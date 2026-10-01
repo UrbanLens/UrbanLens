@@ -59,7 +59,9 @@ class IsAnswerEquivalentTests(TestCase):
     def test_no_match_token_returns_false(self) -> None:
         _grant_ai_to_everyone()
         profile = _make_profile()
-        with patch("urbanlens.dashboard.services.trivia.answer_check.get_gateway", return_value=_FakeGateway("NO_MATCH")):
+        with patch(
+            "urbanlens.dashboard.services.trivia.answer_check.get_gateway", return_value=_FakeGateway("NO_MATCH")
+        ):
             self.assertFalse(is_answer_equivalent("nineteen forty two", "1937", profile=profile))
 
     def test_gateway_unavailable_returns_false(self) -> None:
@@ -80,10 +82,18 @@ class SubmitAnswerAiFallbackWiringTests(TestCase):
 
     def setUp(self) -> None:
         from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaRound, TriviaSession, TriviaSessionParticipant
+        from urbanlens.dashboard.models.trivia.model import (
+            TriviaQuestion,
+            TriviaQuestionSource,
+            TriviaRound,
+            TriviaSession,
+            TriviaSessionParticipant,
+        )
 
         self.profile = _make_profile()
-        question = baker.make(TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937")
+        question = baker.make(
+            TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937"
+        )
         session = baker.make(TriviaSession, host_profile=self.profile)
         baker.make(TriviaSessionParticipant, session=session, profile=self.profile)
         self.round_ = baker.make(TriviaRound, session=session, question=question, sequence_index=0)

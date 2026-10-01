@@ -18,13 +18,12 @@ if TYPE_CHECKING:
 class WelcomeOnboardingView(LoginRequiredMixin, View):
     """Shown once, on first login, before any other onboarding step.
 
-    GET  /welcome/  -> render the toggle form (all pre-checked).
-    POST /welcome/  -> save the toggles and mark onboarding complete.
+    GET /welcome/ -> render the toggle form (all pre-checked).
+    POST /welcome/ -> save the toggles and mark onboarding complete.
 
-    Redirects back through ``post_login`` rather than straight to
-    ``profile.edit``/``map.view`` so PostLoginRedirectView's existing
-    decision chain (site-admin setup, then the username/avatar setup banner,
-    then the map) runs exactly once, in one place.
+    Redirects back through ``post_login`` rather than straight to ``profile.edit``/``map.view`` so
+    PostLoginRedirectView's existing decision chain (site-admin setup, then the username/avatar setup
+    banner, then the map) runs exactly once, in one place.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:

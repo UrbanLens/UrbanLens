@@ -1,18 +1,5 @@
-"""XSS regression tests for the main map page and its data feed.
+"""XSS regression tests for the main map page and its data feed."""
 
-Invariants verified:
-  - A Label (tag/category) name is never embedded raw into the `<script>` blocks
-    that build `filter_labels_json` (map/index.html, view_map) or `tags_data_json`
-    (map/data.html, init_map) - both are JSON payloads written directly into an
-    executing <script> tag via `|safe`, so an unescaped `</script>` (or `<`/`&`)
-    in a label name would let stored label data break out of the script and
-    inject arbitrary markup/script.
-  - Pin.icon / Pin.color are always JS-string-escaped (`|escapejs`) when embedded
-    in map/data.html's inline `<script>` block, matching the other pin fields
-    (name, description, status, ...) which were already escaped - a raw quote
-    in either field would otherwise let stored pin data break out of the JS
-    string literal.
-"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -63,7 +50,7 @@ class FilterLabelsJsonXssTests(_MapXssTestCase):
 
 
 class TagsDataJsonXssTests(_MapXssTestCase):
-    """init_map ("/dashboard/map/init/") embeds each pin's `tags_data_json` inline via `|safe`."""
+    """init_map ("/dashboard/map/init/") embeds its pins as a `json_script` document."""
 
     def test_malicious_tag_name_is_not_embedded_raw(self) -> None:
         location = baker.make(Location, latitude=40.0, longitude=-75.0)
@@ -79,7 +66,7 @@ class TagsDataJsonXssTests(_MapXssTestCase):
 
 
 class PinIconColorEscapejsTests(_MapXssTestCase):
-    """init_map's inline pin object literal must JS-escape every string field, including icon/color."""
+    """Every pin string field, icon and color included, must survive encoding inert."""
 
     def test_malicious_pin_icon_is_escaped(self) -> None:
         location = baker.make(Location, latitude=40.0, longitude=-75.0)
@@ -91,8 +78,19 @@ class PinIconColorEscapejsTests(_MapXssTestCase):
         self.assertNotIn(_QUOTE_BREAKOUT_PAYLOAD, body)
 
     def test_malicious_pin_color_is_escaped(self) -> None:
+        """The template's own escaping, with the column's coercion stepped around.
+
+        `Pin.save()` coerces `color` to NULL for anything that is not a colour, so a payload written through
+        `baker.make` never reaches the database and this test would pass against a template with no escaping at
+        all."""
         location = baker.make(Location, latitude=40.0, longitude=-75.0)
-        baker.make(Pin, profile=self.profile, location=location, icon=None, color=_QUOTE_BREAKOUT_PAYLOAD_SHORT)
+        pin = baker.make(Pin, profile=self.profile, location=location, icon=None, color=None)
+        Pin.objects.filter(pk=pin.pk).update(color=_QUOTE_BREAKOUT_PAYLOAD_SHORT)
+        self.assertEqual(
+            Pin.objects.values_list("color", flat=True).get(pk=pin.pk),
+            _QUOTE_BREAKOUT_PAYLOAD_SHORT,
+            "the payload must actually be stored, or this asserts nothing about escaping",
+        )
 
         resp = self.client.get(reverse("map.init"))
 

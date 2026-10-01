@@ -6,6 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.db import transaction
@@ -13,14 +14,18 @@ from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.views import View
 
-from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_MEDIA, KIND_USER, Label
-from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_MEDIA, KIND_USER
+from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.services.core.request_body import posted_json_object
+from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
 
 # Kinds that never affect map icon priority, and so are excluded from the
 # Display Order tab (tag/category/status only).
 _NON_PRIORITY_KINDS = (KIND_USER, KIND_MEDIA)
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -42,35 +47,65 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
 
     Args:
         request: The HTTP request (used for profile and permissions).
-        active_tab: Tab to show as active - one of the label tabs (tags, categories,
-            status, people, priority) or one of the top-level sections (lists, filters).
+        active_tab: Tab to show as active - one of the label tabs (tags, categories, status, people,
+        priority) or one of the top-level sections (lists,...
 
     Returns:
-        Context dict for dashboard/pages/organize/index.html. Includes both
-        ``active_section`` (labels/lists/filters - which top-level subnav tab is
-        current) and ``active_tab`` (which label sub-tab is current, only
-        meaningful while ``active_section == "labels"``).
+        Context dict for dashboard/pages/organize/index.html.
     """
     if not isinstance(request.user, AuthUser):
         raise TypeError("Expected an authenticated user")
     profile: Profile = request.user.profile
-    # `.with_hierarchy()`, not `.with_pin_counts()` - the pin/location/total-pins
-    # stats are the slow part of this page (a correlated subquery per label plus,
-    # for any label with children, a full descendant BFS in `tag_total_pins`).
-    # Render the cards without them so the page paints immediately; each tab's
-    # rows re-fetch themselves with real counts via HTMX once shown (see
-    # organize_label_panel.html's `hx-trigger="revealed"`).
-    tags = Label.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy()
-    categories = Label.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy()
-    statuses = Label.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy()
-    user_labels = Label.objects.user_labels().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy()
-    media_labels = Label.objects.media().visible_to(profile).ordered().with_hierarchy()
-    # The Display Order tab never renders pin counts at all, so it just skips
-    # the expensive annotation outright rather than deferring it via HTMX.
-    priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered()
-
     active_section = active_tab if active_tab in _SECTION_TABS else "labels"
     label_tab = active_tab if active_tab in _LABEL_TABS else "tags"
+    on_labels_section = active_section == "labels"
+
+    def _rows_if_active(tab_key: str, queryset: QuerySet[Label], *, needs_stats: bool = True) -> list[Label]:
+        """Materialize a label tab's card list only when it's the one on screen.
+
+        This drops the Python/template cost of the tabs nobody is looking at, which query-count fixes
+        never touch and which scales the same way: profiled at 500 tags, the initial page paint alone
+        (six tabs' worth of cards, all but one invisible) cost ~12s of wall time against ~0.2s of actual
+        database time.
+
+        Args:
+            tab_key: The tab this queryset belongs to.
+            queryset: The queryset to materialize when active.
+            needs_stats: Whether the resulting cards render pin counts. People and media cards never
+                do (`services/labels/organize_cards.py` counts only tags, categories and statuses), so priming their
+                subtree totals would compute a number nothing displays.
+        """
+        if not on_labels_section or label_tab != tab_key:
+            return []
+        rows = list(queryset)
+        if needs_stats:
+            # Primed against the same list the template renders: the memo is seeded per instance, so a
+            # queryset re-evaluated during rendering would discard it and restore the per-label BFS.
+            Label.prime_total_pin_counts(rows)
+        return rows
+
+    # `.with_pin_counts()`, not `.with_hierarchy()`: at 120 labels the stats cost ~16ms against ~100ms to
+    # render the cards they sit in, so deferring them to a follow-up request bought a second full render
+    # of every card rather than a cheaper page (X25). Tags/categories/status render those stats;
+    # people/media don't, so they keep `.with_hierarchy()` and skip priming.
+    tags = _rows_if_active("tags", Label.objects.tags().visible_to(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
+    categories = _rows_if_active("categories", Label.objects.categories().for_profile(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
+    statuses = _rows_if_active("status", Label.objects.statuses().for_profile(profile).in_display_order().with_customizations_for(profile).with_pin_counts())
+    user_labels = _rows_if_active(
+        "people",
+        Label.objects.user_labels().visible_to(profile).in_display_order().with_customizations_for(profile).with_hierarchy(),
+        needs_stats=False,
+    )
+    media_labels = _rows_if_active("media", Label.objects.media().visible_to(profile).in_display_order().with_hierarchy(), needs_stats=False)
+    # Always materialized, unlike the lists above: every tab's "create" dialog needs it as the parent-picker's
+    # candidate list, not only the Display Order tab that renders it directly.
+    priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).in_display_order()
+    # People/media have no `priority_items` equivalent (that queryset excludes both kinds), and their own create
+    # dialog's parent-picker can't be fed from `user_labels`/`media_labels` above once those are deferred - a
+    # dialog rendered while its tab is inactive would otherwise get an empty candidate list and never see the
+    # real one, since the HTMX reveal fetch only replaces the rows, not the dialog.
+    people_parent_items = Label.objects.user_labels().visible_to(profile).in_display_order()
+    media_parent_items = Label.objects.media().visible_to(profile).in_display_order()
 
     return {
         **_BASE_CTX,
@@ -80,11 +115,17 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
         "user_labels": user_labels,
         "media_labels": media_labels,
         "priority_items": priority_items,
+        "people_parent_items": people_parent_items,
+        "media_parent_items": media_parent_items,
+        "tags_deferred": not (on_labels_section and label_tab == "tags"),
+        "categories_deferred": not (on_labels_section and label_tab == "categories"),
+        "statuses_deferred": not (on_labels_section and label_tab == "status"),
+        "people_deferred": not (on_labels_section and label_tab == "people"),
+        "media_deferred": not (on_labels_section and label_tab == "media"),
+        "priority_deferred": not (on_labels_section and label_tab == "priority"),
         "active_tab": label_tab,
         "active_section": active_section,
         "can_edit_global": request.user.has_perm(_PERM),
-        "standalone_mode": False,
-        "stats_pending": True,
     }
 
 
@@ -95,7 +136,7 @@ class OrganizeIndexView(LoginRequiredMixin, View):
         """Render the organize page.
 
         Args:
-            request: The HTTP request. Accepts ?tab=tags|categories|status|people|priority|lists|filters.
+            request: The HTTP request.
 
         Returns:
             Rendered organize/index.html.
@@ -111,10 +152,10 @@ class OrganizePriorityListView(LoginRequiredMixin, View):
 
     GET /organize/priority/list/
 
-    The initial page load renders this list once; any label create/edit/delete/
-    merge/bulk-edit/convert elsewhere on the Organize page fires a `refreshPriority`
-    client-side event (see organize.ts) that re-fetches it here, so a renamed,
-    re-icon'd, deleted, or newly-created label shows up without a full reload.
+    The initial page load renders this list once; any label create/edit/delete/ merge/bulk-edit/convert
+    elsewhere on the Organize page fires a `refreshPriority` client-side event (see organize.ts) that
+    re-fetches it here, so a renamed, re-icon'd, deleted, or newly-created label shows up without a full
+    reload.
     """
 
     def get(self, request, *args, **kwargs):
@@ -130,7 +171,7 @@ class OrganizePriorityListView(LoginRequiredMixin, View):
             raise TypeError("Expected an authenticated user")
         profile: Profile = request.user.profile
         # _priority_list.html never renders pin counts - no need for with_pin_counts() here.
-        priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered()
+        priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).in_display_order()
         return render(request, "dashboard/partials/labels/_priority_list.html", {"priority_items": priority_items})
 
 
@@ -140,31 +181,29 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
     def post(self, request, *args, **kwargs):
         """Persist new order for the submitted item IDs.
 
-        Expects JSON body: {"items": [{"id": 1}, {"id": 2}, ...]} in display order
-        (first item gets the highest order value).
-
-        Only labels the requester *owns* are reordered. ``Label.order`` is a
-        single shared column, and ``visible_to`` deliberately spans both a
-        profile's own labels and the site-wide global ones - so validating
-        against it and then writing without re-scoping meant every user's drag
-        rewrote the ordering of shared labels for **everyone on the site**. Any
-        global in the submission is skipped and named in ``skipped_global_ids``
-        so the client can render those rows as position-locked rather than
-        silently losing the user's gesture. Per-profile ordering of globals
-        would need an ``order`` column on ``LabelCustomization``; until that
+        Per-profile ordering of globals would need an ``order`` column on ``LabelCustomization``; until that
         exists, refusing is the only correct answer.
 
         Args:
             request: The HTTP request with JSON body.
 
         Returns:
-            JSON response with ok=True, the number of labels reordered, and the
-            ids skipped because they are global (and therefore not the
-            requester's to reorder).
+            JSON response with ok=True, the number of labels reordered, and the ids skipped because they are
+            global (and therefore not the...
         """
         try:
-            data = json.loads(request.body)
-            item_ids = [int(x["id"]) for x in data.get("items", [])]
+            data = posted_json_object(request)
+            items = data.get("items", [])
+            # Counted before the ids are read out of it: the list goes into one
+            # `id__in` statement whatever its length, and the unresolved ones come
+            # back out in the response, so an oversized request is expensive in
+            # both directions. Measured against the length rather than the parsed
+            # ids so an oversized body is not converted first. The refusal
+            # deliberately does not name what was submitted.
+            ceiling = settings.LABEL_REORDER_MAX_IDS
+            if len(items) > ceiling:
+                return JsonResponse({"error": f"Reorder at most {ceiling} labels at a time."}, status=400)
+            item_ids = [int(x["id"]) for x in items]
         except (json.JSONDecodeError, ValueError, TypeError, KeyError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
@@ -187,13 +226,12 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
             reordered.append(Label(id=item_id, order=total - index))
 
         if reordered:
-            # One statement instead of N, inside a transaction: a partial
-            # reorder is worse than none, since the user sees an arrangement
-            # that was never what they dragged.
+            # One statement instead of N, inside a transaction: a partial reorder is worse than none, since the
+            # user sees an arrangement that was never what they dragged.
             with transaction.atomic():
                 Label.objects.bulk_update(reordered, ["order"])
-            # bulk_update fires no post_save, so the cache-invalidating receiver
-            # never runs - and order decides which label supplies a pin's icon.
-            refresh_map_pin_cache_for_label_ids([label.pk for label in reordered])
+            # bulk_update fires no post_save, so the receiver never runs - and
+            # order decides which label supplies a pin's icon.
+            touch_pins_for_labels([label.pk for label in reordered])
 
         return JsonResponse({"ok": True, "reordered": len(reordered), "skipped_global_ids": skipped_global_ids})

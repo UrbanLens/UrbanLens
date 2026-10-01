@@ -1,16 +1,5 @@
 /**
- * Tools page "Find Pins in a Photo Folder" card: scans a user-chosen local
- * directory (recursively) for photos/videos with GPS metadata entirely in
- * the browser - files never leave the device while scanning - clusters
- * nearby matches live, filters out locations the user already has a pin for
- * (best-effort, via the main map's cached pin store), and uploads the
- * resulting cluster summaries (lat/lng/dates/count) for review as
- * PinSuggestion rows. Photo files themselves are never uploaded unless the
- * user explicitly checks one in the opt-in picker before clicking upload -
- * everything else stays device-only.
- *
- * Uses the File System Access API (`showDirectoryPicker`) where available,
- * falling back to a `<input webkitdirectory>` file picker (Firefox/Safari).
+ * Tools page "Find Pins in a Photo Folder" card.
  */
 import exifr from "exifr";
 import { getCsrfToken } from "../shared/csrf";
@@ -97,34 +86,20 @@ class PhotoLocationScanApp {
 
     private clusters: PhotoCluster[] = [];
     /**
-     * Every raw GPS hit found so far, never merged or discarded - `clusters`
-     * above is a live, order-dependent grouping kept only to render a
-     * manageable-length list while scanning. The final grouping used for
-     * upload is recomputed from this full set right before the request goes
-     * out, so nothing is lost to the incremental display clustering.
-     */
+ * Every raw GPS hit found so far, never merged or discarded.
+ */
     private allHits: PhotoHit[] = [];
     /**
-     * Photos the user has explicitly opted into uploading as a preview,
-     * keyed by File object identity (not cluster identity) - `upload()`
-     * recomputes clusters fresh from `allHits` right before submitting, so a
-     * checkbox toggled against a File during live scanning must still be
-     * identifiable against that freshly-reclustered result. File references
-     * are stable across both since both derive from the same `allHits`.
-     */
+ * Photos the user has explicitly opted into uploading as a preview, keyed by File object identity (not cluster identity).
+ */
     private readonly selectedFiles = new Set<File>();
     /** Object URLs created for thumbnail previews, revoked before each re-render to avoid leaks. */
     private objectUrls: string[] = [];
     private abortController: AbortController | null = null;
     private scanning = false;
     /**
-     * True while a throttled render is already queued via requestAnimationFrame
-     * (see scheduleRender()) - a full re-render rebuilds every cluster's
-     * thumbnails from scratch (revoking and recreating an object URL per
-     * photo), so calling it once per GPS hit found rather than once per
-     * frame turned a long scan with many results into an O(hits x clusters)
-     * churn of DOM nodes and blob URLs, heavy enough to crash the tab.
-     */
+ * True while a throttled render is already queued via requestAnimationFrame).
+ */
     private renderScheduled = false;
 
     constructor(root: HTMLElement) {
@@ -187,25 +162,13 @@ class PhotoLocationScanApp {
 
     private async scanDirectoryHandle(dirHandle: FileSystemDirectoryHandle): Promise<void> {
         this.beginScanState();
-        // Scanning starts on the very first file the walk yields instead of
-        // waiting for the whole tree to be enumerated first - a folder with a
-        // lot of photos or nested subfolders used to sit on "Finding photos
-        // and videos..." for as long as the full recursive walk took, with no
-        // results appearing until every last file had been listed.
+        // Scanning starts on the very first file the walk yields instead of waiting for the whole tree to be enumerated first.
         await this.runScan(null, walkDirectoryHandle(dirHandle, this.abortController!.signal), { alreadyBegun: true });
     }
 
     /**
-     * Reset everything a scan accumulates, and hand it a fresh AbortController.
-     *
-     * Both matter, and both used to be missed on the `<input webkitdirectory>`
-     * fallback path (Firefox/Safari): `runScan` only created a controller when
-     * there was none, and nothing ever cleared an aborted one - so after a
-     * single Stop, every later scan on that path aborted on its first file.
-     * Hits and clusters were likewise only cleared after a *successful upload*,
-     * so re-scanning the same folder double-counted every photo into its
-     * clusters.
-     */
+ * Reset everything a scan accumulates, and hand it a fresh AbortController.
+ */
     private beginScanState(): void {
         this.abortController = new AbortController();
         this.allHits = [];
@@ -214,19 +177,11 @@ class PhotoLocationScanApp {
     }
 
     /**
-     * Scan a stream of candidate files, extracting GPS hits as they arrive.
-     *
-     * @param total - Known file count up front (the `<input webkitdirectory>`
-     *   fallback path already has the full FileList), or `null` when the
-     *   count isn't known ahead of time (the File System Access walk streams
-     *   files one at a time) - the progress bar shows a running count instead
-     *   of a percentage in that case.
-     */
+ * Scan a stream of candidate files, extracting GPS hits as they arrive.
+ * @param total - Known file count up front (the `<input webkitdirectory>`
+ */
     private async runScan(total: number | null, files: AsyncGenerator<File>, { alreadyBegun = false } = {}): Promise<void> {
-        // `scanDirectoryHandle` calls `beginScanState` itself, because it has to
-        // hand the walk that scan's signal *before* getting here. Resetting again
-        // would swap in a controller the walk is not listening to, and Stop would
-        // silently do nothing.
+        // `scanDirectoryHandle` calls `beginScanState` itself, because it has to hand the walk that scan's signal *before* getting here.
         if (!alreadyBegun) this.beginScanState();
         this.setScanning(true);
         let scanned = 0;
@@ -338,12 +293,8 @@ class PhotoLocationScanApp {
     }
 
     /**
-     * Opt-in thumbnail picker for one cluster: unchecked by default, and
-     * visually unambiguous about which photos are selected to upload as a
-     * preview - a filled, accent-colored badge and border for selected
-     * thumbnails, a faint outline for unselected ones, plus a running
-     * "N of 3 selected" caption so the state is never ambiguous at a glance.
-     */
+ * Opt-in thumbnail picker for one cluster: unchecked by default, and visually unambiguous about which photos are selected to upload.
+ */
     private renderPicker(cluster: PhotoCluster): HTMLElement {
         const wrap = document.createElement("div");
         wrap.className = "photo-scan-picker";
@@ -404,14 +355,7 @@ class PhotoLocationScanApp {
         if (this.allHits.length === 0 || !this.uploadUrl) return;
         this.uploadBtn.disabled = true;
         try {
-            // Regroup from the full, un-merged hit list rather than reusing the
-            // live display clusters - the display grouping is order-dependent
-            // (it locks in whichever cluster a hit met first while scanning),
-            // so recomputing fresh from every raw coordinate gives a more
-            // accurate final grouping now that the whole set is known. Each
-            // cluster gets a fresh client-side id so the response can report
-            // back which PinSuggestion it became, for the opt-in photo upload
-            // below.
+            // Regroup from the full, un-merged hit list rather than reusing the live display clusters.
             const finalClusters: UploadCluster[] = clusterHits(this.allHits).map((cluster) => ({ ...cluster, id: crypto.randomUUID() }));
             const response = await fetch(this.uploadUrl, {
                 method: "POST",
@@ -455,11 +399,8 @@ class PhotoLocationScanApp {
     }
 
     /**
-     * Upload any opted-in preview photos, tagged to the PinSuggestion each
-     * cluster resolved to. Best-effort: a failed photo upload doesn't undo
-     * the location results already saved above, so failures are reported
-     * separately rather than blocking the main success toast.
-     */
+ * Upload any opted-in preview photos, tagged to the PinSuggestion each cluster resolved to.
+ */
     private async uploadSelectedPhotos(finalClusters: UploadCluster[], suggestionIds: Record<string, number>): Promise<void> {
         if (!this.uploadPhotoUrl) return;
         let failures = 0;

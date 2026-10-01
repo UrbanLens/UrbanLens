@@ -9,10 +9,10 @@ declaration, and Google MyMaps always nests Placemarks inside a Folder):
 - Reading ``k.features`` (a list attribute in fastkml>=1.4) as if it were a
   method, and assuming Placemarks sit exactly one level below the KML root.
 """
+
 from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
@@ -92,11 +92,6 @@ class TakeoutKmlToDictTests(SimpleTestCase):
         self.assertEqual(pins, [])
 
     def test_https_kml_namespace_still_parses(self):
-        # Some third-party exporters (e.g. multiplottr.com) declare the KML
-        # namespace as `https://www.opengis.net/kml/2.2` instead of `http://`.
-        # fastkml matches elements by exact namespace URI, so this previously
-        # produced zero features with no exception raised - a silent failure
-        # surfaced to users as "No valid location files found in the upload."
         data = _kml_bytes(_placemark_xml("HTTPS Namespace", 38.6244206, -90.1610675)).replace(
             b"http://www.opengis.net/kml/2.2",
             b"https://www.opengis.net/kml/2.2",
@@ -113,7 +108,9 @@ class TakeoutKmlToDictTests(SimpleTestCase):
             alphabet=st.characters(blacklist_categories=("Cs", "Cc"), blacklist_characters="<>&\"'"),
             min_size=1,
             max_size=40,
-        ).map(str.strip).filter(bool),
+        )
+        .map(str.strip)
+        .filter(bool),
         lat=st.floats(min_value=-89, max_value=89, allow_nan=False, allow_infinity=False),
         lon=st.floats(min_value=-179, max_value=179, allow_nan=False, allow_infinity=False),
     )

@@ -30,7 +30,7 @@ MessageType = SystemMessage | UserMessage | AssistantMessage
 class MessageQueue:
     def __init__(self, max_tokens: int = MAX_TOKENS):
         self.messages: list[MessageType] = []
-        self.max_tokens: int = max_tokens
+        self.max_tokens = max_tokens
 
     def add_message(self, message: str, role: Literal["user", "system", "assistant"] = "user") -> None:
         tokens = self.estimate_tokens(message)

@@ -1,17 +1,6 @@
 /**
- * Playwright configuration for the on-demand integration suite.
- *
- * This suite is never pointed at a server it started itself - there is no
- * `webServer` block, deliberately. It runs against a deployment that is already
- * up, with its real database, real Valkey, real Celery workers, real proxy and
- * real TLS, because the failures it exists to catch live in the wiring between
- * those and not in any one of them.
- *
- * Projects are the unit of selection. `--project=smoke` is the five-second
- * question "is this deployment alive"; `--project=ui` is the long one. The
- * cross-browser and visual projects are registered only when asked for, so the
- * default `playwright test` does the useful thing rather than the exhaustive
- * one.
+ * Playwright configuration for the on-demand integration suite. This suite is never pointed at a
+ * server it started itself - there is no `webServer` block, deliberately.
  */
 
 import { defineConfig, devices, type Project } from "@playwright/test";
@@ -87,6 +76,16 @@ const projects: Project[] = [
         dependencies: ["setup"],
         use: { ...devices["Desktop Chrome"], ...signedIn },
     },
+    {
+        // Authorisation, isolation, CSRF, disclosure and input handling against
+        // the real deployment. Depends on setup because several specs render
+        // HTML as the signed-in user; API-only cases still authenticate with
+        // keys via fixtures.
+        name: "security",
+        testDir: "./specs/security",
+        dependencies: ["setup"],
+        use: { ...devices["Desktop Chrome"], ...signedIn },
+    },
 ];
 
 if (env.runLocationData) {
@@ -108,6 +107,20 @@ if (env.runLocationData) {
         // The enrichment chain is minutes long end to end, and a wait that times
         // out here is meant to mean "it is not coming" rather than "it was slow".
         timeout: 900_000,
+        use: { ...devices["Desktop Chrome"], ...signedIn },
+    });
+}
+
+if (env.runSlow) {
+    projects.push({
+        // Specs that wait on Celery beat: a check-in escalating to its contacts
+        // (grace period plus a 5-minute sweep) and the hourly message hard-delete.
+        // Serial because the sharer account holds one active check-in at a time.
+        name: "slow",
+        testDir: "./specs/slow",
+        dependencies: ["setup"],
+        workers: 1,
+        timeout: 5_400_000,
         use: { ...devices["Desktop Chrome"], ...signedIn },
     });
 }
@@ -145,6 +158,7 @@ export default defineConfig({
         ["html", { outputFolder: "reports/html", open: "never" }],
         ["junit", { outputFile: "reports/junit.xml" }],
         ["json", { outputFile: "reports/results.json" }],
+        ["./lib/metrics-reporter.ts"],
     ],
     // Surfaced at the top of the HTML report, so a report that gets passed
     // around says which deployment produced it.
@@ -153,6 +167,9 @@ export default defineConfig({
         runId: env.runId,
         crossBrowser: env.runCrossBrowser,
         visual: env.runVisual,
+        locationData: env.runLocationData,
+        slow: env.runSlow,
+        hrshFresh: env.hrshFresh,
     },
     use: browserDefaults,
     projects,

@@ -1,12 +1,4 @@
-"""Tests for ReactionQuerySet.existing().
-
-Part of the ongoing "every model gets its own queryset/manager" cleanup -
-Reaction was still on the bare default manager despite the exact same
-"does this profile+emoji+target already exist" lookup being duplicated
-across all four of its polymorphic targets (comment/trip_comment/
-direct_message/group_message toggle views in controllers/comments.py,
-services/direct_messages.py and services/group_chats.py).
-"""
+"""Tests for ReactionQuerySet.existing()."""
 
 from __future__ import annotations
 
@@ -87,12 +79,9 @@ class ReactionExistingForTripCommentAndDirectMessageTests(TestCase):
 class ReactionExistingForGroupMessageTests(TestCase):
     """The group-message host, added last and therefore the most likely to drift.
 
-    A group message is the only reaction target whose row is visible to more
-    than two people, so the per-host unique constraint matters more here than
-    anywhere else: without it, two concurrent taps from the same member would
-    each insert a row and the aggregate count shown to the whole group would
-    read 2 for one person.
-    """
+    A group message is the only reaction target whose row is visible to more than two people, so the per-host
+    unique constraint matters more here than anywhere else: without it, two concurrent taps from the same member
+    would each insert a row and the aggregate count shown to the whole group would read 2 for one person."""
 
     def setUp(self) -> None:
         """Create a group with one member and one message in it."""
@@ -145,13 +134,7 @@ class ReactionExistingForGroupMessageTests(TestCase):
 class ReactionExistingTargetGuardTests(TestCase):
     """``existing()`` must refuse anything but exactly one host kwarg.
 
-    Both malformed calls fail *silently* without the guard, which is why it
-    exists. Two hosts AND together into a filter no row can satisfy (no row
-    has two hosts set), so the answer is always "no existing reaction" and the
-    toggle inserts a duplicate the database then rejects with an opaque
-    IntegrityError. Zero hosts matches any reaction by that profile with that
-    emoji *anywhere on the site*, so the toggle removes an unrelated one.
-    """
+    Both malformed calls fail *silently* without the guard, which is why it exists."""
 
     def setUp(self) -> None:
         """Create a profile with one comment and one group message to react to."""

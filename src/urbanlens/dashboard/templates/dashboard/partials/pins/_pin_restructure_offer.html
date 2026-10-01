@@ -1,32 +1,4 @@
-{% comment %}
-The single "organize this property?" suggestion, shown once per pin the first
-time its detail page is opened. Covers both halves together - creating a child
-pin per building here, and nesting existing top-level pins that stand inside
-this property - because they are one question about one pin's hierarchy, and
-two dialogs for that would be two interruptions. See
-controllers.pin_restructure.
-
-Reuses the shared onboarding-card markup (see ts/shared/onboarding-tour.ts and
-_map.scss's .page-onboarding-card rules) so it reads as the same kind of
-suggestion the rest of the app makes, with no styles of its own.
-
-All three actions swap this element away: Yes applies the plan (and toasts its
-own result), No dismisses this pin permanently, and "Don't show again" also
-turns the account-wide setting off.
-
-Context:
-    pin: the pin being viewed.
-    building_count / sample_names: buildings here with no pin yet.
-    nestable_count / nestable: the owner's top-level pins inside this property
-        (nestable is capped for display; nestable_count is the real total).
-
-This re-fetches itself whenever the pin's children change, because the parcel
-panel's own import button targets nothing here - without it, adding the last
-buildings from there leaves this card describing work that is already done.
-`data-ext-panel-204` hands the empty case to the page's shared 204 handler:
-having nothing left to suggest answers 204, and the card flies away rather
-than sitting there stale.
-{% endcomment %}
+{% comment %}The single "organize this property?" suggestion, shown once per pin the first time its detail page is opened.{% endcomment %}
 <section class="page-onboarding-card" id="pin-restructure-offer"
          data-ext-panel-204
          hx-get="{% url 'pin.restructure.offer' pin.slug %}"
@@ -50,9 +22,8 @@ than sitting there stale.
             Add a child pin for each building{% if sample_names %} &mdash; {% for name in sample_names %}{{ name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if building_count > 3 %}, and more{% endif %}{% endif %}.
             {% endif %}
             {% if nestable_count %}
-            Move {% if nestable_count == 1 %}it{% else %}them{% endif %} under this pin as child pins &mdash; nothing is merged or deleted, and everything on them comes along.
+            On the next screen, choose which of {% if nestable_count == 1 %}it{% else %}them{% endif %} to move under this pin as a child pin - nothing else about {% if nestable_count == 1 %}it{% else %}them{% endif %} changes, and it can be undone afterwards.
             {% endif %}
-            You can undo any of this afterwards.
         </p>
         {% if nestable %}
         <ul class="pin-restructure-nestable">
@@ -71,7 +42,7 @@ than sitting there stale.
                     hx-swap="innerHTML"
                     hx-indicator="#pin-restructure-spinner"
                     hx-disabled-elt="this"
-                    hx-on::after-request="if(event.detail.successful && event.detail.xhr.status === 200){window.openBuildingImportDialog()}">
+                    data-ul-on-success="building-import-open" data-ul-success-status="200">
                 Yes, organize it
             </button>
             <button type="button" class="btn btn--ghost"

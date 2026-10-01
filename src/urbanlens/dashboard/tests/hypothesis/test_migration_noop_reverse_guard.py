@@ -1,29 +1,4 @@
-"""Fail the build when a new data migration reverses to ``noop`` without a reason.
-
-``RunPython.noop`` as a reverse is a claim: "undoing this migration needs no
-data work". That is usually true - a backfill's column is dropped by the schema
-reverse anyway, a seeded row can stay, a cache invalidation has nothing to undo.
-
-It was false twice, in the worst way available. Migrations 0039 and 0007 encrypt
-existing columns **in place**; their ``noop`` reverses meant ``migrate dashboard
-0038`` *succeeded* while leaving ciphertext in columns the pre-migration code
-reads as plaintext. Nothing failed, and the data was unreadable. Both now carry
-real decrypting reverses (audit chunk 459-460).
-
-The distinction that matters is not "does the reverse restore the old values" -
-plenty of data migrations are inherently lossy, and that is fine. It is:
-
-    **After reversing, can the pre-migration code still interpret the data?**
-
-A merge, a dedupe, a cap, a flag reset all leave values that are lossy but
-valid. A format change - encryption, an encoding, a serialisation - does not.
-Only the second kind must never reverse to ``noop``.
-
-Reviewed entries are keyed by **file**, because migrations are append-only in
-practice: a new decision arrives as a new file, which is exactly what this test
-should stop in its tracks. Editing an old migration to add a noop op would slip
-past, and that is an acceptable gap for a file nobody edits.
-"""
+"""Fail the build when a new data migration reverses to ``noop`` without a reason."""
 
 from __future__ import annotations
 
@@ -36,8 +11,6 @@ from urbanlens.dashboard import migrations as migrations_package
 MIGRATIONS_DIR = Path(migrations_package.__file__).resolve().parent
 
 #: Migrations whose ``noop`` reverses were read and judged correct, with why.
-#: Audit chunks 459-460 covered 0026-0044; chunk 544 covered 0001-0020, which
-#: that pass never reached.
 REVIEWED: dict[str, str] = {
     "0001_initial.py": "backfill_pin_point / backfill_primary_email_normalized - fill new columns the schema reverse drops anyway.",
     "0003_v0_4_0_data.py": (
@@ -57,28 +30,32 @@ REVIEWED: dict[str, str] = {
     ),
     "0010_v0_6_0.py": "Backfills (intro_seen, notification uuids, unchanged defaults) plus create_first_party_client, which seeds a row that is harmless to leave behind.",
     "0020_seed_vip_subscription_role.py": "Seeds a subscription role. Leaving it on reverse is harmless; deleting it could orphan subscriptions referencing it.",
-    # v0.7.0's squash (bin/squash_urbanlens_migrations.py, this repo's ../infrastructure)
-    # folded 0030-0072 into one file, so this entry replaces the four it used to be:
-    # 0033_quota_exemptions.py, 0042_label_merge_duplicates.py,
-    # 0046_trip_calendar_link_event_unique.py, 0047_link_url_unique.py. Their reasoning
-    # carries forward unchanged; nothing about the forward/reverse pair itself changed,
-    # only the function names (squashmigrations couldn't auto-import them across the
-    # digit-leading module boundary, so they were inlined under new `_NNNN_` names).
-    #
-    # NOTE: the squashed file also carries two noop reverses this entry does NOT cover -
-    # _0062_clear_generated_names and _0062_renumber_levels, from the pre-squash
-    # 0062_floorplan_floor_designation.py. That file was never reviewed either (this gap
-    # predates the squash - `git show <pre-squash commit>:.../0062_floorplan_floor_designation.py`
-    # confirms both were already RunPython.noop before v0.7.0), so it is not filled in
-    # here rather than guessed at: someone who knows whether the pre-migration code
-    # tolerates a blank/non-contiguous floor level after a reverse needs to make that
-    # call, the same way 0007 and 0039's *actual* corruption incidents got caught.
+    # NOTE: the migration carries two noop reverses this entry does NOT cover - _0062_clear_generated_names and
+    # _0062_renumber_levels, from the pre-squash 0062_floorplan_floor_designation.py.
     "0030_v0_7_0.py": (
         "mark_existing_external_media_exempt (was 0033) sets a boolean on existing rows - lossy, valid either way. "
         "merge_duplicate_labels (was 0042) clears the way for 0043's unique constraint, same shape as 0005 - "
         "un-merging is impossible and merged labels stay valid. drop_duplicate_event_links (was 0046) and "
         "drop_duplicate_links (was 0047) both merge/remove duplicates ahead of a unique constraint - un-merging is "
         "impossible and unnecessary, what remains is valid in the old schema."
+    ),
+    "0032_v0_8_0.py": (
+        "The v0.8.0 squash. Backfills of columns this file adds and a reverse drops, so there is nothing to restore: "
+        "_0049_backfill_friendinvitation_email_normalized, _0052__backfill, _0058_trust_verified_signups, "
+        "_0062_backfill_username_keys, _0065_backfill, _0117_date_existing_blocks. "
+        "Merges and dedupes ahead of a unique constraint, lossy but leaving ordinary rows the old code reads: "
+        "_0054_merge_reciprocal_rows (keeps the lowest pk, as FriendshipQuerySet.between does), _0073_dedupe, and "
+        "_0067_release_stale_and_duplicate_proofs (a cleared proof reads as an unproved address). "
+        "_0091__move_to_day_rows moves the weather cache into rows; after a reverse the old code refetches it. "
+        "_0092__clear_out_of_span nulls activity times outside 1900-2199, an unscheduled activity to the old code. "
+        "_0098_repair_links prefixes https:// on scheme-less links, deletes links it can't read as http(s) with a "
+        "top-level domain, and truncates over-long custom-field text. _0116_mark_linked relabels downloaded-URL "
+        "images from upload to linked_url, a plain string the old code stores and shows. The two CREATE EXTENSION "
+        "statements leave an extension nothing else depends on."
+    ),
+    "0033_v0_8_0_indexes.py": (
+        "_0096_refuse_to_drop_url_only_overlays deletes nothing; it only clears a tile template an overlay with an "
+        "image never drew. The rows left are valid overlays for the old code."
     ),
 }
 
@@ -143,12 +120,15 @@ class MigrationNoopReverseGuardTests(SimpleTestCase):
     # -- guard the guard ----------------------------------------------------
 
     def test_the_scan_still_finds_migrations(self) -> None:
-        # Lowered from 40 by the v0.7.0 squash, which folded 0030-0072 into one file
-        # (31 remain) - a squash resets this count by design, so the floor only needs
-        # to catch "the scan found almost nothing", not track the exact total.
-        self.assertGreaterEqual(len(list(MIGRATIONS_DIR.glob("[0-9]*.py"))), 20, "the migration scan found almost nothing - the path resolution broke")
+        self.assertGreaterEqual(
+            len(list(MIGRATIONS_DIR.glob("[0-9]*.py"))),
+            20,
+            "the migration scan found almost nothing - the path resolution broke",
+        )
 
     def test_the_scan_still_finds_noop_reverses(self) -> None:
         """Without this, an AST change that matched nothing would pass silently."""
         found = _noop_reverse_files()
-        self.assertGreaterEqual(len(found), 8, f"only {len(found)} files with noop reverses found - the matcher stopped working")
+        self.assertGreaterEqual(
+            len(found), 8, f"only {len(found)} files with noop reverses found - the matcher stopped working"
+        )

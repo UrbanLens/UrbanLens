@@ -26,7 +26,9 @@ def _make_pin(profile, **kwargs) -> Pin:
     location = kwargs.pop("location", None)
     if location is None:
         _coord_counter += 1
-        location = baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001)
+        location = baker.make(
+            Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001
+        )
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
@@ -39,7 +41,9 @@ class SavedFilterDetailViewTests(TestCase):
         self.profile = self.user.profile
         self.matching = _make_pin(self.profile, name="Old Mill")
         self.non_matching = _make_pin(self.profile, name="New Factory")
-        self.saved_filter = SavedFilter.objects.create(profile=self.profile, name="Mills", icon="filter_alt", criteria={"name": "Mill"})
+        self.saved_filter = SavedFilter.objects.create(
+            profile=self.profile, name="Mills", icon="filter_alt", criteria={"name": "Mill"}
+        )
 
     def test_renders_the_filter_name_and_every_field_group(self) -> None:
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
@@ -84,15 +88,13 @@ class SavedFilterDetailViewTests(TestCase):
         self.assertContains(response, reverse("saved_filters.edit", args=[self.saved_filter.uuid]))
 
     def test_icon_picker_script_is_loaded(self) -> None:
-        """The Icon field's trigger button calls window.IconPicker - previously
-        nothing on this page ever defined it (silent ReferenceError, dead
-        button). saved-filter-detail.js installs the global picker."""
+        """The Icon field's trigger button calls window.IconPicker - previously nothing on this page ever defined it (silent ReferenceError, dead button). saved-filter-detail.js installs the global picker."""
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
         self.assertContains(response, "dashboard/js/saved-filter-detail.js")
 
     def test_label_picker_renders_the_shared_rich_picker(self) -> None:
         """Labels use the shared rich include/exclude picker (the same engine
-        as the main map's filter sidebar - see initSavedFilterLabelPickers and
+        as the main map's filter sidebar - see initLabelPicker in shared/saved-filter-form.ts and
         ts/shared/label-picker.ts), not a flat checkbox list."""
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
         content = response.content.decode()
@@ -176,9 +178,9 @@ class FiltersTabCardLinksToDetailPageTests(TestCase):
         self.assertNotIn("savedFilterOpenDialog", card_html)
         self.assertNotIn(">Edit<", card_html)
 
-    def test_delete_button_still_present_and_stops_propagation(self) -> None:
+    def test_delete_button_still_present(self) -> None:
+        """Its click is captured by shared/saved-filter-form.ts, so the card's link never follows (see its test)."""
         response = self._get_filters_tab()
         content = response.content.decode()
-        self.assertIn("savedFilterDelete(", content)
         self.assertIn("saved-filter-delete-btn", content)
-        self.assertIn("stopPropagation", content)
+        self.assertIn(f'data-saved-filter-action="delete" data-filter-uuid="{self.saved_filter.uuid}"', content)

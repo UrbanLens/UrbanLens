@@ -6,14 +6,19 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import geocode_resolution
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, LocationContextUnavailableError
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
+    LocationContextEnvelope,
+    LocationContextUnavailableError,
+)
 
 _MODULE = "urbanlens.dashboard.services.apis.locations.geocode_resolution"
 
 
 class GeocodeAddressTests(SimpleTestCase):
     def test_redata_configured_uses_first_result(self) -> None:
-        envelope = LocationContextEnvelope(count=1, complete=True, results=[{"provider": "nominatim", "latitude": 42.6, "longitude": -73.6}])
+        envelope = LocationContextEnvelope(
+            count=1, complete=True, results=[{"provider": "nominatim", "latitude": 42.6, "longitude": -73.6}]
+        )
         with (
             mock.patch(f"{_MODULE}.redata_configured", return_value=True),
             mock.patch(f"{_MODULE}.RedataGeocodeGateway") as gateway_cls,

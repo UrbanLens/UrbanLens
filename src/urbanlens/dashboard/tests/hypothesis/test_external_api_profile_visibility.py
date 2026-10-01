@@ -1,20 +1,12 @@
-"""External API: profile visibility must refuse with 404, never a telling 403.
-
-Exercises every ``VisibilityChoice`` value exhaustively rather than sampling
-with Hypothesis: the enum has seven members, so the full space is smaller than
-a sampled run would be, and this repo's ``TestCase`` does not mix ``@given``
-with ``self.client`` (the client keeps state across generated examples).
-Hypothesis is used below only for the pure-logic property, which needs no
-client.
-"""
+"""External API: profile visibility must refuse with 404, never a telling 403."""
 
 from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
@@ -58,8 +50,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Kwargs to splat into a test-client call.
-    """
+        Kwargs to splat into a test-client call."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -69,10 +60,8 @@ class GatedVisibilityFieldListTests(TestCase):
     def test_the_real_field_count_is_twelve(self) -> None:
         """Pins the count an earlier requirements doc got wrong (it claimed nine).
 
-        If a thirteenth gated field is added this test fails loudly, which is
-        the intended prompt to confirm the new field really should be exposed
-        rather than silently shipping it.
-        """
+        If a thirteenth gated field is added this test fails loudly, which is the intended prompt to confirm the
+        new field really should be exposed rather than silently shipping it."""
         self.assertEqual(len(_COMMUNITY_GATED_VISIBILITY_FIELDS), 12)
 
     def test_every_gated_field_exists_on_the_model(self) -> None:
@@ -122,9 +111,10 @@ class ProfileDetailVisibilityTests(TestCase):
             slug: The profile slug to fetch.
 
         Returns:
-            The HTTP response.
-        """
-        return self.client.get(reverse("external_api:profiles.detail", kwargs={"profile_slug": slug}), **_bearer(self.raw_key))
+            The HTTP response."""
+        return self.client.get(
+            reverse("external_api:profiles.detail", kwargs={"profile_slug": slug}), **_bearer(self.raw_key)
+        )
 
     def test_non_permitted_visibility_always_404_never_403(self) -> None:
         """Across every VisibilityChoice, a stranger gets 200 or 404 - never 403."""
@@ -221,15 +211,7 @@ class ProfileDetailVisibilityTests(TestCase):
     def test_community_off_coerces_visibility_via_profile_save(self) -> None:
         """The model's own gating must apply, not be reimplemented in the view.
 
-        Exercised through ``PATCH /settings/``, which is where the visibility
-        fields live. It used to run through ``PATCH /profiles/{slug}/``, and
-        moving it is the point rather than an inconvenience: that endpoint is
-        gated on ``social:write`` - the scope an app asks for to send friend
-        requests - so while it accepted ``profile_visibility`` a credential
-        that could only message people could also switch the account's privacy
-        settings to ``everyone``. The coercion behaviour this test was written
-        for is unchanged; only the door it comes through is.
-        """
+        Exercised through ``PATCH /settings/``, which is where the visibility fields live."""
         settings_key, settings_raw = generate_api_key(self.user, "Settings client")
         # PATCH requires both scopes - the response is always the full settings
         # document (see AccountSettingsView), which a write-only credential has
@@ -253,11 +235,8 @@ class ProfileDetailVisibilityTests(TestCase):
     def test_visibility_fields_are_not_writable_through_the_profile_endpoint(self) -> None:
         """A ``social:write`` credential must not be able to rewrite privacy settings.
 
-        The complement of the test above: the fields moved to ``/settings/``
-        (behind ``settings:write``) must not still be honoured here. DRF
-        ignores unknown keys, so the failure this guards against is silent - a
-        200 whose body looks fine while the write did land.
-        """
+        The complement of the test above: the fields moved to ``/settings/`` (behind ``settings:write``) must
+        not still be honoured here."""
         from urbanlens.dashboard.external_api.serializers import ProfileUpdateSerializer
 
         self.profile.profile_visibility = VisibilityChoice.NO_ONE
@@ -286,13 +265,7 @@ class ProfileDetailVisibilityTests(TestCase):
 class ProfileSettingsOverlapTests(SimpleTestCase):
     """The profile-write and settings-write surfaces must stay disjoint.
 
-    Named by ``ProfileUpdateSerializer``'s own docstring, which points here for
-    the guarantee. A field writable through both endpoints would have two write
-    paths to keep in agreement forever *and* two different scopes guarding it -
-    and since ``PATCH /profiles/{slug}/`` is the weaker of the two
-    (``social:write``), any overlap silently downgrades the protection on
-    whatever it covers.
-    """
+    Named by ``ProfileUpdateSerializer``'s own docstring, which points here for the guarantee."""
 
     def test_no_field_is_writable_through_both_endpoints(self) -> None:
         from urbanlens.dashboard.external_api.serializers import ProfileUpdateSerializer, SettingsPatchSerializer
@@ -335,7 +308,9 @@ class ProfileNotesTests(TestCase):
 
     def test_multiple_notes_per_subject_are_allowed(self) -> None:
         for text in ("first", "second"):
-            response = self.client.post(self.url, {"content": text}, content_type="application/json", **_bearer(self.raw_key))
+            response = self.client.post(
+                self.url, {"content": text}, content_type="application/json", **_bearer(self.raw_key)
+            )
             self.assertEqual(response.status_code, 201)
 
         listing = self.client.get(self.url, **_bearer(self.raw_key))
@@ -362,7 +337,9 @@ class ProfileNotesTests(TestCase):
         self.assertEqual(response.json(), [])
 
     def test_another_users_note_uuid_reads_as_missing(self) -> None:
-        create = self.client.post(self.url, {"content": "mine"}, content_type="application/json", **_bearer(self.raw_key))
+        create = self.client.post(
+            self.url, {"content": "mine"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         note_uuid = create.json()["uuid"]
 
         stranger = baker.make(User)

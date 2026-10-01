@@ -1,19 +1,15 @@
-"""Tests for the async comment-image malware scan (docs/notes/ai/completed.md).
-
-A newly-uploaded comment/reply/trip-comment photo no longer blocks the POST
-on a clamd round-trip: the comment saves immediately with `pending_scan=True`
-(visible only to its own author) and a background task clears that flag once
-the scan confirms the image is clean, or removes the comment and notifies its
-author (with their original text) if the image is rejected or the scanner
-stays unavailable through every retry.
-"""
+"""Tests for the async comment-image malware scan."""
 
 from __future__ import annotations
 
 import io
 from unittest.mock import patch
 
+from botocore.exceptions import ClientError
+from celery.exceptions import Retry
+from django.core.files.storage import FileSystemStorage
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models.fields.files import FieldFile
 from django.test import RequestFactory
 from django.urls import reverse
 from model_bakery import baker
@@ -24,7 +20,6 @@ from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
 from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError
 from urbanlens.dashboard.tasks import scan_comment_image, scan_trip_comment_image
@@ -34,6 +29,13 @@ def _fake_image(name: str = "photo.png") -> SimpleUploadedFile:
     buf = io.BytesIO()
     PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="PNG")
     return SimpleUploadedFile(name, buf.getvalue(), content_type="image/png")
+
+
+def _slow_down(operation: str) -> ClientError:
+    """What the S3 backend raises when the object store turns a request away."""
+    return ClientError(
+        {"Error": {"Code": "SlowDown", "Message": "busy"}, "ResponseMetadata": {"HTTPStatusCode": 503}}, operation
+    )
 
 
 class StartCommentImageScanTests(TestCase):
@@ -75,7 +77,9 @@ class ScanCommentImageTaskTests(TestCase):
         self.pin = baker.make(Pin, profile=self.profile)
 
     def _pending_comment(self, text: str = "check this out") -> Comment:
-        return Comment.objects.create(pin=self.pin, profile=self.profile, text=text, image=_fake_image(), pending_scan=True)
+        return Comment.objects.create(
+            pin=self.pin, profile=self.profile, text=text, image=_fake_image(), pending_scan=True
+        )
 
     def test_clean_result_clears_pending_scan(self) -> None:
         comment = self._pending_comment()
@@ -88,11 +92,20 @@ class ScanCommentImageTaskTests(TestCase):
     def test_infected_result_deletes_the_comment_and_notifies_the_author(self) -> None:
         comment = self._pending_comment(text="my cool photo")
         comment_id = comment.pk
-        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
+        image_name = comment.image.name
+        with patch(
+            "urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload",
+            return_value="This file was flagged as malicious.",
+        ):
             result = scan_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(Comment.objects.filter(pk=comment_id).exists())
-        notification = NotificationLog.objects.get(profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED)
+        # The stored file, not just the row, must go - see reject_comment_upload's
+        # docstring on why an orphaned upload can't be left behind in storage.
+        self.assertFalse(comment.image.storage.exists(image_name))
+        notification = NotificationLog.objects.get(
+            profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
+        )
         self.assertIn("my cool photo", notification.message)
         self.assertIn("flagged as malicious", notification.message)
 
@@ -100,21 +113,115 @@ class ScanCommentImageTaskTests(TestCase):
         comment = self._pending_comment(text="retry me")
         comment_id = comment.pk
         with (
-            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")),
+            patch(
+                "urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload",
+                side_effect=MalwareScanUnavailableError("down"),
+            ),
             patch.object(scan_comment_image, "max_retries", 0),
         ):
             result = scan_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(Comment.objects.filter(pk=comment_id).exists())
-        notification = NotificationLog.objects.get(profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED)
+        notification = NotificationLog.objects.get(
+            profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
+        )
         self.assertIn("retry me", notification.message)
         self.assertIn("unavailable", notification.message)
+
+    def test_unavailable_scanner_retries_instead_of_rejecting_before_the_limit(self) -> None:
+        comment = self._pending_comment(text="retry me too")
+        comment_id = comment.pk
+        # Called directly (not through a worker), a bound task's self.retry() re-raises
+        # the original exception rather than swallowing it into a queued retry - see
+        # celery.app.task.Task.retry's `called_directly` branch. Reaching this at all
+        # proves the code took the "retry" branch, not the "give up and reject" branch
+        # below max_retries.
+        with (
+            patch(
+                "urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload",
+                side_effect=MalwareScanUnavailableError("down"),
+            ),
+            self.assertRaises(MalwareScanUnavailableError),
+        ):
+            scan_comment_image(comment_id)
+        comment.refresh_from_db()
+        self.assertTrue(comment.pending_scan)
+        self.assertTrue(Comment.objects.filter(pk=comment_id).exists())
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
+            ).exists()
+        )
+
+    def test_an_object_store_that_refuses_to_hand_back_the_image_is_retried(self) -> None:
+        comment = self._pending_comment()
+        with (
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None),
+            patch.object(FieldFile, "open", side_effect=_slow_down("GetObject")),
+            patch.object(scan_comment_image, "retry", side_effect=Retry()) as retry,
+            self.assertRaises(Retry),
+        ):
+            scan_comment_image(comment.pk)
+        retry.assert_called_once()
+        comment.refresh_from_db()
+        self.assertTrue(comment.pending_scan)
+
+    def test_an_object_store_that_keeps_refusing_the_reencoded_image_leaves_it_pending(self) -> None:
+        comment = self._pending_comment(text="not stored yet")
+        comment_id = comment.pk
+        with (
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None),
+            patch.object(FileSystemStorage, "save", side_effect=_slow_down("PutObject")),
+            patch.object(scan_comment_image, "max_retries", 0),
+        ):
+            result = scan_comment_image(comment_id)
+        self.assertFalse(result)
+        self.assertTrue(Comment.objects.filter(pk=comment_id, pending_scan=True).exists())
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
+            ).exists()
+        )
+
+    def test_the_upload_as_sent_is_deleted_once_its_reencoded_copy_is_shown(self) -> None:
+        comment = self._pending_comment()
+        uploaded = comment.image.name
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None):
+            self.assertTrue(scan_comment_image(comment.pk))
+        self.assertFalse(comment.image.storage.exists(uploaded))
+
+    def test_a_published_comment_is_kept_when_its_upload_as_sent_cannot_be_deleted(self) -> None:
+        comment = self._pending_comment(text="already published")
+        uploaded = comment.image.name
+        with (
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None),
+            patch.object(FileSystemStorage, "delete", side_effect=[_slow_down("DeleteObject"), None, None]),
+            patch.object(scan_comment_image, "max_retries", 0),
+        ):
+            result = scan_comment_image(comment.pk)
+        self.assertTrue(result)
+        comment.refresh_from_db()
+        self.assertFalse(comment.pending_scan)
+        self.assertNotEqual(comment.image.name, uploaded)
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
+            ).exists()
+        )
 
     def test_missing_comment_is_a_no_op(self) -> None:
         self.assertFalse(scan_comment_image(999_999))
 
     def test_comment_no_longer_pending_is_a_no_op(self) -> None:
-        comment = Comment.objects.create(pin=self.pin, profile=self.profile, text="already scanned", image=_fake_image(), pending_scan=False)
+        comment = Comment.objects.create(
+            pin=self.pin, profile=self.profile, text="already scanned", image=_fake_image(), pending_scan=False
+        )
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload") as scan:
+            self.assertFalse(scan_comment_image(comment.pk))
+        scan.assert_not_called()
+
+    def test_pending_but_imageless_comment_is_a_no_op(self) -> None:
+        comment = Comment.objects.create(pin=self.pin, profile=self.profile, text="no image somehow", pending_scan=True)
         with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload") as scan:
             self.assertFalse(scan_comment_image(comment.pk))
         scan.assert_not_called()
@@ -129,7 +236,9 @@ class ScanTripCommentImageTaskTests(TestCase):
         self.trip = baker.make(Trip, creator=self.profile)
 
     def _pending_comment(self, text: str = "trip photo") -> TripComment:
-        return TripComment.objects.create(trip=self.trip, author=self.profile, text=text, image=_fake_image(), pending_scan=True)
+        return TripComment.objects.create(
+            trip=self.trip, author=self.profile, text=text, image=_fake_image(), pending_scan=True
+        )
 
     def test_clean_result_clears_pending_scan(self) -> None:
         comment = self._pending_comment()
@@ -142,22 +251,25 @@ class ScanTripCommentImageTaskTests(TestCase):
     def test_infected_result_deletes_the_comment_and_notifies_the_author(self) -> None:
         comment = self._pending_comment(text="trip photo text")
         comment_id = comment.pk
-        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
+        with patch(
+            "urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload",
+            return_value="This file was flagged as malicious.",
+        ):
             result = scan_trip_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(TripComment.objects.filter(pk=comment_id).exists())
-        notification = NotificationLog.objects.get(profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED)
+        notification = NotificationLog.objects.get(
+            profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED
+        )
         self.assertIn("trip photo text", notification.message)
 
 
 class CommentVisibilityWhilePendingScanTests(TestCase):
     """controllers.comments._build_context - a pending-scan comment is visible only to its author.
 
-    Pin comments are always self-authored (the pin owner is the only
-    possible viewer), so this only matters in practice for wiki (and trip)
-    comments - covered here via the wiki panel, which any pin-having viewer
-    of the location can see.
-    """
+    Pin comments are always self-authored (the pin owner is the only possible viewer), so this only matters in
+    practice for wiki (and trip) comments - covered here via the wiki panel, which any pin-having viewer of the
+    location can see."""
 
     def setUp(self) -> None:
         self.author = baker.make("auth.User").profile
@@ -169,7 +281,9 @@ class CommentVisibilityWhilePendingScanTests(TestCase):
         # pending_scan) so that check doesn't confound these assertions.
         baker.make(Pin, profile=self.viewer, location=self.location)
         baker.make(Pin, profile=self.author, location=self.location)
-        self.comment = Comment.objects.create(wiki=self.wiki, profile=self.author, text="pending photo comment", image=_fake_image(), pending_scan=True)
+        self.comment = Comment.objects.create(
+            wiki=self.wiki, profile=self.author, text="pending photo comment", image=_fake_image(), pending_scan=True
+        )
         self.request = RequestFactory().get("/")
 
     def test_other_viewer_does_not_see_the_pending_comment(self) -> None:
@@ -205,7 +319,10 @@ class PostingACommentPhotoDoesNotBlockOnTheScanTests(TestCase):
         self.client.force_login(self.user)
 
     def test_post_succeeds_immediately_and_never_calls_the_scanner(self) -> None:
-        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload") as scan, patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
+        with (
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload") as scan,
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+        ):
             response = self.client.post(
                 reverse("pin.comments", args=[self.pin.slug]),
                 {"text": "check out this photo", "image": _fake_image()},

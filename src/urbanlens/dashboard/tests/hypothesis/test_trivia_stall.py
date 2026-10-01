@@ -1,12 +1,4 @@
-"""Tests for Trivia's multiplayer stall/leave/kick handling.
-
-Covers ``force_reveal_round`` (the stall-sweep primitive - can end a session
-as ABANDONED), ``end_session_now`` (the host's manual escape hatch),
-``leave_session``/``kick_participant`` (voluntary departure and host
-removal - no SpotGuessr equivalent exists yet, this is new ground),
-``TriviaSessionQuerySet.stalled()``, and the Celery sweep task itself.
-Mirrors ``test_spotguessr_stall.py``'s shape for the stall-handling pieces.
-"""
+"""Tests for Trivia's multiplayer stall/leave/kick handling."""
 
 from __future__ import annotations
 

@@ -1,18 +1,4 @@
-"""Display Order offers the same delete/merge actions as the other label tabs.
-
-The tab listed tags, categories and statuses together for reordering, but was the
-only one with no way to remove or merge anything from it - a user reordering their
-labels had to switch tabs to delete one and come back.
-
-Per-item delete is rendered here; bulk delete and merge come from the shared
-``#org-bulk-bar`` toolbar, which the tab already drove for bulk *edit*. Merge is
-deliberately not offered per item: every other tab passes ``merge_url=''`` to the
-label card, so merge has always been a 2-or-more selection action, and adding a
-single-item variant here would be a new interaction rather than parity.
-
-Global labels get neither control, matching the other tabs - a user does not own
-them, so they can only stop using them.
-"""
+"""Display Order offers the same delete/merge actions as the other label tabs."""
 
 from __future__ import annotations
 
@@ -67,7 +53,7 @@ class DisplayOrderActionsTests(TestCase):
 
     def test_each_kind_targets_its_own_rows_container(self) -> None:
         """The delete re-renders the owning tab's rows, so its ids must line up."""
-        ensure_label( profile=self.profile, kind=KIND_CATEGORY, name="Hospital")
+        ensure_label(profile=self.profile, kind=KIND_CATEGORY, name="Hospital")
         baker.make(Label, profile=self.profile, kind=KIND_STATUS, name="Sealed")
 
         html = self._priority_html()

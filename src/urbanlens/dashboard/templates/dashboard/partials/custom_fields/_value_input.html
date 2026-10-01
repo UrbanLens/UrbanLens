@@ -1,7 +1,4 @@
-{# One custom-field value control, branched by field type and style. Saves on change via HTMX. #}
-{# Context: field (CustomField), value (CustomFieldValue|None), post_url, hx_target, #}
-{# optional hx_swap (defaults to outerHTML of the target) and include_field_id (adds #}
-{# a field_id hx-val for endpoints that resolve the field from the POST body). #}
+{# One custom-field value control, branched by field type and style. #}
 {% if field.field_type == 'select' %}
 <select class="cf-input cf-value-input cf-value-input--select" name="value" aria-label="{{ field.name }}"
         hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
@@ -75,8 +72,8 @@
            aria-label="{{ field.name }}"
            hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
            {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
-    {% if value.value_text %}
-    <a class="cf-url-open" href="{{ value.value_text }}" target="_blank" rel="noopener noreferrer" title="Open link">
+    {% if value.link_href %}
+    <a class="cf-url-open" href="{{ value.link_href }}" target="_blank" rel="noopener noreferrer" title="Open link">
         <i class="material-symbols-outlined">open_in_new</i>
     </a>
     {% endif %}

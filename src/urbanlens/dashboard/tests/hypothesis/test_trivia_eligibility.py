@@ -10,8 +10,18 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus, TriviaQuestionVote, TriviaQuestionVoteKind
-from urbanlens.dashboard.services.trivia.eligibility import eligible_questions, has_eligible_questions, solo_own_pending_questions
+from urbanlens.dashboard.models.trivia.model import (
+    TriviaQuestion,
+    TriviaQuestionSource,
+    TriviaQuestionStatus,
+    TriviaQuestionVote,
+    TriviaQuestionVoteKind,
+)
+from urbanlens.dashboard.services.trivia.eligibility import (
+    eligible_questions,
+    has_eligible_questions,
+    solo_own_pending_questions,
+)
 
 _coordinate_counter = count()
 
@@ -26,7 +36,9 @@ def _make_profile() -> Profile:
 
 
 def _make_question(location: Location, *, status: str = TriviaQuestionStatus.APPROVED) -> TriviaQuestion:
-    return baker.make(TriviaQuestion, location=location, source=TriviaQuestionSource.DETERMINISTIC, status=status, answer="1937")
+    return baker.make(
+        TriviaQuestion, location=location, source=TriviaQuestionSource.DETERMINISTIC, status=status, answer="1937"
+    )
 
 
 class EligibleQuestionsTests(TestCase):
@@ -87,7 +99,9 @@ class EligibleQuestionsTests(TestCase):
         baker.make(Pin, profile=self.alice, location=location)
         question = _make_question(location)
         for _ in range(3):
-            baker.make(TriviaQuestionVote, question=question, profile=_make_profile(), kind=TriviaQuestionVoteKind.DOWNVOTE)
+            baker.make(
+                TriviaQuestionVote, question=question, profile=_make_profile(), kind=TriviaQuestionVoteKind.DOWNVOTE
+            )
 
         self.assertEqual(list(eligible_questions([self.alice])), [])
 

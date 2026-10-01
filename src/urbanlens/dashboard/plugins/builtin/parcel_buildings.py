@@ -1,27 +1,4 @@
-"""Parcel buildings plugin: every structure standing on a pin's property.
-
-The counterpart to ``plugins.builtin.redata_building_attributes``, which
-answers "what is *this* building?" - this one answers "what buildings are on
-this property?", which is the only sensible question for a campus, a mill
-complex, or an institutional site where one pin covers a hundred structures.
-
-Two providers, in order:
-
-1. **REData** (``RedataGateway.lookup_parcel_uuid`` → ``lookup_buildings``),
-   which combines a county's own building-footprint layer with NY SHPO's CRIS
-   inventory and is the only source that carries real building *numbers* and
-   *names* - the "Building 154 / Tool Shed" identifiers a site's own signage
-   and paperwork use.
-2. **Overpass** (``OverpassGateway.buildings_within``) against the location's
-   effective property boundary, for anywhere REData has no parcel coverage.
-   OSM footprints have no building numbers, but a named-and-located list still
-   beats nothing.
-
-The cached list is what powers the "Buildings on this Property" panel on both
-the pin detail page and the wiki, the "would you like to add pins for the
-buildings here?" offer, and the child-pin classifier's fallback proximity test
-(see ``services.locations.site_scope``).
-"""
+"""Parcel buildings plugin: every structure standing on a pin's property."""
 
 from __future__ import annotations
 
@@ -44,16 +21,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Human-readable labels for each provider's own reporting system, for the
-#: per-row source chip. Shared with ``redata_building_attributes``, which shows
-#: the same provenance on its own card.
-#:
-#: Every tag in REData's ``BUILDING_SOURCES`` needs an entry: a key with no
-#: label renders as no chip at all, so a building whose only source is missing
-#: here reads as if its provenance were unknown. Four of the six were absent
-#: until 2026-08-19, including ``overpass`` - which REData runs by default.
-#: ``osm`` is not one of REData's; it is this plugin's own fallback tag for the
-#: same OpenStreetMap data, which is why both map to one label.
+#: Human-readable labels for each provider's own reporting system, for the per-row source chip.
+#: Shared with ``redata_building_attributes``, which shows the same provenance on its own card.
 SOURCE_LABELS: dict[str, str] = {
     "county_gis": "County GIS",
     "assessor": "County Assessor",
@@ -72,10 +41,7 @@ def source_chips(sources: list[str]) -> list[str]:
         sources: Source keys from :func:`record_sources`.
 
     Returns:
-        Labels in the order given, without repeats - ``overpass`` and ``osm``
-        share a label, so a record referencing both would otherwise render
-        "OpenStreetMap + OpenStreetMap".
-    """
+        Labels in the order given, without repeats - ``overpass`` and ``osm`` share a label, so a record referencing both would otherwise render "OpenStreetMap + OpenStreetMap"."""
     chips: list[str] = []
     for key in sources:
         label = SOURCE_LABELS.get(key)
@@ -86,22 +52,13 @@ def source_chips(sources: list[str]) -> list[str]:
 
 def record_sources(building: dict[str, Any]) -> list[str]:
     """Every source that references one building, richest-information first.
-
-    REData's ``/parcels/{uuid}/buildings/`` now returns one record per physical
-    building with a ``sources[]`` array (see its
-    ``docs/buildings-dedup-spec.md``), having removed the top-level ``source``
-    string a single-observation record used to carry. Reading only the old key
-    leaves the provenance chip blank for every REData building; reading only
-    the new one drops Overpass, which still answers in the flat shape.
+    Reading only the old key leaves the provenance chip blank for every REData building; reading only the new one drops Overpass, which still answers in the flat shape.
 
     Args:
         building: A raw building record from either shape.
 
     Returns:
-        Source keys in the order REData ordered them (``BUILDING_SOURCES``
-        precedence, so the first is the richest), or a single-entry list for a
-        flat record, or empty when neither key is present.
-    """
+        Source keys in the order REData ordered them (``BUILDING_SOURCES`` precedence, so the first is the richest), or a single-entry list for a flat record, or empty when neither key is present."""
     sources = building.get("sources")
     if isinstance(sources, list):
         keys = [key for entry in sources if isinstance(entry, dict) and (key := entry.get("source"))]
@@ -112,89 +69,47 @@ def record_sources(building: dict[str, Any]) -> list[str]:
 
 def buildings_on_property(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The records that stand on this property, dropping the ones that don't.
-
-    REData over-returns deliberately and labels what it returns. A parcel
-    inside a broad CRIS archaeological sensitivity zone gets every surveyed
-    building in that zone - roughly a thousand acres' worth here - each flagged
-    ``is_on_property: false`` precisely so a consumer can drop it. CRIS's own
-    survey roster for this campus is 124 buildings, against the 2604 that
-    reached the UI.
-
-    Deliberately *not* filtered here: a record carrying ``child_refs``. Those
-    are excluded from counts (see :func:`countable_buildings`) but not from the
-    list, because a parent is often a real building in its own right - a large
-    building whose wings are separately mapped becomes their parent while
-    remaining the building people actually name the site after. Dropping it
-    would delete the most significant structure on a campus.
+    A parcel inside a broad CRIS archaeological sensitivity zone gets every surveyed building in that zone - roughly a thousand acres' worth here - each flagged ``is_on_property: false`` precisely so a consumer can drop it.
 
     Args:
         buildings: Raw building records from either provider.
 
     Returns:
-        Only the records on this property. An absent flag is kept: Overpass
-        rows carry none, and a missing label is not a negative one.
-    """
+        Only the records on this property."""
     return [b for b in buildings if b.get("is_on_property") is not False]
 
 
 def countable_buildings(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The records to count, one per physical building.
-
-    A record carrying ``child_refs`` contains other records in this same list,
-    so counting it as well as its children counts a subdivided structure twice.
-    Counting the leaves is REData's own stated rule.
+    A record carrying ``child_refs`` contains other records in this same list, so counting it as well as its children counts a subdivided structure twice.
 
     Args:
         buildings: Raw building records from either provider.
 
     Returns:
-        The on-property records that are nobody's parent.
-    """
+        The on-property records that are nobody's parent."""
     return [b for b in buildings_on_property(buildings) if not b.get("child_refs")]
 
 
 def confident_buildings(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The on-property records certain enough to act on without asking.
 
-    The dividing line is ``overlap_refs``: REData sets it when a building's
-    geometry substantially overlaps another source's building without being
-    contained in it or being obviously the same structure - the one case its
-    reconciliation deliberately refuses to resolve, because merging would
-    destroy real information. If REData cannot say what the record is, neither
-    can we, so those wait for a person (the "add buildings" dialog) instead of
-    becoming pins on their own.
-
-    Containment is not ambiguity: a parent and its ``child_refs`` children are
-    a *verified* relationship, so nested buildings are confident on both sides.
-
     Args:
         buildings: Raw building records from either provider.
 
     Returns:
-        The on-property records with no unresolved overlap.
-    """
+        The on-property records with no unresolved overlap."""
     return [b for b in buildings_on_property(buildings) if not b.get("overlap_refs")]
 
 
 def _tree_ordered(rows: list[dict[str, Any]], *, annotate_depth: bool = True) -> list[dict[str, Any]]:
     """Order rows so each building is followed by the buildings inside it.
 
-    REData reports nesting rather than flattening it, and it is not a flat
-    parent/child pair: a child links to its *most specific* container, and that
-    container may itself be someone else's child, so the structure is a tree of
-    arbitrary depth (a campus block parenting a wing parenting an annex). Nor is
-    it always cross-source - OSM models a ``building`` outline over its own
-    ``building:part`` segments.
-
-    Each row gains a ``depth``, so a template can indent without walking the
-    tree itself.
-
     Args:
         rows: Rendered rows, each possibly carrying ``ref``/``parent_ref``.
 
     Returns:
-        The same rows, depth-first, siblings in :func:`_row_sort_key` order.
-    """
+        The same rows, depth-first, siblings in :func:`_row_sort_key` order."""
     known = {row["ref"] for row in rows if row.get("ref")}
     children: dict[str, list[dict[str, Any]]] = {}
     roots: list[dict[str, Any]] = []
@@ -233,40 +148,28 @@ def _tree_ordered(rows: list[dict[str, Any]], *, annotate_depth: bool = True) ->
 
 def building_tree_order(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Order raw building records parents-first, children directly after.
-
-    The importer needs this ordering to mirror REData's building tree as a pin
-    tree: a child's pin can only be parented under its building's pin if that
-    pin exists by the time the child is created.
+    The importer needs this ordering to mirror REData's building tree as a pin tree: a child's pin can only be parented under its building's pin if that pin exists by the time the child is created.
 
     Args:
         buildings: Raw building records carrying ``ref``/``parent_ref``.
 
-    Deliberately does *not* annotate depth: raw cached records are hashed
-    whole by ``pin_restructure.building_selection_key``, so writing any key
-    into them silently changes their identity and breaks every place/selection
-    lookup keyed on it.
-
     Returns:
-        The same records, depth-first (see :func:`_tree_ordered`).
-    """
+        The same records, depth-first (see :func:`_tree_ordered`)."""
     return _tree_ordered(buildings, annotate_depth=False)
+
+
+#: Ceiling on the CRIS search radius the fallback roster asks, matching the CRIS panel's own site cap.
+_MAX_CRIS_RADIUS_METERS = 1500.0
 
 
 def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
     """Resolve every building on a location's parcel, REData first then Overpass.
 
-    Failures are tolerated the same way ``redata_building_attributes`` and
-    ``cris_buildings`` tolerate theirs (broad catch, cache an empty result):
-    a missing building list is a low-stakes gap, and retrying it on every
-    background enrichment cycle isn't worth the added complexity.
-
     Args:
         location: The location whose parcel to enumerate.
 
     Returns:
-        ``{"buildings": [...], "provider": "redata"|"osm"}``, or ``{}`` when
-        neither provider found anything.
-    """
+        ``{"buildings": [...], "provider": "redata"|"osm"}``, or ``{}`` when neither provider found anything."""
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
     latitude = float(location.latitude or 0)
@@ -277,7 +180,6 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
         buildings = gateway.lookup_buildings(parcel_uuid) if parcel_uuid else []
     except (PropertyRecordsUnavailableError, ValueError):
-        # Rounding is not redaction - ~1km still narrows an undisclosed site to a
         # handful of candidates, and exc_info would re-leak the exact coordinate
         # from the failed request's own URL. See services/security/redact.py.
         logger.debug("parcel_buildings: REData unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
@@ -287,26 +189,119 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         return {"buildings": list(buildings), "provider": "redata"}
 
     osm_buildings = _overpass_buildings(location)
+    cris_buildings = _cris_buildings(location)
     if osm_buildings:
-        return {"buildings": osm_buildings, "provider": "osm"}
+        from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+        return {"buildings": merge_cris_buildings(osm_buildings, cris_buildings, parcel_polygon_for_location(location)), "provider": "osm"}
+    if cris_buildings:
+        from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+        merged = merge_cris_buildings([], cris_buildings, parcel_polygon_for_location(location))
+        if merged:
+            return {"buildings": merged, "provider": "cris"}
     return {}
+
+
+def _cris_buildings(location: Location) -> list[dict[str, Any]]:
+    """NY SHPO's inventoried buildings around the location's parcel, when REData's own list is out of reach.
+
+    REData's building list merges CRIS with OSM itself; this is the fallback's share of that, asked only in New
+    York and only when a real parcel bounds the search.
+
+    Args:
+        location: The location whose parcel to search.
+
+    Returns:
+        CRIS building resources, unfiltered by parcel, or ``[]``.
+    """
+    from urbanlens.dashboard.plugins.builtin.cris_buildings import radius_covering
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+    from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
+    from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+    latitude, longitude = float(location.latitude or 0), float(location.longitude or 0)
+    polygon = parcel_polygon_for_location(location)
+    if polygon is None or not state_boundary("NY").contains(latitude, longitude):
+        return []
+    from shapely import wkt as shapely_wkt
+
+    radius = min(radius_covering(shapely_wkt.loads(polygon.wkt), latitude, longitude), _MAX_CRIS_RADIUS_METERS)
+    try:
+        resources = RedataGateway().lookup_cultural_resources(latitude, longitude, radius_meters=radius, provider="ny_cris")
+    except (PropertyRecordsUnavailableError, ValueError):
+        logger.debug("parcel_buildings: CRIS unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
+        return []
+    return [resource for resource in resources if isinstance(resource, dict) and resource.get("resource_type") == "building"]
+
+
+def merge_cris_buildings(osm_buildings: list[dict[str, Any]], cris_resources: list[dict[str, Any]], polygon: GEOSGeometry | None) -> list[dict[str, Any]]:
+    """Fold CRIS's inventoried buildings into OSM's footprints, by REData's own reconciliation rules.
+
+    A footprint holding exactly one CRIS point is that building (the point lends its name when OSM has none).
+    A footprint holding several is an envelope over them: the points stay the buildings and name it their
+    ``parent_ref``. A point in no footprint is a building of its own. Points off the parcel are dropped.
+
+    Args:
+        osm_buildings: Overpass building records.
+        cris_resources: CRIS building resources from REData.
+        polygon: The parcel outline; None keeps every point.
+
+    Returns:
+        The OSM records (copied, possibly named or turned into envelopes) followed by the CRIS-only records.
+    """
+    from django.contrib.gis.geos import Point
+
+    from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
+
+    records = [dict(building) for building in osm_buildings]
+    footprints = [building_footprint(building) for building in records]
+    held: dict[int, list[dict[str, Any]]] = {}
+    standalone: list[dict[str, Any]] = []
+    for resource in cris_resources:
+        latitude, longitude = resource.get("source_latitude"), resource.get("source_longitude")
+        if latitude is None or longitude is None:
+            continue
+        point = Point(float(longitude), float(latitude), srid=4326)
+        if polygon is not None and not polygon.contains(point):
+            continue
+        raw_attributes = resource.get("attributes")
+        attributes: dict[str, Any] = raw_attributes if isinstance(raw_attributes, dict) else {}
+        number = str(attributes.get("USNNum") or resource.get("external_id") or "").strip()
+        name = str(resource.get("name") or attributes.get("USNName") or "").strip()
+        if not number:
+            continue
+        record = {"name": name, "building_number": "", "latitude": float(latitude), "longitude": float(longitude), "ref": f"cris:{number}", "source": "cris"}
+        holder = next((index for index, footprint in enumerate(footprints) if footprint is not None and footprint.contains(point)), None)
+        if holder is None:
+            standalone.append(record)
+        else:
+            held.setdefault(holder, []).append(record)
+
+    for index, inside in held.items():
+        footprint_record = records[index]
+        if len(inside) == 1:
+            if not footprint_record.get("name"):
+                footprint_record["name"] = inside[0]["name"]
+            footprint_record["cris_ref"] = inside[0]["ref"]
+            continue
+        ref = footprint_record.get("ref") or f"osm:{footprint_record.get('osm_type') or 'way'}/{footprint_record.get('osm_id')}"
+        footprint_record["ref"] = ref
+        footprint_record["child_refs"] = [member["ref"] for member in inside]
+        for member in inside:
+            member["parent_ref"] = ref
+        standalone.extend(inside)
+    return records + standalone
 
 
 def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
     """OSM buildings inside the location's effective property boundary.
 
-    Skipped entirely when the only "boundary" available is the synthesized
-    default circle (see ``Boundary.effective_polygon``) - counting the
-    buildings inside an arbitrary 50 m disc around a coordinate would report
-    a neighbour's house as being on this parcel.
-
     Args:
         location: The location whose property boundary bounds the search.
 
     Returns:
-        Building records, or ``[]`` when there's no real boundary to search
-        inside or Overpass found nothing.
-    """
+        Building records, or ``[]`` when there's no real boundary to search inside or Overpass found nothing."""
     from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
     from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
@@ -326,107 +321,175 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
 
 def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None, boundary_polygon: GEOSGeometry | None = None) -> list[dict[str, Any]]:
     """Pair each known building with the child marker that already covers it.
-
-    Shared by the pin detail panel and the wiki's equivalent view so both
-    render identically from the same cached data - the only difference being
-    whether ``children`` are child pins or child wikis, which both expose the
-    same ``effective_latitude``/``effective_longitude``/``pin_type`` surface.
-
-    Matching is delegated to ``services.pins.pin_restructure.match_marker`` so this
-    panel's idea of "already pinned" can never drift from what the restructure
-    suggestion would actually create.
+    Matching goes through ``services.pins.building_clusters`` - the same grouping and matching auto-nest and the restructure suggestion use - so this panel's idea of "already pinned" can never drift from what they would actually create.
 
     Args:
         buildings: Cached building records (see :func:`fetch_parcel_buildings`).
-        children: The marker's direct children, to match against.
-        url_for: Optional callable turning a matched child into a link target;
-            omit for child wikis, which are markers on their parent's page
-            rather than pages of their own.
-        boundary_polygon: The property's real (non-circle) boundary, when
-            known. REData's per-parcel building list isn't guaranteed to
-            align with our own boundary - a building that falls outside it is
-            dropped, unless a child marker already covers it (a pinned
-            building belongs on the list regardless of where the parcel data
-            says it sits). Pass None to skip this check entirely, which is
-            right wherever there's no real boundary to test against (only the
-            synthesized fallback circle) - filtering against an arbitrary
-            circle would drop real buildings for no reason.
+        children: The marker's child markers at any depth, to match against.
+        url_for: Optional callable turning a matched child into a link target; omit for child wikis, which are markers on their parent's page rather than pages of their own.
+        boundary_polygon: The property's real (non-circle) boundary, when known.
 
     Returns:
-        One row per building, sorted by building number then name, each with
-        ``name``, ``building_number``, ``year_built``, ``source``,
-        ``source_label``, ``latitude``, ``longitude``, ``geometry``,
-        ``has_geometry``, ``child_name``, ``child_uuid``, and ``child_url`` -
-        the child fields empty/None when this building has no marker yet.
+        One row per building record, sorted by building number then name, each with ``name``, ``building_number``, ``year_built``, ``source``, ``source_label``, ``latitude``, ``longitude``, ``geometry``, ``has_geometry``, ``child_name``, ``child_uuid``, and... Records describing one physical building share its child."""
+    rows, _unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=boundary_polygon)
+    return rows
 
-        ``child_*`` are deliberately marker-neutral rather than ``child_pin_*``:
-        the wiki view passes child *wikis* here, so naming them for pins would
-        be a lie on one of the two callers. The external API renames them to
-        ``child_pin_*`` at its own boundary, where they really are pins.
-    """
-    from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 
+def match_buildings_to_children(
+    buildings: list[dict[str, Any]],
+    children: list,
+    url_for=None,
+    boundary_polygon: GEOSGeometry | None = None,
+) -> tuple[list[dict[str, Any]], list]:
+    """The matching :func:`building_rows` wraps, also returning the leftover children.
+
+    Records inside the boundary are grouped into physical buildings first, and each building claims at most one
+    child; every record of that building shows it. A record outside the boundary is listed only when a leftover
+    child covers it on its own.
+
+    Returns:
+        ``(rows, unmatched)`` - ``rows`` exactly as :func:`building_rows` returns them, ``unmatched`` the children left over once every building has claimed at most one."""
+    from urbanlens.dashboard.services.pins.building_clusters import cluster_buildings, match_clusters
+    from urbanlens.dashboard.services.pins.pin_restructure import building_markers, match_marker
+
+    on_property = list(enumerate(buildings_on_property(buildings)))
+    inside = [(index, building) for index, building in on_property if boundary_polygon is None or building_within_boundary(building, boundary_polygon)]
+    clusters = cluster_buildings([building for _index, building in inside], boundary_polygon)
+    candidates = building_markers(children)
+    matched, unmatched_candidates = match_clusters(clusters, candidates)
+    child_of: dict[int, Any] = {id(member): matched[position] for position, cluster in enumerate(clusters) if position in matched for member in cluster.members}
+
+    inside_ids = {id(building) for _index, building in inside}
     rows: list[dict[str, Any]] = []
-    unmatched = list(children)
-    for building in buildings_on_property(buildings):
-        child = match_marker(building, unmatched)
-        if child is not None:
-            # One child can only stand for one building - on a dense campus
-            # the same pin would otherwise claim several neighbouring
-            # footprints and leave real ones looking unpinned.
-            unmatched.remove(child)
-        elif boundary_polygon is not None and not building_within_boundary(building, boundary_polygon):
-            continue
-        geometry = building_footprint_geojson(building)
-        sources = record_sources(building)
-        rows.append(
-            {
-                "name": building.get("name") or "",
-                "building_number": building.get("building_number") or "",
-                "year_built": building.get("year_built") or "",
-                "source": sources[0] if sources else "",
-                "source_label": " + ".join(source_chips(sources)),
-                "latitude": building.get("latitude"),
-                "longitude": building.get("longitude"),
-                "geometry": geometry,
-                "has_geometry": geometry is not None,
-                "ref": building.get("ref") or "",
-                "parent_ref": building.get("parent_ref") or "",
-                "child_refs": list(building.get("child_refs") or []),
-                "depth": 0,
-                "selection_key": building.get("_selection_key") or "",
-                "child_name": _marker_name(child) if child is not None else "",
-                "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
-                "child_url": (url_for(child) if url_for is not None else "") if child is not None else "",
-            },
-        )
+    for record_index, building in on_property:
+        if id(building) in inside_ids:
+            child = child_of.get(id(building))
+        else:
+            child = match_marker(building, unmatched_candidates)
+            if child is None:
+                continue
+            unmatched_candidates.remove(child)
+        rows.append(_building_row(building, record_index, child, url_for))
 
-    return _tree_ordered(rows)
+    candidate_ids = {id(child) for child in candidates}
+    leftover_ids = {id(child) for child in unmatched_candidates}
+    return _tree_ordered(rows), [child for child in children if id(child) not in candidate_ids or id(child) in leftover_ids]
+
+
+def _building_row(building: dict[str, Any], record_index: int, child: Any, url_for) -> dict[str, Any]:
+    """One building record as a panel row, with the child marker standing for it."""
+    geometry = building_footprint_geojson(building)
+    sources = record_sources(building)
+    return {
+        "name": building.get("name") or "",
+        "building_number": building.get("building_number") or "",
+        "year_built": building.get("year_built") or "",
+        "source": sources[0] if sources else "",
+        "source_label": " + ".join(source_chips(sources)),
+        "latitude": building.get("latitude"),
+        "longitude": building.get("longitude"),
+        "geometry": geometry,
+        "has_geometry": geometry is not None,
+        "ref": building.get("ref") or "",
+        "parent_ref": building.get("parent_ref") or "",
+        "child_refs": list(building.get("child_refs") or []),
+        "depth": 0,
+        "selection_key": building.get("_selection_key") or "",
+        # This row's position in buildings_on_property(buildings) - the handle a caller uses to pair a rendered
+        # row with the record it came from, after tree-ordering and boundary drops have reordered and thinned
+        # the list. Not a substitute for selection_key, which is what a POST correlates by.
+        "record_index": record_index,
+        "origin": "external",
+        "child_name": _marker_name(child) if child is not None else "",
+        "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
+        "child_slug": getattr(child, "slug", "") or "" if child is not None else "",
+        "child_url": (url_for(child) if url_for is not None else "") if child is not None else "",
+    }
+
+
+def unpinned_building_child_rows(unmatched_children: list, url_for=None) -> list[dict[str, Any]]:
+    """Row-shape a leftover ``BUILDING`` child pin/wiki that no known building record covers.
+    ``building_rows``' matching loop only ever *consumes* markers that cover an external building record - a ``BUILDING`` pin the owner created by hand (REData/OSM never reported it, or the parcel has no external data at all) is simply never mentioned.
+
+    Args:
+        unmatched_children: The ``unmatched`` list :func:`match_buildings_to_children` returned - children with no external building record.
+        url_for: Optional callable turning a child pin into a link target, as in :func:`building_rows`.
+
+    Returns:
+        One row per ``BUILDING``-typed child, tree-ordered the same way :func:`building_rows`' output is (they share the same sort key)."""
+    from urbanlens.dashboard.models.pin.model import PinType
+
+    rows: list[dict[str, Any]] = [
+        {
+            # No separate "official" name to fall back from here (unlike an external row, where
+            # `name` and `child_name` can legitimately differ) - the pin's own name is the only name
+            # this row has, and using it for both is also what makes _row_sort_key (which only reads
+            # `name`) sort these alphabetically instead of by insertion order.
+            "name": _marker_name(child),
+            "building_number": "",
+            "year_built": "",
+            "source": "",
+            "source_label": "",
+            "latitude": getattr(child, "effective_latitude", None),
+            "longitude": getattr(child, "effective_longitude", None),
+            "geometry": None,
+            "has_geometry": False,
+            "ref": "",
+            "parent_ref": "",
+            "child_refs": [],
+            "depth": 0,
+            "selection_key": "",
+            "origin": "pin",
+            "child_name": _marker_name(child),
+            "child_uuid": str(child.uuid) if getattr(child, "uuid", None) else "",
+            "child_slug": getattr(child, "slug", "") or "",
+            "child_url": url_for(child) if url_for is not None else "",
+        }
+        for child in unmatched_children
+        if getattr(child, "pin_type", None) == PinType.BUILDING
+    ]
+    return _tree_ordered(rows, annotate_depth=False)
+
+
+def child_pin_rows(children: list, url_for=None) -> list[dict[str, Any]]:
+    """Row-shape every direct child pin, of any type, for the panel's Child pins tab.
+
+    Args:
+        children: The pin's direct children.
+        url_for: Optional callable turning a child into a link target.
+
+    Returns:
+        One ``{"name", "pin_type", "type_label", "child_uuid", "child_slug", "child_url"}`` row per child, grouped by
+        type in the order ``PinType`` lists them, then by name.
+    """
+    from urbanlens.dashboard.models.pin.model import PinType
+
+    order = {value: index for index, value in enumerate(PinType.values)}
+    rows = [
+        {
+            "name": _marker_name(child),
+            "pin_type": child.pin_type,
+            "type_label": PinType(child.pin_type).label if child.pin_type in order else "",
+            "child_uuid": str(child.uuid),
+            "child_slug": child.slug or "",
+            "child_url": url_for(child) if url_for is not None else "",
+        }
+        for child in children
+    ]
+    rows.sort(key=lambda row: (order.get(row["pin_type"], len(order)), row["name"].casefold()))
+    return rows
 
 
 def building_within_boundary(building: dict[str, Any], boundary_polygon: GEOSGeometry) -> bool:
     """Whether an unpinned building actually sits on the given boundary.
-
-    Prefers the building's own footprint (an intersection test, so a
-    structure straddling the boundary edge still counts) and falls back to
-    its centroid when the provider published only a point.
-
-    A provider's own "on property" opinion (REData's ``is_on_property``,
-    which :func:`buildings_on_property` filters on) is not guaranteed to
-    agree with our own boundary - see this module's docstring - so this is
-    the check both :func:`building_rows` (the property panel) and
-    ``services.pins.pin_restructure.missing_buildings`` (the "add unpinned
-    buildings" dialog, and the button count that promises what it will do)
-    run against a *suggestion*, not against something already pinned by hand.
+    Prefers the building's own footprint (an intersection test, so a structure straddling the boundary edge still counts) and falls back to its centroid when the provider published only a point.
 
     Args:
         building: One cached building record.
         boundary_polygon: The property's real boundary.
 
     Returns:
-        True when the building overlaps the boundary, or has no usable
-        geometry to test at all (never silently drop a record we can't place).
-    """
+        True when the building overlaps the boundary, or has no usable geometry to test at all (never silently drop a record we can't place)."""
     from django.contrib.gis.geos import Point
 
     from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
@@ -444,26 +507,13 @@ def building_within_boundary(building: dict[str, Any], boundary_polygon: GEOSGeo
 
 def building_footprint_geojson(building: dict[str, Any]) -> dict[str, Any] | None:
     """A building record's real footprint geometry, if it has one.
-
-    REData always returns a ``geometry`` for a building, but degrades to a bare
-    GeoJSON ``Point`` when the county's layer carried no outline - and a Point
-    is exactly the ``latitude``/``longitude`` already on the record, so keeping
-    it would double a hundred-building payload's size to say nothing. Overpass
-    records (the OSM fallback) carry no geometry at all. Both cases collapse to
-    None, which is what makes ``has_geometry`` a usable "can I draw this
-    outline?" flag rather than a "did the provider send a geometry key?" one.
-
-    Named ``..._geojson`` to stay distinct from
-    ``services.pins.pin_restructure.building_footprint``, which answers the same
-    question for the marker-matching code but returns a parsed *shapely* shape
-    (and rejects non-areal geometry) rather than the raw GeoJSON a client wants.
+    Both cases collapse to None, which is what makes ``has_geometry`` a usable "can I draw this outline?" flag rather than a "did the provider send a geometry key?" one.
 
     Args:
         building: One cached building record.
 
     Returns:
-        The GeoJSON geometry dict for a real outline, or None.
-    """
+        The GeoJSON geometry dict for a real outline, or None."""
     geometry = building.get("geometry")
     if not isinstance(geometry, dict) or geometry.get("type") == "Point":
         return None
@@ -476,13 +526,7 @@ def _marker_name(marker) -> str:
 
 
 def _row_sort_key(row: dict[str, Any]) -> tuple:
-    """Sort buildings by number (numerically when they are numbers), then name.
-
-    Building numbers on a campus are the identifiers people actually navigate
-    by, and they are almost always numeric - so "Building 9" has to sort
-    before "Building 10", which a plain string sort gets wrong. Anything
-    non-numeric falls back to its own string, after all the numbered ones.
-    """
+    """Sort buildings by number (numerically when they are numbers), then name."""
     number = str(row.get("building_number") or "").strip()
     if number.isdigit():
         return (0, int(number), "")
@@ -492,26 +536,16 @@ def _row_sort_key(row: dict[str, Any]) -> tuple:
 
 
 class ParcelBuildingsPanelSource(LocationCachePanelSource):
-    """Every building on the pin's parcel, for the "Buildings on this Property" panel.
-
-    Rendered by ``PinController.parcel_buildings`` rather than the generic
-    ``panel_info`` dispatch: each row links to (or offers to create) the child
-    pin for that building, which is well past what
-    ``_simple_info_panel.html``'s label/value grid can express.
-    """
+    """Every building on the pin's parcel, for the "Buildings on this Property" panel."""
 
     key = PARCEL_BUILDINGS_CACHE_SOURCE
     cache_source = PARCEL_BUILDINGS_CACHE_SOURCE
     section_id = "parcel-buildings-section"
     icon = "apartment"
     title = "Buildings on this Property"
-    # Its own read shape, because neither of the uniform ones fits: a building
-    # row is a place with coordinates, a footprint, and a link to the child pin
-    # covering it - which is neither an information card nor a media item. This
-    # is also where a separately-requested "list a pin's buildings" endpoint
-    # ended up: it would have been the same query, the same authorization, and
-    # the same cache row as this panel, so folding it in here means one thing
-    # to keep correct instead of two that must agree.
+    # Its own read shape, because neither of the uniform ones fits: a building row is a place with
+    # coordinates, a footprint, and a link to the child pin covering it - which is neither an
+    # information card nor a media item.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.BUILDINGS})
 
     def gate(self, pin: Pin) -> bool:
@@ -529,35 +563,20 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         payload = fetch_parcel_buildings(location)
         LocationCache.set(location, self.cache_source, payload, query_key=f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}")
         # The moment the list lands is the moment the default structure can be
-        # built - confident buildings become child pins with no dialog.
+        # built - every building becomes a child pin with no dialog.
         auto_nest_location(location)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """Every building on the pin's parcel, each paired with its child pin.
-
-        The child-pin pairing is the part a client cannot compute for itself:
-        deciding whether an existing marker already "covers" a footprint is a
-        geometry-then-nearest-centroid contest (see
-        ``services.pins.pin_restructure.match_marker``), and a client guessing at it
-        would offer to create duplicate pins for buildings that are already
-        pinned. It is resolved server-side through the very same
-        :func:`building_rows` the web panel renders, so both surfaces agree on
-        which buildings are still unpinned.
-
-        ``geometry`` carries a real outline only when the provider supplied one
-        (see :func:`building_footprint`); ``has_geometry`` says so without the
-        client having to inspect it. A client drawing markers reads
-        ``latitude``/``longitude`` and can ignore the geometry entirely.
+        It is resolved server-side through the very same :func:`building_rows` the web panel renders, so both surfaces agree on which buildings are still unpinned.
 
         Args:
-            pin: The pin whose parcel is being read. Its direct children are
-                the markers matched against - a child pin nested deeper is not
-                a candidate, matching what the web panel offers to create.
+            pin: The pin whose parcel is being read. Its child pins at every
+                depth are the markers matched against - a building nested
+                under its container's pin is still pinned.
 
         Returns:
-            ``{"buildings": [...], "provider": ..., "unpinned_count": ...}``,
-            or None when nothing has landed yet, the gate rejects this pin (a
-            child pin has no sub-buildings), or the parcel has no buildings.
+            ``{"buildings": [...], "provider": ..., "unpinned_count": ...}``, or None when nothing has landed yet, the gate rejects this pin (a child pin has no sub-buildings), or the parcel has no buildings.
         """
         if not self.gate(pin):
             return None
@@ -568,38 +587,42 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         if not buildings:
             return None
 
-        from urbanlens.dashboard.services.pins.pin_restructure import property_polygon
+        from urbanlens.dashboard.services.pins.auto_nest import request_sweep
+        from urbanlens.dashboard.services.pins.pin_restructure import importable_building_indexes, property_polygon
 
-        rows = building_rows(buildings, list(pin.detail_pins.select_related("location")), boundary_polygon=property_polygon(pin))
+        children = list(pin.descendants().select_related("location"))
+        boundary = property_polygon(pin)
+        importable = importable_building_indexes(pin, buildings, children, boundary)
+        rows = building_rows(buildings, children, boundary_polygon=boundary)
+        if any(not row["child_uuid"] for row in rows):
+            request_sweep(pin)
+        serialized = [
+            {
+                "name": row["name"],
+                "building_number": row["building_number"],
+                "year_built": row["year_built"],
+                "source": row["source"],
+                "source_label": row["source_label"],
+                "latitude": row["latitude"],
+                "longitude": row["longitude"],
+                "has_geometry": row["has_geometry"],
+                "geometry": row["geometry"],
+                # Renamed from building_rows' marker-neutral child_* keys: on this surface the
+                # children really are pins, and a uuid (not the slug the web panel links by) is what
+                # the mobile pin endpoints address a pin with.
+                "child_pin_uuid": row["child_uuid"] or None,
+                "child_pin_name": row["child_name"] or None,
+                # Whether "add this building" would actually produce a pin.
+                "can_create": not row["child_name"] and row["record_index"] in importable,
+            }
+            for row in rows
+        ]
         return {
-            PanelApiKind.BUILDINGS.value: [
-                {
-                    "name": row["name"],
-                    "building_number": row["building_number"],
-                    "year_built": row["year_built"],
-                    "source": row["source"],
-                    "source_label": row["source_label"],
-                    "latitude": row["latitude"],
-                    "longitude": row["longitude"],
-                    "has_geometry": row["has_geometry"],
-                    "geometry": row["geometry"],
-                    # Renamed from building_rows' marker-neutral child_* keys:
-                    # on this surface the children really are pins, and a uuid
-                    # (not the slug the web panel links by) is what the mobile
-                    # pin endpoints address a pin with.
-                    "child_pin_uuid": row["child_uuid"] or None,
-                    "child_pin_name": row["child_name"] or None,
-                }
-                for row in rows
-            ],
+            PanelApiKind.BUILDINGS.value: serialized,
             "provider": data.get("provider") or "",
-            # Counts what the "add buildings" dialog would actually offer, which
-            # is every unmatched on-property record including envelope parents -
-            # see pin_restructure.missing_buildings, "offer every real one".
-            # Excluding parents here (as this did until 2026-08-19) made the
-            # mobile panel advertise fewer buildings than the web panel on the
-            # subdivided campuses reconciliation exists for.
-            "unpinned_count": sum(1 for row in rows if not row["child_name"]),
+            # Exactly the rows flagged can_create, so the number and the list it ships beside can
+            # never disagree inside one response.
+            "unpinned_count": sum(1 for entry in serialized if entry["can_create"]),
         }
 
 
@@ -614,12 +637,7 @@ class ParcelBuildingsEnrichmentSource(LocationCacheEnrichmentSource):
 
     def gate(self) -> bool:
         """Requires REData to be configured - this source has no other backend.
-
-        Without it the cycle picks candidates, every fetch raises, and the run
-        logs one exception per location. Answering here skips the source for
-        the whole cycle instead, which is what "unavailable" means to
-        ``self_reported_skip``.
-        """
+        Without it the cycle picks candidates, every fetch raises, and the run logs one exception per location."""
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
         return redata_configured()

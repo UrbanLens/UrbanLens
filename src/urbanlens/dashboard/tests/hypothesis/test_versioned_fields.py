@@ -1,16 +1,4 @@
-"""Field-level provenance: every write records who made it, and reads can filter.
-
-The point of this substrate is that a viewer can be shown a *subset* of a row's
-history - automatic writes, plus their own, plus their friends' - because a
-concealed wiki must not contradict a friend who says "I put a load of stuff on
-there". That subset differs per viewer, so it cannot be a stored projection; it
-has to be a filter over recorded writes.
-
-Which makes the interception the thing worth testing hardest. A funnel every
-caller must remember to use is what decayed last time: three writers already
-bypass the existing edit history, one of them a bulk ``update()`` that misses
-``save()`` and every signal alike.
-"""
+"""Field-level provenance: every write records who made it, and reads can filter."""
 
 from __future__ import annotations
 
@@ -34,7 +22,11 @@ class InterceptionTests(TestCase):
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
 
     def _names(self) -> list[str]:
-        return list(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").order_by("pk").values_list("value", flat=True))
+        return list(
+            WikiFieldRevision.objects.filter(target=self.wiki, field_name="name")
+            .order_by("pk")
+            .values_list("value", flat=True)
+        )
 
     def test_save_records_a_revision(self) -> None:
         """The ordinary path."""
@@ -46,11 +38,8 @@ class InterceptionTests(TestCase):
     def test_queryset_update_records_a_revision(self) -> None:
         """The path that matters most.
 
-        ``update()`` bypasses ``save()`` and every signal, so a model-level hook
-        cannot see it - which is exactly how the existing bypasses became
-        invisible. Overriding the queryset is the only interception Django
-        offers.
-        """
+        ``update()`` bypasses ``save()`` and every signal, so a model-level hook cannot see it - which is
+        exactly how the existing bypasses became invisible."""
         Wiki.objects.filter(pk=self.wiki.pk).update(name="Bulk renamed")
 
         self.assertIn("Bulk renamed", self._names())
@@ -172,10 +161,8 @@ class SourceInferenceTests(TestCase):
     def test_an_unattributed_write_records_no_actor(self) -> None:
         """A shell or migration write is SYSTEM and belongs to nobody.
 
-        Attributing it to whoever happened to be around would be worse than
-        leaving it blank - the whole point of the record is that a viewer can
-        be shown their friends' contributions and not a stranger's.
-        """
+        Attributing it to whoever happened to be around would be worse than leaving it blank - the whole point
+        of the record is that a viewer can be shown their friends' contributions and not a stranger's."""
         Wiki.objects.filter(pk=self.wiki.pk).update(name="Nobody in particular")
 
         revision = self._latest()
@@ -185,10 +172,8 @@ class SourceInferenceTests(TestCase):
     def test_an_automatic_write_records_no_actor_even_when_a_person_is_present(self) -> None:
         """Enrichment triggered from a request is still enrichment.
 
-        The inference defaults a request to USER, so a task or service that
-        knows better has to say so - and when it does, the person must not be
-        credited with what the provider wrote.
-        """
+        The inference defaults a request to USER, so a task or service that knows better has to say so - and
+        when it does, the person must not be credited with what the provider wrote."""
         from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
 
         with writing_as(WriteSource.USER, actor=self.user.profile.pk), writing_as(WriteSource.AUTOMATIC):
@@ -216,10 +201,9 @@ class DirtyFieldTests(TestCase):
     def test_a_bare_save_records_only_the_changed_field(self) -> None:
         """Recording all of them would re-attribute other people's work.
 
-        A concealed viewer resolves by author, so if an ordinary save stamped
-        the saver onto every versioned field, a friend saving the wiki for an
-        unrelated reason would hand that viewer a stranger's contribution.
-        """
+        A concealed viewer resolves by author, so if an ordinary save stamped the saver onto every versioned
+        field, a friend saving the wiki for an unrelated reason would hand that viewer a stranger's
+        contribution."""
         from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
 
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
@@ -268,17 +252,16 @@ class DirtyFieldTests(TestCase):
             fresh.save()
             fresh.save()
 
-        self.assertEqual(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name", actor_id=self.friend.pk).count(), 1)
+        self.assertEqual(
+            WikiFieldRevision.objects.filter(target=self.wiki, field_name="name", actor_id=self.friend.pk).count(), 1
+        )
 
 
 class ErasureTests(TestCase):
     """Deleting your own edit must leave no copy of the value anywhere.
 
-    The wiki edit-delete view exists for "accidentally pasting private
-    information into a public wiki field", and its docstring promises no copy
-    lingers. Recording field provenance quietly made that false: the pasted
-    string survives in a revision row with the author's name on it.
-    """
+    The wiki edit-delete view exists for "accidentally pasting private information into a public wiki field",
+    and its docstring promises no copy lingers."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -323,10 +306,8 @@ class UpdateAccuracyTests(TestCase):
     def test_a_compare_and_set_that_matches_nothing_records_nothing(self) -> None:
         """The enrichment rename is a CAS, and losing it must be silent.
 
-        Recording anyway would write an AUTOMATIC row for a value that never
-        reached the wiki - and AUTOMATIC is the one source shown to every
-        viewer, so the phantom would outrank the real name for everybody.
-        """
+        Recording anyway would write an AUTOMATIC row for a value that never reached the wiki - and AUTOMATIC is
+        the one source shown to every viewer, so the phantom would outrank the real name for everybody."""
         matched = Wiki.objects.filter(pk=self.wiki.pk, name="Some Other Name").update(name="Provider Name")
 
         self.assertEqual(matched, 0)
@@ -341,7 +322,9 @@ class UpdateAccuracyTests(TestCase):
         self.wiki.name = "Bulk Name"
         Wiki.objects.bulk_update([self.wiki], ["name"])
 
-        values = list(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").values_list("value", flat=True))
+        values = list(
+            WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").values_list("value", flat=True)
+        )
 
         self.assertEqual(values, ["Bulk Name"])
         self.assertFalse(any("CASE" in v for v in values))

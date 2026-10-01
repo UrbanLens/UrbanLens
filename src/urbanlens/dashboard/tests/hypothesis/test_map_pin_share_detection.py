@@ -1,18 +1,12 @@
-"""Property-based tests for the map-based pin-share detection algorithm.
-
-Covers the pure-function geometry/bearing/viewport math in
-``services.sharing.map_pin_share_detection`` - no database round-trips required.
-See ``test_map_pin_share_detection_integration.py`` for the DB-backed
-``detect_shared_pins``/``share_markup_map_with_profile`` behavior.
-"""
+"""Property-based tests for the map-based pin-share detection algorithm."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from django.contrib.gis.geos import Point
-from hypothesis import given, settings, strategies as st
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.sharing.map_pin_share_detection import (
     arrow_points_toward as _arrow_points_toward,
@@ -21,7 +15,11 @@ from urbanlens.dashboard.services.sharing.map_pin_share_detection import (
     is_zoomed_in,
     viewport_bounds,
 )
-from urbanlens.dashboard.tests.hypothesis.strategies import coord_pair_float, lat_float, lon_float, two_distant_coord_pairs
+from urbanlens.dashboard.tests.hypothesis.strategies import (
+    lat_float,
+    lon_float,
+    two_distant_coord_pairs,
+)
 
 
 def _markup_item(coordinates: list[list[float]]) -> SimpleNamespace:
@@ -31,11 +29,15 @@ def _markup_item(coordinates: list[list[float]]) -> SimpleNamespace:
 
 # -- is_zoomed_in -----------------------------------------------------------------
 
+
 class IsZoomedInTests(SimpleTestCase):
     def test_none_zoom_is_never_zoomed_in(self) -> None:
         self.assertFalse(is_zoomed_in(None))
 
-    @given(st.floats(min_value=-10, max_value=100, allow_nan=False), st.floats(min_value=-10, max_value=100, allow_nan=False))
+    @given(
+        st.floats(min_value=-10, max_value=100, allow_nan=False),
+        st.floats(min_value=-10, max_value=100, allow_nan=False),
+    )
     @settings(max_examples=200)
     def test_threshold_boundary(self, zoom: float, threshold: float) -> None:
         result = is_zoomed_in(zoom, threshold=threshold)
@@ -43,6 +45,7 @@ class IsZoomedInTests(SimpleTestCase):
 
 
 # -- bearing_degrees ----------------------------------------------------------------
+
 
 class BearingDegreesTests(SimpleTestCase):
     @given(two_distant_coord_pairs())
@@ -58,10 +61,8 @@ class BearingDegreesTests(SimpleTestCase):
     def test_reverse_bearing_is_roughly_opposite(self, pair) -> None:
         """Bearing(A, B) and Bearing(B, A) should differ by ~180 degrees (mod 360).
 
-        Only approximately true on a sphere for non-antipodal points, which
-        the strategy guarantees by keeping the two points within 10 degrees
-        of each other.
-        """
+        Only approximately true on a sphere for non-antipodal points, which the strategy guarantees by keeping
+        the two points within 10 degrees of each other."""
         (lat1, lon1), (lat2, lon2) = pair
         forward = bearing_degrees(lat1, lon1, lat2, lon2)
         backward = bearing_degrees(lat2, lon2, lat1, lon1)
@@ -71,6 +72,7 @@ class BearingDegreesTests(SimpleTestCase):
 
 
 # -- viewport_bounds ----------------------------------------------------------------
+
 
 class ViewportBoundsTests(SimpleTestCase):
     @given(lat_float, lon_float, st.floats(min_value=1, max_value=20, allow_nan=False))
@@ -97,6 +99,7 @@ class ViewportBoundsTests(SimpleTestCase):
 
 
 # -- geometry_to_geos ---------------------------------------------------------------
+
 
 class GeometryToGeosTests(SimpleTestCase):
     def test_none_geometry_returns_none(self) -> None:
@@ -133,6 +136,7 @@ class GeometryToGeosTests(SimpleTestCase):
 
 
 # -- arrow_points_toward -------------------------------------------------------------
+
 
 class ArrowPointsTowardTests(SimpleTestCase):
     @given(two_distant_coord_pairs())

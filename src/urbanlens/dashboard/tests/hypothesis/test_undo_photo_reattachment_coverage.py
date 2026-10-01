@@ -1,19 +1,4 @@
-"""Any undo handler whose model can own photos must put them back.
-
-``Image`` points at ``Pin``, ``Wiki`` and ``SafetyCheckin`` with ``SET_NULL``, a
-deliberate choice: deleting one of those detaches the user's photos rather than
-destroying them. The undo handlers did not record which object a photo had been
-on, so an undo restored the object *empty* while the photos sat unattached - and
-because the FK had already been nulled, the link was unrecoverable.
-
-All three now capture the ids at stash time and re-link on restore, and only
-photos that are still detached: one the user has since filed elsewhere stays
-where they put it.
-
-The last test is the completeness arm. ``Image`` gaining a fourth ``SET_NULL``
-owner with an undo handler would repeat the bug silently, so it is asserted
-against the model rather than against a list written today.
-"""
+"""Any undo handler whose model can own photos must put them back."""
 
 from __future__ import annotations
 
@@ -97,12 +82,8 @@ class UndoPhotoReattachmentTests(TestCase):
 
         self.assertEqual(uncovered, [], "these undo handlers no longer restore photo attachments")
 
-        # Both directions, deliberately. The subset below catches a *stale*
-        # entry - _PHOTO_OWNERS naming a relation Image no longer has. On its
-        # own it does not do what this test's docstring promises: a fourth
-        # SET_NULL owner arriving with an undo handler keeps _PHOTO_OWNERS a
-        # subset, so the guard would pass while the new owner's photos went
-        # unrestored - the exact silent repeat it exists to prevent.
+        # Both directions, deliberately.
+        # The subset below catches a *stale* entry - _PHOTO_OWNERS naming a relation Image no longer has.
         normalised = {name.replace("checkin", "_checkin") if name.endswith("checkin") else name for name in owners}
         self.assertTrue(
             set(_PHOTO_OWNERS).issubset(normalised),

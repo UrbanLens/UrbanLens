@@ -1,25 +1,12 @@
 """External-API routes for wiki-attached data that has no controller of its own.
 
-``urls.py`` already routes a wiki's core content (detail, article, aliases,
-links, gallery, comments), and ``urls_wiki_community.py`` owns how that
-content is governed (boundary proposals, name promotion). This module is the
-third bucket: data that hangs off a wiki but was never wired into a template
-view internally - ``WikiOwner``/``WikiPropertySale`` have full models and
-querysets (``models/property_owner/``) but no controller anywhere, and the
-cover photo lives on a plain HTMX endpoint rather than a REST one
-(``controllers.image_gallery.WikiCoverPhotoView``).
-
-Every route here still goes through ``services.wiki.wiki_access.resolve_visible_wiki``
-via ``WikiApiView.resolve`` - see ``views_wiki``'s module docstring for why a
-wiki the caller has not earned access to must be a 404, never a 403.
-
-Wiring: ``urls.py`` concatenates the ``urlpatterns`` below into the flat
-``external_api:`` namespace and re-sorts the combined list with
-:func:`~urbanlens.dashboard.external_api.urls.order_by_specificity`, so
-declaration order inside this module only breaks ties between routes of
-identical shape. Use ``path()`` (``re_path()`` cannot be ordered and is
-rejected at import time) and keep every ``name=`` unique across the whole
-external API.
+This module is the third bucket: data that hangs off a wiki but was never wired into a template view
+internally - ``WikiOwner``/``WikiPropertySale`` have full models and querysets
+(``models/property_owner/``) but no controller anywhere, and the cover photo lives on a plain HTMX
+endpoint rather than a REST one (``controllers.image_gallery.WikiCoverPhotoView``).
+Every route here still goes through ``services.wiki.wiki_access.resolve_visible_wiki`` via
+``WikiApiView.resolve`` - see ``views_wiki``'s module docstring for why a wiki the caller has not
+earned access to must be a 404, never a 403.
 """
 
 from __future__ import annotations

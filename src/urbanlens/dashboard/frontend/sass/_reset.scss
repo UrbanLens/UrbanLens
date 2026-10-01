@@ -1,15 +1,6 @@
 // Base reset & bare-element styling.
 //
-// This replaces third_party/_materialize.scss (deleted - the vendored Materialize
-// CSS framework is gone; nothing in the app uses its component classes any more:
-// no .row/.col grid, no .modal/.sidenav/.dropdown-content/.collapsible/.chips/
-// .select-wrapper/.tabs, no M.* JS init calls). What's here is the small slice of
-// Materialize's bare-element/attribute-selector styling that templates across the
-// app still rely on for their visual appearance without any project-owned class
-// name to hook into (native checkboxes/radios/selects/range sliders, plain <nav>,
-// plain text inputs/textareas, and the root typography/font-size scale). Values
-// are copied over unchanged so removing the vendor file doesn't change how
-// anything renders.
+// This replaces third_party/_materialize.scss.
 
 // -- Document reset (was normalize.css v7, bundled inside Materialize) --------
 
@@ -22,11 +13,7 @@ html {
 }
 
 // -- Root typography ------------------------------------------------------
-// This is the actual base font stack/color/line-height for the whole site, and
-// - critically - the responsive root font-size that every `rem` measurement
-// throughout the compiled CSS scales from (14px up to 992px, 14.5px up to
-// 1200px, 15px above). Do not change these without checking rem-based sizing
-// site-wide.
+// This is the actual base font stack/color/line-height for the whole site, and - critically.
 html {
     line-height: 1.5;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
@@ -333,9 +320,7 @@ ul:not(.browser-default) > li {
 }
 
 // -- Bare <nav> baseline -------------------------------------------------------
-// Every real nav bar in the app (.app-nav, .ul-subnav-tabs,
-// .help-import-toc-nav) sets its own background/height/color, but they rely on
-// this baseline for the properties they don't re-declare.
+// Every real nav bar in the app (app-nav,.ul-subnav-tabs,.help-import-toc-nav) sets its own background/height/color, but they rely.
 nav {
     color: var(--ul-button-text, #fff);
     background-color: #ee6e73;
@@ -352,9 +337,7 @@ nav i.material-icons {
     line-height: 56px;
 }
 
-// Default resting-state elevation shadow. .btn's hover/focus/disabled states
-// are fully covered by _buttons.scss, but nothing there sets a resting-state
-// shadow, so this is what's actually under every button today.
+// Default resting-state elevation shadow..btn's hover/focus/disabled states are fully covered by _buttons.scss, but nothing there sets.
 nav,
 .btn {
     box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 3px 1px -2px rgba(0, 0, 0, 0.12), 0 1px 5px 0 rgba(0, 0, 0, 0.2);
@@ -376,14 +359,7 @@ span.badge {
 }
 
 // -- Checkbox / radio custom visual --------------------------------------------
-// Markup convention used throughout the app: <input type="checkbox|radio"> followed
-// by an empty <span>; the input is visually hidden and the span draws the box/dot/
-// checkmark via ::before/::after. Pages that want the native control visible instead
-// opt out with their own higher-specificity override (see _nav.scss, _trips.scss,
-// _pin-detail.scss, _tags.scss) - those overrides are unaffected by this rule.
-// .ul-switch__track (the design-system toggle switch, see _components.scss) draws
-// its own pill/knob visual and must always be excluded here too - otherwise this
-// legacy box decorator bleeds through underneath every .ul-switch, current or future.
+// Markup convention used throughout the app: <input type="checkbox|radio"> followed by an empty <span>.
 [type="radio"]:not(:checked),
 [type="radio"]:checked {
     position: absolute;
@@ -558,12 +534,7 @@ span.badge {
 }
 
 // -- Text inputs, textareas, selects, range sliders ----------------------------
-// `.browser-default` opts an input out of this skin. Anything more specific
-// (a class, an ID, a parent container - see _base.scss, _dark.scss, _map.scss,
-// _search.scss, _messages.scss, _settings pages, etc.) already wins on
-// specificity, exactly as before. Same input-type list as the project's own
-// `input-selectors` mixin (_mixins.scss), minus `select`/`textarea` - those two
-// get their own distinct skin below.
+// `.browser-default` opts an input out of this skin.
 $_ul-reset-inputs: 'input[type=text]', 'input[type=password]', 'input[type=email]',
     'input[type=url]', 'input[type=time]', 'input[type=date]', 'input[type=datetime]',
     'input[type=datetime-local]', 'input[type=tel]', 'input[type=number]', 'input[type=search]';

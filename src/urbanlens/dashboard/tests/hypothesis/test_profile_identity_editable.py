@@ -1,13 +1,4 @@
-"""Tests for the profile hero's click-to-edit-in-place email/username/name.
-
-Covers:
-- Own-profile view renders the hero's email, username, and full-name as
-  click-to-edit elements; other viewers and the Edit Profile page (which
-  already has real form fields for all three) see plain text.
-- ProfileFieldUpdateView's email/username/first_name/last_name POST paths -
-  including the email format + uniqueness validation and the username
-  format + availability validation those branches perform.
-"""
+"""Tests for the profile hero's click-to-edit-in-place email/username/name."""
 
 from __future__ import annotations
 
@@ -33,7 +24,9 @@ class ProfileIdentityEditableRenderingTests(TestCase):
     """Own-profile view only: email/username/name render as click-to-edit."""
 
     def setUp(self) -> None:
-        self.user = baker.make(User, username="urbex_jane", email="jane@example.com", first_name="Jane", last_name="Doe")
+        self.user = baker.make(
+            User, username="urbex_jane", email="jane@example.com", first_name="Jane", last_name="Doe"
+        )
         self.profile = self.user.profile
         self.client.force_login(self.user)
 
@@ -62,7 +55,9 @@ class ProfileIdentityEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         content = _strip_scripts(response.content.decode())
         self.assertIn("Jane Doe", content)
         self.assertNotIn('class="profile-name-editable"', content)
@@ -90,11 +85,12 @@ class ProfileFieldUpdateIdentityTests(TestCase):
     def _post(self, field: str, value: str):
         return self.client.post(reverse("profile.field.update"), {"field": field, "value": value})
 
-    def test_updates_email(self) -> None:
+    def test_an_email_change_waits_for_the_new_address_to_be_confirmed(self) -> None:
         response = self._post("email", "new@example.com")
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["pending"])
         self.user.refresh_from_db()
-        self.assertEqual(self.user.email, "new@example.com")
+        self.assertEqual(self.user.email, "jane@example.com")
 
     def test_invalid_email_rejected(self) -> None:
         response = self._post("email", "not-an-email")
@@ -102,10 +98,11 @@ class ProfileFieldUpdateIdentityTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "jane@example.com")
 
-    def test_duplicate_email_rejected(self) -> None:
+    def test_an_address_another_account_holds_is_answered_like_any_other_and_not_taken(self) -> None:
         baker.make(User, email="taken@example.com")
         response = self._post("email", "taken@example.com")
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["pending"])
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "jane@example.com")
 
@@ -124,7 +121,7 @@ class ProfileFieldUpdateIdentityTests(TestCase):
     def test_taken_username_rejected(self) -> None:
         baker.make(User, username="already_taken")
         response = self._post("username", "already_taken")
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 400)
         self.user.refresh_from_db()
         self.assertEqual(self.user.username, "urbex_jane")
 

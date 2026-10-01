@@ -1,10 +1,4 @@
-"""Tests for UL-345: sunrise/sunset and golden-hour times on the pin weather panel.
-
-get_sun_times() always goes through Open-Meteo (timezone=auto resolves local
-time server-side, so no separate timezone lookup is needed here) regardless
-of which provider serves the temperature/condition forecast, since
-OpenWeatherMap's 5-day/3-hour endpoint doesn't carry sunrise/sunset.
-"""
+"""Tests for UL-345: sunrise/sunset and golden-hour times on the pin weather panel."""
 
 from __future__ import annotations
 
@@ -60,15 +54,8 @@ class GetSunTimesTests(SimpleTestCase):
 class WeatherPanelSunTimesTests(TestCase):
     """The weather panel's *direct-provider* path.
 
-    Both the forecast and the sun-times lookup now go through
-    ``weather_resolution``, which asks REData first whenever it is configured
-    and only then falls back to OpenWeatherMap/Open-Meteo. These tests are
-    about that fallback chain (UL-345 is a fact about Open-Meteo's endpoint),
-    so REData is explicitly switched off rather than left to whether the
-    machine running the tests happens to have credentials - which is what let
-    them start making a real outbound call and tripping the suite's network
-    guard. REData's own branch is covered in ``test_weather_resolution.py``.
-    """
+    Both the forecast and the sun-times lookup now go through ``weather_resolution``, which asks REData first
+    whenever it is configured and only then falls back to OpenWeatherMap/Open-Meteo."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -77,7 +64,9 @@ class WeatherPanelSunTimesTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
         self.client.force_login(self.user)
-        redata_off = patch("urbanlens.dashboard.services.apis.locations.weather_resolution.redata_configured", return_value=False)
+        redata_off = patch(
+            "urbanlens.dashboard.services.apis.locations.weather_resolution.redata_configured", return_value=False
+        )
         redata_off.start()
         self.addCleanup(redata_off.stop)
 
@@ -89,8 +78,14 @@ class WeatherPanelSunTimesTests(TestCase):
             "golden_hour_evening_start": datetime.fromisoformat("2026-06-15T19:47"),
         }
         with (
-            patch("urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_weather_forecast", return_value=[]),
-            patch("urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_sun_times", return_value=sun_times),
+            patch(
+                "urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_weather_forecast",
+                return_value=[],
+            ),
+            patch(
+                "urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_sun_times",
+                return_value=sun_times,
+            ),
         ):
             response = self.client.get(reverse("pin.weather_forecast", args=[self.pin.slug]))
 
@@ -101,8 +96,13 @@ class WeatherPanelSunTimesTests(TestCase):
 
     def test_weather_panel_omits_sun_times_section_when_unavailable(self) -> None:
         with (
-            patch("urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_weather_forecast", return_value=[]),
-            patch("urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_sun_times", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_weather_forecast",
+                return_value=[],
+            ),
+            patch(
+                "urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_sun_times", return_value=None
+            ),
         ):
             response = self.client.get(reverse("pin.weather_forecast", args=[self.pin.slug]))
 
@@ -120,8 +120,14 @@ class WeatherPanelSunTimesTests(TestCase):
         }
         with (
             patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "test-key"),
-            patch("urbanlens.dashboard.services.apis.weather.gateway.OpenWeatherMapGateway.get_weather_forecast", return_value=[{"date": sun_times["sunrise"], "main": {"temp": 70}, "weather": [{"main": "Clear"}]}]),
-            patch("urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_sun_times", return_value=sun_times) as get_sun_times,
+            patch(
+                "urbanlens.dashboard.services.apis.weather.gateway.OpenWeatherMapGateway.get_weather_forecast",
+                return_value=[{"date": sun_times["sunrise"], "main": {"temp": 70}, "weather": [{"main": "Clear"}]}],
+            ),
+            patch(
+                "urbanlens.dashboard.services.apis.weather.open_meteo.OpenMeteoGateway.get_sun_times",
+                return_value=sun_times,
+            ) as get_sun_times,
         ):
             response = self.client.get(reverse("pin.weather_forecast", args=[self.pin.slug]))
 

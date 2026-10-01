@@ -2,13 +2,13 @@
 
 No database access - pure Pydantic model logic.
 """
+
 from __future__ import annotations
 
 import os
 from unittest.mock import patch
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.environments.dev import Development
@@ -55,13 +55,21 @@ class DebugResolutionTests(SimpleTestCase):
     @given(st.booleans())
     @_hyp
     def test_override_on_dominates_any_default(self, use_true_default: bool) -> None:
-        env = Local(debug_override=DebugTypes.OVERRIDE_ON) if use_true_default else Staging(debug_override=DebugTypes.OVERRIDE_ON)
+        env = (
+            Local(debug_override=DebugTypes.OVERRIDE_ON)
+            if use_true_default
+            else Staging(debug_override=DebugTypes.OVERRIDE_ON)
+        )
         self.assertTrue(env.debug)
 
     @given(st.booleans())
     @_hyp
     def test_override_off_dominates_any_default(self, use_true_default: bool) -> None:
-        env = Local(debug_override=DebugTypes.OVERRIDE_OFF) if use_true_default else Staging(debug_override=DebugTypes.OVERRIDE_OFF)
+        env = (
+            Local(debug_override=DebugTypes.OVERRIDE_OFF)
+            if use_true_default
+            else Staging(debug_override=DebugTypes.OVERRIDE_OFF)
+        )
         self.assertFalse(env.debug)
 
 
@@ -214,11 +222,10 @@ class SelectEnvironmentTests(SimpleTestCase):
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "development"}):
             self.assertIsInstance(select_environment(None), Development)
 
-    def test_default_used_when_no_env_var_set(self) -> None:
+    def test_no_env_var_is_production(self) -> None:
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
         with patch.dict(os.environ, stripped, clear=True):
-            result = select_environment(None, default=EnvironmentTypes.LOCAL)
-            self.assertIsInstance(result, Local)
+            self.assertIsInstance(select_environment(None), Production)
 
     def test_env_var_staging_returns_staging(self) -> None:
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "staging"}):

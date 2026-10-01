@@ -4,24 +4,23 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
 from django.db.models import SET_NULL, ForeignKey, Index
 from django.db.models.fields import CharField, DateTimeField, DecimalField, SlugField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.location.queryset import LocationManager
+from urbanlens.dashboard.services.locations import display
 
 if TYPE_CHECKING:
-    from django.db.models import Manager as DjangoManager
+    from collections.abc import Collection
 
-    from urbanlens.dashboard.models.google_place.model import GooglePlace
-    from urbanlens.dashboard.models.markup.model import PinMarkup
-    from urbanlens.dashboard.models.trips.model import TripActivity
+    from django.db.models.fetch_modes import FetchMode
+
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
@@ -30,29 +29,8 @@ logger = logging.getLogger(__name__)
 
 class Location(abstract.PublicDashboardModel):
     """Shared, immutable address/coordinate record for a physical place.
-
-    Location is the *address* third of the place model:
-    - Location  - one row per real-world address, shared and deduplicated by
-      coordinates. Treated as immutable: when a pin's or wiki's coordinates
-      change we find-or-create a *different* Location instead of mutating it.
-    - Wiki      - one community page per Location (1:1); everything users edit
-      collectively (name, description, security, labels, aliases, ...).
-    - Pin       - one row per (user, place) pair; a user's personal record.
-
-    A Location stores only what is derived from the address itself: coordinates,
-    street components (via AddressableMixin), the linked GooglePlace, an
-    external-source ``official_name``, and the cache of address-keyed external
-    API results (``external_cache``).
-
-    What does NOT belong here (all on Wiki now):
-    - Community name / description -> Wiki.name / Wiki.description
-    - Security indicators, labels, dates -> Wiki
-    - Aliases, comments, edit history, photos -> Wiki
-    A user's personal label/notes/visit history belong on Pin.
-
-    ``slug``/``uuid`` are inherited from PublicDashboardModel: the community wiki
-    is routed by the Location slug (``/location/<slug>/wiki/``) and location
-    UUIDs anchor the @mention system.
+    A Location stores only what is derived from the address itself: coordinates, street components (via AddressableMixin), the linked GooglePlace, an external-source ``official_name``, and the cache of address-keyed external API results (``external_cache``).
+    Treated as immutable: when a pin's or wiki's coordinates change we find-or-create a *different* Location instead of mutating it. - Wiki - one community page per Location (1:1); everything users edit collectively (name, description, security, labels, aliases, ...). - Pin - one row per (user, place) pair; a user's personal record.
     """
 
     # Stable URL routing token (each place resolves its wiki via this slug).
@@ -84,13 +62,10 @@ class Location(abstract.PublicDashboardModel):
         related_name="+",
     )
 
-    # The real-world parcel or building these coordinates sit on. A *resolved,
-    # cached* relationship, never an identity: it is recomputed whenever the
-    # containing place's geometry changes, so a provider correcting a boundary
-    # can move a location to a different place without any of the pin, share,
-    # or wiki provenance keyed off this row being disturbed. Null means the
-    # coordinate is on no known place, which behaves exactly as every location
-    # did before places existed.
+    # The real-world parcel or building these coordinates sit on.
+    # A *resolved, cached* relationship, never an identity: it is recomputed whenever the containing
+    # place's geometry changes, so a provider correcting a boundary can move a location to a
+    # different place without any of the pin, share, or wiki provenance keyed off this row being
     place = ForeignKey(
         "dashboard.Place",
         on_delete=SET_NULL,
@@ -104,20 +79,13 @@ class Location(abstract.PublicDashboardModel):
         google_place_id: int | None
         place_id: int | None
         wiki: Wiki
-        activities: DjangoManager[TripActivity]
-        markup_items: DjangoManager[PinMarkup]
 
     objects = LocationManager()
 
-    # Coordinates are this Location's identity: rows are deduplicated by
-    # (latitude, longitude), and when a pin's/wiki's coordinates change we
-    # get-or-create a *different* Location rather than mutating an existing one.
-    # These are frozen after insert. Address components are deliberately NOT
-    # frozen - they are metadata geocoded *from* the coordinates and are
-    # backfilled onto empty rows after creation (see pin_edit reverse-geocoding).
-    # Cache/routing fields (``google_place``, ``slug``, ``point``, ``updated``)
-    # also stay writable. Enforced here in ``save()`` and, as an unbypassable
-    # floor, by a DB trigger (see migration 0009).
+    # Coordinates are this Location's identity: rows are deduplicated by (latitude, longitude), and
+    # when a pin's/wiki's coordinates change we get-or-create a *different* Location rather than
+    # mutating an existing one.
+    # These are frozen after insert.
     IMMUTABLE_FIELDS: tuple[str, ...] = (
         "latitude",
         "longitude",
@@ -129,10 +97,12 @@ class Location(abstract.PublicDashboardModel):
         parts = []
         if self.street_number:
             parts.append(self.street_number)
+        route_has_more_after_it = bool(self.locality or self.administrative_area_level_1 or self.zipcode)
         if self.route:
-            parts.append(f"{self.route},")
+            parts.append(f"{self.route}," if route_has_more_after_it else self.route)
+        locality_has_more_after_it = bool(self.administrative_area_level_1 or self.zipcode)
         if self.locality:
-            parts.append(f"{self.locality},")
+            parts.append(f"{self.locality}," if locality_has_more_after_it else self.locality)
         if self.administrative_area_level_1:
             parts.append(self.administrative_area_level_1)
         if self.zipcode:
@@ -142,12 +112,7 @@ class Location(abstract.PublicDashboardModel):
     @property
     def address_basic(self) -> str | None:
         """Street number and route only."""
-        parts = []
-        if self.street_number:
-            parts.append(self.street_number)
-        if self.route:
-            parts.append(self.route)
-        return " ".join(parts) or None
+        return display.street_address(street_number=self.street_number, route=self.route)
 
     @property
     def address_extended(self) -> str | None:
@@ -156,7 +121,7 @@ class Location(abstract.PublicDashboardModel):
         if self.street_number:
             parts.append(self.street_number)
         if self.route:
-            parts.append(f"{self.route},")
+            parts.append(f"{self.route}," if self.locality else self.route)
         if self.locality:
             parts.append(self.locality)
         return " ".join(parts) or None
@@ -223,15 +188,7 @@ class Location(abstract.PublicDashboardModel):
     @cid.setter
     def cid(self, value: int | Decimal | None) -> None:
         """Store a Google Maps CID on the shared cache row for these coordinates.
-
-        Deliberately does **not** resolve a place name for these coordinates
-        while doing so. ``set_cid_for_entity`` defaults to
-        ``fetch_if_missing=True``, which made this plain-looking attribute
-        assignment issue a live Google call - the same class of hidden
-        synchronous request that ``place_name`` above is cache-only to avoid.
-        A caller that genuinely wants the lookup should say so by calling
-        ``GooglePlaceService().set_cid_for_entity(...)`` itself, where the cost
-        is visible at the call site.
+        ``set_cid_for_entity`` defaults to ``fetch_if_missing=True``, which made this plain-looking attribute assignment issue a live Google call - the same class of hidden synchronous request that ``place_name`` above is cache-only to avoid.
         """
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
@@ -242,87 +199,51 @@ class Location(abstract.PublicDashboardModel):
     @property
     def place_name(self) -> str | None:
         """Cached Google place name, or None when nothing has been resolved yet.
-
-        Deliberately cache-only - this used to fall back to get_place_name(),
-        which blocks on a live Google API call. A plain property is the wrong
-        place to make a synchronous external request (it fires on every pin
-        detail page render until the cache warms, with no way to opt out or
-        show a loading state) - see PinOverviewView.get, which dispatches
-        tasks.resolve_location_place_name in the background instead so this
-        stays populated for next time without ever blocking a request.
+        A plain property is the wrong place to make a synchronous external request (it fires on every pin detail page render until the cache warms, with no way to opt out or show a loading state) - see PinOverviewView.get, which dispatches tasks.resolve_location_place_name in the background instead so this stays populated for next time without ever blocking a request.
         """
         return self.cached_place_name
-
-    # Country spellings reverse-geocoders commonly return for the USA, compared
-    # casefolded with periods stripped (so "U.S.A." matches too).
-    _USA_COUNTRY_NAMES: frozenset[str] = frozenset({"united states", "united states of america", "usa", "us"})
 
     @property
     def is_usa(self) -> bool:
         """Whether this location's country component identifies the USA.
-
-        An empty country is treated as USA for display purposes: the address
-        backfill frequently omits the country for domestic geocoding results,
-        and the [City, State] form it selects reads fine either way.
+        An empty country is treated as USA for display purposes: the address backfill frequently omits the country for domestic geocoding results, and the [City, State] form it selects reads fine either way.
 
         Returns:
             True when the country is blank or a recognized USA spelling.
         """
-        country = (self.country or "").replace(".", "").strip().casefold()
-        return not country or country in self._USA_COUNTRY_NAMES
+        return display.is_usa(self.country)
 
     @property
     def area_label(self) -> str | None:
-        """Short human-readable area, e.g. ``Albany, NY`` or ``Kyiv, Ukraine``.
-
-        USA locations render as ``City, State``; elsewhere the country replaces
-        the state (``City, Country``), falling back to ``State, Country`` when
-        the city is unknown. Missing components are simply omitted.
+        """Short human-readable area, e.g.
+        ``Albany, NY`` or ``Kyiv, Ukraine``.
+        USA locations render as ``City, State``; elsewhere the country replaces the state (``City, Country``), falling back to ``State, Country`` when the city is unknown.
 
         Returns:
             The area string, or None when no address components are available.
         """
-        city = (self.city or "").strip()
-        state = (self.state or "").strip()
-        country = (self.country or "").strip()
-        if self.is_usa:
-            parts = [city, state]
-        else:
-            parts = [city or state, country]
-        label = ", ".join(part for part in parts if part)
-        return label or None
+        return display.area_label(city=self.city, state=self.state, country=self.country)
 
     @property
     def display_name(self) -> str:
         """Best human-readable name: the community wiki name, else the official name.
-
-        Reads the linked Wiki when present (prefetch with
-        ``select_related("wiki")`` in bulk to avoid an extra query per row).
-        Unnamed places fall back to "Unnamed Location in {area}" when address
-        components are known, so lists of unnamed pins stay tellable apart.
-        The area-suffixed placeholder is still rejected by
-        :func:`~urbanlens.dashboard.services.locations.naming.is_meaningful_name`,
-        so it never leaks into external API queries or saved names.
+        Reads the linked Wiki when present (prefetch with ``select_related("wiki")`` in bulk to avoid an extra query per row).
         """
         try:
             wiki = self.wiki
         except ObjectDoesNotExist:
             wiki = None
-        if wiki is not None and wiki.name:
-            return wiki.name
-        if self.official_name:
-            return self.official_name
-        if area := self.area_label:
-            return f"Unnamed Location in {area}"
-        return "Unnamed Location"
+        return display.display_name(
+            wiki_name=wiki.name if wiki is not None else None,
+            official_name=self.official_name,
+            city=self.city,
+            state=self.state,
+            country=self.country,
+        )
 
     def get_place_name(self) -> str | None:
         """Fetch the canonical place name from Google and cache it on GooglePlace.
-
-        Blocks on a live API call when nothing is cached yet - safe to call
-        from a Celery task (see tasks.resolve_location_place_name), never from
-        a request/response cycle. Use the place_name property instead for
-        anything that renders synchronously.
+        Blocks on a live API call when nothing is cached yet - safe to call from a Celery task (see tasks.resolve_location_place_name), never from a request/response cycle.
         """
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
@@ -368,23 +289,23 @@ class Location(abstract.PublicDashboardModel):
         return self.official_name or str(self.uuid)
 
     @classmethod
-    def from_db(cls, db, field_names, values):
+    def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Location:  # noqa: ARG003
         """Stash the loaded identity-field values so ``save()`` can detect mutation.
-
-        Capturing the originals here means the immutability check normally costs
-        nothing extra - it compares against these instead of re-querying. Deferred
-        (unloaded) fields are simply skipped.
+        Capturing the originals here means the immutability check normally costs nothing extra - it compares against these instead of re-querying.
 
         Args:
             db: The database alias the row was loaded from.
             field_names: The field names present in ``values``.
             values: The row values, positionally aligned with ``field_names``.
+            fetch_mode: Unused (kept for base-signature compatibility).
 
         Returns:
             The reconstructed Location instance.
         """
         instance = super().from_db(db, field_names, values)
-        instance._immutable_originals = {name: values[field_names.index(name)] for name in cls.IMMUTABLE_FIELDS if name in field_names}  # noqa: SLF001
+        ordered_names = list(field_names)
+        ordered_values = list(values)
+        instance._immutable_originals = {name: ordered_values[ordered_names.index(name)] for name in cls.IMMUTABLE_FIELDS if name in ordered_names}  # noqa: SLF001
         return instance
 
     @staticmethod
@@ -453,12 +374,9 @@ class Location(abstract.PublicDashboardModel):
             lat = float(self.latitude)
             self.point = Point(lon, lat, srid=4326)
 
-        # A new coordinate on ground somebody has already fetched resolves
-        # immediately, from geometry we hold - no provider call, and no window
-        # where a location that plainly stands on a known parcel doesn't say
-        # so. ``place_resolved_at`` is deliberately left unset: the chain has
-        # not run for *this* point, and it may still turn up a building
-        # footprint that refines the answer.
+        # A new coordinate on ground somebody has already fetched resolves immediately, from
+        # geometry we hold - no provider call, and no window where a location that plainly stands on
+        # a known parcel doesn't say so.
         if self.pk is None and self.place_id is None and self.latitude is not None and self.longitude is not None:
             from urbanlens.dashboard.models.place.model import Place
 
@@ -468,12 +386,7 @@ class Location(abstract.PublicDashboardModel):
 
     def __setattr__(self, name: str, value) -> None:
         """Support lightweight GooglePlace doubles on unsaved model instances.
-
-        Django's foreign-key descriptor only accepts real ``GooglePlace`` model
-        instances. A few unit tests exercise the place-name helpers on prepared,
-        unsaved models with a small duck-typed object that exposes
-        ``cached_place_name`` and ``pk``. Preserve that fast path without
-        weakening saved model relations.
+        Django's foreign-key descriptor only accepts real ``GooglePlace`` model instances.
         """
         if name == "google_place" and value is not None:
             from urbanlens.dashboard.models.google_place.model import GooglePlace

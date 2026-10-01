@@ -13,34 +13,58 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.controllers.direct_messages import _get_profile
+from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupMessage
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.auth.username import username_search_q
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
-from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
+from urbanlens.dashboard.services.messaging.direct_messages import messageable_profile_pks
 from urbanlens.dashboard.services.messaging.group_chats import (
+    MEMBER_UNAVAILABLE_MESSAGE,
+    STALE_GROUP_KEY_MESSAGE,
+    AddMembersRequiresCreatorError,
+    ConflictingMessageContentError,
+    EmptyMessageError,
     GroupChatPermissionError,
     GroupChatValidationError,
+    GroupNameRequiredError,
+    GroupNameTooLongError,
+    GroupNeedsMembersError,
+    MalformedEncryptedMessageError,
+    MemberInTooManyGroupsError,
+    MemberNotAcceptingMessagesError,
+    MessageTooLongError,
+    NotAGroupMemberError,
+    NotMessageSenderError,
+    RemoveMemberRequiresCreatorError,
+    StaleKeyVersionError,
+    TargetNotAMemberError,
+    TooManyGroupMembersError,
+    UnknownKeyVersionError,
     create_group_chat,
     create_group_message,
     delete_group_message,
     group_e2ee_ready,
     group_thread_page,
+    hidden_by_block,
     mark_group_thread_open,
     remove_group_member,
     rename_group_chat,
     set_group_muted,
     share_pin_in_group_message,
+    visible_memberships,
 )
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
     from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
 
@@ -61,8 +85,8 @@ def _get_group(profile: Profile, group_uuid) -> tuple[GroupChat, GroupChatMember
         ``(group, membership)``.
 
     Raises:
-        Http404: When the group doesn't exist or the profile isn't an active
-            member - the two cases are indistinguishable by design.
+        Http404: When the group doesn't exist or the profile isn't an active member - the two cases are
+        indistinguishable by design.
     """
     group = GroupChat.objects.filter(uuid=group_uuid).first()
     if group is None:
@@ -103,14 +127,13 @@ def _group_thread_context(profile: Profile, group: GroupChat, membership: GroupC
 
     GroupMessage.objects.mark_read(membership)
     mark_group_thread_open(profile.pk, group.pk)
-    thread_messages, has_more_older = group_thread_page(membership)
-    members = [row.profile for row in group.active_memberships().select_related("profile", "profile__user").order_by("created")]
+    blocks = SharedSpaceBlocks.for_viewer(profile)
+    thread_messages, has_more_older = group_thread_page(membership, blocks=blocks)
+    members = [row.profile for row in visible_memberships(group, profile, blocks=blocks)]
 
-    # A group can include people who aren't friends with everyone else in it,
-    # whose privacy settings may not permit some viewers to see their name/
-    # avatar - the message content itself still shows (this is "who sent it",
-    # not "what they said"), same as any other shared space. Resolved once
-    # per distinct sender (not per message) and attached for the template.
+    # A group can include people who aren't friends with everyone else in it, whose privacy settings may not
+    # permit some viewers to see their name/ avatar - the message content itself still shows (this is "who sent
+    # it", not "what they said"), same as any other shared space.
     distinct_senders = {message.sender_id: message.sender for message in thread_messages if message.sender_id}
     sender_identities = resolve_visible_identities(profile, list(distinct_senders.values()))
     for message in thread_messages:
@@ -142,23 +165,43 @@ class GroupCreateView(LoginRequiredMixin, View):
         """Create a group with the caller plus the picked members.
 
         Args:
-            request: The incoming request. Reads ``name`` and repeated
-                ``member_slugs`` values.
+            request: The incoming request.
 
         Returns:
-            JSON ``{uuid, url}`` on success; 400/403 with a plain-text error
-            the page JS shows as a toast.
+            JSON ``{uuid, url}`` on success; 400/403 with a plain-text error the page JS shows as a toast.
         """
         profile = _get_profile(request)
         name = request.POST.get("name", "")
         slugs = [slug for slug in request.POST.getlist("member_slugs") if slug]
         members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        if len(members) != len(set(slugs)):
+            return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         try:
             group = create_group_chat(profile, name, members)
+        except GroupNameRequiredError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("A group name is required.")
+        except GroupNameTooLongError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
+        except GroupNeedsMembersError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Add at least one other person to start a group.")
+        except TooManyGroupMembersError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Groups are limited to {exc.limit} members.")
+        except MemberInTooManyGroupsError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Someone you picked is already in as many groups as they can join.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That group couldn't be created.")
+        except MemberNotAcceptingMessagesError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         return JsonResponse({"uuid": str(group.uuid), "url": reverse("messages.group", kwargs={"group_uuid": group.uuid})}, status=201)
 
 
@@ -173,10 +216,9 @@ class GroupConversationView(LoginRequiredMixin, View):
             group_uuid: UUID of the group chat.
 
         Returns:
-            Thread partial for HTMX requests; the whole messages page with
-            this group active otherwise.
+            Thread partial for HTMX requests; the whole messages page with this group active otherwise.
         """
-        from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
+        from urbanlens.dashboard.controllers.direct_messages import sidebar_conversations
 
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
@@ -187,10 +229,7 @@ class GroupConversationView(LoginRequiredMixin, View):
 
         context = {
             **_group_thread_context(profile, group, membership),
-            # all_conversations_for (not the 1:1-only conversations_for): the
-            # sidebar on a directly-loaded group-thread URL must show every
-            # conversation, groups included - not just 1:1 threads.
-            "conversations": all_conversations_for(profile),
+            **sidebar_conversations(profile),
             "active_partner": None,
             "active_slug": "",
             "active_group_uuid": str(group.uuid),
@@ -206,13 +245,11 @@ class GroupSendView(LoginRequiredMixin, View):
         """Create a message and return the refreshed thread partial.
 
         Args:
-            request: The incoming request. Reads ``body`` (or the encrypted
-                ``ciphertext``/``nonce``/``key_version`` triple).
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
-            The thread partial on success; a plain-text 400/403 the page JS
-            surfaces as a toast.
+            The thread partial on success; a plain-text 400/403 the page JS surfaces as a toast.
         """
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
@@ -226,10 +263,38 @@ class GroupSendView(LoginRequiredMixin, View):
                 nonce=request.POST.get("nonce", ""),
                 key_version=int(key_version_raw) if key_version_raw.isdigit() else 0,
             )
+        except MessageRateLimitedError as exc:
+            # A 429, not the 400 its ValueError siblings earn: the message was
+            # fine, the sender is ahead of their budget. See ConversationSendView.
+            logger.info("Group message rate-limited for profile %s: %s", profile.pk, exc)
+            return HttpResponse("You're sending messages too quickly. Wait a moment and try again.", status=429, content_type="text/plain; charset=utf-8")
+        except MessageTooLongError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        except ConflictingMessageContentError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("A message is either plaintext or encrypted, never both.")
+        except MalformedEncryptedMessageError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That encrypted message is malformed.")
+        except UnknownKeyVersionError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Unknown encryption key version for this group.")
+        except StaleKeyVersionError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponse(STALE_GROUP_KEY_MESSAGE, status=409, content_type="text/plain; charset=utf-8")
+        except EmptyMessageError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Message cannot be empty.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That message couldn't be sent.")
+        except NotAGroupMemberError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You aren't a member of this group.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -241,7 +306,7 @@ class GroupOlderMessagesView(LoginRequiredMixin, View):
         """Return the page of messages immediately older than ``before``.
 
         Args:
-            request: The incoming request. Reads ``before`` (a message pk).
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -306,7 +371,7 @@ class GroupRenameView(LoginRequiredMixin, View):
         """Rename the group and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``name``.
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -316,10 +381,21 @@ class GroupRenameView(LoginRequiredMixin, View):
         group, membership = _get_group(profile, group_uuid)
         try:
             rename_group_chat(group, profile, request.POST.get("name", ""))
+        except GroupNameRequiredError as exc:
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("A group name is required.")
+        except GroupNameTooLongError as exc:
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That name couldn't be used.")
+        except NotAGroupMemberError as exc:
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You aren't a member of this group.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -333,12 +409,6 @@ class GroupMuteToggleView(LoginRequiredMixin, View):
         Args:
             request: The incoming request.
             group_uuid: UUID of the group chat.
-
-        The flip lives here rather than in the service because it is a property
-        of *this button*: the web UI has one control whose meaning is "the
-        other state". ``set_group_muted`` names an end state instead, so the
-        external API's PUT/DELETE pair cannot be turned into a toggle by a
-        retry - see its docstring.
 
         Returns:
             The re-rendered thread partial.
@@ -368,13 +438,11 @@ class GroupMembersDialogView(LoginRequiredMixin, View):
 
         profile = _get_profile(request)
         group, _membership = _get_group(profile, group_uuid)
-        memberships = list(group.active_memberships().select_related("profile", "profile__user").order_by("created"))
-        # Resolves each member's display name/avatar per their own privacy
-        # settings toward the viewer (a member added by someone else may not
-        # be friends with everyone here) and gives every member - masked or
-        # not - a distinct fallback-avatar color, so two members sharing the
-        # same default color/placeholder aren't indistinguishable apart from
-        # an initial letter.
+        memberships = visible_memberships(group, profile)
+        # Resolves each member's display name/avatar per their own privacy settings toward the viewer (a member
+        # added by someone else may not be friends with everyone here) and gives every member - masked or not -
+        # a distinct fallback-avatar color, so two members sharing the same default color/placeholder aren't
+        # indistinguishable apart from an initial letter.
         identities = resolve_visible_identities(profile, [m.profile for m in memberships])
         return render(
             request,
@@ -396,7 +464,7 @@ class GroupAddMembersView(LoginRequiredMixin, View):
         """Add the posted members and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads repeated ``member_slugs``.
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -407,15 +475,31 @@ class GroupAddMembersView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
         slugs = [slug for slug in request.POST.getlist("member_slugs") if slug]
-        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
-        if not members:
+        if not slugs:
             return HttpResponseBadRequest("Pick at least one person to add.")
+        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        if len(members) != len(set(slugs)):
+            return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         try:
             add_group_members(group, profile, members)
+        except TooManyGroupMembersError as exc:
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Groups are limited to {exc.limit} members.")
+        except MemberInTooManyGroupsError as exc:
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Someone you picked is already in as many groups as they can join.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Those members couldn't be added.")
+        except AddMembersRequiresCreatorError as exc:
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("Only the group's creator can add members.")
+        except MemberNotAcceptingMessagesError as exc:
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -427,7 +511,7 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         """Remove the posted member and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``profile_id``.
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -435,21 +519,28 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
-        # Looked up by numeric id, not slug: the member being removed may have
-        # a masked identity toward the requester (see resolve_visible_identities
-        # in GroupMembersDialogView.get), and a profile's slug is derived from
-        # their username (see Profile._slugify_base) - putting it in the DOM/
-        # request body would leak the very identity the mask is hiding.
+        # Looked up by numeric id, not slug: the member being removed may have a masked identity toward the
+        # requester (see resolve_visible_identities in GroupMembersDialogView.get), and a profile's slug is
+        # derived from their username (see Profile._slugify_base) - putting it in the DOM/ request body would
+        # leak the very identity the mask is hiding.
         profile_id_raw = request.POST.get("profile_id", "")
         if not profile_id_raw.isdigit():
             return HttpResponseBadRequest("A valid profile_id is required.")
         target = get_object_or_404(Profile.objects.select_related("user"), pk=profile_id_raw)
         try:
             remove_group_member(group, profile, target)
+        except TargetNotAMemberError as exc:
+            logger.info("Group remove-member rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("They aren't a member of this group.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group remove-member rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That member couldn't be removed.")
+        except RemoveMemberRequiresCreatorError as exc:
+            logger.info("Group remove-member rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("Only the group's creator can remove other members.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group remove-member rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -494,10 +585,16 @@ class GroupMessageDeleteView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
         message = get_object_or_404(GroupMessage, pk=message_id, group=group)
+        if hidden_by_block(message, profile):
+            raise Http404
         try:
             delete_group_message(message, profile)
+        except NotMessageSenderError as exc:
+            logger.info("Group message delete rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("Only the sender can delete this message.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group message delete rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -524,7 +621,7 @@ class GroupSharePinView(LoginRequiredMixin, View):
         """Create the per-member PinShares + chat message and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``pin_slug`` and ``body``.
+            request: The incoming request.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -536,10 +633,18 @@ class GroupSharePinView(LoginRequiredMixin, View):
         body = request.POST.get("body", "").strip() or f"Check out {pin.display_label}!"
         try:
             share_pin_in_group_message(profile, group, pin, body)
+        except MessageTooLongError as exc:
+            logger.info("Group pin-share rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group pin-share rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That pin couldn't be shared.")
+        except NotAGroupMemberError as exc:
+            logger.info("Group pin-share rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You aren't a member of this group.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group pin-share rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -551,13 +656,12 @@ class GroupSharePinRespondView(LoginRequiredMixin, View):
         """Apply the accept/reject decision and return the refreshed share card.
 
         Args:
-            request: The incoming request. Reads ``action`` (``accept``/``reject``).
+            request: The incoming request.
             group_uuid: UUID of the group chat.
             message_id: PK of the message carrying the pin share.
 
         Returns:
-            The re-rendered ``_group_share_card.html`` fragment with a toast
-            trigger, or 400/404 on failure.
+            The re-rendered ``_group_share_card.html`` fragment with a toast trigger, or 400/404 on failure.
         """
         from urbanlens.dashboard.controllers.pin_sharing import apply_pin_share_response
         from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
@@ -565,6 +669,8 @@ class GroupSharePinRespondView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         group, _membership = _get_group(profile, group_uuid)
         message = get_object_or_404(GroupMessage.objects.filter(group=group), pk=message_id)
+        if hidden_by_block(message, profile):
+            raise Http404
         share = message.shares.select_related("pin_share__pin__location").filter(recipient=profile).first()
         if share is None or share.pin_share is None:
             raise Http404
@@ -596,7 +702,7 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
         """Return matching, addable profiles for the member picker.
 
         Args:
-            request: The incoming request. Reads ``q``.
+            request: The incoming request.
 
         Returns:
             The member search-results partial.
@@ -609,12 +715,13 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         results: list[Profile] = []
         if len(query) >= 2:
-            candidates = Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: MEMBER_SEARCH_LIMIT * 4]
-            # can_view_profile mirrors RecipientSearchView: the results partial
-            # renders each candidate's real slug/username/avatar, so a profile
-            # hidden from the requester must not be enumerable through this
-            # picker either.
-            results = [candidate for candidate in candidates if can_direct_message(profile, candidate) and candidate.can_view_profile(profile)][:MEMBER_SEARCH_LIMIT]
+            candidates = list(Profile.objects.select_related("user").filter(username_search_q(query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: MEMBER_SEARCH_LIMIT * 4])
+            # can_view_profile mirrors RecipientSearchView: the results partial renders each candidate's real
+            # slug/username/avatar, so a profile hidden from the requester must not be enumerable through this
+            # picker either. Both gates in batch, for the reason given there.
+            messageable = messageable_profile_pks(profile, candidates)
+            identifiable = Profile.visible_profile_pks(profile, candidates)
+            results = [candidate for candidate in candidates if candidate.pk in messageable and candidate.pk in identifiable][:MEMBER_SEARCH_LIMIT]
             for candidate in results:
                 candidate.ensure_slug()
             # Distinct-per-list fallback avatar colors - see GroupMembersDialogView.get.

@@ -1,18 +1,13 @@
-﻿"""Property-based tests for the Review model.
+"""Property-based tests for the Review model."""
 
-Covers:
-- Rating field validation (MinValueValidator(0), MaxValueValidator(5))
-- unique_together (profile, pin) constraint
-- Pin.rating property delegates to the latest review
-"""
 from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from hypothesis import HealthCheck, given, settings
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile

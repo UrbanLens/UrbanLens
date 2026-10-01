@@ -1,23 +1,26 @@
 /**
- * Album panel interactions: browser history, drag-to-reorder, add/remove,
- * uploading into an album, and the photo map toggle.
- *
- * The panel is server-rendered and HTMX-swapped, so everything here
- * re-initialises after each swap rather than binding once on load. Clicks are
- * handled by delegation off `document` for the same reason - the buttons are
- * replaced wholesale on every swap.
+ * Album panel interactions: browser history, drag-to-reorder, add/remove, uploading into an album, and the photo map toggle.
  */
 
 import Sortable from "sortablejs";
+import { bindAlbumGrid } from "./album-grid";
 import { destroyAlbumMap, highlightAlbumPhoto, initAlbumMap } from "./album-map";
+import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
+import { bulkDeleteOutcome, type BulkDeleteResult } from "./bulk-delete";
 import { getCsrfToken } from "./csrf";
+import { fetchJson, sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
+import { bindExternalPhotoGrids } from "./external-photos";
+import { bindPhotoContextMenu } from "./photo-context-menu";
+import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, tilesForImage, writePhotoIds } from "./photo-tile";
+import { observeProcessingTiles, type ProcessingItem, processingPlaceholder } from "./photo-processing";
+import { bindPhotoGrid } from "./photo-virtual-grid";
+
+/** Upload ceiling: long enough for a big photo on a slow uplink, short enough to fail. */
+const UPLOAD_TIMEOUT_MS = 600000;
 
 /**
  * How long to wait before re-rendering after the server queues a download.
- * Long enough for a typical provider fetch to land, short enough that the
- * photo doesn't feel lost. A miss is harmless - the next panel render picks
- * it up either way.
  */
 const QUEUED_REFRESH_DELAY_MS = 4000;
 
@@ -25,6 +28,7 @@ const QUEUED_REFRESH_DELAY_MS = 4000;
 const ALBUM_PARAM = "album";
 
 let albumSortable: Sortable | null = null;
+let pendingMoveUrl = "";
 /**
  * Set while a swap is being performed *because* of a history navigation, so the
  * resulting render doesn't push the entry we just came from back onto the stack.
@@ -35,16 +39,11 @@ function albumPanel(): HTMLElement | null {
     return document.getElementById("albums-panel");
 }
 
+/**
+ * POST JSON, throwing the server's own sentence on a refusal.
+ */
 async function postJson(url: string, payload: unknown): Promise<Record<string, unknown>> {
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-        throw new Error((await response.text()) || response.statusText);
-    }
-    return (await response.json()) as Record<string, unknown>;
+    return ((await sendJson<Record<string, unknown>>(url, "POST", payload, { reportsItsOwnErrors: true })) ?? {}) as Record<string, unknown>;
 }
 
 /**
@@ -60,11 +59,7 @@ function refreshPanel(): void {
 }
 
 // -- Browser history -----------------------------------------------------------
-// Opening an album is a navigation as far as the user is concerned, so it gets
-// its own history entry. The album is carried in a query parameter rather than
-// the hash because the hash already addresses the page's tab (see
-// static/js/page-tabs.js), and the tab system preserves the query string when
-// it rewrites the hash.
+// Opening an album is a navigation as far as the user is concerned, so it gets its own history entry.
 
 /** The album slug in the current URL, or null on the album list. */
 function albumFromUrl(): string | null {
@@ -74,19 +69,20 @@ function albumFromUrl(): string | null {
 /** Build a URL for the given album (or the list, when null), keeping the tab hash. */
 function urlForAlbum(slug: string | null): string {
     const params = new URLSearchParams(window.location.search);
-    if (slug) params.set(ALBUM_PARAM, slug);
-    else params.delete(ALBUM_PARAM);
+    const pinSlug = albumPanel()?.dataset.albumPinSlug;
+    if (slug) {
+        params.set(ALBUM_PARAM, slug);
+        if (pinSlug) params.set("album_pin", pinSlug);
+    } else {
+        params.delete(ALBUM_PARAM);
+        params.delete("album_pin");
+    }
     const query = params.toString();
     return `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
 }
 
 /**
  * Sync the address bar with whichever view the panel is now showing.
- *
- * Pushes a new entry when the album actually changed, so Back returns to the
- * previous view; replaces otherwise, so a plain re-render (after an add, a
- * remove, a reorder) doesn't stack duplicate entries the user has to click
- * through.
  */
 function syncHistoryToPanel(): void {
     if (restoringFromHistory) return;
@@ -137,7 +133,7 @@ async function saveAlbumOrder(grid: HTMLElement, previousOrder: HTMLElement[]): 
     }
 }
 
-/** Bind Sortable to the album's grid, but only when the album is in custom-order mode. */
+/** Bind Sortable to the album's grid. Photos are always reorderable. */
 export function initAlbumSortable(): void {
     albumSortable?.destroy();
     albumSortable = null;
@@ -145,10 +141,7 @@ export function initAlbumSortable(): void {
     const grid = document.getElementById("album-items-grid");
     if (!grid || grid.dataset.albumSortable !== "1") return;
 
-    // Captured on drag start, not derived from oldIndex/newIndex on end: two
-    // rapid drags can each fire a save while the earlier one is still in
-    // flight, and restoring a snapshot taken *before this specific drag*
-    // is what makes a failed save undo only its own change.
+    // Captured on drag start, not derived from oldIndex/newIndex on end.
     let dragStartOrder: HTMLElement[] = [];
     albumSortable = new Sortable(grid, {
         animation: 150,
@@ -165,12 +158,17 @@ export function initAlbumSortable(): void {
 
 // -- Uploading into the album --------------------------------------------------
 
+let uploadGeneration = 0;
+let uploadsInFlight = 0;
+
 function setUploadProgress(done: number, total: number): void {
     const wrap = document.querySelector<HTMLElement>("[data-album-upload-progress]");
     const bar = document.querySelector<HTMLElement>("[data-album-upload-bar]");
     if (!wrap || !bar) return;
+    const generation = uploadGeneration;
     if (done >= total) {
         window.setTimeout(() => {
+            if (uploadGeneration !== generation || uploadsInFlight > 0) return;
             wrap.hidden = true;
             bar.style.width = "0";
         }, 800);
@@ -180,30 +178,119 @@ function setUploadProgress(done: number, total: number): void {
     bar.style.width = `${Math.round((done / total) * 100)}%`;
 }
 
+window.addEventListener("beforeunload", (event) => {
+    if (uploadsInFlight <= 0) return;
+    event.preventDefault();
+    event.returnValue = "";
+});
+
+/**
+ * Lightbox "show on the map" talks to window.gallerySetPhotoMapHidden.
+ */
+function ensureMapHiddenHandler(): void {
+    if (typeof window.gallerySetPhotoMapHidden === "function") return;
+    window.gallerySetPhotoMapHidden = (imgId, hidden, onError) => {
+        const base = albumPanel()?.dataset.repositionBase;
+        if (!base) {
+            onError?.();
+            return;
+        }
+        void postJson(`${base}${imgId}/`, { map_hidden: hidden })
+            .then((data) => {
+                for (const tile of tilesForImage(imgId)) tile.dataset.mapHidden = data.map_hidden ? "true" : "false";
+                window._albumSyncMapHidden?.(imgId, Boolean(data.map_hidden));
+                if (data.map_hidden) {
+                    window._galleryRemoveMarker?.(imgId);
+                    toast.success("Photo hidden from the map. GPS is still saved.");
+                } else {
+                    toast.success("Photo shown on the map.");
+                }
+            })
+            .catch((err: Error) => {
+                toast.error(err.message || "Could not update map visibility.");
+                onError?.();
+            });
+    };
+}
+
+function reportUploadFailure(filename: string, error: string): void {
+    const url = albumPanel()?.dataset.failureUrl;
+    if (!url) return;
+    // Background telemetry the user never asked.
+    void sendJson(url, "POST", { filename, error }, { reportsItsOwnErrors: true }).catch(() => undefined);
+}
+
+function markThumbFailed(img: HTMLImageElement, filename: string, error: string): void {
+    const btn = img.closest(".gallery-thumb-btn");
+    const placeholder = document.createElement("span");
+    placeholder.className = "gallery-thumb gallery-thumb--failed";
+    placeholder.innerHTML = `<i class="material-symbols-outlined">broken_image</i>`;
+    img.replaceWith(placeholder);
+    if (btn) btn.setAttribute("aria-label", "Photo failed to load");
+    toast.error(`${filename}: ${error}`);
+    reportUploadFailure(filename, error);
+}
+
+function bindThumbLoadGuard(root: ParentNode): void {
+    root.querySelectorAll<HTMLImageElement>(".gallery-thumb").forEach((img) => {
+        if (img.dataset.guarded === "1") return;
+        img.dataset.guarded = "1";
+        img.addEventListener("error", () => {
+            const tile = img.closest<HTMLElement>(".gallery-item");
+            const fallback = tile?.dataset.url || "";
+            if (img.dataset.retried !== "1" && fallback && img.getAttribute("src") !== fallback) {
+                img.dataset.retried = "1";
+                img.src = fallback;
+                return;
+            }
+            const name = tile?.dataset.caption || fallback.split("/").pop() || "photo";
+            markThumbFailed(img, name, "This photo couldn't be shown.");
+        });
+    });
+}
+
 /**
  * Upload files straight into the open album.
- *
- * Each file is one request, matching the pin/wiki gallery upload contract, so a
- * single rejected file (duplicate, over quota, wrong type) doesn't discard the
- * rest of the batch.
  */
 async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
-    const url = albumPanel()?.dataset.uploadUrl;
+    const panel = albumPanel();
+    const url = panel?.dataset.uploadUrl;
     const list = Array.from(files).filter((file) => file.type.startsWith("image/"));
     if (!url || !list.length) return;
 
+    uploadsInFlight += 1;
+    uploadGeneration += 1;
     let done = 0;
     let failed = 0;
+    let appended = 0;
     setUploadProgress(0, list.length);
 
     for (const file of list) {
         const body = new FormData();
         body.append("image", file);
         try {
-            const response = await fetch(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
-            if (!response.ok) {
-                const data = (await response.json().catch(() => ({}))) as { error?: string };
-                throw new Error(data.error || `HTTP ${response.status}`);
+            let data: Record<string, unknown>;
+            try {
+                // A longer ceiling than fetchJson's two-minute default, which a large photo on a slow uplink can legitimately exceed.
+                data = (await fetchJson<Record<string, unknown>>(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body, timeoutMs: UPLOAD_TIMEOUT_MS, reportsItsOwnErrors: true })) ?? {};
+            } catch (err) {
+                // Reported to the server before rethrowing, which is what the
+                // outer catch's toast does not do.
+                reportUploadFailure(file.name, (err as Error).message);
+                throw err;
+            }
+            const tile = tileFromJson(data);
+            const grid = document.getElementById("album-items-grid");
+            if (tile && tileHasImage(tile) && grid) {
+                if (!tile.albumSlug) tile.albumSlug = panel?.dataset.albumSlug ?? null;
+                const li = renderPhotoTile(tile, { inAlbum: true, albumSlug: panel?.dataset.albumSlug });
+                const sentinel = grid.querySelector(".photo-grid-sentinel");
+                if (sentinel) grid.insertBefore(li, sentinel);
+                else grid.appendChild(li);
+                bindThumbLoadGuard(li);
+                appended += 1;
+                const count = Number.parseInt(grid.dataset.photoCount ?? "0", 10) + 1;
+                grid.dataset.photoCount = String(count);
             }
         } catch (err) {
             failed += 1;
@@ -213,20 +300,183 @@ async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
         setUploadProgress(done, list.length);
     }
 
+    uploadsInFlight -= 1;
     const added = list.length - failed;
     if (added > 0) {
         toast.success(`Added ${added} photo${added === 1 ? "" : "s"} to this album.`);
+        if (appended === 0) refreshPanel();
+        else initAlbumSortable();
+    }
+}
+
+// -- Multi-select --------------------------------------------------------------
+
+let selecting = false;
+const selected = new Set<number>();
+
+function clearSelect(): void {
+    selecting = false;
+    selected.clear();
+    const panel = albumPanel();
+    panel?.classList.remove("albums-panel--selecting");
+    document.getElementById("albums-select-btn")?.classList.remove("is-active");
+    panel?.querySelectorAll(".gallery-item.is-selected").forEach((el) => el.classList.remove("is-selected"));
+    window.ulBulkToolbar?.clear("albums");
+    initAlbumSortable();
+}
+
+function syncAlbumToolbar(): void {
+    const panel = albumPanel();
+    const count = selected.size;
+    const ids = Array.from(selected);
+    const inAlbum = Boolean(panel?.dataset.albumSlug);
+    const bulkUrl = panel?.dataset.galleryBulkUrl || "";
+    // Separate from the delete URL: a vault album has a bulk delete but no
+    // send-to-wiki, because there is no location to infer the wiki from.
+    const wikiUrl = panel?.dataset.galleryWikiUrl || "";
+    // Bound outside the action map so its narrowing survives into the closure.
+    const soleId = count === 1 ? ids[0] : undefined;
+    window.ulBulkToolbar?.sync("albums", count, {
+        add_to_album: count
+            ? () => openAlbumPicker({ imageIds: ids, onDone: () => { clearSelect(); refreshPanel(); } })
+            : null,
+        move_to_album:
+            inAlbum && count
+                ? () =>
+                      openAlbumPicker({
+                          imageIds: ids,
+                          moveFrom: panel?.dataset.albumSlug,
+                          onDone: () => { clearSelect(); refreshPanel(); },
+                      })
+                : null,
+        remove: inAlbum && count ? () => bulkRemove(ids) : null,
+        set_cover: inAlbum && soleId !== undefined ? () => setAlbumCoverFromToolbar(soleId) : null,
+        wiki: wikiUrl && count ? () => bulkWiki(ids, wikiUrl) : null,
+        delete: bulkUrl && count ? () => bulkDelete(ids, bulkUrl) : null,
+        deselect: () => clearSelect(),
+    });
+}
+
+function toggleSelecting(): void {
+    if (selecting) {
+        clearSelect();
+        return;
+    }
+    selecting = true;
+    albumPanel()?.classList.add("albums-panel--selecting");
+    document.getElementById("albums-select-btn")?.classList.add("is-active");
+    albumSortable?.destroy();
+    albumSortable = null;
+}
+
+function toggleSelected(item: HTMLElement): void {
+    const id = Number.parseInt(item.dataset.id ?? "", 10);
+    if (!id) return;
+    const now = !item.classList.contains("is-selected");
+    item.classList.toggle("is-selected", now);
+    if (now) selected.add(id);
+    else selected.delete(id);
+    if (selected.size === 0) {
+        // Stay in select mode with an empty bar, matching the pin gallery.
+    }
+    syncAlbumToolbar();
+}
+
+async function setAlbumCoverFromToolbar(imageId: number): Promise<void> {
+    const url = albumPanel()?.dataset.editUrl;
+    if (!url || !imageId) return;
+    try {
+        await postJson(url, { cover_image_id: imageId });
+        toast.success("Album cover updated.");
+        clearSelect();
+    } catch (err) {
+        toast.error((err as Error).message || "Could not set album cover.");
+    }
+}
+
+async function bulkRemove(ids: number[]): Promise<void> {
+    const panel = albumPanel();
+    const url = panel?.dataset.removeUrl;
+    if (!panel || !url || !ids.length) return;
+    // Only this panel's copies: the photo is still on the pin, so its gallery tile stays.
+    ids.forEach((id) => tilesForImage(id, panel).forEach((tile) => tile.remove()));
+    try {
+        await postJson(url, { image_ids: ids });
+        clearSelect();
+    } catch (err) {
+        toast.error(`Could not remove: ${(err as Error).message}`);
         refreshPanel();
     }
 }
 
+async function bulkWiki(ids: number[], bulkUrl: string): Promise<void> {
+    if (!ids.length) return;
+    if (!window.confirm(`Send ${ids.length} photo${ids.length === 1 ? "" : "s"} to the community wiki?`)) return;
+    try {
+        await postJson(bulkUrl, { action: "send_to_wiki", image_ids: ids });
+        toast.success(`Sent ${ids.length} photo${ids.length === 1 ? "" : "s"} to the wiki.`);
+        clearSelect();
+    } catch (err) {
+        toast.error((err as Error).message || "Could not send photos to the wiki.");
+    }
+}
+
+async function bulkDelete(ids: number[], bulkUrl: string): Promise<void> {
+    if (!ids.length) return;
+    if (!window.confirm(`Delete ${ids.length} photo${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    try {
+        const result = await sendJson<BulkDeleteResult>(bulkUrl, "POST", { action: "delete", image_ids: ids }, { reportsItsOwnErrors: true });
+        const { gone, message } = bulkDeleteOutcome(ids, result);
+        gone.forEach((id) => tilesForImage(id).forEach((tile) => tile.remove()));
+        toast.success(message);
+        clearSelect();
+    } catch (err) {
+        toast.error((err as Error).message || "Failed to delete photos.");
+    }
+}
+
+function openAlbumLightbox(tile: HTMLElement): void {
+    if (tile.dataset.processing) return;
+    const scope = tile.closest<HTMLElement>("[data-lightbox-scope]") ?? tile.closest<HTMLElement>(".gallery-grid");
+    if (!scope || !window.galleryOpenLightboxItem) return;
+    const { list, idx } = lightboxListFromGrid(scope, tile);
+    window.galleryOpenLightboxItem(list, idx);
+}
+
+let unbindGrids: Array<() => void> = [];
+
+function initPhotoGrids(): void {
+    unbindGrids.forEach((unbind) => unbind());
+    unbindGrids = [];
+    const panel = albumPanel();
+    if (!panel) return;
+    const inAlbum = Boolean(panel.dataset.albumSlug);
+    panel.querySelectorAll<HTMLElement>("[data-photo-grid]").forEach((grid) => {
+        unbindGrids.push(bindPhotoGrid(grid, { inAlbum, albumSlug: panel.dataset.albumSlug }));
+        unbindGrids.push(observeProcessingTiles(grid, settleAlbumTile));
+    });
+    panel.querySelectorAll<HTMLElement>("[data-album-grid]").forEach((grid) => {
+        unbindGrids.push(bindAlbumGrid(grid));
+    });
+}
+
+/** Swap a placeholder tile for the settled photo, keeping the album membership it was rendered with. */
+function settleAlbumTile(el: HTMLElement, item: ProcessingItem | null): void {
+    const tile = item ? tileFromJson(item) : null;
+    if (!tile) {
+        el.remove();
+        return;
+    }
+    const inAlbum = el.classList.contains("album-item");
+    tile.itemId ??= el.dataset.itemId ? Number.parseInt(el.dataset.itemId, 10) : null;
+    tile.albumSlug ??= el.dataset.albumSlug || null;
+    const next = renderPhotoTile(tile, { inAlbum, albumSlug: tile.albumSlug ?? undefined });
+    el.replaceWith(next);
+    bindThumbLoadGuard(next);
+}
+
 /**
  * Show the drop overlay only for a real file drag from outside the page.
- *
- * Dragging a thumbnail within the page also carries the image file, so treating
- * every drag as an upload would re-upload photos that are already here. An
- * in-page drag always fires `dragstart` first, which is what distinguishes them
- * (same rule the pin gallery's overlay uses).
  */
 let internalDrag = false;
 let dragDepth = 0;
@@ -244,8 +494,14 @@ function setOverlayVisible(visible: boolean): void {
     if (overlay) overlay.hidden = !visible;
 }
 
-document.addEventListener("dragstart", () => {
+document.addEventListener("dragstart", (event) => {
     internalDrag = true;
+    const tile = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".gallery-item[data-id]");
+    const panel = albumPanel();
+    if (!tile || !panel?.contains(tile) || !event.dataTransfer) return;
+    const id = Number.parseInt(tile.dataset.id ?? "", 10);
+    const ids = selected.has(id) && selected.size ? Array.from(selected) : id ? [id] : [];
+    if (ids.length) writePhotoIds(event.dataTransfer, ids);
 });
 document.addEventListener("dragend", () => {
     internalDrag = false;
@@ -254,11 +510,7 @@ document.addEventListener("dragend", () => {
 document.addEventListener("dragenter", (event) => {
     if (!albumPanel()?.dataset.uploadUrl || !isFileDrag(event)) return;
     dragDepth += 1;
-    // The pin gallery installs its own document-level drag overlay (see
-    // partials/pins/_photo_gallery.html), which uploads to the pin rather than
-    // to this album. Both listeners are on document and the gallery's is
-    // registered by a later HTMX swap, so its overlay is suppressed on the next
-    // frame - by then both handlers have run and ours wins.
+    // The pin gallery installs its own document-level drag overlay, which uploads to the pin rather than to this album.
     window.requestAnimationFrame(() => {
         if (!dragDepth) return;
         const galleryOverlay = document.getElementById("gallery-drop-overlay");
@@ -267,19 +519,47 @@ document.addEventListener("dragenter", (event) => {
     });
 });
 
-document.addEventListener("dragleave", () => {
-    if (dragDepth === 0) return;
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (dragDepth === 0) setOverlayVisible(false);
-});
-
 document.addEventListener("dragover", (event) => {
+    const card = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-album-drop]");
+    if (card && internalDrag) {
+        event.preventDefault();
+        card.classList.add("album-card--drop");
+        return;
+    }
     if (!dropOverlay() || dropOverlay()?.hidden) return;
     // Without this the browser navigates to the dropped file instead.
     event.preventDefault();
 });
 
+document.addEventListener("dragleave", (event) => {
+    const card = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-album-drop]");
+    if (card) card.classList.remove("album-card--drop");
+    if (dragDepth === 0) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) setOverlayVisible(false);
+});
+
 document.addEventListener("drop", (event) => {
+    const card = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-album-drop]");
+    document.querySelectorAll(".album-card--drop").forEach((el) => el.classList.remove("album-card--drop"));
+    if (card && internalDrag) {
+        event.preventDefault();
+        const ids = parsePhotoIds(event.dataTransfer);
+        const addUrl = card.dataset.addUrl;
+        internalDrag = false;
+        dragDepth = 0;
+        setOverlayVisible(false);
+        if (addUrl && ids.length) {
+            void postJson(addUrl, { image_ids: ids })
+                .then(() => {
+                    toast.success(`Added ${ids.length} photo${ids.length === 1 ? "" : "s"} to the album.`);
+                    clearSelect();
+                    refreshPanel();
+                })
+                .catch((err: Error) => toast.error(`Could not add: ${err.message}`));
+        }
+        return;
+    }
     const overlayShowing = !!dropOverlay() && !dropOverlay()?.hidden;
     dragDepth = 0;
     setOverlayVisible(false);
@@ -310,7 +590,36 @@ document.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     if (!target?.closest) return;
 
-    // -- Album list: show/hide the create form ---------------------------------
+    if (target.closest("[data-album-select-toggle]")) {
+        toggleSelecting();
+        return;
+    }
+
+    const selectCheck = target.closest<HTMLElement>(".gallery-select-check");
+    if (selectCheck && albumPanel()?.contains(selectCheck)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const item = selectCheck.closest<HTMLElement>(".gallery-item");
+        if (item) {
+            if (!selecting) toggleSelecting();
+            toggleSelected(item);
+        }
+        return;
+    }
+
+    const photoOpen = target.closest<HTMLElement>("[data-photo-open], .gallery-thumb-btn");
+    if (photoOpen && albumPanel()?.contains(photoOpen)) {
+        event.preventDefault();
+        const tile = photoOpen.closest<HTMLElement>(".gallery-item");
+        if (!tile) return;
+        if (selecting) {
+            toggleSelected(tile);
+            return;
+        }
+        openAlbumLightbox(tile);
+        return;
+    }
+
     const createToggle = target.closest<HTMLElement>("[data-album-create-toggle]");
     if (createToggle) {
         const form = document.getElementById("album-create-form");
@@ -335,9 +644,50 @@ document.addEventListener("click", (event) => {
         return;
     }
 
+    const moveBtn = target.closest<HTMLElement>("[data-album-move]");
+    if (moveBtn) {
+        event.preventDefault();
+        closeMenus();
+        pendingMoveUrl = moveBtn.dataset.moveUrl || albumPanel()?.dataset.moveUrl || "";
+        const currentPin = moveBtn.dataset.currentPin || albumPanel()?.dataset.albumPinSlug || "";
+        const dialog = document.getElementById("album-move-dialog") as HTMLDialogElement | null;
+        if (!pendingMoveUrl || !dialog) {
+            toast.info("This album can only move between a parent pin and its children.");
+            return;
+        }
+        dialog.querySelectorAll<HTMLElement>("[data-album-move-target]").forEach((btn) => {
+            btn.hidden = btn.dataset.albumMoveTarget === currentPin;
+        });
+        dialog.showModal();
+        return;
+    }
+
+    const moveTarget = target.closest<HTMLElement>("[data-album-move-target]");
+    if (moveTarget) {
+        event.preventDefault();
+        const slug = moveTarget.dataset.albumMoveTarget;
+        const url = pendingMoveUrl;
+        (document.getElementById("album-move-dialog") as HTMLDialogElement | null)?.close();
+        if (!url || !slug) return;
+        void postJson(url, { pin_slug: slug })
+            .then(() => {
+                toast.success("Album moved.");
+                refreshPanel();
+            })
+            .catch((err: Error) => toast.error(err.message || "Could not move album."));
+        return;
+    }
+
     if (target.closest("[data-album-picker-open]")) {
         closeMenus();
         (document.getElementById("album-picker-dialog") as HTMLDialogElement | null)?.showModal();
+        void loadEligiblePage(false);
+        return;
+    }
+
+    if (target.closest("[data-album-picker-more]")) {
+        event.preventDefault();
+        void loadEligiblePage(true);
         return;
     }
 
@@ -363,12 +713,12 @@ document.addEventListener("click", (event) => {
         const url = albumPanel()?.dataset.removeUrl;
         const imageId = Number.parseInt(removeBtn.dataset.imageId ?? "0", 10);
         if (!url || !imageId) return;
-        postJson(url, { image_ids: [imageId] })
-            .then(() => {
-                toast.success("Removed from album.");
-                refreshPanel();
-            })
-            .catch((err: Error) => toast.error(`Could not remove: ${err.message}`));
+        const tile = removeBtn.closest<HTMLElement>(".album-item, .gallery-item");
+        tile?.remove();
+        postJson(url, { image_ids: [imageId] }).catch((err: Error) => {
+            toast.error(`Could not remove: ${err.message}`);
+            refreshPanel();
+        });
         return;
     }
 
@@ -387,6 +737,106 @@ document.addEventListener("click", (event) => {
             .catch((err: Error) => toast.error(`Could not add: ${err.message}`));
     }
 });
+
+// -- "Add from this place" picker -------------------------------------------
+//
+// Its photos arrive a page at a time when the dialog opens, rather than being rendered into a closed dialog on every album page view.
+
+/** How many eligible photos to fetch per request. */
+const ELIGIBLE_PAGE_SIZE = 60;
+
+
+function pickerGrid(): HTMLElement | null {
+    return document.querySelector<HTMLElement>(".album-add-grid[data-album-eligible-url]");
+}
+
+/** One picker tile, built rather than interpolated - a caption needs no escaping this way. */
+function renderEligibleTile(tile: { id: number; thumbUrl: string; caption: string; processing: string }): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "gallery-item album-add-item";
+    li.dataset.id = String(tile.id);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "album-item-add";
+    button.title = "Add to this album";
+    button.setAttribute("aria-label", "Add to this album");
+    button.dataset.imageId = String(tile.id);
+
+    let img: HTMLElement;
+    if (tile.processing) {
+        img = processingPlaceholder("gallery-thumb gallery-thumb--placeholder", tile.processing === "failed");
+    } else {
+        const thumb = document.createElement("img");
+        thumb.src = tile.thumbUrl;
+        thumb.alt = tile.caption || "Photo";
+        thumb.className = "gallery-thumb";
+        thumb.loading = "lazy";
+        thumb.decoding = "async";
+        img = thumb;
+    }
+
+    const tick = document.createElement("span");
+    tick.className = "album-add-tick";
+    tick.innerHTML = '<i class="material-symbols-outlined">add</i>';
+
+    button.append(img, tick);
+    li.append(button);
+    return li;
+}
+
+/**
+ * Fetch the next page of addable photos into the picker.
+ * @param more - True for a "show more" click; false for the first open, which
+ */
+async function loadEligiblePage(more: boolean): Promise<void> {
+    const grid = pickerGrid();
+    if (!grid) return;
+    const url = grid.dataset.albumEligibleUrl;
+    if (!url) return;
+    if (!more && grid.childElementCount > 0) return;
+    if (grid.dataset.loading === "1") return;
+
+    const status = document.querySelector<HTMLElement>("[data-album-picker-status]");
+    const moreBtn = document.querySelector<HTMLElement>("[data-album-picker-more]");
+    const offset = more ? grid.childElementCount : 0;
+    grid.dataset.loading = "1";
+    if (status) {
+        status.textContent = "Loading photos...";
+        status.hidden = false;
+    }
+    if (moreBtn) moreBtn.hidden = true;
+
+    try {
+        const data = (await fetchJson<{ items: Record<string, unknown>[]; total: number }>(url + `?offset=${offset}&limit=${ELIGIBLE_PAGE_SIZE}`, {
+            reportsItsOwnErrors: true,
+        })) ?? { items: [], total: 0 };
+        for (const raw of data.items) {
+            const tile = tileFromJson(raw);
+            if (tile) grid.append(renderEligibleTile(tile));
+        }
+        if (status) {
+            // Cleared as well as hidden: a hidden node still holding "Loading
+            // photos..." is a stale sentence waiting for something to unhide it.
+            status.textContent = "";
+            status.hidden = true;
+        }
+        if (moreBtn) moreBtn.hidden = grid.childElementCount >= data.total;
+        if (!grid.childElementCount && status) {
+            status.textContent = "No photos left to add.";
+            status.hidden = false;
+        }
+    } catch (error) {
+        if (status) {
+            status.textContent = error instanceof Error ? error.message : "Could not load photos.";
+            status.hidden = false;
+        }
+        // Shown again so a failed page can be retried without closing the dialog.
+        if (moreBtn) moreBtn.hidden = false;
+    } finally {
+        delete grid.dataset.loading;
+    }
+}
 
 /** Close every open album overflow menu (they are <details> elements). */
 function closeMenus(): void {
@@ -407,11 +857,6 @@ document.addEventListener("mouseout", (event) => syncHoverToMap(event, false));
 
 /**
  * Add an external Media-gallery item to an album.
- *
- * Exposed globally because the Media gallery tiles are rendered by a different
- * (server-rendered, inline-JS) surface than this module owns. Marking the item
- * relevant and caching it locally happens server-side - see
- * services.media.media_relevance.record_relevant_and_cache.
  */
 window.albumAddExternalMedia = async (addUrl, media) => {
     toast.info("Saving photo...");
@@ -439,32 +884,44 @@ window.albumAddExternalMedia = async (addUrl, media) => {
     }
 };
 
-/** Re-bind everything that a panel swap replaced. */
-function onPanelRendered(): void {
+/**
+ * Re-bind everything that a panel swap replaced.
+ *
+ * @param panel - The freshly rendered album panel.
+ */
+function onPanelRendered(panel: HTMLElement): void {
     // The swap replaced the map's container, so any live map now points at a
     // detached node. Rebuild only if the new render still shows the section.
     destroyAlbumMap();
     if (document.getElementById("album-map-section")?.hasAttribute("hidden") === false) initAlbumMap();
+    ensureMapHiddenHandler();
 
+    clearSelect();
+    bindAlbumPicker();
+    initPhotoGrids();
     initAlbumSortable();
+    bindThumbLoadGuard(panel);
     syncHistoryToPanel();
     restoringFromHistory = false;
 }
 
 /**
- * The panel node as of the last render, so an unrelated HTMX swap elsewhere on
- * the page (these pages are full of them) doesn't tear down and rebuild the
- * album map. Comparing node identity is more reliable than reading the swap
- * event's target, which for an outerHTML swap refers to the replaced node.
+ * The panel node as of the last render, so an unrelated HTMX swap elsewhere on the page (these pages are full of them) doesn't tear down.
  */
 let lastPanel: HTMLElement | null = null;
 
 document.body.addEventListener("htmx:afterSwap", () => {
+    bindExternalPhotoGrids();
     const panel = albumPanel();
     if (panel === lastPanel) return;
     lastPanel = panel;
-    if (panel) onPanelRendered();
+    if (panel) onPanelRendered(panel);
 });
 
 lastPanel = albumPanel();
+bindPhotoContextMenu();
+initPhotoGrids();
+bindExternalPhotoGrids();
 initAlbumSortable();
+ensureMapHiddenHandler();
+if (lastPanel) bindThumbLoadGuard(lastPanel);

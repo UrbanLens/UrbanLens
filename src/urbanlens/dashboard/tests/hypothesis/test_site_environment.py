@@ -1,13 +1,14 @@
 """Tests for SiteSettings environment override resolution."""
+
 from __future__ import annotations
 
 import os
 from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser, User
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.site_settings import EnvironmentOverrideChoice, SiteSettings
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
@@ -31,14 +32,14 @@ class SiteSettingsEnvironmentTests(TestCase):
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "production"}):
             self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PRODUCTION)
 
-    def test_default_falls_back_to_local_without_env_var(self) -> None:
+    def test_default_falls_back_to_production_without_env_var(self) -> None:
         SiteSettings.objects.filter(pk=self.site.pk).update(
             environment_override=EnvironmentOverrideChoice.DEFAULT,
         )
         self.site.refresh_from_db()
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
         with patch.dict(os.environ, stripped, clear=True):
-            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.LOCAL)
+            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PRODUCTION)
 
     def test_development_override_wins_over_env_var(self) -> None:
         SiteSettings.objects.filter(pk=self.site.pk).update(
@@ -72,11 +73,13 @@ class SiteSettingsEnvironmentTests(TestCase):
         self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.STAGING)
 
     @given(
-        st.sampled_from([
-            EnvironmentOverrideChoice.PRODUCTION,
-            EnvironmentOverrideChoice.DEVELOPMENT,
-            EnvironmentOverrideChoice.TESTING,
-        ]),
+        st.sampled_from(
+            [
+                EnvironmentOverrideChoice.PRODUCTION,
+                EnvironmentOverrideChoice.DEVELOPMENT,
+                EnvironmentOverrideChoice.TESTING,
+            ]
+        ),
     )
     @_hyp
     def test_explicit_override_ignores_env_var(self, override: str) -> None:
@@ -113,12 +116,12 @@ class IsDevelopmentEnvironmentTests(TestCase):
         self._set_override(EnvironmentOverrideChoice.TESTING)
         self.assertFalse(self.site.is_development_environment())
 
-    def test_default_with_local_env_var_is_dev(self) -> None:
+    def test_default_with_no_env_var_is_not_dev(self) -> None:
+        """Unset is production, so an image run without UL_ENVIRONMENT does not show admins the dev toolbar."""
         self._set_override(EnvironmentOverrideChoice.DEFAULT)
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
         with patch.dict(os.environ, stripped, clear=True):
-            # No UL_ENVIRONMENT → resolves to LOCAL, which is treated as dev.
-            self.assertTrue(self.site.is_development_environment())
+            self.assertFalse(self.site.is_development_environment())
 
     def test_default_with_ul_environment_local_is_dev(self) -> None:
         self._set_override(EnvironmentOverrideChoice.DEFAULT)
@@ -188,9 +191,7 @@ class ShowDevAdminFeaturesTests(TestCase):
             self.assertTrue(self.site.show_dev_admin_features(self.non_admin))
 
     def test_non_admin_sees_it_when_enabled_in_staging(self) -> None:
-        """Staging was deliberately added to the allowed set (commit 74930ea9)
-        so QA accounts can use the toolbar there - still gated behind the
-        explicit UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS opt-in."""
+        """Staging was deliberately added to the allowed set (commit 74930ea9) so QA accounts can use the toolbar there - still gated behind the explicit UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS opt-in."""
         self._set_override(EnvironmentOverrideChoice.STAGING)
         with patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True):
             self.assertTrue(self.site.show_dev_admin_features(self.non_admin))
@@ -200,7 +201,11 @@ class ShowDevAdminFeaturesTests(TestCase):
         with patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True):
             self.assertFalse(self.site.show_dev_admin_features(self.non_admin))
 
-    @given(st.sampled_from([EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL, EnvironmentTypes.TESTING, EnvironmentTypes.STAGING]))
+    @given(
+        st.sampled_from(
+            [EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL, EnvironmentTypes.TESTING, EnvironmentTypes.STAGING]
+        )
+    )
     @_hyp
     def test_non_admin_allowed_environments(self, env_type: str) -> None:
         """Hypothesis: with the flag on, dev/local/testing/staging all grant non-admins the toolbar."""

@@ -53,6 +53,18 @@ class WikiDetailGetTests(WikiDetailBaseTestCase):
         self.assertEqual(body["uuid"], str(self.wiki.uuid))
         self.assertEqual(body["location_slug"], self.location.ensure_slug())
 
+    def test_the_comment_count_is_a_json_number(self) -> None:
+        """This payload is rendered by the JSON encoder, not by a template.
+
+        The gated count grew a `capped` flag and a `__str__` that prints "512+"
+        for the badge. That object is not JSON-serialisable, and the documented
+        contract here (`WikiDetailSerializer.comment_count`) is an integer - so
+        the web badge's affordance must not travel into the API payload.
+        """
+        body = self.client.get(self.url(), **self.headers()).json()
+
+        self.assertIsInstance(body["comment_count"], int)
+
     def test_location_slug_round_trips(self) -> None:
         """The slug the payload hands back actually resolves the same wiki."""
         body = self.client.get(self.url(), **self.headers()).json()
@@ -213,7 +225,9 @@ class WikiScopeEnforcementTests(WikiDetailBaseTestCase):
         for method, suffix, payload in self.WRITES:
             with self.subTest(method=method, suffix=suffix):
                 kwargs = {"content_type": "application/json", **self.headers()}
-                response = getattr(self.client, method)(self.url(suffix), payload if payload is not None else {}, **kwargs)
+                response = getattr(self.client, method)(
+                    self.url(suffix), payload if payload is not None else {}, **kwargs
+                )
                 self.assertEqual(response.status_code, 403, f"{method.upper()} {suffix} was not refused")
 
     def test_read_scope_still_permits_reads(self) -> None:
@@ -231,11 +245,11 @@ class WikiAliasesAndLinksTests(WikiDetailBaseTestCase):
     def test_alias_create_list_delete(self) -> None:
         """Round-trip one alias.
 
-        ``Wiki.save()`` auto-creates an alias matching the wiki's own name, so
-        the list is never empty - assert on the alias under test rather than on
-        the whole collection.
-        """
-        created = self.client.post(self.url("aliases/"), {"name": "The Mill"}, content_type="application/json", **self.headers())
+        ``Wiki.save()`` auto-creates an alias matching the wiki's own name, so the list is never empty - assert
+        on the alias under test rather than on the whole collection."""
+        created = self.client.post(
+            self.url("aliases/"), {"name": "The Mill"}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(created.status_code, 201)
         alias_id = created.json()["id"]
 
@@ -250,7 +264,12 @@ class WikiAliasesAndLinksTests(WikiDetailBaseTestCase):
         self.assertNotIn(alias_id, [row["id"] for row in remaining])
 
     def test_link_create_list_delete(self) -> None:
-        created = self.client.post(self.url("links/"), {"name": "History", "url": "https://example.com/mill"}, content_type="application/json", **self.headers())
+        created = self.client.post(
+            self.url("links/"),
+            {"name": "History", "url": "https://example.com/mill"},
+            content_type="application/json",
+            **self.headers(),
+        )
         self.assertEqual(created.status_code, 201)
         link_id = created.json()["id"]
 
@@ -261,5 +280,7 @@ class WikiAliasesAndLinksTests(WikiDetailBaseTestCase):
         self.assertEqual(removed.status_code, 204)
 
     def test_malformed_link_url_is_rejected(self) -> None:
-        response = self.client.post(self.url("links/"), {"url": "not a url"}, content_type="application/json", **self.headers())
+        response = self.client.post(
+            self.url("links/"), {"url": "not a url"}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(response.status_code, 400)

@@ -232,6 +232,13 @@
 
 .ul-spinner {
 	@include spinner;
+
+	// On a page surface rather than a filled button.
+	&--surface {
+		border-color: var(--ul-grey-4);
+		border-top-color: $color-blue-700;
+		animation-duration: .7s;
+	}
 }
 
 // -- Labels --------------------------------------------------------------------
@@ -286,9 +293,6 @@
 }
 
 // Muted inline chip used as <span class="badge badge--muted"> in templates.
-// The base span.badge (_reset.scss) is a right-floated count badge; this
-// modifier resets those properties to render as an inline pill instead.
-// The doubled class keeps specificity above span.badge.
 .badge.badge--muted {
 	display: inline-block;
 	float: none;
@@ -560,7 +564,7 @@
     input[type="radio"] {
         display: none;
     }
-	
+
 	.material-symbols-outlined,
     .material-icons {
         font-size: 1.6rem;
@@ -681,12 +685,7 @@
 			outline: none !important;
 		}
 
-		// The overlapped-input trick means the thumbs are the ONLY hittable
-		// part of this control (track and input are both pointer-events:none so
-		// the two ranges don't block each other), and these drive every
-		// score/count filter. An 18px thumb is well under a finger, so grow it
-		// on touch - the hit area of a native range thumb tracks its rendered
-		// size, and no ::before can be attached to reach it.
+		// The overlapped-input trick means the thumbs are the ONLY hittable part of this control.
 		@media (pointer: coarse) {
 			&::-webkit-slider-thumb {
 				width: 28px;
@@ -736,7 +735,9 @@
 .pagination-btn {
 	@include icon-btn(28px);
 
-	&:disabled {
+	// `--disabled` as well as `:disabled`: the plain-link variant of the bar.
+	&:disabled,
+	&--disabled {
 		opacity: .35;
 		cursor: default;
 		pointer-events: none;
@@ -763,4 +764,15 @@
 			}
 		}
 	}
+}
+
+// Save state of a form that saves as it is edited (shared/form-autosave.ts).
+.form-autosave-indicator {
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+    opacity: 0;
+    transition: opacity .3s;
+
+    &.is-shown { opacity: 1; }
+    &--error { color: $color-red-500; }
 }

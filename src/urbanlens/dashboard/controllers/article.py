@@ -1,17 +1,4 @@
-"""Article controller - Wikipedia-style articles for pins and community wikis.
-
-Every view here serves both hosts through the same class:
-
-- Wiki articles are routed with a ``location_slug`` kwarg and resolved through
-  the standard wiki visibility gate (:func:`resolve_visible_wiki`), so they
-  are only reachable by users with a pin at that location.
-- Pin articles are routed with a ``pin_slug`` kwarg and resolved strictly
-  against the requesting user's own pins - a pin article is private and can
-  never be seen (or even confirmed to exist) by anyone else.
-
-The article tab, editor, preview, revision history, diff, and restore are all
-HTMX partials swapped into the host page's Article/History tabs.
-"""
+"""Article controller - articles for pins and community wikis."""
 
 from __future__ import annotations
 
@@ -22,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
+from django.db.models.functions import Length
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -30,17 +18,22 @@ from django.views import View
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH, text_length_error
 from urbanlens.dashboard.services.wiki.articles import ArticleConflictError, diff_revisions, get_article, render_article, restore_revision, save_article_checked
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
+    from django.core.paginator import Page
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
+
+#: Revisions per page in the history list.
+_HISTORY_PAGE_SIZE = 25
 
 
 @dataclass(slots=True)
@@ -55,10 +48,7 @@ class ArticleScope:
         location: The wiki's Location (wiki scope only) - used to build URLs.
         is_private: True for a pin article (only its owner ever sees it).
         host_name: Display name of the pin/wiki for headings.
-        urls: Named endpoint URLs for templates (view/edit/save/preview/
-            history). Per-revision URLs are derived from ``history`` by
-            appending ``<revision_id>/`` (and ``restore/``), matching the
-            nested route layout.
+        urls: Named endpoint URLs for templates (view/edit/save/preview/ history).
     """
 
     profile: Profile
@@ -96,9 +86,8 @@ def _pin_urls(pin_slug: str) -> dict[str, str]:
 def _resolved_article(scope: ArticleScope) -> Article | None:
     """Re-read the scope's article the way ``ArticleViewBase.resolve`` would.
 
-    Used after a write, so the fragment sent back reflects what was just saved
-    while staying concealed for the viewer who saved it. A private pin article
-    has no concealment to apply and takes the plain path.
+    Used after a write, so the fragment sent back reflects what was just saved while staying concealed
+    for the viewer who saved it.
 
     Args:
         scope: The resolved scope, after a write.
@@ -118,10 +107,8 @@ def _resolved_article(scope: ArticleScope) -> Article | None:
 def _writable_article(scope: ArticleScope) -> Article:
     """The scope's article as a row that may be written.
 
-    ``scope.article`` may be a concealed projection carrying an older
-    revision's text; restoring through it would publish that text as the
-    current article. See ``concealment.writable_wiki`` for the same argument
-    about wikis.
+    ``scope.article`` may be a concealed projection carrying an older revision's text; restoring through
+    it would publish that text as the current article.
 
     Args:
         scope: The resolved scope.
@@ -149,9 +136,9 @@ def _writable_article(scope: ArticleScope) -> Article:
 def _visible_revision_queryset(scope: ArticleScope):
     """The scope's article revisions, narrowed to what its viewer may see.
 
-    One definition rather than the same filter at each of the four places that
-    list or look up a revision - the shape of defect this whole layer keeps
-    producing is a rule spelled out per call site and forgotten at one of them.
+    One definition rather than the same filter at each of the four places that list or look up a
+    revision - the shape of defect this whole layer keeps producing is a rule spelled out per call site
+    and forgotten at one of them.
 
     Args:
         scope: The resolved scope.
@@ -172,9 +159,29 @@ def _visible_revision_queryset(scope: ArticleScope):
     return conceal_rows(revisions, scope.profile) if concealment_active(scope.wiki, scope.profile) else revisions
 
 
-def _visible_revisions(scope: ArticleScope) -> list[ArticleRevision]:
-    """The scope's visible revisions, newest first, ready for the history list."""
-    return list(_visible_revision_queryset(scope).order_by("-created"))
+def owned_pin(request: HttpRequest, pin_slug: str) -> Pin:
+    """The requester's own pin, addressed by slug or uuid.
+
+    Args:
+        request: The current request.
+        pin_slug: The URL's pin segment.
+
+    Returns:
+        The pin, with its location loaded.
+
+    Raises:
+        Http404: No pin of the requester's matches.
+    """
+    pin = Pin.objects.filter(slug=pin_slug, profile__user=request.user).select_related("location").first()
+    if pin is None:
+        try:
+            pin = Pin.objects.filter(uuid=pin_slug, profile__user=request.user).select_related("location").first()
+        except (ValueError, ValidationError):
+            # pin_slug isn't a UUID at all - same outcome as no match.
+            pin = None
+    if pin is None:
+        raise Http404
+    return pin
 
 
 class ArticleViewBase(LoginRequiredMixin, View):
@@ -184,12 +191,11 @@ class ArticleViewBase(LoginRequiredMixin, View):
         """Resolve the host (pin or wiki) and its article for this request.
 
         Args:
-            request: The current request.
-            **kwargs: URL kwargs; ``location_slug`` selects wiki scope,
-                ``pin_slug`` selects pin scope.
+            request: The current request. **kwargs: URL kwargs; ``location_slug`` selects wiki scope,
+            ``pin_slug`` selects pin scope.
 
         Returns:
-            The populated :class:`ArticleScope`.
+            The populated: class:`ArticleScope`.
 
         Raises:
             Http404: Host not found or not accessible to the requester.
@@ -200,9 +206,8 @@ class ArticleViewBase(LoginRequiredMixin, View):
             location, wiki, profile = resolve_visible_wiki(request, kwargs["location_slug"])
             return ArticleScope(
                 profile=profile,
-                # An article is entirely user-contributed prose, so a concealed
-                # viewer sees the newest revision they are entitled to - or
-                # None, which is what a place nobody has written up looks like.
+                # An article is entirely user-contributed prose, so a concealed viewer sees the newest revision
+                # they are entitled to - or None, which is what a place nobody has written up looks like.
                 article=conceal_article(get_article(wiki=wiki), wiki, profile),
                 pin=None,
                 wiki=wiki,
@@ -213,17 +218,14 @@ class ArticleViewBase(LoginRequiredMixin, View):
                 urls=_wiki_urls(location.ensure_slug()),
             )
 
-        pin_slug = kwargs.get("pin_slug")
-        pin = Pin.objects.filter(slug=pin_slug, profile__user=request.user).select_related("location").first()
-        if pin is None:
-            try:
-                pin = Pin.objects.filter(uuid=pin_slug, profile__user=request.user).select_related("location").first()
-            except (ValueError, ValidationError):
-                # pin_slug isn't a UUID at all - same outcome as no match.
-                pin = None
-        if pin is None:
-            raise Http404
+        pin = owned_pin(request, kwargs.get("pin_slug") or "")
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        from urbanlens.dashboard.services.wiki.wiki_seed import apply_wikipedia_cover_if_missing, seed_pin_article_from_wikipedia
+
+        if get_article(pin=pin) is None:
+            seed_pin_article_from_wikipedia(pin)
+        else:
+            apply_wikipedia_cover_if_missing(pin=pin)
         return ArticleScope(
             profile=profile,
             article=get_article(pin=pin),
@@ -232,7 +234,7 @@ class ArticleViewBase(LoginRequiredMixin, View):
             location=None,
             is_private=True,
             host_name=pin.effective_name or "this pin",
-            urls=_pin_urls(pin.slug),
+            urls=_pin_urls(pin.ensure_slug()),
         )
 
     @staticmethod
@@ -242,8 +244,7 @@ class ArticleViewBase(LoginRequiredMixin, View):
         Args:
             response: The response to annotate.
             level: toastr level ("success", "error", ...).
-            message: Toast body.
-            *extra_events: Additional client event names to trigger.
+            message: Toast body. *extra_events: Additional client event names to trigger.
 
         Returns:
             The same response, for chaining.
@@ -259,11 +260,9 @@ class ArticleViewBase(LoginRequiredMixin, View):
         separate read-only view - see frontend/ts/entries/article-wysiwyg.ts) for the
         resolved scope.
         """
-        # The visible revisions, not all of them: this id goes out to the
-        # client as the conflict-check baseline and comes back on save, so
-        # taking it from the live row would hand a concealed viewer the id of a
-        # revision they were not shown - and make the conflict check compare
-        # against text they never saw.
+        # The visible revisions, not all of them: this id goes out to the client as the conflict-check baseline
+        # and comes back on save, so taking it from the live row would hand a concealed viewer the id of a
+        # revision they were not shown - and make the conflict check compare against text they never saw.
         latest_revision = _visible_revision_queryset(scope).order_by("-created").first()
         return render(
             request,
@@ -291,12 +290,7 @@ class ArticlePanelView(ArticleViewBase):
 
 
 class ArticleSaveView(ArticleViewBase):
-    """Persist a new article version.
-
-    POST .../article/save/  with ``content``, ``edit_summary`` and
-    ``base_revision_id`` (the latest revision the editor was started from,
-    used to detect conflicting edits on community wikis).
-    """
+    """Persist a new article version."""
 
     def post(self, request: HttpRequest, **kwargs) -> HttpResponse:
         scope = self.resolve(request, **kwargs)
@@ -310,9 +304,7 @@ class ArticleSaveView(ArticleViewBase):
             response["HX-Reswap"] = "none"
             return self.toast(response, "error", length_error)
 
-        # Conflict check: someone else saved while this editor was open. The
-        # client keeps the user's text so nothing is lost. Shared with the
-        # external API via services.wiki.articles.save_article_checked.
+        # Conflict check: someone else saved while this editor was open.
         base_revision_id = int(base_revision_raw) if base_revision_raw.isdigit() else None
         try:
             _article, revision = save_article_checked(
@@ -360,13 +352,12 @@ class ArticlePreviewView(ArticleViewBase):
 class ArticleImageUploadView(ArticleViewBase):
     """Upload an image to embed inline in an article, from the WYSIWYG editor.
 
-    POST .../article/image/  with an ``image`` file.
-
-    Images are stored as ordinary ``Image`` rows against the article's host
-    (pin or wiki) - the same model and validation (size/content-type
-    sniffing/malware scan/quota) every other gallery upload goes through -
-    so a pasted-in article image is never a lower-scrutiny upload path than
-    the Memories or pin/wiki gallery.
+    POST .../article/image/ with an ``image`` file. Answers with the image's stable link
+    (``media.image``), its id, and whether it is still processing.
+    Images are stored as ordinary ``Image`` rows against the article's host (pin or wiki) - the same
+    model and validation (size/content-type sniffing/malware scan/quota) every other gallery upload goes
+    through - so a pasted-in article image is never a lower-scrutiny upload path than the Memories or
+    pin/wiki gallery.
     """
 
     def post(self, request: HttpRequest, **kwargs) -> JsonResponse:
@@ -376,53 +367,94 @@ class ArticleImageUploadView(ArticleViewBase):
             return JsonResponse({"error": "No image provided."}, status=400)
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        # Scanned asynchronously instead: prepare_photo_upload below marks the row
+        # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
         if upload_error:
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
         location = scope.location or (scope.pin.location if scope.pin else None)
-        with per_profile_upload_lock(scope.profile):
-            quota_error = quota_error_for_upload(scope.profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            img = Image.objects.create(
-                image=image_file,
-                pin=scope.pin,
-                wiki=scope.wiki,
-                location=location,
-                profile=scope.profile,
-                checksum=checksum,
-                file_size=image_file.size,
-            )
+        try:
+            with reserve_upload(scope.profile, image_file.size):
+                # Stored already stripped - see services.media.images.prepare_photo_upload.
+                prepared = prepare_photo_upload(image_file, scope.profile)
+                img = Image.objects.create(
+                    image=prepared.file,
+                    pin=scope.pin,
+                    wiki=scope.wiki,
+                    location=location,
+                    profile=scope.profile,
+                    checksum=checksum,
+                    file_size=prepared.size,
+                    **prepared.metadata,
+                )
+        except UploadRefusedError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)
-        return JsonResponse({"url": request.build_absolute_uri(img.image.url)}, status=201)
+        # Written into the article body, so it names the row: the re-encode replaces the file.
+        return JsonResponse({"url": reverse("media.image", args=[img.uuid]), "id": img.pk, "processing": img.is_processing}, status=201)
 
 
-def _annotate_deltas(revisions: list[ArticleRevision]) -> list[dict]:
-    """Pair each revision (newest first) with its size delta and ordinal.
+def _annotate_deltas(revisions: list[ArticleRevision], *, following: ArticleRevision | None = None, highest_number: int | None = None, current_id: int | None = None) -> list[dict]:
+    """Pair each revision (newest first) with its size delta, ordinal and current flag.
 
     Args:
         revisions: Revisions ordered newest first.
+        following: The revision immediately older than the last one in ``revisions`` - the top of the
+        next page.
+        highest_number: The ordinal of ``revisions[0]``; defaults to the length of the list, which is
+        only right on an unpaginated history.
+        current_id: The id of the newest revision in the whole history.
 
     Returns:
-        Dicts of {revision, delta, number} where number is 1 for the oldest.
+        Dicts of {revision, delta, number, is_current} where number is 1 for the oldest revision of all,
+        not for the oldest on this page.
     """
     total = len(revisions)
+    highest = total if highest_number is None else highest_number
     rows = []
     for index, revision in enumerate(revisions):
-        previous = revisions[index + 1] if index + 1 < total else None
-        rows.append({"revision": revision, "delta": revision.size_delta(previous), "number": total - index})
+        previous = revisions[index + 1] if index + 1 < total else following
+        rows.append(
+            {
+                "revision": revision,
+                "delta": revision.size_delta(previous),
+                "number": highest - index,
+                "is_current": revision.pk == current_id,
+            }
+        )
     return rows
+
+
+def _history_rows(request: HttpRequest, scope: ArticleScope) -> tuple[list[dict], Page]:
+    """One page of ``scope``'s revision history, newest first.
+
+    Args:
+        request: The current request; carries the page number.
+        scope: The resolved article scope.
+
+    Returns:
+        The annotated rows for the requested page, and the ``Page`` itself so the template can render
+        pagination controls.
+    """
+    revisions = _visible_revision_queryset(scope).annotate(content_length=Length("content")).defer("content").order_by("-created")
+    page = get_page(request, revisions, _HISTORY_PAGE_SIZE)
+    rows = list(page.object_list)
+    # The oldest row on this page needs the one below it to size its delta, and
+    # that revision is the top of the next page.
+    following = next(iter(revisions[page.end_index() : page.end_index() + 1]), None) if page.has_next() else None
+    newest = rows[0] if page.number == 1 and rows else next(iter(revisions[:1]), None)
+    current_id = newest.pk if newest is not None else None
+    return _annotate_deltas(rows, following=following, highest_number=page.paginator.count - page.start_index() + 1, current_id=current_id), page
 
 
 class ArticleHistoryView(ArticleViewBase):
@@ -433,14 +465,15 @@ class ArticleHistoryView(ArticleViewBase):
 
     def get(self, request: HttpRequest, **kwargs) -> HttpResponse:
         scope = self.resolve(request, **kwargs)
-        revisions = _visible_revisions(scope)
+        rows, page = _history_rows(request, scope)
         return render(
             request,
             "dashboard/partials/articles/_article_history.html",
             {
                 "scope": scope,
                 "article": scope.article,
-                "revision_rows": _annotate_deltas(revisions),
+                "revision_rows": rows,
+                "page_obj": page,
             },
         )
 
@@ -455,9 +488,8 @@ class ArticleRevisionView(ArticleViewBase):
         scope = self.resolve(request, **kwargs)
         if scope.article is None:
             raise Http404
-        # Scoped to what this viewer may see, not merely to the article: an
-        # unfiltered by-id lookup is an oracle, answering "does revision N
-        # exist here" - and then handing over its whole diff - for revisions
+        # Scoped to what this viewer may see, not merely to the article: an unfiltered by-id lookup is an
+        # oracle, answering "does revision N exist here" - and then handing over its whole diff - for revisions
         # concealment has already decided this account cannot read.
         visible = _visible_revision_queryset(scope)
         revision = get_object_or_404(visible, id=kwargs["revision_id"])
@@ -492,18 +524,20 @@ class ArticleRestoreView(ArticleViewBase):
         revision = get_object_or_404(_visible_revision_queryset(scope), id=kwargs["revision_id"])
         _article, new_revision = restore_revision(scope_article=_writable_article(scope), revision=revision, editor=scope.profile)
         scope.article = _resolved_article(scope)
-        revisions = _visible_revisions(scope)
+        # Deliberately not carrying the caller's page number across: a restore
+        # writes a new newest revision, which is on page one.
+        rows, page = _history_rows(request, scope)
         response = render(
             request,
             "dashboard/partials/articles/_article_history.html",
             {
                 "scope": scope,
                 "article": scope.article,
-                "revision_rows": _annotate_deltas(revisions),
+                "revision_rows": rows,
+                "page_obj": page,
             },
         )
         message = "Article restored to the selected version." if new_revision else "That version is already the current article."
-        # "articleChanged" refreshes the read-mode Article tab; the history
-        # list itself is the body of this response, so it must NOT also listen
-        # for this event (that would double-fetch).
+        # "articleChanged" refreshes the read-mode Article tab; the history list itself is the body of this
+        # response, so it must NOT also listen for this event (that would double-fetch).
         return self.toast(response, "success", message, "articleChanged")

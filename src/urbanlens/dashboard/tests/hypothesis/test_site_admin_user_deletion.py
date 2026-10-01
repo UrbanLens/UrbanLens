@@ -1,17 +1,12 @@
-"""Guards on admin-initiated account deletion.
-
-`SiteAdminUsersView.post` deletes other people's accounts. The coverage run over the
-full suite showed it never executes - so the three things standing between an admin
-misclick and someone's data (no self-deletion, no deleting admin accounts, and a typed
-confirmation) were unverified.
-
-The handler's class docstring still describes it as a "read-only directory of
-registered users", documenting only GET; that is corrected alongside these tests.
-"""
+"""Guards on admin-initiated account deletion."""
 
 from __future__ import annotations
 
+import html as html_lib
+import re
+
 from django.contrib.auth.models import Group, User
+from django.http.response import HttpResponseBase
 from django.urls import reverse
 from model_bakery import baker
 
@@ -36,7 +31,7 @@ class AdminUserDeletionGuardTests(TestCase):
         self.target_profile.profile_visibility = VisibilityChoice.ANYONE
         self.target_profile.save(update_fields=["profile_visibility"])
 
-    def _post(self, **data) -> object:
+    def _post(self, **data: object) -> HttpResponseBase:
         return self.client.post(reverse("site_admin_users"), data=data)
 
     def _pending(self, profile: Profile) -> bool:
@@ -94,10 +89,7 @@ class AdminUserDeletionGuardTests(TestCase):
         self.assertFalse(self._pending(self.target_profile))
 
     def test_a_hidden_user_is_confirmed_with_the_placeholder_not_their_username(self) -> None:
-        """The handler avoids echoing a username the admin is not allowed to see, so the
-        confirmation string for a hidden profile is the fixed literal "hidden user".
-        Worth pinning: it means the typed confirmation is a constant for every user an
-        admin cannot see, which by default is most of them."""
+        """The handler avoids echoing a username the admin is not allowed to see, so the confirmation string for a hidden profile is the fixed literal "hidden user". Worth pinning: it means the typed confirmation is a constant for every user an admin cannot see, which by default is most of them."""
         hidden = baker.make(User, username="zzaudit-hidden")
         hidden_profile = Profile.objects.get(user=hidden)
 
@@ -116,3 +108,23 @@ class AdminUserDeletionGuardTests(TestCase):
 
         self.assertIn(response.status_code, (302, 403))
         self.assertFalse(self._pending(self.target_profile))
+
+    def test_the_phrase_each_rows_delete_asks_for_is_the_one_that_confirms(self) -> None:
+        """The dialog is filled from the row's markup (``admin-delete-user.ts``), so its phrase must be the server's."""
+        hidden = baker.make(User, username="zzaudit-hidden")
+        html = self.client.get(reverse("site_admin_users")).content.decode()
+        self.assertIn("dashboard/js/site-admin.js", html)
+        self.assertNotIn("openAdminDeleteUserDialog", html)
+        for user in (self.target, hidden):
+            match = re.search(
+                rf'data-admin-delete-user="{user.pk}"\s+data-name="([^"]*)"\s+data-expect="([^"]*)"', html
+            )
+            assert match is not None, user.username
+            self.assertNotEqual(match.group(1), "")
+            self._post(
+                action="request_delete", user_id=user.pk, confirm_text=f" {html_lib.unescape(match.group(2)).upper()} "
+            )
+            self.assertTrue(self._pending(Profile.objects.get(user=user)), user.username)
+        hidden_button = re.search(rf'data-admin-delete-user="{hidden.pk}"[^>]*>', html)
+        assert hidden_button is not None
+        self.assertNotIn(hidden.username, hidden_button.group(0))

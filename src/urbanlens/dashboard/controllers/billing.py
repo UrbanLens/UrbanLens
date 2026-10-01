@@ -1,22 +1,16 @@
-"""User-facing paid subscription controller: browse/subscribe/manage from Settings.
-
-Checkout and the billing portal are genuine cross-site redirects to Stripe-hosted
-pages, so those views use plain (non-HTMX) form POSTs that 302 the whole browser -
-HTMX would try to swap the redirect target's HTML into the page instead of navigating
-to it. Everything that stays on-site (viewing the section, updating a pledge,
-cancelling) uses the same lazy-HTMX-subsection pattern as Immich/Flickr/Google Photos.
-"""
+"""Paid subscription controller: browse/subscribe/manage from Settings."""
 
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -60,8 +54,11 @@ class BillingSettingsSectionView(LoginRequiredMixin, View):
 
 
 def _section_context(request: HttpRequest) -> dict:
+    user = request.user
+    if not isinstance(user, User):
+        raise PermissionDenied
     purchasable_roles = SubscriptionRole.objects.filter(monthly_price_cents__isnull=False) | SubscriptionRole.objects.filter(pay_what_you_want=True)
-    role_rows = []
+    role_rows: list[dict[str, Any]] = []
     for role in purchasable_roles.distinct().order_by("name"):
         threshold_cents = pricing.role_pwyw_threshold_cents(role)
         role_rows.append(
@@ -70,7 +67,10 @@ def _section_context(request: HttpRequest) -> dict:
                 "pwyw_threshold_dollars": pricing.cents_to_dollars(threshold_cents) if threshold_cents else None,
             }
         )
-    subscriptions = RoleSubscription.objects.visible_for(request.user).select_related("role").order_by("-created")
+    subscriptions = RoleSubscription.objects.visible_for(user).select_related("role").order_by("-created")
+    held_role_ids = set(RoleSubscription.objects.not_terminal().filter(user=user).values_list("role_id", flat=True))
+    for row in role_rows:
+        row["already_subscribed"] = row["role"].pk in held_role_ids
     return {
         "stripe_configured": stripe_client.is_configured(),
         "role_rows": role_rows,
@@ -95,13 +95,17 @@ class BillingCheckoutView(LoginRequiredMixin, View):
         if amount_cents is None or amount_cents < pricing.STRIPE_MINIMUM_CHARGE_CENTS:
             return redirect(f"{reverse('settings.view')}#membership-settings-section")
 
-        session = stripe_client.create_checkout_session(
-            user=request.user,
-            role=role,
-            amount_cents=amount_cents,
-            success_url=request.build_absolute_uri(reverse("settings.billing.checkout_success")),
-            cancel_url=request.build_absolute_uri(reverse("settings.billing.checkout_cancel")),
-        )
+        try:
+            session = stripe_client.create_checkout_session(
+                user=request.user,
+                role=role,
+                amount_cents=amount_cents,
+                success_url=request.build_absolute_uri(reverse("settings.billing.checkout_success")),
+                cancel_url=request.build_absolute_uri(reverse("settings.billing.checkout_cancel")),
+            )
+        except stripe_client.AlreadySubscribedError:
+            messages.info(request, f"You already have a {role.name} subscription. Change its pledge or cancel it below.")
+            return redirect(f"{reverse('settings.view')}#membership-settings-section")
         if not session.url:
             logger.error("Stripe Checkout Session %s was created without a redirect url.", session.id)
             return redirect(f"{reverse('settings.view')}#membership-settings-section")
@@ -128,7 +132,10 @@ class BillingPledgeUpdateView(LoginRequiredMixin, View):
     """POST /settings/billing/<id>/pledge/ - change an existing pay-what-you-want pledge."""
 
     def post(self, request: HttpRequest, subscription_id: int) -> HttpResponse:
-        subscription = get_object_or_404(RoleSubscription, pk=subscription_id, user=request.user)
+        subscription = get_object_or_404(RoleSubscription.objects.select_related("role"), pk=subscription_id, user=request.user)
+        if not subscription.role.pay_what_you_want:
+            response = render(request, _SECTION_PARTIAL, _section_context(request), status=400)
+            return _with_toast(response, "This membership has a fixed price.", level="error")
         amount_cents = _parse_amount_cents(request.POST.get("amount_dollars"))
         if amount_cents is None or amount_cents < pricing.STRIPE_MINIMUM_CHARGE_CENTS:
             response = render(request, _SECTION_PARTIAL, _section_context(request), status=400)

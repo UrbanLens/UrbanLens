@@ -15,16 +15,8 @@
 {% block content %}
 <div class="trips-page page-content">
     <div class="trips-view trips-view--calendar">
-        {% include "dashboard/partials/trips/_mini_calendar.html" with calendar_data=trips_calendar_data %}
+        {% include "dashboard/partials/trips/_mini_calendar.html" %}
     </div>
 </div>
 {% endblock %}
 
-{% block scripts %}
-{% include "dashboard/partials/trips/_mini_calendar_script.html" %}
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        if (window.tripsCalRender) { window.tripsCalRender(); }
-    });
-</script>
-{% endblock %}

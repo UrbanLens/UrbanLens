@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import TYPE_CHECKING
+
 from django.contrib.gis.geos import MultiPoint, MultiPolygon, Point, Polygon
 from django.db import transaction
 from django.utils import timezone
@@ -9,6 +13,9 @@ from django.utils import timezone
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.boundary.queryset import buffer_point_by_meters
 from urbanlens.dashboard.models.pin.model import Pin
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 # Enough breathing room to make every marker visibly interior without turning
 # a child-derived fallback into a parcel-sized claim beyond the known points.
@@ -37,10 +44,7 @@ def _provider_outline(pin: Pin) -> MultiPolygon | None:
         pin: The pin whose place to consult.
 
     Returns:
-        The place's property polygon, or None when no provider has offered one
-        (or the place has nothing to say about property boundaries - see
-        ``services.places.scope.place_polygon``).
-    """
+        The place's property polygon, or None when no provider has offered one (or the place has nothing to say about property boundaries - see ``services.places.scope.place_polygon``)."""
     from urbanlens.dashboard.services.places.scope import place_polygon
 
     location = pin.location if pin.location_id else None
@@ -48,19 +52,48 @@ def _provider_outline(pin: Pin) -> MultiPolygon | None:
     return place_polygon(place, BoundaryType.PROPERTY) if place is not None else None
 
 
+_deferred_refits: ContextVar[set[int] | None] = ContextVar("deferred_child_boundary_refits", default=None)
+
+
+@contextmanager
+def deferring_child_boundary_refits() -> Iterator[None]:
+    """Collect this block's child-boundary refits and run each parent's once, when the block succeeds.
+
+    A bulk hierarchy change otherwise refits a parent once per moved child, reloading every child each time.
+    Open it inside the bulk action's ``transaction.atomic()`` so the refits commit with the moves; a block that
+    raises refits nothing, since its moves roll back. Nested blocks defer to the outermost one.
+    """
+    if _deferred_refits.get() is not None:
+        yield
+        return
+    pending: set[int] = set()
+    token = _deferred_refits.set(pending)
+    try:
+        yield
+    finally:
+        _deferred_refits.reset(token)
+    for parent_pin_id in sorted(pending):
+        refit_child_pin_boundary(parent_pin_id)
+
+
+def request_child_boundary_refit(parent_pin_id: int | None) -> None:
+    """Refit *parent_pin_id*'s child-fitted boundary now, or at the end of an open :func:`deferring_child_boundary_refits`."""
+    if parent_pin_id is None:
+        return
+    pending = _deferred_refits.get()
+    if pending is None:
+        refit_child_pin_boundary(parent_pin_id)
+    else:
+        pending.add(parent_pin_id)
+
+
 @transaction.atomic
 def refit_child_pin_boundary(parent_pin_id: int | None) -> None:
     """Refit one parent's child-generated fallback after a hierarchy change.
-
-    Existing pin/community drawings and official location boundaries take
-    precedence and are never created, updated, or removed here. Once this
-    function has created a pin-owned child fallback, only that explicitly
-    marked row remains eligible for subsequent automatic updates.
+    Existing pin/community drawings and official location boundaries take precedence and are never created, updated, or removed here.
 
     Args:
-        parent_pin_id: Primary key of the parent whose direct children changed.
-            ``None`` is a no-op for root-pin saves/deletes.
-    """
+        parent_pin_id: Primary key of the parent whose direct children changed."""
     if parent_pin_id is None:
         return
     # Serializing by parent prevents concurrent bulk add/delete requests from
@@ -74,12 +107,10 @@ def refit_child_pin_boundary(parent_pin_id: int | None) -> None:
         if row.polygon is not None or not row.generated_from_children:
             return
         if _provider_outline(parent) is not None:
-            # A provider has supplied the real outline since this stand-in was
-            # fitted, so it can never be chosen again (see
-            # ``BoundaryManager.resolve_for_pin``). Dropping it keeps the table
-            # honest and stops every hierarchy change refitting a shape nothing
-            # will draw. Safe to delete unconditionally here: the branch above
-            # has already excluded any row carrying a person's own drawing.
+            # A provider has supplied the real outline since this stand-in was fitted, so it can
+            # never be chosen again (see ``BoundaryManager.resolve_for_pin``).
+            # Dropping it keeps the table honest and stops every hierarchy change refitting a shape
+            # nothing will draw.
             row.delete()
             return
     else:

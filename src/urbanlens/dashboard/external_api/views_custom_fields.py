@@ -30,6 +30,7 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, CapacityExceededError, reserve
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -40,9 +41,8 @@ if TYPE_CHECKING:
 class CustomFieldDefinitionsView(PaginatedListMixin, ExternalApiView):
     """The caller's custom field definitions: GET lists them, POST creates one.
 
-    Definitions span every entity type since they are one shared model -
-    filter with ``?entity_type=`` to scope to one (``pin``, ``photo``,
-    ``profile``, or ``markup_map``).
+    Definitions span every entity type since they are one shared model - filter with ``?entity_type=``
+    to scope to one (``pin``, ``photo``, ``profile``, or ``markup_map``).
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -75,23 +75,27 @@ class CustomFieldDefinitionsView(PaginatedListMixin, ExternalApiView):
 
         config = {"choices": data["options"]} if data["field_type"] == CustomFieldType.SELECT else {}
         try:
-            field = CustomField.objects.create(
-                profile=profile,
-                entity_type=data["entity_type"],
-                name=data["name"],
-                field_type=data["field_type"],
-                order=data["order"],
-                config=config,
-            )
+            with reserve(CUSTOM_FIELDS, profile.pk):
+                field = CustomField.objects.create(
+                    profile=profile,
+                    entity_type=data["entity_type"],
+                    name=data["name"],
+                    field_type=data["field_type"],
+                    order=data["order"],
+                    config=config,
+                )
+        except CapacityExceededError as exc:
+            return Response({"error": exc.user_message}, status=400)
         except IntegrityError:
             return Response({"error": f"You already have a “{data['name']}” field there."}, status=400)
         return Response(CustomFieldDefinitionSerializer(field).data, status=201)
 
 
 class CustomFieldDefinitionDetailView(ExternalApiView):
-    """PATCH: partially update one of the caller's field definitions.  DELETE: remove it."""
+    """GET one of the caller's field definitions.  PATCH: partially update it.  DELETE: remove it."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.CUSTOM_FIELDS_READ}),
         "PATCH": frozenset({ApiKeyScope.CUSTOM_FIELDS_WRITE}),
         "DELETE": frozenset({ApiKeyScope.CUSTOM_FIELDS_WRITE}),
     }
@@ -101,13 +105,20 @@ class CustomFieldDefinitionDetailView(ExternalApiView):
         """The caller's own field with this id, or None."""
         return CustomField.objects.filter(pk=field_id, profile=request.user.profile).first()
 
+    @extend_schema(responses={200: CustomFieldDefinitionSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, field_id: int) -> Response:
+        """Return one of the caller's own field definitions."""
+        field = self._get_field(request, field_id)
+        if field is None:
+            return Response({"error": "No such custom field."}, status=404)
+        return Response(CustomFieldDefinitionSerializer(field).data)
+
     @extend_schema(request=CustomFieldDefinitionWriteSerializer, responses={200: CustomFieldDefinitionSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, field_id: int) -> Response:
         """Apply a partial update to one of the caller's own field definitions.
 
-        ``entity_type`` is accepted by the serializer (for symmetry with
-        create) but never applied here: migrating a field between entity
-        types would orphan every value already stored under it, the same
+        ``entity_type`` is accepted by the serializer (for symmetry with create) but never applied here:
+        migrating a field between entity types would orphan every value already stored under it, the same
         reason the web settings panel never offers it either.
         """
         field = self._get_field(request, field_id)
@@ -167,11 +178,10 @@ class CustomFieldDefinitionDetailView(ExternalApiView):
 class PhotoCustomFieldsView(ExternalApiView):
     """GET: every one of the caller's PHOTO-entity fields, with this photo's value.
 
-    Lists every defined field, not just ones with a value already set on this
-    photo - a native client renders the whole set as an editable form, the
-    same way the web lightbox strip does
-    (``controllers.custom_fields._render_strip``). An unset field reports
-    ``value: null``.
+    Lists every defined field, not just ones with a value already set on this photo - a native client
+    renders the whole set as an editable form, the same way the web lightbox strip does
+    (``controllers.custom_fields._render_strip``).
+    An unset field reports ``value: null``.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

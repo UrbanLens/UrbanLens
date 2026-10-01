@@ -1,24 +1,15 @@
 """Article rendering and persistence.
-
-Turns the Markdown source of a pin/wiki article into sanitized HTML plus a
-table of contents, and owns the save path (render, cache, revision record).
-
-Authoring format: Markdown ("gfm-like": tables, strikethrough, autolinked
-URLs) plus footnote references (``[^1]`` in the text, ``[^1]: source`` at the
-bottom) which render as a Wikipedia-style numbered References section.
-
-Security: rendered HTML is always sanitized with nh3 against a fixed allowlist
-before it is stored or returned - article HTML is community/user input and
-must never reach a template unsanitized.
-"""
+Security: rendered HTML is always sanitized with nh3 against a fixed allowlist before it is stored or returned - article HTML is community/user input and must never reach a template unsanitized."""
 
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass, field
 import difflib
+import html as html_lib
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from django.db import transaction
 from markdown_it import MarkdownIt
@@ -26,6 +17,9 @@ from mdit_py_plugins.footnote import footnote_plugin
 import nh3
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    import datetime
+
     from urbanlens.dashboard.models.article.model import Article, ArticleRevision
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -138,6 +132,88 @@ def _build_markdown() -> MarkdownIt:
 
 _MD = _build_markdown()
 
+#: A remote image in article source: Markdown's ``![alt](url`` and a raw ``<img ... src="url"``.
+#: An address with a parenthesis in it is left for render time, which parses it properly. Alt text stops at a
+#: bracket and a tag at the next ``<``, so each match attempt ends where the next one starts; saving runs this.
+_SOURCE_IMAGE = re.compile(r"""(!\[[^\[\]]*\]\(\s*<?|<img\b[^<>]*?\bsrc\s*=\s*["']?)(https?://[^\s()<>"']+)(?=[\s)>"'])""", re.IGNORECASE)
+_BACKTICK_RUN = re.compile(r"`+")
+#: Every fenced or indented code block contains one of these, so text without any needs no Markdown parse.
+_BLOCK_CODE_HINT = re.compile(r"```|~~~|^(?: {4}|\t)", re.MULTILINE)
+_BLANK_LINE = re.compile(r"\n(?=\n)")
+#: A remote image in sanitized HTML, whose attributes nh3 always double-quotes.
+_RENDERED_IMAGE = re.compile(r'(<img\b[^<>]*?\ssrc=")(https?://[^"]+)(")')
+
+
+def _copies_of(urls: set[str]) -> dict[str, str]:
+    from urbanlens.dashboard.services.media.remote_copies import RemoteImage, copy_urls
+
+    return copy_urls(RemoteImage(url, "article") for url in urls) if urls else {}
+
+
+def _code_ranges(content: str) -> list[tuple[int, int]]:
+    """Character ranges of *content* that are code: fenced and indented blocks, and inline code."""
+    starts = [0]
+    for line in content.split("\n"):
+        starts.append(starts[-1] + len(line) + 1)
+    blocks = _MD.parse(content) if _BLOCK_CODE_HINT.search(content) else []
+    ranges = [(starts[token.map[0]], starts[min(token.map[1], len(starts) - 1)]) for token in blocks if token.type in ("fence", "code_block") and token.map]
+    return ranges + _inline_code_ranges(content)
+
+
+def _inline_code_ranges(content: str) -> list[tuple[int, int]]:
+    """Inline code: a run of backticks up to the next run of the same length, within one paragraph."""
+    runs = [(match.start(), match.end()) for match in _BACKTICK_RUN.finditer(content)]
+    blank_lines = [match.start() for match in _BLANK_LINE.finditer(content)]
+    by_length: dict[int, list[int]] = {}
+    for index, (start, end) in enumerate(runs):
+        by_length.setdefault(end - start, []).append(index)
+    ranges = []
+    index = 0
+    while index < len(runs):
+        start, end = runs[index]
+        same = by_length[end - start]
+        following = bisect.bisect_right(same, index)
+        if following < len(same):
+            closer = same[following]
+            blank = bisect.bisect_left(blank_lines, end)
+            if blank == len(blank_lines) or blank_lines[blank] >= runs[closer][0]:
+                ranges.append((start, runs[closer][1]))
+                index = closer + 1
+                continue
+        index += 1
+    return ranges
+
+
+def localize_article_images(content: str) -> str:
+    """Point every remote image in article source at this site's copy, so the editor never loads it from its host.
+
+    Links stay as they are, and so does code that shows image syntax; only images the article displays change. The
+    original address is kept on the copy.
+
+    Args:
+        content: Markdown article source.
+
+    Returns:
+        The source with each remote image address replaced.
+    """
+
+    def address(match: re.Match[str]) -> str:
+        return html_lib.unescape(match.group(2)) if match.group(1).startswith("<") else match.group(2)
+
+    code = _code_ranges(content)
+
+    def shown(match: re.Match[str]) -> bool:
+        return not any(start <= match.start() < end for start, end in code)
+
+    copies = _copies_of({address(match) for match in _SOURCE_IMAGE.finditer(content) if shown(match)})
+    return _SOURCE_IMAGE.sub(lambda match: match.group(1) + copies.get(address(match), match.group(2)) if shown(match) else match.group(0), content)
+
+
+def _localize_rendered_images(clean_html: str) -> str:
+    copies = _copies_of({html_lib.unescape(match.group(2)) for match in _RENDERED_IMAGE.finditer(clean_html)})
+    return _RENDERED_IMAGE.sub(lambda match: match.group(1) + copies.get(html_lib.unescape(match.group(2)), match.group(2)) + match.group(3), clean_html)
+
+
 _SLUG_STRIP = re.compile(r"[^\w\s-]", re.UNICODE)
 _SLUG_DASH = re.compile(r"[\s_-]+")
 
@@ -164,18 +240,13 @@ def _anchor_slug(title: str, used: set[str]) -> str:
 
 def render_article(content: str) -> RenderedArticle:
     """Render Markdown article source to sanitized HTML plus a TOC.
-
-    Headings are demoted one level (``#`` becomes ``<h2>``) so the article can
-    never inject a second ``<h1>`` into the page, and each heading receives a
-    stable ``id`` used by the table of contents. External links open in a new
-    tab. Footnote definitions render as a numbered References section.
+    Headings are demoted one level (``#`` becomes ``<h2>``) so the article can never inject a second ``<h1>`` into the page, and each heading receives a stable ``id`` used by the table of contents.
 
     Args:
         content: The raw Markdown source (may be empty).
 
     Returns:
-        The sanitized HTML, TOC entries, and whether references are present.
-    """
+        The sanitized HTML, TOC entries, and whether references are present."""
     if not content or not content.strip():
         return RenderedArticle()
 
@@ -230,12 +301,10 @@ def render_article(content: str) -> RenderedArticle:
     )
     if has_references:
         toc.append(TocEntry(level=2, title="References", anchor="article-references"))
-    return RenderedArticle(html=clean, toc=toc, has_references=has_references)
+    return RenderedArticle(html=_localize_rendered_images(clean), toc=toc, has_references=has_references)
 
 
-# ----------------------------------------------------------------------
 # Persistence
-# ----------------------------------------------------------------------
 
 
 def get_article(*, pin: Pin | None = None, wiki: Wiki | None = None) -> Article | None:
@@ -268,16 +337,8 @@ def save_article(
 ) -> tuple[Article, ArticleRevision | None]:
     """Persist a new version of a pin/wiki article.
 
-    Renders and caches the sanitized HTML, updates the Article row (creating
-    it on first save), and records an :class:`ArticleRevision` carrying the
-    complete new source. Saving identical content is a no-op (no revision).
-
     Args:
-        editor: The profile making the edit, or None for a system-initiated
-            save (e.g. seeding a new wiki article from a matched Wikipedia
-            article) - both ``Article.last_edited_by`` and
-            ``ArticleRevision.editor`` are already nullable (SET_NULL) for
-            exactly this case.
+        editor: The profile making the edit, or None for a system-initiated save (e.g. seeding a new wiki article from a matched Wikipedia article) - both ``Article.last_edited_by`` and ``ArticleRevision.editor`` are already nullable (SET_NULL) for exactly this...
         content: The complete new Markdown source.
         edit_summary: Optional one-line description of the change.
         pin: Host pin (mutually exclusive with ``wiki``).
@@ -289,33 +350,38 @@ def save_article(
 
     Raises:
         ValueError: Neither or both hosts were provided.
-    """
+        Pin.DoesNotExist: The host pin was deleted before the save could hold it."""
     from urbanlens.dashboard.models.article.model import Article, ArticleRevision
+    from urbanlens.dashboard.models.pin.model import Pin
 
     if (pin is None) == (wiki is None):
         raise ValueError("Exactly one of pin or wiki must be provided.")
 
-    content = (content or "").replace("\r\n", "\n").rstrip()
-    article = get_article(pin=pin, wiki=wiki)
-    if article is None:
-        article = Article(pin=pin, wiki=wiki)
-    elif article.content == content:
-        return article, None
+    content = localize_article_images((content or "").replace("\r\n", "\n").rstrip())
+    with transaction.atomic():
+        # Held until the revision commits, so a delete of the pin (pin_edit.delete_pin) waits or is waited for.
+        if pin is not None and not Pin.objects.select_for_update(no_key=True).filter(pk=pin.pk).values_list("pk", flat=True):
+            raise Pin.DoesNotExist(f"Pin {pin.pk} was deleted before its article could be saved.")
+        article = get_article(pin=pin, wiki=wiki)
+        if article is None:
+            article = Article(pin=pin, wiki=wiki)
+        elif article.content == content:
+            return article, None
 
-    rendered = render_article(content)
-    article.content = content
-    article.content_html = rendered.html
-    article.toc = [{"level": entry.level, "title": entry.title, "anchor": entry.anchor} for entry in rendered.toc]
-    article.last_edited_by = editor
-    article.save()
+        rendered = render_article(content)
+        article.content = content
+        article.content_html = rendered.html
+        article.toc = [{"level": entry.level, "title": entry.title, "anchor": entry.anchor} for entry in rendered.toc]
+        article.last_edited_by = editor
+        article.save()
 
-    revision = ArticleRevision.objects.create(
-        article=article,
-        editor=editor,
-        content=content,
-        edit_summary=(edit_summary or "").strip()[:255],
-        restored_from=restored_from,
-    )
+        revision = ArticleRevision.objects.create(
+            article=article,
+            editor=editor,
+            content=content,
+            edit_summary=(edit_summary or "").strip()[:255],
+            restored_from=restored_from,
+        )
     return article, revision
 
 
@@ -323,9 +389,7 @@ class ArticleConflictError(Exception):
     """Someone else saved the article while this editor was working on it.
 
     Attributes:
-        current_revision_id: The id of the revision that is actually current,
-            so a client can fetch it, show the other edit, and re-base.
-    """
+        current_revision_id: The id of the revision that is actually current, so a client can fetch it, show the other edit, and re-base."""
 
     def __init__(self, current_revision_id: int) -> None:
         """Record which revision is current."""
@@ -340,9 +404,7 @@ def latest_revision_id(article: Article | None) -> int | None:
         article: The article to inspect, or None when none exists yet.
 
     Returns:
-        The newest ``ArticleRevision`` id, or None when the article is absent
-        or has no revisions.
-    """
+        The newest ``ArticleRevision`` id, or None when the article is absent or has no revisions."""
     if article is None:
         return None
     latest = article.revisions.order_by("-created").first()
@@ -360,26 +422,14 @@ def save_article_checked(
     wiki: Wiki | None = None,
 ) -> tuple[Article, ArticleRevision | None]:
     """Save an article, refusing the write if it would clobber a concurrent edit.
-
-    Wraps :func:`save_article` with the optimistic-concurrency check the
-    article editor has always performed, moved here so the internal view and
-    the external API cannot drift on it.
-
-    The rule, unchanged: if a revision exists and its id is not the one the
-    editor started from, the save is refused. A ``base_revision_id`` of None
-    therefore conflicts with *any* existing revision - which is what makes it
-    safe for the API to require the field explicitly rather than letting an
-    omitted value silently overwrite someone else's work.
+    Wraps :func:`save_article` with the optimistic-concurrency check the article editor has always performed, moved here so the internal view and the external API cannot drift on it.
 
     Args:
         editor: The profile making the edit (None for system saves).
         content: The complete new Markdown source.
         edit_summary: Optional one-line description of the change.
-        viewer: Who is saving, when the conflict check must be asked about what
-            they were shown rather than what is stored - a concealed viewer. Its
-            absence means the two are the same, which is the ordinary case.
-        base_revision_id: The revision the editor started from, or None when
-            they believe the article has no revisions yet.
+        viewer: Who is saving, when the conflict check must be asked about what they were shown rather than what is stored - a concealed viewer.
+        base_revision_id: The revision the editor started from, or None when they believe the article has no revisions yet.
         pin: Host pin (mutually exclusive with ``wiki``).
         wiki: Host wiki.
 
@@ -388,31 +438,22 @@ def save_article_checked(
 
     Raises:
         ArticleConflictError: The article moved on since *base_revision_id*.
-            Nothing is written when this is raised.
-        ValueError: Neither or both hosts were provided.
-    """
+        ValueError: Neither or both hosts were provided."""
     from urbanlens.dashboard.models.article.model import Article
 
     with transaction.atomic():
         article = get_article(pin=pin, wiki=wiki)
         if article is not None:
-            # Lock the article row for the read-check-write below. Without it the
-            # check is a TOCTOU: two editors who both loaded revision R both read
-            # `latest_id == R`, both pass, and both append - so one editor's save
-            # silently stops being the current article even though the conflict
-            # check exists to prevent exactly that. (Their text is not lost -
-            # history is append-only - but they were told the save succeeded.)
-            # Revisions carry no number and no unique constraint, so there is no
-            # database-level guard to fall back on. A *first* save needs no lock:
-            # Article.pin/.wiki are OneToOne, so the second insert loses there.
+            # Lock the article row for the read-check-write below.
+            # Without it the check is a TOCTOU: two editors who both loaded revision R both read
+            # `latest_id == R`, both pass, and both append - so one editor's save silently stops
+            # being the current article even though the conflict check exists to prevent exactly
             Article.objects.select_for_update().filter(pk=article.pk).first()
         latest_id = latest_revision_id(article)
-        # A concealed viewer's editor was handed the newest revision *they* can
-        # see as its baseline, so comparing it against the live newest is a
-        # conflict they can never clear - a permanent 409 on an article that
-        # looks, to them, like nobody else has touched it. Ask the question they
-        # can actually answer: has anything changed that they were shown?
-        # Inside the lock, so it keeps the read-check-write above honest.
+        # A concealed viewer's editor was handed the newest revision *they* can see as its baseline,
+        # so comparing it against the live newest is a conflict they can never clear - a permanent
+        # 409 on an article that looks, to them, like nobody else has touched it.
+        # Ask the question they can actually answer: has anything changed that they were shown?
         if article is not None and viewer is not None and wiki is not None:
             from urbanlens.dashboard.services.wiki.concealment import concealment_active, visible_rows
 
@@ -428,23 +469,16 @@ def save_article_checked(
 def restore_revision(*, scope_article: Article, revision: ArticleRevision, editor: Profile | None) -> tuple[Article, ArticleRevision | None]:
     """Restore an older revision's content as a new revision.
 
-    History is append-only: restoring does not delete anything, it writes the
-    old content forward as the newest revision, tagged with ``restored_from``
-    so the lineage stays visible in the history list.
-
     Args:
-        scope_article: The article being restored. *revision* must belong to
-            it - callers scope the lookup rather than trusting a bare id.
+        scope_article: The article being restored. *revision* must belong to it - callers scope the lookup rather than trusting a bare id.
         revision: The revision whose content to restore.
         editor: The profile performing the restore.
 
     Returns:
-        Tuple of (article, revision) - revision is None when the article
-        already held exactly that content.
+        Tuple of (article, revision) - revision is None when the article already held exactly that content.
 
     Raises:
-        ValueError: *revision* does not belong to *scope_article*.
-    """
+        ValueError: *revision* does not belong to *scope_article*."""
     if revision.article_id != scope_article.pk:
         raise ValueError("That revision belongs to a different article.")
 
@@ -460,26 +494,14 @@ def restore_revision(*, scope_article: Article, revision: ArticleRevision, edito
 
 def article_payload(article: Article, viewer: Profile) -> dict[str, Any]:
     """Render one article as the external API's article body.
-
-    An article is host-agnostic - the same row shape backs a pin's private
-    article and a community wiki's - so the payload is built here rather than
-    in either host's view module. Two endpoints in different files rendering
-    "the same" dict by hand is how one of them ends up omitting
-    ``base_revision_id`` (silently breaking that host's conflict detection,
-    because a client with no revision to echo back always looks like a fresh
-    save) or leaking an unmasked editor name that the other correctly masks.
+    An article is host-agnostic - the same row shape backs a pin's private article and a community wiki's - so the payload is built here rather than in either host's view module.
 
     Args:
         article: The article to render.
-        viewer: The requesting profile. Attribution is masked per the editor's
-            identity-visibility settings as seen by this viewer, never emitted
-            raw.
+        viewer: The requesting profile.
 
     Returns:
-        A JSON-serializable dict with the article's source, rendered HTML,
-        table of contents, word count, masked last editor, update timestamp,
-        and the ``base_revision_id`` a client must echo back on save.
-    """
+        A JSON-serializable dict with the article's source, rendered HTML, table of contents, word count, masked last editor, update timestamp, and the ``base_revision_id`` a client must echo back on save."""
     # Local import: ``services.wiki.wiki_detail`` imports this module for its own
     # article summary, so a module-level import here would close the cycle.
     from urbanlens.dashboard.services.wiki.wiki_detail import masked_editor_name
@@ -499,17 +521,12 @@ def article_payload(article: Article, viewer: Profile) -> dict[str, Any]:
     }
 
 
-# ----------------------------------------------------------------------
 # Revision diffs
-# ----------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class DiffRow:
-    """One row of a rendered revision diff.
-
-    ``kind`` is "context", "add", or "del"; ``text`` is the line content.
-    """
+    """One row of a rendered revision diff."""
 
     kind: str
     text: str
@@ -524,8 +541,7 @@ def diff_revisions(old_content: str, new_content: str, *, context: int = 3) -> l
         context: Unchanged lines kept around each change hunk.
 
     Returns:
-        Ordered diff rows; a ``kind="skip"`` row marks elided unchanged spans.
-    """
+        Ordered diff rows; a ``kind="skip"`` row marks elided unchanged spans."""
     old_lines = old_content.splitlines()
     new_lines = new_content.splitlines()
     matcher = difflib.SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)
@@ -542,3 +558,81 @@ def diff_revisions(old_content: str, new_content: str, *, context: int = 3) -> l
             if tag in {"replace", "insert"}:
                 rows.extend(DiffRow(kind="add", text=line) for line in new_lines[new_start:new_end])
     return rows
+
+
+class AnnotatedRevision(Protocol):
+    """An ``ArticleRevision`` carrying the two lengths the history query adds.
+
+    The row builder below is only ever handed rows from the queryset built
+    beside it, which annotates both - but nothing in `ArticleRevision` itself
+    promises them, and saying so here is more honest than asserting it on the
+    model, where it would claim every instance has lengths that only a
+    `revision_history_page` queryset supplies.
+    """
+
+    pk: int
+    edit_summary: str
+    editor_id: int | None
+    editor: Profile | None
+    restored_from_id: int | None
+    created: datetime.datetime
+    #: LENGTH(content) for this revision.
+    content_length: int
+    #: The same for the revision before it, or 0 for the first.
+    previous_length: int
+
+
+def revision_history_page(revisions: Any, viewer: Profile) -> tuple[Any, Callable[[AnnotatedRevision], dict[str, Any]]]:
+    """A revision-history queryset and its row builder, for paginating in SQL.
+
+    The two callers (pin article, wiki article) both used to materialise the
+    whole history and build a row per revision before paginating, so the page
+    size bounded the response body and nothing else. Each row needs
+    ``size_delta``, which is ``len(content)`` - so every revision's complete
+    source was read out of the database to produce one integer per row.
+
+    ``size_delta`` is why this cannot be a plain slice: a row's delta is
+    measured against the revision before it, which on the last row of a page is
+    on the *next* page. A window function computes it against the true
+    neighbour before ``LIMIT`` applies, so paging never changes a number.
+
+    Args:
+        revisions: The revision queryset, already scoped and filtered by the
+            caller - the wiki door applies concealment, the pin door does not,
+            and the window must see exactly the rows the viewer will page
+            through for the deltas to add up.
+        viewer: The requesting profile, for editor-name masking.
+
+    Returns:
+        ``(queryset, row_builder)`` to hand straight to ``paginated_response``.
+    """
+    from django.db.models import F, Window
+    from django.db.models.functions import Lag, Length
+
+    from urbanlens.dashboard.services.wiki.wiki_detail import masked_editor_name
+
+    prepared = revisions.annotate(content_length=Length("content")).annotate(previous_length=Window(expression=Lag(Length("content"), default=0), order_by=[F("created").asc(), F("pk").asc()])).defer("content").order_by("-created", "-pk")
+    # One entry per editor rather than per revision: `masked_editor_name` calls
+    # `resolve_visible_identities`, which is written to take a batch, and a
+    # history is usually a handful of people over many revisions.
+    editor_names: dict[int, str | None] = {}
+
+    def build(revision: AnnotatedRevision) -> dict[str, Any]:
+        editor_id = revision.editor_id
+        if editor_id is None:
+            editor = None
+        elif editor_id in editor_names:
+            editor = editor_names[editor_id]
+        else:
+            editor = masked_editor_name(revision.editor, viewer)
+            editor_names[editor_id] = editor
+        return {
+            "id": revision.pk,
+            "edit_summary": revision.edit_summary,
+            "editor": editor,
+            "size_delta": revision.content_length - revision.previous_length,
+            "restored_from": revision.restored_from_id,
+            "created": revision.created.isoformat(),
+        }
+
+    return prepared, build

@@ -1,34 +1,19 @@
 """Turning provider geometry into places.
-
-The provider chain answers a *coordinate*: "what parcel and what building
-footprint are here?" This module is what makes that answer converge onto one
-row per real-world thing instead of one row per person who pinned it.
-
-Two ideas do the work:
-
-**Ask once per place, not once per location.** Before any provider runs,
-:func:`ensure_place_for_location` checks whether a known place already contains
-the coordinate. On a campus where somebody has already fetched the parcel, the
-124th pin costs zero API calls and resolves onto the same parcel row - which is
-precisely the duplication that used to give one property 125 copies of its own
-outline.
-
-**Match new geometry to existing places before creating any.** A provider key
-when the source publishes a stable id, mutual centroid containment otherwise
-(see :func:`find_matching_place`) - so a provider nudging a parcel outline
-between runs updates the place it already had rather than growing a second one.
-"""
+The provider chain answers a *coordinate*: "what parcel and what building footprint are here?" This module is what makes that answer converge onto one row per real-world thing instead of one row per person who pinned it."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
+from django.contrib.gis.db.models.functions import Distance
 from django.db import transaction
 from django.utils import timezone
 
-from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation
+from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, is_plausible_area
+from urbanlens.dashboard.services.geo.area import area_sqm
 from urbanlens.dashboard.services.places import lineage, resolution
 
 if TYPE_CHECKING:
@@ -38,6 +23,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Upstream chain runs one split may spend finding successors. A location left unprobed keeps working through the
+#: superseded parcel's domain and finds its own parcel on its next refresh.
+MAX_SUBDIVISION_PROBES = 20
+
 
 def geometry_stale(place: Place) -> bool:
     """Whether a place's geometry is older than the site's boundary cache window.
@@ -46,16 +35,7 @@ def geometry_stale(place: Place) -> bool:
         place: The place to check.
 
     Returns:
-        True when the result is older than ``SiteSettings.boundary_cache_days``,
-        or when the provider chain has never run for this place at all.
-
-        A null timestamp means the latter and nothing else: ``upsert_place``
-        stamps one on both its branches, so the only rows carrying a null are
-        those ``0027_places_backfill`` created from pre-places location
-        boundaries. Treating those as fresh pinned them to that geometry
-        permanently - no provider was ever asked, so a better parcel (REData's,
-        say) could only ever be recorded as a losing candidate.
-    """
+        True when the result is older than ``SiteSettings.boundary_cache_days``, or when the provider chain has never run for this place at all."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     if place.geometry_generated_at is None:
@@ -63,7 +43,7 @@ def geometry_stale(place: Place) -> bool:
     return timezone.now() - place.geometry_generated_at > timedelta(days=SiteSettings.get_current().boundary_cache_days)
 
 
-def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "", provider_key: str = "") -> Place | None:
+def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "", provider_key: str = "", exclude_pk: int | None = None) -> Place | None:
     """Find the existing place a freshly-fetched polygon describes, if any.
 
     Args:
@@ -71,30 +51,25 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
         polygon: The candidate geometry.
         provider: Provider key namespace (e.g. ``"redata"``).
         provider_key: The provider's stable id for this record, when it has one.
+        exclude_pk: A place to never match, however well its geometry fits - for a parcel being split, its own (still-``CURRENT`` until the split transaction commits) centroid very often lands inside one of its own successors, and without this a successor's upsert...
 
     Returns:
-        The matching place, or None when this is genuinely new.
-    """
+        The matching place, or None when this is genuinely new."""
     if provider and provider_key:
-        if existing := Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).first():
+        if existing := Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first():
             return existing
 
-    # No stable id match: treat two polygons as the same thing when each
-    # contains the other's centroid. Providers disagree about exact edges all
-    # the time, and an overlap-fraction threshold would need tuning per kind;
-    # mutual centroid containment needs none and cannot match two side-by-side
-    # parcels.
+    # No stable id match: treat two polygons as the same thing when each contains the other's
+    # centroid.
+    # Providers disagree about exact edges all the time, and an overlap-fraction threshold would
+    # need tuning per kind; mutual centroid containment needs none and cannot match two side-by-side
     centroid = polygon.centroid
-    centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid)
+    centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid).exclude(pk=exclude_pk)
     for candidate in centroid_holders:
-        # A place already claimed by a *different* id from this same provider is
-        # not this record, whatever the geometry says - the provider has just
-        # told us they are two things. This matters most for nested buildings:
-        # REData reconciles a block and the wings inside it into separate
-        # records on purpose, and an L-shaped block can contain a wing's
-        # centroid while the wing contains the block's, which is exactly what
-        # the mutual-containment test below looks for. Without this check the
-        # two collapse back into one place, undoing the reconciliation.
+        # A place already claimed by a *different* id from this same provider is not this record,
+        # whatever the geometry says - the provider has just told us they are two things.
+        # This matters most for nested buildings: REData reconciles a block and the wings inside it
+        # into separate records on purpose, and an L-shaped block can contain a wing's centroid
         if provider and provider_key and candidate.provider == provider and candidate.provider_key and candidate.provider_key != provider_key:
             continue
         if candidate.geometry is not None and polygon.contains(candidate.geometry.centroid):
@@ -112,31 +87,31 @@ def upsert_place(
     name: str = "",
     parent: Place | None = None,
     relation: str = PlaceRelation.PART_OF,
+    exclude_pk: int | None = None,
 ) -> Place | None:
     """Create or update the place a provider record describes.
 
     Args:
         kind: The :class:`PlaceKind` to create.
-        polygon: Official geometry. None creates a geometry-less place, which
-            keeps identity and lineage (and can hold a wiki) without ever
-            being resolved onto - right for a building nobody has a footprint
-            for.
+        polygon: Official geometry.
         provider: Provider key namespace.
         provider_key: The provider's stable id, when it has one.
         name: Admin-facing label.
         parent: The containing or aggregating place.
         relation: How it attaches to ``parent``.
+        exclude_pk: Passed through to :func:`find_matching_place` - a place that must never be matched, however well its geometry fits.
 
     Returns:
-        The place, or None when there is neither geometry nor a provider key
-        to identify it by.
-    """
+        The place, or None when there is neither plausible geometry nor a provider key to identify it by."""
+    if polygon is not None and not is_plausible_area(kind, area := area_sqm(polygon)):
+        logger.warning("Refused a %s outline of %.1f km² as implausible", kind, area / 1_000_000)
+        polygon = None
     if polygon is None and not provider_key:
         return None
 
-    place = find_matching_place(kind, polygon, provider=provider, provider_key=provider_key) if polygon is not None else None
+    place = find_matching_place(kind, polygon, provider=provider, provider_key=provider_key, exclude_pk=exclude_pk) if polygon is not None else None
     if place is None and provider and provider_key:
-        place = Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).first()
+        place = Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first()
 
     now = timezone.now()
     if place is None:
@@ -160,50 +135,93 @@ def upsert_place(
     return place
 
 
-def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False) -> Place | None:
+@dataclass(slots=True)
+class ProvisionOutcome:
+    """What one resolution of a coordinate produced.
+
+    Attributes:
+        place: The most specific place now covering the coordinate, or None.
+        deferred: Providers that declined for now rather than answering.
+        retry_after: The longest wait a deferring provider asked for, in seconds.
+    """
+
+    place: Place | None = None
+    deferred: list[str] = field(default_factory=list)
+    retry_after: int | None = None
+
+
+def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> Place | None:
     """Resolve a Location onto a place, provisioning geometry only if needed.
 
     Args:
         location: The Location to place.
         name: Optional place-name hint forwarded to name-aware providers.
-        force: Re-run the provider chain even when the coordinate already
-            resolves onto a fresh place.
+        force: Re-run the provider chain even when the coordinate already resolves onto a fresh place.
+        detect_splits: Probe for a subdivision when the parcel shrinks; a caller that re-homes the old outline's locations itself can skip it.
 
     Returns:
-        The resolved place, or None when no provider knows this coordinate.
-    """
+        The resolved place, or None when no provider knows this coordinate."""
+    return ensure_place_outcome(location, name=name, force=force, detect_splits=detect_splits).place
+
+
+def ensure_place_outcome(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> ProvisionOutcome:
+    """:func:`ensure_place_for_location`, also reporting which providers deferred.
+
+    Args:
+        location: The Location to place.
+        name: Optional place-name hint forwarded to name-aware providers.
+        force: Re-run the provider chain even when the coordinate already resolves onto a fresh place.
+        detect_splits: Probe for a subdivision when the parcel shrinks.
+
+    Returns:
+        The outcome; ``deferred`` is empty when the answer came from known geometry."""
     if location.latitude is None or location.longitude is None:
-        return None
+        return ProvisionOutcome()
 
     existing = Place.objects.resolve_for_point(location.latitude, location.longitude)
     if existing is not None and not force and not geometry_stale(existing):
         resolution.attach_location(location, existing)
-        return existing
+        return ProvisionOutcome(place=existing)
 
-    return provision_places_for_coordinate(location, name=name)
+    return provision_outcome_for_coordinate(location, name=name, detect_splits=detect_splits)
 
 
-def provision_places_for_coordinate(location: Location, *, name: str | None = None) -> Place | None:
+def provision_places_for_coordinate(location: Location, *, name: str | None = None, detect_splits: bool = True) -> Place | None:
     """Run the provider chain for a coordinate and persist the places it describes.
-
-    The parcel and the building footprint become *separate* places, the
-    building ``PART_OF`` the parcel. That separation is what lets a building's
-    page draw its own footprint instead of the grounds it stands on, while
-    keeping both in one access domain.
+    That separation is what lets a building's page draw its own footprint instead of the grounds it stands on, while keeping both in one access domain.
 
     Args:
         location: The Location whose coordinate to resolve.
         name: Optional place-name hint forwarded to name-aware providers.
+        detect_splits: Probe for a subdivision when the parcel shrinks.
 
     Returns:
-        The most specific place now covering the coordinate, or None.
-    """
+        The most specific place now covering the coordinate, or None."""
+    return provision_outcome_for_coordinate(location, name=name, detect_splits=detect_splits).place
+
+
+def provision_outcome_for_coordinate(location: Location, *, name: str | None = None, detect_splits: bool = True) -> ProvisionOutcome:
+    """:func:`provision_places_for_coordinate`, also reporting which providers deferred.
+
+    Args:
+        location: The Location whose coordinate to resolve.
+        name: Optional place-name hint forwarded to name-aware providers.
+        detect_splits: Probe for a subdivision when the parcel shrinks.
+
+    Returns:
+        The outcome of this chain run."""
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
     latitude, longitude = float(location.latitude), float(location.longitude)
     resolved = BoundaryProviderChain().get_boundaries(latitude, longitude, name=name or location.official_name or None)
 
-    detect_subdivision(location, resolved.property_polygon)
+    if resolved.deferred and (known := Place.objects.resolve_for_point(location.latitude, location.longitude)) is not None:
+        # A fallback's outline must not overwrite one the deferring provider gave earlier; keep it until that provider answers.
+        resolution.attach_location(location, known)
+        return ProvisionOutcome(place=known, deferred=list(resolved.deferred), retry_after=resolved.retry_after)
+
+    if detect_splits and not resolved.deferred:
+        detect_subdivision(location, resolved.property_polygon)
 
     parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
     building = None
@@ -222,33 +240,24 @@ def provision_places_for_coordinate(location: Location, *, name: str | None = No
 
     standing_on = resolution.resolve_location_place(location)
     if standing_on is None and (building or parcel) is not None:
-        # The chain was asked about *this* coordinate, so its answer applies to
-        # it even when the outline it returned doesn't strictly contain the
-        # point - providers do disagree with themselves by a metre or two, and
-        # discarding geometry we just paid for would leave the location looking
-        # unknown until the next refresh made the same mistake again.
+        # The chain was asked about *this* coordinate, so its answer applies to it even when the
+        # outline it returned doesn't strictly contain the point - providers do disagree with
+        # themselves by a metre or two, and discarding geometry we just paid for would leave the
+        # location looking unknown until the next refresh made the same mistake again.
         standing_on = building or parcel
         resolution.attach_location(location, standing_on)
-    return standing_on
+    return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after)
 
 
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
-    """Retire the parcel this coordinate used to be on, if it has been divided.
-
-    Only the shrink case is detected from a single coordinate: the provider now
-    returns a much smaller parcel here than the one on record, which means the
-    rest of the old parcel became something else. The successor outlines are
-    whatever the *other* pinned coordinates inside the old boundary now resolve
-    to, which is exactly the set that matters - a piece nobody has pinned needs
-    no place until somebody does.
+    """Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
 
     Args:
         location: The coordinate whose refresh triggered this.
         new_parcel_polygon: The parcel outline the providers now return here.
 
     Returns:
-        The superseded place, or None when nothing was subdivided.
-    """
+        The superseded place, or None when nothing was subdivided."""
     from urbanlens.dashboard.models.location.model import Location as LocationModel
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
     from urbanlens.dashboard.services.places import splits
@@ -258,7 +267,14 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         return None
 
     successors = [new_parcel_polygon]
-    for other in LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon):
+    probes = 0
+    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
+    for other in neighbours.iterator():
+        if any(successor.contains(other.point) for successor in successors):
+            continue
+        if probes >= MAX_SUBDIVISION_PROBES:
+            break
+        probes += 1
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
         if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
             successors.append(chain_result.property_polygon)
@@ -270,40 +286,24 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
 
 def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provider: str = "") -> dict[int, Place]:
     """Create the building places a bulk import already has the footprints for.
-
-    The import knows exactly which structures it is about - it fetched the
-    parcel's building list to offer them. Persisting those footprints directly
-    is both cheaper and *more correct* than letting each new child pin's
-    coordinate be looked up on its own: a point lookup for a building returns
-    the parcel when no footprint provider covers it, which is how 124 markers
-    ended up each claiming to be the whole hospital.
-
-    A building with no footprint still gets a place, with null geometry. It
-    keeps identity, lineage, and the ability to hold its own wiki, and can
-    never be resolved onto - which is the right answer for a structure we know
-    exists but cannot locate precisely.
+    It keeps identity, lineage, and the ability to hold its own wiki, and can never be resolved onto - which is the right answer for a structure we know exists but cannot locate precisely.
 
     Args:
-        parcel: The parcel these buildings stand on; None skips the whole step,
-            since a building place with no parcel has no domain to join.
+        parcel: The parcel these buildings stand on; None skips the whole step, since a building place with no parcel has no domain to join.
         buildings: Cached building records (see ``plugins.builtin.parcel_buildings``).
         provider: Provider namespace for stable-id matching.
 
     Returns:
-        Dict mapping each record's index in ``buildings`` to its place.
-    """
+        Dict mapping each record's index in ``buildings`` to its place."""
     from urbanlens.dashboard.services.pins.pin_restructure import building_footprint, building_name
 
     if parcel is None:
         return {}
 
-    # REData's reconciled shape reports nesting: a coarse footprint enclosing
-    # finer ones becomes their `parent_ref` rather than a duplicate of them (its
-    # `docs/buildings-dedup-spec.md`). Parenting every building to the parcel
-    # regardless made an envelope and the wings inside it *siblings* whose
-    # footprints overlap - the Place tree then said two peers occupy the same
-    # ground, which is the shape `resolve_locations_in` has to disambiguate and
-    # the one thing the reconciliation exists to avoid.
+    # REData's reconciled shape reports nesting: a coarse footprint enclosing finer ones becomes
+    # their `parent_ref` rather than a duplicate of them (its
+    # `../REData/docs/archive/buildings-dedup-spec.md`).
+    # Parenting every building to the parcel regardless made an envelope and the wings inside it
     by_ref: dict[str, int] = {}
     for index, building in enumerate(buildings):
         ref = str(building.get("ref") or "").strip()
@@ -316,12 +316,31 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
         candidate = by_ref.get(parent_ref) if parent_ref else None
         return candidate if candidate is not None and candidate != index else None
 
+    def _key(building: dict) -> str:
+        """The building's identity: global ids as they are, a building number only within this parcel."""
+        # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
+        # and doubles as the key floorplan lookups use - prefer it.
+        if ref := str(building.get("ref") or building.get("uuid") or building.get("id") or "").strip():
+            return ref
+        if osm_id := building.get("osm_id"):
+            # REData's own ref for an OSM building, so a later REData answer finds this place.
+            return f"osm:{building.get('osm_type') or 'way'}/{osm_id}"
+        if number := str(building.get("building_number") or "").strip():
+            return f"parcel:{parcel.pk}:{number}"
+        return ""
+
+    def _adopt_legacy_number_key(key: str) -> None:
+        """Rekey this parcel's place filed under the bare building number, so it is updated rather than forked."""
+        number = key.removeprefix(f"parcel:{parcel.pk}:")
+        if number == key or Place.objects.filter(provider=provider, provider_key=key, kind=PlaceKind.BUILDING).exists():
+            return
+        Place.objects.filter(provider=provider, provider_key=number, kind=PlaceKind.BUILDING, parent=parcel).update(provider_key=key)
+
     def _create(index: int, parent_place: Place) -> None:
         building = buildings[index]
         footprint = building_footprint(building)
-        # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
-        # and doubles as the key floorplan lookups use - prefer it.
-        key = str(building.get("ref") or building.get("uuid") or building.get("id") or building.get("building_number") or "").strip()
+        key = _key(building)
+        _adopt_legacy_number_key(key)
         place = upsert_place(
             PlaceKind.BUILDING,
             _as_multipolygon(footprint),
@@ -335,10 +354,10 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
             created[index] = place
 
     created: dict[int, Place] = {}
-    # Parents before children, to whatever depth the source reports (a campus
-    # block parenting a wing parenting an annex). Resolved by repeated passes
-    # rather than recursion so a `parent_ref` cycle - which `parcel_buildings`
-    # already guards against in its own ordering - cannot recurse forever.
+    # Parents before children, to whatever depth the source reports (a campus block parenting a wing
+    # parenting an annex).
+    # Resolved by repeated passes rather than recursion so a `parent_ref` cycle - which
+    # `parcel_buildings` already guards against in its own ordering - cannot recurse forever.
     pending = list(range(len(buildings)))
     while pending:
         deferred: list[int] = []
@@ -388,16 +407,11 @@ def _as_multipolygon(geometry):
 
 def record_boundary_candidates(place: Place, candidates: list[tuple[str, MultiPolygon]]) -> None:
     """Persist one votable candidate row per provider that offered a parcel outline.
-
-    Candidate geometry refreshes freely: it is never user-drawn, so a newer
-    provider answer can only be better data. The winning candidate is
-    materialised onto ``Place.geometry`` by
-    ``services.geo.boundary_voting.apply_winning_boundary``.
+    Candidate geometry refreshes freely: it is never user-drawn, so a newer provider answer can only be better data.
 
     Args:
         place: The parcel place the candidates describe.
-        candidates: ``(provider service_key, polygon)`` pairs from the chain.
-    """
+        candidates: ``(provider service_key, polygon)`` pairs from the chain."""
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
     from urbanlens.dashboard.services.geo.boundary_voting import apply_winning_boundary
     from urbanlens.dashboard.services.locations.boundaries import PROVIDER_BOUNDARY_SOURCES

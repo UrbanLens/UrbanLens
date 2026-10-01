@@ -1,10 +1,4 @@
-"""Tests for PinController.panel_info(), the generic dispatch for InfoPanelSource panels.
-
-Covers the shared plumbing (404/204/pending/render paths) that every
-InfoPanelSource-based plugin panel (Photon, US Census Geography, EPA
-Regulated Facilities, iNaturalist, News, Building Characteristics, Recent
-Seismic Activity) now relies on instead of hand-written controller methods.
-"""
+"""Tests for PinController.panel_info(), the generic dispatch for InfoPanelSource panels."""
 
 from __future__ import annotations
 
@@ -17,6 +11,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.plugins.builtin.gdelt import GdeltPanelSource
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_sources
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
@@ -50,9 +45,7 @@ class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_coordinate_gated_panel_returns_204_at_null_island(self) -> None:
-        """(0, 0) is the "never geocoded" sentinel - effective_latitude/longitude are never
-        actually None (Location.latitude/longitude are non-nullable, and immutable once
-        set), so the gate checks falsiness, which only (0, 0) coordinates satisfy."""
+        """(0, 0) is the "never geocoded" sentinel - effective_latitude/longitude are never actually None (Location.latitude/longitude are non-nullable, and immutable once set), so the gate checks falsiness, which only (0, 0) coordinates satisfy."""
         location: Location = baker.make("dashboard.Location", latitude=0, longitude=0)
         pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
         response = self.client.get(reverse("pin.panel", args=[pin.slug, "photon"]))
@@ -74,7 +67,9 @@ class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
         # The third arg is the single-flight token (random per call): the fetch
         # releases the marker only while it is still its own, so the exact value
         # is deliberately not asserted.
-        fetch_task.apply_async.assert_called_once_with(args=("photon", self.pin.pk, mock.ANY), kwargs={}, queue="panel_fetch")
+        fetch_task.apply_async.assert_called_once_with(
+            args=("photon", self.pin.pk, mock.ANY), kwargs={}, queue="panel_fetch"
+        )
         self.assertContains(response, "Photon (OpenStreetMap)")
 
     def test_render_context_returning_none_yields_204(self) -> None:
@@ -99,7 +94,16 @@ class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
         LocationCache.set(
             self.pin.location,
             "usgs_earthquakes",
-            {"events": [{"magnitude": 4.2, "title": "10km N of Nowhere", "occurred_at": "2026-01-01T00:00:00Z", "url": "https://example.com"}]},
+            {
+                "events": [
+                    {
+                        "magnitude": 4.2,
+                        "title": "10km N of Nowhere",
+                        "occurred_at": "2026-01-01T00:00:00Z",
+                        "url": "https://example.com",
+                    }
+                ]
+            },
             query_key="",
         )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
@@ -119,11 +123,19 @@ class PanelAiExtractButtonTests(RedataConfiguredMixin, TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Riverside Mill")
         LocationCache.set(
             self.pin.location,
-            "gdelt",
-            {"articles": [{"date": "20240101T120000Z", "title": "Mill fire investigated", "link": "https://news.example.com/mill-fire"}]},
+            GdeltPanelSource.cache_source,
+            {
+                "articles": [
+                    {
+                        "date": "20240101T120000Z",
+                        "title": "Riverside Mill fire investigated",
+                        "link": "https://news.example.com/mill-fire",
+                    }
+                ]
+            },
             query_key="",
         )
 
@@ -204,7 +216,7 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
 
 
 class PinDetailHeroSubnavTests(TestCase):
-    """The pin detail page has a standard page hero + subnav (like every other page)."""
+    """The Private Pin page has a standard page hero + subnav (like every other page)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -212,7 +224,9 @@ class PinDetailHeroSubnavTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Old Mill", name_is_user_provided=True)
+        self.pin: Pin = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, name="Old Mill", name_is_user_provided=True
+        )
 
     def test_hero_renders_the_pin_name(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
@@ -249,13 +263,22 @@ class PinDetailHeroSubnavTests(TestCase):
         self.assertLess(hero_pos, overview_panel_pos)
 
     def test_condensed_panels_are_excluded_from_the_autoloading_list(self) -> None:
-        """Census/iNaturalist/Seismic/EPA's nearby-list all move into the single "Regional Data"
-        tab strip (panel_tabs), and Photon/Overture/Elevation into the "Location Data" tab
-        strip, instead of auto-loading as their own standalone cards. EPA's exact-site detail
-        card is a different key (epa_echo_detail) and still auto-loads unconditionally."""
+        """Regional sources (Census, iNaturalist, Seismic, disasters, hydrology, air quality, EPA's nearby list) are tabs in "Regional Data", and Photon/Overture/Elevation/Historic Registers tabs in "Location Data", rather than cards of their own. EPA's exact-site detail card is a different key (epa_echo_detail) and still auto-loads."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         keys = [panel.key for panel in response.context["simple_info_panels"]]
-        for tabbed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes", "photon", "overture_building_attributes", "open_elevation"):
+        for tabbed_key in (
+            "census_tigerweb",
+            "epa_echo",
+            "inaturalist",
+            "usgs_earthquakes",
+            "photon",
+            "overture_building_attributes",
+            "open_elevation",
+            "hazard_history",
+            "redata_hydrology",
+            "redata_air_quality",
+            "redata_historic_registers",
+        ):
             self.assertNotIn(tabbed_key, keys)
         self.assertIn("gdelt", keys)
         self.assertIn("epa_echo_detail", keys)
@@ -265,8 +288,20 @@ class PinDetailHeroSubnavTests(TestCase):
         see NearbyResearchTabGatingTests for the combined-with-EPA case."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         tabs = response.context["panel_tabs"]
-        self.assertEqual([tab["key"] for tab in tabs], ["census_tigerweb", "inaturalist", "usgs_earthquakes"])
-        self.assertEqual([tab["label"] for tab in tabs], ["US Census", "Wildlife", "Seismic"])
+        self.assertEqual(
+            [tab["key"] for tab in tabs],
+            [
+                "census_tigerweb",
+                "inaturalist",
+                "usgs_earthquakes",
+                "hazard_history",
+                "redata_hydrology",
+                "redata_air_quality",
+            ],
+        )
+        self.assertEqual(
+            [tab["label"] for tab in tabs], ["US Census", "Wildlife", "Seismic", "Disasters", "Water", "Air Quality"]
+        )
 
     def test_page_renders_the_regional_data_tab_strip(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
@@ -279,24 +314,28 @@ class PinDetailHeroSubnavTests(TestCase):
         # route used everywhere else - just triggered by a click, not page load.
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "census_tigerweb"]))
 
+    #: The autoload trigger as rendered: collapsible-sections.ts fires ul:lazy-load for a section that is not collapsed.
+    @staticmethod
+    def _autoload_trigger(key: str) -> str:
+        return f'data-ul-lazy-section="pin:{key}"'
+
     def test_condensed_panels_no_longer_have_an_autoload_trigger(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         content = response.content.decode()
         for condensed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"):
-            self.assertNotIn(f"hx-trigger=\"load[!window.ulSectionCollapsed('pin','{condensed_key}')]", content)
+            self.assertNotIn(self._autoload_trigger(condensed_key), content)
 
     def test_epa_exact_site_detail_panel_still_has_an_autoload_trigger(self) -> None:
-        """Unlike epa_echo (nearby list), epa_echo_detail is not tab-gated - it's a normal auto-loading card."""
+        """Unlike epa_echo (nearby list), epa_echo_detail is not tab-gated - it's a normal auto-loading card.
+
+        Also what keeps the negative test above honest: if the trigger's spelling changes and this helper is not
+        updated, this fails rather than letting that one pass by matching nothing."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         content = response.content.decode()
-        self.assertIn("hx-trigger=\"load[!window.ulSectionCollapsed('pin','epa_echo_detail')]", content)
+        self.assertIn(self._autoload_trigger("epa_echo_detail"), content)
 
     def test_tab_body_carries_the_chrome_stripping_class(self) -> None:
-        """Regression guard: the nested-card-chrome-stripping CSS rule
-        (_pin-detail.scss's .pin-plugin-tab-body) is a class selector, but the
-        tab body div used to only ever carry that string as its id - a class
-        selector never matches an id, so it silently never applied to any
-        panel rendered inside a tab."""
+        """Regression guard: the nested-card-chrome-stripping CSS rule (_pin-detail.scss's .pin-plugin-tab-body) is a class selector, but the tab body div used to only ever carry that string as its id - a class selector never matches an id, so it silently never applied to any panel rendered inside a tab."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         self.assertContains(response, 'id="pin-plugin-tab-body" class="card__body pin-plugin-tab-body"')
 
@@ -340,13 +379,22 @@ class NearbyResearchTabGatingTests(TestCase):
 
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         tabs = response.context["panel_tabs"]
-        self.assertEqual([tab["key"] for tab in tabs], ["census_tigerweb", "inaturalist", "usgs_earthquakes", "epa_echo"])
+        self.assertEqual(
+            [tab["key"] for tab in tabs],
+            [
+                "census_tigerweb",
+                "inaturalist",
+                "usgs_earthquakes",
+                "hazard_history",
+                "redata_hydrology",
+                "redata_air_quality",
+                "epa_echo",
+            ],
+        )
         self.assertEqual(tabs[-1]["label"], "EPA")
 
     def test_only_one_tab_strip_card_renders_on_the_page(self) -> None:
-        """Regression guard: Regional Data and Nearby Research used to be two
-        separate cards - now there's exactly one, so the old second section id
-        must never appear."""
+        """Regression guard: Regional Data and Nearby Research used to be two separate cards - now there's exactly one, so the old second section id must never appear."""
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 
         role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)

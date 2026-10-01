@@ -275,6 +275,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     align-items: center;
     flex-wrap: wrap;
 
+    > .save-status { margin-left: auto; }
+
     select,
     input[type="number"] {
         min-width: 5rem;
@@ -353,30 +355,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     &:has(input:focus-visible) {
         outline: 2px solid $color-blue-500;
         outline-offset: 1px;
-    }
-}
-
-.subscription-save-status {
-    margin-left: auto;
-    font-size: .72rem;
-    font-weight: 600;
-    opacity: 0;
-    transition: opacity .25s;
-    white-space: nowrap;
-
-    &.is-saving {
-        color: var(--ul-grey-6);
-        opacity: 1;
-    }
-
-    &.is-saved {
-        color: $color-green-600;
-        opacity: 1;
-    }
-
-    &.is-error {
-        color: $color-red-600;
-        opacity: 1;
     }
 }
 
@@ -623,7 +601,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     flex-shrink: 0;
 }
 
-.api-limit-status {
+// Save outcome beside an autosaving form (shared/save-status.ts).
+.save-status {
     font-size: .72rem;
     font-weight: 600;
     opacity: 0;
@@ -643,6 +622,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     &.is-error {
         color: $color-red-600;
         opacity: 1;
+    }
+
+    &.is-fading {
+        opacity: 0;
+        transition-duration: .5s;
     }
 }
 
@@ -757,9 +741,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 }
 
-// Cards flow into as many columns as fit at 340px+ each, so the many
-// single/few-field settings cards pack side by side on wide screens instead
-// of each stacking full-width for just one input.
+// Cards flow into as many columns as fit at 340px+ each, so the many single/few-field settings cards pack side by side on wide screens.
 .site-admin-settings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -819,11 +801,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         padding-top: .5rem;
     }
 
-    // Sub-element (__item/__handle/__rank/__label/__move/__btn/__toggle) styling
-    // for this markup now lives unscoped in _tags.scss, so it also applies to
-    // the same dashboard/partials/ui/_priority_list.html partial used outside
-    // site-admin (e.g. the settings page) - only this page-specific container
-    // override (max-width, tighter gap) stays here.
+    // Sub-element (__item/__handle/__rank/__label/__move/__btn/__toggle) styling for this markup now lives unscoped in _tags.scss, so it.
     .priority-list {
         list-style: none;
         margin: 0 0 .5rem;
@@ -986,25 +964,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         text-transform: uppercase;
         letter-spacing: .04em;
         color: var(--ul-grey-7);
-    }
-}
-
-.stats-table-rank {
-    color: var(--ul-grey-6);
-    width: 2.5rem;
-}
-
-.stats-table-count {
-    font-weight: 600;
-    text-align: right;
-}
-
-.stats-table-link {
-    color: var(--ul-color-accent);
-    text-decoration: none;
-
-    &:hover {
-        text-decoration: underline;
     }
 }
 
@@ -1655,7 +1614,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
 
 // - Dark Mode
 [data-theme="dark"] {
-    
+
     .subscription-admin-page .role-pill {
         background: linear-gradient(135deg, rgba($color-indigo-600, .25), rgba($color-blue-500, .2));
         color: var(--ul-grey-8);
@@ -1713,9 +1672,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
 
 }
 // -- Suggestion model report (site-admin/models/) ---------------------------
-// Its own block rather than reused admin-table/admin-list names: those do not
-// exist, and inventing class names that no stylesheet defines is how a page
-// ships looking broken while every test passes.
+// Its own block rather than reused admin-table/admin-list names.
 .model-report {
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
@@ -1743,7 +1700,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
   th,
   td {
     padding: .4rem .6rem;
-    border-bottom: 1px solid var(--border-color, rgb(128 128 128 / 25%));
+    border-bottom: 1px solid var(--ul-border, rgb(128 128 128 / 25%));
     text-align: left;
     vertical-align: top;
   }
@@ -1795,4 +1752,129 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
   .api-limits-capability-provider {
     white-space: nowrap;
   }
+}
+
+// -- External tag mapping admin ------------------------------------------------
+
+.exttag-mapping-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.exttag-search-row {
+    .exttag-search-input {
+        width: 100%;
+        max-width: 360px;
+        padding: .5rem .75rem;
+        border-radius: 8px;
+        border: 1px solid var(--ul-border, #cbd5e1);
+        background: var(--card-bg, #fff);
+        color: inherit;
+    }
+}
+
+.exttag-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .6rem .9rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--ul-primary-color, #6366f1) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ul-primary-color, #6366f1) 30%, transparent);
+
+    .exttag-bulk-count {
+        font-weight: 600;
+        font-size: .85rem;
+    }
+}
+
+.exttag-section {
+    h3 {
+        margin: 0 0 .25rem;
+        font-size: 1rem;
+    }
+}
+
+.exttag-section-hint {
+    margin: 0 0 .6rem;
+    font-size: .8rem;
+    color: var(--ul-grey-6, #64748b);
+}
+
+.exttag-empty {
+    font-size: .85rem;
+    color: var(--ul-grey-6, #64748b);
+}
+
+.exttag-clusters,
+.exttag-groups-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .75rem;
+}
+
+.exttag-cluster-card,
+.exttag-group-card {
+    padding: .65rem .75rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.exttag-chip-row,
+.exttag-group-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    min-height: 2.25rem;
+}
+
+// The ungrouped pool and every group card's member list share this class.
+.exttag-group-list {
+    padding: .35rem;
+    border-radius: 8px;
+    border: 1px dashed var(--ul-border, #cbd5e1);
+}
+
+.exttag-vocab-chip {
+    cursor: grab;
+    user-select: none;
+
+    &.exttag-vocab-chip--selected {
+        outline: 2px solid var(--ul-primary-color, #6366f1);
+        outline-offset: 1px;
+    }
+
+    &.exttag-vocab-chip--preferred {
+        font-weight: 600;
+    }
+}
+
+.exttag-chip--ghost {
+    opacity: .4;
+}
+
+.exttag-preferred-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: inherit;
+
+    .material-symbols-outlined {
+        font-size: 16px;
+    }
+}
+
+.exttag-source-badge {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    opacity: .65;
 }

@@ -1,33 +1,24 @@
-"""Property tests for the place access predicate.
-
-The predicate is small but its consequences are not, so these assert the
-properties rather than a handful of examples:
-
-- **Symmetry within a domain.** A parcel and everything ``PART_OF`` it is one
-  access domain; a pin anywhere in it reaches every wiki in it, in either
-  direction. Splitting a property into buildings must never change who can see
-  what.
-- **All members, for aggregates.** A ``MEMBER_OF`` parent is reachable only by
-  holding every one of its members, and holding all-but-one is not enough.
-- **Earning is recursive.** Completing one tier can complete the tier above it.
-- **Nothing user-drawn ever counts.** The ``Boundary`` table is where every
-  community drawing lives, and the predicate must not read it.
-- **Superseded geometry never grants.** The old campus outline still contains
-  every post-split pin; containment against it must resolve to nothing.
-"""
+"""Property tests for the place access predicate."""
 
 from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus
+from urbanlens.dashboard.models.place.model import (
+    GrantReason,
+    Place,
+    PlaceAccessGrant,
+    PlaceKind,
+    PlaceRelation,
+    PlaceStatus,
+)
 from urbanlens.dashboard.services.places import lineage, resolution
 from urbanlens.dashboard.services.wiki.wiki_access import accessible_domain_ids, place_visible_to
 
@@ -57,7 +48,10 @@ class DomainSymmetryTests(TestCase):
         Pin.objects.filter(profile=self.profile).delete()
         Place.objects.filter(parent=self.parcel).delete()
 
-        buildings = [make_place(PlaceKind.BUILDING, square(-74.0 + i * 0.001, 40.0, 0.0002), parent=self.parcel) for i in range(building_count)]
+        buildings = [
+            make_place(PlaceKind.BUILDING, square(-74.0 + i * 0.001, 40.0, 0.0002), parent=self.parcel)
+            for i in range(building_count)
+        ]
         target = buildings[pinned_index % building_count]
         pin_on(self.profile, target, lat=40.0, lng=-74.0 + (pinned_index % building_count) * 0.001)
 
@@ -91,7 +85,12 @@ class AggregateEarningTests(TestCase):
         Place.objects.all().delete()
 
         site = make_place(PlaceKind.SITE, None)
-        members = [make_place(PlaceKind.PARCEL, square(-74.0 + i * 0.05, 40.0, 0.01), parent=site, relation=PlaceRelation.MEMBER_OF) for i in range(member_count)]
+        members = [
+            make_place(
+                PlaceKind.PARCEL, square(-74.0 + i * 0.05, 40.0, 0.01), parent=site, relation=PlaceRelation.MEMBER_OF
+            )
+            for i in range(member_count)
+        ]
         site.refresh_from_db()
 
         held = min(held, member_count)
@@ -104,9 +103,15 @@ class AggregateEarningTests(TestCase):
         """campus -> {A, B}; A -> {A1, A2}. Pins in A1, A2 and B earn the campus."""
         campus = make_place(PlaceKind.SITE, None)
         parcel_a = make_place(PlaceKind.PARCEL, None, parent=campus, relation=PlaceRelation.MEMBER_OF)
-        parcel_b = make_place(PlaceKind.PARCEL, square(-73.0, 40.0, 0.01), parent=campus, relation=PlaceRelation.MEMBER_OF)
-        sub_1 = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.005), parent=parcel_a, relation=PlaceRelation.MEMBER_OF)
-        sub_2 = make_place(PlaceKind.PARCEL, square(-74.02, 40.0, 0.005), parent=parcel_a, relation=PlaceRelation.MEMBER_OF)
+        parcel_b = make_place(
+            PlaceKind.PARCEL, square(-73.0, 40.0, 0.01), parent=campus, relation=PlaceRelation.MEMBER_OF
+        )
+        sub_1 = make_place(
+            PlaceKind.PARCEL, square(-74.0, 40.0, 0.005), parent=parcel_a, relation=PlaceRelation.MEMBER_OF
+        )
+        sub_2 = make_place(
+            PlaceKind.PARCEL, square(-74.02, 40.0, 0.005), parent=parcel_a, relation=PlaceRelation.MEMBER_OF
+        )
 
         pin_on(self.profile, sub_1, lat=40.0, lng=-74.0)
         self.assertFalse(place_visible_to(parcel_a, self.profile))
@@ -155,7 +160,13 @@ class AntiGamingTests(TestCase):
         return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
     def test_a_pin_owned_boundary_grants_nothing(self) -> None:
-        Boundary.objects.create(pin=self.pin, profile=self.profile, boundary_type=BoundaryType.PROPERTY, polygon=self._huge(), generated_polygon=self._huge())
+        Boundary.objects.create(
+            pin=self.pin,
+            profile=self.profile,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=self._huge(),
+            generated_polygon=self._huge(),
+        )
         self.assertFalse(place_visible_to(self.target, self.profile))
 
     def test_a_community_drawn_wiki_boundary_grants_nothing(self) -> None:
@@ -177,24 +188,28 @@ class SupersessionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
-        self.old_campus = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.05))
-        self.new_a = make_place(PlaceKind.PARCEL, square(-74.02, 40.0, 0.01), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF)
-        self.new_b = make_place(PlaceKind.PARCEL, square(-73.98, 40.0, 0.01), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF)
+        self.old_campus = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.005))
+        self.new_a = make_place(
+            PlaceKind.PARCEL, square(-74.002, 40.0, 0.001), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF
+        )
+        self.new_b = make_place(
+            PlaceKind.PARCEL, square(-73.998, 40.0, 0.001), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF
+        )
         Place.objects.filter(pk=self.old_campus.pk).update(status=PlaceStatus.SUPERSEDED)
         self.old_campus.refresh_from_db()
 
     def test_superseded_geometry_never_resolves(self) -> None:
         """A point inside the old campus but outside both successors resolves to nothing."""
-        self.assertIsNone(Place.objects.resolve_for_point(40.04, -74.04))
+        self.assertIsNone(Place.objects.resolve_for_point(40.004, -74.004))
 
     def test_holding_one_successor_does_not_grant_the_old_campus(self) -> None:
-        pin_on(self.profile, self.new_a, lat=40.0, lng=-74.02)
+        pin_on(self.profile, self.new_a, lat=40.0, lng=-74.002)
         self.assertTrue(place_visible_to(self.new_a, self.profile))
         self.assertFalse(place_visible_to(self.old_campus, self.profile))
 
     def test_holding_every_successor_earns_the_old_campus(self) -> None:
-        pin_on(self.profile, self.new_a, lat=40.0, lng=-74.02)
-        pin_on(self.profile, self.new_b, lat=40.0, lng=-73.98)
+        pin_on(self.profile, self.new_a, lat=40.0, lng=-74.002)
+        pin_on(self.profile, self.new_b, lat=40.0, lng=-73.998)
         self.assertTrue(place_visible_to(self.old_campus, self.profile))
 
 

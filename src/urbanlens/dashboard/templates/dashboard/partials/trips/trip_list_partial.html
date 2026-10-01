@@ -135,6 +135,7 @@
     </li>
     {% endfor %}
 </ul>
+{% include "dashboard/partials/ui/_pagination_controls.html" with page_target="#trip-list" page_swap="innerHTML" page_noun="trips" %}
 {% else %}
 <div class="trips-empty">
     <div class="trips-empty-icon-wrap">
@@ -143,7 +144,7 @@
     <h2 class="trips-empty-title">No trips yet</h2>
     <p class="trips-empty-text">Create a trip to plan stops, invite friends, and track your route.</p>
     <button type="button" class="btn btn--primary"
-            onclick="document.getElementById('create-trip-dialog').showModal()">
+            data-dialog-open="create-trip-dialog">
         <i class="material-symbols-outlined">add</i>
         New Trip
     </button>

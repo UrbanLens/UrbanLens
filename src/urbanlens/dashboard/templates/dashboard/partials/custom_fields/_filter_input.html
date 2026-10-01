@@ -1,7 +1,4 @@
-{# One custom-field filter control, branched by field type. Shared by the map filter #}
-{# panel (no prefill; the saved-filter restore JS fills values) and the saved-filter #}
-{# dialog (cfval prefills from the deserialized criteria). #}
-{# Context: field (CustomField), optional cfval (deserialized criterion bounds dict). #}
+{# One custom-field filter control, branched by field type. #}
 <div class="fp-custom-field" title="{{ field.get_field_type_display }} field">
     <span class="fp-custom-field-label">
         <i class="material-symbols-outlined">{{ field.type_icon }}</i>

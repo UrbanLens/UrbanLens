@@ -1,16 +1,4 @@
-"""Tests for the wiki Media gallery: vote aggregation, voting endpoint, and the
-per-source provider view (controllers/wiki_media.py + MediaRelevanceQuerySet).
-
-The wiki reuses the Location-scoped ``MediaRelevance`` model as a community
-vote store, so these cover the three behaviors that make that work without a
-schema change:
-
-* ``vote_scores`` aggregates every profile's marks into a net score (up - down).
-* A pin-detail relevance mark already counts toward the wiki score (carry-over),
-  because the model is keyed by Location, not Pin.
-* External media renders straight from the shared ``LocationCache``; only
-  photos intentionally shared to the wiki (``Image.wiki``) show under "photos".
-"""
+"""Tests for the wiki Media gallery: vote aggregation, voting endpoint, and the per-source provider view (controllers/wiki_media.py + MediaRelevanceQuerySet)."""
 
 from __future__ import annotations
 
@@ -37,7 +25,9 @@ _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-wiki-media-")
 
 
 def _mark(profile, location, source, item_key, is_relevant) -> MediaRelevance:
-    return MediaRelevance.objects.create(profile=profile, location=location, source=source, item_key=item_key, is_relevant=is_relevant)
+    return MediaRelevance.objects.create(
+        profile=profile, location=location, source=source, item_key=item_key, is_relevant=is_relevant
+    )
 
 
 class VoteScoresTests(TestCase):
@@ -98,63 +88,141 @@ class WikiMediaVoteViewTests(TestCase):
         )
 
     def test_upvote_records_mark_and_returns_score(self) -> None:
-        image = Image.objects.create(image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"), wiki=None, location=self.location, profile=self.profile)
-        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image) as materialize:
-            response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
+        image = Image.objects.create(
+            image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"),
+            wiki=None,
+            location=self.location,
+            profile=self.profile,
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image
+        ) as materialize:
+            response = self._vote(
+                {"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True}
+            )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"my_vote": True, "vote_score": 1, "image_id": image.pk, "image_url": image.image.url})
-        self.assertTrue(MediaRelevance.objects.filter(profile=self.profile, location=self.location, source="wikimedia", item_key="a", is_relevant=True).exists())
-        materialize.assert_called_once_with(location=self.location, profile=self.profile, source="wikimedia", url="https://x/a.jpg", page_url="", caption="", wiki=self.wiki)
+        self.assertEqual(
+            response.json(), {"my_vote": True, "vote_score": 1, "image_id": image.pk, "image_url": image.image.url}
+        )
+        self.assertTrue(
+            MediaRelevance.objects.filter(
+                profile=self.profile, location=self.location, source="wikimedia", item_key="a", is_relevant=True
+            ).exists()
+        )
+        materialize.assert_called_once_with(
+            location=self.location,
+            profile=self.profile,
+            source="wikimedia",
+            url="https://x/a.jpg",
+            page_url="",
+            caption="",
+            wiki=self.wiki,
+        )
 
     def test_upvote_passes_page_url_and_caption_through_to_materialize(self) -> None:
-        image = Image.objects.create(image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"), wiki=None, location=self.location, profile=self.profile)
-        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image) as materialize:
-            self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "page_url": "https://x/a", "caption": "A photo", "is_relevant": True})
-        materialize.assert_called_once_with(location=self.location, profile=self.profile, source="wikimedia", url="https://x/a.jpg", page_url="https://x/a", caption="A photo", wiki=self.wiki)
+        image = Image.objects.create(
+            image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"),
+            wiki=None,
+            location=self.location,
+            profile=self.profile,
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image
+        ) as materialize:
+            self._vote(
+                {
+                    "source": "wikimedia",
+                    "item_key": "a",
+                    "url": "https://x/a.jpg",
+                    "page_url": "https://x/a",
+                    "caption": "A photo",
+                    "is_relevant": True,
+                }
+            )
+        materialize.assert_called_once_with(
+            location=self.location,
+            profile=self.profile,
+            source="wikimedia",
+            url="https://x/a.jpg",
+            page_url="https://x/a",
+            caption="A photo",
+            wiki=self.wiki,
+        )
 
     def test_upvoting_a_photos_tab_item_does_not_re_materialize_it(self) -> None:
         """The 'photos' source key lists photos already attached to this wiki
         (WikiMediaProviderView._photos) - its url is a local media path, not
         an external provider url, so re-materializing it would be wrong."""
-        image = Image.objects.create(image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile)
+        image = Image.objects.create(
+            image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+        )
         with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
-            response = self._vote({"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": True, "image_id": image.pk})
+            response = self._vote(
+                {"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": True, "image_id": image.pk}
+            )
         self.assertEqual(response.status_code, 200)
         materialize.assert_not_called()
 
     def test_downvote_never_materializes(self) -> None:
         with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
-            response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": False})
+            response = self._vote(
+                {"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": False}
+            )
         self.assertEqual(response.status_code, 200)
         materialize.assert_not_called()
 
     def test_a_failed_materialize_still_records_the_vote_and_reports_the_error(self) -> None:
         from urbanlens.dashboard.services.media.media_materialize import MaterializeError
 
-        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", side_effect=MaterializeError("boom")):
-            response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item",
+            side_effect=MaterializeError("boom"),
+        ):
+            response = self._vote(
+                {"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True}
+            )
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["materialize_error"], "Could not save this photo.")
         self.assertEqual(body["my_vote"], True)
-        self.assertTrue(MediaRelevance.objects.filter(profile=self.profile, location=self.location, source="wikimedia", item_key="a", is_relevant=True).exists())
+        self.assertTrue(
+            MediaRelevance.objects.filter(
+                profile=self.profile, location=self.location, source="wikimedia", item_key="a", is_relevant=True
+            ).exists()
+        )
 
     def test_clearing_a_vote_deletes_the_mark(self) -> None:
         _mark(self.profile, self.location, "wikimedia", "a", True)
         response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": None})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"my_vote": None, "vote_score": 0})
-        self.assertFalse(MediaRelevance.objects.filter(profile=self.profile, location=self.location, source="wikimedia", item_key="a").exists())
+        self.assertFalse(
+            MediaRelevance.objects.filter(
+                profile=self.profile, location=self.location, source="wikimedia", item_key="a"
+            ).exists()
+        )
 
     def test_pin_detail_mark_carries_over_to_the_wiki_score(self) -> None:
-        """A mark made by another user (e.g. on their pin detail page) already
+        """A mark made by another user (e.g. on their Private Pin page) already
         counts, since MediaRelevance is Location-scoped."""
         other = baker.make(User).profile
         _mark(other, self.location, "wikimedia", "a", True)
 
-        image = Image.objects.create(image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"), wiki=None, location=self.location, profile=self.profile)
-        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image):
-            response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
+        image = Image.objects.create(
+            image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"),
+            wiki=None,
+            location=self.location,
+            profile=self.profile,
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image
+        ):
+            response = self._vote(
+                {"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True}
+            )
         self.assertEqual(response.json()["vote_score"], 2)
 
     def test_voting_with_an_image_id_queues_a_redata_vote(self) -> None:
@@ -165,7 +233,9 @@ class WikiMediaVoteViewTests(TestCase):
             profile=self.profile,
         )
         with mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote:
-            response = self._vote({"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": True, "image_id": image.pk})
+            response = self._vote(
+                {"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": True, "image_id": image.pk}
+            )
         self.assertEqual(response.status_code, 200)
         queue_vote.assert_called_once()
         (voted_image, voted_profile), kwargs = queue_vote.call_args
@@ -178,28 +248,56 @@ class WikiMediaVoteViewTests(TestCase):
         before being trusted - otherwise a vote could be attached to an
         unrelated photo elsewhere on the site."""
         other_location = baker.make(Location)
-        other_image = Image.objects.create(image=SimpleUploadedFile("x.jpg", b"y", content_type="image/jpeg"), location=other_location, profile=self.profile)
+        other_image = Image.objects.create(
+            image=SimpleUploadedFile("x.jpg", b"y", content_type="image/jpeg"),
+            location=other_location,
+            profile=self.profile,
+        )
         with mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote:
-            response = self._vote({"source": "photos", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True, "image_id": other_image.pk})
+            response = self._vote(
+                {
+                    "source": "photos",
+                    "item_key": "a",
+                    "url": "https://x/a.jpg",
+                    "is_relevant": True,
+                    "image_id": other_image.pk,
+                }
+            )
         self.assertEqual(response.status_code, 200)
         queue_vote.assert_not_called()
 
     def test_voting_with_a_pin_owned_image_id_at_the_same_location_is_ignored(self) -> None:
-        """A photo that was only ever uploaded to a Pin (never sent to the
-        wiki) must not be votable through the wiki just because it shares the
-        wiki's Location - the lookup has to scope to the wiki's own attached
-        media, not merely to the location."""
-        pin_only_image = Image.objects.create(image=SimpleUploadedFile("pin-only.jpg", b"y", content_type="image/jpeg"), location=self.location, profile=self.profile)
+        """A photo that was only ever uploaded to a Pin (never sent to the wiki) must not be votable through the wiki just because it shares the wiki's Location - the lookup has to scope to the wiki's own attached media, not merely to the location."""
+        pin_only_image = Image.objects.create(
+            image=SimpleUploadedFile("pin-only.jpg", b"y", content_type="image/jpeg"),
+            location=self.location,
+            profile=self.profile,
+        )
         with mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote:
-            response = self._vote({"source": "photos", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True, "image_id": pin_only_image.pk})
+            response = self._vote(
+                {
+                    "source": "photos",
+                    "item_key": "a",
+                    "url": "https://x/a.jpg",
+                    "is_relevant": True,
+                    "image_id": pin_only_image.pk,
+                }
+            )
         self.assertEqual(response.status_code, 200)
         queue_vote.assert_not_called()
 
     def test_clearing_a_vote_does_not_queue_a_redata_vote(self) -> None:
-        image = Image.objects.create(image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile)
+        image = Image.objects.create(
+            image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+        )
         _mark(self.profile, self.location, "photos", "a", is_relevant=True)
         with mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote:
-            self._vote({"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": None, "image_id": image.pk})
+            self._vote(
+                {"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": None, "image_id": image.pk}
+            )
         queue_vote.assert_not_called()
 
     def test_vote_404s_for_a_user_without_a_pin_at_the_location(self) -> None:
@@ -247,23 +345,64 @@ class WikiMediaProviderViewTests(TestCase):
         self.assertIn(shared.image.url, body)
         self.assertNotIn(unrelated.image.url, body)
 
+    def test_a_shared_photo_tile_shows_the_photo_not_an_icon(self) -> None:
+        shared = Image.objects.create(
+            image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+        )
+
+        response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "photos"]))
+
+        self.assertContains(response, f'<img class="media-item-thumb" src="{shared.image.url}"')
+
     def test_photos_are_ordered_by_vote_score_before_redata_confidence(self) -> None:
         """A community upvote outranks a merely REData-confident, unvoted photo."""
-        upvoted_low_confidence = Image.objects.create(image=SimpleUploadedFile("a.jpg", b"a", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile, redata_confidence=0.1)
-        unvoted_high_confidence = Image.objects.create(image=SimpleUploadedFile("b.jpg", b"b", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile, redata_confidence=0.9)
+        upvoted_low_confidence = Image.objects.create(
+            image=SimpleUploadedFile("a.jpg", b"a", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+            redata_confidence=0.1,
+        )
+        unvoted_high_confidence = Image.objects.create(
+            image=SimpleUploadedFile("b.jpg", b"b", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+            redata_confidence=0.9,
+        )
         _mark(self.profile, self.location, "photos", media_item_key(upvoted_low_confidence.image.url), is_relevant=True)
 
         response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "photos"]))
         body = response.content.decode()
-        self.assertLess(body.index(f'data-image-id="{upvoted_low_confidence.pk}"'), body.index(f'data-image-id="{unvoted_high_confidence.pk}"'))
+        self.assertLess(
+            body.index(f'data-image-id="{upvoted_low_confidence.pk}"'),
+            body.index(f'data-image-id="{unvoted_high_confidence.pk}"'),
+        )
 
     def test_unvoted_photos_break_ties_by_redata_confidence(self) -> None:
-        lower_confidence = Image.objects.create(image=SimpleUploadedFile("a.jpg", b"a", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile, redata_confidence=0.2)
-        higher_confidence = Image.objects.create(image=SimpleUploadedFile("b.jpg", b"b", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile, redata_confidence=0.8)
+        lower_confidence = Image.objects.create(
+            image=SimpleUploadedFile("a.jpg", b"a", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+            redata_confidence=0.2,
+        )
+        higher_confidence = Image.objects.create(
+            image=SimpleUploadedFile("b.jpg", b"b", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+            redata_confidence=0.8,
+        )
 
         response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "photos"]))
         body = response.content.decode()
-        self.assertLess(body.index(f'data-image-id="{higher_confidence.pk}"'), body.index(f'data-image-id="{lower_confidence.pk}"'))
+        self.assertLess(
+            body.index(f'data-image-id="{higher_confidence.pk}"'), body.index(f'data-image-id="{lower_confidence.pk}"')
+        )
 
     def test_external_source_renders_cached_items_with_vote_scores(self) -> None:
         from urbanlens.dashboard.services.pins.external_data import get_panel_source
@@ -273,13 +412,21 @@ class WikiMediaProviderViewTests(TestCase):
         LocationCache.set(
             self.location,
             panel.cache_source,
-            {"items": [
-                {"url": url_a, "thumb_url": url_a, "caption": "A", "source": "Wikimedia", "page_url": url_a},
-                {"url": "https://example.com/b.jpg", "thumb_url": "https://example.com/b.jpg", "caption": "B", "source": "Wikimedia", "page_url": "https://example.com/b.jpg"},
-            ]},
+            {
+                "items": [
+                    {"url": url_a, "thumb_url": url_a, "caption": "A", "source": "Wikimedia", "page_url": url_a},
+                    {
+                        "url": "https://example.com/b.jpg",
+                        "thumb_url": "https://example.com/b.jpg",
+                        "caption": "B",
+                        "source": "Wikimedia",
+                        "page_url": "https://example.com/b.jpg",
+                    },
+                ]
+            },
             query_key="q",
         )
-        # A prior up-vote (as if from another user's pin detail page).
+        # A prior up-vote (as if from another user's Private Pin page).
         other = baker.make(User).profile
         _mark(other, self.location, "wikimedia", media_item_key(url_a), True)
 
@@ -291,7 +438,8 @@ class WikiMediaProviderViewTests(TestCase):
         # Item A carries the carried-over +1 score on its tile.
         self.assertIn('data-vote-score="1"', body)
         # Wiki tiles wire their thumbs to the vote handler, not the pin's relevance handler.
-        self.assertIn("window.wikiMediaVote", body)
+        self.assertIn('data-media-action="vote-up"', body)
+        self.assertNotIn('data-media-action="relevant"', body)
 
     def test_provider_404s_for_a_user_without_a_pin(self) -> None:
         stranger = baker.make(User)
@@ -301,7 +449,9 @@ class WikiMediaProviderViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_uncached_external_source_schedules_a_fetch_and_returns_a_pending_loader(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True) as sched:
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True
+        ) as sched:
             response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "wikimedia"]))
         # Either a pending loader (fetch scheduled) or a quiet 204 if the panel
         # gate rejected this pin - both are valid; if it did schedule, the
@@ -312,3 +462,79 @@ class WikiMediaProviderViewTests(TestCase):
             self.assertEqual(response["UL-Panel-Pending"], "1")
         else:
             self.assertEqual(response.status_code, 204)
+
+
+class WikiMediaFillsWithoutAUserActionTests(TestCase):
+    """Opening the wiki is the only action: its loaders fire on load, a cold provider is fetched, tiles follow."""
+
+    _ARTICLE_IMAGES = [
+        {
+            "title": "HRSH.jpg",
+            "url": "https://upload.wikimedia.org/hrsh.jpg",
+            "thumb_url": "https://upload.wikimedia.org/t.jpg",
+        },
+    ]
+    _ARTICLE = {"title": "Hudson River State Hospital", "url": "u"}
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.location = baker.make(Location, latitude=41.73328, longitude=-73.92812)
+        self.wiki = baker.make(Wiki, location=self.location, name="Hudson River State Hospital")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location)
+        LocationCache.set(self.location, "wikipedia", self._ARTICLE, query_key="")
+
+    def _media_url(self, source: str) -> str:
+        return reverse("location.wiki.media", args=[self.location.slug, source])
+
+    def test_the_wiki_page_carries_a_loader_per_provider_that_fires_on_load(self) -> None:
+        response = self.client.get(reverse("location.wiki", args=[self.location.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        for source in ("photos", "wikipedia_media", "wikimedia"):
+            loader = body[body.index(f'id="wiki-media-loader-{source}"') :]
+            loader = loader[: loader.index("</div>")]
+            self.assertIn(self._media_url(source), loader)
+            self.assertIn('hx-trigger="load"', loader)
+            self.assertIn('hx-target="#wiki-media-grid"', loader)
+
+    def test_a_cold_provider_is_fetched_for_the_viewers_pin_and_polls(self) -> None:
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True
+        ) as sched:
+            response = self.client.get(self._media_url("wikipedia_media"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(sched.call_args.args, ("wikipedia_media", self.pin))
+        self.assertEqual(response["HX-Retarget"], "#wiki-media-loader-wikipedia_media")
+        self.assertEqual(response["UL-Panel-Pending"], "1")
+
+    def test_the_fetch_lands_tiles_in_the_grid(self) -> None:
+        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+        from urbanlens.dashboard.services.pins.external_data import get_panel_source
+
+        with mock.patch.object(WikipediaGateway, "get_article_media", return_value=self._ARTICLE_IMAGES):
+            get_panel_source("wikipedia_media").fetch(self.pin)
+        response = self.client.get(self._media_url("wikipedia_media"))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn('class="media-item', body)
+        self.assertIn("https://upload.wikimedia.org/hrsh.jpg", body)
+
+    def test_images_looked_for_before_the_article_matched_are_looked_for_again(self) -> None:
+        LocationCache.objects.filter(location=self.location, source="wikipedia").delete()
+        LocationCache.set(self.location, "wikipedia_media", {"items": []}, query_key="")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", self._ARTICLE, query_key="")
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True
+        ) as sched:
+            response = self.client.get(self._media_url("wikipedia_media"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(sched.called)

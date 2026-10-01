@@ -1,12 +1,4 @@
-{# Rich include/exclude label picker - the same shared engine                  #}
-{# (ts/shared/label-picker.ts, window.UrbanLensLabelPicker via core.js) as the #}
-{# main map's filter sidebar: click to include, right-click to exclude, drag   #}
-{# chips between the Include/Exclude columns (or out to remove), an AND/OR     #}
-{# combinator, and a formula bar. Driven by initSavedFilterLabelPickers() in   #}
-{# _saved_filter_dialog_scripts.html. Serializes two ways on every change:     #}
-{# the label_groups hidden input (structured groups - what the server          #}
-{# prefers), plus hidden tags/exclude_tags checkbox inputs kept in sync so     #}
-{# the existing flat ModelMultipleChoiceField processing needs no changes.     #}
+{# Rich include/exclude label picker - the same shared engine (ts/shared/label-picker.ts, window.UrbanLensLabelPicker via core.js). #}
 <div class="saved-filter-label-picker sf-rich-label-picker" id="sf-label-picker"
      data-initial-groups="{{ initial_label_groups_json|default:'' }}">
     <input type="hidden" name="label_groups" id="sf-label-groups">

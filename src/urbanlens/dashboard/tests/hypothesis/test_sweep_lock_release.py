@@ -1,24 +1,4 @@
-"""A sweep that outran its TTL must not release the next run's lock.
-
-The beat tasks took their overlap lock with ``cache.add(key, ..., ttl)`` and
-released it with a bare ``cache.delete(key)`` in a ``finally``. That is correct
-only while the run finishes inside its own TTL. When it does not:
-
-1. the lock expires while run A is still working;
-2. the next tick starts run B, which acquires the now-free lock;
-3. run A finishes and deletes the key - which is *B's* lock;
-4. the tick after that acquires immediately and runs alongside B.
-
-Exclusion degrades with every overrun instead of recovering, and the sweeps most
-likely to overrun are the ones where it matters: ``send_due_checkin_reminders``
-sends SMTP inline for every due check-in, so its runtime grows with the data
-while its TTL stays a constant 270s. The notification and the email are both
-sent *before* the status compare-and-set that makes the row stop matching, so two
-genuinely concurrent runs can notify a user twice about one check-in.
-
-The expiry is simulated by deleting the key rather than by sleeping out a real
-TTL - what is under test is the release decision, not Django's cache expiry.
-"""
+"""A sweep that outran its TTL must not release the next run's lock."""
 
 from __future__ import annotations
 
@@ -93,10 +73,12 @@ class SweepLockReleaseTests(SimpleTestCase):
         self.assertIsNotNone(acquire_lock(_KEY, 60), "the block did not release on exit")
 
     def test_the_context_manager_releases_when_the_body_raises(self) -> None:
-        with self.assertRaises(RuntimeError), beat_lock(_KEY, 60) as acquired:
-            self.assertTrue(acquired)
-            raise RuntimeError("sweep blew up")
+        def crashing_sweep() -> None:
+            with beat_lock(_KEY, 60) as acquired:
+                self.assertTrue(acquired)
+                raise RuntimeError("sweep blew up")
 
+        self.assertRaises(RuntimeError, crashing_sweep)
         self.assertIsNotNone(acquire_lock(_KEY, 60), "a crashed sweep left its lock behind")
 
     def test_an_expired_lock_with_no_new_holder_does_not_warn(self) -> None:

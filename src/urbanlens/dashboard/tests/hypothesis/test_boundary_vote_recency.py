@@ -1,17 +1,4 @@
-"""Re-affirming a boundary vote must refresh its recency weight.
-
-`cast_boundary_vote`'s contract: "re-voting updates the row's choice and its
-``updated`` timestamp, refreshing its recency weight - even when the choice is
-unchanged (re-affirming counts)". The tally reads ``updated`` and decays it on
-a half-life, so if the timestamp does not move, a re-affirmed vote keeps
-fading and consensus drifts toward whoever voted most recently *by accident*.
-
-The mechanism is not obvious: ``update_or_create`` passes ``update_fields``
-when saving an existing row, and Django only refreshes an ``auto_now`` field
-when that field is included. This test pins the *behaviour* rather than the
-implementation, so a Django upgrade that changes the rule fails here instead
-of silently skewing every boundary consensus.
-"""
+"""Re-affirming a boundary vote must refresh its recency weight."""
 
 from __future__ import annotations
 
@@ -56,7 +43,7 @@ class BoundaryVoteRecencyTests(TestCase):
             profile=None,
             source=BoundarySource.REDATA.value,
             boundary_type=BoundaryType.PROPERTY,
-            generated_polygon=MultiPolygon(Polygon(((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))),
+            generated_polygon=MultiPolygon(Polygon(((0, 0), (0, 0.001), (0.001, 0.001), (0.001, 0), (0, 0)))),
         )
 
         vote = cast_boundary_vote(place, self.profile, boundary.pk)
@@ -71,4 +58,8 @@ class BoundaryVoteRecencyTests(TestCase):
             stale,
             "re-affirming did not refresh `updated` - the vote keeps decaying, contradicting cast_boundary_vote's documented contract",
         )
-        self.assertEqual(BoundaryVote.objects.filter(place=place, profile=self.profile).count(), 1, "re-voting must update the row, never add a second")
+        self.assertEqual(
+            BoundaryVote.objects.filter(place=place, profile=self.profile).count(),
+            1,
+            "re-voting must update the row, never add a second",
+        )

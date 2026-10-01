@@ -1,11 +1,5 @@
-"""Tests for geographic include/exclude region filtering.
+"""Tests for geographic include/exclude region filtering."""
 
-Covers three layers:
-
-- ``services.geo.geo.dissolve_polygons`` - the merge-overlapping-polygons helper.
-- ``Pin.objects.filter_by_criteria``'s ``include_regions``/``exclude_regions`` handling.
-- ``services.search.filter_criteria``'s (de)serialization round-trip for regions.
-"""
 from __future__ import annotations
 
 from unittest import mock
@@ -17,7 +11,6 @@ from model_bakery import baker
 
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
@@ -66,6 +59,19 @@ class DissolvePolygonsTests(SimpleTestCase):
         self.assertTrue(result.contains(a.centroid))
         self.assertTrue(result.contains(b.centroid))
 
+    def test_overlapping_polygons_keep_their_shared_area(self) -> None:
+        a = _square(-74.0, 40.0, 0.01)
+        b = _square(-73.99, 40.01, 0.01)
+        result = dissolve_polygons([a, b])
+        self.assertAlmostEqual(result.area, a.union(b).area)
+
+    def test_a_polygon_inside_another_leaves_no_hole(self) -> None:
+        outer = _square(-74.0, 40.0, 0.01)
+        inner = _square(-74.0, 40.0, 0.002)
+        result = dissolve_polygons([outer, inner])
+        self.assertAlmostEqual(result.area, outer.area)
+        self.assertTrue(result.contains(inner.centroid))
+
     def test_chained_overlaps_fully_merge(self) -> None:
         """A overlaps B, B overlaps C, A does not overlap C - all three must still merge into one."""
         a = _square(-74.00, 40.0, 0.006)
@@ -80,11 +86,27 @@ class DissolvePolygonsTests(SimpleTestCase):
         # than independently-computed center+delta arithmetic, which can drift
         # by float rounding and turn an intended shared edge into a hairline
         # gap or overlap.
-        a = Polygon(((-74.005, 39.995), (-73.995, 39.995), (-73.995, 40.005), (-74.005, 40.005), (-74.005, 39.995)), srid=4326)
-        b = Polygon(((-73.995, 39.995), (-73.985, 39.995), (-73.985, 40.005), (-73.995, 40.005), (-73.995, 39.995)), srid=4326)
+        a = Polygon(
+            ((-74.005, 39.995), (-73.995, 39.995), (-73.995, 40.005), (-74.005, 40.005), (-74.005, 39.995)), srid=4326
+        )
+        b = Polygon(
+            ((-73.995, 39.995), (-73.985, 39.995), (-73.985, 40.005), (-73.995, 40.005), (-73.995, 39.995)), srid=4326
+        )
         self.assertTrue(a.touches(b))
         result = dissolve_polygons([a, b])
         self.assertEqual(len(result), 1)
+
+    def test_a_self_intersecting_polygon_dissolves_instead_of_raising(self) -> None:
+        """A bowtie drawn next to a disjoint square: GEOS refuses to union invalid input."""
+        bowtie = Polygon(((-74.0, 40.0), (-73.99, 40.01), (-73.99, 40.0), (-74.0, 40.01), (-74.0, 40.0)), srid=4326)
+        square = _square(-70.0, 45.0, 0.001)
+        self.assertFalse(bowtie.valid)
+
+        result = dissolve_polygons([bowtie, square])
+
+        self.assertTrue(result.valid)
+        self.assertTrue(result.covers(square))
+        self.assertAlmostEqual(result.area, bowtie.make_valid().area + square.area)
 
 
 class FilterByCriteriaRegionTests(TestCase):
@@ -105,12 +127,16 @@ class FilterByCriteriaRegionTests(TestCase):
         return Pin.objects.filter(profile=self.profile)
 
     def test_include_regions_keeps_only_pins_inside(self) -> None:
-        result_ids = set(self._base_qs().filter_by_criteria({"include_regions": self.region}).values_list("pk", flat=True))
+        result_ids = set(
+            self._base_qs().filter_by_criteria({"include_regions": self.region}).values_list("pk", flat=True)
+        )
         self.assertIn(self.inside_pin.pk, result_ids)
         self.assertNotIn(self.outside_pin.pk, result_ids)
 
     def test_exclude_regions_drops_pins_inside(self) -> None:
-        result_ids = set(self._base_qs().filter_by_criteria({"exclude_regions": self.region}).values_list("pk", flat=True))
+        result_ids = set(
+            self._base_qs().filter_by_criteria({"exclude_regions": self.region}).values_list("pk", flat=True)
+        )
         self.assertNotIn(self.inside_pin.pk, result_ids)
         self.assertIn(self.outside_pin.pk, result_ids)
 
@@ -130,7 +156,9 @@ class FilterByCriteriaRegionTests(TestCase):
         pin_near_edge = baker.make(Pin, profile=self.profile, location=near_edge_location)
 
         result_ids = set(
-            self._base_qs().filter_by_criteria({"include_regions": self.region, "exclude_regions": hole}).values_list("pk", flat=True),
+            self._base_qs()
+            .filter_by_criteria({"include_regions": self.region, "exclude_regions": hole})
+            .values_list("pk", flat=True),
         )
         self.assertNotIn(pin_in_hole.pk, result_ids)
         self.assertIn(pin_near_edge.pk, result_ids)
@@ -167,10 +195,8 @@ class FilterCriteriaRegionSerializationTests(TestCase):
 class FiltersTabViewRenderingTests(TestCase):
     """Smoke tests that the new Filters tab and region-search views actually render.
 
-    Template-syntax checks alone (get_template) don't catch context bugs like
-    a bad attribute lookup or a missing context var - these hit the real
-    views end-to-end with a logged-in client.
-    """
+    Template-syntax checks alone (get_template) don't catch context bugs like a bad attribute lookup or a
+    missing context var - these hit the real views end-to-end with a logged-in client."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -200,10 +226,15 @@ class FiltersTabViewRenderingTests(TestCase):
 
     def test_region_search_returns_polygonal_results_only(self) -> None:
         fake_results = [
-            {"display_name": "Albany, NY, USA", "geojson": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]}},
+            {
+                "display_name": "Albany, NY, USA",
+                "geojson": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+            },
             {"display_name": "123 Main St", "geojson": {"type": "Point", "coordinates": [0, 0]}},
         ]
-        with mock.patch("urbanlens.dashboard.controllers.region_search.NominatimGateway.search", return_value=fake_results):
+        with mock.patch(
+            "urbanlens.dashboard.controllers.region_search.NominatimGateway.search", return_value=fake_results
+        ):
             response = self.client.get(reverse("region_search.search"), {"q": "Albany, NY"})
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -222,12 +253,7 @@ class FiltersTabViewRenderingTests(TestCase):
 
 
 class SavedFilterLabelPickerTests(TestCase):
-    """The Filters-tab include/exclude label pickers are a search-driven chip
-    picker (see _saved_filter_label_picker.html + initSavedFilterLabelPickers in
-    _saved_filter_dialog_scripts.html), reusing the same .apdlg-* markup/CSS as
-    the main map's add-pin/bulk-edit label pickers. The server only renders a
-    hidden data-id/data-selected catalog for the client-side JS to build chips
-    and hidden checkboxes from - confirm that catalog carries the right state."""
+    """The Filters-tab include/exclude label pickers are a search-driven chip picker (see _saved_filter_label_picker.html + initLabelPicker in frontend/ts/shared/saved-filter-form.ts), reusing the same .apdlg-* markup/CSS as the main map's add-pin/bulk-edit label pickers. The server only renders a hidden data-id/data-selected catalog for the client-side JS to build chips and hidden checkboxes from - confirm that catalog carries the right state."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

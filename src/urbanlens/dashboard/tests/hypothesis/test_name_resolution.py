@@ -1,17 +1,12 @@
-"""Tests for plugin-driven place-name resolution.
-
-Covers the address-derived quality gate, the rule-based resolver (agreement >
-priority > arrival order), the plugin-fed candidate pipeline, and the
-"current name always has an alias row" invariant on Pin and Wiki saves.
-"""
+"""Tests for plugin-driven place-name resolution."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -22,6 +17,7 @@ from urbanlens.dashboard.services.locations.name_resolution import (
     RuleBasedNameResolver,
     default_name_resolver,
 )
+from urbanlens.dashboard.services.locations.name_tiers import NameTier
 from urbanlens.dashboard.services.locations.naming import (
     external_name_candidates_for_location,
     is_address_derived_name,
@@ -69,7 +65,12 @@ class IsAddressDerivedNameTests(SimpleTestCase):
     """Street/city/state fragments must not be promoted to official names."""
 
     def test_street_name_reported_as_place_name_is_rejected(self) -> None:
-        loc = _location(street_number="2663", route="Westwood Northern Blvd", locality="Cincinnati", administrative_area_level_1="OH")
+        loc = _location(
+            street_number="2663",
+            route="Westwood Northern Blvd",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
+        )
         self.assertTrue(is_address_derived_name("Westwood Northern Blvd", loc))
 
     def test_city_reported_as_place_name_is_rejected(self) -> None:
@@ -108,9 +109,16 @@ class IsAddressDerivedNameTests(SimpleTestCase):
     )
     @_hyp
     def test_case_and_punctuation_noise_does_not_change_verdicts(self, transform, pad: str) -> None:
-        reject_loc = _location(street_number="2663", route="Westwood Northern Blvd", locality="Cincinnati", administrative_area_level_1="OH")
+        reject_loc = _location(
+            street_number="2663",
+            route="Westwood Northern Blvd",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
+        )
         self.assertTrue(is_address_derived_name(transform("Westwood Northern Blvd") + pad, reject_loc))
-        keep_loc = _location(street_number="1", route="Kenwood Road", locality="Albany", administrative_area_level_1="NY")
+        keep_loc = _location(
+            street_number="1", route="Kenwood Road", locality="Albany", administrative_area_level_1="NY"
+        )
         self.assertFalse(is_address_derived_name(transform("Kenwood") + pad, keep_loc))
 
 
@@ -132,7 +140,9 @@ class IsAddressDerivedNameFuzzyVariantsTests(SimpleTestCase):
         self.assertTrue(is_address_derived_name("1030-1060 Main St, Amsterdam, NY", self._amsterdam_location()))
 
     def test_full_street_suffix_and_full_state_name_and_zip(self) -> None:
-        self.assertTrue(is_address_derived_name("1049 Main Street, Amsterdam, New York, 12010", self._amsterdam_location()))
+        self.assertTrue(
+            is_address_derived_name("1049 Main Street, Amsterdam, New York, 12010", self._amsterdam_location())
+        )
 
     def test_house_number_far_outside_tolerance_is_not_matched(self) -> None:
         """A house number too far off to plausibly be the same building/block must still be kept."""
@@ -157,10 +167,7 @@ class IsAddressDerivedNameFuzzyVariantsTests(SimpleTestCase):
         self.assertTrue(is_address_derived_name("Miller Road", loc))
 
     def test_kenwood_still_kept_even_with_a_ranged_or_fuzzy_number(self) -> None:
-        """Regression guard: the new house-number tolerance path must not
-        accidentally reopen the "place the street was named after" exception -
-        Kenwood carries no street-type word, so it's rejected before house
-        numbers are even considered."""
+        """Regression guard: the new house-number tolerance path must not accidentally reopen the "place the street was named after" exception - Kenwood carries no street-type word, so it's rejected before house numbers are even considered."""
         loc = _location(street_number="1", route="Kenwood Road", locality="Albany", administrative_area_level_1="NY")
         self.assertFalse(is_address_derived_name("1 Kenwood", loc))
 
@@ -261,7 +268,11 @@ class DefaultNameResolverChildPinOverrideTests(TestCase):
     def test_no_override_for_a_root_pins_location(self) -> None:
         location = self._make_location_with_pin(parent_pin=None)
         resolver = default_name_resolver(location=location)
-        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        candidates = [
+            NameCandidate(name="Agreed", source="wikipedia"),
+            NameCandidate(name="AGREED!", source="nps"),
+            NameCandidate(name="REData", source="redata_building"),
+        ]
         self.assertEqual(resolver.resolve(candidates, location).name, "Agreed")
 
     def test_override_for_a_child_pins_location(self) -> None:
@@ -270,12 +281,20 @@ class DefaultNameResolverChildPinOverrideTests(TestCase):
         parent = baker.make(Pin, profile=profile, location=parent_location, parent_pin=None)
         location = self._make_location_with_pin(parent_pin=parent)
         resolver = default_name_resolver(location=location)
-        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        candidates = [
+            NameCandidate(name="Agreed", source="wikipedia"),
+            NameCandidate(name="AGREED!", source="nps"),
+            NameCandidate(name="REData", source="redata_building"),
+        ]
         self.assertEqual(resolver.resolve(candidates, location).name, "REData")
 
     def test_no_location_given_is_a_no_op(self) -> None:
         resolver = default_name_resolver()
-        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        candidates = [
+            NameCandidate(name="Agreed", source="wikipedia"),
+            NameCandidate(name="AGREED!", source="nps"),
+            NameCandidate(name="REData", source="redata_building"),
+        ]
         self.assertEqual(resolver.resolve(candidates, _location()).name, "Agreed")
 
     def test_unsaved_location_is_a_no_op(self) -> None:
@@ -308,7 +327,7 @@ class ExternalNameCandidatesTests(TestCase):
         loc = baker.make(Location, latitude="41.100000", longitude="-73.100000")
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
             candidates = external_name_candidates_for_location(loc)
-        self.assertEqual(candidates, [NameCandidate(name="Old Mill", source="wikipedia")])
+        self.assertEqual(candidates, [NameCandidate(name="Old Mill", source="wikipedia", tier=NameTier.ENCYCLOPEDIA)])
 
     def test_address_derived_candidates_are_filtered(self) -> None:
         loc = baker.make(
@@ -320,7 +339,9 @@ class ExternalNameCandidatesTests(TestCase):
             locality="Cincinnati",
             administrative_area_level_1="OH",
         )
-        with _patch_providers(_StaticProvider("google_places", ["Westwood Northern Blvd", "Cincinnati", "Real Museum"])):
+        with _patch_providers(
+            _StaticProvider("google_places", ["Westwood Northern Blvd", "Cincinnati", "Real Museum"])
+        ):
             candidates = external_name_candidates_for_location(loc)
         self.assertEqual([candidate.name for candidate in candidates], ["Real Museum"])
 
@@ -328,7 +349,7 @@ class ExternalNameCandidatesTests(TestCase):
         loc = baker.make(Location, latitude="41.110000", longitude="-73.110000")
         with _patch_providers(_StaticProvider("wikipedia", ["Dropped Pin", None, "Old Mill", "old-MILL"])):
             candidates = external_name_candidates_for_location(loc)
-        self.assertEqual(candidates, [NameCandidate(name="Old Mill", source="wikipedia")])
+        self.assertEqual(candidates, [NameCandidate(name="Old Mill", source="wikipedia", tier=NameTier.ENCYCLOPEDIA)])
 
     def test_broken_provider_is_isolated(self) -> None:
         loc = baker.make(Location, latitude="41.120000", longitude="-73.120000")
@@ -337,7 +358,7 @@ class ExternalNameCandidatesTests(TestCase):
             self.assertLogs("urbanlens.dashboard.services.locations.naming", level="ERROR"),
         ):
             candidates = external_name_candidates_for_location(loc)
-        self.assertEqual(candidates, [NameCandidate(name="Park Name", source="nps")])
+        self.assertEqual(candidates, [NameCandidate(name="Park Name", source="nps", tier=NameTier.SITE)])
 
     def test_extra_candidates_come_before_plugin_candidates(self) -> None:
         loc = baker.make(Location, latitude="41.130000", longitude="-73.130000")
@@ -362,26 +383,32 @@ class UpdateLocationNameResolutionTests(TestCase):
         self.assertEqual(alias.kind, "official")
         self.assertEqual(alias.source, "wikipedia")
 
-    def test_pin_at_the_location_also_receives_an_official_alias(self) -> None:
-        """Regression guard: name providers used to populate WikiAlias only,
-        never PinAlias, despite update_location_name_from_external_sources'
-        own docstring claiming otherwise for both."""
+    def test_the_acting_accounts_pin_also_receives_an_official_alias(self) -> None:
         loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.201000", lng="-73.201000")
         pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
-            self.assertTrue(update_location_name_from_external_sources(loc))
+            self.assertTrue(update_location_name_from_external_sources(loc, profile=pin.profile))
         alias = pin.aliases.get(name="Old Mill")
         self.assertEqual(alias.kind, "official")
         self.assertEqual(alias.source, "wikipedia")
 
-    def test_every_pin_at_a_shared_location_gets_the_alias(self) -> None:
-        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.202000", lng="-73.202000")
-        pin_a: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
-        pin_b: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+    def test_another_accounts_pin_at_a_shared_location_is_left_alone(self) -> None:
+        loc, wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.202000", lng="-73.202000")
+        mine: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+        theirs: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+        with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
+            update_location_name_from_external_sources(loc, profile=mine.profile)
+        self.assertTrue(mine.aliases.filter(name="Old Mill").exists())
+        self.assertTrue(wiki.aliases.filter(name="Old Mill").exists())
+        self.assertFalse(theirs.aliases.exists())
+
+    def test_a_refresh_nobody_triggered_writes_no_pin(self) -> None:
+        loc, wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.202500", lng="-73.202500")
+        pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
             update_location_name_from_external_sources(loc)
-        self.assertTrue(pin_a.aliases.filter(name="Old Mill").exists())
-        self.assertTrue(pin_b.aliases.filter(name="Old Mill").exists())
+        self.assertTrue(wiki.aliases.filter(name="Old Mill").exists())
+        self.assertFalse(pin.aliases.exists())
 
     def test_no_pins_at_the_location_is_not_an_error(self) -> None:
         loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.203000", lng="-73.203000")
@@ -397,7 +424,7 @@ class UpdateLocationNameResolutionTests(TestCase):
         pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
         PinAlias.objects.create(pin=pin, name="Old Mill", kind=AliasType.NICKNAME, source="user")
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
-            update_location_name_from_external_sources(loc)
+            update_location_name_from_external_sources(loc, profile=pin.profile)
         alias = pin.aliases.get(name="Old Mill")
         self.assertEqual(alias.kind, "nickname")
         self.assertEqual(alias.source, "user")
@@ -413,18 +440,32 @@ class UpdateLocationNameResolutionTests(TestCase):
         loc.refresh_from_db()
         self.assertEqual(loc.official_name, "Agreed Hall")
 
-    def test_admin_priority_orders_lone_sources(self) -> None:
+    def test_admin_priority_orders_lone_sources_of_one_tier(self) -> None:
+        settings = SiteSettings.get_current()
+        settings.default_name_source_priority = "epa_echo,azure_maps"
+        settings.save(update_fields=["default_name_source_priority", "updated"])
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.220000", lng="-73.220000")
+        with _patch_providers(
+            _StaticProvider("azure_maps", ["Map Name"]),
+            _StaticProvider("epa_echo", ["Facility Name"]),
+        ):
+            update_location_name_from_external_sources(loc)
+        loc.refresh_from_db()
+        self.assertEqual(loc.official_name, "Facility Name")
+
+    def test_a_better_tier_outranks_admin_priority(self) -> None:
+        """Admin priority orders sources within a tier; it cannot put a park unit over the matched article."""
         settings = SiteSettings.get_current()
         settings.default_name_source_priority = "nps,wikipedia"
         settings.save(update_fields=["default_name_source_priority", "updated"])
-        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.220000", lng="-73.220000")
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.225000", lng="-73.225000")
         with _patch_providers(
             _StaticProvider("wikipedia", ["Wiki Name"]),
             _StaticProvider("nps", ["Park Name"]),
         ):
             update_location_name_from_external_sources(loc)
         loc.refresh_from_db()
-        self.assertEqual(loc.official_name, "Park Name")
+        self.assertEqual(loc.official_name, "Wiki Name")
 
     def test_google_places_is_dropped_when_another_source_has_a_candidate(self) -> None:
         """Google Places is demoted to fallback-only: any other source's candidate wins outright."""
@@ -491,7 +532,7 @@ class PinNameAliasInvariantTests(TestCase):
 
 class NameSourcePriorityPickerRenderTests(TestCase):
     """The site-admin picker is the only one left - users can no longer override
-    name-source priority themselves, see naming.py's _FALLBACK_ONLY_SOURCES and
+    name-source priority themselves, see naming.py's FALLBACK_ONLY_NAME_SOURCES and
     default_name_resolver's docstring."""
 
     def test_settings_page_no_longer_renders_a_user_priority_picker(self) -> None:

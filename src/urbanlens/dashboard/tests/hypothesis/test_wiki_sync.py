@@ -10,6 +10,7 @@ from __future__ import annotations
 import itertools
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
 
@@ -104,7 +105,9 @@ class RatingSyncTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             review.rating = 5
             review.save()
-        self.assertEqual(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="rating").count(), 1)
+        self.assertEqual(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="rating").count(), 1
+        )
         self.assertEqual(WikiStatVote.objects.get(wiki=self.pin.wiki, profile=self.profile, field="rating").value, 5)
 
     def test_deleting_a_review_removes_the_vote(self) -> None:
@@ -154,7 +157,9 @@ class PinStatSyncTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.save(update_fields=["danger", "updated"])
         self.assertTrue(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="danger").exists())
-        self.assertFalse(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists())
+        self.assertFalse(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists()
+        )
 
     def test_per_field_opt_out_is_independent(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(sync_danger_to_wiki=False)
@@ -164,19 +169,25 @@ class PinStatSyncTests(TestCase):
         self.pin.danger = 5
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.save(update_fields=["priority", "danger", "updated"])
-        self.assertTrue(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists())
+        self.assertTrue(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists()
+        )
         self.assertFalse(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="danger").exists())
 
     def test_dropping_a_value_to_zero_clears_the_vote(self) -> None:
         self.pin.priority = 3
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.save(update_fields=["priority", "updated"])
-        self.assertTrue(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists())
+        self.assertTrue(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists()
+        )
 
         self.pin.priority = 0
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.save(update_fields=["priority", "updated"])
-        self.assertFalse(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists())
+        self.assertFalse(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists()
+        )
 
     def test_no_wiki_means_no_vote_and_no_crash(self) -> None:
         location = baker.make(Location, latitude=42.0, longitude=-76.0)
@@ -259,8 +270,16 @@ class PinAliasToWikiSyncTests(TestCase):
         self.assertFalse(WikiAlias.objects.filter(name="No Wiki Yet").exists())
 
 
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
 class WikiAliasToPinSyncTests(TestCase):
-    """A newly-added wiki alias mirrors onto every opted-in profile's pin at that location."""
+    """A newly-added wiki alias mirrors onto every opted-in profile's pin at that location.
+
+    The mirror runs in a Celery task now (one wiki alias used to write a row
+    into every other profile's pin at that location, synchronously in the
+    request). `captureOnCommitCallbacks` only gets as far as enqueueing it, so
+    without eager execution the positive assertions fail - and, less obviously,
+    the negative ones pass for the wrong reason, since nothing runs either way.
+    """
 
     def setUp(self) -> None:
         self.owner_user = baker.make(User)
@@ -401,13 +420,7 @@ class SettingsViewWikiSyncSectionTests(TestCase):
 
 
 class MediaCacheInvalidationOnNewAliasTests(TestCase):
-    """A new pin/wiki alias may surface a name-quality-dependent match (a
-    Wikipedia article, or images on one) that couldn't be found under the
-    previous name set - "Wikipedia article
-    images not reliably reaching Media section" entry. A genuinely new alias
-    should clear the location's Wikipedia/Wikimedia LocationCache rows so the
-    next panel view does a fresh lookup; renaming an existing alias should not.
-    """
+    """A new pin/wiki alias may surface a name-quality-dependent match (a Wikipedia article, or images on one) that couldn't be found under the previous name set - "Wikipedia article images not reliably reaching Media section" entry. A genuinely new alias should clear the location's Wikipedia/Wikimedia LocationCache rows so the next panel view does a fresh lookup; renaming an existing alias should not."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -416,7 +429,9 @@ class MediaCacheInvalidationOnNewAliasTests(TestCase):
 
     def _seed_cache(self) -> None:
         for source in ("wikipedia", "wikimedia", "wikipedia_media", "nominatim"):
-            LocationCache.objects.update_or_create(location=self.pin.location, source=source, defaults={"data": {"stub": True}})
+            LocationCache.objects.update_or_create(
+                location=self.pin.location, source=source, defaults={"data": {"stub": True}}
+            )
 
     def _cached_sources(self) -> set[str]:
         return set(LocationCache.objects.filter(location=self.pin.location).values_list("source", flat=True))
@@ -443,6 +458,20 @@ class MediaCacheInvalidationOnNewAliasTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             WikiAlias.objects.create(wiki=self.pin.wiki, name="New Wiki Alias")
         self.assertEqual(self._cached_sources(), {"nominatim"})
+
+    def test_a_new_alias_keeps_a_matched_wikipedia_article_and_its_images(self) -> None:
+        """A match is not improved by another name - the lookup takes the first nearby article that fits."""
+        location = self.pin.location
+        LocationCache.objects.create(location=location, source="wikipedia", data={"title": "Old Mill", "url": "u"})
+        LocationCache.objects.create(
+            location=location, source="wikipedia_media", data={"items": []}, query_key="Old Mill"
+        )
+        LocationCache.objects.create(location=location, source="wikimedia", data={"items": []})
+
+        with self.captureOnCommitCallbacks(execute=True):
+            WikiAlias.objects.create(wiki=self.pin.wiki, name="Old Mill")
+
+        self.assertEqual(self._cached_sources(), {"wikipedia", "wikipedia_media"})
 
     def test_new_pin_alias_with_no_cached_data_yet_does_not_crash(self) -> None:
         location = baker.make(Location, latitude=44.0, longitude=-78.0)

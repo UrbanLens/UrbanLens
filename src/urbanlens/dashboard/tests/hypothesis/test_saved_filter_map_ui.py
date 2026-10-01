@@ -1,34 +1,8 @@
-"""Regression coverage for the main map's saved-filter sidebar/toolbar UI bugs.
-
-Covers two bugs reported against the filters sidebar's "Saved Filters"
-section: clicking a chip merged in structured ``label_groups`` criteria
-(from the map's own formula bar) but silently ignored the flat
-``tags``/``exclude_tags`` shape a filter saved via the Filters tab's simple
-include/exclude picker actually uses (that dialog has no formula-bar UI, so
-every label-only filter created there stored *only* ``tags``/``exclude_tags``)
-- for such a filter, clicking the chip merged nothing at all and looked like
-a dead click. It also never gave the clicked chip any visual "applied" state.
-
-Both fixes live in inline ``<script>`` markup inside
-``dashboard/pages/map/index.html`` (``applySavedFilter()``), which has no
-dedicated JS test runner in this project, so these tests instead assert
-against the rendered page source - a lightweight guard against the specific
-fix regressing, not a full behavioral test of the browser-side merge logic.
-
-Also covers the ``#filter-form`` race: sliders, the debounced name/custom-
-field inputs, and the saved-filters toolbar's manual ``htmx.trigger(form,
-'change')`` calls are all independent triggers hitting the same
-``hx-target="#map-body"`` with no ``hx-sync`` - out-of-order responses could
-silently overwrite a just-applied toolbar filter's result with a stale one
-from an earlier in-flight request, exactly matching the reported "clicking a
-toolbar filter causes no changes" symptom when sidebar filters were already
-active. ``hx-sync="this:replace"`` makes htmx cancel/replace the in-flight
-request instead of racing it.
-"""
+"""Regression coverage for the main map's saved-filter sidebar/toolbar UI bugs."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from django.contrib.auth.models import User
 from model_bakery import baker
@@ -36,6 +10,8 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 
 _MAP_URL = "/dashboard/map/"
+#: The map page's program ships as a bundle, not inline in the page.
+_MAP_PAGE_TS = Path(__file__).resolve().parents[2] / "frontend" / "ts" / "entries" / "map-page.ts"
 
 
 class SavedFilterMapUiTests(TestCase):
@@ -52,8 +28,7 @@ class SavedFilterMapUiTests(TestCase):
         self.assertIn('hx-sync="this:replace"', content)
 
     def test_apply_saved_filter_merges_flat_tags_not_just_label_groups(self) -> None:
-        resp = self.client.get(_MAP_URL)
-        content = resp.content.decode()
+        content = _MAP_PAGE_TS.read_text(encoding="utf-8")
         # The label_groups branch must stay - it's still the primary path for
         # filters saved from the map's own formula bar.
         self.assertIn("Array.isArray(criteria.label_groups)", content)
@@ -61,9 +36,8 @@ class SavedFilterMapUiTests(TestCase):
         self.assertIn("Array.isArray(criteria.tags) && criteria.tags.length", content)
 
     def test_apply_saved_filter_marks_the_clicked_chip_as_active(self) -> None:
-        resp = self.client.get(_MAP_URL)
-        content = resp.content.decode()
-        self.assertIn("fp-saved-filter-apply--active", content)
+        content = _MAP_PAGE_TS.read_text(encoding="utf-8")
+        self.assertIn('chipEl.classList.add("fp-saved-filter-apply--active")', content)
         # resetFilters() must clear it again so a fresh panel doesn't show a
         # stale "applied" chip from a previous session's filter state.
-        self.assertIn("querySelectorAll('.fp-saved-filter-apply--active')", content)
+        self.assertIn('querySelectorAll(".fp-saved-filter-apply--active")', content)

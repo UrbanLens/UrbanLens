@@ -1,0 +1,55 @@
+{% comment %}Floating actions toolbar for pin/wiki hierarchy. Collapsed state is remembered per user.{% endcomment %}
+{% if has_children or parent_url or show_article_actions %}
+<div class="pin-actions-fab map-buttons" id="pin-actions-fab" data-user="{{ request.user.pk }}">
+    <button type="button" class="map-toolbar-collapse" id="pin-actions-collapse" title="Collapse actions" aria-label="Collapse actions">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+    <div class="map-buttons-content pin-actions-menu" id="pin-actions-menu">
+        <button type="button" class="map-btn-icon" id="pin-actions-undo" disabled
+                title="Undo" data-tooltip="Undo" aria-label="Undo">
+            <i class="material-symbols-outlined">undo</i>
+        </button>
+        {% if show_article_actions %}
+        <button type="button" class="map-btn-icon" data-article-mode-toggle data-article-page-action hidden
+                title="Source" data-tooltip="Source" aria-label="Source">
+            <i class="material-symbols-outlined">code_blocks</i>
+        </button>
+        <button type="button" class="map-btn-icon" data-article-clear data-article-page-action hidden
+                title="Clear article" data-tooltip="Clear article" aria-label="Clear article">
+            <i class="material-symbols-outlined">delete_sweep</i>
+        </button>
+        {% endif %}
+        {% if has_children %}
+        <a class="map-btn-icon{% if include_children %} is-active{% endif %}"
+           href="{{ request.path }}?children={% if include_children %}0{% else %}1{% endif %}"
+           title="Child pin details" data-tooltip="Child pin details {% if include_children %}on{% else %}off{% endif %}" aria-label="Child pin details"
+           aria-pressed="{% if include_children %}true{% else %}false{% endif %}">
+            <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
+        </a>
+        {% endif %}
+        {% if parent_url %}
+        <a class="map-btn-icon" href="{{ parent_url }}" title="{{ parent_item_label|default:'Open parent pin' }}" data-tooltip="{{ parent_item_label|default:'Open parent pin' }}" aria-label="{{ parent_item_label|default:'Open parent pin' }}">
+            <i class="material-symbols-outlined">arrow_upward</i>
+        </a>
+        {% if detach_url %}
+        <button type="button" class="map-btn-icon"
+                title="Detach from parent" data-tooltip="Detach from parent" aria-label="Detach from parent"
+                hx-post="{{ detach_url }}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                hx-confirm="Detach this pin from {{ parent_name }}? It becomes a top-level pin on your main map again."
+                hx-swap="none">
+            <i class="material-symbols-outlined">link_off</i>
+        </button>
+        {% endif %}
+        {% endif %}
+        <button type="button" class="map-btn-icon" id="pin-actions-hidden-sections"
+                title="Hidden sections" data-tooltip="Hidden sections" aria-label="Hidden sections">
+            <i class="material-symbols-outlined">visibility_off</i>
+        </button>
+    </div>
+    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn" hidden title="Actions" aria-label="Actions">
+        <i class="material-symbols-outlined">account_tree</i>
+        <span class="pin-actions-fab-label">Actions</span>
+    </button>
+</div>
+{% endif %}

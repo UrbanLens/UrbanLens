@@ -1,10 +1,4 @@
-{% comment %}
-Georeferenced historical maps covering this pin/wiki's location, from REData -
-HTMX-loaded into #map-overlay-historical-results by the "Browse historical
-maps" button in _map_overlays_list.html. Each Add button POSTs back to the
-same endpoint, which creates a tile overlay and re-renders the whole manage
-dialog body.
-{% endcomment %}
+{% comment %}Georeferenced historical maps covering this pin/wiki's location, from REData.{% endcomment %}
 {% if error %}
 <p class="map-overlay-manage-empty">{{ error }}</p>
 {% elif not maps %}
@@ -15,7 +9,7 @@ dialog body.
     <li class="map-overlay-historical-row">
         {% if map.thumbnail_url %}
         <img class="map-overlay-historical-thumb" src="{{ map.thumbnail_url }}" alt="" loading="lazy"
-             onerror="this.style.display='none'">
+             data-thumb-fallback="map" data-thumb-fallback-class="map-overlay-historical-thumb">
         {% endif %}
         <div class="map-overlay-historical-info">
             <span class="map-overlay-historical-title">

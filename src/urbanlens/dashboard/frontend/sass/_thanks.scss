@@ -18,9 +18,7 @@
         padding: 0 1.5rem;
     }
 
-    // Hero gradient banner now lives in the shared .ul-page-hero component
-    // (_page_hero.scss / partials/ui/_page_hero.html); the --wide modifier
-    // reproduces this page's wider inner column and larger type.
+    // Hero gradient banner now lives in the shared.ul-page-hero component (_page_hero.scss / partials/ui/_page_hero.html).
 
     .attr-section {
         padding: 3.5rem 0;
@@ -332,7 +330,7 @@
             a {
                 color: #{$color-indigo-300};
             }
-            
+
             h3 a,
             a {
                 &:hover {

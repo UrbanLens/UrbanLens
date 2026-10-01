@@ -1,20 +1,4 @@
-"""The anti-enumeration guarantee for the external API's wiki surface.
-
-A wiki is visible only to someone who has pinned the place it describes. That
-rule is worth nothing if the *error* distinguishes the cases: if "no such
-location" and "you haven't pinned this one" look different, a caller can walk
-slugs and learn which places other users care about, which is exactly the
-inference the discovery model exists to prevent.
-
-So these tests assert something stricter than "returns 404": for **every**
-wiki route, including every sub-resource, all three of
-
-1. a ``location_slug`` matching nothing at all,
-2. a real Location with no Wiki, and
-3. a real Wiki the caller has not pinned
-
-must produce a byte-identical response - same status, same body.
-"""
+"""The anti-enumeration guarantee for the external API's wiki surface."""
 
 from __future__ import annotations
 
@@ -36,16 +20,12 @@ BASE = "/dashboard/api/external/v1/wikis"
 def disable_throttling(test_case) -> None:
     """Turn off the external API's rate limits for the duration of *test_case*.
 
-    :data:`WIKI_ROUTES` is walked once per invisibility case over a single
-    credential, which is far past the burst allowance - without this the tail
-    of the list comes back 429 and the visibility gate these tests exist to
-    check never runs at all. Patching the shared base covers the read, write
-    and burst throttles at once. The throttles themselves are covered by
-    ``test_external_api_throttling.py``.
+    :data:`WIKI_ROUTES` is walked once per invisibility case over a single credential, which is far past the
+    burst allowance - without this the tail of the list comes back 429 and the visibility gate these tests exist
+    to check never runs at all.
 
     Args:
-        test_case: The test whose lifetime the patch should follow.
-    """
+        test_case: The test whose lifetime the patch should follow."""
     patcher = mock.patch.object(ExternalApiRateThrottle, "allow_request", return_value=True)
     patcher.start()
     test_case.addCleanup(patcher.stop)
@@ -54,12 +34,8 @@ def disable_throttling(test_case) -> None:
 def grant_wiki_scopes(user) -> None:
     """Add the wiki scopes to *user*'s API keys.
 
-    ``_default_api_key_scopes`` deliberately grants only profile/pins/push to a
-    newly issued PAT - the wiki scopes are opt-in and, until a scope-picker UI
-    exists, reachable only through OAuth2. Without this, every request below
-    would be refused at the permission layer (403) and never reach the
-    visibility gate these tests are actually about.
-    """
+    ``_default_api_key_scopes`` deliberately grants only profile/pins/push to a newly issued PAT - the wiki
+    scopes are opt-in and, until a scope-picker UI exists, reachable only through OAuth2."""
     ApiKey.objects.filter(user=user).update(
         scopes=[
             ApiKeyScope.PROFILE_READ.value,
@@ -69,6 +45,7 @@ def grant_wiki_scopes(user) -> None:
             ApiKeyScope.WIKI_WRITE.value,
         ],
     )
+
 
 #: Every wiki route, as (method, path suffix after the location slug).
 #: Sub-resource ids are arbitrary - resolution must fail at the wiki gate,
@@ -155,7 +132,11 @@ class WikiDiscoveryOracleTests(TestCase):
             # Byte-for-byte, not merely equal-when-parsed.
             bodies = {label: response.content for label, response in responses.items()}
             with self.subTest(method=method, suffix=suffix, check="identical bytes"):
-                self.assertEqual(len(set(bodies.values())), 1, f"Responses differ across cases for {method.upper()} {suffix}: {bodies}")
+                self.assertEqual(
+                    len(set(bodies.values())),
+                    1,
+                    f"Responses differ across cases for {method.upper()} {suffix}: {bodies}",
+                )
 
     def test_the_control_wiki_is_actually_reachable(self) -> None:
         """A pinned place's wiki really does resolve - the 404s above mean something."""
@@ -196,7 +177,9 @@ class WikiCrossScopeIdTests(TestCase):
         baker.make("dashboard.Pin", profile=self.profile, location=self.location_b)
 
         # Resources that belong to wiki B.
-        self.b_edit = baker.make("dashboard.WikiEdit", wiki=self.wiki_b, editor=self.profile, changes={"name": {"from": "x", "to": "y"}})
+        self.b_edit = baker.make(
+            "dashboard.WikiEdit", wiki=self.wiki_b, editor=self.profile, changes={"name": {"from": "x", "to": "y"}}
+        )
         self.b_alias = baker.make("dashboard.WikiAlias", wiki=self.wiki_b, name="B alias")
         self.b_link = baker.make("dashboard.WikiLink", wiki=self.wiki_b, url="https://example.com/b")
         self.b_comment = baker.make("dashboard.Comment", wiki=self.wiki_b, profile=self.profile, text="B comment")

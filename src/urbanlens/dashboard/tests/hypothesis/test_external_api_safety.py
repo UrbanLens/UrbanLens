@@ -1,20 +1,9 @@
-"""Tests for the external API's safety check-in surface.
-
-Safety is the most sensitive domain on this surface: the payloads carry
-emergency-contact addresses, destination plans, and the ability to invite a
-partner into a live check-in. The tests here hold four lines in particular:
-
-* the ``safety:*`` scopes are opt-in and absent from the default key grant, so a
-  key issued today reaches none of this;
-* another profile's check-in is *not found*, never forbidden;
-* the contact-portal ``token`` never appears in any payload;
-* PATCH honors the same field locks as the web autosave, reporting ignored
-  fields as warnings rather than failing the request.
-"""
+"""Tests for the external API's safety check-in surface."""
 
 from __future__ import annotations
 
 import datetime
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -23,8 +12,13 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinStatus
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.models.safety.model import (
+    SafetyCheckin,
+    SafetyCheckinContact,
+    SafetyCheckinPartner,
+    SafetyCheckinStatus,
+)
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.visits.safety import create_checkin, save_contact_defaults
@@ -65,10 +59,11 @@ class _SafetyApiTestCase(TestCase):
         """Retire the setUp check-in so a fresh one can be created.
 
         Must move ``status`` to a terminal value, not just stamp ``resolved_at``:
-        ``SafetyCheckin.objects.active()`` - the queryset enforcing one active
-        check-in per scope - keys off status alone.
-        """
-        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(status=SafetyCheckinStatus.CHECKED_IN, resolved_at=timezone.now())
+        ``SafetyCheckin.objects.active()`` - the queryset enforcing one active check-in per scope - keys off
+        status alone."""
+        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
+            status=SafetyCheckinStatus.CHECKED_IN, resolved_at=timezone.now()
+        )
 
 
 class SafetyScopeTests(_SafetyApiTestCase):
@@ -85,7 +80,9 @@ class SafetyScopeTests(_SafetyApiTestCase):
 
     def test_patch_requires_safety_write(self) -> None:
         ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.SAFETY_READ.value])
-        response = self.client.patch(self.detail_url, {"title": "x"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.detail_url, {"title": "x"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_delete_requires_safety_write(self) -> None:
@@ -98,11 +95,7 @@ class SafetyScopeTests(_SafetyApiTestCase):
     def test_default_api_key_grant_cannot_reach_safety(self) -> None:
         """The security line this whole surface rests on.
 
-        Emergency-contact addresses and partner-invite ability are categorically
-        more sensitive than pins. Every key issued before these endpoints existed
-        must stay unable to reach them - silently widening those grants would be
-        an unconsented privilege escalation, not a convenience.
-        """
+        Emergency-contact addresses and partner-invite ability are categorically more sensitive than pins."""
         _key, raw = generate_api_key(self.user, "Default grant")
         self.assertEqual(self.client.get(self.list_url, **_bearer(raw)).status_code, 403)
         self.assertEqual(self.client.get(self.detail_url, **_bearer(raw)).status_code, 403)
@@ -121,7 +114,9 @@ class SafetyOwnerIsolationTests(_SafetyApiTestCase):
             checkin_by=timezone.now() + datetime.timedelta(hours=3),
             grace_period=datetime.timedelta(hours=1),
         )
-        self.other_url = reverse("external_api:safety.checkins.detail", kwargs={"checkin_slug": self.other_checkin.slug})
+        self.other_url = reverse(
+            "external_api:safety.checkins.detail", kwargs={"checkin_slug": self.other_checkin.slug}
+        )
 
     def test_other_profiles_checkin_is_404_not_403(self) -> None:
         """A 403 would confirm the slug names a real check-in belonging to someone."""
@@ -129,7 +124,9 @@ class SafetyOwnerIsolationTests(_SafetyApiTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_other_profiles_checkin_cannot_be_patched(self) -> None:
-        response = self.client.patch(self.other_url, {"title": "Hijacked"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.other_url, {"title": "Hijacked"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 404)
         self.other_checkin.refresh_from_db()
         self.assertEqual(self.other_checkin.title, "Someone else's trip")
@@ -151,11 +148,8 @@ class SafetyOwnerIsolationTests(_SafetyApiTestCase):
 class SafetyContactTokenExposureTests(_SafetyApiTestCase):
     """The contact-portal token must never leave the server.
 
-    ``SafetyCheckinContact.token`` is the sole credential for the session-free
-    contact portal: holding it means being able to read the check-in, post to its
-    chat, and mark the owner safe. Leaking it to an API key would hand out portal
-    access for every contact.
-    """
+    ``SafetyCheckinContact.token`` is the sole credential for the session-free contact portal: holding it means
+    being able to read the check-in, post to its chat, and mark the owner safe."""
 
     def _assert_no_token_anywhere(self, payload: object) -> None:
         """Recursively assert no token key, and no contact token value, appears."""
@@ -185,7 +179,9 @@ class SafetyContactTokenExposureTests(_SafetyApiTestCase):
         self._assert_no_token_anywhere(self.client.get(self.list_url, **_bearer(self.raw_key)).json())
 
     def test_patch_payload_has_no_contact_token(self) -> None:
-        response = self.client.patch(self.detail_url, {"plan_details": "Updated"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.detail_url, {"plan_details": "Updated"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self._assert_no_token_anywhere(response.json())
 
     def test_contact_defaults_payload_has_no_contact_token(self) -> None:
@@ -410,10 +406,26 @@ class SafetyPartnerTests(_SafetyApiTestCase):
         self.partners_url = reverse("external_api:safety.checkins.partners", kwargs={"checkin_slug": self.checkin.slug})
 
     def _invite(self, username: str):
-        return self.client.post(self.partners_url, {"username": username}, content_type="application/json", **_bearer(self.raw_key))
+        return self.client.post(
+            self.partners_url, {"username": username}, content_type="application/json", **_bearer(self.raw_key)
+        )
 
-    def test_unknown_username_is_400_with_the_services_own_message(self) -> None:
+    def test_unknown_username_is_400(self) -> None:
         response = self._invite("nobody-here")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("No user found", response.json()["error"])
+
+    def test_blocked_invitee_is_400(self) -> None:
+        """Same message and status as an unknown username.
+
+        A block existing between the two profiles must not be distinguishable from the invitee not existing at
+        all - confirming one confirms the other's account is real."""
+        invitee = baker.make(User, username="apartner")
+        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
+        Profile.objects.get_or_create(user=invitee)
+
+        with mock.patch.object(Profile, "are_blocked", return_value=True):
+            response = self._invite("apartner")
         self.assertEqual(response.status_code, 400)
         self.assertIn("No user found", response.json()["error"])
 
@@ -424,6 +436,7 @@ class SafetyPartnerTests(_SafetyApiTestCase):
 
     def test_duplicate_invite_is_400(self) -> None:
         invitee = baker.make(User, username="apartner")
+        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
         Profile.objects.get_or_create(user=invitee)
 
         self.assertEqual(self._invite("apartner").status_code, 200)
@@ -433,6 +446,7 @@ class SafetyPartnerTests(_SafetyApiTestCase):
 
     def test_successful_invite_returns_detail_with_partners(self) -> None:
         invitee = baker.make(User, username="apartner")
+        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
         Profile.objects.get_or_create(user=invitee)
 
         payload = self._invite("apartner").json()
@@ -442,18 +456,25 @@ class SafetyPartnerTests(_SafetyApiTestCase):
 
     def test_partner_removal(self) -> None:
         invitee = baker.make(User, username="apartner")
+        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
         Profile.objects.get_or_create(user=invitee)
         self._invite("apartner")
         partner = SafetyCheckinPartner.objects.get(checkin=self.checkin)
 
-        url = reverse("external_api:safety.checkins.partners.detail", kwargs={"checkin_slug": self.checkin.slug, "partner_id": partner.pk})
+        url = reverse(
+            "external_api:safety.checkins.partners.detail",
+            kwargs={"checkin_slug": self.checkin.slug, "partner_id": partner.pk},
+        )
         response = self.client.delete(url, **_bearer(self.raw_key))
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists())
 
     def test_removing_another_checkins_partner_is_404(self) -> None:
-        url = reverse("external_api:safety.checkins.partners.detail", kwargs={"checkin_slug": self.checkin.slug, "partner_id": 999999})
+        url = reverse(
+            "external_api:safety.checkins.partners.detail",
+            kwargs={"checkin_slug": self.checkin.slug, "partner_id": 999999},
+        )
         self.assertEqual(self.client.delete(url, **_bearer(self.raw_key)).status_code, 404)
 
 
@@ -469,25 +490,29 @@ class SafetyPreferencesApiTests(_SafetyApiTestCase):
         self.assertIsInstance(payload["default_grace_period_seconds"], int)
 
     def test_patch_is_partial(self) -> None:
-        self.client.patch(self.url, {"default_message": "Call me"}, content_type="application/json", **_bearer(self.raw_key))
-        payload = self.client.patch(self.url, {"auto_delete_after_days": 30}, content_type="application/json", **_bearer(self.raw_key)).json()
+        self.client.patch(
+            self.url, {"default_message": "Call me"}, content_type="application/json", **_bearer(self.raw_key)
+        )
+        payload = self.client.patch(
+            self.url, {"auto_delete_after_days": 30}, content_type="application/json", **_bearer(self.raw_key)
+        ).json()
 
         self.assertEqual(payload["default_message"], "Call me")
         self.assertEqual(payload["auto_delete_after_days"], 30)
 
     def test_grace_period_floor_is_enforced(self) -> None:
-        response = self.client.patch(self.url, {"default_grace_period_seconds": 10}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"default_grace_period_seconds": 10}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 400)
 
 
 class SafetyCheckinMapsTests(_SafetyApiTestCase):
     """The check-in maps endpoint answers with the standard paginated envelope.
 
-    Regression coverage for the bare top-level array this endpoint used to answer
-    with - it could never gain a field later without breaking clients, so it was
-    normalized onto ``{count,next,previous,results}`` (see
-    ``docs/notes/mobile_app_notes.md`` Part 7).
-    """
+    Regression coverage for the bare top-level array this endpoint used to answer with - it could never gain a
+    field later without breaking clients, so it was normalized onto ``{count,next,previous,results}`` (see
+    ``docs/notes/mobile_app_notes.md`` Part 7)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -533,7 +558,9 @@ class SafetyCheckinMapsTests(_SafetyApiTestCase):
 
         own_map = MarkupMap.objects.create(profile=self.profile, title="Mine")
 
-        response = self.client.post(self.maps_url, {"map_uuid": str(own_map.uuid)}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            self.maps_url, {"map_uuid": str(own_map.uuid)}, content_type="application/json", **_bearer(self.raw_key)
+        )
 
         self.assertEqual(response.status_code, 200)
         body = response.json()

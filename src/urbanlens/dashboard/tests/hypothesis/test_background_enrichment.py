@@ -1,12 +1,4 @@
-"""Scheduled background enrichment: budget math, run window, prioritization, and the cycle.
-
-Covers services.locations.enrichment end to end with the network fully mocked:
-compute_service_budget must honor the admin buffer and pace multi-day limits
-evenly (the "300 calls per 30 days, 6 used today -> enrich 3 more" contract),
-enrichment_window_open must respect the admin's UTC window including midnight
-wrap, prioritized_location_candidates must rank high-impact locations first,
-and run_enrichment_cycle must respect budgets, caps, and per-source isolation.
-"""
+"""Scheduled background enrichment: budget math, run window, prioritization, and the cycle."""
 
 from __future__ import annotations
 
@@ -14,10 +6,11 @@ from datetime import UTC, datetime, timedelta
 import math
 from unittest.mock import patch
 
+from celery.exceptions import SoftTimeLimitExceeded
 from django.db.models import Q
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
@@ -28,15 +21,19 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import (
+    AddressEnrichmentSource,
     EnrichmentSource,
     compute_service_budget,
     enrichment_sources,
     enrichment_window_open,
     prioritized_location_candidates,
+    refresh_official_names,
     run_enrichment_cycle,
+    self_reported_skip,
     stagger_seconds,
 )
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
@@ -67,6 +64,12 @@ class EnrichmentWindowTests(SimpleTestCase):
         self.assertTrue(enrichment_window_open(site_settings, now=datetime(2026, 7, 16, 23, 0, tzinfo=UTC)))
         self.assertTrue(enrichment_window_open(site_settings, now=datetime(2026, 7, 16, 2, 0, tzinfo=UTC)))
         self.assertFalse(enrichment_window_open(site_settings, now=datetime(2026, 7, 16, 12, 0, tzinfo=UTC)))
+        # Pin the exact edges: start is inclusive, end is exclusive. An off-by-one
+        # (`> start`/`<= end`) would still pass the hours above but fail here.
+        self.assertTrue(enrichment_window_open(site_settings, now=datetime(2026, 7, 16, 22, 0, tzinfo=UTC)))
+        self.assertFalse(enrichment_window_open(site_settings, now=datetime(2026, 7, 16, 21, 0, tzinfo=UTC)))
+        self.assertTrue(enrichment_window_open(site_settings, now=datetime(2026, 7, 16, 3, 0, tzinfo=UTC)))
+        self.assertFalse(enrichment_window_open(site_settings, now=datetime(2026, 7, 16, 4, 0, tzinfo=UTC)))
 
 
 class ComputeServiceBudgetTests(TestCase):
@@ -114,10 +117,38 @@ class ComputeServiceBudgetTests(TestCase):
         self.assertIsNone(compute_service_budget("svc_free"))
 
     def test_geo_filtered_calls_do_not_count(self) -> None:
+        # success=True here isolates was_geo_filtered as the reason for exclusion -
+        # billable() does not key off success at all (see test below).
         self._limit("svc_geo", calls_per_day=100)
         for _ in range(30):
-            ApiCallLog.objects.create(service="svc_geo", success=False, was_geo_filtered=True)
+            ApiCallLog.objects.create(service="svc_geo", success=True, was_geo_filtered=True)
         self.assertEqual(compute_service_budget("svc_geo"), 90)
+
+    def test_daily_and_thirty_day_limits_combine_via_minimum(self) -> None:
+        """When a service configures both windows, the tighter one binds."""
+        self._limit("svc_both", calls_per_day=50, calls_per_30_days=300)
+        self._log_calls("svc_both", 6)
+        # Daily window: floor(50*0.9) - 6 = 39. Thirty-day pacing: floor(300*0.9)//30 - 6 = 3.
+        # The overall budget must be the minimum across both windows, not just the daily one.
+        self.assertEqual(compute_service_budget("svc_both"), 3)
+
+    def test_failed_but_not_geo_filtered_calls_still_count(self) -> None:
+        """A call that went out and failed remotely still spent quota - only calls the
+        limiter itself skipped (geo-filtered/rate-limited/service-disabled) are excluded."""
+        self._limit("svc_failed", calls_per_day=100)
+        for _ in range(20):
+            ApiCallLog.objects.create(service="svc_failed", success=False)
+        self.assertEqual(compute_service_budget("svc_failed"), 70)
+
+    def test_both_daily_and_30_day_limits_combine_via_minimum(self) -> None:
+        """Real services (e.g. google_geocoding) configure calls_per_day AND
+        calls_per_30_days together; the budget must be the min of both arms, not
+        just whichever branch happens to run last."""
+        self._limit("svc_both", calls_per_day=5, calls_per_30_days=9999)
+        # No calls logged: the tight daily cap (floor(5*0.9)=4) must win over the
+        # much larger 30-day pace (floor(9999*0.9)//30=299) - if the calls_per_day
+        # arm were dropped once calls_per_30_days is also set, this would be 299.
+        self.assertEqual(compute_service_budget("svc_both"), 4)
 
     @hypothesis_settings(max_examples=15, deadline=None)
     @given(limit=st.integers(30, 3000), used=st.integers(0, 40), buffer_percent=st.integers(0, 90))
@@ -147,16 +178,56 @@ class StaggerSecondsTests(TestCase):
         def enrich(self, location) -> bool:
             return True
 
+    class _MultiCallSource(EnrichmentSource):
+        """calls_per_item > 1 so a raw pace can genuinely exceed MAX_STAGGER_SECONDS."""
+
+        key = "stagger_multi"
+        service_keys = ("svc_stagger_multi",)
+        calls_per_item = 5
+
+        def missing_filter(self) -> Q:
+            return Q()
+
+        def enrich(self, location) -> bool:
+            return True
+
     def test_derived_from_tightest_per_minute_limit(self) -> None:
-        ApiRateLimit.objects.create(service="svc_stagger", display_name="x", calls_per_minute=30, calls_per_day=None, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_stagger", display_name="x", calls_per_minute=30, calls_per_day=None, calls_per_30_days=None
+        )
         self.assertEqual(stagger_seconds(self._Source()), 2.0)
 
     def test_clamped_to_max(self) -> None:
-        ApiRateLimit.objects.create(service="svc_stagger", display_name="x", calls_per_minute=1, calls_per_day=None, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_stagger", display_name="x", calls_per_minute=1, calls_per_day=None, calls_per_30_days=None
+        )
         self.assertEqual(stagger_seconds(self._Source()), 60.0)
 
+    def test_clamp_to_max_engages_when_raw_pace_exceeds_it(self) -> None:
+        # 60/1 * 5 = 300s raw pace: unlike test_clamped_to_max above (where the raw
+        # pace already equals 60 without any clamping), this forces min(pause, MAX)
+        # to actually reduce the value, so removing that clamp would be caught.
+        ApiRateLimit.objects.create(
+            service="svc_stagger_multi",
+            display_name="x",
+            calls_per_minute=1,
+            calls_per_day=None,
+            calls_per_30_days=None,
+        )
+        self.assertEqual(stagger_seconds(self._MultiCallSource()), 60.0)
+
+    def test_clamped_to_min(self) -> None:
+        # 60/120 * 1 = 0.5s raw pace, below MIN_STAGGER_SECONDS - the floor clamp
+        # is otherwise entirely unexercised by the other tests here.
+        ApiRateLimit.objects.create(
+            service="svc_stagger", display_name="x", calls_per_minute=120, calls_per_day=None, calls_per_30_days=None
+        )
+        self.assertEqual(stagger_seconds(self._Source()), 1.0)
+
     def test_default_when_no_per_minute_limit(self) -> None:
-        ApiRateLimit.objects.create(service="svc_stagger", display_name="x", calls_per_minute=None, calls_per_day=None, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_stagger", display_name="x", calls_per_minute=None, calls_per_day=None, calls_per_30_days=None
+        )
         self.assertEqual(stagger_seconds(self._Source()), 2.0)
 
 
@@ -225,9 +296,27 @@ class PrioritizedCandidatesTests(TestCase):
 
         from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaEnrichmentSource
 
-        pks = [location.pk for location in prioritized_location_candidates(WikipediaEnrichmentSource().missing_filter(), limit=10)]
+        pks = [
+            location.pk
+            for location in prioritized_location_candidates(WikipediaEnrichmentSource().missing_filter(), limit=10)
+        ]
         self.assertNotIn(cached.pk, pks)
         self.assertIn(uncached.pk, pks)
+
+    def test_nearby_density_breaks_ties_among_equal_priority_candidates(self) -> None:
+        """The shortlist-then-rescore step must actually change the outcome. All 4 candidates here tie on priority_score, so with limit=3 the shortlist (4 > limit) triggers the density rescore; a no-op density function would instead fall back to -updated order and keep the most-recently-created (isolated) one, which this asserts against."""
+        clustered = []
+        for index in range(3):
+            location = _make_location(lat=f"40.00000{index}")
+            baker.make(Pin, profile=_make_profile(), location=location)
+            clustered.append(location)
+
+        isolated = _make_location(lat="10.000000", lng="10.000000")
+        baker.make(Pin, profile=_make_profile(), location=isolated)
+
+        pks = {location.pk for location in prioritized_location_candidates(Q(), limit=3)}
+        self.assertEqual(pks, {location.pk for location in clustered})
+        self.assertNotIn(isolated.pk, pks)
 
     def test_stale_cache_row_still_counts_as_enriched(self) -> None:
         """Background enrichment backfills never-fetched locations only; staleness is lazy loading's job."""
@@ -238,7 +327,10 @@ class PrioritizedCandidatesTests(TestCase):
 
         from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaEnrichmentSource
 
-        pks = [candidate.pk for candidate in prioritized_location_candidates(WikipediaEnrichmentSource().missing_filter(), limit=10)]
+        pks = [
+            candidate.pk
+            for candidate in prioritized_location_candidates(WikipediaEnrichmentSource().missing_filter(), limit=10)
+        ]
         self.assertNotIn(location.pk, pks)
 
 
@@ -249,17 +341,41 @@ class _RecordingSource(EnrichmentSource):
     verbose_name = "Recording source"
     service_keys = ("svc_cycle",)
 
-    def __init__(self, fail_after: int | None = None) -> None:
+    def __init__(self, fail_after: int | None = None, fail_with: Exception | None = None) -> None:
         self.enriched_pks: list[int] = []
         self.fail_after = fail_after
+        self.fail_with = fail_with or RateLimitExceededError("svc_cycle")
 
     def missing_filter(self) -> Q:
         return Q()
 
     def enrich(self, location) -> bool:
         if self.fail_after is not None and len(self.enriched_pks) >= self.fail_after:
-            raise RateLimitExceededError("svc_cycle")
+            raise self.fail_with
         self.enriched_pks.append(location.pk)
+        return True
+
+
+class _GatedOffSource(_RecordingSource):
+    """A source whose own availability gate reports it can't run at all."""
+
+    key = "gated_off"
+
+    def gate(self) -> bool:
+        return False
+
+
+class _BrokenSource(EnrichmentSource):
+    """A source whose candidate-selection step crashes, to test per-source isolation."""
+
+    key = "broken"
+    verbose_name = "Broken source"
+    service_keys = ("svc_cycle",)
+
+    def missing_filter(self) -> Q:
+        raise RuntimeError("broken source misconfiguration")
+
+    def enrich(self, location) -> bool:
         return True
 
 
@@ -341,10 +457,49 @@ class RunEnrichmentCycleTests(TestCase):
             summary = self._run(source)
         self.assertEqual(summary.get("skipped"), "outside_window")
 
+    def test_force_bypasses_outside_window_too(self) -> None:
+        """force=True must bypass the window check, not just the enabled toggle
+        (test_disabled_setting_skips_cycle_unless_forced covers that one) - both
+        checks live under one `if not force:` guard that a mutation could split."""
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        self.site_settings.enrichment_start_hour = 2
+        self.site_settings.enrichment_end_hour = 3
+        self.site_settings.save(update_fields=["enrichment_start_hour", "enrichment_end_hour"])
+        source = _RecordingSource()
+        with patch("urbanlens.dashboard.services.locations.enrichment.enrichment_window_open", return_value=False):
+            summary = self._run(source, force=True)
+        self.assertNotEqual(summary.get("skipped"), "outside_window")
+        self.assertEqual(len(source.enriched_pks), 1)
+
+    def test_generic_exception_mid_run_is_counted_and_run_continues(self) -> None:
+        """Unlike a rate-limit signal (which stops the source), an arbitrary exception must be counted as a failure and the run must continue to the next candidate - a continue/break mix-up would either lose this count or wrongly abort the rest of the batch."""
+        for index in range(3):
+            baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
+        source = _RecordingSource(fail_after=1, fail_with=ValueError("boom"))
+        summary = self._run(source)
+        self.assertEqual(len(source.enriched_pks), 1)
+        self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
+        self.assertEqual(summary["sources"]["recording"]["failed"], 2)
+        self.assertNotIn("skipped", summary["sources"]["recording"])
+
     def test_rate_limit_mid_run_stops_source_gracefully(self) -> None:
         for index in range(3):
             baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
         source = _RecordingSource(fail_after=1)
+        summary = self._run(source)
+        self.assertEqual(len(source.enriched_pks), 1)
+        self.assertEqual(summary["sources"]["recording"]["skipped"], "rate_limited")
+        self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
+
+    def test_upstream_gateway_rate_limit_mid_run_stops_source_gracefully(self) -> None:
+        # A source's own gateway (e.g. REData) reporting its request budget is
+        # exhausted must be treated the same as this codebase's own
+        # RateLimitExceededError: stop this source, don't retry every
+        # remaining candidate against a budget that won't refill mid-run, and
+        # don't log a traceback for a known, expected condition.
+        for index in range(3):
+            baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
+        source = _RecordingSource(fail_after=1, fail_with=GatewayRateLimitedError("REData budget exhausted"))
         summary = self._run(source)
         self.assertEqual(len(source.enriched_pks), 1)
         self.assertEqual(summary["sources"]["recording"]["skipped"], "rate_limited")
@@ -358,6 +513,35 @@ class RunEnrichmentCycleTests(TestCase):
         self.assertEqual(source.enriched_pks, [])
         self.assertEqual(summary["sources"]["recording"]["skipped"], "service_disabled")
 
+    def test_source_gate_false_skips_as_unavailable(self) -> None:
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        source = _GatedOffSource()
+        summary = self._run(source)
+        self.assertEqual(summary["sources"]["gated_off"]["skipped"], "unavailable")
+        self.assertEqual(source.enriched_pks, [])
+
+    def test_one_source_crashing_does_not_stop_the_others(self) -> None:
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        broken = _BrokenSource()
+        healthy = _RecordingSource()
+        with (
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.enrichment_sources", return_value=[broken, healthy]
+            ),
+            patch.object(SiteSettings, "get_effective_environment_type", return_value=EnvironmentTypes.PRODUCTION),
+        ):
+            summary = run_enrichment_cycle(sleep=lambda _seconds: None)
+        self.assertEqual(summary["sources"]["broken"]["skipped"], "error")
+        self.assertEqual(len(healthy.enriched_pks), 1)
+        self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
+
+    def test_soft_time_limit_exceeded_propagates_from_enrich(self) -> None:
+        """A Celery soft time-limit mid-enrich must abort the cycle, not be swallowed as a failure."""
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        source = _RecordingSource(fail_after=0, fail_with=SoftTimeLimitExceeded())
+        with self.assertRaises(SoftTimeLimitExceeded):
+            self._run(source)
+
     def test_names_refreshed_for_name_sources(self) -> None:
         location = _make_location()
         baker.make(Pin, profile=_make_profile(), location=location)
@@ -366,7 +550,9 @@ class RunEnrichmentCycleTests(TestCase):
             refreshes_names = True
 
         source = NameSource()
-        with patch("urbanlens.dashboard.services.locations.enrichment.refresh_official_names", return_value=1) as mock_refresh:
+        with patch(
+            "urbanlens.dashboard.services.locations.enrichment.refresh_official_names", return_value=1
+        ) as mock_refresh:
             summary = self._run(source)
         mock_refresh.assert_called_once_with({location.pk})
         self.assertEqual(summary["names_refreshed"], 1)
@@ -377,7 +563,13 @@ class EnrichmentCycleProductionGateTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        ApiRateLimit.objects.create(service="svc_cycle", display_name="Cycle service", calls_per_minute=None, calls_per_day=100, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_cycle",
+            display_name="Cycle service",
+            calls_per_minute=None,
+            calls_per_day=100,
+            calls_per_30_days=None,
+        )
 
     def _run_with_environment(self, env_type: EnvironmentTypes, source: EnrichmentSource, **kwargs):
         with (
@@ -433,6 +625,52 @@ class EnrichmentSourceRegistryTests(SimpleTestCase):
         keys = [source.key for source in enrichment_sources()]
         self.assertEqual(len(keys), len(set(keys)))
 
+    def test_duplicate_key_from_a_plugin_is_dropped_in_favor_of_the_core_source(self) -> None:
+        """Docstring contract: 'deduplicated by key (first wins)'. Never exercised
+        elsewhere since no real registered source collides today."""
+        from urbanlens.dashboard.plugins.registry import plugin_registry
+
+        class _DuplicateAddressSource(EnrichmentSource):
+            key = "address"
+            service_keys = ()
+
+            def missing_filter(self) -> Q:
+                return Q()
+
+            def enrich(self, location) -> bool:
+                return True
+
+        with patch.object(plugin_registry, "enrichment_sources", return_value=[_DuplicateAddressSource()]):
+            sources = enrichment_sources()
+        address_sources = [source for source in sources if source.key == "address"]
+        self.assertEqual(len(address_sources), 1)
+        self.assertIsInstance(address_sources[0], AddressEnrichmentSource)
+
+
+class SelfReportedSkipTests(SimpleTestCase):
+    """self_reported_skip - a source's own "can't run at all" gate.
+
+    The "service_disabled" branch is exercised end-to-end by
+    RunEnrichmentCycleTests.test_service_disabled_on_api_limits_page_skips_source; the gate()-based
+    "unavailable" branch was not exercised anywhere - every other source in this file uses the base class's
+    default gate()->True."""
+
+    class _GatedSource(EnrichmentSource):
+        key = "gated"
+        service_keys = ("svc_gated",)
+
+        def gate(self) -> bool:
+            return False
+
+        def missing_filter(self) -> Q:
+            return Q()
+
+        def enrich(self, location) -> bool:
+            return True
+
+    def test_failed_gate_reports_unavailable(self) -> None:
+        self.assertEqual(self_reported_skip(self._GatedSource()), "unavailable")
+
 
 class LocationCacheSourceBehaviorTests(TestCase):
     """LocationCacheEnrichmentSource - per-provider completion tracking."""
@@ -471,11 +709,35 @@ class ScheduledEnrichmentTaskTests(TestCase):
         cache.delete(RUN_LOCK_CACHE_KEY)
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle", return_value={"sources": {}}) as mock_cycle,
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle", return_value={"sources": {}}
+            ) as mock_cycle,
         ):
             result = run_scheduled_enrichment.apply().result
         mock_cycle.assert_called_once()
         self.assertEqual(result, {"sources": {}})
+        self.assertIsNone(cache.get(RUN_LOCK_CACHE_KEY))
+
+    def test_soft_time_limit_winds_down_cleanly_and_releases_lock(self) -> None:
+        """Deliberately not autoretried (see tasks.py's comment above the task):
+        SoftTimeLimitExceeded must be swallowed into a "timed_out" skip marker, and
+        the lock must still be released via the finally block."""
+        from celery.exceptions import SoftTimeLimitExceeded
+        from django.core.cache import cache
+
+        from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY
+        from urbanlens.dashboard.tasks import run_scheduled_enrichment
+
+        cache.delete(RUN_LOCK_CACHE_KEY)
+        with (
+            patch("urbanlens.dashboard.tasks.update_task_progress"),
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle",
+                side_effect=SoftTimeLimitExceeded(),
+            ),
+        ):
+            result = run_scheduled_enrichment.apply().result
+        self.assertEqual(result, {"skipped": "timed_out"})
         self.assertIsNone(cache.get(RUN_LOCK_CACHE_KEY))
 
     def test_single_flight_lock_skips_concurrent_run(self) -> None:
@@ -495,3 +757,56 @@ class ScheduledEnrichmentTaskTests(TestCase):
             self.assertEqual(result, {"skipped": "already_running"})
         finally:
             cache.delete(RUN_LOCK_CACHE_KEY)
+
+    def test_soft_time_limit_releases_lock_and_reports_timeout(self) -> None:
+        """A soft time-limit mid-cycle must still release the lock, or every future run starves."""
+        from django.core.cache import cache
+
+        from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY
+        from urbanlens.dashboard.tasks import run_scheduled_enrichment
+
+        cache.delete(RUN_LOCK_CACHE_KEY)
+        with (
+            patch("urbanlens.dashboard.tasks.update_task_progress"),
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle",
+                side_effect=SoftTimeLimitExceeded(),
+            ),
+        ):
+            result = run_scheduled_enrichment.apply().result
+        self.assertEqual(result, {"skipped": "timed_out"})
+        self.assertIsNone(cache.get(RUN_LOCK_CACHE_KEY))
+
+
+class RefreshOfficialNamesTests(TestCase):
+    """refresh_official_names - per-location isolation when re-resolving names."""
+
+    def test_counts_only_locations_that_actually_changed(self) -> None:
+        changed = _make_location(lat="40.000000")
+        unchanged = _make_location(lat="41.000000")
+
+        def _side_effect(location):
+            return location.pk == changed.pk
+
+        with patch(
+            "urbanlens.dashboard.services.locations.naming.update_location_name_from_external_sources",
+            side_effect=_side_effect,
+        ):
+            result = refresh_official_names({changed.pk, unchanged.pk})
+        self.assertEqual(result, 1)
+
+    def test_one_location_failing_does_not_stop_the_others(self) -> None:
+        broken = _make_location(lat="40.000000")
+        healthy = _make_location(lat="41.000000")
+
+        def _side_effect(location):
+            if location.pk == broken.pk:
+                raise RuntimeError("boom")
+            return True
+
+        with patch(
+            "urbanlens.dashboard.services.locations.naming.update_location_name_from_external_sources",
+            side_effect=_side_effect,
+        ):
+            result = refresh_official_names({broken.pk, healthy.pk})
+        self.assertEqual(result, 1)

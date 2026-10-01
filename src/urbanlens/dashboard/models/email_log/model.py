@@ -1,20 +1,12 @@
 """EmailSendLog - privacy-preserving record of user-triggered outbound emails.
-
-Every email a user causes the site to send to a third party (join-the-site
-invitations, visit invites, ...) is logged here so that per-user send caps can
-be enforced and duplicate "join the site" emails to the same address can be
-suppressed.
-
-The recipient's address is stored only as a one-way hash of its normalized
-form: the recipient has not consented to having their address stored, and a
-hash is all that rate limiting and duplicate detection need.
+Every email a user causes the site to send to a third party (join-the-site invitations, visit invites, ...) is logged here so that per-user send caps can be enforced and duplicate "join the site" emails to the same address can be suppressed.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, CharField, ForeignKey, Index
+from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, Index
 
 from urbanlens.dashboard.models import abstract
 
@@ -26,11 +18,13 @@ class EmailType(abstract.TextChoices):
         JOIN_INVITE: "Join the site" invitation from the invite-a-friend flow.
         VISIT_INVITE: "Join the site" invitation raised by tagging a
             non-member (by email) as a visit participant.
+        TRIP_INVITE: Invitation to a trip sent to an address with no account.
     """
 
     JOIN_INVITE = "join_invite", "Friend invitation"
     VISIT_INVITE = "visit_invite", "Visit participant invitation"
-    EMAIL_VERIFICATION = "email_verification", "Secondary-email verification"
+    EMAIL_VERIFICATION = "email_verification", "Email verification"
+    TRIP_INVITE = "trip_invite", "Trip invitation"
 
 
 # Email types that invite the recipient to join the site. A given user sends
@@ -56,6 +50,9 @@ class EmailSendLog(abstract.DashboardModel):
     )
     recipient_hash = CharField(max_length=64)
     email_type = CharField(max_length=20, choices=EmailType.choices)
+    # False for a charge taken before anything was sent; the "one join email per address" rule counts
+    # only rows where mail actually went out.
+    delivered = BooleanField(default=True)
 
     if TYPE_CHECKING:
         sender_id: int

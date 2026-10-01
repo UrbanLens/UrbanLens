@@ -1,28 +1,4 @@
-"""Regression guard: the API surface never exposes per-scan or per-uploader
-device-scan data - only the cumulative, unattributed :class:`WikiDeviceMarker`.
-
-Raw scans (``DeviceScanUpload``/``DeviceScanEntry``/``DeviceSignalReading``)
-carry a ``profile`` (directly or via their upload) precisely because
-attribution is needed for the privacy-preference plumbing described in
-``Profile.track_device_scans``'s docstring. That is exactly why they must
-never be individually readable back through any API: a client with
-``device_scans:read`` could otherwise reconstruct who walked where. The
-guarantee is layered, and each layer gets its own test class below so a
-regression in any one of them fails loudly with a reason attached:
-
-1. **No route reads them.** The external API registers exactly two
-   device-scan routes - a write-only upload and a read-only aggregate query -
-   and neither the upload view nor any internal ``/rest/`` viewset exposes a
-   GET over the raw models.
-2. **The one read serializer can't carry an identity.** ``WikiDeviceMarker``
-   itself has no ``profile``/uploader field to leak, and
-   ``NearbyDeviceMarkerSerializer``'s field set is pinned to an explicit
-   allowlist.
-3. **End to end, two different uploaders collapse into one silent marker.**
-   The clustering pipeline is what actually anonymizes contributions -
-   this proves the merge really happens, not just that the serializer omits
-   a field that still exists on the object underneath.
-"""
+"""Regression guard: the API surface never exposes per-scan or per-uploader device-scan data - only the cumulative, unattributed :class:`WikiDeviceMarker`."""
 
 from __future__ import annotations
 
@@ -45,8 +21,13 @@ from urbanlens.dashboard.external_api.serializers_device_scans import (
 )
 from urbanlens.dashboard.external_api.views_device_scans import DeviceScanUploadView, NearbyDeviceMarkersView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.models.boundary.model import Boundary
-from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, DeviceScanUpload, DeviceSignalReading, ScannedDevice, WikiDeviceMarker
+from urbanlens.dashboard.models.device_scan.model import (
+    DeviceScanEntry,
+    DeviceScanUpload,
+    DeviceSignalReading,
+    ScannedDevice,
+    WikiDeviceMarker,
+)
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -96,7 +77,11 @@ class WikiDeviceMarkerModelHasNoIdentityFieldTests(TestCase):
     def test_wiki_device_marker_has_no_profile_or_uploader_field(self) -> None:
         field_names = {field.name.lower() for field in WikiDeviceMarker._meta.get_fields()}
         leaking = {name for name in field_names if any(fragment in name for fragment in _IDENTITY_FIELD_FRAGMENTS)}
-        self.assertEqual(leaking, set(), f"WikiDeviceMarker gained field(s) that look identity-related: {leaking}. This model backs the cumulative nearby/ endpoint and must never carry a contributor reference.")
+        self.assertEqual(
+            leaking,
+            set(),
+            f"WikiDeviceMarker gained field(s) that look identity-related: {leaking}. This model backs the cumulative nearby/ endpoint and must never carry a contributor reference.",
+        )
 
 
 class RouteSurfaceTests(TestCase):
@@ -145,7 +130,9 @@ class WrongMethodIsRefusedTests(TestCase):
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
 
     def test_post_on_the_nearby_endpoint_is_refused_even_with_both_scopes(self) -> None:
-        response = self.client.post(reverse("external_api:device_scans.nearby"), {}, content_type="application/json", **_bearer(self.full_key))
+        response = self.client.post(
+            reverse("external_api:device_scans.nearby"), {}, content_type="application/json", **_bearer(self.full_key)
+        )
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
 
 
@@ -155,16 +142,30 @@ class SerializerFieldAllowlistTests(TestCase):
     def test_nearby_marker_serializer_has_no_identity_looking_field(self) -> None:
         field_names = {name.lower() for name in NearbyDeviceMarkerSerializer().fields}
         leaking = {name for name in field_names if any(fragment in name for fragment in _IDENTITY_FIELD_FRAGMENTS)}
-        self.assertEqual(leaking, set(), f"NearbyDeviceMarkerSerializer exposes field(s) that look identity-related: {leaking}.")
+        self.assertEqual(
+            leaking, set(), f"NearbyDeviceMarkerSerializer exposes field(s) that look identity-related: {leaking}."
+        )
 
     def test_nearby_marker_serializer_fields_are_exactly_the_allowed_set(self) -> None:
         self.assertEqual(
             set(NearbyDeviceMarkerSerializer().fields),
-            {"marker_uuid", "device", "latitude", "longitude", "radius_meters", "confidence", "avg_signal_strength", "last_observed_at", "status"},
+            {
+                "marker_uuid",
+                "device",
+                "latitude",
+                "longitude",
+                "radius_meters",
+                "confidence",
+                "avg_signal_strength",
+                "last_observed_at",
+                "status",
+            },
         )
 
     def test_marker_device_field_is_exactly_the_allowed_set(self) -> None:
-        self.assertEqual(set(NearbyDeviceMarkerDeviceSerializer().fields), {"mac_address", "device_type", "display_name"})
+        self.assertEqual(
+            set(NearbyDeviceMarkerDeviceSerializer().fields), {"mac_address", "device_type", "display_name"}
+        )
 
     def test_upload_response_serializer_returns_only_the_upload_uuid(self) -> None:
         self.assertEqual(set(DeviceScanUploadResponseSerializer().fields), {"upload_uuid"})
@@ -183,7 +184,8 @@ class AggregateOnlyEndToEndTests(TestCase):
         self.uploader_one = baker.make(User, username="contributor-one")
         self.uploader_two = baker.make(User, username="contributor-two")
         self.viewer = baker.make(User, username="viewer")
-        baker.make(Pin, profile=self.viewer.profile, location=self.location)
+        for user in (self.uploader_one, self.uploader_two, self.viewer):
+            baker.make(Pin, profile=user.profile, location=self.location)
 
         self.write_key_one = _key_with_scopes(self.uploader_one, [ApiKeyScope.DEVICE_SCANS_WRITE])
         self.write_key_two = _key_with_scopes(self.uploader_two, [ApiKeyScope.DEVICE_SCANS_WRITE])
@@ -202,7 +204,12 @@ class AggregateOnlyEndToEndTests(TestCase):
             ],
         }
         with patch(_ENQUEUE):
-            return self.client.post(reverse("external_api:device_scans.upload"), payload, content_type="application/json", **_bearer(raw_key))
+            return self.client.post(
+                reverse("external_api:device_scans.upload"),
+                payload,
+                content_type="application/json",
+                **_bearer(raw_key),
+            )
 
     def test_marker_from_two_uploaders_carries_no_trace_of_either(self) -> None:
         response_one = self._upload(self.write_key_one)
@@ -221,7 +228,11 @@ class AggregateOnlyEndToEndTests(TestCase):
         marker = WikiDeviceMarker.objects.get()
         self.assertEqual(marker.observation_count, 2)
 
-        response = self.client.get(reverse("external_api:device_scans.nearby"), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key))
+        response = self.client.get(
+            reverse("external_api:device_scans.nearby"),
+            {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000},
+            **_bearer(self.read_key),
+        )
         self.assertEqual(response.status_code, HTTPStatus.OK)
         markers = response.json()["markers"]
         self.assertEqual(len(markers), 1)
@@ -238,7 +249,11 @@ class AggregateOnlyEndToEndTests(TestCase):
             str(self.uploader_one.profile.uuid),
             str(self.uploader_two.profile.uuid),
         ):
-            self.assertNotIn(identity, body_text, f"nearby/ response leaked {identity!r} - it must only ever describe the cumulative marker, never a contributor.")
+            self.assertNotIn(
+                identity,
+                body_text,
+                f"nearby/ response leaked {identity!r} - it must only ever describe the cumulative marker, never a contributor.",
+            )
 
     def test_upload_responses_never_echo_the_uploader_either(self) -> None:
         response = self._upload(self.write_key_one)

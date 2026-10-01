@@ -1,10 +1,4 @@
-"""Deleting a markup map is restorable from Undo History, annotations included.
-
-The map row is trivial; the hand-drawn ``PinMarkup`` annotations that cascade with
-it are the expensive part. Shares are deliberately NOT restored - the delete severed
-those relationships, and undo brings back the owner's work, not other people's
-access to it.
-"""
+"""Deleting a markup map is restorable from Undo History, annotations included."""
 
 from __future__ import annotations
 
@@ -29,7 +23,12 @@ class MarkupMapUndoTests(TestCase):
         location = Location.objects.create(latitude=51.2, longitude=-64.8)
         self.pin = Pin.objects.create(profile=self.profile, location=location, name="Annotated place")
         self.markup_map = MarkupMap.objects.create(
-            profile=self.profile, title="Entry routes", pin=self.pin, center_latitude=51.2, center_longitude=-64.8, zoom=17.0,
+            profile=self.profile,
+            title="Entry routes",
+            pin=self.pin,
+            center_latitude=51.2,
+            center_longitude=-64.8,
+            zoom=17.0,
         )
         self.annotation = PinMarkup.objects.create(
             parent_map=self.markup_map,

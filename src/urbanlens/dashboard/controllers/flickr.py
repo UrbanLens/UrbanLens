@@ -1,20 +1,4 @@
-"""Flickr integration controller.
-
-Three groups of views:
-
-- Settings ("Connect Flickr"): ``FlickrSettingsView`` (read-only subsection
-  partial), ``FlickrConnectView``/``FlickrCallbackView`` (OAuth 1.0a 3-legged
-  flow), ``FlickrDisconnectView``.
-- Pin detail ("Import from Flickr"): server-side geo search over *one user's
-  own* OAuth-connected library (no thumbnail proxy needed - Flickr's photo
-  URLs are public, capability-scoped per photo) and a Celery-backed import
-  with progress polling.
-- Pin/wiki Media ("Import a Flickr Album"): given the public URL of *any*
-  Flickr user's public album/photoset (no OAuth involved - see
-  ``services.apis.flickr.public``), preview its photos and import selected
-  ones. Same picker + Celery-progress-polling shape as the section above,
-  parameterized over a pin or a wiki target.
-"""
+"""Flickr integration controller."""
 
 from __future__ import annotations
 
@@ -24,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core import signing
 from django.core.cache import cache
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -40,8 +23,11 @@ from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredEr
 from urbanlens.dashboard.services.apis.flickr.public import MAX_ALBUM_PHOTOS, FlickrPublicGateway
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.core.request_upstream import Outcome
 from urbanlens.dashboard.services.geo.distance import haversine_meters
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
+from urbanlens.dashboard.services.security.throttle import account_or_address
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -59,6 +45,8 @@ _ALBUM_PROGRESS_PARTIAL = "dashboard/partials/pins/_flickr_album_import_progress
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
 _REQUEST_TOKEN_CACHE_TTL = 600
+#: A pasted album is usually looked up once, then again by the import task moments later.
+_ALBUM_LOOKUP_CACHE_TTL = 600
 _EMPTY_MESSAGES: dict[str, str] = {
     PhotoImportMode.NEARBY: "No photos found within that distance.",
     PhotoImportMode.VISITS: "No photos found on your recorded visit dates.",
@@ -83,9 +71,9 @@ def _request_token_cache_key(oauth_token: str) -> str:
 def _within_radius(pin_point: tuple[float, float], photo: FlickrPhoto, radius_m: int) -> bool:
     """Whether a photo is within ``radius_m`` of the pin, re-checking locally.
 
-    Flickr's search already filters server-side, so this only re-verifies
-    photos that reported coordinates - one with none is kept as-is (Flickr
-    included it in the radius search results, so it's trusted).
+    Flickr's search already filters server-side, so this only re-verifies photos that reported
+    coordinates - one with none is kept as-is (Flickr included it in the radius search results, so it's
+    trusted).
 
     Args:
         pin_point: (latitude, longitude) of the pin.
@@ -147,8 +135,8 @@ class FlickrCallbackView(LoginRequiredMixin, View):
             messages.error(request, "Flickr access was not granted.")
             return redirect(f"{reverse('settings.view')}#flickr-settings-section")
 
-        FlickrAccount.objects.update_or_create(
-            profile=profile,
+        FlickrAccount.objects.connect_for_profile(
+            profile,
             defaults={
                 "oauth_token": grant.oauth_token,
                 "oauth_token_secret": grant.oauth_token_secret,
@@ -157,7 +145,7 @@ class FlickrCallbackView(LoginRequiredMixin, View):
             },
         )
         messages.success(request, "Flickr connected.")
-        return redirect("settings.view")
+        return redirect(f"{reverse('settings.view')}#flickr-settings-section")
 
 
 class FlickrDisconnectView(LoginRequiredMixin, View):
@@ -208,26 +196,47 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
         if not profile.external_apis_enabled:
             return render(request, _PICKER_PARTIAL, {**context, "error": "External lookups are turned off in your settings."})
 
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+
         gateway = FlickrGateway(account=account)
         try:
             if mode == PhotoImportMode.VISITS:
                 dates = visit_dates_for_pin(pin)
                 if not dates:
                     return render(request, _PICKER_PARTIAL, {**context, "assets": [], "empty_message": "No recorded visits for this pin yet."})
-                photos = gateway.search_by_dates(dates)
+                # One search per visit date, because Flickr's taken-date filter
+                # takes a range rather than a set of days. The per-call timeout
+                # bounds each of up to MAX_VISIT_DATES calls and nothing bounded
+                # their sum, so every inner timeout could be respected while the
+                # request itself ran for minutes.
+                photos = call_with_deadline(lambda: gateway.search_by_dates(dates), timeout=EXTERNAL_CALL_DEADLINE, default=None, name="flickr_search_by_dates")
             elif mode == PhotoImportMode.ALL:
-                photos = gateway.list_recent()
+                photos = call_with_deadline(gateway.list_recent, timeout=EXTERNAL_CALL_DEADLINE, default=None, name="flickr_list_recent")
             else:
                 if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
                     return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
-                photos = gateway.search_near(float(pin.location.latitude), float(pin.location.longitude), radius_m / 1000)
-                # Flickr's radius search is already server-side; re-check distance
-                # locally only for photos that reported coordinates (some may not),
-                # matching the search's own radius rather than trusting it blindly.
-                pin_point = (float(pin.location.latitude), float(pin.location.longitude))
-                photos = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
-        except GatewayRequestError as exc:
-            return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
+                latitude, longitude = float(pin.location.latitude), float(pin.location.longitude)
+                photos = call_with_deadline(
+                    lambda: gateway.search_near(latitude, longitude, radius_m / 1000),
+                    timeout=EXTERNAL_CALL_DEADLINE,
+                    default=None,
+                    name="flickr_search_near",
+                )
+                if photos is not None:
+                    # Flickr's radius search is already server-side; re-check distance locally only for photos that
+                    # reported coordinates (some may not), matching the search's own radius rather than trusting it
+                    # blindly.
+                    pin_point = (latitude, longitude)
+                    photos = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
+        except (GatewayRequestError, RequestCancelledError) as exc:
+            logger.warning("Flickr picker request failed: %s", exc)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Flickr library right now."})
+
+        # `call_with_deadline` returns its default only on timeout; anything the
+        # gateway itself raises has already been handled above.
+        if photos is None:
+            logger.warning("Flickr picker exceeded the external-call deadline for pin %s", pin.pk)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Flickr library right now."})
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
         assets = [{"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": account.photo_web_url(photo.id) in already_imported} for photo in photos]
@@ -243,12 +252,12 @@ class PinFlickrImportView(LoginRequiredMixin, View):
         photo_ids = request.POST.getlist("photo_ids")
         if not photo_ids:
             return HttpResponse('<p class="immich-import-error">Select at least one photo to import.</p>', status=400)
-        if not FlickrAccount.objects.filter(profile=profile).exists():
+        if FlickrAccount.objects.get_for_profile(profile) is None:
             return HttpResponse('<p class="immich-import-error">Flickr is not connected.</p>', status=400)
 
         from urbanlens.dashboard.tasks import import_flickr_photos
 
-        result = safely_enqueue_task(import_flickr_photos, pin.pk, profile.pk, photo_ids)
+        result = safely_enqueue_task(import_flickr_photos, pin.pk, profile.pk, photo_ids, durable=False)
         if result is None:
             return render(request, _PROGRESS_PARTIAL, {"pin": pin, "state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
         return render(request, _PROGRESS_PARTIAL, {"pin": pin, "task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting import..."})
@@ -271,12 +280,10 @@ class PinFlickrImportProgressView(LoginRequiredMixin, View):
         return response
 
 
-# -- Public Flickr album import (pin + wiki) ----------------------------------
-#
-# Shared logic lives in the module-level helpers below; each pin/wiki View
-# pair is a thin wrapper supplying its own target resolution + URL names
-# (mirroring how PinGalleryView/WikiGalleryView share _photo_gallery.html but
-# differ in permission checks and which FK gets set).
+# -- Public Flickr album import (pin + wiki) ---------------------------------- Shared logic lives in the
+# module-level helpers below; each pin/wiki View pair is a thin wrapper supplying its own target resolution +
+# URL names (mirroring how PinGalleryView/WikiGalleryView share _photo_gallery.html but differ in permission
+# checks and which FK gets set).
 
 
 def _album_base_context(*, target_kind: str, lookup_url: str, import_url: str) -> dict:
@@ -294,8 +301,8 @@ def _album_lookup_response(request: HttpRequest, *, dedupe_urls: set[str], conte
 
     Args:
         request: The POST request carrying ``album_url``.
-        dedupe_urls: The target's existing ``Image.source_url`` values, so
-            already-imported photos can be flagged/disabled in the grid.
+        dedupe_urls: The target's existing ``Image.source_url`` values, so already-imported photos can
+        be flagged/disabled in the grid.
         context: The target-specific base context (URLs, target_kind, etc.).
 
     Returns:
@@ -307,12 +314,26 @@ def _album_lookup_response(request: HttpRequest, *, dedupe_urls: set[str], conte
     if not flickr_is_configured():
         return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": "Flickr integration is not configured on this server."})
 
-    from urbanlens.dashboard.services.apis.flickr.public import photo_web_url
+    from urbanlens.dashboard.services.apis.flickr.public import parse_album_url, photo_web_url
+    from urbanlens.dashboard.services.apis.request_upstreams import FlickrAlbumUpstream
 
-    try:
-        album = FlickrPublicGateway().get_album(album_url)
-    except (ValueError, GatewayRequestError) as exc:
-        return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": str(exc)})
+    parsed = parse_album_url(album_url)
+    found = FlickrAlbumUpstream.call(
+        lambda: FlickrPublicGateway().get_album(album_url),
+        key=":".join(parsed) if parsed else None,
+        ttl=_ALBUM_LOOKUP_CACHE_TTL,
+        caller=account_or_address(request),
+        errors=(ValueError,),
+    )
+    album = found.value
+    if album is None:
+        if isinstance(found.error, (ValueError, GatewayRequestError)):
+            error = str(found.error)
+        elif found.outcome is Outcome.THROTTLED:
+            error = "Too many album lookups at once. Try again in a minute."
+        else:
+            error = "Flickr didn't answer in time. Try again in a moment."
+        return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": error})
 
     assets = [{"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": photo_web_url(album.owner_nsid, photo.id) in dedupe_urls} for photo in album.photos]
     return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "album": album, "album_url": album_url, "assets": assets})
@@ -326,18 +347,17 @@ def _album_import_response(request: HttpRequest, *, target_kind: str, target_id:
         target_kind: ``"pin"`` or ``"wiki"``.
         target_id: PK of the pin or wiki.
         profile: The requesting profile.
-        album_url: The album URL submitted with the form (re-resolved inside
-            the task rather than trusting a client-supplied photo list).
+        album_url: The album URL submitted with the form (re-resolved inside the task rather than
+        trusting a client-supplied photo list).
         photo_ids: Selected Flickr photo ids.
         progress_url_for: Builds the polling URL given a task id.
 
     Returns:
-        The initial progress fragment, or a 503 fragment when the queue is
-        unavailable.
+        The initial progress fragment, or a 503 fragment when the queue is unavailable.
     """
     from urbanlens.dashboard.tasks import import_flickr_album_photos
 
-    result = safely_enqueue_task(import_flickr_album_photos, target_kind, target_id, profile.pk, album_url, photo_ids)
+    result = safely_enqueue_task(import_flickr_album_photos, target_kind, target_id, profile.pk, album_url, photo_ids, durable=False)
     if result is None:
         return render(request, _ALBUM_PROGRESS_PARTIAL, {"state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
     return render(request, _ALBUM_PROGRESS_PARTIAL, {"progress_url": progress_url_for(result.id), "state": "PENDING", "percent": 0, "message": "Starting import..."})
@@ -352,8 +372,7 @@ def _album_progress_response(request: HttpRequest, *, task_id: str, progress_url
         progress_url: This same view's own URL (for the fragment's next poll).
 
     Returns:
-        The progress fragment, with an ``HX-Trigger`` toast + gallery refresh
-        once the task settles.
+        The progress fragment, with an ``HX-Trigger`` toast + gallery refresh once the task settles.
     """
     progress = get_task_progress(task_id)
     context = {"progress_url": progress_url, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
@@ -386,7 +405,7 @@ class PinFlickrAlbumLookupView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        dedupe_urls = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
+        dedupe_urls = {url for url in Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True) if url is not None}
         context = _album_base_context(
             target_kind="pin",
             lookup_url=reverse("pin.flickr_album.lookup", args=[pin.slug]),
@@ -442,7 +461,7 @@ class WikiFlickrAlbumLookupView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        dedupe_urls = set(Image.objects.filter(wiki=wiki, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
+        dedupe_urls = {url for url in Image.objects.filter(wiki=wiki, profile=profile, source_url__isnull=False).values_list("source_url", flat=True) if url is not None}
         context = _album_base_context(
             target_kind="wiki",
             lookup_url=reverse("location.wiki.flickr_album.lookup", args=[location.slug]),

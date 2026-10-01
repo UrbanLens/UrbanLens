@@ -1,26 +1,63 @@
-"""Shared GeoJSON <-> GEOS geometry helpers used by boundary drawing and PinList
-smart-membership bounding polygons, so both features parse/serialize polygons
-identically.
-"""
+"""Shared GeoJSON <-> GEOS geometry helpers used by boundary drawing and PinList smart-membership bounding polygons, so both features parse/serialize polygons identically."""
 
 from __future__ import annotations
 
 import json
 
-from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
+from django.contrib.gis.gdal import GDALException
+from django.contrib.gis.geos import GeometryCollection, GEOSException, GEOSGeometry, MultiPolygon, Polygon
 
 
 class InvalidPolygonGeoJSONError(ValueError):
-    """The submitted GeoJSON isn't a valid polygon/multipolygon geometry.
+    """Base for every way a submitted geometry can fail to be a usable polygon."""
 
-    Deliberately never carries the underlying ``GEOSException`` text - that
-    can echo back GEOS/GDAL internals, not just a description of what the
-    caller submitted. ``safe_message`` is safe to surface directly.
+
+class GeoJSONParseError(InvalidPolygonGeoJSONError):
+    """The payload isn't parseable geometry at all - malformed JSON, an unknown ``type``, or a shape GEOS/GDAL otherwise rejects."""
+
+
+class NotPolygonalGeometryError(InvalidPolygonGeoJSONError):
+    """The payload parsed to a real geometry, but not a Polygon or MultiPolygon."""
+
+
+class EmptyPolygonGeometryError(InvalidPolygonGeoJSONError):
+    """The payload parsed to a Polygon/MultiPolygon with no coordinates."""
+
+
+class TooComplexGeometryError(InvalidPolygonGeoJSONError):
+    """The payload parsed, but is larger than one drawn region may be.
+
+    A subclass rather than a new hierarchy, because every caller already turns
+    :class:`InvalidPolygonGeoJSONError` into a 400 and a new failure mode here
+    should not arrive as a 500 instead.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+#: Most components one drawn region may have. The count arrives in a POST body and
+#: every component is unioned inside the request. Far above what anyone draws by
+#: hand.
+MAX_REGION_POLYGONS = 200
+
+#: Most vertices one drawn region may carry in total. A component cap alone would
+#: move the cost rather than remove it: a single polygon with a hundred thousand
+#: points is one cheap `len()` and one expensive union.
+MAX_REGION_VERTICES = 50_000
+
+
+def _refuse_if_too_complex(geom: MultiPolygon) -> None:
+    """Refuse a region larger than the dissolve can be asked to handle.
+
+    Args:
+        geom: The parsed multipolygon.
+
+    Raises:
+        TooComplexGeometryError: Too many components, or too many vertices.
+    """
+    if len(geom) > MAX_REGION_POLYGONS:
+        raise TooComplexGeometryError(f"Region has {len(geom)} components, above the {MAX_REGION_POLYGONS} one region may have")
+    vertices = sum(polygon.num_points for polygon in geom)
+    if vertices > MAX_REGION_VERTICES:
+        raise TooComplexGeometryError(f"Region has {vertices} vertices, above the {MAX_REGION_VERTICES} one region may have")
 
 
 def geometry_to_geojson(geom) -> dict | None:
@@ -38,60 +75,58 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
         The parsed geometry, coerced to MultiPolygon.
 
     Raises:
-        InvalidPolygonGeoJSONError: If the payload isn't valid polygonal GeoJSON,
-            or is valid but not polygonal.
+        GeoJSONParseError: The payload isn't valid GeoJSON/geometry at all.
+        NotPolygonalGeometryError: It parsed, but isn't a Polygon or MultiPolygon.
+        EmptyPolygonGeometryError: It parsed to a Polygon/MultiPolygon with no coordinates.
+        TooComplexGeometryError: It parsed, but carries more components or
+            vertices than one region may.
     """
     try:
         geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
-    except (GEOSException, TypeError, ValueError) as exc:
-        raise InvalidPolygonGeoJSONError("Invalid polygon geometry") from exc
+    except (GDALException, GEOSException, TypeError, ValueError) as exc:
+        # GDALException, not just GEOSException: GEOSGeometry parses GeoJSON through OGR, so most
+        # malformed input - a bare `{}`, an unknown `type`, a `Polygon` with no coordinates -
+        # surfaces as GDALException, which is not a GEOSException subclass.
+        # Every caller handles InvalidPolygonGeoJSONError (of which this is a subclass) as a 400, so
+        raise GeoJSONParseError(f"GEOSGeometry rejected the submitted GeoJSON: {exc!r}") from exc
     if isinstance(geom, Polygon):
         geom = MultiPolygon(geom, srid=geom.srid)
     if not isinstance(geom, MultiPolygon):
-        raise InvalidPolygonGeoJSONError("Boundary must be a Polygon or MultiPolygon")
+        raise NotPolygonalGeometryError(f"Parsed to a {geom.geom_type}, not a Polygon or MultiPolygon")
+    if geom.empty:
+        # `{"type": "Polygon", "coordinates": []}` parses cleanly into an empty geometry.
+        # Storing it is worse than rejecting it: `dissolve_polygons` below documents the same trap -
+        # an empty polygon in a `__within` lookup matches zero rows rather than imposing no
+        # restriction - and a boundary row holding one draws nothing while reading as "set".
+        raise EmptyPolygonGeometryError("Parsed geometry has no coordinates")
+    # Here rather than in dissolve_polygons: this is the door every client-
+    # supplied geometry comes through, and a ceiling checked after something has
+    # already stored the shape is a ceiling on the wrong side of the write.
+    _refuse_if_too_complex(geom)
     return geom
 
 
 def dissolve_polygons(polygons: list[Polygon]) -> MultiPolygon:
     """Merge any polygons that intersect (overlap, touch, or contain) into single components.
-
-    Runs pairwise unions until no two remaining components intersect. Chained
-    overlaps (A intersects B, B intersects C, A does not intersect C) still
-    fully merge into one component, because after A+B are unioned the
-    resulting shape contains B's footprint and therefore does intersect C.
+    Chained overlaps merge into one component, and a self-intersecting polygon is repaired rather than refused.
 
     Args:
         polygons: GEOS Polygons, all in the same SRID (4326).
 
     Returns:
-        A MultiPolygon whose components are pairwise non-intersecting. Empty
-        input yields an empty MultiPolygon - callers must treat that as "no
-        geometry" and drop the criteria key entirely rather than storing an
-        empty-but-truthy geometry (an empty polygon in a `__within` lookup
-        would match zero rows instead of imposing no restriction).
-    """
+        A MultiPolygon whose components are pairwise non-intersecting."""
     if not polygons:
         return MultiPolygon([], srid=4326)
 
-    # union() returns the general GEOSGeometry type (not narrowed to
-    # Polygon | MultiPolygon), so clusters has to be typed that broadly too.
-    clusters: list[GEOSGeometry] = list(polygons)
-    merged_any = True
-    while merged_any:
-        merged_any = False
-        for i in range(len(clusters)):
-            for j in range(i + 1, len(clusters)):
-                if clusters[i].intersects(clusters[j]):
-                    clusters[i] = clusters[i].union(clusters[j])
-                    del clusters[j]
-                    merged_any = True
-                    break
-            if merged_any:
-                break
-    flat: list[Polygon] = []
-    for geom in clusters:
-        if isinstance(geom, MultiPolygon):
-            flat.extend(sub for sub in geom if isinstance(sub, Polygon))
-        elif isinstance(geom, Polygon):
-            flat.append(geom)
-    return MultiPolygon(flat, srid=4326)
+    # GEOS refuses to union invalid input, and a hand-drawn polygon can cross itself. Each polygon
+    # is repaired alone: make_valid on the whole collection cuts overlaps out instead of merging them.
+    repaired = [part for polygon in polygons for part in _polygon_parts(polygon if polygon.valid else polygon.make_valid())]
+    return MultiPolygon(_polygon_parts(MultiPolygon(repaired, srid=4326).unary_union), srid=4326)
+
+
+def _polygon_parts(geom: GEOSGeometry) -> list[Polygon]:
+    if isinstance(geom, Polygon):
+        return [geom]
+    if isinstance(geom, GeometryCollection):
+        return [sub for sub in geom if isinstance(sub, Polygon)]
+    return []

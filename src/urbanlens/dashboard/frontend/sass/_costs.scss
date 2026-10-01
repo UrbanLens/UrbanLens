@@ -2,13 +2,7 @@
 
 // -- Public running-costs transparency page -------------------------------------
 //
-// Reuses the wide `.ul-page-hero` and the eyebrow/title/lead section shell
-// established by Thanks & Credits (_thanks.scss is scoped to `.page-thanks`
-// only, so this page needs its own copy of that shell under `.page-costs`),
-// plus the fully-global KPI card and `.card`/`.card-header` chart-card
-// components the site-admin cost tracker already uses (_admin.scss /
-// _layout.scss) so the public numbers read the same way the admin sees them
-// internally.
+// Reuses the wide `.ul-page-hero` and the eyebrow/title/lead section shell established by Thanks & Credits.
 
 .page-costs {
 
@@ -51,9 +45,7 @@
         margin: 0 0 2rem;
     }
 
-    // KPI row - reuses the fully-global .stats-kpi-* components from
-    // _admin.scss (already used by the site-admin cost tracker) so the
-    // public headline numbers match the admin's own at a glance.
+    // KPI row - reuses the fully-global.stats-kpi-* components from _admin.scss (already used by the site-admin cost tracker) so the public.
     .stats-kpi-grid {
         margin-bottom: 2.25rem;
     }

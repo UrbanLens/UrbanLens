@@ -1,12 +1,4 @@
-"""Tests for SaveMapPositionView (POST /settings/map-position/).
-
-Server-side confirmation for UL-255 ("remember last map position doesn't
-work") - locks in that the write side is correctly implemented and gated, so
-a future investigation doesn't re-suspect it. See docs/PROBLEMS.md for the
-more likely actual cause: a separate, unrelated shareable-map-view-URL
-feature on the map page takes precedence over the server-remembered value
-on page load, independent of anything tested here.
-"""
+"""Tests for SaveMapPositionView (POST /settings/map-position/)."""
 
 from __future__ import annotations
 
@@ -93,5 +85,5 @@ class SaveMapPositionViewTests(TestCase):
         self._post(lat="15.5", lng="-25.5", zoom="9")
 
         body = self.client.get(reverse("map.view")).content.decode()
-        self.assertIn("_SERVER_CENTER_LAT = 15.5", body)
-        self.assertIn("_MAP_CENTER_MODE   = 'remember'", body)
+        self.assertIn('"mapCenterLat": 15.5', body)
+        self.assertIn('"mapCenterMode": "remember"', body)

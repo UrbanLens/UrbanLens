@@ -1,14 +1,4 @@
-"""Re-running keyword generation for an image must not crash on its own rows.
-
-``generate_keywords_for_image`` replaces a provider's keywords by deleting the old
-rows and inserting the new ones. The delete and the insert are not isolated from
-another worker doing the same thing: ``uq_image_keyword`` then rejects the second
-insert.
-
-The only caller is the Celery task ``generate_photo_keywords``, and Celery delivers at
-least once - a worker lost mid-task has its message redelivered, so two runs for one
-image is an ordinary occurrence rather than a rare interleaving.
-"""
+"""Re-running keyword generation for an image must not crash on its own rows."""
 
 from __future__ import annotations
 
@@ -48,11 +38,15 @@ class PhotoKeywordRerunTests(TestCase):
         self.profile: Profile = baker.make("auth.User").profile
         self.location = Location.objects.create(latitude=44.4, longitude=-71.1)
         self.pin = Pin.objects.create(profile=self.profile, location=self.location, name="Keyworded")
-        self.image = Image.objects.create(pin=self.pin, location=self.location, profile=self.profile, image="photos/k.jpg")
+        self.image = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.profile, image="photos/k.jpg"
+        )
 
     def _run(self, keywords: list[str]) -> dict:
         provider = _StubProvider(keywords)
-        with mock.patch("urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers", return_value=[provider]):
+        with mock.patch(
+            "urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers", return_value=[provider]
+        ):
             return generate_keywords_for_image(self.image.pk)
 
     def _stored(self) -> set[str]:

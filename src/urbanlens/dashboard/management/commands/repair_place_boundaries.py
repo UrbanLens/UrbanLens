@@ -1,35 +1,16 @@
 """Re-resolve parcels whose geometry predates REData's boundary ranking.
 
-Two populations carry wrong geometry, for different reasons, and both need the
-same repair:
+Sweeping with the corrected polygon would visit only the locations that are still inside it and
+silently leave every wrongly re-homed location outside it attached to the wrong place, which looks
+like a half-applied fix.
+Cheap by design: REData's boundary sources are cache-first, and the building list is already cached
+locally, so the only genuinely new call per parcel is ``/parcels/{uuid}/boundaries/`` - an endpoint
+that has never been called, so there is no earlier response to reuse.
 
-- Parcels created by ``0027_places_backfill`` from pre-places location
-  boundaries. They carry ``geometry_generated_at=None``, and until recently
-  ``geometry_stale`` read that null as "pending, not stale", so the provider
-  chain never ran for them again.
-- Parcels whose geometry *is* a provider answer, but from before the chain
-  consulted ``/parcels/{uuid}/boundaries/``. For any New York parcel that answer
-  was the convex hull of every building REData returned, unfiltered - which on
-  the reported campus was the hull of a ~1,040-acre archaeological sensitivity
-  zone's contents.
-
-The subtle part is not re-fetching the boundary; it is repairing what the wrong
-boundary already did to *other* rows. ``provision_places_for_coordinate`` calls
-``resolve_locations_in(place.geometry)`` on every new outline, so pins across a
-wide area were re-homed onto the oversized parcel.
-
-``resolve_locations_in`` re-resolves each location it visits authoritatively -
-whatever place now contains it wins - but its scope is
-``Location.objects.filter(point__within=polygon)``. So the sweep has to run
-against the **old, larger** geometry, captured before re-provisioning. Sweeping
-with the corrected polygon would visit only the locations that are still inside
-it and silently leave every wrongly re-homed location outside it attached to the
-wrong place, which looks like a half-applied fix.
-
-Cheap by design: REData's boundary sources are cache-first, and the building
-list is already cached locally, so the only genuinely new call per parcel is
-``/parcels/{uuid}/boundaries/`` - an endpoint that has never been called, so
-there is no earlier response to reuse.
+- Parcels created by ``0027_places_backfill`` from pre-places location boundaries. They carry
+  ``geometry_generated_at=None``, and until recently ``geometry_sta...
+- Parcels whose geometry *is* a provider answer, but from before the chain consulted
+  ``/parcels/{uuid}/boundaries/``. For any New York parcel that answer was t...
 """
 
 from __future__ import annotations
@@ -37,7 +18,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand
 from django.db import DatabaseError
 
-from urbanlens.dashboard.models.place.model import Place, PlaceKind
+from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceStatus
 from urbanlens.dashboard.services.places import resolution
 from urbanlens.dashboard.services.places.provisioning import ensure_place_for_location
 
@@ -59,14 +40,12 @@ class Command(BaseCommand):
     def _targets(self, *, include_generated: bool, limit: int):
         """The parcels to repair, largest first.
 
-        Largest first because area is the symptom: an oversized boundary is
-        both the most visible defect and the one whose sweep re-homes the most
-        wrongly-attached locations, so a partial run (``--limit``) does the most
-        good.
+        Largest first because area is the symptom: an oversized boundary is both the most visible defect and
+        the one whose sweep re-homes the most wrongly-attached locations, so a partial run (``--limit``)
+        does the most good.
 
         Args:
-            include_generated: Whether to include parcels that already have a
-                generation timestamp.
+            include_generated: Whether to include parcels that already have a generation timestamp.
             limit: Maximum number to return, or 0 for all.
 
         Returns:
@@ -99,19 +78,25 @@ class Command(BaseCommand):
                 repaired += 1
                 continue
 
+            generated_before = place.geometry_generated_at
             try:
-                ensure_place_for_location(location, force=True)
-                # Deliberately the *old* geometry: the locations that need
-                # re-homing are the ones the oversized outline captured, and
-                # most of them are outside the corrected one.
+                ensure_place_for_location(location, force=True, detect_splits=False)
+                place.refresh_from_db()
+                confirmed = place.geometry_generated_at != generated_before
+                if not confirmed:
+                    # The chain no longer returns this outline at its own coordinate, so it was wrong rather than
+                    # subdivided; a split would grandfather access across every parcel it wrongly covered.
+                    Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
+                # Deliberately the *old* geometry: the locations that need re-homing are the ones the oversized
+                # outline captured, and most of them are outside the corrected one.
                 moved = resolution.resolve_locations_in(old_geometry)
             except (DatabaseError, OSError) as exc:
                 self.stderr.write(f"  failed {label}: {exc}")
                 failed += 1
                 continue
 
-            place.refresh_from_db()
-            self.stdout.write(f"  re-resolved {label}: {place.area_sqm or 0:,.0f} m2, {moved} location(s) re-homed")
+            outcome = f"{place.area_sqm or 0:,.0f} m2" if confirmed else "retired, unconfirmed by the provider chain"
+            self.stdout.write(f"  re-resolved {label}: {outcome}, {moved} location(s) re-homed")
             repaired += 1
 
         verb = "would repair" if dry_run else "repaired"

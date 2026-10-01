@@ -1,0 +1,35 @@
+{% extends 'dashboard/pages/vault/media_page.html' %}
+{% load static %}
+
+{% block header %}
+<script type="module" src="{% static 'dashboard/js/vault-documents.js' %}"></script>
+{% endblock %}
+
+{% block page_title %}Documents{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="folder_copy" title="Documents" subtitle="Deeds, permits, reports - any file worth keeping with a place." modifier="top" %}
+{% endblock %}
+
+{% block upload_zone %}
+{% if can_upload_documents %}
+{{ block.super }}
+{% else %}
+<div class="photos-empty">
+    <i class="material-symbols-outlined">lock</i>
+    <p>Document uploads aren't enabled for your account yet.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block accept %}.pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp{% endblock %}
+{% block dropzone_hint %}Drag &amp; drop anywhere on this page, or click to upload. PDF, Word, Excel, PowerPoint, and plain text.{% endblock %}
+
+{% block grid_class %} document-grid{% endblock %}
+
+{% block empty_state %}
+<i class="material-symbols-outlined">folder_off</i>
+<p>No documents yet.{% if can_upload_documents %} Upload some above to get started.{% endif %}</p>
+{% endblock %}
+
+{% block drop_overlay %}{% if can_upload_documents %}{{ block.super }}{% endif %}{% endblock %}

@@ -1,16 +1,5 @@
-"""Tests for the max-length limits added to previously-unbounded free-text fields
-(``services/text_limits.py``): Pin.description, Wiki.description, Comment.text,
-Trip.description, TripActivity.notes, TripComment.text, PinMarkup.label, Profile.bio.
+"""Tests for the max-length limits added to previously-unbounded free-text fields (``services/text_limits.py``): Pin.description, Wiki.description, Comment.text, Trip.description, TripActivity.notes, TripComment.text, PinMarkup.label, Profile.bio."""
 
-Two layers are verified:
-  - Model-level: ``full_clean()`` raises ``ValidationError`` for text longer than
-    the field's ``max_length`` (these are ``TextField``s, so Postgres itself
-    enforces nothing - the limit only exists via Django's validators).
-  - Controller-level: the write paths that build/mutate these models directly
-    (bypassing a Form/Serializer's automatic ``full_clean()``) explicitly check
-    length via ``text_length_error()`` and return 400 rather than silently
-    persisting oversized input.
-"""
 from __future__ import annotations
 
 import json
@@ -62,14 +51,9 @@ def _location_with_wiki(name: str = "Old Mill") -> tuple[Location, Wiki]:
 class ModelFullCleanLengthTests(TestCase):
     """`full_clean()` must reject text past each field's `max_length`.
 
-    Each case starts from a fully-valid, already-saved instance (via
-    ``baker.make``, so every other required field - FKs included - is
-    already populated) and mutates only the field under test, then asserts
-    the raised ``ValidationError`` names *that* field specifically. Plain
-    Django ``TextField``s do **not** get this for free from `max_length=N`
-    alone (unlike ``CharField``) - `full_clean()` only enforces it because
-    the model fields also carry an explicit `validators=[MaxLengthValidator(N)]`.
-    """
+    Each case starts from a fully-valid, already-saved instance (via ``baker.make``, so every other required
+    field - FKs included - is already populated) and mutates only the field under test, then asserts the raised
+    ``ValidationError`` names *that* field specifically."""
 
     def test_pin_description_too_long(self) -> None:
         pin = baker.make(Pin)
@@ -120,7 +104,9 @@ class ModelFullCleanLengthTests(TestCase):
         self.assertIn("text", cm.exception.message_dict)
 
     def test_pin_markup_label_too_long(self) -> None:
-        markup = baker.make(PinMarkup, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]})
+        markup = baker.make(
+            PinMarkup, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]}
+        )
         markup.label = "x" * (MAX_MARKUP_LABEL_LENGTH + 1)
         with self.assertRaises(ValidationError) as cm:
             markup.full_clean()
@@ -152,7 +138,10 @@ class PinEditDescriptionLengthTests(TestCase):
         )
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
@@ -223,6 +212,36 @@ class WikiEditDescriptionLengthTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.description, text)
+
+    def test_an_invalid_security_value_is_rejected_rather_than_dropped(self) -> None:
+        """This view used to skip the field and answer `{"ok": true}`.
+
+        The dialog already renders `resp.error` on a non-ok response and keeps the user's values in place, so
+        there was never a UI cost to telling them - only a report of a write that had not happened."""
+        before = self.wiki.cameras
+
+        resp = self.client.post(
+            reverse("location.wiki.edit", args=[self.location.slug]),
+            data=json.dumps({"cameras": "not-a-level"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["error"], "That edit couldn't be saved.")
+        self.wiki.refresh_from_db()
+        self.assertEqual(self.wiki.cameras, before)
+
+    def test_an_unparseable_date_is_rejected_rather_than_dropped(self) -> None:
+        resp = self.client.post(
+            reverse("location.wiki.edit", args=[self.location.slug]),
+            data=json.dumps({"date_abandoned": "last tuesday"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["error"], "That edit couldn't be saved.")
+        self.wiki.refresh_from_db()
+        self.assertIsNone(self.wiki.date_abandoned)
 
 
 class PinCommentTextLengthTests(TestCase):
@@ -306,7 +325,9 @@ class TripActivityNotesLengthTests(TestCase):
         self.profile = self.user.profile
         self.client = Client()
         self.client.force_login(self.user)
-        self.trip = _make_trip(self.profile, allow_add_activities=Trip.PERM_EVERYONE, allow_edit_activities=Trip.PERM_EVERYONE)
+        self.trip = _make_trip(
+            self.profile, allow_add_activities=Trip.PERM_EVERYONE, allow_edit_activities=Trip.PERM_EVERYONE
+        )
 
     def test_create_rejects_oversized_notes(self) -> None:
         resp = self.client.post(
@@ -363,11 +384,13 @@ class MarkupLabelLengthTests(TestCase):
     def test_create_rejects_oversized_label(self) -> None:
         resp = self.client.post(
             reverse("pin.markup", args=[self.pin.slug]),
-            data=json.dumps({
-                "markup_type": "line",
-                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
-                "label": "x" * (MAX_MARKUP_LABEL_LENGTH + 1),
-            }),
+            data=json.dumps(
+                {
+                    "markup_type": "line",
+                    "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                    "label": "x" * (MAX_MARKUP_LABEL_LENGTH + 1),
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)

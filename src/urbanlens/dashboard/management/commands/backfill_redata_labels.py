@@ -1,12 +1,10 @@
 """Backfill: push every profile's existing tag/category taxonomy and pin assignments to REData.
 
-Ongoing changes are kept in sync automatically once this integration is
-live (see ``models.labels.signals`` and the ``Pin.labels`` m2m_changed
-receiver in ``models.pin.signals``), but signals only fire on *future*
-writes. Data created before this integration shipped - and REData's own
-state if it is ever reset - needs this command to prime it. Safe to run
-repeatedly: REData's own upsert/resend semantics mean this never duplicates
-or corrupts existing state.
+Ongoing changes are kept in sync automatically once this integration is live (see
+``models.labels.signals`` and the ``Pin.labels`` m2m_changed receiver in ``models.pin.signals``),
+but signals only fire on *future* writes.
+Safe to run repeatedly: REData's own upsert/resend semantics mean this never duplicates or corrupts
+existing state.
 """
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+{% load remote_copies %}
 <div class="nps-info card" id="nps-section"
      data-collapse-scope="pin" data-collapse-section="nps">
     {% if debug %}
@@ -17,8 +18,8 @@
         {% with img=park.images.0 %}
         {% if img.url %}
         <div class="nps-image-wrap">
-            <img class="nps-image" src="{{ img.url }}" alt="{{ img.altText|default:park.full_name }}" loading="lazy"
-                 onerror="this.closest('.nps-image-wrap').style.display='none'">
+            <img class="nps-image" src="{{ img.url|remote_copy:'nps' }}" alt="{{ img.altText|default:park.full_name }}" loading="lazy"
+                 data-hide-on-fail=".nps-image-wrap">
             {% if img.caption %}
             <p class="nps-image-caption">{{ img.caption }}</p>
             {% endif %}
@@ -47,6 +48,21 @@
                 <span class="nps-activity-chip">{{ activity.name }}</span>
                 {% endfor %}
             </div>
+            {% endif %}
+
+            {% if alerts %}
+            <ul class="nps-alerts">
+                {% for alert in alerts %}
+                <li class="nps-alert">
+                    <i class="material-symbols-outlined">{{ alert.icon }}</i>
+                    {% if alert.href %}
+                    <a href="{{ alert.href }}" target="_blank" rel="noopener noreferrer">{{ alert.text }}</a>
+                    {% else %}
+                    <span>{{ alert.text }}</span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
             {% endif %}
 
             {% if facts %}

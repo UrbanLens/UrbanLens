@@ -1,16 +1,6 @@
 """Wiki model - the community-editable page for a shared place.
-
-The Wiki holds everything a community collectively knows and edits about a
-place: its canonical name, description, security indicators, dates, labels,
-aliases, comments, photos, child wikis (community detail markers, via the
-self-referential ``parent_wiki``) and edit history.  It links to a
-:class:`~urbanlens.dashboard.models.location.model.Location` for its current
-address/coordinates via a ``OneToOneField``.
-
-Address and coordinate data never live here - they are read-only proxies that
-delegate to ``self.location``.  When a wiki's coordinates or address change we
-find-or-create a *different* Location for the new coordinates and repoint
-``self.location`` rather than mutating the shared Location row.
+The Wiki holds everything a community collectively knows and edits about a place: its canonical name, description, security indicators, dates, labels, aliases, comments, photos, child wikis (community detail markers, via the self-referential ``parent_wiki``) and edit history.
+Address and coordinate data never live here - they are read-only proxies that delegate to ``self.location``.
 """
 
 from __future__ import annotations
@@ -31,35 +21,16 @@ from urbanlens.dashboard.models.wiki.queryset import WikiManager
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
-    from decimal import Decimal
+    from collections.abc import Collection
 
-    from django.db.models import Manager as DjangoManager
-
-    from urbanlens.dashboard.models.labels.model import Label
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.markup.model import PinMarkup
-    from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.trips.model import TripActivity
+    from django.db.models.fetch_modes import FetchMode
 
 
 logger = logging.getLogger(__name__)
 
 
 class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
-    """Community-editable page describing a shared, real-world place.
-
-    Wiki is the *community* half of the place model:
-    - Location - one row per real-world address, shared and treated as immutable.
-    - Wiki     - one community page per Location (1:1); everything users edit.
-
-    A Wiki is never user-specific. The security indicators (fences, alarms, ...)
-    are inherited from :class:`SecurityModel`. Coordinates and address are read
-    from ``self.location`` via the proxy properties below.
-
-    What does NOT belong here:
-    - Coordinates / street address / Google place metadata -> Location
-    - A single user's personal label, notes, or visit history -> Pin
-    """
+    """Community-editable page describing a shared, real-world place. A Wiki is never user-specific."""
 
     # Global uniqueness: each community page has one canonical slug.
     slug = SlugField(max_length=255, null=True, blank=True, unique=True)
@@ -79,10 +50,7 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         default=False,
         help_text="Prevents automatic building/parcel classification from overwriting an editor-chosen type.",
     )
-    # Whether this place is indoors, outdoors, or both (e.g. a building with an
-    # outdoor courtyard). Left unset (None) until something actually
-    # classifies it - groundwork for a future feature, not yet surfaced in
-    # any UI.
+    # Whether this place is indoors, outdoors, or both (e.g. a building with an outdoor courtyard).
     indoor_outdoor = CharField(
         max_length=10,
         choices=IndoorOutdoor.choices,
@@ -117,11 +85,10 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         on_delete=RESTRICT,
         related_name="wiki",
     )
-    # The real-world thing this page is *about*, and the unit of dedup: one
-    # community page per parcel or building, however many coordinates people
-    # pinned it at. Location can't do that job - two users pinning opposite
-    # ends of the same property get two Locations and would get two wikis.
-    # Null for a coordinate no provider knows, which behaves as it always has.
+    # The real-world thing this page is *about*, and the unit of dedup: one community page per
+    # parcel or building, however many coordinates people pinned it at.
+    # Location can't do that job - two users pinning opposite ends of the same property get two
+    # Locations and would get two wikis.
     place = OneToOneField(
         "dashboard.Place",
         on_delete=SET_NULL,
@@ -129,10 +96,10 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         blank=True,
         related_name="wiki",
     )
-    # Self-referential FK for community sub-markers ("child wikis") nested
-    # within a parent wiki's page - buildings, entrances, points of interest,
-    # hazards, etc. Mirrors Pin.parent_pin (see that field's docstring); never
-    # allowed to nest into a cycle (see would_create_cycle).
+    # Self-referential FK for community sub-markers ("child wikis") nested within a parent wiki's
+    # page - buildings, entrances, points of interest, hazards, etc.
+    # Mirrors Pin.parent_pin (see that field's docstring); never allowed to nest into a cycle (see
+    # would_create_cycle).
     parent_wiki = ForeignKey(
         "self",
         on_delete=CASCADE,
@@ -142,7 +109,7 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     )
 
     # Attribution only - deleting the creator's profile does not cascade-delete
-    # the wiki. Used solely to gate self-service deletion (see can_be_deleted_by).
+    # the wiki.
     created_by = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
@@ -150,27 +117,14 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         blank=True,
         related_name="created_wikis",
     )
-    # Only meaningful on a child wiki - a detail pin - where it records who
-    # placed it, and null means it was mirrored from building data. A
-    # top-level page has no creator: every pinned Location gets one
-    # automatically (tasks.ensure_wiki_for_location), so there is nobody to
-    # attribute it to and nothing about creating one to reward.
+    # Only meaningful on a child wiki - a detail pin - where it records who placed it, and null
+    # means it was mirrored from building data.
+    # A top-level page has no creator: every pinned Location gets one automatically
+    # (tasks.ensure_wiki_for_location), so there is nobody to attribute it to and nothing about
 
-    #: Scalar fields whose writes record provenance. Mirrors
-    #: services.wiki.wiki_edits.WIKI_EDITABLE_FIELDS - the fields a person can
-    #: change - plus pin_type and indoor_outdoor, which enrichment and the
-    #: Consensus game both write. Declared rather than inferred so a new column
-    #: does not start being versioned by accident.
-    #:
-    #: The reason this list matters: a concealed viewer is shown automatic
-    #: writes plus their own plus their friends', so every field a person can
-    #: change has to carry who changed it. See docs/designs/versioned-content.md.
-    #: True only on a concealed projection built by
-    #: ``services.wiki.concealment.conceal_wiki`` - a copy of this row carrying
-    #: the subset of field values one viewer is entitled to see. Declared here
-    #: rather than set ad hoc so the distinction is visible from the model, and
-    #: so reading it is a plain attribute access with an honest type. A row
-    #: loaded from the database is never concealed.
+    #: Scalar fields whose writes record provenance.
+    #: Mirrors services.wiki.wiki_edits.WIKI_EDITABLE_FIELDS - the fields a person can change - plus
+    #: pin_type and indoor_outdoor, which enrichment and the Consensus game both write.
     _ul_concealed: bool = False
 
     #: Which viewer the projection above was built for, so re-concealing is a
@@ -197,11 +151,10 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
     #: Where this model's field revisions are stored.
     revision_model = "dashboard.WikiFieldRevision"
-    # Hero banner photo for the wiki page. Any Image tied to this wiki
-    # (community gallery uploads, or a materialized Media-gallery item, see
-    # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
-    # just drops the banner rather than the wiki. Display is further gated by
-    # each viewer's own Profile.show_wiki_cover_photos preference.
+    # Hero banner photo for the wiki page.
+    # Any Image tied to this wiki (community gallery uploads, or a materialized Media-gallery item,
+    # see services.media.media_materialize) is eligible; SET_NULL so deleting the photo just drops
+    # the banner rather than the wiki.
     cover_photo = ForeignKey(
         "dashboard.Image",
         on_delete=SET_NULL,
@@ -216,8 +169,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         parent_wiki_id: int | None
         created_by_id: int | None
         cover_photo_id: int | None
-        activities: DjangoManager[TripActivity]
-        markup_items: DjangoManager[PinMarkup]
 
     objects = WikiManager()
 
@@ -230,13 +181,14 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_db(cls, db, field_names, values) -> Wiki:
+    def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Wiki:  # noqa: ARG003
         """Track the persisted name so ``save()`` can detect renames.
 
         Args:
             db: Database alias the row was loaded from.
             field_names: Names of the loaded fields.
             values: Loaded field values.
+            fetch_mode: Unused (kept for base-signature compatibility).
 
         Returns:
             The loaded Wiki instance.
@@ -248,20 +200,7 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
     def save(self, *args, **kwargs) -> None:
         """Save the wiki, adopting its location's place and syncing its aliases.
-
-        A wiki describes whatever its location stands on, so an unset ``place``
-        adopts the location's on first save. Skipped when that place already
-        has a wiki - the OneToOne is the dedup rule, and the right way to reach
-        an existing page is ``Wiki.objects.existing_for_location``, not a
-        second row racing it.
-
-        The alias list is the full set of names the place has ever been known
-        by, including the current one - so whenever a meaningful ``name`` is
-        persisted, an alias row for it is ensured. External naming refreshes
-        create their attributed official alias rows *before* setting the name,
-        so the ``get_or_create`` here finds them instead of mislabelling them
-        as user-provided. ``name`` is also sanitized to a strict character set
-        before it's persisted (see ``sanitize_name``).
+        A wiki describes whatever its location stands on, so an unset ``place`` adopts the location's on first save.
         """
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 
@@ -275,6 +214,7 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
             if place_id is not None and not type(self).objects.filter(place_id=place_id).exclude(pk=self.pk).exists():
                 self.place_id = place_id
         super().save(*args, **kwargs)
+        self._align_child_location_slug()
         if update_fields is not None and "name" not in update_fields:
             return
         if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):
@@ -282,24 +222,10 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
             new_name = (self.name or "").strip()
             try:
-                # Case-insensitive lookup matches the alias uniqueness rule, so
-                # renaming to a different casing of an existing alias reuses
-                # that row instead of racing the DB constraint.
-                # created_by from the write context, not left null. The alias
-                # concealment rule reads `source` because created_by is null
-                # for the geocoder backfill too - so a rename alias with the
-                # default source=USER and no author matched neither branch and
-                # was concealed from everyone, including the person who had
-                # just renamed the wiki: the name showed with no alias row
-                # behind it, and re-adding it by hand hit the uniqueness
-                # constraint. The renamer is exactly who authored it.
+                # created_by from the write context, not left null.
                 from urbanlens.dashboard.models.abstract.versioning import current_write_actor
 
-                WikiAlias.objects.get_or_create(
-                    wiki=self,
-                    name__iexact=new_name,
-                    defaults={"name": new_name, "created_by_id": current_write_actor()},
-                )
+                WikiAlias.objects.resolve_or_create(self, new_name, defaults={"created_by_id": current_write_actor()})
             except DatabaseError:
                 logger.exception("Could not ensure alias for wiki %s name %r", self.pk, self.name)
         self._loaded_name = self.name
@@ -311,12 +237,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     def would_create_cycle(self, new_parent: Wiki | None) -> bool:
         """Return True if ``new_parent`` becoming this wiki's parent would close a loop.
 
-        Mirrors ``Pin.would_create_cycle``: walks ``new_parent``'s own
-        ``parent_wiki`` chain looking for this wiki's pk. A ``visited`` guard
-        bounds the walk to the number of distinct wikis actually in the
-        chain, so the check still terminates promptly even against data that
-        is already corrupted with a pre-existing cycle.
-
         Args:
             new_parent: The wiki that would be assigned to ``self.parent_wiki``,
                 or None (clearing the parent never creates a cycle).
@@ -324,62 +244,11 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         Returns:
             True if the assignment would make this wiki its own ancestor.
         """
-        if new_parent is None:
-            return False
-        if self.pk is not None and new_parent.pk == self.pk:
-            return True
-        visited: set[int] = set()
-        current: Wiki | None = new_parent
-        while current is not None:
-            if current.pk is None:
-                return False
-            if current.pk in visited:
-                return False  # pre-existing cycle among ancestors, not involving self
-            visited.add(current.pk)
-            if self.pk is not None and current.pk == self.pk:
-                return True
-            current = current.parent_wiki
-        return False
+        return Wiki.objects.would_close_cycle(self, new_parent)
 
-    # ------------------------------------------------------------------
-    # Self-service deletion
-    # ------------------------------------------------------------------
-
-    # ------------------------------------------------------------------
-    # Label helpers
-    # ------------------------------------------------------------------
-
-    def add_category(self, category_name: str, save: bool = True) -> Label | None:
-        """Attach a category label to this wiki by name, creating it if needed."""
-        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
-
-        category_name = category_name.lower()
-        try:
-            category, _created = Label.objects.get_or_create(
-                name__iexact=category_name,
-                kind=KIND_CATEGORY,
-                # profile=None belongs in the *lookup*, not just defaults: this
-                # creates a global category, so the get must find a global one.
-                # Without it the get spans every profile's labels and returns
-                # MultipleObjectsReturned as soon as two users have a category of
-                # the same name - which the case-insensitive match below makes
-                # dramatically more likely.
-                profile=None,
-                # Looked up case-insensitively because the uniqueness constraint is
-                # (lower(name), profile, kind): an exact-match get would miss an
-                # existing "Factory" while creating "factory", and the insert would
-                # then violate the constraint. get_or_create cannot recover from that
-                # either - its retry repeats the same exact-match get.
-                defaults={"name": category_name},
-            )
-            if category:
-                self.labels.add(category)
-                if save:
-                    self.save()
-                return category
-        except DatabaseError as e:
-            logger.exception("failed to add category %s to wiki -> %s", category_name, e)
-        return None
+    def ancestor_chain(self) -> list[Wiki]:
+        """Return this wiki's ancestors, nearest parent first, stopping short of a corrupted cycle."""
+        return Wiki.objects.ancestors_of(self, select_related=("location",))
 
     # ------------------------------------------------------------------
     # Derived values
@@ -388,11 +257,7 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     @property
     def effective_latitude(self) -> float:
         """Wiki marker latitude, as a float - mirrors ``Pin.effective_latitude``.
-
-        Child markers (``services.pins.pin_restructure.match_marker`` and
-        friends) are typed as ``Pin | Wiki`` and read this name off whichever
-        one they were handed; keeping the same name and float type here is
-        what lets that code stay marker-neutral.
+        Child markers (``services.pins.pin_restructure.match_marker`` and friends) are typed as ``Pin | Wiki`` and read this name off whichever one they were handed; keeping the same name and float type here is what lets that code stay marker-neutral.
         """
         return float(self.location.latitude)
 
@@ -400,6 +265,14 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     def effective_longitude(self) -> float:
         """Wiki marker longitude, as a float. See ``effective_latitude``."""
         return float(self.location.longitude)
+
+    def descendants(self):
+        """Return every wiki nested below this one (children, grandchildren, ...).
+
+        Returns:
+            A ``WikiQuerySet`` over the full subtree, excluding this wiki itself.
+        """
+        return Wiki.objects.filter(pk=self.pk).with_descendants().exclude(pk=self.pk)
 
     @property
     def effective_date_last_active(self):
@@ -409,26 +282,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         if self.date_abandoned is not None:
             return self.date_abandoned - timedelta(days=1)
         return None
-
-    def get_unique_search_name(self, *, include_country: bool = True) -> str | None:
-        """Name to use when searching for this place in external APIs."""
-        name = self.official_name or self.name
-        if not name:
-            return None
-
-        parts = [name]
-        if self.address_basic and self.address_basic != name:
-            parts.append(self.address_basic)
-
-        if self.city:
-            parts.append(self.city)
-        elif self.county:
-            parts.append(self.county)
-        if self.state:
-            parts.append(self.state)
-        if include_country and self.country:
-            parts.append(self.country)
-        return " ".join(parts)
 
     # ------------------------------------------------------------------
     # Serialisation / display
@@ -474,6 +327,50 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
     def _slugify_base(self) -> str:
         return self.name or "wiki"
+
+    def _slug_parent_prefix(self) -> str:
+        """Short alias of ``parent_wiki``, when this wiki is nested under one."""
+        from urbanlens.dashboard.services.core.slugs import parent_slug_prefix
+
+        parent = self.parent_wiki
+        if parent is None:
+            return ""
+        names: list[str] = []
+        for value in (parent.name, parent.slug):
+            if value:
+                names.append(value)
+        location = getattr(parent, "location", None)
+        official_name = getattr(location, "official_name", None) if location is not None else None
+        if official_name:
+            names.append(official_name)
+        if parent.pk:
+            names.extend(parent.aliases.values_list("name", flat=True))
+        return parent_slug_prefix(names)
+
+    def _slug_preferred_length(self) -> int:
+        from urbanlens.dashboard.services.core.slugs import PREFERRED_CHILD_SLUG_LENGTH
+
+        if self.parent_wiki_id:
+            return min(PREFERRED_CHILD_SLUG_LENGTH, self._slug_max_length())
+        return self._slug_max_length()
+
+    def _align_child_location_slug(self) -> None:
+        """Replace a UUID location slug with this child wiki's own slug.
+        Wiki pages are routed by ``Location.slug``, and a child wiki's location is often created before the wiki has a name, so it would otherwise keep a UUID in the URL.
+        """
+        from urbanlens.dashboard.services.core.slugs import is_uuid_slug
+
+        if not self.parent_wiki_id or not self.location_id or not self.slug:
+            return
+        location = self.location
+        if not is_uuid_slug(location.slug):
+            return
+        from urbanlens.dashboard.models.location.model import Location
+
+        if Location.objects.filter(slug=self.slug).exclude(pk=location.pk).exists():
+            return
+        location.slug = self.slug
+        location.save(update_fields=["slug", "updated"])
 
     class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta, abstract.AddressableModel.Meta):
         db_table = "dashboard_wikis"

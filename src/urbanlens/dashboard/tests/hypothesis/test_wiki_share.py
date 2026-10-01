@@ -1,16 +1,10 @@
-"""Tests for the explicit, user-initiated wiki creation flow.
-
-Wikis are never auto-created: ``WikiShareService.share_from_pin`` is the
-single creation entry point, invoked by the pin detail page's "Create wiki"
-button. The user chooses which pin fields, aliases, and photos to seed the
-new wiki with; nothing is copied unless explicitly selected, and an existing
-wiki is never overwritten with personal data.
-"""
+"""Tests for the explicit, user-initiated wiki creation flow."""
 
 from __future__ import annotations
 
 from unittest import mock
 
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -18,6 +12,7 @@ from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatVote
 from urbanlens.dashboard.services.wiki.wiki_share import (
+    SEEDABLE_PHOTO_LIMIT,
     WikiShareService,
     seedable_aliases,
     seedable_field_values,
@@ -29,7 +24,9 @@ class WikiShareServiceTests(TestCase):
     """share_from_pin seeds only chosen fields/aliases/photos and links the pin."""
 
     def setUp(self):
-        self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000", official_name="Old Mill")
+        self.location = baker.make(
+            "dashboard.Location", latitude="40.000000", longitude="-74.000000", official_name="Old Mill"
+        )
         self.pin = baker.make(
             "dashboard.Pin",
             location=self.location,
@@ -38,9 +35,13 @@ class WikiShareServiceTests(TestCase):
             vulnerability=2,
         )
 
-    def _create(self, *, include: set[str] | None = None, alias_ids: set[int] | None = None, image_ids: set[int] | None = None) -> tuple[Wiki, bool]:
+    def _create(
+        self, *, include: set[str] | None = None, alias_ids: set[int] | None = None, image_ids: set[int] | None = None
+    ) -> tuple[Wiki, bool]:
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
-            return WikiShareService().share_from_pin(self.pin, include_fields=include, alias_ids=alias_ids, image_ids=image_ids)
+            return WikiShareService().share_from_pin(
+                self.pin, include_fields=include, alias_ids=alias_ids, image_ids=image_ids
+            )
 
     def test_sharing_nothing_contributes_nothing(self) -> None:
         wiki, shared = self._create()
@@ -95,7 +96,7 @@ class WikiShareServiceTests(TestCase):
         self.assertTrue(new_wiki.aliases.filter(name="Chosen Alias").exists())
 
     def test_photos_only_seeded_when_chosen(self) -> None:
-        image = baker.make("dashboard.Image", pin=self.pin)
+        image = baker.make("dashboard.Image", pin=self.pin, upload_processed_at=timezone.now())
 
         wiki, _created = self._create(image_ids={image.pk})
         image.refresh_from_db()
@@ -103,15 +104,30 @@ class WikiShareServiceTests(TestCase):
         # Still attached to the original pin too.
         self.assertEqual(image.pin_id, self.pin.pk)
 
+    def test_unprocessed_photo_is_enqueued_for_processing_and_skipped_from_this_share(self) -> None:
+        """An unprocessed photo is never attached to the wiki from this request.
+
+        ``process_image_upload`` is decorated ``@untrusted_parse`` and may only run in the sandbox worker
+        (``queue=SANDBOX_QUEUE``), never inline here - so the guarantee is structural: the service hands it to
+        ``safely_enqueue_task`` rather than calling it directly, the same pattern every other upload path uses."""
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        image = baker.make("dashboard.Image", pin=self.pin, upload_processed_at=None)
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue:
+            wiki, shared = WikiShareService().share_from_pin(self.pin, image_ids={image.pk})
+
+        image.refresh_from_db()
+        self.assertFalse(shared)
+        self.assertEqual(wiki.location_id, self.location.pk)
+        self.assertIsNone(image.wiki_id)
+        mock_enqueue.assert_called_once_with(process_image_upload, image.pk)
+
     def test_sharing_to_an_existing_wiki_contributes_without_renaming_it(self) -> None:
         """The case that used to be impossible.
 
-        Seeding only ran when the click created the page, so sharing to a page
-        that already existed did nothing at all. Contributing is now something
-        a person does to a page that is already there - but naming stays a
-        creation-time act, since renaming a page other people read because
-        somebody shared a stat to it is a side effect nobody asked for.
-        """
+        Seeding only ran when the click created the page, so sharing to a page that already existed did nothing
+        at all."""
         existing = baker.make("dashboard.Wiki", location=self.location, name="Community Name")
 
         wiki, shared = self._create(include={"danger"})
@@ -172,3 +188,25 @@ class SeedableAliasesAndPhotosTests(TestCase):
 
     def test_seedable_photos_empty_when_none(self) -> None:
         self.assertEqual(seedable_photos(self.pin), [])
+
+    def test_seedable_photos_is_capped(self) -> None:
+        """A pin with years of photos must not render every one into the dialog.
+
+        The wiki's own Media gallery and the visit dialog's picker both already
+        cap at the same number; this picker was the one that did not.
+        """
+        baker.make("dashboard.Image", pin=self.pin, _quantity=SEEDABLE_PHOTO_LIMIT + 5)
+
+        self.assertEqual(len(seedable_photos(self.pin)), SEEDABLE_PHOTO_LIMIT)
+
+    def test_seedable_photos_offers_the_newest_first(self) -> None:
+        """The cap has to drop the oldest photos, and drop the same ones every time.
+
+        A LIMIT over an unordered queryset is free to return a different slice per call, so which photos are
+        offerable would depend on the plan Postgres happened to pick."""
+        images = baker.make("dashboard.Image", pin=self.pin, _quantity=3)
+        newest = images[-1]
+
+        offered = seedable_photos(self.pin)
+        self.assertEqual(offered[0].pk, newest.pk)
+        self.assertEqual([image.pk for image in offered], [image.pk for image in seedable_photos(self.pin)])

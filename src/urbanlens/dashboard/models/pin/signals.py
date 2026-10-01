@@ -1,8 +1,7 @@
-from collections.abc import Iterable
 import logging
 
 from django.db import transaction
-from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
@@ -32,97 +31,39 @@ def refit_child_boundaries_on_save(sender: type[Pin], instance: Pin, created: bo
     """Keep child-generated property boundaries aligned after adds and moves."""
     if not created and not getattr(instance, "child_boundary_position_changed", False):
         return
-    from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import request_child_boundary_refit
 
     parent_ids = {parent_id for parent_id in (instance.parent_pin_id, instance.child_boundary_previous_parent_id) if parent_id is not None}
     for parent_id in sorted(parent_ids):
-        refit_child_pin_boundary(parent_id)
+        request_child_boundary_refit(parent_id)
 
 
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_refit_child_boundaries_on_delete")
 def refit_child_boundaries_on_delete(sender: type[Pin], instance: Pin, **kwargs) -> None:
     """Shrink a child-generated property boundary after a child is removed."""
-    from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import request_child_boundary_refit
 
-    refit_child_pin_boundary(instance.parent_pin_id)
+    request_child_boundary_refit(instance.parent_pin_id)
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")
 def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
-    """Clear the cached map center so it is recomputed on the next map load."""
+    """Queue a recompute of the profile's map centre, leaving the current one in place to serve.
+
+    Clearing it instead would charge the next visitor a read of every pin the account owns - 285 ms on a
+    20,000-pin account - to move an opening map position by less than a pixel.
+    """
     if not created or not instance.profile_id:
         return
-    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.profile.model import queue_map_center_refresh
 
-    Profile.objects.filter(pk=instance.profile_id).update(
-        map_center_latitude=None,
-        map_center_longitude=None,
-    )
-
-
-def _refresh_cached_pin(pin_id: int, profile_id: int) -> None:
-    """Update one cached map pin if that profile is currently cached in Valkey."""
-
-    def _run() -> None:
-        from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.map_pins import MapPinCache
-
-        try:
-            profile = Profile.objects.get(pk=profile_id)
-            pin = Pin.objects.get(pk=pin_id)
-        except (Profile.DoesNotExist, Pin.DoesNotExist):
-            try:
-                MapPinCache(Profile(pk=profile_id)).delete_pin(pin_id)
-            except (ConnectionError, OSError, RuntimeError):
-                logger.debug("Unable to delete missing pin %s from map cache", pin_id, exc_info=True)
-            return
-        try:
-            MapPinCache(profile).upsert_pin(pin)
-        except (ConnectionError, OSError, RuntimeError):
-            logger.warning("Unable to refresh cached map pin %s", pin_id, exc_info=True)
-
-    transaction.on_commit(_run)
-
-
-def _delete_cached_pin(pin_id: int, profile_id: int) -> None:
-    def _run() -> None:
-        from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.map_pins import MapPinCache
-
-        try:
-            MapPinCache(Profile(pk=profile_id)).delete_pin(pin_id)
-        except (ConnectionError, OSError, RuntimeError):
-            logger.warning("Unable to delete cached map pin %s", pin_id, exc_info=True)
-
-    transaction.on_commit(_run)
-
-
-@receiver(post_save, sender=Pin, dispatch_uid="pin_refresh_map_pin_cache")
-def refresh_map_pin_cache(sender: type[Pin], instance: Pin, **kwargs) -> None:
-    if instance.profile_id:
-        _refresh_cached_pin(instance.pk, instance.profile_id)
-
-
-@receiver(post_delete, sender=Pin, dispatch_uid="pin_delete_map_pin_cache")
-def delete_map_pin_cache(sender: type[Pin], instance: Pin, **kwargs) -> None:
-    if instance.profile_id:
-        _delete_cached_pin(instance.pk, instance.profile_id)
+    queue_map_center_refresh(instance.profile_id)
 
 
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_record_tombstone")
 def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
     """Durably record the deletion for external-API delta-sync clients.
-
-    Written synchronously (not ``on_commit``) so the tombstone commits or
-    rolls back together with the delete itself.
-
-    Only fires when the deletion originated on pins (a single ``pin.delete()``
-    or a Pin queryset delete, including the cascade over ``parent_pin``
-    children either triggers). When the deletion is a cascade from the owning
-    profile/user - account deletion - no tombstones are written: the rows
-    would FK a profile that is itself mid-delete (and was collected before
-    they existed), and an account deletion leaves no sync clients behind to
-    tell.
+    Written synchronously (not ``on_commit``) so the tombstone commits or rolls back together with the delete itself.
     """
     origin = kwargs.get("origin")
     origin_model = getattr(origin, "model", type(origin))
@@ -133,65 +74,76 @@ def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
     PinTombstone.objects.record(profile_id=instance.profile_id, pin_uuid=instance.uuid)
 
 
-@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
-    if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
-        _refresh_cached_pin(instance.pk, instance.profile_id)
-
-
-def refresh_map_pin_cache_for_label_ids(label_ids: Iterable[int]) -> None:
-    """Invalidate the cached map pins of every pin carrying any of these labels.
-
-    Call this after a bulk write to ``Label``. ``bulk_update`` issues raw SQL and
-    never fires ``post_save``, so :func:`refresh_map_pin_cache_for_label` does not
-    run and affected pins keep serving the icon and colour baked in at cache time.
-    That is not only an icon edit: ``Pin.icon_source_label`` picks the winning label
-    by ``-order``, so a reorder changes what a pin draws just as much.
-
-    Args:
-        label_ids: Primary keys of the labels that changed.
+@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_touch_pin")
+def touch_pin_for_labels(sender, instance, action: str, *, reverse: bool = False, pk_set: set[int] | None = None, **kwargs) -> None:
+    """A pin gaining or losing a label changes its chips, and can change its icon.
+    Writing ``Pin.labels.through`` does not write the pin row, so ``auto_now`` does not fire and the client's poll sees nothing.
     """
-    ids = list(label_ids)
-    if not ids:
+    from urbanlens.dashboard.services.map_pins.touch import touch_pin, touch_pins
+
+    if action not in {"post_add", "post_remove", "post_clear"}:
         return
-    # distinct(): a pin carrying two of the changed labels would otherwise be
-    # refreshed once per label.
-    for pin_id, profile_id in Pin.objects.filter(labels__in=ids).distinct().values_list("pk", "profile_id"):
-        _refresh_cached_pin(pin_id, profile_id)
+    if reverse:
+        # post_clear arrives with the rows already gone and no pk_set, so there
+        # is nothing left to identify; no caller clears from this side today.
+        if pk_set:
+            touch_pins(Pin.objects.filter(pk__in=pk_set))
+        return
+    if instance.profile_id:
+        touch_pin(instance.pk)
 
 
 @receiver(post_save, sender=Label, dispatch_uid="label_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
-    """A label's icon/color can appear on any pin carrying it (Pin.effective_icon).
+def touch_pins_for_edited_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
+    """A label's icon/colour can appear on any pin carrying it (Pin.effective_icon).
 
-    Unlike the m2m-add/remove case above, editing the label itself never
-    touches Pin.labels.through, so nothing else here would invalidate the
-    server-side Redis pin cache for pins that already carry this label - they'd
-    keep serving the old baked-in icon/color until something else happened to
-    touch that specific pin, or the cache TTL lapsed.
+    Editing the label never touches Pin.labels.through, so without this the pins
+    carrying it keep drawing the old icon until the browser's own cache expires.
     """
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
+
     if created:
         return  # not attached to any pin yet
-    refresh_map_pin_cache_for_label_ids([instance.pk])
+    touch_pins_for_labels([instance.pk])
+
+
+@receiver(pre_delete, sender=Label, dispatch_uid="label_delete_touch_carrying_pins")
+def touch_pins_for_deleted_label(sender: type[Label], instance: Label, **kwargs) -> None:
+    """A deleted label takes a chip off every pin that carried it.
+
+    ``pre_delete`` because the through rows go with the row: afterwards there is
+    no way left to ask which pins carried it. Deleting them is a cascade in SQL,
+    so no ``m2m_changed`` fires and nothing else here would notice.
+    """
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
+
+    touch_pins_for_labels([instance.pk])
 
 
 @receiver(post_save, sender=LabelCustomization, dispatch_uid="label_customization_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_label_customization(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
-    """Per-profile icon/color overrides need the same cache refresh as editing the label itself."""
-    for pin_id in Pin.objects.filter(profile_id=instance.profile_id, labels=instance.label_id).values_list("pk", flat=True):
-        _refresh_cached_pin(pin_id, instance.profile_id)
+def touch_pins_for_customized_label(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
+    """Per-profile icon/colour overrides need the same treatment as editing the label."""
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_label_customization
+
+    touch_pins_for_label_customization(instance.profile_id, instance.label_id)
+
+
+@receiver(post_delete, sender=LabelCustomization, dispatch_uid="label_customization_delete_touch_pins")
+def touch_pins_for_cleared_customization(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
+    """Dropping an override changes what the pin draws as surely as setting one.
+
+    ``services.labels.customization`` also calls this directly, because it needs
+    the count; a row deleted any other way has only this.
+    """
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_label_customization
+
+    touch_pins_for_label_customization(instance.profile_id, instance.label_id)
 
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_propagate_visited")
 def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_set=None, reverse: bool = False, **kwargs) -> None:
     """Mark a child pin's ancestors Visited when the child gains the Visited label.
-
-    Visiting a child pin (an entrance, a building on a campus) means the parent
-    place was visited too, so the profile's "Visited" status label cascades up
-    the ``parent_pin`` chain. The whole chain is stamped in one pass with a
-    cycle-safe walk (see ``Pin.ancestor_chain``); the m2m adds this performs
-    re-fire this handler for each ancestor, but their ``pk_set`` only contains
-    newly-added rows, so the cascade terminates once the chain is stamped.
+    Visiting a child pin (an entrance, a building on a campus) means the parent place was visited too, so the profile's "Visited" status label cascades up the ``parent_pin`` chain.
     """
     if action != "post_add" or reverse or not pk_set or instance.parent_pin_id is None:
         return
@@ -207,16 +159,7 @@ def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_sync_redata_assignments")
 def sync_redata_assignments_for_pin_labels(sender, instance, action: str, reverse: bool, pk_set: set[int] | None, **kwargs) -> None:
     """Forward a pin's tag/category label set to REData whenever it changes.
-
-    ``Pin.labels`` is mutated from ~20 call sites across the codebase (manual
-    tagging, keyword/AI auto-tag, imports, label-merge, undo) - this
-    m2m_changed receiver is the one choke point that sees all of them,
-    forward (``pin.labels.add(label)``) and reverse
-    (``label.pins.add(pin)``, used by ``services.labels.merge``) alike.
-
-    Unlike ``refresh_map_pin_cache_for_labels`` above, ``reverse`` matters
-    here: in the reverse direction ``instance`` is the *Label*, not a Pin,
-    and ``pk_set`` holds the affected *pin* ids rather than label ids.
+    ``reverse`` matters here, as it does in ``touch_pin_for_labels`` above: in the reverse direction ``instance`` is the *Label*, not a Pin, and ``pk_set`` holds the affected *pin* ids rather than label ids.
     """
     if action not in {"post_add", "post_remove", "post_clear"}:
         return
@@ -238,32 +181,32 @@ def sync_redata_assignments_for_pin_labels(sender, instance, action: str, revers
 
 
 @receiver(post_save, sender=Review, dispatch_uid="review_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_review(sender, instance: Review, **kwargs) -> None:
+def touch_pin_for_review(sender, instance: Review, **kwargs) -> None:
+    """A review carries the pin's rating, which the map payload shows."""
+    from urbanlens.dashboard.services.map_pins.touch import touch_pin
+
     if instance.pin_id:
-        _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
+        touch_pin(instance.pin_id)
 
 
 @receiver(post_delete, sender=Review, dispatch_uid="review_delete_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_deleted_review(sender, instance: Review, **kwargs) -> None:
+def touch_pin_for_deleted_review(sender, instance: Review, **kwargs) -> None:
+    """Removing a rating changes the payload as much as adding one."""
+    from urbanlens.dashboard.services.map_pins.touch import touch_pin
+
     if instance.pin_id:
-        _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
+        touch_pin(instance.pin_id)
 
 
-# -- Wiki-sync: mirror rating/vulnerability/priority/danger onto WikiStatVote ---
-# One-way only (pin -> wiki): the wiki has no single owner, so there's no
-# equivalent "wiki value" to pull back the other way - see
-# Profile.sync_rating_to_wiki etc. and models.wiki_stat_vote.model.WikiStatVote's
-# own docstring on why a composite average, not a single stored field, is
-# the wiki-side representation of these dimensions.
+# -- Wiki-sync: mirror rating/vulnerability/priority/danger onto WikiStatVote --- One-way only (pin
+# -> wiki): the wiki has no single owner, so there's no equivalent "wiki value" to pull back the
+# other way - see Profile.sync_rating_to_wiki etc. and models.wiki_stat_vote.model.WikiStatVote's
+# own docstring on why a composite average, not a single stored field, is the wiki-side
 
 
 def _sync_pin_stat_to_wiki(wiki_id: int, profile_id: int, field: str, value: int | None) -> None:
     """Upsert (1-5) or clear (anything else) one profile's WikiStatVote for a field.
-
-    Mirrors WikiStatVoteView's own upsert-or-delete behavior exactly, so a
-    pin's star rating going back to "unset" clears the vote the same way
-    manually clearing it on the wiki page would - never leaves a stale 0/None
-    row skewing the wiki's composite average.
+    Mirrors WikiStatVoteView's own upsert-or-delete behavior exactly, so a pin's star rating going back to "unset" clears the vote the same way manually clearing it on the wiki page would - never leaves a stale 0/None row skewing the wiki's composite average.
     """
 
     def _run() -> None:
@@ -334,30 +277,19 @@ def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
 @receiver(post_save, sender=Pin, dispatch_uid="pin_ensure_wiki")
 def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
     """Queue background creation of the Wiki for a newly pinned Location.
-
-    Fires for every pin-creation path (manual add, CSV/Google Maps import,
-    Flickr, Immich, GPX) since it's a model-level signal rather than a
-    per-importer call - that's what makes this "still happens for bulk
-    imports, but in the background" without slowing any of them down: the
-    enqueue itself is a cheap non-blocking broker publish (see
-    ``tasks.ensure_wiki_for_location``). The page is published from the moment
-    it exists and fills in as enrichment lands - default boundaries are still
-    generated lazily on first pin-detail-page view, unchanged.
-
-    Skipped when the triggering profile has community features disabled -
-    their own action shouldn't kick off community-wiki background work for a
-    location, though another profile's pin there will. Queued on_commit, like
-    every other Celery-enqueuing signal in this module - a pin creation that
-    ultimately rolls back should never have queued anything.
+    Fires for every pin-creation path (manual add, CSV/Google Maps import, Flickr, Immich, GPX) since it's a model-level signal rather than a per-importer call - that's what makes this "still happens for bulk imports, but in the background" without slowing any of them down: the enqueue itself is a cheap non-blocking broker publish (see ``tasks.ensure_wiki_for_location``).
     """
     if not created or instance.location_id is None or not instance.profile.community_enabled:
         return
+    from urbanlens.dashboard.services.core.celery import follow_on_queue
+
     location_id = instance.location_id
+    queue = follow_on_queue()
 
     def _run() -> None:
-        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import ensure_wiki_for_location
+        from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location, ensure_wikis_for_locations
 
-        safely_enqueue_task(ensure_wiki_for_location, location_id)
+        enqueue_follow_on(ensure_wiki_for_location, ensure_wikis_for_locations, location_id, queue=queue)
 
     transaction.on_commit(_run)

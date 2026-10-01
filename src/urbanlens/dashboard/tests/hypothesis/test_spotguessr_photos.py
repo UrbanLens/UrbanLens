@@ -1,9 +1,4 @@
-"""Tests for services.spotguessr.photos - Photos-mode candidate photo selection.
-
-The wiki-attachment gate here is a privacy invariant, not a quality filter -
-see photos.py's module docstring. It's tested first and most thoroughly for
-that reason.
-"""
+"""Tests for services.spotguessr.photos - Photos-mode candidate photo selection."""
 
 from __future__ import annotations
 
@@ -50,7 +45,9 @@ class CandidateImageForLocationPrivacyTests(TestCase):
         location = _make_location()
         profile = _make_profile()
         checkin = baker.make(SafetyCheckin, profile=profile)
-        baker.make(Image, location=location, safety_checkin=checkin, profile=profile, media_type=MediaKind.PHOTO, wiki=None)
+        baker.make(
+            Image, location=location, safety_checkin=checkin, profile=profile, media_type=MediaKind.PHOTO, wiki=None
+        )
         self.assertIsNone(candidate_image_for_location(location))
 
     def test_a_photo_shared_to_the_locations_wiki_is_eligible(self) -> None:
@@ -87,7 +84,9 @@ class CandidateImageForLocationPrivacyTests(TestCase):
         location = _make_location()
         profile = _make_profile()
         checkin = baker.make(SafetyCheckin, profile=profile)
-        baker.make(Image, location=location, safety_checkin=checkin, profile=profile, media_type=MediaKind.PHOTO, wiki=None)
+        baker.make(
+            Image, location=location, safety_checkin=checkin, profile=profile, media_type=MediaKind.PHOTO, wiki=None
+        )
         self.assertIsNone(candidate_image_for_location(location, solo_profile=profile))
 
 

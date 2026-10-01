@@ -6,11 +6,11 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
-from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, JSONField, OneToOneField, Q, TextChoices, UniqueConstraint
+from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, JSONField, OneToOneField, Q, UniqueConstraint
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.billing.meta import BillingSubscriptionStatus
+from urbanlens.dashboard.models.billing.meta import TERMINAL_SUBSCRIPTION_STATUSES, BillingSubscriptionStatus
 from urbanlens.dashboard.models.billing.queryset import (
     BillingCustomerManager,
     RoleSubscriptionManager,
@@ -36,19 +36,7 @@ class BillingCustomer(abstract.DashboardModel):
 
 class RoleSubscription(abstract.DashboardModel):
     """A user's paid, Stripe-backed subscription to a SubscriptionRole.
-
-    Distinct from ``UserSubscription`` (an admin-issued grant with no billing behind
-    it) - a role can be held either way, and ``active_subscription_roles()``/
-    ``user_has_feature()`` check both. ``threshold_met`` only matters for roles with
-    ``pwyw_dynamic_threshold`` enabled: it's recomputed against the site's current
-    cost-per-user each time Stripe reports a successful charge
-    (``services.billing.webhooks``), so a pledge that used to clear the bar can stop
-    granting the role's features without the subscription itself changing status.
-
-    Pay-what-you-want roles also accrue a usage ledger (``total_paid_cents``,
-    ``amount_used_cents``, ``usage_covered_until`` - see ``services.billing.banking``)
-    that can keep ``grants_access`` true independent of ``is_billable``/``threshold_met``,
-    for as long as cumulative overpayment covers each elapsed billing period's cost.
+    Distinct from ``UserSubscription`` (an admin-issued grant with no billing behind it) - a role can be held either way, and ``active_subscription_roles()``/ ``user_has_feature()`` check both.
     """
 
     user = ForeignKey(User, on_delete=CASCADE, related_name="role_subscriptions")
@@ -62,6 +50,11 @@ class RoleSubscription(abstract.DashboardModel):
     cancel_at_period_end = BooleanField(default=False)
     canceled_at = DateTimeField(null=True, blank=True)
     threshold_met = BooleanField(default=True, help_text="Whether the current pledge clears the role's pay-what-you-want access threshold.")
+    stripe_state_at = DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Stripe-side time of the latest subscription state applied here: an event's created time, or when a live retrieve was sent. Older subscription events are ignored.",
+    )
 
     # --- Pay-what-you-want usage ledger (see services.billing.banking) ---
 
@@ -84,7 +77,7 @@ class RoleSubscription(abstract.DashboardModel):
         constraints = [
             UniqueConstraint(
                 fields=["user", "role"],
-                condition=~Q(status=BillingSubscriptionStatus.CANCELED),
+                condition=~Q(status__in=TERMINAL_SUBSCRIPTION_STATUSES),
                 name="unique_active_role_subscription",
             ),
         ]
@@ -97,6 +90,11 @@ class RoleSubscription(abstract.DashboardModel):
     def is_billable(self) -> bool:
         """Whether Stripe is still actively billing this subscription (regardless of threshold_met)."""
         return self.status in (BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING)
+
+    @property
+    def is_terminal(self) -> bool:
+        """Whether Stripe has ended this subscription for good."""
+        return self.status in TERMINAL_SUBSCRIPTION_STATUSES
 
     @property
     def has_banked_access(self) -> bool:
@@ -135,12 +133,8 @@ class StripeWebhookEvent(abstract.DashboardModel):
 
 class StripeProcessedRefund(abstract.DashboardModel):
     """Idempotency record for individual Stripe refund objects already applied.
-
-    ``StripeWebhookEvent`` dedups whole event deliveries, but ``charge.refunded`` is
-    cumulative: a second partial refund on the same charge arrives as a *fresh* event
-    (new event id) whose ``refunds.data`` re-contains every earlier refund object. Each
-    refund id (``re_...``) is claimed here exactly once - within the receiving view's
-    transaction, so the claim commits atomically with the ledger decrement it produced.
+    ``StripeWebhookEvent`` dedups whole event deliveries, but ``charge.refunded`` is cumulative: a second partial refund on the same charge arrives as a *fresh* event (new event id) whose ``refunds.data`` re-contains every earlier refund object.
+    Each refund id (``re_...``) is claimed here exactly once - within the receiving view's transaction, so the claim commits atomically with the ledger decrement it produced.
     """
 
     stripe_refund_id = CharField(max_length=255, unique=True)

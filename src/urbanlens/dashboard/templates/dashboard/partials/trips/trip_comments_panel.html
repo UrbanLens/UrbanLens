@@ -20,6 +20,11 @@
         {% endif %}
       </div>
       <div class="comment-body">
+        {% if item.parent_was_deleted %}
+        <p class="comment-parent-deleted-indicator">
+          <i class="material-symbols-outlined">forum</i> Replying to a comment that was deleted
+        </p>
+        {% endif %}
         <div class="comment-meta">
           <span class="comment-author">{{ c.author.display_name|default:"Unknown" }}</span>
           <span class="comment-date">{{ c.created|human_timesince }}</span>
@@ -37,9 +42,10 @@
         <div class="comment-text">{{ item.rendered_text }}</div>
         {% if c.image %}
         {% if c.pending_scan %}
-        <p class="comment-image-scanning" title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
-          <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
-        </p>
+        <a class="comment-image-link" target="_blank" data-id="{{ c.pk }}" data-processing="pending" data-processing-url="{% url 'comments.trip_images.processing' %}"
+           title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
+          {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="comment-image comment-image--processing" %}
+        </a>
         {% else %}
         <a href="{{ c.image.url }}" target="_blank" class="comment-image-link">
           <img src="{{ c.image.url }}" alt="Attached" class="comment-image">
@@ -70,7 +76,7 @@
           {% endfor %}
           <div class="reaction-picker">
             <button type="button" class="reaction-add-btn" title="Add reaction"
-                    onclick="toggleReactionPicker(this)">
+                   >
               <i class="material-symbols-outlined">add_reaction</i>
             </button>
             <div class="reaction-picker-popup" hidden>
@@ -81,8 +87,7 @@
                       hx-target="#comment-reactions-{{ c.id }}"
                       hx-swap="outerHTML"
                       hx-vals='{"emoji": "{{ emoji }}"}'
-                      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                      onclick="this.closest('.reaction-picker-popup').hidden=true">
+                      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
                 {{ emoji }}
               </button>
               {% endfor %}
@@ -92,19 +97,18 @@
 
         {# Reply toggle #}
         <button type="button" class="comment-reply-btn"
-                onclick="toggleReplyForm('reply-form-{{ c.id }}')">
+                data-reply-form="reply-form-{{ c.id }}">
           <i class="material-symbols-outlined">reply</i> Reply
           {% if item.replies %}<span class="reply-count">({{ item.replies|length }})</span>{% endif %}
         </button>
 
-        {# Reply form #}
         <div id="reply-form-{{ c.id }}" class="comment-reply-form" hidden>
           <form class="comment-compose comment-compose--reply"
                 hx-post="{% url 'trips.comments' trip.slug %}"
                 hx-target="#trip-comments-panel"
                 hx-swap="outerHTML"
                 hx-encoding="multipart/form-data"
-                hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);document.getElementById('reply-form-{{ c.id }}').hidden=true}"
+                data-ul-on-success="reset comment-clear-map hide:reply-form-{{ c.id }}"
                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
             <input type="hidden" name="parent_id" value="{{ c.id }}">
             <input type="hidden" name="map_data" class="comment-map-data-field" value="">
@@ -120,7 +124,7 @@
               <div class="comment-map-chip" hidden>
                 <i class="material-icons" style="font-size:14px">map</i>
                 <span>Map attached</span>
-                <button type="button" onclick="_clearCommentMap(this.closest('.comment-compose'))" title="Remove map">
+                <button type="button" data-comment-map="clear" title="Remove map">
                   <i class="material-icons" style="font-size:14px">close</i>
                 </button>
               </div>
@@ -130,7 +134,7 @@
                   <input type="file" name="image" accept="image/*" class="comment-image-input">
                 </label>
                 <button type="button" class="comment-map-btn" title="Attach map"
-                        onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
+                        data-comment-map="open">
                   <i class="material-symbols-outlined">map</i>
                 </button>
                 <span class="comment-image-preview"></span>
@@ -140,7 +144,6 @@
           </form>
         </div>
 
-        {# Existing replies #}
         {% if item.replies %}
         <ul class="comment-replies">
           {% for reply_item in item.replies %}
@@ -171,9 +174,10 @@
               <div class="comment-text">{{ reply_item.rendered_text }}</div>
               {% if r.image %}
               {% if r.pending_scan %}
-              <p class="comment-image-scanning" title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
-                <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
-              </p>
+              <a class="comment-image-link" target="_blank" data-id="{{ r.pk }}" data-processing="pending" data-processing-url="{% url 'comments.trip_images.processing' %}"
+                 title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
+                {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="comment-image comment-image--processing" %}
+              </a>
               {% else %}
               <a href="{{ r.image.url }}" target="_blank" class="comment-image-link">
                 <img src="{{ r.image.url }}" alt="Attached" class="comment-image">
@@ -201,7 +205,7 @@
                 </button>
                 {% endfor %}
                 <div class="reaction-picker">
-                  <button type="button" class="reaction-add-btn" onclick="toggleReactionPicker(this)" aria-label="Add reaction">
+                  <button type="button" class="reaction-add-btn" aria-label="Add reaction">
                     <i class="material-symbols-outlined">add_reaction</i>
                   </button>
                   <div class="reaction-picker-popup" hidden>
@@ -212,8 +216,7 @@
                             hx-target="#comment-reactions-{{ r.id }}"
                             hx-swap="outerHTML"
                             hx-vals='{"emoji": "{{ emoji }}"}'
-                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                            onclick="this.closest('.reaction-picker-popup').hidden=true">
+                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
                       {{ emoji }}
                     </button>
                     {% endfor %}
@@ -222,7 +225,7 @@
               </div>
               {# Reply button on replies - targets the parent's reply form (flat threading) #}
               <button type="button" class="comment-reply-btn comment-reply-btn--sm"
-                      onclick="toggleReplyForm('reply-form-{{ c.id }}')">
+                      data-reply-form="reply-form-{{ c.id }}">
                 <i class="material-symbols-outlined">reply</i> Reply
               </button>
             </div>
@@ -239,6 +242,7 @@
   {% else %}
   <p class="comment-empty">No comments yet.</p>
   {% endif %}
+  {% include "dashboard/partials/ui/_pagination_controls.html" with page_url=comments_url page_noun="trip comments" %}
 
   {# -- Compose -- #}
   {% if not viewer_has_joined %}
@@ -249,7 +253,7 @@
         hx-target="#trip-comments-panel"
         hx-swap="outerHTML"
         hx-encoding="multipart/form-data"
-        hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this)}"
+        data-ul-on-success="reset comment-clear-map"
         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
     <input type="hidden" name="map_data" class="comment-map-data-field" value="">
     <div class="comment-avatar comment-avatar--compose">
@@ -271,7 +275,7 @@
       <div class="comment-map-chip" hidden>
         <i class="material-icons" style="font-size:14px">map</i>
         <span>Map attached</span>
-        <button type="button" onclick="_clearCommentMap(this.closest('.comment-compose'))" title="Remove map">
+        <button type="button" data-comment-map="clear" title="Remove map">
           <i class="material-icons" style="font-size:14px">close</i>
         </button>
       </div>
@@ -281,7 +285,7 @@
           <input type="file" name="image" accept="image/*" class="comment-image-input">
         </label>
         <button type="button" class="comment-map-btn" title="Attach map"
-                onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
+                data-comment-map="open">
           <i class="material-symbols-outlined">map</i>
         </button>
         <span class="comment-image-preview"></span>

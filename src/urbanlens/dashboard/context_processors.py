@@ -1,27 +1,62 @@
 from __future__ import annotations
 
+from functools import cache, partial, wraps
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.models import User
 from django.db import DatabaseError
+from django.urls import reverse
+from django.utils.functional import SimpleLazyObject, empty
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
 
+class Deferred(SimpleLazyObject):
+    """A context value computed on first read. A template calls it, so filters receive the value rather than this."""
+
+    def __call__(self) -> Any:
+        if self._wrapped is empty:
+            self._setup()
+        return self._wrapped
+
+
+def _read(compute: Callable[[], Mapping[str, object]], key: str) -> object:
+    return compute().get(key)
+
+
+def deferred(*keys: str) -> Callable[[Callable[[HttpRequest], Mapping[str, object]]], Callable[[HttpRequest], dict[str, Deferred]]]:
+    """Run a processor only if the template reads one of *keys*, and once however many it reads.
+
+    Django runs every processor on every render, including fragments that read none of their values.
+    """
+
+    def decorate(processor: Callable[[HttpRequest], Mapping[str, object]]) -> Callable[[HttpRequest], dict[str, Deferred]]:
+        @wraps(processor)
+        def lazily(request: HttpRequest) -> dict[str, Deferred]:
+            compute = cache(partial(processor, request))
+            return {key: Deferred(partial(_read, compute, key)) for key in keys}
+
+        return lazily
+
+    return decorate
+
+
+@deferred("site_title", "app_version", "public_costs_page_enabled")
 def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
-    """Inject site-wide settings into every template context.
+    """Inject site-wide settings into template context.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with site_title, app_version, and public_costs_page_enabled available in
-        all templates.
+        dict with site_title, app_version, public_costs_page_enabled.
     """
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -42,15 +77,15 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
     }
 
 
+@deferred("show_dev_toolbar", "dev_toolbar_theme_mode", "dev_toolbar_map_dark_mode")
 def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
-    """Inject dev toolbar visibility and theme state into template context.
+    """Inject dev toolbar visibility and theme state.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``show_dev_toolbar``, ``dev_toolbar_theme_mode``, and
-        ``dev_toolbar_map_dark_mode``.
+        dict with show_dev_toolbar, theme and map dark modes.
     """
     show = False
     try:
@@ -77,16 +112,15 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
     }
 
 
+@deferred("env_indicator_type", "env_indicator_label")
 def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
-    """Expose the active environment to every template for the non-production indicator banner.
+    """Expose the active environment for the non-production banner.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``env_indicator_type`` (lowercase environment value, e.g. ``"staging"``) and
-        ``env_indicator_label`` (human-readable label). Both are empty strings in production,
-        which templates use as the signal to hide the indicator.
+        dict with env_indicator_type and env_indicator_label (empty in prod).
     """
     from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
@@ -106,15 +140,10 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
 
 
 def add_demo_context(request: HttpRequest) -> dict[str, object]:
-    """Expose the demo flags to every template.
+    """Expose demo flags to templates.
 
-    Two separate facts, deliberately not one:
-
-    - ``demo_url`` is set on the **real** site and is where its "Try the demo"
-      button points. Empty means no demo has been provisioned, and the button
-      does not render - it cannot advertise a destination that does not exist.
-    - ``demo_mode`` is set on the **demo instance itself** and drives the
-      persistent banner. An instance should never have both.
+    ``demo_url`` lives on the real site (button target); ``demo_mode`` on the
+    demo instance itself (banner). Never both.
 
     Args:
         request: The current HttpRequest.
@@ -127,53 +156,43 @@ def add_demo_context(request: HttpRequest) -> dict[str, object]:
     return {
         "demo_url": app_settings.demo_url,
         "demo_mode": app_settings.demo_mode,
-        # Where the demo's banner sends someone who wants the real thing. Empty
-        # unless the demo instance has been told the real site's address, since
-        # the demo's own /signup/ would just make another throwaway account on
-        # the instance that is about to delete it.
+        # Banner link to the real site; empty hides it.
         "demo_signup_url": app_settings.demo_real_site_url,
     }
 
 
-#: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
-#: pin detail pages (``pin.*``) are reached from the map and should keep "Map" active.
+#: Nav aliases for sections reached from another page (e.g. pin.* keeps Map active).
 _NAV_SECTION_ALIASES = {"pin": "map", "spotguessr": "games", "trivia": "games"}
 
 
 def add_page_name(request: HttpRequest) -> dict[str, str]:
-    """Expose the current page and nav-bar section to every template.
+    """Expose the current page and nav section to templates.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``page_name`` (the resolved URL name, sanitized for use as a
-        CSS class) and ``nav_section`` (the URL name's leading ``section.``
-        segment, used by the nav bar to highlight the active link).
+        dict with ``page_name`` (CSS-safe URL name) and ``nav_section``.
     """
     resolver_match = request.resolver_match
     if resolver_match is None:
         return {"page_name": "", "nav_section": ""}
     url_name = resolver_match.url_name or ""
-    # This will be a className, so replace anything that would trip up css
     page_name = re.sub(r"[^a-zA-Z0-9]", "-", url_name)
     section = url_name.split(".", 1)[0] if url_name else ""
     nav_section = _NAV_SECTION_ALIASES.get(section, section)
     return {"page_name": page_name, "nav_section": nav_section}
 
 
+@deferred("distance_units")
 def add_distance_units(request: HttpRequest) -> dict[str, str]:
-    """Expose the viewer's effective distance unit to every template.
-
-    Templates render distances (stored internally in kilometres) in this unit via
-    the ``distance`` filter, e.g. ``{{ value_km|distance:distance_units }}``.
+    """Expose the viewer's distance unit to templates.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``distance_units`` ("km" or "mi"), defaulting to "km" for
-        anonymous users or when the profile is unavailable.
+        dict with ``distance_units`` ("km"/"mi"), defaulting to "km".
     """
     from urbanlens.dashboard.models.profile.meta import DistanceUnit
 
@@ -186,15 +205,33 @@ def add_distance_units(request: HttpRequest) -> dict[str, str]:
     return {"distance_units": units}
 
 
-def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
-    """Expose the current user's pending-deletion state for the site-wide warning banner.
+@deferred("keyboard_shortcuts")
+def add_keyboard_shortcuts(request: HttpRequest) -> dict[str, dict[str, str]]:
+    """Expose the viewer's shortcut overrides to templates.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``pending_account_deletion`` (bool), ``account_deletion_date``
-        (datetime or None), and ``account_deletion_days_left`` (int or None).
+        dict with ``keyboard_shortcuts`` (profile overrides, or ``{}``).
+    """
+    if isinstance(request.user, User):
+        try:
+            return {"keyboard_shortcuts": request.user.profile.keyboard_shortcuts or {}}
+        except (AttributeError, DatabaseError):
+            pass
+    return {"keyboard_shortcuts": {}}
+
+
+@deferred("pending_account_deletion", "account_deletion_date", "account_deletion_days_left")
+def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
+    """Expose pending-deletion state for the warning banner.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with pending flag, date, and days left.
     """
     if isinstance(request.user, User):
         try:
@@ -210,30 +247,27 @@ def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
     return {"pending_account_deletion": False, "account_deletion_date": None, "account_deletion_days_left": None}
 
 
+@deferred("show_messages_icon", "e2ee_needs_oauth_enroll")
 def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
-    """Expose whether the navbar messages icon should render for this user.
+    """Expose whether the navbar messages icon should render.
 
-    The icon appears once the user has ever sent or received a direct
-    message, OR has ever had an accepted friend (even if that friend was
-    later removed) - users with no way to reach the feature don't get an
-    extra navbar icon competing for attention, but the icon stays visible
-    once it's been relevant at all rather than flickering away.
+    Shown once the feature has been relevant; stays visible afterwards.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``show_messages_icon`` (bool) and ``e2ee_needs_oauth_enroll``
-        (bool - True for passwordless accounts with no key bundle yet, which
-        base.html enrolls transparently in the background).
+        dict with ``show_messages_icon`` and ``e2ee_needs_oauth_enroll``.
     """
     if isinstance(request.user, User):
         try:
             from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
             from urbanlens.dashboard.models.friendship import Friendship
             from urbanlens.dashboard.services.messaging.direct_messages import has_used_direct_messages
+            from urbanlens.dashboard.services.profile.profile_preview import is_rendering_as_ghost
 
-            needs_oauth_enroll = not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
+            # A preview's ghost has no password or keys either, but enrolling it would be refused as a write.
+            needs_oauth_enroll = not is_rendering_as_ghost(request) and not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
             show_messages_icon = has_used_direct_messages(request.user.profile) or Friendship.objects.profile(request.user.profile).ever_friends().exists()
             return {
                 "show_messages_icon": show_messages_icon,
@@ -244,18 +278,140 @@ def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
     return {"show_messages_icon": False, "e2ee_needs_oauth_enroll": False}
 
 
-def add_feature_access(request: HttpRequest) -> dict[str, bool]:
-    """Expose subscription-gated feature visibility to templates."""
-    try:
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+@deferred("nav_unread_messages")
+def add_unread_messages_badge(request: HttpRequest) -> dict[str, int]:
+    """The header's unread-conversations count, rendered with the page rather than fetched after it."""
+    if isinstance(request.user, User):
+        try:
+            from urbanlens.dashboard.services.messaging.direct_messages import unread_conversation_total
 
-        return {
-            "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
-            "show_places_layer": user_has_feature(request.user, SiteFeature.PLACES),
-            "can_use_web_search": user_has_feature(request.user, SiteFeature.SEARCH),
-            "can_upload_videos": user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS),
-            "show_games_nav": user_has_feature(request.user, SiteFeature.ALPHA_FEATURES),
-            "has_beta_features": user_has_feature(request.user, SiteFeature.BETA_FEATURES),
+            return {"nav_unread_messages": unread_conversation_total(request.user.profile)}
+        except (AttributeError, DatabaseError):
+            pass
+    return {"nav_unread_messages": 0}
+
+
+@deferred("nav_unread_notifications")
+def add_unread_notifications_badge(request: HttpRequest) -> dict[str, int]:
+    """The header's unread-notifications count, rendered with the page rather than fetched after it."""
+    if isinstance(request.user, User):
+        try:
+            from urbanlens.dashboard.services.notifications.notification_center import unread_count
+
+            return {"nav_unread_notifications": unread_count(request.user.profile)}
+        except (AttributeError, DatabaseError):
+            pass
+    return {"nav_unread_notifications": 0}
+
+
+@deferred("nav_active_checkins")
+def add_active_checkins_banner(request: HttpRequest) -> dict[str, list[Any]]:
+    """The header banner's active safety check-ins, rendered with the page rather than fetched after it."""
+    if isinstance(request.user, User):
+        try:
+            from urbanlens.dashboard.services.visits.safety import get_active_checkins
+
+            return {"nav_active_checkins": list(get_active_checkins(request.user.profile))}
+        except (AttributeError, DatabaseError):
+            pass
+    return {"nav_active_checkins": []}
+
+
+#: Stands in for the map the composer is about to save, which has no uuid until it is created.
+_MARKUP_MAP_PLACEHOLDER = "11111111-1111-1111-1111-111111111111"
+
+
+@deferred("comment_map_config")
+def add_comment_map_config(request: HttpRequest) -> dict[str, dict[str, Any]]:
+    """What the theme's comment-map composer needs from the server.
+
+    The composer is a static file, so the browser keeps it between pages and only these few request-shaped
+    values travel with the page. An anonymous visitor reaches the theme too, by way of the signed-out page.
+    """
+    profile_uuid = ""
+    if isinstance(request.user, User):
+        try:
+            profile_uuid = str(request.user.profile.uuid)
+        except (AttributeError, DatabaseError):
+            profile_uuid = ""
+    return {
+        "comment_map_config": {
+            "profileUuid": profile_uuid,
+            "urls": {
+                "commentsImagePicker": reverse("comments.image_picker"),
+                "mapAutocompleteLocal": reverse("map.autocomplete.local"),
+                "mapAutocompletePlaces": reverse("map.autocomplete.places"),
+                "mapResolvePlace": reverse("map.resolve_place"),
+                "markupMapCreate": reverse("markup_map.create"),
+                "markupMapSnapshot": reverse("markup_map.snapshot", kwargs={"map_uuid": _MARKUP_MAP_PLACEHOLDER}),
+                "messagesAttachMapPicker": reverse("messages.attach_map.picker"),
+            },
         }
+    }
+
+
+#: Stands in for the profile slug the conversation-key URL takes, so the base path can be
+#: recovered from one reverse() call instead of hand-building the route.
+_E2EE_SLUG_PLACEHOLDER = "e2ee-slug-token"
+
+
+@deferred("e2ee_urls")
+def add_e2ee_urls(request: HttpRequest) -> dict[str, dict[str, str]]:
+    """The E2EE client's endpoints, for the OAuth-enrollment bootstrap and the sign-in pages' auth.js.
+
+    Mirrors ``add_comment_map_config``: the request-shaped values travel with the page, and the
+    behavior that reads them is a cached static file.
+    """
+    keys_url = reverse("e2ee.keys")
+    passkeys_url = reverse("settings.security.passkeys.register")
+    conversation_key_url = reverse("e2ee.conversation_key", kwargs={"profile_slug": _E2EE_SLUG_PLACEHOLDER})
+    return {
+        "e2ee_urls": {
+            "loginParams": reverse("e2ee.login_params"),
+            "enroll": reverse("e2ee.enroll"),
+            "keys": keys_url,
+            "rewrap": reverse("e2ee.rewrap"),
+            "reset": reverse("e2ee.reset"),
+            "partnerKeyBase": keys_url,
+            "conversationKeyBase": conversation_key_url.removesuffix(f"{_E2EE_SLUG_PLACEHOLDER}/"),
+            "login": reverse("login"),
+            "faqUrl": f"{reverse('faq')}#faq-e2ee",
+            "validatePassword": reverse("validate_password_policy"),
+            "changePassword": reverse("e2ee.change_password"),
+            "passkeyWrap": reverse("e2ee.passkey_wrap"),
+            "passkeyRegisterOptions": reverse("settings.security.passkeys.options"),
+            "passkeyRegister": passkeys_url,
+            "passkeyBase": passkeys_url,
+        }
+    }
+
+
+#: Template flag, and the ``SiteFeature`` member it reports.
+_FEATURE_FLAGS = {
+    "can_use_ai_features": "AI",
+    "show_places_layer": "PLACES",
+    "can_use_web_search": "SEARCH",
+    "can_upload_videos": "VIDEO_UPLOADS",
+    "can_upload_documents": "DOCUMENT_UPLOADS",
+    "show_games_nav": "ALPHA_FEATURES",
+    "has_beta_features": "BETA_FEATURES",
+}
+
+
+@deferred(*_FEATURE_FLAGS, "is_site_admin")
+def add_feature_access(request: HttpRequest) -> dict[str, bool]:
+    """Expose subscription-gated feature visibility, and whether the viewer is a site admin.
+
+    ``is_site_admin`` is here rather than left to ``{{ perms }}`` because the template's ``perms``
+    lookup goes to the database on every page, asking the same question this already has the
+    answer to. It decides whether a nav item renders; the admin views enforce access themselves.
+    """
+    try:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_features
+        from urbanlens.dashboard.models.subscriptions.access_state import access_state
+
+        features = user_features(request.user)
+        admin = access_state(request.user).admin
     except (ImportError, DatabaseError):
-        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False, "show_games_nav": False, "has_beta_features": False}
+        return {**dict.fromkeys(_FEATURE_FLAGS, False), "is_site_admin": False}
+    return {flag: SiteFeature[member] in features for flag, member in _FEATURE_FLAGS.items()} | {"is_site_admin": admin}

@@ -1,13 +1,4 @@
-"""Tests for the outbound-email safety controls.
-
-Covers:
-- hash_email - one-way, normalization-aware hashing (property-based)
-- get_email_limits - site default vs. subscription-role override resolution
-  (largest wins, 0 = unlimited)
-- email_rate_limit_error - hour/day/month windows
-- has_sent_join_email / record_email_sent - one join email per address ever
-- invite_by_email - returns 429 at the cap and never re-emails an address
-"""
+"""Tests for the outbound-email safety controls."""
 
 from __future__ import annotations
 
@@ -17,9 +8,10 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import assume, given, strategies as st
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
@@ -31,6 +23,7 @@ from urbanlens.dashboard.services.security.email_safety import (
     hash_email,
     record_email_sent,
 )
+from urbanlens.dashboard.tasks import deliver_friend_invitation
 
 _EMAILS = st.emails()
 
@@ -53,9 +46,16 @@ class HashEmailTests(SimpleTestCase):
 
     @given(email=_EMAILS)
     def test_hash_does_not_contain_address(self, email):
+        """The stored digest is not a place the address can be read back out of.
+
+        Local parts made only of hex digits are excluded, and not for convenience: the digest is itself 64 hex
+        characters, so a short all-hex local part turns up inside one by coincidence often enough to fail this
+        at random - ``0846@a.com`` hashes to ``5ece20846df4...``."""
         local = email.split("@", 1)[0].lower()
-        if len(local) >= 4:
-            self.assertNotIn(local, hash_email(email))
+        assume(len(local) >= 4)
+        assume(not all(character in "0123456789abcdef" for character in local))
+
+        self.assertNotIn(local, hash_email(email))
 
 
 class EmailLimitResolutionTests(TestCase):
@@ -160,10 +160,12 @@ class InviteByEmailSafetyTests(TestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_second_invite_to_same_address_sends_no_email(self, mock_send):
-        self.client.post(self.url, {"email": "brandnew@example.com"})
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": "brandnew@example.com"})
         self.assertEqual(mock_send.call_count, 1)
 
-        self.client.post(self.url, {"email": "brandnew@example.com"})
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": "brandnew@example.com"})
 
         self.assertEqual(mock_send.call_count, 1)
 

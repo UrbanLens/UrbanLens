@@ -1,13 +1,4 @@
-"""Gateway for REData's ``/hazards/`` near-a-coordinate endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /hazards/ - recorded
-natural-hazard events". Replaces the direct, keyless call to the USGS FDSN
-event catalog with REData's pooled hazards registry - one provider today
-(``usgs_earthquakes``, worldwide), but the endpoint is shared across hazard
-kinds (``event_type`` is a closed vocabulary: earthquake, flood, wildfire,
-severe_weather, landslide, volcanic, other), so a future flood/wildfire
-provider answers from the same endpoint without this gateway changing.
-"""
+"""Gateway for REData's ``/hazards/`` near-a-coordinate endpoint."""
 
 from __future__ import annotations
 
@@ -55,16 +46,10 @@ class RedataHazardsGateway(RedataLocationContextGateway):
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope. Each ``results`` entry carries ``event_type``,
-            ``magnitude``, ``magnitude_scale`` (magnitudes are not comparable
-            across event types - treat the number as opaque unless you
-            recognize the scale), ``occurred_at``, ``place``, ``url``, and any
-            provider-specific extras under ``attributes``.
+            The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: Every source covering the
-                coordinate failed to answer, or the request to REData failed
-                outright.
+            LocationContextUnavailableError: Every source covering the coordinate failed to answer, or the request to REData failed outright.
         """
         extra_params: dict[str, Any] = {}
         if min_magnitude is not None:

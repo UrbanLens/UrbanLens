@@ -1,37 +1,29 @@
-r"""Provision (or remove) the accounts the on-demand integration suite runs as.
+"""Provision (or remove) the accounts the on-demand integration suite runs as.
 
-Run this on the deployment under test, then point the suite at what it prints::
-
-    python src/urbanlens/manage.py provision_integration_env --out /tmp/e2e.json
-    UL_E2E_ACCOUNTS_FILE=/tmp/e2e.json \
-        bin/run_integration_tests.sh --url https://s1.dev.urbanlens.org
-
-and afterwards, if the instance is shared::
-
-    python src/urbanlens/manage.py provision_integration_env --purge --execute
-
-Idempotent: re-running refreshes the same accounts (new password, new keys)
-rather than accumulating a new pair each time. See
-``services.integration_testing.accounts`` for what "refresh" has to mean for a
-headless browser to be able to sign in.
-
-**The output contains plaintext credentials.** ``--out`` writes them to a file
-so they do not end up in a terminal scrollback or a CI log by default.
+Idempotent: re-running refreshes the same accounts (new password, new keys) rather than accumulating
+a new pair each time.
 """
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from django.conf import settings as django_settings
 from django.core.management.base import BaseCommand, CommandError
 
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_OVERRIDE_ENV_VAR
 from urbanlens.dashboard.services.integration_testing.accounts import DEFAULT_ROLES, integration_users, provision, purge
-from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
+from urbanlens.dashboard.services.integration_testing.guards import is_production, production_unlocked
 from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+#: Role the load harness drives as the noisy neighbour. Not in ``DEFAULT_ROLES`` because provisioning it is
+#: cheap but *seeding* it is not, and every ordinary integration run would otherwise pay for a fixture only the
+#: perf suite uses.
+_HEAVY_ROLE = "heavy"
+#: Usernames the signup specs register through the form; only these may have their verification link read back.
+SIGNUP_SPEC_PREFIX = "ule2e_"
 
 
 class Command(BaseCommand):
@@ -53,6 +45,45 @@ class Command(BaseCommand):
         )
         parser.add_argument("--no-api-keys", action="store_true", help="Skip minting external-API keys.")
         parser.add_argument(
+            "--subscriber-roles",
+            default="",
+            help="Comma-separated roles (each must be in --roles) granted the suite's subscriber role, which unlocks property_owners. Every other role has it revoked.",
+        )
+        parser.add_argument(
+            "--heavy-pins",
+            type=int,
+            default=0,
+            help="Seed the --heavy-role account up to this many root pins, for the load harness. Tops up rather than restarting, so re-running is cheap.",
+        )
+        parser.add_argument(
+            "--heavy-role",
+            default=_HEAVY_ROLE,
+            help=f"Which role --heavy-pins seeds (default: {_HEAVY_ROLE}). Must be one of --roles.",
+        )
+        parser.add_argument(
+            "--heavy-labels",
+            type=int,
+            default=0,
+            help="Grow dashboard_labels to this many rows on the --heavy-role account, for P123's cross-account label-scan load test. Tops up rather than restarting.",
+        )
+        parser.add_argument(
+            "--heavy-search-relations",
+            type=int,
+            default=0,
+            help="Grow the five other to-many relations P123 generalised to (pin/wiki aliases, trip activities/comments, safety check-in messages) to this many rows each on the --heavy-role account. Tops up rather than restarting.",
+        )
+        parser.add_argument(
+            "--population",
+            type=int,
+            default=0,
+            help="Provision this many ordinary accounts for the capacity test instead of --roles, each signed in with a minted session. Requires --out.",
+        )
+        parser.add_argument(
+            "--no-analyze",
+            action="store_true",
+            help="Skip refreshing planner statistics after seeding. Only useful for demonstrating what skipping it costs; every measurement taken afterwards is of the planner's ignorance rather than of the query.",
+        )
+        parser.add_argument(
             "--external-apis",
             action="store_true",
             help="Leave outbound providers and AI enabled on these accounts. Off by default: every provider outside REData bills per call.",
@@ -61,6 +92,12 @@ class Command(BaseCommand):
         parser.add_argument("--format", choices=["json", "text"], default="json", help="Output format (default: json).")
         parser.add_argument("--purge", action="store_true", help="Delete the provisioned accounts instead of creating them.")
         parser.add_argument("--execute", action="store_true", help="Required by --purge. Without it, --purge only reports.")
+        parser.add_argument(
+            "--signup-verify-path",
+            default=None,
+            metavar="USERNAME",
+            help=f"Print the verification path of a pending signup made by a spec (username starting {SIGNUP_SPEC_PREFIX!r}), since its mail is never delivered.",
+        )
         parser.add_argument(
             "--force",
             action="store_true",
@@ -71,26 +108,40 @@ class Command(BaseCommand):
         """Provision or purge, after checking this is somewhere it may run.
 
         Raises:
-            CommandError: The environment is production and both locks were not
-                opened, or ``--purge`` was given without ``--execute``.
+            CommandError: The environment is production and both locks were not opened, or ``--purge`` was
+            given without ``--execute``.
         """
         self._check_environment(force=options["force"])
+
+        if options["signup_verify_path"]:
+            self.stdout.write(_signup_verify_path(options["signup_verify_path"]))
+            return
 
         if options["purge"]:
             self._purge(execute=options["execute"])
             return
 
-        roles = [role.strip() for role in options["roles"].split(",") if role.strip()]
+        if options["population"]:
+            self._provision_population(options)
+            return
+
+        roles = _split_roles(options["roles"])
         if not roles:
             raise CommandError("--roles resolved to an empty list.")
+        subscriber_roles = _split_roles(options["subscriber_roles"])
+        unknown = [role for role in subscriber_roles if role not in roles]
+        if unknown:
+            raise CommandError(f"--subscriber-roles names {', '.join(unknown)}, which is not in --roles ({', '.join(roles)}). Add it to --roles.")
 
         result = provision(
             roles,
             password=options["password"],
             with_api_keys=not options["no_api_keys"],
             external_apis=options["external_apis"],
+            subscriber_roles=subscriber_roles,
         )
-        manifest = result.manifest(site_url=django_settings.SITE_URL, environment=str(app_settings.environment_name))
+        seeds = self._seed(result, options)
+        manifest = result.manifest(site_url=django_settings.SITE_URL, environment=str(app_settings.environment_name), seeds=seeds)
 
         if options["format"] == "text":
             self._write_text(manifest)
@@ -102,30 +153,139 @@ class Command(BaseCommand):
             self.stdout.write(payload)
             return
 
-        path = Path(destination)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(payload, encoding="utf-8")
-        # Owner-only. The manifest holds live passwords and API keys, and this
-        # is frequently written to a shared /tmp on a shared staging box.
-        try:
-            path.chmod(0o600)
-        except OSError:
-            # Windows and some mounted filesystems do not implement this. Not
-            # worth failing a provisioning run over, but worth saying out loud.
-            self.stderr.write(self.style.WARNING(f"Could not restrict permissions on {path}; it holds plaintext credentials."))
+        path = self._write_private(Path(destination), payload)
 
         created = ", ".join(result.created_roles) or "none"
         refreshed = ", ".join(result.refreshed_roles) or "none"
         self.stdout.write(f"Wrote {len(result.accounts)} account(s) to {path}. Created: {created}. Refreshed: {refreshed}.")
         self.stdout.write(f"Point the suite at it with UL_E2E_ACCOUNTS_FILE={path}")
 
-    def _check_environment(self, *, force: bool) -> None:
-        """Refuse to run against production unless both locks are open.
+    def _write_private(self, path: Path, payload: str) -> Path:
+        """Write *payload* to *path*, readable by its owner alone before any byte of it lands.
 
-        Two locks rather than one because each covers a different mistake:
-        ``--force`` covers a command typed in the wrong terminal, and the
-        environment variable covers a script that has always carried ``--force``
-        being pointed somewhere new.
+        Owner-only because a manifest holds live credentials and is frequently written to a shared /tmp on a shared
+        staging box.
+
+        Args:
+            path: Where to write.
+            payload: The manifest.
+
+        Returns:
+            The path written.
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch(mode=0o600, exist_ok=True)
+        try:
+            path.chmod(0o600)
+        except OSError:
+            # Windows and some mounted filesystems do not implement this. Not
+            # worth failing a provisioning run over, but worth saying out loud.
+            self.stderr.write(self.style.WARNING(f"Could not restrict permissions on {path}; it holds plaintext credentials."))
+        path.write_text(payload, encoding="utf-8")
+        return path
+
+    def _provision_population(self, options: dict) -> None:
+        """Provision the capacity test's population and write its manifest.
+
+        Args:
+            options: Parsed command options.
+
+        Raises:
+            CommandError: No ``--out`` was given. A session for every account does not belong in scrollback.
+        """
+        from urbanlens.dashboard.services.integration_testing.population import provision_population
+
+        if options["out"] is None:
+            raise CommandError("--population writes a live session for every account; pass --out so they go to a file.")
+        self.stderr.write(f"Provisioning a population of {options['population']} accounts. A first run seeds every pin and takes a while.")
+        result = provision_population(options["population"], analyze=not options["no_analyze"], progress=self.stderr.write)
+        manifest = result.manifest(site_url=django_settings.SITE_URL, environment=str(app_settings.environment_name))
+        path = self._write_private(Path(options["out"]), json.dumps(manifest))
+        self.stdout.write(
+            f"Wrote {len(result.accounts)} population account(s) to {path}: {result.created} created, {result.pins_created} pins created, analyzed={result.analyzed}, {result.seconds}s.",
+        )
+
+    def _seed(self, result, options: dict) -> dict[str, object]:
+        """Seed the heavy account, if asked, and report what was made.
+
+        The report goes into the manifest rather than only to stdout because the load harness reads the
+        shared label's id out of it.
+
+        Args:
+            result: What ``provision`` just produced.
+            options: Parsed command options.
+
+        Returns:
+            A mapping of role name to that role's seed report; empty when nothing was seeded.
+
+        Raises:
+            CommandError: ``--heavy-pins``, ``--heavy-labels``, or ``--heavy-search-relations`` names
+                a role that was not provisioned.
+        """
+        wanted_pins = options["heavy_pins"]
+        wanted_labels = options["heavy_labels"]
+        wanted_relations = options["heavy_search_relations"]
+        if wanted_pins <= 0 and wanted_labels <= 0 and wanted_relations <= 0:
+            return {}
+
+        role = options["heavy_role"]
+        account = next((candidate for candidate in result.accounts if candidate.role == role), None)
+        if account is None:
+            provisioned = ", ".join(candidate.role for candidate in result.accounts) or "none"
+            raise CommandError(
+                f"--heavy-pins/--heavy-labels/--heavy-search-relations asked to seed the '{role}' account, but only these were provisioned: {provisioned}. Add it to --roles.",
+            )
+        profile = Profile.objects.get(user__username=account.username)
+        report: dict[str, object] = {}
+
+        # Progress goes to stderr because stdout is a document: with --format json and no --out it is the
+        # manifest itself, and with --format text it is a block of shell exports.
+        if wanted_pins > 0:
+            from urbanlens.dashboard.services.integration_testing.perf_seed import seed_heavy_account
+
+            self.stderr.write(f"Seeding {account.username} to {wanted_pins} pins. This writes rows in bulk and can take a while at large sizes.")
+            pins_report = seed_heavy_account(profile, pins=wanted_pins, analyze=not options["no_analyze"])
+            self.stderr.write(
+                f"  {pins_report['pins']} pins ({pins_report['created']} created, {pins_report['already_present']} already there) on label {pins_report['label']!r} (id {pins_report['label_id']}), analyzed={pins_report['analyzed']}, {pins_report['seconds']}s",
+            )
+            if not pins_report["analyzed"]:
+                self.stderr.write(
+                    self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
+                )
+            report.update(pins_report)
+
+        if wanted_labels > 0:
+            from urbanlens.dashboard.services.integration_testing.perf_seed import seed_bulk_labels
+
+            self.stderr.write(f"Growing dashboard_labels to {wanted_labels} rows on {account.username}. This writes rows in bulk and can take a while at large sizes.")
+            labels_report = seed_bulk_labels(profile, count=wanted_labels, analyze=not options["no_analyze"])
+            self.stderr.write(
+                f"  {labels_report['labels']} bulk labels ({labels_report['created']} created, {labels_report['already_present']} already there), analyzed={labels_report['analyzed']}, {labels_report['seconds']}s",
+            )
+            if not labels_report["analyzed"]:
+                self.stderr.write(
+                    self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
+                )
+            report["bulk_labels"] = labels_report
+
+        if wanted_relations > 0:
+            from urbanlens.dashboard.services.integration_testing.perf_seed import seed_bulk_search_relations
+
+            self.stderr.write(f"Growing pin/wiki aliases, trip activities/comments, and safety messages to {wanted_relations} rows each on {account.username}. This writes rows in bulk and can take a while at large sizes.")
+            relations_report = seed_bulk_search_relations(profile, count=wanted_relations, analyze=not options["no_analyze"])
+            for key in ("pin_aliases", "wiki_aliases", "trip_activities", "trip_comments", "safety_messages"):
+                sub = relations_report[key]
+                self.stderr.write(f"  {key}: {sub['count']} ({sub['created']} created, {sub['already_present']} already there)")
+            if not relations_report["analyzed"]:
+                self.stderr.write(
+                    self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
+                )
+            report["bulk_search_relations"] = relations_report
+
+        return {role: report}
+
+    def _check_environment(self, *, force: bool) -> None:
+        """Refuse to run against production unless both locks in ``guards`` are open.
 
         Args:
             force: Whether ``--force`` was passed.
@@ -133,10 +293,9 @@ class Command(BaseCommand):
         Raises:
             CommandError: This is production and either lock is closed.
         """
-        if str(app_settings.environment_name) != EnvironmentTypes.PRODUCTION:
+        if not is_production():
             return
-        override = os.environ.get(INTEGRATION_OVERRIDE_ENV_VAR, "").strip().lower() in {"1", "true", "yes", "on"}
-        if force and override:
+        if production_unlocked(force=force):
             self.stderr.write(self.style.WARNING("Running against a PRODUCTION environment because --force and the override variable are both set."))
             return
         raise CommandError(
@@ -147,9 +306,7 @@ class Command(BaseCommand):
         """Delete the provisioned accounts, or report what would be deleted.
 
         Args:
-            execute: Whether to actually delete. Without it this only reports,
-                which is the default because the alternative is a command that
-                destroys accounts on a typo.
+            execute: Whether to actually delete.
         """
         candidates = list(integration_users())
         if not candidates:
@@ -179,3 +336,27 @@ class Command(BaseCommand):
             if account["api_key"]:
                 self.stdout.write(f"export {prefix}API_KEY={account['api_key']}")
                 self.stdout.write(f"export {prefix}SCOPES={','.join(account['scopes'])}")
+            self.stdout.write(f"export {prefix}FEATURES={','.join(account['features'])}")
+
+
+def _split_roles(raw: str) -> list[str]:
+    """Parse a comma-separated role list, dropping blanks."""
+    return [role.strip() for role in raw.split(",") if role.strip()]
+
+
+def _signup_verify_path(username: str) -> str:
+    """The verification path of a spec's pending signup.
+
+    Raises:
+        CommandError: The username is not a spec's, or has no pending signup.
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.account import EmailVerification
+
+    if not username.startswith(SIGNUP_SPEC_PREFIX):
+        raise CommandError(f"Only a spec's signup ({SIGNUP_SPEC_PREFIX}...) can have its verification link read back.")
+    verification = EmailVerification.objects.filter(user__username=username, user__is_active=False, verified_at__isnull=True).first()
+    if verification is None:
+        raise CommandError(f"No pending signup for {username}.")
+    return reverse("verify_email", args=[str(verification.token)])

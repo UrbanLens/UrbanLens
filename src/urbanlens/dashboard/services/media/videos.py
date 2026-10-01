@@ -1,11 +1,4 @@
-"""Video processing utilities - ffmpeg-based downscaling and metadata extraction.
-
-Requires the ``ffmpeg``/``ffprobe`` binaries on PATH (see the Dockerfile).
-Every function here degrades gracefully (logs and returns None/empty) when
-the binaries are missing or a given file can't be processed, rather than
-failing the upload - a video is still usable at its original resolution
-even if downscaling isn't available.
-"""
+"""Video processing utilities - ffmpeg-based downscaling and metadata extraction."""
 
 from __future__ import annotations
 
@@ -13,6 +6,7 @@ import contextlib
 from datetime import datetime
 import json
 import logging
+import os
 import posixpath
 import re
 import shutil
@@ -21,6 +15,9 @@ import tempfile
 from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
+
+from urbanlens.dashboard.services.media.images import StoredFileReplacement
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -31,11 +28,23 @@ _FFMPEG_TIMEOUT_SECONDS = 600
 _FFPROBE_TIMEOUT_SECONDS = 30
 
 
+def ffmpeg_path() -> str | None:
+    """The absolute path to the ffmpeg binary, or None.
+    Resolved once here rather than left to `exec`'s own PATH walk, so the sandbox tier passes an absolute path and the binary it will run is inspectable before it runs."""
+    return shutil.which("ffmpeg")
+
+
+def ffprobe_path() -> str | None:
+    """The absolute path to the ffprobe binary, or None. See `ffmpeg_path`."""
+    return shutil.which("ffprobe")
+
+
 def ffmpeg_available() -> bool:
     """Whether the ffmpeg/ffprobe binaries are present on PATH."""
-    return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+    return ffmpeg_path() is not None and ffprobe_path() is not None
 
 
+@untrusted_parse("video.probe")
 def probe_video(path: str) -> dict[str, Any] | None:
     """Run ffprobe on a local file and return its parsed JSON output.
 
@@ -43,14 +52,13 @@ def probe_video(path: str) -> dict[str, Any] | None:
         path: Local filesystem path to the video file.
 
     Returns:
-        The parsed ffprobe JSON (``format``/``streams`` keys), or None if
-        ffprobe is unavailable or the file can't be probed.
-    """
-    if not ffmpeg_available():
+        The parsed ffprobe JSON (``format``/``streams`` keys), or None if ffprobe is unavailable or the file can't be probed."""
+    ffprobe = ffprobe_path()
+    if ffprobe is None:
         return None
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
+            [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
             capture_output=True,
             timeout=_FFPROBE_TIMEOUT_SECONDS,
             check=True,
@@ -65,12 +73,10 @@ def probe_video(path: str) -> dict[str, Any] | None:
         return None
 
 
-#: Container tags a phone writes the capture coordinates into. ffmpeg copies
-#: global metadata across both a re-encode and a stream copy, so these have to
-#: be cleared explicitly; assigning an empty value is how ffmpeg deletes a tag.
-#: Only the location tags are cleared, never the whole metadata block - this
-#: mirrors the photo path, which drops the GPS IFD and leaves the rest of the
-#: EXIF alone.
+#: Container tags a phone writes the capture coordinates into. ffmpeg copies global metadata across
+#: both a re-encode and a stream copy, so these have to be cleared explicitly; assigning an empty
+#: value is how ffmpeg deletes a tag.
+#: Only the location tags are cleared, never the whole metadata block - this mirrors the photo path,
 _LOCATION_TAGS = ("location", "location-eng", "com.apple.quicktime.location.ISO6709")
 
 
@@ -92,11 +98,7 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
         path: Local filesystem path to the video file.
 
     Returns:
-        Dict with any of ``taken_at`` (datetime), ``latitude``/``longitude``
-        (float), ``width``/``height`` (int) that could be determined. Missing
-        keys mean that piece of metadata wasn't present or ffprobe/the file
-        didn't yield it - never raises.
-    """
+        Dict with any of ``taken_at`` (datetime), ``latitude``/``longitude`` (float), ``width``/``height`` (int) that could be determined."""
     metadata: dict[str, Any] = {}
     probed = probe_video(path)
     if not probed:
@@ -112,11 +114,10 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
             parsed = datetime.fromisoformat(creation_time)
             metadata["taken_at"] = parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
 
-    # `has_location_tag` is reported separately from the parsed coordinates: a
-    # scrub has to key off the tag being *present*, not off it being readable.
-    # A tag in a notation _parse_iso6709 doesn't handle still discloses where
-    # the video was taken, and gating the strip on successful parsing would
-    # leave exactly those behind.
+    # `has_location_tag` is reported separately from the parsed coordinates: a scrub has to key off
+    # the tag being *present*, not off it being readable.
+    # A tag in a notation _parse_iso6709 doesn't handle still discloses where the video was taken,
+    # and gating the strip on successful parsing would leave exactly those behind.
     location_tag = next((fmt_tags.get(tag) for tag in _LOCATION_TAGS if fmt_tags.get(tag)), None)
     if location_tag:
         metadata["has_location_tag"] = True
@@ -142,9 +143,12 @@ def _clear_location_args() -> list[str]:
 
 def _run_ffmpeg(args: list[str], src_path: str, what: str) -> bool:
     """Run one ffmpeg invocation; returns True on success."""
+    ffmpeg = ffmpeg_path()
+    if ffmpeg is None:
+        return False
     try:
         subprocess.run(
-            ["ffmpeg", "-y", "-i", src_path, *args],
+            [ffmpeg, "-y", "-i", src_path, *args],
             capture_output=True,
             timeout=_FFMPEG_TIMEOUT_SECONDS,
             check=True,
@@ -155,6 +159,7 @@ def _run_ffmpeg(args: list[str], src_path: str, what: str) -> bool:
     return True
 
 
+@untrusted_parse("video.transcode")
 def _reencode(src_path: str, out_path: str, max_height: int, *, strip_location: bool = False) -> bool:
     """Downscale to ``max_height``, optionally dropping the location tags; True on success."""
     args = [
@@ -178,44 +183,21 @@ def _reencode(src_path: str, out_path: str, max_height: int, *, strip_location: 
     return _run_ffmpeg([*args, out_path], src_path, "re-encode")
 
 
+@untrusted_parse("video.transcode")
 def _remux_without_location(src_path: str, out_path: str) -> bool:
-    """Drop the location tags without touching the streams; True on success.
-
-    A stream copy, so it costs a file rewrite rather than a transcode and loses
-    no quality. This is what lets a video be scrubbed even when it is already
-    small enough that no downscale was warranted.
-    """
+    """Drop the location tags without touching the streams; True on success."""
     return _run_ffmpeg(["-c", "copy", *_clear_location_args(), "-movflags", "+faststart", out_path], src_path, "location strip")
 
 
-def process_uploaded_video(image: Image, max_height: int | None, *, strip_location: bool = False) -> tuple[dict[str, Any], int | None]:
-    """Extract metadata from an uploaded video, downscale it if oversized, and optionally scrub its location.
-
-    Copies the stored file to a local temp path once (ffmpeg/ffprobe need a
-    real file, not a stream) and reuses that copy for both metadata probing
-    and, if needed, re-encoding - so the file is only fetched from storage a
-    single time regardless of storage backend.
-
-    ``strip_location`` is independent of ``max_height``: a video small enough to
-    need no downscale must still be scrubbed, via a lossless stream copy. The
-    caller controlling this previously expressed it by passing ``max_height=None``,
-    which meant "skip processing entirely" and so guaranteed the opposite - the
-    original file, location tag and all, was what got stored and served.
+def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[str, Any], StoredFileReplacement | None]:
+    """Extract metadata from an uploaded video, downscale it if oversized, and scrub its location.
 
     Args:
         image: The Image row whose stored video to process.
-        max_height: Vertical resolution cap in pixels, or None to skip
-            downscaling (metadata is still extracted, and a location strip
-            still happens if asked for).
-        strip_location: Remove the container's location tags from the stored
-            file. Independent of the derived ``Image.latitude``/``longitude``
-            fields, which the caller controls separately.
+        max_height: Vertical resolution cap in pixels, or None to skip downscaling.
 
     Returns:
-        (metadata, new_size): metadata is as :func:`extract_video_metadata`;
-        new_size is the new stored size in bytes if the file was replaced,
-        else None.
-    """
+        (metadata, replacement): metadata is as :func:`extract_video_metadata`; replacement is None when the file was left alone, and otherwise carries the new size plus the superseded name - still on disk, for the caller to discard once the row names..."""
     old_name = image.image.name
     if not old_name or not ffmpeg_available():
         return {}, None
@@ -230,7 +212,7 @@ def process_uploaded_video(image: Image, max_height: int | None, *, strip_locati
         needs_downscale = max_height is not None and not (current_height is not None and current_height <= max_height)
         # Keyed off the tag's presence, not off parsed coordinates - see
         # extract_video_metadata. Only worth rewriting a file that carries one.
-        needs_strip = strip_location and bool(metadata.get("has_location_tag"))
+        needs_strip = bool(metadata.get("has_location_tag"))
 
         if not needs_downscale and not needs_strip:
             return metadata, None
@@ -246,21 +228,17 @@ def process_uploaded_video(image: Image, max_height: int | None, *, strip_locati
         if not succeeded:
             return metadata, None
 
-        with open(out_path, "rb") as f:
-            new_bytes = f.read()
+        new_size = os.path.getsize(out_path)
+        # A rewrite that grew the file is not worth keeping - unless scrubbing the
+        # location was the point, in which case keeping the smaller-but-still-tagged
+        # original would defeat it. Mirrors the photo path's has_gps exemption.
+        if not new_size or (new_size >= old_size and not needs_strip):
+            return metadata, None
 
-    # A rewrite that grew the file is not worth keeping - unless scrubbing the
-    # location was the point, in which case keeping the smaller-but-still-tagged
-    # original would defeat it. Mirrors the photo path's has_gps exemption.
-    if not new_bytes or (len(new_bytes) >= old_size and not needs_strip):
-        return metadata, None
+        from django.core.files import File
 
-    from django.core.files.base import ContentFile
-
-    stem = posixpath.splitext(posixpath.basename(old_name))[0]
-    image.image.save(f"{stem}.mp4", ContentFile(new_bytes), save=False)
-    if image.image.name != old_name:
-        with contextlib.suppress(OSError):
-            image.image.storage.delete(old_name)
-    logger.info("Rewrote video %s: %s -> %s bytes (downscale=%s, location strip=%s)", image.pk, old_size, len(new_bytes), needs_downscale, needs_strip)
-    return metadata, len(new_bytes)
+        stem = posixpath.splitext(posixpath.basename(old_name))[0]
+        with open(out_path, "rb") as rewritten:
+            image.image.save(f"{stem}.mp4", File(rewritten), save=False)
+    logger.info("Rewrote video %s: %s -> %s bytes (downscale=%s, location strip=%s)", image.pk, old_size, new_size, needs_downscale, needs_strip)
+    return metadata, StoredFileReplacement(new_size, old_name if image.image.name != old_name else None)

@@ -1,15 +1,5 @@
 """Public-pin eligibility engine and vote handling (UL-58).
-
-A location becomes a public-pin candidate only when EVERY criterion in
-:class:`PublicPinConfig` holds; the community then votes, and a passed vote
-makes the location public - suggested to every account (opt-out). The rules
-are deliberately never surfaced to users: the UI shows only the vote buttons
-(when a place qualifies) and a plain-language FAQ entry.
-
-Everything here is driven by ``evaluate_public_pin_candidates`` on a Celery
-beat schedule. The only request-path entry points are ``public_vote_context``
-(render the block) and ``cast_public_vote`` (record a ballot), both cheap.
-"""
+A location becomes a public-pin candidate only when EVERY criterion in :class:`PublicPinConfig` holds; the community then votes, and a passed vote makes the location public - suggested to every account (opt-out)."""
 
 from __future__ import annotations
 
@@ -18,10 +8,11 @@ from datetime import timedelta
 import logging
 import math
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth import get_user_model
-from django.db.models import Avg, Count, Q
+from django.contrib.gis.measure import D
+from django.db.models import Avg, Count, Exists, OuterRef, Q
 from django.db.models.functions import Length
 from django.utils import timezone
 
@@ -34,9 +25,12 @@ from urbanlens.dashboard.models.public_pins.model import PublicPinCandidate, Pub
 from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiStatVote
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
 
-    from urbanlens.dashboard.models.wiki.model import Wiki
+    from django.contrib.gis.geos import Point
+    from django.db.models import QuerySet
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,31 +40,22 @@ class PublicPinConfig:
     """Every tunable threshold for public-pin eligibility and voting.
 
     Attributes:
-        region_radius_km: Only one public location per circle of this radius
-            ("about the size of a city").
-        min_vuln_votes: Vulnerability composite must draw from at least this
-            many votes.
-        max_vuln_avg: Vulnerability average must be strictly below this
-            (1-5 scale; low = not vulnerable).
+        region_radius_km: Only one public location per circle of this radius ("about the size of a city").
+        min_vuln_votes: Vulnerability composite must draw from at least this many votes.
+        max_vuln_avg: Vulnerability average must be strictly below this (1-5 scale; low = not vulnerable).
         min_aliases: Aliases required beyond the wiki name itself.
         min_photos: Photos required on the wiki/location.
         min_links: External links required on the wiki.
         min_article_chars: Minimum article length to count as "an article".
-        min_markup_or_children: Markup elements plus community child markers
-            required on the wiki map.
-        top_n_per_state: Rank cutoff among eligible locations per US state
-            (ties at the cutoff all qualify).
-        pinner_share: Fraction of active users in the pinned-by floor formula.
-        pinner_floor_min / pinner_floor_max: Clamp for that formula -
-            ``max(min, min(max, ceil(share x active_users)))``.
-        active_user_days: A user counts as active if they logged in within
-            this many days.
+        min_markup_or_children: Markup elements plus community child markers required on the wiki map.
+        top_n_per_state: Rank cutoff among eligible locations per US state (ties at the cutoff all qualify).
+        pinner_share: Fraction of active users in the pinned-by floor formula. pinner_floor_min / pinner_floor_max: Clamp for that formula - ``max(min, min(max, ceil(share x active_users)))``.
+        active_user_days: A user counts as active if they logged in within this many days.
         min_votes_to_pass: Ballots required before a vote can pass.
         min_open_days: Minimum total days a vote must have been open to pass.
         pass_consensus: Yes-share required to pass (inclusive).
         fail_min_votes: Ballots required before the hard-fail rule applies.
-        fail_consensus: No-share that closes the vote for good (inclusive).
-    """
+        fail_consensus: No-share that closes the vote for good (inclusive)."""
 
     region_radius_km: float = 15.0
     min_vuln_votes: int = 3
@@ -101,14 +86,19 @@ _PLACEHOLDER_NAMES = frozenset({"untitled", "unknown", "unnamed", "new location"
 
 
 class PublicVoteError(Exception):
-    """A ballot was refused (not eligible, not open, or bad input).
+    """A ballot was refused."""
 
-    ``safe_message`` is safe to surface directly to the caller.
-    """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+class VoteNotOpenError(PublicVoteError):
+    """This location has no public-pin candidate, or its vote isn't open."""
+
+
+class VoterNotPinnedError(PublicVoteError):
+    """The profile doesn't hold a root pin at this location, so it can't vote."""
+
+
+class UnrecognizedVoteChoiceError(PublicVoteError):
+    """``choice`` wasn't "public", "private", or "withdraw"."""
 
 
 def is_meaningful_name(name: str | None) -> bool:
@@ -118,9 +108,7 @@ def is_meaningful_name(name: str | None) -> bool:
         name: The wiki's community name.
 
     Returns:
-        True when the name is long enough, not coordinate-like, and not a
-        known placeholder.
-    """
+        True when the name is long enough, not coordinate-like, and not a known placeholder."""
     stripped = (name or "").strip()
     if len(stripped) < 4:
         return False
@@ -131,30 +119,22 @@ def is_meaningful_name(name: str | None) -> bool:
 
 def pinned_by_floor(active_user_count: int, config: PublicPinConfig = CONFIG) -> int:
     """Minimum distinct pinners required, scaled to community size.
-
-    ``max(floor_min, min(floor_max, ceil(share x active_users)))`` - small
-    communities need only a couple of pinners; large ones cap out so the bar
-    stays reachable.
-    """
+    ``max(floor_min, min(floor_max, ceil(share x active_users)))`` - small communities need only a couple of pinners; large ones cap out so the bar stays reachable."""
     scaled = math.ceil(config.pinner_share * active_user_count)
     return max(config.pinner_floor_min, min(config.pinner_floor_max, scaled))
 
 
-def _km_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in kilometres.
+def _passed_within(point: Point | OuterRef, config: PublicPinConfig) -> QuerySet[PublicPinCandidate]:
+    """Passed candidates whose location lies within the region radius of *point*, measured by PostGIS.
 
     Args:
-        lat1: First latitude in degrees.
-        lon1: First longitude in degrees.
-        lat2: Second latitude in degrees.
-        lon2: Second longitude in degrees.
+        point: A geography point, or an ``OuterRef`` to one for use in ``Exists``.
+        config: Supplies ``region_radius_km``.
 
     Returns:
-        Distance in kilometres.
+        The matching passed candidates.
     """
-    from urbanlens.dashboard.services.geo.distance import haversine_km
-
-    return haversine_km(lat1, lon1, lat2, lon2)
+    return PublicPinCandidate.objects.passed().filter(location__point__dwithin=(point, D(km=config.region_radius_km)))
 
 
 def _active_user_count(now: datetime, config: PublicPinConfig) -> int:
@@ -165,14 +145,8 @@ def _active_user_count(now: datetime, config: PublicPinConfig) -> int:
 
 def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
     """Compute the full set of currently-eligible location ids.
-
-    One aggregate query per aspect (distinct counts, vulnerability composite,
-    article length), combined in Python, then ranked per state. Runs on the
-    beat schedule only - never in a request.
-    """
+    Runs on the beat schedule only - never in a request."""
     floor = pinned_by_floor(_active_user_count(now, config), config)
-
-    public_coords = [(float(lat), float(lon)) for lat, lon in PublicPinCandidate.objects.passed().values_list("location__latitude", "location__longitude")]
 
     # Distinct counts are safe against join fan-out; averages are not, so the
     # vulnerability composite and article length come from separate queries.
@@ -193,6 +167,8 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
             alias_count__gte=config.min_aliases,
             link_count__gte=config.min_links,
         )
+        # Region exclusion: one public location per region.
+        .exclude(Exists(_passed_within(OuterRef("point"), config)))
         .values(
             "id",
             "wiki__id",
@@ -208,7 +184,7 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
         )
     )
 
-    survivors: list[dict] = []
+    survivors: list[Mapping[str, Any]] = []
     for row in rows:
         if not row["administrative_area_level_1"]:
             continue
@@ -217,9 +193,6 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
         if row["wiki_photo_count"] + row["loc_photo_count"] < config.min_photos:
             continue
         if row["markup_count"] + row["child_marker_count"] < config.min_markup_or_children:
-            continue
-        lat, lon = float(row["latitude"]), float(row["longitude"])
-        if any(_km_between(lat, lon, plat, plon) <= config.region_radius_km for plat, plon in public_coords):
             continue
         survivors.append(row)
 
@@ -241,9 +214,9 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
     # locations that already pass everything else. Ties at the cutoff all
     # qualify (a strict cut on equal counts would be arbitrary).
     eligible: set[int] = set()
-    by_state: dict[str, list[dict]] = {}
-    for row in survivors:
-        by_state.setdefault(row["administrative_area_level_1"], []).append(row)
+    by_state: dict[str, list[Mapping[str, Any]]] = {}
+    for survivor in survivors:
+        by_state.setdefault(survivor["administrative_area_level_1"], []).append(survivor)
     for state_rows in by_state.values():
         state_rows.sort(key=lambda r: r["pinners"], reverse=True)
         cutoff_index = min(config.top_n_per_state, len(state_rows)) - 1
@@ -254,12 +227,7 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
 
 
 def _check_hard_fail(candidate: PublicPinCandidate, now: datetime, config: PublicPinConfig = CONFIG) -> bool:
-    """Apply the hard-fail rule; returns True when the candidate was rejected.
-
-    With ``fail_min_votes`` or more ballots and a no-share at or above
-    ``fail_consensus``, the vote closes for good and the location is
-    permanently ineligible.
-    """
+    """Apply the hard-fail rule; returns True when the candidate was rejected."""
     tally = PublicPinVote.objects.tally(candidate)
     if tally.total >= config.fail_min_votes and tally.no_share >= config.fail_consensus:
         candidate.status = PublicPinCandidateStatus.REJECTED
@@ -273,13 +241,8 @@ def _check_hard_fail(candidate: PublicPinCandidate, now: datetime, config: Publi
 def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str, int]:
     """Recompute eligibility, transition candidates, and settle votes.
 
-    Called from the Celery beat task. Idempotent - safe to run at any
-    frequency.
-
     Returns:
-        Counters for logging/tests: opened, reopened, suspended, passed,
-        rejected.
-    """
+        Counters for logging/tests: opened, reopened, suspended, passed, rejected."""
     now = timezone.now()
     eligible = _eligible_location_ids(now, config)
     counters = {"opened": 0, "reopened": 0, "suspended": 0, "passed": 0, "rejected": 0}
@@ -305,9 +268,8 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
         )
         counters["opened"] += 1
 
-    # Settle open votes. Newly-passed locations join the region-exclusion set
-    # immediately, so two candidates in one region can't both pass in a run.
-    passed_coords = [(float(lat), float(lon)) for lat, lon in PublicPinCandidate.objects.passed().values_list("location__latitude", "location__longitude")]
+    # Settle open votes. A pass is saved before the next candidate is checked, so two candidates in
+    # one region can't both pass in a run.
     for candidate in PublicPinCandidate.objects.with_status(PublicPinCandidateStatus.OPEN).select_related("location"):
         if _check_hard_fail(candidate, now, config):
             counters["rejected"] += 1
@@ -317,8 +279,7 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
         tally = PublicPinVote.objects.tally(candidate)
         if tally.total < config.min_votes_to_pass or tally.yes_share < config.pass_consensus:
             continue
-        lat, lon = float(candidate.location.latitude), float(candidate.location.longitude)
-        if any(_km_between(lat, lon, plat, plon) <= config.region_radius_km for plat, plon in passed_coords):
+        if _passed_within(candidate.location.point, config).exists():
             candidate.status = PublicPinCandidateStatus.SUSPENDED
             candidate.save(update_fields=["status", "updated"])
             counters["suspended"] += 1
@@ -326,14 +287,13 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
         candidate.status = PublicPinCandidateStatus.PASSED
         candidate.decided_at = now
         candidate.save(update_fields=["status", "decided_at", "updated"])
-        passed_coords.append((lat, lon))
         counters["passed"] += 1
         logger.info("Location %s voted public (%s yes / %s total)", candidate.location_id, tally.yes, tally.total)
 
-    # Unconditional, not gated on counters["passed"]: a location that passed
-    # in some earlier run still needs backfilling for profiles created (or
-    # opted back in) since then, and this idempotent scan is the only thing
-    # that ever catches those up - see sync_public_pin_suggestions's docstring.
+    # Unconditional, not gated on counters["passed"]: a location that passed in some earlier run
+    # still needs backfilling for profiles created (or opted back in) since then, and this
+    # idempotent scan is the only thing that ever catches those up - see
+    # sync_public_pin_suggestions's docstring.
     sync_public_pin_suggestions()
 
     return counters
@@ -342,14 +302,8 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
 def sync_public_pin_suggestions() -> int:
     """Ensure every opted-in profile has a suggestion for each public location.
 
-    Idempotent backfill: skips profiles that already have a root pin there or
-    any prior suggestion for the location (including rejected ones - declining
-    a public pin is a decision, not something to re-ask). New accounts are
-    picked up on the next beat run.
-
     Returns:
-        Number of suggestions created.
-    """
+        Number of suggestions created."""
     created = 0
     # wiki__isnull=False: a candidate is only suggested - by name, to every
     # community-enabled profile site-wide - once its place has a page, which
@@ -373,7 +327,8 @@ def sync_public_pin_suggestions() -> int:
             for profile_id in recipients
         ]
         if new_rows:
-            PinSuggestion.objects.bulk_create(new_rows)
+            # The partial unique constraint drops a row another run already wrote.
+            PinSuggestion.objects.bulk_create(new_rows, ignore_conflicts=True)
             created += len(new_rows)
     if created:
         logger.info("Created %s public-pin suggestions", created)
@@ -382,21 +337,12 @@ def sync_public_pin_suggestions() -> int:
 
 def public_vote_context(location: Location, profile: Profile | None, *, conceal: bool = False) -> dict | None:
     """Build the template context for the public-vote block on a wiki page.
-
-    Returns None when nothing should render (no candidate, suspended,
-    rejected, or the viewer can't vote) - ineligibility is never explained
-    in the UI.
+    Returns None when nothing should render (no candidate, suspended, rejected, or the viewer can't vote) - ineligibility is never explained in the UI.
 
     Args:
         location: The place being rendered.
         profile: The viewing profile.
-        conceal: When True, render nothing. The eligibility gate this block sits
-            behind requires a pinner floor, aliases, links, a meaningful name,
-            photos and markup - so the block's mere *presence* proves heavy
-            community contribution, which is what concealment exists to hide.
-            The PASSED branch returns before any profile check, so that half
-            would leak unconditionally.
-    """
+        conceal: When True, render nothing."""
     if conceal:
         return None
     candidate = PublicPinCandidate.objects.filter(location=location).first()
@@ -421,20 +367,20 @@ def cast_public_vote(location: Location, profile: Profile, choice: str, config: 
         choice: ``"public"``, ``"private"``, or ``"withdraw"``.
 
     Raises:
-        PublicVoteError: When there is no open vote, the profile can't vote
-            here, or the choice is unrecognized.
-    """
+        VoteNotOpenError: There is no public-pin candidate for this location, or its vote isn't currently open.
+        VoterNotPinnedError: ``profile`` doesn't hold a root pin at this location.
+        UnrecognizedVoteChoiceError: ``choice`` isn't one of ``"public"``, ``"private"``, or ``"withdraw"``."""
     candidate = PublicPinCandidate.objects.filter(location=location).first()
     if candidate is None or not candidate.is_open:
-        raise PublicVoteError("There is no open vote for this location.")
+        raise VoteNotOpenError(f"No open public-pin candidate for location {location.pk} (status={candidate.status if candidate else 'none'}).")
     if not Pin.objects.filter(location=location, profile=profile, parent_pin__isnull=True).exists():
-        raise PublicVoteError("Only users with this location pinned can vote.")
+        raise VoterNotPinnedError(f"Profile {profile.pk} holds no root pin at location {location.pk}; vote refused.")
 
     if choice == "withdraw":
         PublicPinVote.objects.filter(candidate=candidate, profile=profile).delete()
         return
     if choice not in ("public", "private"):
-        raise PublicVoteError("Unrecognized vote.")
+        raise UnrecognizedVoteChoiceError(f"Unrecognized vote choice {choice!r} for candidate {candidate.pk}.")
 
     PublicPinVote.objects.update_or_create(
         candidate=candidate,

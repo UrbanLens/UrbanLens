@@ -1,17 +1,7 @@
 /**
- * A thin, typed client for the versioned external API.
- *
- * Two jobs. The first is to make API-level assertions readable: every helper
- * returns the raw {@link APIResponse} so a spec can assert on status, headers
- * and body without the client deciding what counts as success.
- *
- * The second is to be the *setup* mechanism for UI specs. Driving the map form
- * to get a pin on screen tests pin creation, not the thing under test, and it
- * costs seconds per test. Creating the row over the API and then asserting on
- * the rendered page is both faster and a sharper failure signal - when the
- * assertion fails it is because rendering is broken, not because a toolbar
- * moved. Everything created this way is tracked and torn down by
- * {@link ApiClient.cleanup}, which the `api` fixture calls automatically.
+ * A thin, typed client for the versioned external API. The first is to make API-level assertions
+ * readable: every helper returns the raw {@link APIResponse} so a spec can assert on status,
+ * headers and body without the client deciding what counts as success.
  */
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";

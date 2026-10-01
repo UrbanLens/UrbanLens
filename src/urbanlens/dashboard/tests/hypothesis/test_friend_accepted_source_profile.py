@@ -1,24 +1,4 @@
-"""Every "friend request accepted" notification must name who accepted.
-
-Three separate code paths raise `FRIEND_ACCEPTED`, and one of them omitted
-`source_profile`. The external API's `NotificationSerializer` exposes that field,
-so a client rendering the notification had no actor to link back to - while the
-message text and the url in the very same row both referred to that profile.
-
-The three paths, and why they all exist:
-
-- `services.social.friendship.request_or_accept_friendship` - the combined
-  "befriend" entry point, which accepts an existing inbound request rather than
-  creating a second one.
-- `services.social.friendship.accept_friend_request` - the explicit accept.
-  **This was the path missing it**, ported verbatim from the old controller
-  during an extraction that was kept behaviour-preserving.
-- `controllers.friendship.FriendController.friend_request_respond` - the HTMX
-  view.
-
-The completeness test at the bottom is the point: a fourth path would otherwise
-reintroduce the same gap silently.
-"""
+"""Every "friend request accepted" notification must name who accepted."""
 
 from __future__ import annotations
 
@@ -50,7 +30,9 @@ class FriendAcceptedSourceProfileTests(TestCase):
 
     def test_accept_friend_request_names_the_accepter(self) -> None:
         """The path that was missing it."""
-        Friendship.objects.create(from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED
+        )
 
         friendship_service.accept_friend_request(self.accepter, self.requester)
 
@@ -58,7 +40,9 @@ class FriendAcceptedSourceProfileTests(TestCase):
 
     def test_request_or_accept_names_the_accepter(self) -> None:
         """The path that already set it - pinned so the two cannot drift apart."""
-        Friendship.objects.create(from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED
+        )
 
         friendship_service.request_or_accept_friendship(self.accepter, self.requester)
 
@@ -68,7 +52,9 @@ class FriendAcceptedSourceProfileTests(TestCase):
 
     def test_the_actor_named_matches_the_message_and_url(self) -> None:
         """source_profile must agree with the row's own text, not just be non-null."""
-        Friendship.objects.create(from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED
+        )
 
         friendship_service.request_or_accept_friendship(self.accepter, self.requester)
 
@@ -85,28 +71,62 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
         Path("src/urbanlens/dashboard/controllers/friendship.py"),
     )
 
-    def _sites_missing_source_profile(self) -> list[str]:
-        missing = []
+    #: How a notification is raised. ``notify`` is the sanctioned entry point
+    #: (see NotificationQuerySet.notify - it applies the recipient's mute
+    #: preferences); ``create`` still works and is what it calls. Matching only
+    #: ``create`` is why this scan silently found nothing: every site here moved
+    #: to ``notify`` and the walk kept reporting an empty list of offenders.
+    #: ``deliver_notification`` is the preference-aware wrapper around ``notify``.
+    _RAISE_METHODS = ("notify", "create", "deliver_notification")
+
+    def _accepted_sites(self) -> list[tuple[str, bool]]:
+        """Every call raising FRIEND_ACCEPTED, and whether it names the actor.
+
+        Returns:
+            ``(location, sets_source_profile)`` per site, in file order.
+        """
+        sites = []
         for path in self._MODULES:
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
-                if not (isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "create"):
+                if not isinstance(node, ast.Call):
+                    continue
+                called = getattr(node.func, "attr", None) or getattr(node.func, "id", "")
+                if called not in self._RAISE_METHODS:
                     continue
                 kwargs = {kw.arg for kw in node.keywords if kw.arg}
                 if "notification_type" not in kwargs:
                     continue
                 raises_accepted = any(
-                    kw.arg == "notification_type" and getattr(kw.value, "attr", "") == "FRIEND_ACCEPTED" for kw in node.keywords
+                    kw.arg == "notification_type" and getattr(kw.value, "attr", "") == "FRIEND_ACCEPTED"
+                    for kw in node.keywords
                 )
-                if raises_accepted and "source_profile" not in kwargs:
-                    missing.append(f"{path.name}:{node.lineno}")
-        return missing
+                if raises_accepted:
+                    sites.append((f"{path.name}:{node.lineno}", "source_profile" in kwargs))
+        return sites
 
     def test_no_site_omits_it(self) -> None:
-        self.assertEqual(self._sites_missing_source_profile(), [])
+        self.assertEqual([location for location, names_actor in self._accepted_sites() if not names_actor], [])
 
     def test_the_scan_still_finds_the_sites(self) -> None:
-        """Guard against the check passing because it matched nothing."""
-        found = sum(path.read_text(encoding="utf-8").count("NotificationType.FRIEND_ACCEPTED") for path in self._MODULES)
+        """Guard against the check above passing because it matched nothing.
 
-        self.assertGreaterEqual(found, 3, "expected three FRIEND_ACCEPTED sites - has this moved?")
+        Counts what the AST walk actually found rather than a separate string
+        search, rather than trusting it just because nothing failed above:
+        a rename from ``.create(`` to ``.notify(`` once made the walk match
+        zero sites while a separate string count still found some, which
+        left ``test_no_site_omits_it`` asserting that an empty list is empty.
+        Deriving the guard from the same walk keeps the two in sync, so a
+        change in how these calls are made fails here instead of passing
+        silently there.
+
+        Only one raise site remains today - ``1899a8e64`` moved
+        ``FriendController.friend_request_respond``'s own raise into
+        ``accept_friend_request`` - but the guard holds for one site as well
+        as two.
+        """
+        self.assertGreaterEqual(
+            len(self._accepted_sites()),
+            1,
+            "expected at least one FRIEND_ACCEPTED site - have they moved out of these modules, or changed how they raise?",
+        )

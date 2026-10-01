@@ -1,30 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if a panel/media ``fetch`` can cache a result after swallowing an error.
-
-On 2026-08-18 the SearXNG instance behind image search returned 403s for a
-period. ``plugins.builtin.searxng_images.fetch`` caught the failure, logged a
-warning, and then wrote its ``LocationCache`` row anyway - and the *existence*
-of that row is what marks a source as having been fetched. Every pin fetched
-during the outage cached "no photographs here" and kept it after the instance
-recovered: the emptiness outlived the outage, and nothing retried, because a
-row that exists looks exactly like a completed fetch. ``redata_site_conditions``
-had the same shape.
-
-The property this checks is structural: inside a ``fetch`` method, if an
-``except`` handler does *not* re-raise or return, then a ``LocationCache.set``
-reached afterwards can persist a failure as though it were an answer. That is
-the bug, and it is invisible in review precisely because the ``except`` block
-looks responsible - it logs.
-
-Deliberately conservative. It only flags a handler that falls through to a
-cache write in the same function, which is the exact shape that caused the
-outage. A partial result that is genuinely worth caching (some providers
-answered, others did not) is expected to return early on the total-failure
-path - see ``redata_site_conditions.fetch`` - which satisfies this.
-
-Exits non-zero listing each offending handler. Safe to run by hand from the
-repo root.
-"""
+"""Fail if a panel/media ``fetch`` can cache a result after swallowing an error."""
 
 from __future__ import annotations
 

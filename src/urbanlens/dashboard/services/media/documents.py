@@ -1,21 +1,18 @@
 """Document processing utilities - convert uploads to PDF and make them searchable.
-
-Requires ``soffice`` (LibreOffice headless, for non-PDF conversion),
-``pdftoppm``/``pdftocairo`` (via the ``pdf2image`` package, for OCR fallback),
-and ``tesseract`` (via ``pytesseract``) on PATH - see the Dockerfile. Every
-function here degrades gracefully (logs and returns None/unchanged) when a
-binary is missing, rather than failing the upload.
-"""
+Every function here degrades gracefully (logs and returns None/unchanged) when a binary is missing, rather than failing the upload."""
 
 from __future__ import annotations
 
-import contextlib
 import logging
+import os
 import posixpath
 import shutil
 import subprocess
 import tempfile
 from typing import TYPE_CHECKING
+
+from urbanlens.dashboard.services.media.images import StoredFileReplacement
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -26,26 +23,12 @@ _SOFFICE_TIMEOUT_SECONDS = 120
 _OCR_MAX_PAGES = 25
 
 #: Longest edge, in pixels, any page may be rasterised to for OCR.
-#:
-#: A page's dimensions come from its own MediaBox, and the PDF spec allows up
-#: to 14400pt (200 inches) a side - so without this, `pdf2image`'s default of
-#: 200 DPI and no size limit renders a 426-byte PDF to 40,000 x 40,000 px,
-#: about 4.8 GB as RGB, per page, 25 pages deep. Verified against poppler:
-#: `pdfinfo` reports the declared 14400 x 14400 pts for exactly such a file.
-#:
-#: 2200 is chosen to be a no-op for real documents rather than a compromise:
-#: a US-Letter page is 11 inches tall, which at the current default of 200 DPI
-#: is 2200 px, so ordinary uploads rasterise exactly as they do today and only
-#: pathological geometry is scaled down. Passed as a bare int, which pdf2image
-#: turns into poppler's `-scale-to` - longest side, aspect preserved - so one
-#: number bounds both axes whatever the page shape.
+#: Passed as a bare int, which pdf2image turns into poppler's `-scale-to` - longest side, aspect
+#: preserved - so one number bounds both axes whatever the page shape.
 _OCR_MAX_PIXELS = 2200
 
-#: Ceiling on stored OCR text. 25 pages of dense text is roughly 125 KB, so
-#: this is generous for anything real; it exists because both extraction paths
-#: append per page into a `TextField` with no bound of its own, and the input
-#: is an untrusted upload. Truncated rather than discarded - partial text still
-#: serves the search it was extracted for.
+#: Ceiling on stored OCR text.
+#: Truncated rather than discarded - partial text still serves the search it was extracted for.
 _OCR_MAX_CHARS = 200_000
 
 # Extensions LibreOffice can convert to PDF. Anything else that isn't already
@@ -54,31 +37,35 @@ CONVERTIBLE_DOCUMENT_EXTENSIONS = frozenset({".doc", ".docx", ".odt", ".rtf", ".
 DOCUMENT_EXTENSIONS = CONVERTIBLE_DOCUMENT_EXTENSIONS | {".pdf"}
 
 
+def soffice_path() -> str | None:
+    """The absolute path to the LibreOffice headless binary, or None.
+    Resolved once here rather than left to `exec`'s own PATH walk - see the note on `ffmpeg_path` in `videos.py` for what that does and does not buy."""
+    return shutil.which("soffice")
+
+
 def soffice_available() -> bool:
     """Whether the LibreOffice headless binary is present on PATH."""
-    return shutil.which("soffice") is not None
+    return soffice_path() is not None
 
 
-def convert_to_pdf(image: Image) -> int | None:
+@untrusted_parse("document.convert")
+def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
     """Convert a non-PDF document upload to PDF in place, via LibreOffice headless.
-
-    A file that's already a PDF is left untouched (returns None). The stored
-    file is replaced via the storage abstraction so this works regardless of
-    storage backend.
+    The stored file is replaced via the storage abstraction so this works regardless of storage backend.
 
     Args:
         image: The Image row whose stored document to convert.
 
     Returns:
-        The new stored size in bytes when converted, else None.
-    """
+        The replacement when the file was converted, else None."""
     old_name = image.image.name
     if not old_name:
         return None
     ext = posixpath.splitext(old_name)[1].lower()
     if ext == ".pdf":
         return None
-    if ext not in CONVERTIBLE_DOCUMENT_EXTENSIONS or not soffice_available():
+    soffice = soffice_path()
+    if ext not in CONVERTIBLE_DOCUMENT_EXTENSIONS or soffice is None:
         return None
 
     old_size = image.image.size
@@ -89,7 +76,7 @@ def convert_to_pdf(image: Image) -> int | None:
 
         try:
             subprocess.run(
-                ["soffice", "--headless", "--norestore", "--convert-to", "pdf", "--outdir", tmpdir, src_path],
+                [soffice, "--headless", "--norestore", "--convert-to", "pdf", "--outdir", tmpdir, src_path],
                 capture_output=True,
                 timeout=_SOFFICE_TIMEOUT_SECONDS,
                 check=True,
@@ -100,41 +87,32 @@ def convert_to_pdf(image: Image) -> int | None:
 
         out_path = posixpath.join(tmpdir, "source.pdf")
         try:
-            with open(out_path, "rb") as f:
-                new_bytes = f.read()
+            new_size = os.path.getsize(out_path)
         except OSError:
             logger.warning("Document-to-PDF conversion produced no output for image %s", image.pk)
             return None
+        if not new_size:
+            return None
 
-    if not new_bytes:
-        return None
+        from django.core.files import File
 
-    from django.core.files.base import ContentFile
-
-    stem = posixpath.splitext(posixpath.basename(old_name))[0]
-    image.image.save(f"{stem}.pdf", ContentFile(new_bytes), save=False)
-    if image.image.name != old_name:
-        with contextlib.suppress(OSError):
-            image.image.storage.delete(old_name)
-    logger.info("Converted document %s to PDF: %s -> %s bytes", image.pk, old_size, len(new_bytes))
-    return len(new_bytes)
+        stem = posixpath.splitext(posixpath.basename(old_name))[0]
+        with open(out_path, "rb") as converted:
+            image.image.save(f"{stem}.pdf", File(converted), save=False)
+    logger.info("Converted document %s to PDF: %s -> %s bytes", image.pk, old_size, new_size)
+    return StoredFileReplacement(new_size, old_name if image.image.name != old_name else None)
 
 
+@untrusted_parse("document.ocr")
 def extract_pdf_text(image: Image) -> str | None:
     """Extract searchable text from a stored PDF: its native text layer plus OCR.
-
-    The native text layer (via ``pypdf``) is cheap and accurate for born-
-    digital PDFs; OCR (via ``pdf2image`` + ``pytesseract``) additionally
-    covers scanned pages or embedded images that have no text layer. Both are
-    best-effort - missing binaries or unparseable PDFs simply contribute no
-    text rather than failing the upload.
+    Both are best-effort - missing binaries or unparseable PDFs simply contribute no text rather than failing the upload.
 
     Args:
         image: The Image row whose stored PDF to extract text from.
 
     Returns:
-        The combined text, or None if nothing could be extracted.
-    """
+        The combined text, or None if nothing could be extracted."""
     if not image.image.name or posixpath.splitext(image.image.name)[1].lower() != ".pdf":
         return None
 
@@ -156,15 +134,19 @@ def extract_pdf_text(image: Image) -> str | None:
     # long document would be slow for no benefit.
     if not chunks and shutil.which("tesseract"):
         try:
-            from pdf2image import convert_from_bytes
+            from pdf2image import convert_from_path
             import pytesseract
 
-            with image.image.open("rb") as stored_file:
-                pdf_bytes = stored_file.read()
-            pages = convert_from_bytes(pdf_bytes, last_page=_OCR_MAX_PAGES, size=_OCR_MAX_PIXELS)
-            for page_image in pages:
-                if text := pytesseract.image_to_string(page_image).strip():
-                    chunks.append(text)
+            # Poppler reads the PDF from disk and writes each page to disk, and tesseract reads each page
+            # from there, so neither the document nor its rasterised pages are ever held in memory at once.
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src_path = posixpath.join(tmpdir, "source.pdf")
+                with image.image.open("rb") as stored_file, open(src_path, "wb") as src_file:
+                    shutil.copyfileobj(stored_file, src_file)
+                pages = convert_from_path(src_path, last_page=_OCR_MAX_PAGES, size=_OCR_MAX_PIXELS, output_folder=tmpdir, fmt="png", paths_only=True)
+                for page_path in pages:
+                    if text := pytesseract.image_to_string(page_path).strip():
+                        chunks.append(text)
         except Exception:
             logger.warning("OCR fallback failed for image %s", image.pk, exc_info=True)
 

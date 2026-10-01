@@ -1,18 +1,4 @@
-"""A name that sanitizes away must be refused, not stored blank.
-
-Alias creation validated that the *raw* submitted name was non-empty, then
-``save()`` ran it through ``sanitize_name``. A name made entirely of dropped
-characters - an emoji, ``<>`` - therefore passed the "Name is required" check and
-persisted as an empty-string alias: a blank row in the pin's alias list that also
-consumes its one free slot under the case-insensitive unique constraint, so the
-next such attempt fails with a duplicate-key error instead of a useful message.
-
-Both creation paths now validate the sanitized value, which is the one that will
-actually be stored, and reject it with the message they already had.
-
-The pin-name sync path was never affected: it guards on ``is_meaningful_name``
-before ensuring an alias row, so it could not produce a blank one.
-"""
+"""A name that sanitizes away must be refused, not stored blank."""
 
 from __future__ import annotations
 
@@ -24,7 +10,7 @@ from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pins.pin_subresources import create_pin_alias
+from urbanlens.dashboard.services.pins.pin_subresources import AliasExistsError, create_pin_alias
 
 
 class AliasNameValidationTests(TestCase):
@@ -69,3 +55,14 @@ class AliasNameValidationTests(TestCase):
         alias = create_pin_alias(self.pin, name="Site_7")
 
         self.assertEqual(alias.name, "Site_7")
+
+    def test_a_case_insensitive_duplicate_name_is_refused(self) -> None:
+        """The unique constraint this bug hid behind: same name, different case, is still a duplicate."""
+        create_pin_alias(self.pin, name="Old Mill")
+
+        with pytest.raises(AliasExistsError):
+            create_pin_alias(self.pin, name="OLD MILL")
+
+        # The atomic() savepoint must have rolled the failed insert back cleanly,
+        # not left a partial or duplicate row behind.
+        self.assertEqual(PinAlias.objects.filter(pin=self.pin, name__iexact="old mill").count(), 1)

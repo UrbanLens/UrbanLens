@@ -17,6 +17,20 @@ Runs pytest inside the test container with the sync this repo requires: copy the
 tree in, chown it to `appuser`, prune `.py` files the host has deleted, then
 verify host and container agree **by checksum** before running anything.
 
+The sync covers `src/`, `bin/`, `sample_data/`, and the deployment files at the
+repo root (`docker-compose.yml`, `docker-entrypoint.sh`, `gunicorn.conf.py`,
+`pyproject.toml`, `uv.lock`, `.gitignore`, `.env*-sample`). The last group is
+there because several suites assert on topology rather than on Python -
+`test_ai_isolation`, `test_sandbox_isolation`, `test_metrics_endpoint` - and
+resolve those files by path off the repo root. They are baked into the image, so
+before this they were read at whatever the image was last built with **while the
+checksum line still printed `tree matches`**: on 2026-09-03 that failed all 42
+`ComposeTopologyTests` against a compose file predating ai-inference, which
+reads as a broken branch rather than as an unsynced file.
+
+Note the parity check still only covers `src/`. A new test reading some *other*
+repo-root path will hit the same trap; add it to `sync_tree` when you write it.
+
 ```bash
 bin/run_tests.sh src/urbanlens/dashboard/tests/hypothesis/test_billing_banking.py -q
 bin/run_tests.sh --fast <paths>      # reuse a persistent database
@@ -64,9 +78,63 @@ container's copy on purpose and expecting failures. Without it the parity guard
 refuses the run, which is otherwise exactly what you want — a file restored on
 the host but not re-copied is how the audit's only red consolidation happened.
 
+### `bun run test:ts`
+
+Runs every frontend test file in its own global (`bun test --isolate`). In one shared global, a file that left
+something installed broke files that ran after it, so the result depended on file order: requiring the whole
+`core` entry left its window globals and document listeners behind, and `photo-gallery`'s delete tests then
+reached core's confirm dialog instead of their own stub. Measured 2026-10-01: 49 s isolated against 29 s shared,
+and every `--randomize` seed tried (1 and 3-8) passes isolated, where five of them failed shared. CI's bun
+(1.3.14) has the flag too. To hunt a leak on purpose, drop `--isolate` and replay an order with `./`-prefixed
+paths.
+
+### `bin/sync_app.sh`
+
+The same copy-into-a-container sequence as `run_tests.sh`, pointed at a running
+**app** container instead of the test runner — they share `bin/lib/container_sync.sh`
+so the two cannot drift apart.
+
+```bash
+bin/sync_app.sh               # copy src/ + bin/, chown, prune deletions, verify
+bin/sync_app.sh --frontend    # also rebuild SCSS/TS and run collectstatic
+bin/sync_app.sh --restart     # also restart the container afterwards
+UL_APP_CONTAINER=... bin/sync_app.sh     # a slot other than development_main
+```
+
+Use it instead of a hand-typed `docker cp`. The hand-typed form omits the chown,
+and `docker cp` preserves *source* ownership while the container runs as
+`appuser` — so the copy takes away the app's ability to write what it was just
+given. That has taken the container down twice, both times without saying so:
+once on the logs directory (Django's logging config raises before `runserver`
+binds a port) and once on `dashboard/frontend/static/dashboard/js`, where the
+entrypoint's `bun run build` could not remove its own output directory and the
+container crash-looped.
+
+**`docker exec` defaults to root, and that is what makes this hard to see.**
+Root can write everything, so every diagnostic, every `pytest` run, and every
+manual `bun run build` succeeds while the served site is down — reading as
+"permissions are fine", which is the exact opposite of the truth for the process
+that matters. Reproduce as the account that actually runs: `docker exec -u appuser`.
+
+The sync deliberately skips `urbanlens/frontend/static`, `urbanlens/media` and
+`backups`, which the app container mounts as volumes *inside* the tree being
+copied. Writing into the first is actively harmful: it replaces the
+`staticfiles.json` nginx is serving with whatever the host last collected, and
+under `ManifestStaticFilesStorage` an asset missing from the manifest is a
+render-time error, not a stale file. Measured on 2026-09-04, a plain copy
+swapped a 16,769-byte container manifest for a 14,166-byte host one. None of the
+skipped paths hold Python or templates, so the parity check is unaffected.
+
+`--frontend` is a separate flag because copying built assets in does not reach
+what nginx serves. `collectstatic` populates a *volume* mounted at
+`/app/src/urbanlens/frontend/static`; the package directory the sync writes to
+is a different path. Without it the site keeps serving the bundle that was live
+at last boot, and a browser check of a fresh TS change silently verifies the old
+one.
+
 ### `bin/run_integration_tests.sh`
 
-Drives a **deployed** instance over HTTP - real database, real Valkey, real
+Drives a **deployed** instance over HTTP - real database, real Dragonfly, real
 Celery workers, real WebSocket container, real proxy. Manual only; the config
 refuses to start against production.
 
@@ -89,6 +157,72 @@ regenerated. Six selectable projects - `smoke`, `services`, `api`, `ui`,
 
 Full documentation, including how to write a test and what it deliberately does
 not cover, is `docs/INTEGRATION_TESTS.md`.
+
+### `bin/run_nuclei_scan.sh`
+
+Template-driven vulnerability scan of a deployed instance - CVEs, exposed
+panels and files, default credentials, misconfigured headers - via
+[Nuclei](https://docs.projectdiscovery.io/opensource/nuclei/ci-cd). Manual
+only, refuses production the same way `run_integration_tests.sh` does, and
+excludes DoS-tagged templates unconditionally.
+
+```bash
+bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
+bin/run_nuclei_scan.sh --url ... --docker              # needs only Docker
+bin/run_nuclei_scan.sh --url ... --fail-on-findings    # gate a run on it
+bin/run_nuclei_scan.sh --url ... --accounts-file /tmp/e2e.json --all-tiers
+```
+
+Preflights the target with `curl` before scanning, and never combines
+`-update-templates` with a scan in one Nuclei invocation - that combination
+updates the template catalogue, exits 0, and silently scans nothing, which is
+how the first live run against staging reported "0 findings" that turned out
+to be a broken invocation rather than a hardened deployment. `--accounts-file`
+takes the same manifest `provision_integration_env` writes for
+`run_integration_tests.sh`; `--all-tiers` scans four times - unauthenticated,
+restricted-scope API key, full-scope API key, and a real signed-in session -
+since the API key and a session reach genuinely disjoint route surfaces
+rather than overlapping ones. The session tier signs in for real through
+`tests/integration/setup/auth.setup.ts` rather than crafting a cookie by
+hand. Full story, including two live deployment bugs and a credential-cleanup
+bug this found along the way, in `docs/INTEGRATION_TESTS.md`.
+
+Runs by default alongside `.github/workflows/integration.yml` (skip with
+`run_nuclei: false` on dispatch) and is separately dispatchable as
+`.github/workflows/nuclei.yml`, which runs all four tiers automatically
+whenever the `staging` environment's `UL_E2E_ACCOUNTS_JSON` secret is set.
+Each tier's findings upload as their own SARIF category to GitHub Code
+Scanning. Full documentation is `docs/INTEGRATION_TESTS.md`.
+
+### `bin/run_sqlmap_scan.sh`
+
+[sqlmap](https://github.com/sqlmapproject/sqlmap) against a deployed
+instance's own published OpenAPI schema, plus a crawl of the HTML/HTMX
+dashboard under a real session. Nuclei detects known patterns; this actively
+exploits an injection if one exists, which is why it is stricter than every
+other tool here: it only runs against an **allowlist** of disposable
+dev-container hosts (`UL_SQLMAP_ALLOWED_HOSTS`) rather than a denylist of
+production ones, `staging.urbanlens.org` included, and a fixed set of flags
+that go past confirming an injection into OS/filesystem access are refused
+unconditionally, with no opt-in inside this wrapper.
+
+```bash
+bin/run_sqlmap_scan.sh --url https://s1.dev.urbanlens.org
+bin/run_sqlmap_scan.sh --url ... --accounts-file /tmp/e2e.json --all-tiers
+bin/run_sqlmap_scan.sh --url ... --fail-on-findings
+```
+
+sqlmap itself is not a project dependency - `bin/install_sqlmap.py` installs a
+version- and hash-pinned copy (`bin/sqlmap-requirements.txt`, verified via
+`pip install --require-hashes`) into its own throwaway `.sqlmap/venv`, since
+sqlmap publishes no checksums of its own and this is not something every
+contributor running `ruff`/`pytest` should have installed. Full documentation,
+including why sqlmap's own `--openapi` flag replaced a hand-built target
+generator, is `docs/INTEGRATION_TESTS.md`.
+
+Dispatchable on its own as `.github/workflows/sqlmap.yml`; unlike Nuclei it is
+**not** bundled into `integration.yml`'s dispatch, so running the integration
+suite never fires this as a side effect.
 
 ### `bin/run_contract_tests.sh`
 
@@ -209,22 +343,30 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Eight checkers guard properties that are invisible from a working copy, which is
-exactly why they need checking — the machine that made the mistake is the one
-that cannot see it.
+Fourteen checkers guard properties that are invisible from a working copy, which
+is exactly why they need checking — the machine that made the mistake is the one
+that cannot see it. Every one of them is `bin/check_*.py`, so the list here and
+the directory can be compared with `ls`.
 
 | Check | Catches |
 | --- | --- |
 | `bin/check_imports_tracked.py` | An import resolving to a file git is not tracking |
 | `bin/check_migration_graph.py` | A migration depending on one a fresh checkout won't have |
-| `bin/check_doc_line_refs.py` | A documentation citation pointing past end-of-file |
+| `bin/check_docs_refs.py` | Code citing a `docs/` path that does not exist, or one only its author can read |
+| `bin/check_docs_index.py` | `docs/INDEX.md` drifting from the entries it allocates ids for |
 | `bin/check_outage_not_cached.py` | A `fetch` that caches a swallowed failure as though it were an answer |
 | `bin/check_notification_choke_point.py` | A notification written around the mute preference |
 | `bin/check_versioned_writes.py` | A model half-adopting field versioning, so bulk writes go unrecorded |
 | `bin/check_signal_reachable.py` | A `post_save` subscription waiting on a field only a queryset `update()` sets |
 | `bin/check_concealed_writes.py` | A wiki resolved for reading being saved, persisting one viewer's redacted view |
+| `bin/check_pin_not_published_to_wiki.py` | A private pin's fields reaching a community wiki |
+| `bin/check_template_comments.py` | A Django `{#` comment that is not closed on the same line, so the tokens render as text |
+| `bin/check_line_endings.py` | A tracked text file stored with CRLF |
+| `bin/check_typescript_coverage.py` | A `.ts` file in no tsconfig project, or a project `bun run typecheck` never runs |
+| `bin/check_css_variables.py` | A `var()` naming a custom property nothing defines, so the rule renders its fallback on every theme |
 
-The last two exist because a *defect class* recurred, not because one bug did.
+`check_outage_not_cached.py` and `check_notification_choke_point.py` exist because a
+*defect class* recurred, not because one bug did.
 `check_outage_not_cached.py` came from an outage being stored as "nothing here"
 and outliving the outage; `check_notification_choke_point.py` came from a mute
 preference that two UI surfaces wrote and nothing read, which was possible
@@ -255,6 +397,10 @@ mutating one is ordinary Django — nothing at the call site says which kind of
 row it holds. They now launder through `concealment.writable_wiki`, and a
 deliberate case is marked `concealed-write-ok: <why>`.
 
+`check_template_comments.py` exists because `{# #}` is single-line, and Django
+does not treat an opener that never meets `#}` on that line as a comment — the
+tokens are emitted as text.
+
 `check_versioned_writes.py` exists for the same reason as those two: provenance
 has to be recorded at write time, and the wiki's *existing* edit history is
 already bypassed by three writers — a bulk `update()`, a bare `save()`, and one
@@ -266,13 +412,116 @@ declared without the mixin, the mixin without a `VersionedQuerySet` (instance
 saves recorded, every bulk write silently not — the worse half), a missing
 `revision_model`, and a field name a rename left behind.
 
-`check_doc_line_refs.py --report-drift` additionally lists citations whose line
-exists but no longer holds what the prose claims. That half is *not* enforced:
-several name symbols that no longer exist, where the repair is rewriting the
-sentence rather than the number, and a CI job should not be making that call.
+`check_typescript_coverage.py` checks two halves of one claim, because either
+alone is worthless. A file in no project is never read by `tsc`, and the
+pre-commit `tsc` hook still fires when you edit it — so it passes while telling
+you nothing. A project nothing *runs* is the same failure one level up:
+`tests/integration/` had its own `tsconfig.json`, covering 84 files, and no
+command in the repository invoked it. Files that cannot join a project are
+listed in the script's `_UNCOVERED` map with the reason, so the exception is a
+line someone chose rather than an absence nobody can see.
+
+`bin/check_doc_line_refs.py` flags a documentation citation pointing past
+end-of-file. It is a warning, not a CI step: run it with
+`bun run check:doc-line-refs`, and `bun run check` reports it without failing.
+Dated records cite the code as it was, so shortening a file they cite can push
+one of their citations past the end. When it flags one, drop the line number and keep the
+path and any symbol named beside it.
+
+`--report-drift` additionally lists citations whose line exists but no longer
+holds what the prose claims. Several name symbols that no longer exist, where
+the repair is rewriting the sentence rather than the number.
 
 Note its one blind spot: it cannot tell a specimen from a claim, so prose that
 *quotes* a broken citation as an example will be flagged.
+
+### `bin/build_docs.py`
+
+Builds the Sphinx site, and fails if it produced no API reference.
+
+Exit status is not the check. `sphinx-build` reports "build succeeded" for a
+configuration that reads no source at all, which is what this repository shipped
+until 2026-09-05: `docs/conf.py` and `docs/index.rst` existed, no `automodule`
+directive was ever written, nothing ran `sphinx-apidoc`, and the output was three
+pages. Meanwhile `CLAUDE.md` justified its Google-docstring standard with the
+claim that Sphinx consumes them. The script asserts a floor on the number of
+generated API pages instead.
+
+`autoapi` rather than `autodoc`, so the build parses the source instead of
+importing it: `autodoc` would need `django.setup()`, a settings module and a
+system GDAL/GEOS install, which would confine the docs to the app container and
+CI. `myst_parser` is what lets the toctree reference the Markdown that the rest
+of this directory is written in.
+
+It is slow — double-digit minutes even with `-j auto`, since `autoapi` generates
+and then reads a page per module. That is why CI runs it as its own job rather
+than as a step in `python-quality`. `docs/_build/` and the generated `docs/api/`
+are both gitignored.
+
+```bash
+uv run python bin/build_docs.py            # what CI runs
+uv run python bin/build_docs.py --strict   # warnings become errors
+```
+
+`bun run docs` is the same command, and works only where the venv is already on
+`PATH` - Sphinx is a `dev` dependency, so a bare `python3` has neither it nor
+`myst_parser`.
+
+### `bin/run_codeql.py`
+
+CodeQL is already in CI (`.github/workflows/security.yml`) on every PR. That is
+after the branch exists. This is the same analysis on a working copy, so a
+finding shows up before a PR does.
+
+```bash
+python bin/run_codeql.py --install     # once per machine; ~700MB download
+python bin/run_codeql.py               # exhaustive: security-and-quality + local threat model
+python bin/run_codeql.py --languages python
+python bin/run_codeql.py --quiet       # per-rule counts only
+python bin/run_codeql.py --verbose     # include note-level findings
+python bin/run_codeql.py --all-queries # every query in each language pack, including experimental
+python bin/run_codeql.py --gate        # the suites GitHub runs; reused when the tree is unchanged
+python bin/run_codeql.py --rebuild     # recreate databases even if a previous extract finished
+```
+
+The default manual run is broader than CI on purpose. GitHub uses the
+`code-scanning` suites. A local run uses
+`security-and-quality` and also treats file/env/CLI as source. `--all-queries`
+goes further still: every query in the Python, JavaScript/TypeScript, and GitHub
+Actions packs, including experimental ones that the suites exclude for noise.
+
+Default output is a per-rule count plus each error/warning. Notes (unused
+imports, cyclic imports, and similar) are counted but not printed unless
+`--verbose`. SARIF under `.codeql/results/` still has everything.
+
+A finding read and judged not exploitable goes in `.github/codeql/triaged-findings.json`, with the
+reason. It is counted as triaged rather than as a failure, and `--verbose` prints it with that reason.
+Entries are keyed on rule, path and the SARIF `primaryLocationLineHash`, so a new finding under the same
+rule still fails, and an entry follows its line when code above it moves. Editing the flagged line
+changes the hash, which is deliberate: the verdict was about that line. The run then lists the entry as
+matching no finding, and it should be re-judged or removed. A missing reason is refused. This file does
+not affect GitHub code scanning in CI, whose alerts are dismissed in GitHub.
+
+A failed JavaScript or Actions extract leaves a database with `finalised:
+false`. The wrapper does not reuse that; it rebuilds. Those extractors need
+**Node.js** on PATH - bun is not a substitute.
+
+CodeQL does **not** run from a git hook. It was wired as a pre-push hook and
+had to be removed: the analysis is minutes long, and a GUI git client shows none of a hook's
+output - so `git push` from VS Code simply failed with no explanation. CI still
+runs CodeQL on every PR (`.github/workflows/security.yml`).
+
+Run it on demand instead - the hook is still defined, at the `manual` stage:
+
+```bash
+bun run codeql:gate                                  # the suites CI runs
+pre-commit run --hook-stage manual --all-files codeql # same thing, via pre-commit
+```
+
+`UL_SKIP_CODEQL=1` short-circuits the wrapper wherever it is invoked.
+
+Install uses the official CodeQL Action *bundle*.
+The standalone CLI zip does not ship query packs.
 
 ### `noUnusedLocals` (`tsconfig.json`)
 
@@ -303,6 +552,179 @@ Asserts an endpoint's query count does not grow with its row count, and:
   identical requests vary by 11 bytes, ten real rows added 12,033;
 - **reports which statements multiplied** on failure, so the cause is in the
   message rather than a separate diagnostic run.
+
+### `RenderTimeScalingMixin` (`core/tests/render_scaling.py`)
+
+The sibling of the above, and only the pair is interpretable: queries answer
+*how many*, render time answers *how expensive*. The Organize Labels page had
+already been cut from ~146 queries to 3 and still took ~12s at 500 labels,
+because the view rendered all six client-side tabs every load. Flat in queries
+the whole time.
+
+Two things it does differently, both measured rather than chosen:
+
+- **It asserts a per-row cost, not a growth ratio.** Render time on a list page
+  is *supposed* to be linear, so a page whose rows are 60x too expensive still
+  grows 4x at 4x the rows. Measured over 25 trials at load 11.4 on 8 cores, the
+  pathological workload's ratio was 2.8–3.2 — the same as everything else's.
+  What separates the classes is `(T(large) − T(small)) / rows` divided by the
+  page's own **zero-row** render: the subtraction cancels the fixed overhead and
+  the division cancels machine speed, leaving "one row costs X% of the whole
+  empty page". Budget 10%; benign workloads never exceeded 4.4%, an icon-picker
+  row never came in under 65%.
+- **Best-of-5, not the mean.** Contention only adds time, so the minimum is the
+  estimate that converges. A benign row measured 0.3–2.8% best-of-5 and
+  −5.6–6.3% by mean.
+
+A superlinearity check was designed and rejected: the slope ratio reached 3.24
+on a *linear* workload against 1.11–1.45 on the genuinely broken one. Database
+time is included rather than subtracted — Django rounds each statement to the
+millisecond, reading those numbers needs `force_debug_cursor` which perturbs the
+measurement, and the baseline already cancels everything constant. The failure
+message carries bytes-per-row and the query count instead.
+
+`test_render_time_scaling_harness.py` points it at two views in a test-only
+urlconf whose per-row cost is known, including one showing the query mixin
+calling the expensive page perfectly flat.
+
+### `InstantiationScalingMixin` (`core/tests/instantiation_scaling.py`)
+
+The third axis, and the one that caught the map 504. Counts Django model
+instances built per row of output, by receiving `post_init` — which
+`Model.__init__` sends unconditionally, so the count is exact and does not move
+with machine speed or load, unlike a timing.
+
+It exists because the other two were structurally blind to the defect. The map
+payload built **63,240 model objects to emit 10,000 flat dicts** (a
+`select_related` companion per row, and a fresh `Label` per pin-label pair — 128
+distinct labels became ~36,000 instances), and 88% of the endpoint's time was
+that construction. `QueryScalingMixin` read it as flat, correctly: `.all()`
+iterates in chunks of 1,000, so below that the query count is literally
+constant, and at 10,000 the 21 statements it does run were 6% of the wall time.
+`RenderTimeScalingMixin` reads a uniformly 6x-too-expensive row as a slow
+machine. Only the object count separates them — so a failure here reports the
+per-model breakdown *and* the query count, to say plainly that a query counter
+would call this fine.
+
+Reach for it on any endpoint that serialises a collection. `objects/row <= 1` is
+the target; a DRF view with nested serializers needs a per-endpoint number and a
+comment saying why.
+
+### `EndpointScalingMixin` (`core/tests/endpoint_scaling.py`)
+
+The three above in one seed pass, plus the two axes none of them can see. Reach
+for this on any endpoint that returns a collection; the others remain useful when
+only one axis is in question.
+
+- **Rows fetched per row**, summed from `cursor.rowcount` across the request.
+  Found P107 immediately: `SavedFilterMatchCountsView` returns one count per
+  saved filter and reads every root pin's uuid to build it. That is invisible to
+  a statement counter (one query at every size), to a bytes budget (the body
+  never moves), and to the object counter (`values_list` builds nothing).
+
+  The budget is not one number, and the reason is worth knowing before setting
+  it: at one row read per row, a healthy list endpoint and that defect are
+  numerically identical. What separates them is whether the rows are *rendered*.
+  So the budget is chosen from `expect_growth` — 1.5 per rendered row when the
+  output grows, **0.5 when it does not**, because an endpoint that caps its
+  output must cap its reading.
+- **Bytes per row** — measured by the older mixins, asserted by none of them.
+- **Payload rows against a ceiling**, via an overridable `count_payload_rows`.
+  No per-row budget can express "and never more than N records", which is the
+  shape both P96 and the unbounded map document have: their per-row costs are
+  fine.
+
+Failures report every axis that moved, not the first, because an endpoint
+building objects per row usually also fetches rows per row and fixing one at a
+time means measuring three times.
+
+`test_endpoint_scaling_harness.py` points it at eight views whose per-row cost is
+known — one broken per axis, so a harness failure is unambiguous about which axis
+caught it — and includes a negative control for the *axis* rather than the
+fixture: `/bounded/` reads the identical one row per row and must pass.
+
+**Streamed responses are in scope** (2026-09-11). They were not: the mixin read
+`len(response.content)`, which raises on a `StreamingHttpResponse`, so
+`map.document` — the largest response the application serves — could not be
+measured by the most complete instrument in the repo, and nothing said so because
+nobody had pointed a gate at it. `read_body()` drains either shape *inside* the
+counting wrappers, which matters: a streamed response has done none of its work
+when the view returns, so reading it afterwards reports zero rows and zero objects
+for exactly the endpoint that builds the most of both. `/streams/` and
+`/streams-bounded/` are the fixtures holding that honest.
+
+`test_map_document_scaling.py` is the gate that extension exists for:
+0 objects/pin, **444 bytes/pin measured 2026-09-11**, and rows-fetched budgeted as
+one pin row plus one through-row per label the pin names — derived rather than
+chosen, so anything reading beyond a pin and its own labels trips it. The mixin's
+default of 1.5 is simply the wrong budget for a payload carrying an m2m list, and
+a gate whose budget is wrong teaches people to raise budgets.
+
+### What all four share: `SeedScalingMixin` and the `ANALYZE` it runs
+
+All four seed through `seed()`, which calls the test's `seed_rows()` and then
+refreshes the planner statistics for the tables that seed actually wrote to.
+
+Without it the measurement is of the planner's ignorance. Seeding through the
+ORM leaves `pg_class.reltuples` and `pg_statistic` describing an empty table, so
+every query the measurement then runs is planned for a table that no longer
+exists: `MapPinPayloadService.all()` at 5,000 pins read **4.683s** without the
+refresh and **0.384s** with it, and the session that hit it spent three rounds
+suspecting its own change (N10).
+
+The target list is derived from the seed's own SQL — the `INSERT`/`UPDATE`/
+`DELETE` targets captured while `seed_rows()` runs — rather than declared per
+test class, so no test can forget to update it and it stays correct when a
+signal writes somewhere the test never mentions. `extra_analyzed_tables` adds
+anything a trigger touches. It is deliberately never a bare `ANALYZE`: measured
+on this schema's 237 tables, whole-database is **3.55s cold / 1.70s warm**
+against **45ms** for three named tables, and every assertion seeds twice.
+
+### `bin/run_perf_tests.sh` — the neighbour load test (k6)
+
+What the scaling mixins cannot answer. They prove query count, per-row render
+cost and objects-per-row do not grow, which says nothing about connection-pool
+exhaustion or worker behaviour under concurrency — the two things that actually
+took the site down (P104, and the map 504s). This asks the owner's question
+directly: one account acts, a *different* account browses at a fixed rate, and
+the second account's latency is the verdict.
+
+```bash
+bin/run_perf_tests.sh --url http://localhost:21810 \
+    --provision-container urbanlens_development_main_app \
+    --db-container urbanlens_development_main_db --heavy-pins 20000
+```
+
+Seeds the target, derives a budget from a baseline pass on the same host,
+samples `pg_stat_activity` at 1 Hz throughout, and returns a per-phase table.
+`tests/perf/README.md` has the layout and the three things that are easy to get
+wrong; `bin/perf/` has the sampler and the budget derivation.
+
+**The verdict is latency and the pool, not latency alone** (2026-09-11). It used
+to be latency alone: `report_activity.py` returned zero whatever it found, the
+runner called it with `|| true`, and nothing grepped the database log for
+`53300`. So the one harness built to catch P104 could not fail on P104's own
+mechanism — one tier holding every connection while every latency number still
+looks survivable. It now runs with `--fail-on-pressure --db-log`, and **a missing
+sampler CSV fails the run**: a sampler that never ran is a broken harness, not a
+healthy pool, and reading absence as success is how an instrument comes to report
+green forever.
+
+k6 rather than Locust because the assertion is open-model: a closed-model tool
+lets a slowing server reduce the probe's own request rate, hiding exactly the
+degradation being measured. Runs against a deployment, so it is not in pytest.
+
+**Run it against the real process model, because the process model changes the
+answer.** The default dev environment is `runserver` under daphne; measured on
+the same account with the same harness, one user filtering cost the neighbour
+4,431 ms there and 221 ms under gunicorn (X15). `dev_env.py create
+--environment staging` gives gunicorn + gevent with the deployed flags — see
+`tests/perf/README.md` for the two environment variables such an environment
+needs before a load run, both of which are easy to miss and quiet when missing.
+
+The one thing it still will not tell you: the load generator shares the host
+with the target, so its own CPU is part of what the target competes with. The
+single-actor phases are the clean ones.
 
 ### `run_concurrently` (`core/tests/concurrency.py`)
 
@@ -348,11 +770,13 @@ grew by the same amount without any of their records explaining why.
 
 ## Evaluated, not adopted
 
-- **`nplusone`** — the obvious runtime N+1 detector, and rejected on two counts:
-  it has not shipped a release since 2019, and `django-auto-prefetch` (already a
-  dependency) suppresses exactly the access pattern it watches for, so it would
-  be quietest where this codebase's N+1s actually came from — model *properties*
-  that fall back to a query. `django-perf-rec` was adopted instead, above.
+- **`nplusone`** — the obvious runtime N+1 detector, rejected because it has not
+  shipped a release since 2019. `django-perf-rec` was adopted instead, above.
+  (Corrected 2026-09-10, N12: this used to also cite `django-auto-prefetch` as
+  already suppressing the access pattern such a detector watches for — false,
+  it is a listed dependency with zero imports anywhere in `src/urbanlens`, not
+  in `INSTALLED_APPS`, and no model inherits from it. The 2019 reason above
+  carries the decision on its own.)
 - **`django-linear-migrations`** — would subsume part of
   `check_migration_graph.py` and additionally prevent branching migration
   graphs. Worth adopting if migrations ever branch across parallel work.
@@ -368,7 +792,3 @@ grew by the same amount without any of their records explaining why.
 - **`testcontainers-python`** — an ephemeral PostGIS per run. `bin/run_tests.sh`
   already runs pytest inside the project's own compose stack against real
   PostGIS, so this would replace a working setup rather than add a capability.
-- **Load testing (Locust / k6)** — a genuine gap: `QueryScalingMixin` proves
-  query counts do not grow per row, which says nothing about connection-pool
-  exhaustion or gevent worker behaviour under concurrency. Wants its own scoped
-  effort against a deployment, not a bolt-on here.

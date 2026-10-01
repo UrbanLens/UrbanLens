@@ -173,6 +173,42 @@
                 "clear": true
             },
             "problemMatcher": []
+        },
+        {
+            "label": "CodeQL: install CLI",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\python.exe",
+            "args": ["bin/run_codeql.py", "--install"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "CodeQL: analyse (exhaustive)",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\python.exe",
+            "args": ["bin/run_codeql.py"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Check: template comments",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\python.exe",
+            "args": ["bin/check_template_comments.py"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
         }
     ]
 }

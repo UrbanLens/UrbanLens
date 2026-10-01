@@ -1,21 +1,6 @@
 /**
- * Waiting for work that finishes on its own schedule.
- *
- * The rest of the suite waits for things the browser can be asked about: a
- * navigation, an HTMX swap, an element appearing. This module is for the other
- * kind - a Celery task nobody can observe directly, whose only evidence is that
- * an endpoint starts answering differently some minutes later.
- *
- * Playwright's `expect.poll` covers the simple case and should be preferred
- * where it fits. What it does not give is a *diagnosis* when the wait runs out,
- * and that is the entire difference between a useful failure and a useless one
- * here. "Timed out after 300000ms" says nothing about a pipeline with a dozen
- * stages; "the parcel boundary never arrived - last seen: source=circle,
- * pending=false, refreshing=false, after 41 polls over 5m2s" names the stage
- * that did not run, which is usually the whole answer.
- *
- * Nothing here retries on exception by default. A helper that swallowed errors
- * would turn a 500 into a timeout, and the 500 is the more useful failure.
+ * Waiting for work that finishes on its own schedule. The rest of the suite waits for things the
+ * browser can be asked about: a navigation, an HTMX swap, an element appearing.
  */
 
 /** How often to re-check, when a caller does not say. */

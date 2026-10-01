@@ -1,19 +1,4 @@
-"""A Merge button is only rendered where merging actually works.
-
-`_organize_label_card.html` had a second branch: when no `merge_url` was passed
-and the kind was `people`, it rendered a Merge button calling
-`peopleMergeSingle(...)`. That function is defined nowhere in the repository, so
-every click raised `ReferenceError` and nothing happened.
-
-Wiring it to the real route would not have helped: `KIND_USER` and `KIND_MEDIA`
-both set `enable_single_merge=False`, and `LabelMergeView` answers **404** for a
-kind that does. The affordance was for a capability the server refuses, so the
-fix is to not offer it.
-
-This test is written against the *config* rather than the template so it keeps
-holding if the markup moves: whatever the page renders, a kind that cannot
-single-merge must not show a single-merge control.
-"""
+"""A Merge button is only rendered where merging actually works."""
 
 from __future__ import annotations
 
@@ -46,7 +31,9 @@ class SingleMergeAffordanceTests(TestCase):
                 self.assertFalse(_config(kind).enable_single_merge)
 
                 label = baker.make(Label, profile=self.profile, kind=kind, name=f"Subject {kind}")
-                response = self.client.get(reverse("label.merge", kwargs={"label_kind": _config(kind).url_kind, "label_id": label.pk}))
+                response = self.client.get(
+                    reverse("label.merge", kwargs={"label_kind": _config(kind).url_kind, "label_id": label.pk})
+                )
 
                 self.assertEqual(response.status_code, 404)
 
@@ -65,4 +52,6 @@ class SingleMergeAffordanceTests(TestCase):
         html = self._rows_html(KIND_TAG)
 
         self.assertTrue(_config(KIND_TAG).enable_single_merge)
-        self.assertIn(reverse("label.merge", kwargs={"label_kind": _config(KIND_TAG).url_kind, "label_id": tag.pk}), html)
+        self.assertIn(
+            reverse("label.merge", kwargs={"label_kind": _config(KIND_TAG).url_kind, "label_id": tag.pk}), html
+        )

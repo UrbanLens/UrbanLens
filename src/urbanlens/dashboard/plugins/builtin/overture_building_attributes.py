@@ -1,11 +1,4 @@
-"""Overture Maps building-attributes plugin: physical building characteristics panel.
-
-Free, open-data "real estate" context Overture actually publishes (it has no
-year-built field, unlike what a quick read of some API-candidate lists might
-suggest) - building class/subtype, height, floor count, and roof
-construction, reusing the same ``OvertureMapsGateway`` already wired into the
-boundary-provider chain (``services.apis.locations.boundaries.overture_maps``).
-"""
+"""Overture Maps building-attributes plugin: physical building characteristics panel."""
 
 from __future__ import annotations
 
@@ -14,7 +7,8 @@ import time
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.pins.external_data import InfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement
+from urbanlens.dashboard.services.sandbox.queues import Queue
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -22,14 +16,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: get_building_attributes() and get_nearby_places() are each independent S3
-#: GeoParquet range reads (connect/request timeouts of 10s/30s each - see
-#: OvertureMapsGateway), and observed in production to occasionally each take
-#: close to their own ceiling, compounding to 100s+ for one fetch() call when
-#: run back-to-back. get_nearby_places() is the less essential of the two
-#: (building attributes are this panel's primary content); skip it once the
-#: first call has already eaten most of a reasonable total budget, rather
-#: than always paying for both regardless of how slow the first one was.
+#: get_building_attributes() and get_nearby_places() are each independent S3 GeoParquet range reads
+#: (connect/request timeouts of 10s/30s each - see OvertureMapsGateway), and observed in production
+#: to occasionally each take close to their own ceiling, compounding to 100s+ for one fetch() call
+#: when run back-to-back. get_nearby_places() is the less essential of the two (building attributes
 _NEARBY_PLACES_BUDGET_SECONDS = 20.0
 
 
@@ -41,18 +31,21 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
     section_id = "overture-building-section"
     icon = "apartment"
     title = "Building Characteristics"
-    # Stays on the default (prefork) queue, not the fast thread-pool queue -
-    # OvertureMapsGateway reads GeoParquet via pyarrow/geopandas (real
-    # CPU-bound parsing/geometry work, same class of cost as BoundaryPanelSource's
-    # shapely work), and several of those running concurrently on a thread
-    # pool would cause enough GIL contention to slow down every other panel
-    # sharing it. See PanelSource.queue.
-    queue = "celery"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
+    building_level: ClassVar[bool] = True
+    tab_order: ClassVar[int] = 20
+    # The prefork pool, not the fast thread-pool queue - OvertureMapsGateway reads GeoParquet via
+    # pyarrow/geopandas (real CPU-bound parsing/geometry work, same class of cost as
+    # BoundaryPanelSource's shapely work), and several running concurrently on a thread pool would
+    # cause enough GIL contention to slow down every other panel sharing it. See PanelSource.queue.
+    queue = Queue.INTERACTIVE
 
     def fetch(self, pin: Pin) -> None:
         """Look up the pinned building's Overture attributes and cache the result."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, PlaceExternalTag
         from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
+        from urbanlens.dashboard.services.locations.external_tags import extract_overture_tags
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
@@ -60,6 +53,10 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
 
         started = time.monotonic()
         attributes = gateway.get_building_attributes(lat, lng) or {}
+
+        target_place = pin.location.place
+        if attributes and target_place is not None and not PlaceExternalTag.is_fresh_for(target_place, ExternalTagSource.OVERTURE):
+            PlaceExternalTag.sync_for_source(target_place, ExternalTagSource.OVERTURE, extract_overture_tags(attributes))
 
         nearby_places: list = []
         elapsed = time.monotonic() - started
@@ -75,13 +72,7 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
         LocationCache.set(pin.location, self.cache_source, {**attributes, "nearby_places": nearby_places}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Build the building-characteristics card from Overture's attribute + nearby-places lookup.
-
-        Suppressed for a parcel-scope pin: height, floor count, and roof shape
-        describe the one structure nearest the marker, which says nothing
-        useful about a site made of dozens of them (see
-        ``services.locations.site_scope``).
-        """
+        """Build the building-characteristics card from Overture's attribute + nearby-places lookup."""
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
         if not data or is_site_scope(pin):

@@ -8,7 +8,7 @@ REST API endpoints use DRF ViewSets under `/rest/`. Custom actions use `@action(
 
 Template/HTMX views use `TemplateView` or `ViewMixin` and return rendered HTML. Key controllers:
 - `maps.MapController` - Map display, pin add/edit, search
-- `pin.PinController` - Pin detail, image/weather/search integrations
+- `pin.PinController` - Private Pin page, image/weather/search integrations
 - `userprofile.ViewProfileView/EditProfileView` - Profile CRUD
 
 ## URL Routing
@@ -31,11 +31,19 @@ User-facing objects are slug-addressed: trips are `/trips/<slug>/` (not uuid), e
 - SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile with `bun run sass`
 - Templates in `src/urbanlens/dashboard/templates/dashboard/`
 
+## UI
+
+- Anything not near-instant shows a loading/progress indicator.
+- Results and errors surface as toast notifications (toastr is integrated).
+- Prefer an HTMX partial update over a full reload.
+- Celery is in place; keep moving slow work (API calls, geocoding, imports) onto
+  it, with a progress indicator and a toast on completion or failure.
+
 ## API Integrations
 
 The project connects to many external APIs via service classes in `dashboard/services/`. Each service wraps one API. 
 
-External integrations are wired into the app through the plugin system: the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (pin-detail panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
+External integrations are wired into the app through the plugin system: the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (Private Pin panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
 
 API usage and cost tracking is **automatic**: the `Gateway` base wraps every request in a
 rate-limited session that writes an `ApiCallLog` row (with a `cost_estimate`) per call - no
@@ -44,6 +52,9 @@ an SDK client) must record itself via `rate_limiter.log_api_call`, as the AI ser
 
 ## Gotchas
 
+- A Celery task that reaches a `@untrusted_parse` function must declare
+  `queue=SANDBOX_QUEUE` on the task itself, never at the `apply_async` call site.
+  See `docs/MEDIA_PIPELINE.md` and `services/CLAUDE.md`.
 - Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
   keep the `LocationExposure` provenance chain intact.
 - `EncryptedTextField` writes under the active key (`UL_FIELD_ENCRYPTION_KEY`, else Django's

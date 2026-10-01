@@ -152,10 +152,7 @@
     margin-top: 0;
 }
 
-// A plain <nav> would otherwise pick up _reset.scss's global top-navbar
-// styling (pink background, fixed 56px height/line-height) - that clips this
-// link list down to a single visible row. The class gives us enough
-// specificity to reset it without !important.
+// A plain <nav> would otherwise pick up _reset.scss's global top-navbar styling (pink background, fixed 56px height/line-height).
 .help-import-toc-nav {
     display: grid;
     gap: $space-xs;
@@ -257,9 +254,7 @@
     }
 }
 
-// Technical/implementation-detail callouts are visually distinct from the
-// user-facing tips above - monospace + neutral grey signals "you probably
-// don't need to read this unless something isn't importing as expected."
+// Technical/implementation-detail callouts are visually distinct from the user-facing tips above.
 .help-import-callout--tech {
     border-left-color: var(--ul-grey-4);
     background: var(--ul-grey-1a);

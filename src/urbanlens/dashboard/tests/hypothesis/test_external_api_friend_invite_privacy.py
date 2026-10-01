@@ -1,25 +1,4 @@
-"""External API: the friend-invite endpoint must not leak site membership.
-
-Mirrors the internal-surface test in ``test_friend_invite_privacy.py``, but
-raises the bar: rather than comparing two cases, this compares all four
-outcomes the endpoint can reach without a validation error, and asserts the
-status code, the response body *and* the header names are identical across
-every one of them.
-
-That strictness is the point. ``POST /friend-invites/`` takes an arbitrary
-email address and is reachable by anyone holding an API key. If any observable
-part of the response varied by whether the address belonged to an account, the
-endpoint would be a membership-enumeration oracle: try addresses one at a
-time, diff the responses, harvest the site's user list.
-
-The four cases:
-
-1. the address belongs to a registered account that accepts requests;
-2. the address belongs to nobody;
-3. the address belongs to a registered account whose privacy settings refuse
-   the request (nothing is created);
-4. the address belongs to nobody and the outbound mail send raises.
-"""
+"""External API: the friend-invite endpoint must not leak site membership."""
 
 from __future__ import annotations
 
@@ -30,6 +9,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
@@ -37,6 +17,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.tasks import deliver_friend_invitation
 
 
 def _bearer(raw_key: str) -> dict:
@@ -46,8 +27,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Kwargs to splat into a test-client call.
-    """
+        Kwargs to splat into a test-client call."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -61,14 +41,12 @@ class ExternalInvitePrivacyTests(TestCase):
     def _inviter_key(self) -> str:
         """Create a fresh inviter and return an API key granting social:write.
 
-        A distinct inviter per case keeps the shared per-user outbound-email
-        budget from coupling the four cases together - a rate limit tripped by
-        case 3 would otherwise change case 4's response for reasons that have
+        A distinct inviter per case keeps the shared per-user outbound-email budget from coupling the four cases
+        together - a rate limit tripped by case 3 would otherwise change case 4's response for reasons that have
         nothing to do with the property under test.
 
         Returns:
-            The plaintext API key.
-        """
+            The plaintext API key."""
         user = baker.make(User, email=f"inviter{baker.random_gen.gen_integer(1, 10**9)}@example.com")
         api_key, raw_key = generate_api_key(user, "Test")
         api_key.scopes = [ApiKeyScope.SOCIAL_WRITE.value]
@@ -79,18 +57,17 @@ class ExternalInvitePrivacyTests(TestCase):
         """POST one invitation.
 
         Args:
-            raw_key: The caller's API key.
-            email: The address to invite.
+            raw_key: The caller's API key. email: The address to invite.
 
         Returns:
-            The HTTP response.
-        """
-        return self.client.post(
-            self.url,
-            {"email": email},
-            content_type="application/json",
-            **_bearer(raw_key),
-        )
+            The HTTP response."""
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(
+                self.url,
+                {"email": email},
+                content_type="application/json",
+                **_bearer(raw_key),
+            )
 
     def _case_registered_open(self):
         """Case 1: a real account that accepts friend requests."""
@@ -135,9 +112,15 @@ class ExternalInvitePrivacyTests(TestCase):
         baseline_name, baseline = next(iter(responses.items()))
         for name, response in responses.items():
             with self.subTest(case=name):
-                self.assertEqual(response.status_code, baseline.status_code, f"{name} vs {baseline_name}: status differs")
+                self.assertEqual(
+                    response.status_code, baseline.status_code, f"{name} vs {baseline_name}: status differs"
+                )
                 self.assertEqual(response.content, baseline.content, f"{name} vs {baseline_name}: body differs")
-                self.assertEqual(sorted(response.headers), sorted(baseline.headers), f"{name} vs {baseline_name}: header names differ")
+                self.assertEqual(
+                    sorted(response.headers),
+                    sorted(baseline.headers),
+                    f"{name} vs {baseline_name}: header names differ",
+                )
 
     def test_response_is_exactly_the_invariant_sent_document(self) -> None:
         response = self._case_unregistered()
@@ -155,16 +138,17 @@ class ExternalInvitePrivacyTests(TestCase):
 
         self.assertFalse(Friendship.objects.filter(to_profile=profile).exists())
 
-    def test_open_target_really_does_get_a_friendship_row(self) -> None:
-        """Conversely, the identical response is not hiding a no-op either."""
+    def test_open_target_is_asked_to_accept(self) -> None:
+        """Conversely, the identical response is not hiding a no-op: the account is bound and asked."""
         target = baker.make(User, email="open2@example.com", is_active=True)
         profile = Profile.objects.get(user=target)
         profile.friend_request_visibility = VisibilityChoice.ANYONE
+        profile.verified_primary_email = profile.primary_email_normalized
         profile.save()
 
         self._invite(self._inviter_key(), target.email)
 
-        self.assertTrue(Friendship.objects.filter(to_profile=profile).exists())
+        self.assertTrue(FriendInvitation.objects.filter(invitee=profile).exists())
 
     def test_unregistered_address_creates_a_pending_invitation(self) -> None:
         self._invite(self._inviter_key(), "future-member@example.com")

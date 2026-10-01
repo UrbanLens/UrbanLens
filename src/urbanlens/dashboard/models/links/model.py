@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from django.db.models import CASCADE, SET_NULL, F, ForeignKey, Index, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, F, ForeignKey, UniqueConstraint
 from django.db.models.fields import CharField, IntegerField, URLField
 from django.db.models.functions import MD5
 
@@ -33,23 +33,28 @@ class _LinkBase(abstract.DashboardModel):
     wayback_url = URLField(max_length=MAX_LINK_URL_LENGTH, blank=True, default="")
     order = IntegerField(default=0)
 
-    objects: LinkManager = LinkManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects = LinkManager()
 
     class Meta(abstract.DashboardModel.Meta):
         abstract = True
         ordering = ["order", "id"]
 
     def save(self, *args, **kwargs) -> None:
-        """Sanitize ``name`` to a strict character set before persisting it.
+        """Sanitize ``name`` and refuse a URL that is not an http(s) link.
 
-        Single enforcement point regardless of write path (manual add, KMZ
-        import link extraction, ...) - mirrors ``_AliasBase.save()``.
+        Raises:
+            InvalidLinkUrlError: ``url`` or ``wayback_url`` is not an http(s) link; both are rendered as ``href``.
         """
         from urbanlens.dashboard.services.locations.naming import sanitize_name
+        from urbanlens.dashboard.services.security.link_urls import clean_link_url
 
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
             self.name = sanitize_name(self.name) or ""
+        if update_fields is None or "url" in update_fields:
+            self.url = clean_link_url(self.url, max_length=MAX_LINK_URL_LENGTH)
+        if self.wayback_url and (update_fields is None or "wayback_url" in update_fields):
+            self.wayback_url = clean_link_url(self.wayback_url, max_length=MAX_LINK_URL_LENGTH)
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
@@ -78,11 +83,6 @@ class PinLink(_LinkBase):
     class Meta(_LinkBase.Meta):
         db_table = "dashboard_pin_links"
         constraints = [
-            # Hashed rather than indexing `url` directly: it holds up to 2000
-            # characters, and a btree entry over that in multibyte UTF-8 can
-            # exceed Postgres' ~2704-byte row limit - which would turn a long
-            # link into an insert error, a worse failure than the duplicate row
-            # this prevents.
             UniqueConstraint(F("pin"), MD5("url"), name="db_plink_pin_url_unique"),
         ]
         indexes = []

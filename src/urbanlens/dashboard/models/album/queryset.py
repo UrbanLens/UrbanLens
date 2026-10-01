@@ -7,12 +7,16 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.album.model import Album
+    from urbanlens.dashboard.models.album.model import (
+        Album,
+        AlbumItem,  # noqa: F401 - mypy needs these; ruff does not
+    )
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class AlbumQuerySet(abstract.PublicDashboardQuerySet):
+class AlbumQuerySet(abstract.PublicDashboardQuerySet["Album"]):
     """Custom queryset for Album models."""
 
     def for_pin(self, pin: Pin | int) -> AlbumQuerySet:
@@ -37,12 +41,26 @@ class AlbumQuerySet(abstract.PublicDashboardQuerySet):
         """
         return self.filter(parent_wiki=wiki)
 
+    def for_profile(self, profile: Profile | int) -> AlbumQuerySet:
+        """Vault albums belonging to one profile directly (not via a pin or wiki).
 
-class AlbumManager(abstract.PublicDashboardManager.from_queryset(AlbumQuerySet)):
+        Args:
+            profile: The owning profile (accepts a Profile instance or a raw pk).
+
+        Returns:
+            Matching albums, in the model's default order.
+        """
+        return self.filter(parent_profile=profile)
+
+
+_AlbumManagerBase = abstract.PublicDashboardManager.from_queryset(AlbumQuerySet)
+
+
+class AlbumManager(_AlbumManagerBase):
     """Custom query manager for Album models."""
 
 
-class AlbumItemQuerySet(abstract.DashboardQuerySet):
+class AlbumItemQuerySet(abstract.DashboardQuerySet["AlbumItem"]):
     """Custom queryset for AlbumItem models."""
 
     def for_album(self, album: Album | int) -> AlbumItemQuerySet:
@@ -52,22 +70,26 @@ class AlbumItemQuerySet(abstract.DashboardQuerySet):
             album: The album (accepts an Album instance or a raw pk).
 
         Returns:
-            Matching items, in the model's default (order, created) order.
+            Matching items. Display order is :meth:`in_display_order`, not this.
         """
         return self.filter(album=album)
 
-    def membership(self, album: Album | int, image):
-        """This image's membership row in this album, if any.
+    def in_display_order(self, album: Album) -> AlbumItemQuerySet:
+        """This album's items in its current sort method. Date and name sorts join ``image`` and read live metadata.
 
         Args:
-            album: The album to check.
-            image: The image to check.
+            album: The album whose ``sort`` to apply.
 
         Returns:
-            The matching AlbumItem, or None.
+            Matching items, ordered for display.
         """
-        return self.for_album(album).filter(image=image).first()
+        from urbanlens.dashboard.models.album.sort import album_sort_spec
+
+        return album_sort_spec(album.sort).apply(self.for_album(album))
 
 
-class AlbumItemManager(abstract.DashboardManager.from_queryset(AlbumItemQuerySet)):
+_AlbumItemManagerBase = abstract.DashboardManager.from_queryset(AlbumItemQuerySet)
+
+
+class AlbumItemManager(_AlbumItemManagerBase):
     """Custom query manager for AlbumItem models."""

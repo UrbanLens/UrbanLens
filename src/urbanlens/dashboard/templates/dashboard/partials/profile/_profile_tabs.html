@@ -1,10 +1,4 @@
-{% comment %}
-Profile | Edit | Achievements tab strip for the current user's own profile pages.
-
-Context:
-  active - "profile", "edit", or "achievements" (which tab is current)
-  profile_slug - the current user's own profile slug, for the Achievements link
-{% endcomment %}
+{% comment %}Profile | Edit | Achievements tab strip for the current user's own profile pages.{% endcomment %}
 <nav class="ul-subnav-tabs" aria-label="Profile views">
     <a href="{% url 'profile.view' %}"
        class="ul-subnav-tab {% if active == 'profile' %}is-active{% endif %}"
@@ -18,10 +12,12 @@ Context:
         <i class="material-symbols-outlined">edit</i>
         <span>Edit</span>
     </a>
+    {% if has_achievements %}
     <a href="{% url 'achievement.list' profile_slug=profile_slug %}"
        class="ul-subnav-tab {% if active == 'achievements' %}is-active{% endif %}"
        {% if active == 'achievements' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">trophy</i>
         <span>Achievements</span>
     </a>
+    {% endif %}
 </nav>

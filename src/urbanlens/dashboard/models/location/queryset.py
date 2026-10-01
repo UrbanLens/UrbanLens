@@ -10,7 +10,7 @@ from django.contrib.gis.measure import D
 
 # Django Imports
 from django.db import IntegrityError, transaction
-from django.db.models import DecimalField, Q
+from django.db.models import DecimalField
 
 # App Imports
 from urbanlens.dashboard.models import abstract
@@ -19,19 +19,13 @@ from urbanlens.dashboard.models.place.queryset import point_for_coordinates
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.place.model import Place
 
 logger = logging.getLogger(__name__)
 
 
 def quantize_coordinate(value: float | str | Decimal, field_name: str) -> Decimal:
     """Round a submitted coordinate to the precision ``Location`` actually stores.
-
-    ``Location.latitude``/``longitude`` are fixed-precision decimals, so the
-    database rounds on insert. Rounding here first means a lookup compares the
-    same value the row will hold, rather than the caller's raw float - which is
-    what makes exact-coordinate matching agree with the ``(latitude, longitude)``
-    unique constraint instead of racing it.
+    ``Location.latitude``/``longitude`` are fixed-precision decimals, so the database rounds on insert.
 
     Args:
         value: The submitted coordinate.
@@ -54,53 +48,19 @@ def quantize_coordinate(value: float | str | Decimal, field_name: str) -> Decima
     return Decimal(str(float(value))).quantize(Decimal(1).scaleb(-field.decimal_places), rounding=ROUND_HALF_UP)
 
 
-class LocationQuerySet(abstract.PublicDashboardQuerySet):
+class LocationQuerySet(abstract.PublicDashboardQuerySet["Location"]):
     """QuerySet for Location - the shared, user-agnostic half of the place model.
 
     Filters here operate on global place data (coordinates, name, CID, address).
     For per-user filtering (by profile, visit status, priority) use PinQuerySet.
     """
 
-    def by_latitude(self, latitude):
-        return self.filter(latitude=latitude)
-
-    def by_longitude(self, longitude):
-        return self.filter(longitude=longitude)
-
     def by_cid(self, cid: int):
         return self.filter(google_place__cid=cid)
 
-    def by_official_name(self, name):
-        return self.filter(official_name__icontains=name)
-
-    def by_created_year(self, year):
-        return self.filter(created__year=year)
-
-    def by_updated_year(self, year):
-        return self.filter(updated__year=year)
-
-    def in_domain_of(self, place: Place | None) -> Self:
-        """Locations resolving onto any place in ``place``'s access domain."""
-        if place is None:
-            return self.none()
-        return self.filter(place__domain_root_id=place.domain_root_id)
-
     def within_bounding_box(self, latitude: float, longitude: float) -> Self:
         """Locations sharing the access domain of whatever is at this coordinate.
-
-        Resolution happens once, on Place, and the answer is a single
-        real-world thing - so "which locations cover this point?" is no longer
-        a geometry query over every location that ever copied a polygon, but a
-        lookup of the domain the point resolves into.
-
-        That is the fix for the campus case: importing 124 buildings used to
-        give 124 Locations their own copy of the same parcel outline, so every
-        point on the property matched all 125 at once. They now share one
-        domain and answer as one place.
-
-        Falls back to a 50 m proximity check for coordinates on no known
-        place, which is the pre-Place behaviour for locations nobody has
-        official geometry for.
+        Resolution happens once, on Place, and the answer is a single real-world thing - so "which locations cover this point?" is no longer a geometry query over every location that ever copied a polygon, but a lookup of the domain the point resolves into.
         """
         from urbanlens.dashboard.models.place.model import Place
 
@@ -110,32 +70,18 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
         place = Place.objects.resolve_for_point(latitude, longitude)
         if place is not None:
             return self.filter(place__domain_root_id=place.domain_root_id).distinct()
-        return self.filter(place__isnull=True).filter(point__distance_lte=(pt, D(m=DEFAULT_RADIUS_METERS))).distinct()
-
-    def filter_by_criteria(self, criteria):
-        query = Q()
-        if criteria.get("date_added"):
-            query &= Q(created__date=criteria["date_added"])
-        return self.filter(query)
+        return self.filter(place__isnull=True).filter(point__dwithin=(pt, D(m=DEFAULT_RADIUS_METERS))).distinct()
 
 
-class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuerySet)):
-    """Manager for Location. Use get_for_point to find the Location standing at a coordinate."""
+_LocationManagerBase = abstract.PublicDashboardManager.from_queryset(LocationQuerySet)
 
-    def get_for_point(self, latitude: float, longitude: float):
-        """Return the first Location sharing the access domain at (lat, lon), or None.
 
-        Falls back to a 50 m proximity check for coordinates on no known place.
-        """
-        return self.within_bounding_box(latitude, longitude).first()
+class LocationManager(_LocationManagerBase["Location"]):
+    """Manager for Location."""
 
     def get_all_for_point(self, latitude: float, longitude: float) -> Self:
         """Return every Location sharing the access domain at (lat, lon).
-
-        These are locations describing the *same* real-world thing - one
-        parcel and the buildings on it - not competing candidates. For the
-        genuinely ambiguous case (two unrelated parcels whose county geometry
-        overlaps) see ``Place.objects.competing_for_point``.
+        These are locations describing the *same* real-world thing - one parcel and the buildings on it - not competing candidates.
 
         Args:
             latitude: WGS-84 latitude of the point to test.
@@ -148,20 +94,7 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
 
     def get_exact_or_create(self, latitude, longitude, defaults=None) -> tuple[Location, bool]:
         """Get or create the Location at exactly these coordinates.
-
-        The counterpart to :meth:`get_nearby_or_create` for callers that must
-        keep a submitted point exactly as given - a detail pin's own marker, a
-        child wiki, a manual pin move - rather than snapping it onto whatever
-        Location happens to sit within the dedup radius.
-
-        Matches on the stored coordinates rather than a zero-distance PostGIS
-        probe. Those are not equivalent: ``point`` is built from the raw float
-        while ``latitude``/``longitude`` are rounded to the fields' precision on
-        insert, so two submissions differing below that precision have points a
-        few centimetres apart but the *same* stored pair. A zero-distance probe
-        misses the existing row and the insert then trips the
-        ``(latitude, longitude)`` unique constraint; matching on the stored
-        values is what that constraint actually enforces.
+        The counterpart to :meth:`get_nearby_or_create` for callers that must keep a submitted point exactly as given - a detail pin's own marker, a child wiki, a manual pin move - rather than snapping it onto whatever Location happens to sit within the dedup radius.
 
         Args:
             latitude: WGS-84 latitude.
@@ -178,16 +111,10 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
         if existing is not None:
             return existing, False
         try:
-            # Nested atomic so the raced insert fails inside its *own*
-            # savepoint. Callers run this inside `transaction.atomic()` blocks
-            # (pin moves, in both `PinViewSet.partial_update` and
-            # `PinDetailView.patch`), and an IntegrityError raised in an outer
-            # transaction marks the whole thing for rollback - so catching it
-            # here without a savepoint left the connection in a broken state
-            # and the recovery query below raised TransactionManagementError
-            # instead of returning the winning row. The bare `except` turned a
-            # survivable race into a 500 in exactly the case it was written to
-            # survive.
+            # Nested atomic so the raced insert fails inside its *own* savepoint.
+            # Callers run this inside `transaction.atomic()` blocks (pin moves, in both
+            # `PinViewSet.partial_update` and `PinDetailView.patch`), and an IntegrityError raised
+            # in an outer transaction marks the whole thing for rollback - so catching it here
             with transaction.atomic():
                 return self.create(latitude=latitude_value, longitude=longitude_value, **(defaults or {})), True
         except IntegrityError:
@@ -199,20 +126,9 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
             return existing, False
 
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=0, defaults=None):
-        """
-        Get or create a Location instance, optionally treating nearby coordinates as the same.
-
-        The threshold now defaults to **exact**. Consolidating two drops at one
-        real place is the *place's* job: they resolve onto the same parcel and
-        share its wiki, its community, and its "places in common" entry without
-        either coordinate being thrown away. Snapping discarded whichever
-        coordinate arrived second - including when the first belonged to a
-        different user - which defeated the 6-decimal precision Location goes
-        to some trouble to store and enforce.
-
-        A non-zero threshold remains available for the few callers whose job
-        genuinely is radius matching (see
-        ``services.apis.locations.legacy_cid_coordinate_fix``).
+        """Get or create a Location instance, optionally treating nearby coordinates as the same.
+        The threshold now defaults to **exact**.
+        Consolidating two drops at one real place is the *place's* job: they resolve onto the same parcel and share its wiki, its community, and its "places in common" entry without either coordinate being thrown away.
 
         Args:
             latitude (float): Latitude of the location.
@@ -222,7 +138,6 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
 
         Returns:
             (Location, bool): Tuple of (Location instance, created boolean)
-
         """
         if not threshold_meters:
             return self.get_exact_or_create(latitude, longitude, defaults=defaults)
@@ -231,7 +146,7 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
 
         # Find existing locations within the threshold distance
         existing_locations = self.filter(
-            point__distance_lte=(point, D(m=threshold_meters)),
+            point__dwithin=(point, D(m=threshold_meters)),
         )
 
         if existing_locations.exists():
@@ -245,18 +160,16 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
             **(defaults or {}),
         }
         try:
-            # Nested atomic for the same reason as get_or_create_at_coordinates:
-            # without its own savepoint the IntegrityError poisons any
-            # enclosing transaction, and the recovery query below then raises
-            # TransactionManagementError instead of returning the winner.
+            # Nested atomic for the same reason as get_or_create_at_coordinates: without its own
+            # savepoint the IntegrityError poisons any enclosing transaction, and the recovery query
+            # below then raises TransactionManagementError instead of returning the winner.
             with transaction.atomic():
                 location = self.create(**location_data)
         except IntegrityError:
-            # A concurrent request created a Location at these exact coordinates between
-            # the existence check above and this insert (the (latitude, longitude)
-            # unique_together constraint) - return that row instead of letting the race
-            # surface as an unhandled 500.
-            existing_locations = self.filter(point__distance_lte=(point, D(m=threshold_meters)))
+            # A concurrent request created a Location at these exact coordinates between the
+            # existence check above and this insert (the (latitude, longitude) unique_together
+            # constraint) - return that row instead of letting the race surface as an unhandled 500.
+            existing_locations = self.filter(point__dwithin=(point, D(m=threshold_meters)))
             if existing_locations.exists():
                 return existing_locations.first(), False
             raise

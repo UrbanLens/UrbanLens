@@ -4,7 +4,7 @@
       hx-post="{% url 'label.customize' label_kind=label_url_kind label_id=label.id %}"
       hx-target="{{ rows_target }}"
       hx-swap="innerHTML"
-      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Customization saved.'); }">
+      data-ul-on-success="close-dialog" data-ul-success-toast="Customization saved.">
     {% csrf_token %}
 
     <p class="form-hint" style="margin-bottom:1rem;">
@@ -56,9 +56,9 @@
         <button type="submit" class="btn btn--primary">Save</button>
         {% if customization %}
         <button type="submit" name="action" value="clear" class="btn btn--ghost"
-                style="color:var(--color-danger,#e53);">Reset to global defaults</button>
+                style="color:var(--ul-color-danger-text,#e53);">Reset to global defaults</button>
         {% endif %}
         <button type="button" class="btn btn--ghost"
-                onclick="this.closest('dialog').close()">Cancel</button>
+                data-dialog-close>Cancel</button>
     </div>
 </form>

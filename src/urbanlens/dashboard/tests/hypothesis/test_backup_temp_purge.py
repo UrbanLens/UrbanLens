@@ -1,14 +1,4 @@
-"""A dump that dies mid-write leaves a `.tmp` behind that nothing used to reap.
-
-`run()` writes to `<name>.sql.tmp` and renames only on success, so a partial dump can
-never be mistaken for a complete backup. That is deliberate, but it means retention -
-which only ever considers `is_backup_filename` matches - never counts or removes those
-files. A process death mid-dump (OOM kill, container restart) is exactly the case the
-rename guards against, and every occurrence left a full-dump-sized file on disk forever.
-
-`purge_stale_temp_files` reaps them, but only once they are far too old to be a dump
-still in progress - deleting a live dump's temp file would corrupt a running backup.
-"""
+"""A dump that dies mid-write leaves a `.tmp` behind that nothing used to reap."""
 
 from __future__ import annotations
 
@@ -21,7 +11,12 @@ from unittest import mock
 
 from django.conf import settings as django_settings
 
-from urbanlens.core.controllers.backups.db import BACKUP_TIMEOUT_SECONDS, STALE_TEMP_AGE_SECONDS, DatabaseBackup, is_backup_temp_filename
+from urbanlens.core.controllers.backups.db import (
+    BACKUP_TIMEOUT_SECONDS,
+    STALE_TEMP_AGE_SECONDS,
+    DatabaseBackup,
+    is_backup_temp_filename,
+)
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 
@@ -70,6 +65,27 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
 
             self.assertTrue(live.exists())
 
+    def test_the_stale_cutoff_boundary_is_pinned_to_the_second(self) -> None:
+        """`> cutoff` (not `>=`) decides which side of STALE_TEMP_AGE_SECONDS a file falls on - pin the exact cutoff instant and one second inside it, not just values comfortably on either side, so a flipped comparison or an off-by-one survives no longer than this test."""
+        with TemporaryDirectory() as tmp:
+            fixed_now = 10_000_000.0
+            cutoff = fixed_now - STALE_TEMP_AGE_SECONDS
+
+            at_cutoff = Path(tmp) / "backup_20260101_000000.sql.tmp"
+            at_cutoff.write_bytes(b"x")
+            os.utime(at_cutoff, (cutoff, cutoff))
+
+            one_second_short = Path(tmp) / "backup_20260102_000000.sql.tmp"
+            one_second_short.write_bytes(b"x")
+            os.utime(one_second_short, (cutoff + 1, cutoff + 1))
+
+            with mock.patch("urbanlens.core.controllers.backups.db.datetime") as mock_dt:
+                mock_dt.now.return_value.timestamp.return_value = fixed_now
+                self._backup(tmp).purge_stale_temp_files()
+
+            self.assertFalse(at_cutoff.exists(), "a file exactly at the cutoff must be reaped")
+            self.assertTrue(one_second_short.exists(), "a file one second inside the cutoff must survive")
+
     def test_completed_backups_are_untouched(self) -> None:
         with TemporaryDirectory() as tmp:
             done = Path(tmp) / "backup_20260101_000000.sql"
@@ -88,6 +104,29 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
 
             self.assertTrue(stray.exists())
 
+    def test_a_removal_failure_does_not_abort_the_rest_of_the_sweep(self) -> None:
+        """The try/except around os.remove exists so one uncooperative file (a permission
+        error, a concurrent delete) can't abort the sweep before later stale files are
+        reaped - assert the loop actually continues rather than propagating."""
+        with TemporaryDirectory() as tmp:
+            unremovable = Path(tmp) / "backup_20260101_000000.sql.tmp"
+            removable = Path(tmp) / "backup_20260102_000000.sql.tmp"
+            _touch(unremovable, STALE_TEMP_AGE_SECONDS + 60)
+            _touch(removable, STALE_TEMP_AGE_SECONDS + 60)
+
+            real_remove = os.remove
+
+            def _flaky_remove(path, *args, **kwargs) -> None:
+                if os.fspath(path) == str(unremovable):
+                    raise OSError("permission denied")
+                real_remove(path, *args, **kwargs)
+
+            with mock.patch("os.remove", side_effect=_flaky_remove):
+                self._backup(tmp).purge_stale_temp_files()
+
+            self.assertTrue(unremovable.exists())
+            self.assertFalse(removable.exists())
+
     def test_purging_old_backups_also_reaps_temp_files(self) -> None:
         """The reaper has no scheduler of its own - it rides along with retention,
         which runs after every successful dump."""
@@ -103,10 +142,8 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
 class BackupTimeoutTests(SimpleTestCase):
     """A wedged pg_dump must fail cleanly rather than run to the Celery task limit.
 
-    `subprocess.TimeoutExpired` is not a `CalledProcessError`, so the original handler
-    would not have caught one had a timeout been passed - it would propagate out of the
-    task leaving the partial `.tmp` behind.
-    """
+    `subprocess.TimeoutExpired` is not a `CalledProcessError`, so the original handler would not have caught one
+    had a timeout been passed - it would propagate out of the task leaving the partial `.tmp` behind."""
 
     def _backup(self, backup_dir: str | Path) -> DatabaseBackup:
         backup = DatabaseBackup(auto_schedule=False)
@@ -124,11 +161,114 @@ class BackupTimeoutTests(SimpleTestCase):
                 raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 1))
 
             # `db.py` does `from shutil import which`, so the name to patch is its own.
-            with mock.patch("subprocess.run", side_effect=_hang), mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"):
+            with (
+                mock.patch("subprocess.run", side_effect=_hang) as mock_run,
+                mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"),
+            ):
                 self.assertFalse(backup.run())
 
+            # A dropped `timeout=` kwarg would restore the original bug (the wedge running
+            # until Celery's own soft limit) while `_hang` above still raises regardless -
+            # pin that the argument is actually threaded through, not just that some
+            # TimeoutExpired gets raised somewhere.
+            self.assertEqual(mock_run.call_args.kwargs.get("timeout"), BACKUP_TIMEOUT_SECONDS)
             self.assertEqual(list(Path(tmp).iterdir()), [], "the partial dump was left on disk")
 
     def test_the_timeout_is_below_the_celery_soft_limit(self) -> None:
         """Otherwise the task limit fires first and the cleanup above never runs."""
         self.assertLess(BACKUP_TIMEOUT_SECONDS, django_settings.CELERY_TASK_SOFT_TIME_LIMIT)
+
+
+class PgDumpCredentialTests(SimpleTestCase):
+    """``PGPASSWORD`` adds nothing only while the password is ``UL_DB_PASS``, which the dump inherits anyway.
+
+    Should the password ever come from anywhere but the environment (a secrets file, a vault), pg_dump's
+    environment would become the one readable place it lives, and this fails."""
+
+    def test_the_dump_is_handed_no_secret_it_did_not_already_inherit(self) -> None:
+        password = django_settings.DATABASES["default"]["PASSWORD"]
+        self.assertTrue(password, "the test runner has no database password, so this proves nothing")
+
+        def _dump(cmd, **_kwargs):
+            Path(cmd[cmd.index("-f") + 1]).write_bytes(b"-- dump")
+
+        with (
+            TemporaryDirectory() as tmp,
+            mock.patch("subprocess.run", side_effect=_dump) as run,
+            mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"),
+        ):
+            backup = DatabaseBackup(auto_schedule=False)
+            backup.backup_dir = Path(tmp)
+            self.assertTrue(backup.run())
+
+        env = run.call_args.kwargs["env"]
+        self.assertEqual(env.get("UL_DB_PASS"), password)
+        self.assertEqual(os.environ.get("UL_DB_PASS"), password)
+
+
+class CountBasedRetentionTests(SimpleTestCase):
+    """`purge_old_backups`'s count-deletion loop had never run in any test.
+
+    `test_backup_temp_purge.py` exercised only the `.tmp`-reaping side effect, with zero real `.sql` backups on
+    disk - so `backup_files[self.backup_retention:]` was never reached."""
+
+    def _backup(self, backup_dir: str | Path, retention: int) -> DatabaseBackup:
+        with mock.patch.object(DatabaseBackup, "schedule_backup", return_value=False):
+            backup = DatabaseBackup(auto_schedule=False)
+        backup.backup_dir = Path(backup_dir)
+        backup.backup_retention = retention
+        return backup
+
+    def _dated_backups(self, tmp: str, count: int) -> list[Path]:
+        """`count` backups, newest first - index 0 is the most recent."""
+        paths = []
+        for index in range(count):
+            path = Path(tmp) / f"backup_2026080{index + 1}_120000.sql"
+            _touch(path, age_seconds=index * 3600)
+            paths.append(path)
+        return paths
+
+    def test_exactly_the_oldest_excess_backups_are_removed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            newest_first = self._dated_backups(tmp, count=7)
+
+            self._backup(tmp, retention=3).purge_old_backups()
+
+            for survivor in newest_first[:3]:
+                self.assertTrue(survivor.exists(), f"{survivor.name} is among the newest 3 and must survive")
+            for removed in newest_first[3:]:
+                self.assertFalse(removed.exists(), f"{removed.name} is beyond retention and must be gone")
+
+    def test_nothing_is_removed_below_the_retention_count(self) -> None:
+        """Anti-vacuity: the loop must not fire when there is nothing to purge."""
+        with TemporaryDirectory() as tmp:
+            paths = self._dated_backups(tmp, count=3)
+
+            self._backup(tmp, retention=5).purge_old_backups()
+
+            for path in paths:
+                self.assertTrue(path.exists(), f"{path.name} is within retention")
+
+    def test_exactly_the_retention_count_is_left_alone(self) -> None:
+        """The boundary: `len(files) > retention` must not fire at equality."""
+        with TemporaryDirectory() as tmp:
+            paths = self._dated_backups(tmp, count=4)
+
+            self._backup(tmp, retention=4).purge_old_backups()
+
+            for path in paths:
+                self.assertTrue(path.exists(), f"{path.name} is exactly at retention")
+
+    def test_a_stray_non_backup_file_is_neither_counted_nor_deleted(self) -> None:
+        """Retention must not be spent on, or reach, a file this class did not write."""
+        with TemporaryDirectory() as tmp:
+            newest_first = self._dated_backups(tmp, count=3)
+            stray = Path(tmp) / "notes.txt"
+            _touch(stray, age_seconds=99_999)
+
+            self._backup(tmp, retention=2).purge_old_backups()
+
+            self.assertTrue(stray.exists(), "a stray file must never be deleted alongside backups")
+            self.assertTrue(newest_first[0].exists())
+            self.assertTrue(newest_first[1].exists())
+            self.assertFalse(newest_first[2].exists(), "the stray must not have been counted toward retention")

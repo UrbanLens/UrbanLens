@@ -1,11 +1,4 @@
-"""Tests for the external API's credential-introspection endpoint.
-
-``auth/session/`` is the single deliberate exception to the fail-closed
-``HasApiKeyScope`` default, so these tests pin down both halves of that: it must
-still require *authentication* (the exception is about scopes, not about being
-open), and it must describe either credential kind accurately enough for a
-client to hide unreachable UI and refresh before expiry.
-"""
+"""Tests for the external API's credential-introspection endpoint."""
 
 from __future__ import annotations
 
@@ -79,7 +72,9 @@ class AuthSessionApiKeyTests(TestCase):
     def test_reported_scopes_gate_what_the_client_may_try(self) -> None:
         """A narrowed key reports the narrowed grant, not the issuing default."""
         ApiKey.objects.filter(pk=self.key.pk).update(scopes=[ApiKeyScope.PINS_READ.value])
-        self.assertEqual(self.client.get(self.url, **_bearer(self.raw_key)).json()["scopes"], [ApiKeyScope.PINS_READ.value])
+        self.assertEqual(
+            self.client.get(self.url, **_bearer(self.raw_key)).json()["scopes"], [ApiKeyScope.PINS_READ.value]
+        )
 
 
 class AuthSessionOauth2Tests(TestCase):
@@ -133,7 +128,9 @@ class UnscopedViewContractTests(TestCase):
         unscoped = {
             name
             for name in dir(views)
-            if isinstance(getattr(views, name), type) and issubclass(getattr(views, name), UnscopedExternalApiView) and getattr(views, name) is not UnscopedExternalApiView
+            if isinstance(getattr(views, name), type)
+            and issubclass(getattr(views, name), UnscopedExternalApiView)
+            and getattr(views, name) is not UnscopedExternalApiView
         }
         self.assertEqual(unscoped, {"AuthSessionView"})
 

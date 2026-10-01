@@ -1,16 +1,4 @@
-"""Auto-discovered links are unique per (pin, url) / (wiki, url), enforced by the DB.
-
-``add_pin_link``/``add_wiki_link`` run from a ``LocationCache`` post-save signal,
-and cache rows are written by panel fetches - which have their own Celery queue
-at concurrency 20. Two panels that surface the same URL for one pin can both pass
-the exists() fast path, so the unique constraint added in migration 0047 is what
-actually decides; the loser's insert is absorbed rather than escaping as a 500
-from inside a signal handler.
-
-The constraint hashes the URL (``UniqueConstraint(F(owner), MD5("url"))``)
-because ``url`` holds up to 2000 characters and a plain btree entry over that in
-multibyte UTF-8 can exceed Postgres' row limit.
-"""
+"""Auto-discovered links are unique per (pin, url) / (wiki, url), enforced by the DB."""
 
 from __future__ import annotations
 
@@ -58,12 +46,7 @@ class DuplicateExternalLinkTests(TestCase):
     def test_a_racing_add_is_absorbed_rather_than_raising(self) -> None:
         """The loser of the exists()-then-create race returns False, not a 500.
 
-        A concurrent panel inserts between the fast-path check and this call's
-        insert. Neutering the check reproduces that ordering deterministically:
-        the create then hits the constraint, which must be swallowed - this runs
-        inside a signal handler on a Celery queue, where an IntegrityError would
-        surface as a task failure.
-        """
+        A concurrent panel inserts between the fast-path check and this call's insert."""
         PinLink.objects.create(pin=self.pin, url=_URL, name="the winner")
 
         with mock.patch.object(LinkQuerySet, "exists", return_value=False):

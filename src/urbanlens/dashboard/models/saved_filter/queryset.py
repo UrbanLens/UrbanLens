@@ -1,20 +1,19 @@
-# Generic imports
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
+import uuid
 
-# Django Imports
-# App Imports
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.saved_filter.model import SavedFilter  # noqa: F401 - mypy needs these; ruff does not
 
 logger = logging.getLogger(__name__)
 
 
-class SavedFilterQuerySet(abstract.DashboardQuerySet):
+class SavedFilterQuerySet(abstract.FrontendDashboardQuerySet["SavedFilter"]):
     """Custom queryset for SavedFilter models."""
 
     def name_taken_for(self, profile: Profile, name: str, *, exclude_pk: int | None = None) -> bool:
@@ -35,6 +34,32 @@ class SavedFilterQuerySet(abstract.DashboardQuerySet):
             qs = qs.exclude(pk=exclude_pk)
         return qs.exists()
 
+    def for_client_ids(self, profile: Profile, raw_ids: str) -> Self:
+        """``profile``'s filters named by a comma-separated uuid list from the client.
 
-class SavedFilterManager(abstract.DashboardManager.from_queryset(SavedFilterQuerySet)):
+        Another profile's uuid, an unknown uuid and a malformed value are all dropped the same way, so the
+        result never says which of them a value was.
+
+        Args:
+            profile: The requesting profile; nothing outside it is returned.
+            raw_ids: Comma-separated ``SavedFilter`` uuids, or "".
+
+        Returns:
+            The matching filters, possibly none.
+        """
+        ids = set()
+        for value in raw_ids.split(","):
+            try:
+                ids.add(uuid.UUID(value.strip()))
+            except ValueError:
+                continue
+        if not ids:
+            return self.none()
+        return self.filter(profile=profile, uuid__in=ids).select_related("profile")
+
+
+_SavedFilterManagerBase = abstract.FrontendDashboardManager.from_queryset(SavedFilterQuerySet)
+
+
+class SavedFilterManager(_SavedFilterManagerBase):
     """Custom query manager for SavedFilter models."""

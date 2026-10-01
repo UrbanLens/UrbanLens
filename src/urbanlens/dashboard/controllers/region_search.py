@@ -14,24 +14,22 @@ _POLYGONAL_TYPES = ("Polygon", "MultiPolygon")
 class RegionBoundarySearchView(LoginRequiredMixin, View):
     """Look up a place name's polygonal boundary for the Filters tab's region map.
 
-    GET /region-search/?q=<free text> → JSON ``{"results": [{"display_name": str, "geojson": dict}, ...]}``.
+    GET /region-search/?q=<free text> → JSON ``{"results": [{"display_name": str, "geojson": dict},
 
-    Only candidates with a Polygon/MultiPolygon geometry are returned - point
-    addresses and other non-area results are dropped, since they can't be
-    drawn as an include/exclude region.
+    ...]}``.
+    Only candidates with a Polygon/MultiPolygon geometry are returned - point addresses and other
+    non-area results are dropped, since they can't be drawn as an include/exclude region.
     """
 
     def get(self, request: HttpRequest) -> JsonResponse:
         """Look up polygonal boundaries matching a free-text place name.
 
         Args:
-            request: The incoming GET request; ``q`` is the free-text place
-                name to look up.
+            request: The incoming GET request; ``q`` is the free-text place name to look up.
 
         Returns:
-            A JSON response of the form ``{"results": [{"display_name": str,
-            "geojson": dict}, ...]}``, limited to Polygon/MultiPolygon
-            candidates. Returns an empty list when ``q`` is blank.
+            A JSON response of the form ``{"results": [{"display_name": str, "geojson": dict}, ...]}``,
+            limited to Polygon/MultiPolygon candidates.
         """
         query = (request.GET.get("q") or "").strip()
         if not query:

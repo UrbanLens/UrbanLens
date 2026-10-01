@@ -1,11 +1,4 @@
-"""Tests for the map's pin-list sidebar being scoped to the current viewport.
-
-MapController.pin_list_panel (GET map.pins.list) now accepts an optional
-"bounds" "south,west,north,east" query param - when present, both the
-rendered pin list and its total count are restricted to that box (on top of
-whatever SearchForm/toolbar filters already apply); when absent, behavior is
-unchanged (the full filtered set, as before this feature).
-"""
+"""Tests for the map's pin-list sidebar being scoped to the current viewport."""
 
 from __future__ import annotations
 
@@ -28,8 +21,18 @@ class PinListPanelViewportScopingTests(TestCase):
         self.profile = self.user.profile
         self.client = Client()
         self.client.force_login(self.user)
-        self.inside = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude="40.0", longitude="-74.0"), name="Inside Pin")
-        self.outside = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude="45.0", longitude="-80.0"), name="Outside Pin")
+        self.inside = baker.make(
+            Pin,
+            profile=self.profile,
+            location=baker.make(Location, latitude="40.0", longitude="-74.0"),
+            name="Inside Pin",
+        )
+        self.outside = baker.make(
+            Pin,
+            profile=self.profile,
+            location=baker.make(Location, latitude="45.0", longitude="-80.0"),
+            name="Outside Pin",
+        )
 
     def _url(self, **params) -> str:
         base = reverse("map.pins.list")
@@ -64,7 +67,12 @@ class PinListPanelViewportScopingTests(TestCase):
         self.assertFalse(response.context["is_viewport_scoped"])
 
     def test_bounds_scoping_combines_with_search_form_filters(self) -> None:
-        baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude="40.001", longitude="-74.001"), name="Inside But Wrong Name")
+        baker.make(
+            Pin,
+            profile=self.profile,
+            location=baker.make(Location, latitude="40.001", longitude="-74.001"),
+            name="Inside But Wrong Name",
+        )
         response = self.client.get(self._url(bounds="39.0,-75.0,41.0,-73.0", name="Inside Pin"))
         self.assertContains(response, "Inside Pin")
         self.assertNotContains(response, "Inside But Wrong Name")
@@ -101,7 +109,12 @@ class PinListPanelPageSizeTests(TestCase):
         self.client = Client()
         self.client.force_login(self.user)
         for i in range(10):
-            baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=f"{40.0 + i * 0.001}", longitude="-74.0"), name=f"Pin {i}")
+            baker.make(
+                Pin,
+                profile=self.profile,
+                location=baker.make(Location, latitude=f"{40.0 + i * 0.001}", longitude="-74.0"),
+                name=f"Pin {i}",
+            )
 
     def _url(self, **params) -> str:
         base = reverse("map.pins.list")

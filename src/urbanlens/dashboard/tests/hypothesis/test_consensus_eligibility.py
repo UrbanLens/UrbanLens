@@ -1,9 +1,4 @@
-"""Tests for Consensus wiki eligibility (services.consensus.eligibility).
-
-Only wikis whose Location the requesting profile has a *visited* pin for
-are ever offered as rounds - not merely pinned, per the Consensus design
-spec (stricter than SpotGuessr's "pinned by everyone" rule).
-"""
+"""Tests for Consensus wiki eligibility (services.consensus.eligibility)."""
 
 from __future__ import annotations
 
@@ -15,7 +10,12 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.consensus.eligibility import eligible_wikis, eligible_wikis_for_all, has_eligible_wikis, has_eligible_wikis_for_all
+from urbanlens.dashboard.services.consensus.eligibility import (
+    eligible_wikis,
+    eligible_wikis_for_all,
+    has_eligible_wikis,
+    has_eligible_wikis_for_all,
+)
 
 
 def _make_profile() -> Profile:

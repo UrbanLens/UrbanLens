@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource
@@ -27,7 +27,9 @@ class NormalizeAnswerPropertyTests(SimpleTestCase):
     def test_matches_regardless_of_case_and_punctuation(self) -> None:
         self.assertEqual(TriviaQuestion.normalize_answer("1937"), TriviaQuestion.normalize_answer("1937"))
         self.assertEqual(TriviaQuestion.normalize_answer("The Armory"), TriviaQuestion.normalize_answer("the-armory!"))
-        self.assertEqual(TriviaQuestion.normalize_answer("St. Mary's Church"), TriviaQuestion.normalize_answer("st marys church"))
+        self.assertEqual(
+            TriviaQuestion.normalize_answer("St. Mary's Church"), TriviaQuestion.normalize_answer("st marys church")
+        )
 
     def test_different_answers_do_not_collide(self) -> None:
         self.assertNotEqual(TriviaQuestion.normalize_answer("1937"), TriviaQuestion.normalize_answer("1938"))

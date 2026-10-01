@@ -1,16 +1,4 @@
-"""Search must not return photos their uploader has not agreed to show you.
-
-`PhotoSearchProvider` reaches other people's photos on purpose: its third
-disjunct is ``Q(location__pins__profile=profile)``, "any image at a location I
-have a pin at", which is how you find pictures of a place you follow. It did that
-without consulting `ImageQuerySet.visible_to`, so a photo whose uploader had set
-`photo_upload_visibility=NO_ONE` came back anyway - and a photo result carries
-the caption, the *owning pin's name*, and a link to that pin, so what leaked was
-not only the picture.
-
-Every other search provider scopes to the searcher's own rows. This is the one
-that does not, which is why it is the one that needed the filter.
-"""
+"""Search must not return photos their uploader has not agreed to show you."""
 
 from __future__ import annotations
 
@@ -38,7 +26,9 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
         self.location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
         # Both have a pin at the same place: that is what makes the third
         # disjunct match, and it is an ordinary situation rather than an attack.
-        self.owner_pin = baker.make(Pin, profile=self.owner, location=self.location, parent_pin=None, name="Owner's private survey")
+        self.owner_pin = baker.make(
+            Pin, profile=self.owner, location=self.location, parent_pin=None, name="Owner's private survey"
+        )
         self.neighbour_pin = baker.make(Pin, profile=self.neighbour, location=self.location, parent_pin=None)
         self.photo = Image.objects.create(
             image=SimpleUploadedFile("secret.jpg", b"not-a-real-jpeg", content_type="image/jpeg"),
@@ -83,15 +73,14 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
 
         results = self._search(self.owner)
 
-        self.assertTrue(any(_NONCE in (r.title or "") for r in results), "the uploader lost their own photo from search")
+        self.assertTrue(
+            any(_NONCE in (r.title or "") for r in results), "the uploader lost their own photo from search"
+        )
 
     def test_a_photo_shared_widely_is_still_found_by_a_neighbour(self) -> None:
         """The positive control: this suite must not pass by breaking search.
 
-        Both gates open - contributed to the wiki, and a setting that admits
-        anyone. Setting the visibility alone is not enough and should not be:
-        a photo nobody shared is nobody else's to find.
-        """
+        Both gates open - contributed to the wiki, and a setting that admits anyone."""
         from urbanlens.dashboard.models.images.model import Image as ImageModel
         from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -102,4 +91,6 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
 
         results = self._search(self.neighbour)
 
-        self.assertTrue(any(_NONCE in (r.title or "") for r in results), "a photo shared with anyone stopped being findable")
+        self.assertTrue(
+            any(_NONCE in (r.title or "") for r in results), "a photo shared with anyone stopped being findable"
+        )

@@ -35,10 +35,11 @@
         </ul>
     </div>
 
-    {% if form.errors or form.non_field_errors %}
+    {% if form.non_field_errors %}
     <div class="auth-errors">
-        {{ form.errors }}
-        {{ form.non_field_errors }}
+        {% for error in form.non_field_errors %}
+        <p>{{ error }}</p>
+        {% endfor %}
     </div>
     {% endif %}
 

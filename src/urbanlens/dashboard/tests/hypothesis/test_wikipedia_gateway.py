@@ -1,21 +1,22 @@
-"""Tests for WikipediaGateway's address-verification matching.
-
-``get_article_for_location`` must only accept a geosearch candidate when
-there's a genuine positive signal that it's specifically about the queried
-place - proximity alone (which is all ``list=geosearch`` guarantees) is not
-enough. These tests pin down ``_address_matches``'s stricter rejection
-behavior: a nearby candidate with no title/name match and no address mention
-in its extract must be rejected, not guessed at.
-"""
+"""Tests for WikipediaGateway's address-verification matching."""
 
 from __future__ import annotations
 
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway, WikipediaMediaGateway, _absolute_media_url
+from urbanlens.dashboard.services.apis.assets.wikipedia import (
+    WikipediaGateway,
+    WikipediaMediaGateway,
+    _absolute_media_url,
+)
 
-_COMPONENTS = {"locality": "Poughkeepsie", "route": "Main St", "street_number": "103", "administrative_area_level_1": "NY"}
+_COMPONENTS = {
+    "locality": "Poughkeepsie",
+    "route": "Main St",
+    "street_number": "103",
+    "administrative_area_level_1": "NY",
+}
 
 
 class AddressMatchesTests(SimpleTestCase):
@@ -52,7 +53,10 @@ class AddressMatchesTests(SimpleTestCase):
         self.assertFalse(WikipediaGateway._address_matches(summary, _COMPONENTS, name="The Actual Place"))
 
     def test_long_extract_with_no_matching_signal_is_rejected(self) -> None:
-        summary = {"title": "Unrelated Article", "extract": "A very long article about an entirely different place, " * 20}
+        summary = {
+            "title": "Unrelated Article",
+            "extract": "A very long article about an entirely different place, " * 20,
+        }
         self.assertFalse(WikipediaGateway._address_matches(summary, _COMPONENTS, name="The Actual Place"))
 
     def test_no_components_and_no_name_is_rejected(self) -> None:
@@ -71,7 +75,11 @@ class GetArticleForLocationTests(SimpleTestCase):
         """A geographically close but otherwise unrelated article must not be returned."""
         with (
             mock.patch.object(WikipediaGateway, "_geo_search", return_value=[{"title": "Nearby Unrelated Place"}]),
-            mock.patch.object(WikipediaGateway, "_fetch_summary", return_value={"title": "Nearby Unrelated Place", "extract": "Some other place entirely."}),
+            mock.patch.object(
+                WikipediaGateway,
+                "_fetch_summary",
+                return_value={"title": "Nearby Unrelated Place", "extract": "Some other place entirely."},
+            ),
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
         self.assertIsNone(result)
@@ -82,7 +90,11 @@ class GetArticleForLocationTests(SimpleTestCase):
             mock.patch.object(
                 WikipediaGateway,
                 "_fetch_summary",
-                return_value={"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
+                return_value={
+                    "title": "The Actual Place",
+                    "extract": "Located in Poughkeepsie.",
+                    "extract_html": "<p>Located in Poughkeepsie.</p>",
+                },
             ),
             mock.patch.object(WikipediaGateway, "_fill_full_extract"),
             mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[]),
@@ -97,7 +109,11 @@ class GetArticleForLocationTests(SimpleTestCase):
         candidates = [{"title": "Wrong Nearby Article"}, {"title": "The Actual Place"}]
         summaries = {
             "Wrong Nearby Article": {"title": "Wrong Nearby Article", "extract": "Something unrelated."},
-            "The Actual Place": {"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
+            "The Actual Place": {
+                "title": "The Actual Place",
+                "extract": "Located in Poughkeepsie.",
+                "extract_html": "<p>Located in Poughkeepsie.</p>",
+            },
         }
         with (
             mock.patch.object(WikipediaGateway, "_geo_search", return_value=candidates),
@@ -116,10 +132,16 @@ class GetArticleForLocationTests(SimpleTestCase):
             mock.patch.object(
                 WikipediaGateway,
                 "_fetch_summary",
-                return_value={"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
+                return_value={
+                    "title": "The Actual Place",
+                    "extract": "Located in Poughkeepsie.",
+                    "extract_html": "<p>Located in Poughkeepsie.</p>",
+                },
             ),
             mock.patch.object(WikipediaGateway, "_fill_full_extract"),
-            mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[["Established", "1900"]]) as fetch_infobox,
+            mock.patch.object(
+                WikipediaGateway, "_fetch_infobox", return_value=[["Established", "1900"]]
+            ) as fetch_infobox,
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
         fetch_infobox.assert_called_once_with("The Actual Place")
@@ -134,7 +156,9 @@ class AbsoluteMediaUrlTests(SimpleTestCase):
         self.assertEqual(_absolute_media_url("//upload.wikimedia.org/x.jpg"), "https://upload.wikimedia.org/x.jpg")
 
     def test_already_absolute_url_is_unchanged(self) -> None:
-        self.assertEqual(_absolute_media_url("https://upload.wikimedia.org/x.jpg"), "https://upload.wikimedia.org/x.jpg")
+        self.assertEqual(
+            _absolute_media_url("https://upload.wikimedia.org/x.jpg"), "https://upload.wikimedia.org/x.jpg"
+        )
 
     def test_empty_string_is_unchanged(self) -> None:
         self.assertEqual(_absolute_media_url(""), "")
@@ -143,11 +167,9 @@ class AbsoluteMediaUrlTests(SimpleTestCase):
 class GetArticleMediaTests(SimpleTestCase):
     """WikipediaGateway.get_article_media() - reads the article's own curated media list.
 
-    This exists specifically because a Wikimedia Commons text search (see
-    WikimediaGateway) can miss images that are only reachable through an
-    in-body gallery and aren't independently discoverable by name -
-    "Wikipedia article images not reliably reaching Media section" entry.
-    """
+    This exists specifically because a Wikimedia Commons text search (see WikimediaGateway) can miss images that
+    are only reachable through an in-body gallery and aren't independently discoverable by name - "Wikipedia
+    article images not reliably reaching Media section" entry."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -182,7 +204,11 @@ class GetArticleMediaTests(SimpleTestCase):
         self.assertEqual(media[0]["url"], "https://upload.wikimedia.org/thumb/1280px-Example.jpg")
 
     def test_non_image_items_are_skipped(self) -> None:
-        payload = {"items": [{"title": "File:Anthem.ogg", "type": "audio", "srcset": [{"src": "//upload.wikimedia.org/anthem.ogg"}]}]}
+        payload = {
+            "items": [
+                {"title": "File:Anthem.ogg", "type": "audio", "srcset": [{"src": "//upload.wikimedia.org/anthem.ogg"}]}
+            ]
+        }
         with mock.patch.object(self.gateway.session, "get", return_value=self._response(payload=payload)):
             media = self.gateway.get_article_media("Example Article")
         self.assertEqual(media, [])
@@ -205,16 +231,21 @@ class GetArticleMediaTests(SimpleTestCase):
 
 
 class WikipediaCampusFallbackTests(TestCase):
-    """UL-354: a child pin whose own coordinates find no article retries from
-    each ancestor pin's coordinates and name (campus-aware search).
+    """UL-354: a child pin whose own coordinates find no article retries from each ancestor pin's coordinates and name (campus-aware search).
 
-    A large campus has one article geotagged at a single point (usually the
-    main building); an outbuilding pin can sit outside the geosearch radius,
-    so its own search legitimately finds nothing - the parent's point and
-    name are the right second query, without widening the global radius.
-    """
+    A large campus has one article geotagged at a single point (usually the main building); an outbuilding pin
+    can sit outside the geosearch radius, so its own search legitimately finds nothing - the parent's point and
+    name are the right second query, without widening the global radius."""
 
-    _CAMPUS_ARTICLE = {"title": "Hudson River State Hospital", "extract": "x", "url": "", "thumbnail": "", "description": "", "page_id": 1, "infobox": []}
+    _CAMPUS_ARTICLE = {
+        "title": "Hudson River State Hospital",
+        "extract": "x",
+        "url": "",
+        "thumbnail": "",
+        "description": "",
+        "page_id": 1,
+        "infobox": [],
+    }
 
     def setUp(self) -> None:
         super().setUp()
@@ -226,11 +257,24 @@ class WikipediaCampusFallbackTests(TestCase):
 
         self.profile = baker.make(User).profile
         self.campus_location = baker.make(Location, latitude=41.6, longitude=-73.8)
-        self.campus = baker.make(Pin, profile=self.profile, location=self.campus_location, name="Hudson River State Hospital")
+        self.campus = baker.make(
+            Pin, profile=self.profile, location=self.campus_location, name="Hudson River State Hospital"
+        )
         self.child_location = baker.make(Location, latitude=41.61, longitude=-73.81)
-        self.child = baker.make(Pin, profile=self.profile, location=self.child_location, name="Boiler House", parent_pin=self.campus)
+        self.child = baker.make(
+            Pin, profile=self.profile, location=self.child_location, name="Boiler House", parent_pin=self.campus
+        )
+        for patcher in (
+            mock.patch("urbanlens.dashboard.services.locations.addresses.ensure_location_address", return_value=False),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway.reverse_geocode_admin",
+                return_value=None,
+            ),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
-    def _article_only_at_campus(self, lat, lng, components, name=""):
+    def _article_only_at_campus(self, lat, lng, components, name="", within=None):
         return self._CAMPUS_ARTICLE if abs(lat - 41.6) < 1e-6 else None
 
     def test_child_pin_falls_back_to_parent_coordinates(self) -> None:
@@ -247,7 +291,9 @@ class WikipediaCampusFallbackTests(TestCase):
     def test_own_coordinate_match_never_consults_the_parent(self) -> None:
         from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaPanelSource
 
-        with mock.patch.object(WikipediaGateway, "get_article_for_location", return_value=dict(self._CAMPUS_ARTICLE)) as get_article:
+        with mock.patch.object(
+            WikipediaGateway, "get_article_for_location", return_value=dict(self._CAMPUS_ARTICLE)
+        ) as get_article:
             WikipediaPanelSource().fetch(self.child)
 
         get_article.assert_called_once()
@@ -273,7 +319,13 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
         with mock.patch.object(
             WikipediaGateway,
             "get_article_media",
-            return_value=[{"title": "Example.jpg", "url": "https://upload.wikimedia.org/full.jpg", "thumb_url": "https://upload.wikimedia.org/thumb.jpg"}],
+            return_value=[
+                {
+                    "title": "Example.jpg",
+                    "url": "https://upload.wikimedia.org/full.jpg",
+                    "thumb_url": "https://upload.wikimedia.org/thumb.jpg",
+                }
+            ],
         ):
             items = list(gateway._generate_media("Example Article"))
         self.assertEqual(len(items), 1)
@@ -292,8 +344,16 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
             WikipediaGateway,
             "get_article_media",
             return_value=[
-                {"title": "Dup.jpg", "url": "https://upload.wikimedia.org/dup.jpg", "thumb_url": "https://upload.wikimedia.org/dup-thumb.jpg"},
-                {"title": "New.jpg", "url": "https://upload.wikimedia.org/new.jpg", "thumb_url": "https://upload.wikimedia.org/new-thumb.jpg"},
+                {
+                    "title": "Dup.jpg",
+                    "url": "https://upload.wikimedia.org/dup.jpg",
+                    "thumb_url": "https://upload.wikimedia.org/dup-thumb.jpg",
+                },
+                {
+                    "title": "New.jpg",
+                    "url": "https://upload.wikimedia.org/new.jpg",
+                    "thumb_url": "https://upload.wikimedia.org/new-thumb.jpg",
+                },
             ],
         ):
             items = list(gateway._generate_media("Example Article"))
@@ -301,15 +361,11 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
 
 
 class FetchInfoboxTests(SimpleTestCase):
-    """WikipediaGateway._fetch_infobox() - regression coverage for the
-    "started from Wikipedia" seed missing the infobox" report
-    (docs/notes/ai/completed.md).
+    """WikipediaGateway._fetch_infobox() - regression coverage for the "started from Wikipedia" seed missing the infobox.
 
-    _fetch_summary/_fetch_extended_extract are both backed by the
-    TextExtracts extension, which strips infoboxes before returning "extract"
-    text - _fetch_infobox instead parses action=parse's real rendered HTML,
-    which is the only Wikipedia response that carries the infobox table.
-    """
+    _fetch_summary/_fetch_extended_extract are both backed by the TextExtracts extension, which strips infoboxes
+    before returning "extract" text - _fetch_infobox instead parses action=parse's real rendered HTML, which is
+    the only Wikipedia response that carries the infobox table."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -322,12 +378,7 @@ class FetchInfoboxTests(SimpleTestCase):
         resp.json.return_value = payload
         return resp
 
-    # A trimmed version of the "New St. Joseph Cemetery" infobox from the
-    # original bug report: a title row (th only, no td), an image/map row
-    # (td only, no th), a section-divider row ("Details", th only), then
-    # real label/value fact rows - including one with inline markup
-    # (a <span> around a non-breaking space in "Owned by") and a linked label
-    # ("Find a Grave") to confirm text_content() flattens both correctly.
+    # A trimmed version of the "New St.
     _INFOBOX_HTML = """
     <table class="infobox vcard">
     <tbody>
@@ -370,7 +421,10 @@ class FetchInfoboxTests(SimpleTestCase):
             self.assertEqual(self.gateway._fetch_infobox("Some Article"), [])
 
     def test_row_count_is_capped(self) -> None:
-        rows = "".join(f'<tr><th class="infobox-label">Field {i}</th><td class="infobox-data">Value {i}</td></tr>' for i in range(50))
+        rows = "".join(
+            f'<tr><th class="infobox-label">Field {i}</th><td class="infobox-data">Value {i}</td></tr>'
+            for i in range(50)
+        )
         payload = {"parse": {"text": f'<div><table class="infobox">{rows}</table></div>'}}
         with mock.patch.object(self.gateway.session, "get", return_value=self._response(payload)):
             pairs = self.gateway._fetch_infobox("Some Article")
@@ -397,11 +451,7 @@ class CleanAndTrimExtractTests(SimpleTestCase):
         self.assertNotIn("javascript:", result)
 
     def test_generic_attributes_like_title_and_lang_are_stripped(self) -> None:
-        """nh3/ammonia keeps a hardcoded "generic" attribute set (title, lang, ...) on every
-        tag regardless of an empty `attributes={}` allowlist unless `attribute_filter` also
-        rejects them - assert the extract cleaner actually does so, since the allowlist alone
-        does not guarantee "no attributes at all" as its call site intends.
-        """
+        """nh3/ammonia keeps a hardcoded "generic" attribute set (title, lang, ...) on every tag regardless of an empty `attributes={}` allowlist unless `attribute_filter` also rejects them - assert the extract cleaner actually does so, since the allowlist alone does not guarantee "no attributes at all" as its call site intends."""
         html = '<p title="injected" lang="en">Hello</p>'
         result = WikipediaGateway._clean_and_trim_extract(html)
         self.assertNotIn("title=", result)

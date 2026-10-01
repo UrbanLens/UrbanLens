@@ -25,7 +25,9 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiStatVote
 from urbanlens.dashboard.services.pins.public_pins import (
     PublicPinConfig,
-    PublicVoteError,
+    UnrecognizedVoteChoiceError,
+    VoteNotOpenError,
+    VoterNotPinnedError,
     cast_public_vote,
     evaluate_public_pin_candidates,
     is_meaningful_name,
@@ -240,12 +242,16 @@ class VoteLifecycleTests(TestCase):
 
     def test_cast_requires_open_candidate_and_pin(self) -> None:
         outsider = Profile.objects.get(user=baker.make("auth.User"))
-        with pytest.raises(PublicVoteError):
+        with pytest.raises(VoterNotPinnedError):
             cast_public_vote(self.location, outsider, "public")
 
         PublicPinCandidate.objects.filter(pk=self.candidate.pk).update(status=PublicPinCandidateStatus.SUSPENDED)
-        with pytest.raises(PublicVoteError):
+        with pytest.raises(VoteNotOpenError):
             cast_public_vote(self.location, self.pinners[0], "public")
+
+    def test_cast_rejects_unrecognized_choice(self) -> None:
+        with pytest.raises(UnrecognizedVoteChoiceError):
+            cast_public_vote(self.location, self.pinners[0], "not-a-real-choice")
 
     def test_withdraw_removes_the_ballot(self) -> None:
         cast_public_vote(self.location, self.pinners[0], "public")
@@ -350,17 +356,19 @@ class SuggestionSyncTests(TestCase):
     def test_evaluate_backfills_suggestions_even_when_nothing_passes_this_run(self) -> None:
         """A profile created after a location already passed must still be caught up.
 
-        ``evaluate_public_pin_candidates`` used to call ``sync_public_pin_suggestions``
-        only when ``counters["passed"]`` was nonzero for *this* run - so a location
-        that passed in an earlier beat tick never got backfilled for accounts
-        created (or opted back in) afterward, contradicting
-        ``sync_public_pin_suggestions``'s own documented "idempotent backfill ...
-        new accounts are picked up on the next beat run" contract.
-        """
+        ``evaluate_public_pin_candidates`` used to call ``sync_public_pin_suggestions`` only when
+        ``counters["passed"]`` was nonzero for *this* run - so a location that passed in an earlier beat tick
+        never got backfilled for accounts created (or opted back in) afterward, contradicting
+        ``sync_public_pin_suggestions``'s own documented "idempotent backfill ... new accounts are picked up on
+        the next beat run" contract."""
         late_joiner = Profile.objects.get(user=baker.make("auth.User"))
         counters = evaluate_public_pin_candidates()
-        self.assertEqual(counters["passed"], 0, "the candidate was force-set to PASSED directly, not settled by this run")
-        suggestion = PinSuggestion.objects.filter(profile=late_joiner, location=self.location, origin=PinSuggestionOrigin.COMMUNITY)
+        self.assertEqual(
+            counters["passed"], 0, "the candidate was force-set to PASSED directly, not settled by this run"
+        )
+        suggestion = PinSuggestion.objects.filter(
+            profile=late_joiner, location=self.location, origin=PinSuggestionOrigin.COMMUNITY
+        )
         self.assertTrue(suggestion.exists())
 
     def test_queue_hides_community_suggestions_when_toggled_off(self) -> None:

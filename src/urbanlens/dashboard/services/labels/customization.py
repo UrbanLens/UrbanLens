@@ -1,14 +1,5 @@
 """Per-profile display overrides for labels (``LabelCustomization``).
-
-A customization is how a user renames or re-styles a label they do not own -
-in practice a global label, which they cannot edit because everyone shares it.
-Each of ``name``/``icon``/``color`` is independently nullable: null means "use
-the label's own value", non-null means "override it".
-
-Extracted from ``controllers.labels.LabelCustomizeView.post`` so the external
-API applies the same normalization, the same delete-when-empty rule, and the
-same map-cache nudge the web UI does.
-"""
+A customization is how a user renames or re-styles a label they do not own - in practice a global label, which they cannot edit because everyone shares it."""
 
 from __future__ import annotations
 
@@ -16,7 +7,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.utils import timezone
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.labels.customization import LabelCustomization
@@ -50,35 +40,21 @@ def upsert_label_customization(
     color: str | None = None,
 ) -> LabelCustomization | None:
     """Create, update, or clear *profile*'s display overrides for *label*.
-
-    Empty strings normalize to None, so "" and null both mean "no override" -
-    there is deliberately no third state. When all three end up None the row is
-    deleted rather than stored as an all-null record, keeping "customized"
-    equivalent to "row exists and carries something", which is what
-    ``Label.is_customized`` assumes.
-
-    Pins are touched afterwards for the same reason
-    ``LabelCustomizeView.post`` does it: a customization changes how this
-    profile's pins render on the map without writing to any Pin row, so the
-    map cache's freshness check needs an explicit nudge or it will keep
-    serving the old styling.
+    When all three end up None the row is deleted rather than stored as an all-null record, keeping "customized" equivalent to "row exists and carries something", which is what ``Label.is_customized`` assumes.
 
     Args:
         profile: The profile whose overrides these are.
-        label: The label being customized. Any label the profile can see is
-            valid - this is the only way a client can restyle a global label.
+        label: The label being customized.
         name: Display-name override, or None/"" to clear it.
         icon: Icon override, or None/"" to clear it.
         color: Color override, or None/"" to clear it.
 
     Returns:
-        The stored :class:`LabelCustomization`, or None when every override was
-        empty and any existing row was therefore deleted.
-    """
+        The stored :class:`LabelCustomization`, or None when every override was empty and any existing row was therefore deleted."""
     from urbanlens.dashboard.models.labels.customization import LabelCustomization
-    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.core import icons
     from urbanlens.dashboard.services.core.text_limits import column_max_length
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_label_customization
 
     clean_name = _normalize(name)
     # Through the shared validator, not just _normalize: this writes to a
@@ -96,7 +72,10 @@ def upsert_label_customization(
             defaults={"name": clean_name, "icon": clean_icon, "color": clean_color},
         )
 
-    Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
+    if customization is None:
+        # The delete branch above fires no post_save, so the receiver that
+        # normally handles this never runs.
+        touch_pins_for_label_customization(profile.pk, label.pk)
     return customization
 
 
@@ -112,8 +91,10 @@ def clear_label_customization(profile: Profile, label: Label) -> bool:
         True if a customization row existed and was deleted.
     """
     from urbanlens.dashboard.models.labels.customization import LabelCustomization
-    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_label_customization
 
     deleted, _ = LabelCustomization.objects.filter(profile=profile, label=label).delete()
-    Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
+    # A delete fires no post_save, so nothing else drops the cached pins that
+    # were drawing this override, or tells the client they changed.
+    touch_pins_for_label_customization(profile.pk, label.pk)
     return bool(deleted)

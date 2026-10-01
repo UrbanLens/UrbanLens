@@ -1,3 +1,4 @@
+{% load remote_copies %}
 {# Global search dialog body: recent searches + hints when the query is blank, grouped results otherwise. #}
 {% if not query %}
 
@@ -37,8 +38,7 @@
             <i class="material-symbols-outlined">tips_and_updates</i>
             <span>Try searching for</span>
         </div>
-        {# Loaded separately - each candidate is a real search run against this #}
-        {# profile's data, so it isn't run inline blocking the dialog's open.  #}
+        {# Loaded separately - each candidate is a real search run against this profile's data, so it isn't run inline blocking the dialog's open. #}
         <div class="gs-hints" id="gs-hints" hx-get="{% url 'search.hints' %}" hx-trigger="load" hx-swap="innerHTML">
             <span class="gs-hints-loading"><i class="material-icons spin">autorenew</i></span>
         </div>
@@ -59,6 +59,14 @@
     </div>
     {% endif %}
 
+    {% if problem_notes %}
+    <div class="gs-filters">
+        {% for note in problem_notes %}
+        <span class="gs-filter-chip gs-filter-chip--note">{{ note }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% if response.groups %}
         {% for group in response.groups %}
         <div class="gs-section">
@@ -72,7 +80,7 @@
                 <li>
                     <a class="gs-result" href="{{ result.url }}">
                         {% if result.image_url %}
-                        <img class="gs-result-thumb" src="{{ result.image_url }}" alt="" loading="lazy">
+                        <img class="gs-result-thumb" src="{{ result.image_url|remote_copy:'search' }}" alt="" loading="lazy">
                         {% else %}
                         <span class="gs-result-icon"><i class="material-symbols-outlined">{{ result.icon }}</i></span>
                         {% endif %}

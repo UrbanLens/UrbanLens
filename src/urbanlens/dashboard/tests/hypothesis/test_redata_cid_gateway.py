@@ -1,21 +1,22 @@
-"""Tests for RedataCidGateway.resolve_cids against REData's shipped contract
-(``../REData/docs/api-reference.md``, "Google Maps CID resolution").
-
-Constructs the gateway with a mock ``session`` (Gateway.__post_init__ leaves a
-non-default session untouched, skipping the DB-backed rate-limiting wrapper -
-see gateway.py) so these stay pure unit tests with no database access.
-"""
+"""Tests for RedataCidGateway.resolve_cids against REData's shipped contract (``../REData/docs/api-reference.md``, "Google Maps CID resolution")."""
 
 from __future__ import annotations
 
+import io
 import json
 from unittest import mock
 
 import pytest
+import requests
+from urllib3 import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google import redata_cid_gateway as gw_module
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidGateway, RedataPermissionError
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import (
+    CidLookupEntry,
+    RedataCidGateway,
+    RedataPermissionError,
+)
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
@@ -125,6 +126,137 @@ class RedataCidGatewayResolveCidsTests(SimpleTestCase):
         session = mock.Mock()
         session.post.return_value = _response(200, {"results": {"1": {"lat": 38.456, "lng": -77.123}}, "pending": []})
 
-        result = self._gateway(session).resolve_cids([CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X")])
+        result = self._gateway(session).resolve_cids(
+            [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X")]
+        )
 
         self.assertEqual(result.resolved, {1: (38.456, -77.123)})
+
+
+class RedataCidGatewayGetPlaceDetailTests(SimpleTestCase):
+    """Tests for ``get_place_detail`` against ``../REData/docs/api-reference.md``'s
+    "GET /places/cid/{cid}/" contract."""
+
+    def _gateway(self, session: mock.Mock) -> RedataCidGateway:
+        return RedataCidGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
+
+    def test_200_returns_the_parsed_body(self) -> None:
+        session = mock.Mock()
+        body = {"cid": 123, "name": "Katz's Delicatessen", "rating": 4.6, "scrape_pending": False}
+        session.get.return_value = _response(200, body)
+
+        result = self._gateway(session).get_place_detail(123)
+
+        self.assertEqual(result, body)
+        session.get.assert_called_once()
+        self.assertIn("/api/v1/places/cid/123/", session.get.call_args.args[0])
+
+    def test_404_returns_none_not_an_error(self) -> None:
+        """This CID has never been resolved at all - a real, expected answer, not a failure."""
+        session = mock.Mock()
+        session.get.return_value = _response(404, {"error": "not_found"})
+
+        result = self._gateway(session).get_place_detail(123)
+
+        self.assertIsNone(result)
+
+    def test_non_200_non_404_raises_gateway_request_error(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(503, {})
+
+        with pytest.raises(GatewayRequestError) as exc_info:
+            self._gateway(session).get_place_detail(123)
+        self.assertNotIsInstance(exc_info.value, RedataPermissionError)
+
+    def test_403_raises_redata_permission_error(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(403, {"detail": "forbidden"})
+
+        with pytest.raises(RedataPermissionError):
+            self._gateway(session).get_place_detail(123)
+
+    def test_401_raises_redata_permission_error(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(401, {"detail": "invalid key"})
+
+        with pytest.raises(RedataPermissionError):
+            self._gateway(session).get_place_detail(123)
+
+    def test_unparseable_body_raises_gateway_request_error(self) -> None:
+        session = mock.Mock()
+        resp = mock.Mock(status_code=200)
+        resp.json.side_effect = ValueError("not json")
+        resp.text = "not json"
+        session.get.return_value = resp
+
+        with pytest.raises(GatewayRequestError):
+            self._gateway(session).get_place_detail(123)
+
+    def test_network_error_raises_gateway_request_error(self) -> None:
+        import requests
+
+        session = mock.Mock()
+        session.get.side_effect = requests.ConnectionError("no route to host")
+
+        with pytest.raises(GatewayRequestError):
+            self._gateway(session).get_place_detail(123)
+
+
+class RedataCidGatewayDownloadMediaTests(SimpleTestCase):
+    """Tests for ``download_media`` against ``../REData/docs/api-reference.md``'s
+    "GET /places/cid/{cid}/media/{id}/download/" contract."""
+
+    def _gateway(self, session: mock.Mock) -> RedataCidGateway:
+        return RedataCidGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
+
+    @staticmethod
+    def _streamed(body: bytes, headers: dict[str, str]) -> requests.Response:
+        """A 200 as ``stream=True`` leaves it, which is the only shape ``read_capped`` accepts."""
+        response = requests.Response()
+        response.status_code = 200
+        response.headers.update(headers)
+        response.raw = HTTPResponse(body=io.BytesIO(body), status=200, preload_content=False)
+        return response
+
+    def test_200_returns_bytes_and_content_type(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = self._streamed(b"jpeg-bytes", {"Content-Type": "image/jpeg"})
+
+        content, content_type = self._gateway(session).download_media(123, 1)
+
+        self.assertEqual(content, b"jpeg-bytes")
+        self.assertEqual(content_type, "image/jpeg")
+        self.assertIn("/api/v1/places/cid/123/media/1/download/", session.get.call_args.args[0])
+
+    def test_missing_content_type_header_defaults(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = self._streamed(b"bytes", {})
+
+        _content, content_type = self._gateway(session).download_media(123, 1)
+
+        self.assertEqual(content_type, "application/octet-stream")
+
+    def test_404_raises_gateway_request_error(self) -> None:
+        """The download itself failed - REData never re-fetches from Google here."""
+        session = mock.Mock()
+        session.get.return_value = _response(404, {"error": "media_unavailable"})
+
+        with pytest.raises(GatewayRequestError) as exc_info:
+            self._gateway(session).download_media(123, 1)
+        self.assertNotIsInstance(exc_info.value, RedataPermissionError)
+
+    def test_403_raises_redata_permission_error(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(403, {"detail": "forbidden"})
+
+        with pytest.raises(RedataPermissionError):
+            self._gateway(session).download_media(123, 1)
+
+    def test_network_error_raises_gateway_request_error(self) -> None:
+        import requests
+
+        session = mock.Mock()
+        session.get.side_effect = requests.ConnectionError("no route to host")
+
+        with pytest.raises(GatewayRequestError):
+            self._gateway(session).download_media(123, 1)

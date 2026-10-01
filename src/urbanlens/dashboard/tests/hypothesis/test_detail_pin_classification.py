@@ -1,15 +1,4 @@
-"""Tests for automatic building classification of sub-markers.
-
-The detail-pin dialog's Type select defaults to "Auto", which submits a blank
-``pin_type``. These tests pin down what that blank means end to end: a
-provisional type now, a background classification task queued, and
-``pin_type_is_user_provided`` left False so the classifier is allowed to act -
-versus an explicit pick, which is recorded as the user's own and never
-touched again.
-
-Celery is mocked throughout; the classifier itself is covered by
-test_site_scope.py.
-"""
+"""Tests for automatic building classification of sub-markers."""
 
 from __future__ import annotations
 
@@ -100,13 +89,31 @@ class DetailPinEditTypeTests(TestCase):
             pin_type=PinType.BUILDING,
             pin_type_is_user_provided=False,
         )
-        self.url = reverse("pin.detail_pin.edit", kwargs={"pin_slug": self.parent.slug, "detail_pin_uuid": self.child.uuid})
+        self.url = reverse(
+            "pin.detail_pin.edit", kwargs={"pin_slug": self.parent.slug, "detail_pin_uuid": self.child.uuid}
+        )
 
     def _post(self, **body):
         with patch(_ENQUEUE) as self.mock_enqueue:
             response = self.client.post(self.url, data=json.dumps(body), content_type="application/json")
         self.assertEqual(response.status_code, 200)
         self.child.refresh_from_db()
+
+    def test_a_json_float_literal_opacity_is_ignored_rather_than_a_500(self) -> None:
+        """`json.loads` accepts the bare literal `Infinity`; `int(float("inf"))` raises OverflowError.
+
+        This view parses the body itself rather than through DRF (whose parser rejects the literal outright), so
+        the value really does reach `safe_int`."""
+        before = self.child.detail_bg_opacity
+        for literal in ("Infinity", "-Infinity", "NaN"):
+            with self.subTest(literal=literal), patch(_ENQUEUE):
+                response = self.client.post(
+                    self.url, data=f'{{"bg_opacity": {literal}}}', content_type="application/json"
+                )
+                self.assertEqual(response.status_code, 200, "a non-finite opacity must not 500")
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.detail_bg_opacity, 80, "it falls back to safe_int's default")
+        self.assertIsNotNone(before)
 
     def test_an_unrelated_edit_never_touches_the_type(self) -> None:
         """Restyling an auto-classified pin must not freeze that guess as a user choice."""
@@ -184,7 +191,13 @@ class ClassifyDetailMarkerTaskTests(TestCase):
     def test_a_user_typed_marker_short_circuits_before_generating_boundaries(self) -> None:
         from urbanlens.dashboard.tasks import classify_detail_marker
 
-        pin = baker.make(Pin, profile=self.profile, location=_make_location(), pin_type=PinType.ENTRANCE, pin_type_is_user_provided=True)
+        pin = baker.make(
+            Pin,
+            profile=self.profile,
+            location=_make_location(),
+            pin_type=PinType.ENTRANCE,
+            pin_type_is_user_provided=True,
+        )
         with patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as mock_generate:
             self.assertFalse(classify_detail_marker("pin", pin.pk))
         mock_generate.assert_not_called()

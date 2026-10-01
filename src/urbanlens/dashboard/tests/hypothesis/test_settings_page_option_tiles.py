@@ -1,12 +1,4 @@
-"""Smoke test for the settings page's generalized option-tile picker style.
-
-Regression coverage for generalizing .settings-theme-option (previously only
-used by the Color Theme / Map Dark Mode pickers) into .settings-option-tile,
-now shared by every group of this shape on the page (Color Theme, Map Dark
-Mode, Guidance level, Default Map View, Starting Point, Cluster Radius mode) -
-retiring the old .settings-theme-option/.settings-theme-row and
-.settings-map-view-option/.settings-map-view-row class names entirely.
-"""
+"""Smoke test for the settings page's generalized option-tile picker style."""
 
 from __future__ import annotations
 

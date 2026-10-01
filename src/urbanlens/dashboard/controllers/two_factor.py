@@ -1,13 +1,8 @@
 """TOTP (authenticator app) enrollment and backup-code management for Settings > Security.
 
-Unlike passkey registration, none of this needs browser-side WebAuthn ceremony
-JavaScript - an authenticator app just needs to scan a QR code and the user
-types back a 6-digit code. Every view here is still a plain server-rendered
-form POST that works with no JS at all (progressive enhancement): on success
-or failure it redirects back to the settings page. When the request carries
-an ``HX-Request`` header (the forms in ``_security_section_body.html`` all
-do), it instead re-renders just that partial in place, so the section
-updates without a full page navigation.
+When the request carries an ``HX-Request`` header (the forms in ``_security_section_body.html`` all
+do), it instead re-renders just that partial in place, so the section updates without a full page
+navigation.
 """
 
 from __future__ import annotations

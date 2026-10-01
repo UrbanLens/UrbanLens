@@ -1,25 +1,10 @@
-"""CSRF/CORS trusted origins are derived from this deployment's own configuration.
-
-The bug this replaces was quiet in the worst way. ``CSRF_TRUSTED_ORIGINS`` came
-from a hardcoded domain list, so an ephemeral dev environment
-(``bin/dev_env.py``), served on a generated ``<slug>.dev.urbanlens.org``
-hostname, rendered every page perfectly and rejected every POST - login
-included - on its Referer. That reads as "the app is broken", not as "this
-origin is untrusted", and no hardcoded list can ever enumerate a hostname that
-does not exist yet.
-
-Deriving them widens nothing: a host gets here only by already being in
-``ALLOWED_HOSTS`` or by being ``UL_SITE_URL``, both of which an operator sets
-deliberately per deployment. The tests below pin that boundary - the ``*``
-catch-all mints no origin, plain HTTP appears only where it is already allowed,
-and junk entries are skipped rather than turned into malformed origins.
-"""
+"""CSRF/CORS trusted origins are derived from this deployment's own configuration."""
 
 from __future__ import annotations
 
 from django.conf import settings as django_settings
-from hypothesis import given, strategies as st
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.settings.base import _derive_trusted_origins, _origin_from_url
 
@@ -28,7 +13,9 @@ _PRODUCTION_HOSTS = ["urbanlens.org", "www.urbanlens.org", "localhost"]
 
 class OriginFromUrlTests(SimpleTestCase):
     def test_a_url_is_reduced_to_its_origin(self) -> None:
-        self.assertEqual(_origin_from_url("https://a1b2c3.dev.urbanlens.org/accounts/login/"), "https://a1b2c3.dev.urbanlens.org")
+        self.assertEqual(
+            _origin_from_url("https://a1b2c3.dev.urbanlens.org/accounts/login/"), "https://a1b2c3.dev.urbanlens.org"
+        )
 
     def test_a_port_is_kept_because_an_origin_includes_it(self) -> None:
         self.assertEqual(_origin_from_url("http://localhost:21811/"), "http://localhost:21811")
@@ -97,7 +84,9 @@ class DerivedTrustedOriginTests(SimpleTestCase):
 
     def test_junk_entries_are_skipped_rather_than_made_into_origins(self) -> None:
         """Read as a URL, each of these would mean something wider than the entry says."""
-        exact, wildcard = _derive_trusted_origins(["bad host", "evil.com/x", "user@host", "host:notaport", "*.*"], "", allow_http=True)
+        exact, wildcard = _derive_trusted_origins(
+            ["bad host", "evil.com/x", "user@host", "host:notaport", "*.*"], "", allow_http=True
+        )
 
         self.assertEqual((exact, wildcard), ([], []))
 
@@ -115,7 +104,9 @@ class DerivedTrustedOriginTests(SimpleTestCase):
         self.assertNotIn("https://*.dev.urbanlens.org", exact + wildcard)
 
     @given(st.lists(st.from_regex(r"\A[a-z][a-z0-9-]{0,20}\.example\.org\Z"), max_size=6), st.booleans())
-    def test_every_derived_origin_is_a_scheme_and_a_host_and_nothing_else(self, hosts: list[str], allow_http: bool) -> None:
+    def test_every_derived_origin_is_a_scheme_and_a_host_and_nothing_else(
+        self, hosts: list[str], allow_http: bool
+    ) -> None:
         exact, wildcard = _derive_trusted_origins(hosts, "", allow_http=allow_http)
 
         for origin in exact + wildcard:

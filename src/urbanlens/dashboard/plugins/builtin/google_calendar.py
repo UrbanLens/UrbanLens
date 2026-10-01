@@ -1,12 +1,5 @@
 """Google Calendar plugin: rate-limit defaults for the per-user calendar sync.
-
-The integration itself (OAuth connect, trip import/export) lives in
-``dashboard/services/apis/calendar/google.py`` and
-``dashboard/services/calendar_sync.py``; every call runs against the
-requesting user's own calendar using their stored OAuth grant. This plugin
-registers the service's rate-limit defaults so calls are throttled and
-logged like every other external API.
-"""
+This plugin registers the service's rate-limit defaults so calls are throttled and logged like every other external API."""
 
 from __future__ import annotations
 

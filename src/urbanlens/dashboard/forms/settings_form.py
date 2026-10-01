@@ -1,6 +1,8 @@
 """User settings form - privacy, contact, and style preferences."""
 
+import json
 import re
+from typing import TYPE_CHECKING, Any
 
 from django import forms
 
@@ -16,22 +18,16 @@ from urbanlens.dashboard.models.profile.model import (
     VisibilityChoice,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 
 class ProfileSettingsForm(forms.ModelForm):
     """Base for the settings page's per-section forms over ``Profile``.
 
-    Writes only the columns the form declares. Django's ``ModelForm.save()``
-    calls ``instance.save()`` with no ``update_fields``, i.e. a whole-row write
-    from the instance the request loaded - and ``Profile`` has around
-    twenty-five other writers that scope their updates to what they own: the
-    pin-create signal clearing the cached map centre, the importer writing the
-    privacy and contact blocks over a job lasting minutes, the home-widget
-    layout, the external API's settings patch. A section save was reverting
-    whatever they had committed while the page was open.
-
-    Subclasses must declare ``Meta.fields``; ``exclude`` would leave
-    ``_meta.fields`` as None and silently restore whole-row writes, which
-    ``test_settings_form_field_scope`` fails on.
+    Writes only the columns the form declares.
+    Subclasses must declare ``Meta.fields``; ``exclude`` would leave ``_meta.fields`` as None and
+    silently restore whole-row writes, which ``test_settings_form_field_scope`` fails on.
     """
 
     def save(self, commit: bool = True) -> Profile:
@@ -90,6 +86,43 @@ class MarkupDefaultsForm(ProfileSettingsForm):
 
     def clean_markup_border_color(self):
         return (self.cleaned_data.get("markup_border_color") or "").strip()
+
+
+# Kept in sync by hand with DEFAULT_HOTKEYS' keys in frontend/ts/shared/hotkeys.ts - JS and Python don't share a
+# source of truth here, same tradeoff as PIN_CACHE_VERSION's two independent literals (see
+# pin-cache.contract.test.ts).
+_KNOWN_HOTKEY_ACTIONS = frozenset({"undo", "redo", "toggleFullscreen", "openAssistant"})
+# [a-z0-9/?] rather than just [a-z0-9]: openAssistant's default binding is the bare "?" key (shift+/ on most
+# layouts, sometimes reported as "/" itself depending on layout/browser) - widened to admit both without opening
+# this up to arbitrary punctuation.
+_HOTKEY_COMBO_RE = re.compile(r"^(ctrl\+)?(shift\+)?(alt\+)?[a-z0-9/?]+$")
+
+
+class HotkeySettingsForm(ProfileSettingsForm):
+    """Per-action keyboard shortcut overrides (Settings > Shortcuts).
+
+    One hidden field carries the whole override mapping as JSON, built client-side by the Shortcuts
+    section's key-capture inputs - mirrors MarkupDefaultsForm's hidden-input pattern, but a
+    field-per-action here would mean a migration every time hotkeys.ts gains an action.
+    """
+
+    keyboard_shortcuts = forms.CharField(required=False, widget=forms.HiddenInput(attrs={"id": "id_keyboard_shortcuts"}))
+
+    class Meta:
+        model = Profile
+        fields = ["keyboard_shortcuts"]
+
+    def clean_keyboard_shortcuts(self) -> dict[str, str]:
+        raw = self.cleaned_data.get("keyboard_shortcuts") or "{}"
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        # Drop an unrecognized action id or malformed combo (a stale client, or someone editing the hidden field
+        # directly) rather than rejecting the whole save - every other action's override still gets to save.
+        return {action: combo for action, combo in parsed.items() if action in _KNOWN_HOTKEY_ACTIONS and isinstance(combo, str) and _HOTKEY_COMBO_RE.match(combo)}
 
 
 # "Friends only" is circular for friend requests (they're not friends yet), so exclude it.
@@ -171,9 +204,9 @@ class PrivacySettingsForm(ProfileSettingsForm):
     def __init__(self, *args, **kwargs):
         """Disable every field while Community is off - they're forced to "No one" in Profile.save() anyway.
 
-        ``disabled=True`` both greys the field out in rendering and makes Django
-        ignore any posted value for it, so this is also the belt to Profile.save()'s
-        suspenders against a tampered POST re-enabling one field at a time.
+        ``disabled=True`` both greys the field out in rendering and makes Django ignore any posted value for
+        it, so this is also the belt to Profile.save()'s suspenders against a tampered POST re-enabling one
+        field at a time.
         """
         super().__init__(*args, **kwargs)
         if self.instance is not None and not self.instance.community_enabled:
@@ -206,7 +239,7 @@ class DirectMessageSettingsForm(ProfileSettingsForm):
         choices=MessageRetentionChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Delete My Messages After",
-        help_text="Messages you send disappear this long after the recipient has read them. They are permanently deleted, and cannot be recovered.",
+        help_text="Messages you send disappear this long after the recipient has read them, or 180 days after sending if never read. They are permanently deleted, and cannot be recovered.",
     )
     allow_friend_recommendations = forms.BooleanField(
         required=False,
@@ -248,20 +281,9 @@ class ContactSettingsForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, exclude_user_id: int | None = None, **kwargs):
-        self._exclude_user_id = exclude_user_id
-        super().__init__(*args, **kwargs)
-
     def clean_email(self) -> str:
-        """Reject email addresses already claimed by another account (normalized comparison)."""
-        from django.core.exceptions import ValidationError
-
-        from urbanlens.dashboard.services.auth.email_normalization import is_email_taken
-
-        email = self.cleaned_data["email"].strip().lower()
-        if is_email_taken(email, exclude_user_id=self._exclude_user_id):
-            raise ValidationError("Another account already uses this email address.")
-        return email
+        """Lowercase the address. Whether another account holds it is never a form error; see ``claim_address``."""
+        return self.cleaned_data["email"].strip().lower()
 
 
 class StyleSettingsForm(ProfileSettingsForm):
@@ -304,11 +326,6 @@ class StyleSettingsForm(ProfileSettingsForm):
 
 
 # Discord usernames (new pomelo system): 2-32 chars, letters/digits/underscores/dots.
-# Also allow the legacy discriminator form (e.g. "user#1234") since older accounts may
-# still show one. Mirrors DiscordHandleForm's public-facing regex in profile_form.py -
-# this is private contact info rather than a public identity claim, so it's kept
-# intentionally permissive (no discriminator-length enforcement) rather than duplicating
-# that field's exact 100-char ceiling.
 _DISCORD_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
 
 
@@ -370,8 +387,8 @@ class ContactMethodsForm(ProfileSettingsForm):
             The stripped handle, or an empty string when blank.
 
         Raises:
-            forms.ValidationError: When the handle contains disallowed characters
-                or falls outside the allowed length range.
+            forms.ValidationError: When the handle contains disallowed characters or falls outside the
+            allowed length range.
         """
         value = self.cleaned_data.get("discord_username", "").strip()
         if value and not _DISCORD_USERNAME_RE.match(value):
@@ -460,16 +477,14 @@ class MapCenterForm(ProfileSettingsForm):
     def finalize_instance(self, instance: Profile) -> None:
         """Keep the saved custom location when the mode isn't CUSTOM.
 
-        ``map_custom_latitude`` / ``map_custom_longitude`` are only meaningful
-        when the mode is CUSTOM. In GPS or AUTO modes the hidden form fields
-        contain whatever the preview map happened to be showing, which must not
-        overwrite the user's saved custom location.
+        In GPS or AUTO modes the hidden form fields contain whatever the preview map happened to be showing,
+        which must not overwrite the user's saved custom location.
 
         Args:
             instance: The profile about to be saved.
         """
         if instance.map_center_mode != MapCenterMode.CUSTOM:
-            original = type(instance).objects.filter(pk=instance.pk).values("map_custom_latitude", "map_custom_longitude").first() or {}
+            original: Mapping[str, Any] = type(instance).objects.filter(pk=instance.pk).values("map_custom_latitude", "map_custom_longitude").first() or {}
             instance.map_custom_latitude = original.get("map_custom_latitude")
             instance.map_custom_longitude = original.get("map_custom_longitude")
 

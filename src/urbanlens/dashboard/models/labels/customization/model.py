@@ -8,15 +8,13 @@ from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.customization.queryset import LabelCustomizationManager
+from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.text_limits import column_max_length
 
 
 class LabelCustomization(abstract.DashboardModel):
-    """Stores a user's display overrides for a global label (tag or category).
-
-    Each field is nullable - null means "use the label's global value", non-null
-    means "override with this value".  The form normalises empty strings to None
-    before saving, so there is no ambiguity between "not set" and "cleared".
-    """
+    """Per-user display overrides for a global label (null = use global value)."""
 
     profile = ForeignKey(
         "dashboard.Profile",
@@ -29,7 +27,6 @@ class LabelCustomization(abstract.DashboardModel):
         related_name="customizations",
         db_column="label_id",
     )
-    # Null = use global value.  Non-null = override.
     name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=50, null=True, blank=True)
     color = CharField(max_length=50, null=True, blank=True)
@@ -37,6 +34,20 @@ class LabelCustomization(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int
         label_id: int
+
+    def coerce_colors(self) -> None:
+        """Drop `color` to NULL unless it is a valid colour."""
+        self.color = clean_color(self.color, default=None)
+
+    def coerce_icon(self) -> None:
+        """Drop `icon` to NULL unless it is an icon shape `clean_icon` accepts."""
+        self.icon = clean_icon(self.icon, max_length=column_max_length(LabelCustomization, "icon"))
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the override, coercing its colour and icon first."""
+        self.coerce_colors()
+        self.coerce_icon()
+        super().save(*args, **kwargs)
 
     objects = LabelCustomizationManager()
 

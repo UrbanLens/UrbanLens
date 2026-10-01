@@ -1,13 +1,4 @@
-"""Tests for services.profile.identity_visibility and its trip/group-chat wiring.
-
-A trip or group chat can include people who aren't friends with everyone
-else in it - if their profile_visibility setting doesn't permit a given
-viewer to see their identity, that viewer must still see the trip
-activity/comment/message content, but the author's/member's name, username,
-and avatar must be masked. Also covers the "suggest connecting" feature:
-adding someone unconnected to existing members softly introduces them
-(never auto-friends), gated on both sides' allow_friend_recommendations.
-"""
+"""Tests for services.profile.identity_visibility and its trip/group-chat wiring."""
 
 from __future__ import annotations
 
@@ -24,7 +15,10 @@ from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities, resolve_visible_identity
+from urbanlens.dashboard.services.profile.identity_visibility import (
+    resolve_visible_identities,
+    resolve_visible_identity,
+)
 from urbanlens.dashboard.services.social.connections import recommendable_strangers, suggest_mutual_connection
 
 
@@ -52,7 +46,13 @@ class ResolveVisibleIdentityTests(TestCase):
     def setUp(self) -> None:
         self.viewer = _profile()
         self.friend = _profile()
-        Friendship.objects.create(from_profile=self.viewer, to_profile=self.friend, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.viewer,
+            to_profile=self.friend,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         self.stranger = _profile(visibility=VisibilityChoice.NO_ONE)
 
     def test_visible_subject_returns_real_identity(self) -> None:
@@ -94,7 +94,9 @@ class ResolveVisibleIdentitiesTests(TestCase):
         hidden_a = _profile(visibility=VisibilityChoice.NO_ONE)
         hidden_b = _profile(visibility=VisibilityChoice.NO_ONE)
         identities = resolve_visible_identities(self.viewer, [hidden_a, hidden_b])
-        self.assertNotEqual(identities[hidden_a.pk]["avatar_color_class"], identities[hidden_b.pk]["avatar_color_class"])
+        self.assertNotEqual(
+            identities[hidden_a.pk]["avatar_color_class"], identities[hidden_b.pk]["avatar_color_class"]
+        )
 
     def test_mutates_subjects_in_place_for_shared_object_access(self) -> None:
         hidden = _profile(visibility=VisibilityChoice.NO_ONE)
@@ -126,7 +128,13 @@ class TripMemberPanelPrivacyTests(TestCase):
 
     def test_friend_identity_is_not_masked(self) -> None:
         friend_member = _profile()
-        Friendship.objects.create(from_profile=self.creator, to_profile=friend_member, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.creator,
+            to_profile=friend_member,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         TripMembership.objects.create(trip=self.trip, profile=friend_member)
 
         self.client.force_login(self.creator.user)
@@ -250,11 +258,7 @@ class TripCommentVisibilityGateTests(TestCase):
 class LiveMessagePayloadMaskingTests(TestCase):
     """WebSocket message payloads resolve the sender's identity per recipient.
 
-    docs/PROBLEMS.md (PR #111 deferred item, decision 2026-07-23): the
-    broadcast payload used to be built once and delivered identically to every
-    member, so a live incoming message revealed a raw sender name that a page
-    refresh would mask. Payloads are now built per recipient.
-    """
+    Payloads are now built per recipient."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -262,7 +266,11 @@ class LiveMessagePayloadMaskingTests(TestCase):
         self.hidden_sender = _profile(visibility=VisibilityChoice.NO_ONE)
 
     def test_group_payload_masks_a_hidden_sender_for_another_member(self) -> None:
-        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message, serialize_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import (
+            create_group_chat,
+            create_group_message,
+            serialize_group_message,
+        )
 
         group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
         message = create_group_message(self.hidden_sender, group, "Meet at the gate")
@@ -273,7 +281,11 @@ class LiveMessagePayloadMaskingTests(TestCase):
         self.assertEqual(payload["body"], "Meet at the gate")
 
     def test_group_payload_keeps_the_senders_own_name_for_their_sessions(self) -> None:
-        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message, serialize_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import (
+            create_group_chat,
+            create_group_message,
+            serialize_group_message,
+        )
 
         group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
         message = create_group_message(self.hidden_sender, group, "Meet at the gate")
@@ -283,10 +295,20 @@ class LiveMessagePayloadMaskingTests(TestCase):
         self.assertEqual(payload["sender_name"], self.hidden_sender.username)
 
     def test_group_payload_keeps_a_visible_senders_name(self) -> None:
-        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message, serialize_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import (
+            create_group_chat,
+            create_group_message,
+            serialize_group_message,
+        )
 
         visible = _profile()
-        Friendship.objects.create(from_profile=self.viewer, to_profile=visible, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.viewer,
+            to_profile=visible,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         group = create_group_chat(self.viewer, "Crew", [visible])
         message = create_group_message(visible, group, "Heading out")
 
@@ -296,7 +318,10 @@ class LiveMessagePayloadMaskingTests(TestCase):
 
     def test_direct_message_payload_masks_a_hidden_sender_for_the_recipient(self) -> None:
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-        from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for, serialize_direct_message
+        from urbanlens.dashboard.services.messaging.direct_messages import (
+            display_identity_for,
+            serialize_direct_message,
+        )
 
         message = DirectMessage.objects.create(sender=self.hidden_sender, recipient=self.viewer, body="hi")
 
@@ -327,7 +352,13 @@ class GroupMembersDialogPrivacyTests(TestCase):
 
         self.creator = _profile()
         self.visible_member = _profile()
-        Friendship.objects.create(from_profile=self.creator, to_profile=self.visible_member, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.creator,
+            to_profile=self.visible_member,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         self.group = create_group_chat(self.creator, "Crew", [self.visible_member])
 
     def test_hidden_member_added_later_is_masked(self) -> None:
@@ -358,7 +389,9 @@ class GroupMessageSenderPrivacyTests(TestCase):
 
     def test_hidden_sender_masked_but_message_visible(self) -> None:
         self.client.force_login(self.creator.user)
-        response = self.client.get(reverse("messages.group", kwargs={"group_uuid": self.group.uuid}), HTTP_HX_REQUEST="true")
+        response = self.client.get(
+            reverse("messages.group", kwargs={"group_uuid": self.group.uuid}), HTTP_HX_REQUEST="true"
+        )
 
         self.assertContains(response, "Found something interesting here")
         self.assertNotContains(response, self.hidden_sender.username)
@@ -367,11 +400,10 @@ class GroupMessageSenderPrivacyTests(TestCase):
 class TripListCardPrivacyTests(TestCase):
     """Trip list cards mask member avatars/creator badge per profile_visibility.
 
-    docs/PROBLEMS.md gap: the single-trip render sites (member panel, activity/
-    comment attribution) were already masked, but the trips LIST wasn't - every
-    card shows its own member avatars and creator badge, diffuse across
-    however many trips are listed at once (see _apply_trip_list_identity_masking).
-    """
+    A list is more diffuse than the single-trip render sites (member panel, activity and comment attribution):
+    every card carries its own member avatars and creator badge, across however many trips are listed at once,
+    so masking has to run over the whole page's worth of them - see controllers/trip.py's
+    _apply_trip_list_identity_masking."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -379,7 +411,13 @@ class TripListCardPrivacyTests(TestCase):
 
     def test_hidden_member_avatar_is_masked_on_the_list(self) -> None:
         creator = _profile()
-        Friendship.objects.create(from_profile=self.viewer, to_profile=creator, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.viewer,
+            to_profile=creator,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         trip = _make_trip(creator)
         hidden_member = _profile(visibility=VisibilityChoice.NO_ONE)
         TripMembership.objects.create(trip=trip, profile=hidden_member)
@@ -402,10 +440,22 @@ class TripListCardPrivacyTests(TestCase):
 
     def test_visible_member_still_shows_their_username(self) -> None:
         creator = _profile()
-        Friendship.objects.create(from_profile=self.viewer, to_profile=creator, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.viewer,
+            to_profile=creator,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         trip = _make_trip(creator)
         visible_member = _profile()
-        Friendship.objects.create(from_profile=self.viewer, to_profile=visible_member, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.viewer,
+            to_profile=visible_member,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         TripMembership.objects.create(trip=trip, profile=visible_member)
 
         self.client.force_login(self.viewer.user)
@@ -417,11 +467,8 @@ class TripListCardPrivacyTests(TestCase):
 class PinWikiCommentAuthorPrivacyTests(TestCase):
     """Pin/wiki comment author identity is masked per profile_visibility - comment text still shows.
 
-    docs/PROBLEMS.md gap: the comment's content was already all-or-nothing
-    gated by can_view_comments_from (comment_visibility, a different field) -
-    but once a comment passed that gate, its author's own name/avatar weren't
-    separately masked per profile_visibility.
-    """
+    Two separate gates, easily mistaken for one: can_view_comments_from decides whether the comment is shown at
+    all (comment_visibility), and profile_visibility decides whether its author is named."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -437,12 +484,6 @@ class PinWikiCommentAuthorPrivacyTests(TestCase):
         wiki = Wiki.objects.create(location=location, name="Old Mill Wiki")
         baker.make(Pin, profile=self.viewer, location=location)
         hidden_author = _profile(visibility=VisibilityChoice.NO_ONE)
-        # The author must have standing at this location (a pin - which is how
-        # wiki commenters see the wiki at all): it gives viewer and author a
-        # common pin, so the author's default comment_visibility
-        # (ANYTHING_IN_COMMON) passes and the comment CONTENT stays visible -
-        # what this test exercises is that the AUTHOR identity is still masked
-        # per profile_visibility once the content gate passes.
         baker.make(Pin, profile=hidden_author, location=location)
         Comment.objects.create(wiki=wiki, profile=hidden_author, text="Watch the third floor.")
 
@@ -463,7 +504,13 @@ class PinWikiCommentAuthorPrivacyTests(TestCase):
         wiki = Wiki.objects.create(location=location, name="Old Factory Wiki")
         baker.make(Pin, profile=self.viewer, location=location)
         visible_author = _profile()
-        Friendship.objects.create(from_profile=self.viewer, to_profile=visible_author, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.viewer,
+            to_profile=visible_author,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         Comment.objects.create(wiki=wiki, profile=visible_author, text="Great find!")
 
         self.client.force_login(self.viewer.user)
@@ -476,14 +523,12 @@ class PinWikiCommentAuthorPrivacyTests(TestCase):
 class TripInviteNotificationPrivacyTests(TestCase):
     """Trip-invite notification text masks the inviter's identity when hidden.
 
-    docs/PROBLEMS.md gap: notification text is baked in as a plain-text
-    string at creation time, so a template-side fix can't reach it later -
-    it must be resolved (and masked if needed) before formatting.
-    """
+    Notification text is baked in as a plain-text string at creation time, so a template-side fix cannot reach
+    it later: the identity has to be resolved, and masked if needed, before the string is formatted."""
 
     def test_added_to_trip_notification_masks_a_hidden_inviter(self) -> None:
         inviter = _profile(visibility=VisibilityChoice.NO_ONE)
-        invitee = _profile()
+        invitee = _profile(visibility=VisibilityChoice.ANYONE)
         trip = _make_trip(inviter, allow_add_members=Trip.PERM_EVERYONE)
         self.client.force_login(inviter.user)
 
@@ -505,7 +550,13 @@ class TripInviteNotificationPrivacyTests(TestCase):
         recipient = _profile()
         # NO_ONE excludes even accepted friends (see VisibilityChoice's docstring) -
         # being connected doesn't guarantee sender is visible to recipient.
-        Friendship.objects.create(from_profile=sender, to_profile=recipient, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=sender,
+            to_profile=recipient,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         trip = _make_trip(sender)
 
         invite_to_trip_in_message(sender, recipient, trip, "Join my trip!")
@@ -516,7 +567,7 @@ class TripInviteNotificationPrivacyTests(TestCase):
 
 
 class GroupAddNotificationTextPrivacyTests(TestCase):
-    """"X added you to the group" notification text masks the actor's identity
+    """ "X added you to the group" notification text masks the actor's identity
     when hidden - _notify_group_event stores it as a plain-text NotificationLog
     (notification_type=MESSAGE, title=group.name)."""
 
@@ -525,11 +576,19 @@ class GroupAddNotificationTextPrivacyTests(TestCase):
 
         hidden_creator = _profile(visibility=VisibilityChoice.NO_ONE)
         member = _profile()
-        Friendship.objects.create(from_profile=hidden_creator, to_profile=member, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=hidden_creator,
+            to_profile=member,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
 
         group = create_group_chat(hidden_creator, "Crew", [member])
 
-        notification = NotificationLog.objects.get(profile=member, notification_type=NotificationType.MESSAGE, title=group.name)
+        notification = NotificationLog.objects.get(
+            profile=member, notification_type=NotificationType.MESSAGE, title=group.name
+        )
         self.assertNotIn(hidden_creator.username, notification.message)
         self.assertIn("Member", notification.message)
 
@@ -538,14 +597,28 @@ class GroupAddNotificationTextPrivacyTests(TestCase):
 
         hidden_actor = _profile(visibility=VisibilityChoice.NO_ONE)
         existing_member = _profile()
-        Friendship.objects.create(from_profile=hidden_actor, to_profile=existing_member, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=hidden_actor,
+            to_profile=existing_member,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         group = create_group_chat(hidden_actor, "Crew", [existing_member])
 
         new_member = _profile()
-        Friendship.objects.create(from_profile=hidden_actor, to_profile=new_member, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=hidden_actor,
+            to_profile=new_member,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         add_group_members(group, hidden_actor, [new_member])
 
-        notification = NotificationLog.objects.get(profile=new_member, notification_type=NotificationType.MESSAGE, title=group.name)
+        notification = NotificationLog.objects.get(
+            profile=new_member, notification_type=NotificationType.MESSAGE, title=group.name
+        )
         self.assertNotIn(hidden_actor.username, notification.message)
         self.assertIn("Member", notification.message)
 
@@ -553,10 +626,9 @@ class GroupAddNotificationTextPrivacyTests(TestCase):
 class DirectMessageThreadPartnerMaskingTests(TestCase):
     """_thread.html's block-confirm/empty-state/composer text masks a hidden partner.
 
-    docs/PROBLEMS.md gap: the thread header already used display_name/
-    display_avatar_url via display_identity_for, but four other spots in the
-    same template still used raw partner.username.
-    """
+    The thread header resolves the partner through display_identity_for, which is easy to read as covering the
+    template - four other spots in the same file render the partner independently, and each has to mask on its
+    own."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -591,7 +663,13 @@ class RecommendableStrangersTests(TestCase):
         self.assertEqual(recommendable_strangers(self.new_member, [self.other]), [self.other])
 
     def test_already_connected_pair_is_not_recommendable(self) -> None:
-        Friendship.objects.create(from_profile=self.new_member, to_profile=self.other, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.new_member,
+            to_profile=self.other,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         self.assertEqual(recommendable_strangers(self.new_member, [self.other]), [])
 
     def test_new_member_opted_out_disables_all_suggestions(self) -> None:
@@ -621,12 +699,22 @@ class SuggestMutualConnectionTests(TestCase):
 
     def test_sends_notification_to_both(self) -> None:
         suggest_mutual_connection(self.a, self.b)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.a, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
-        self.assertTrue(NotificationLog.objects.filter(profile=self.b, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.a, notification_type=NotificationType.FRIEND_SUGGESTION
+            ).exists()
+        )
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.b, notification_type=NotificationType.FRIEND_SUGGESTION
+            ).exists()
+        )
 
     def test_never_creates_a_friend_request(self) -> None:
         suggest_mutual_connection(self.a, self.b)
-        self.assertFalse(Friendship.objects.filter(from_profile__in=[self.a, self.b], to_profile__in=[self.a, self.b]).exists())
+        self.assertFalse(
+            Friendship.objects.filter(from_profile__in=[self.a, self.b], to_profile__in=[self.a, self.b]).exists()
+        )
 
     def test_does_not_grant_profile_view_access(self) -> None:
         """A masked (e.g. NO_ONE-visibility) profile must not become viewable just
@@ -640,7 +728,9 @@ class SuggestMutualConnectionTests(TestCase):
         Profile.objects.filter(pk=self.b.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
         self.b.refresh_from_db()
         suggest_mutual_connection(self.a, self.b)
-        notification_to_a = NotificationLog.objects.get(profile=self.a, notification_type=NotificationType.FRIEND_SUGGESTION)
+        notification_to_a = NotificationLog.objects.get(
+            profile=self.a, notification_type=NotificationType.FRIEND_SUGGESTION
+        )
         self.assertNotIn(self.b.username, notification_to_a.message)
         self.assertIn("Member", notification_to_a.message)
 
@@ -659,27 +749,51 @@ class TripAddMemberSuggestsConnectionTests(TestCase):
 
     def test_adding_unconnected_member_suggests_connection_with_creator(self) -> None:
         new_user = baker.make("auth.User", username="newmember")
-        Profile.objects.filter(user=new_user).update(allow_friend_recommendations=True)
-        response = self.client.post(self._url(), data=json.dumps({"username": "newmember"}), content_type="application/json")
+        Profile.objects.filter(user=new_user).update(
+            profile_visibility=VisibilityChoice.ANYONE, allow_friend_recommendations=True
+        )
+        response = self.client.post(
+            self._url(), data=json.dumps({"username": "newmember"}), content_type="application/json"
+        )
         self.assertEqual(response.status_code, 200)
 
         new_profile = Profile.objects.get(user=new_user)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.creator, source_profile=new_profile, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
-        self.assertTrue(NotificationLog.objects.filter(profile=new_profile, source_profile=self.creator, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.creator, source_profile=new_profile, notification_type=NotificationType.FRIEND_SUGGESTION
+            ).exists()
+        )
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=new_profile, source_profile=self.creator, notification_type=NotificationType.FRIEND_SUGGESTION
+            ).exists()
+        )
 
     def test_opted_out_new_member_gets_no_suggestion(self) -> None:
         new_user = baker.make("auth.User", username="newmember")
-        Profile.objects.filter(user=new_user).update(allow_friend_recommendations=False)
+        Profile.objects.filter(user=new_user).update(
+            profile_visibility=VisibilityChoice.ANYONE, allow_friend_recommendations=False
+        )
         self.client.post(self._url(), data=json.dumps({"username": "newmember"}), content_type="application/json")
 
         new_profile = Profile.objects.get(user=new_user)
-        self.assertFalse(NotificationLog.objects.filter(notification_type=NotificationType.FRIEND_SUGGESTION, profile__in=[self.creator, new_profile]).exists())
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                notification_type=NotificationType.FRIEND_SUGGESTION, profile__in=[self.creator, new_profile]
+            ).exists()
+        )
 
     def test_already_connected_new_member_gets_no_suggestion(self) -> None:
         new_user = baker.make("auth.User", username="newmember")
         new_profile = Profile.objects.get(user=new_user)
         Profile.objects.filter(pk=new_profile.pk).update(allow_friend_recommendations=True)
-        Friendship.objects.create(from_profile=self.creator, to_profile=new_profile, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.creator,
+            to_profile=new_profile,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
 
         self.client.post(self._url(), data=json.dumps({"username": "newmember"}), content_type="application/json")
 
@@ -695,7 +809,13 @@ class GroupAddMemberSuggestsConnectionTests(TestCase):
 
         self.creator = _profile()
         self.other_member = _profile()
-        Friendship.objects.create(from_profile=self.creator, to_profile=self.other_member, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.creator,
+            to_profile=self.other_member,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         self.group = create_group_chat(self.creator, "Crew", [self.other_member])
 
     def test_adding_unconnected_member_suggests_with_existing_members(self) -> None:
@@ -704,9 +824,23 @@ class GroupAddMemberSuggestsConnectionTests(TestCase):
         new_member = _profile()
         add_group_members(self.group, self.creator, [new_member])
 
-        self.assertTrue(NotificationLog.objects.filter(profile=new_member, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
-        self.assertTrue(NotificationLog.objects.filter(profile=self.creator, source_profile=new_member, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
-        self.assertTrue(NotificationLog.objects.filter(profile=self.other_member, source_profile=new_member, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=new_member, notification_type=NotificationType.FRIEND_SUGGESTION
+            ).exists()
+        )
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.creator, source_profile=new_member, notification_type=NotificationType.FRIEND_SUGGESTION
+            ).exists()
+        )
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.other_member,
+                source_profile=new_member,
+                notification_type=NotificationType.FRIEND_SUGGESTION,
+            ).exists()
+        )
 
     def test_group_creation_suggests_connections_among_unconnected_initial_members(self) -> None:
         from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
@@ -717,5 +851,13 @@ class GroupAddMemberSuggestsConnectionTests(TestCase):
         create_group_chat(creator, "New Crew", [member_a, member_b])
 
         # member_a <-> member_b weren't connected to each other or the creator.
-        self.assertTrue(NotificationLog.objects.filter(profile=member_a, source_profile=member_b, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
-        self.assertTrue(NotificationLog.objects.filter(profile=member_a, source_profile=creator, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=member_a, source_profile=member_b, notification_type=NotificationType.FRIEND_SUGGESTION
+            ).exists()
+        )
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=member_a, source_profile=creator, notification_type=NotificationType.FRIEND_SUGGESTION
+            ).exists()
+        )

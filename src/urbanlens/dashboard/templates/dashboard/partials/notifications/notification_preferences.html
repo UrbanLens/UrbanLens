@@ -36,15 +36,13 @@
             <div class="notif-prefs__row">
                 <span class="notif-prefs__label">{{ title }}</span>
 
-                {# None - decorative checkbox; no name, so it is never submitted.       #}
-                {# Checked when no channel (site, email, WhatsApp, or SMS) is active.     #}
+                {# None - decorative checkbox; no name, so it is never submitted. #}
                 <label class="notif-prefs__cell">
                     <span class="notif-prefs__sr-only">{{ title }}: none</span>
                     <input type="checkbox"
                            class="notif-none-box"
                            data-field="{{ field }}"
-                           {% if current == 'none' and not prefs|get_attr:wa_field and not prefs|get_attr:sms_field %}checked{% endif %}
-                           onchange="notifNone(this)">
+                           {% if current == 'none' and not prefs|get_attr:wa_field and not prefs|get_attr:sms_field %}checked{% endif %}>
                 </label>
 
                 {# In-app notification #}
@@ -54,8 +52,7 @@
                            name="{{ field }}__site"
                            class="notif-delivery-box"
                            data-field="{{ field }}"
-                           {% if current == 'site' or current == 'both' %}checked{% endif %}
-                           onchange="notifDelivery(this)">
+                           {% if current == 'site' or current == 'both' %}checked{% endif %}>
                 </label>
 
                 {# Email #}
@@ -65,8 +62,7 @@
                            name="{{ field }}__email"
                            class="notif-delivery-box"
                            data-field="{{ field }}"
-                           {% if current == 'email' or current == 'both' %}checked{% endif %}
-                           onchange="notifDelivery(this)">
+                           {% if current == 'email' or current == 'both' %}checked{% endif %}>
                 </label>
 
 
@@ -78,7 +74,7 @@
                            class="notif-delivery-box"
                            data-field="{{ field }}"
                            {% if prefs|get_attr:wa_field %}checked{% endif %}
-                           {% if not has_whatsapp_number %}onclick="return false;"{% else %}onchange="notifDelivery(this)"{% endif %}>
+                           {% if not has_whatsapp_number %}disabled{% endif %}>
                 </label>
 
                 {# SMS - independent boolean toggle #}
@@ -90,7 +86,7 @@
                            class="notif-delivery-box"
                            data-field="{{ field }}"
                            {% if prefs|get_attr:sms_field %}checked{% endif %}
-                           {% if not has_phone_number %}onclick="return false;"{% else %}onchange="notifDelivery(this)"{% endif %}>
+                           {% if not has_phone_number %}disabled{% endif %}>
                 </label>
             </div>
             {% endwith %}
@@ -99,68 +95,13 @@
 
     </form>
 
-    {# -- Browser (desktop) notifications. The permission lives in the browser,   #}
-    {# not the database, so there's nothing to submit - just request permission.  #}
-    {# Hidden entirely when the browser doesn't support the Notification API.     #}
+    {# Browser (desktop) notifications. #}
     <div class="notif-prefs__browser" id="notif-browser-prefs" hidden>
         <p class="settings-label notif-prefs__heading">Browser notifications</p>
         <p class="settings-help notif-prefs__intro">Show a desktop notification when something happens while UrbanLens is open in a background tab.</p>
         <p class="notif-prefs__browser-status" id="notif-browser-status"></p>
-        <button type="button" class="btn btn--primary" id="notif-browser-enable" onclick="notifBrowserEnable()">
+        <button type="button" class="btn btn--primary" id="notif-browser-enable" data-notif-action="enable-browser">
             Enable browser notifications
         </button>
     </div>
 </div>
-<script>
-function notifBrowserRender() {
-    var wrap = document.getElementById('notif-browser-prefs');
-    if (!wrap || !('Notification' in window)) return;
-    wrap.hidden = false;
-    var status = document.getElementById('notif-browser-status');
-    var btn = document.getElementById('notif-browser-enable');
-    if (Notification.permission === 'granted') {
-        status.textContent = "Enabled - you'll get desktop notifications while UrbanLens is open in a background tab.";
-        btn.hidden = true;
-        btn.style.display = 'none';
-    } else if (Notification.permission === 'denied') {
-        status.textContent = 'Blocked - allow notifications for this site in your browser settings to turn them on.';
-        btn.hidden = true;
-        btn.style.display = 'none';
-    } else {
-        status.textContent = '';
-        btn.hidden = false;
-        btn.style.display = 'block';
-    }
-}
-function notifBrowserEnable() {
-    if (!('Notification' in window)) return;
-    Notification.requestPermission().then(function () {
-        notifBrowserRender();
-        if (Notification.permission === 'granted' && window.toastr) {
-            toastr.success('Browser notifications enabled.');
-        }
-    });
-}
-notifBrowserRender();
-
-function notifNone(noneBox) {
-    if (!noneBox.checked) return;
-    var field = noneBox.dataset.field;
-    document.querySelectorAll('.notif-delivery-box[data-field="' + field + '"]').forEach(function (cb) {
-        cb.checked = false;
-    });
-}
-function notifDelivery(deliveryBox) {
-    var field = deliveryBox.dataset.field;
-    var noneBox = document.querySelector('.notif-none-box[data-field="' + field + '"]');
-    if (!noneBox) return;
-    if (deliveryBox.checked) {
-        noneBox.checked = false;
-    } else {
-        var anyChecked = Array.from(
-            document.querySelectorAll('.notif-delivery-box[data-field="' + field + '"]')
-        ).some(function (cb) { return cb.checked; });
-        if (!anyChecked) noneBox.checked = true;
-    }
-}
-</script>

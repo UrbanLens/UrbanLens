@@ -1,17 +1,4 @@
-"""What a brand-new profile starts with, and what it may not lose.
-
-Three things, all reported together:
-
-- A new profile gets two saved filters, so the main map's filter bar is not
-  an empty shelf someone has to learn the formula syntax to fill.
-- "Want to Go" was the one default status label without `is_protected`, while
-  its four siblings had it - so the label the second filter is built on could
-  be deleted out from under it.
-- Merging a label *deletes* the source, so every guard that protects a label
-  from deletion has to hold on the merge paths too. The single-merge view
-  checks both `profile is None` (a global label) and `is_protected`; the bulk
-  path checked ownership for every kind but `is_protected` for statuses only.
-"""
+"""What a brand-new profile starts with, and what it may not lose."""
 
 from __future__ import annotations
 
@@ -22,7 +9,8 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, KIND_STATUS, KIND_TAG, Label
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
@@ -85,7 +73,12 @@ class DefaultSavedFilterTests(TestCase):
 
         saved = SavedFilter.objects.get(profile=self.profile, name=name)
         criteria = deserialize_criteria(saved.criteria, self.profile)
-        return set(Pin.objects.filter(profile=self.profile).filter_by_criteria(criteria).distinct().values_list("pk", flat=True))
+        return set(
+            Pin.objects.filter(profile=self.profile)
+            .filter_by_criteria(criteria)
+            .distinct()
+            .values_list("pk", flat=True)
+        )
 
 
 class ProtectedLabelTests(TestCase):
@@ -115,7 +108,9 @@ class ProtectedLabelTests(TestCase):
 
         self._merge(target, source)
 
-        self.assertTrue(Label.objects.filter(pk=source.pk).exists(), "a protected label was deleted by being merged away")
+        self.assertTrue(
+            Label.objects.filter(pk=source.pk).exists(), "a protected label was deleted by being merged away"
+        )
 
     def test_a_protected_label_cannot_be_bulk_deleted(self) -> None:
         source = baker.make(Label, profile=self.profile, kind=KIND_CATEGORY, name="protected-cat", is_protected=True)

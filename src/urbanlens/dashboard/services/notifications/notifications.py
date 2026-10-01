@@ -1,10 +1,4 @@
-"""Critical-issue notification dispatch (admin email + Gotify push).
-
-Lets the site admin be alerted about critical issues (e.g. a pin import failing to
-process an uploaded file) without exposing the details of whatever triggered the
-issue - callers should only pass high-level, non-sensitive facts (what happened and
-when) and point the admin at the app logs for specifics.
-"""
+"""Critical-issue notification dispatch (admin email + Gotify push)."""
 
 from __future__ import annotations
 
@@ -26,6 +20,7 @@ class NotificationEvent:
 
     PIN_IMPORT_ERROR: Final = "pin_import_error"
     SAFETY_CHECKIN_ARCHIVAL_FAILED: Final = "safety_checkin_archival_failed"
+    UPLOAD_STUCK: Final = "upload_stuck"
 
 
 # Maps each event key to the SiteSettings BooleanField that controls whether it is
@@ -40,6 +35,10 @@ _EVENT_CHANNEL_FIELDS: dict[str, dict[str, str]] = {
         "email": "notify_safety_checkin_archival_failed_email",
         "gotify": "notify_safety_checkin_archival_failed_gotify",
     },
+    NotificationEvent.UPLOAD_STUCK: {
+        "email": "notify_stuck_uploads_email",
+        "gotify": "notify_stuck_uploads_gotify",
+    },
 }
 
 
@@ -49,11 +48,7 @@ def notify(event: str, subject: str, message: str) -> None:
     Args:
         event: One of the ``NotificationEvent`` keys.
         subject: Short human-readable summary; also used as the Gotify title.
-        message: Notification body. Must not include user-supplied content (e.g.
-            uploaded file contents or names) - only non-sensitive facts such as a
-            file format and timestamp. Admins can consult the app logs to
-            investigate further.
-    """
+        message: Notification body."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     fields = _EVENT_CHANNEL_FIELDS.get(event)
@@ -96,7 +91,8 @@ def _send_gotify(site, subject: str, message: str) -> None:
     try:
         response = requests.post(
             f"{site.notify_gotify_url.rstrip('/')}/message",
-            params={"token": site.notify_gotify_token},
+            # A header rather than `?token=`, which proxies and access logs record.
+            headers={"X-Gotify-Key": site.notify_gotify_token},
             data={"title": subject, "message": message, "priority": _GOTIFY_PRIORITY},
             timeout=_GOTIFY_TIMEOUT,
         )
@@ -104,9 +100,8 @@ def _send_gotify(site, subject: str, message: str) -> None:
         logger.exception("Failed to send Gotify notification")
         return
 
-    # A rejected token (401) or a wrong URL (404) answers cleanly, so without
-    # this check a silently-undelivered admin alert looks identical to a
-    # delivered one - the failure mode that matters here, since nobody is
-    # watching for the notification that never arrives.
+    # A rejected token (401) or a wrong URL (404) answers cleanly, so without this check a
+    # silently-undelivered admin alert looks identical to a delivered one - the failure mode that
+    # matters here, since nobody is watching for the notification that never arrives.
     if not response.ok:
         logger.error("Gotify rejected the notification: HTTP %s - check notify_gotify_url/notify_gotify_token", response.status_code)

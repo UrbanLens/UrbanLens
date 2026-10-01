@@ -1,0 +1,16 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}Invitation for another address - UrbanLens{% endblock %}
+
+{% block auth_header %}{% endblock %}
+
+{% block content %}
+<div class="auth-info-icon"><i class="material-icons">alternate_email</i></div>
+<h2 class="auth-info-title">This invitation was sent to another address</h2>
+<p class="auth-info-text">
+    Only the account that owns the address it was sent to can answer it. If that address is yours, add it to
+    your account in settings and verify it, then open the invitation again.
+</p>
+<a href="{% url 'settings.view' %}" class="btn btn--primary auth-submit-btn trip-invitation-link">Open settings</a>
+<div class="auth-footer"><a href="{% url 'index' %}">UrbanLens home</a></div>
+{% endblock %}

@@ -1,17 +1,14 @@
-"""Locations pinned by every member of a group of profiles.
-
-Used today for the pairwise "Places in Common" stat/page on the profile
-page, but written to intersect any number of profiles so it also covers
-the "expand to groups, e.g. trips" follow-up called out in the same
-feature request without a later rewrite.
-"""
+"""Locations pinned by every member of a group of profiles."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Exists, Min, OuterRef, Q
+
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.place.model import Place
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -21,63 +18,52 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-def pinned_place_keys(profile: Profile) -> set[tuple[str, int]]:
-    """One key per real-world thing this profile has pinned.
+def _on_a_shared_place() -> Q:
+    """Pins whose place may be shared: they have one, and it is not implausibly large (``PlaceQuerySet.implausible``).
 
-    Keyed by *place* where one is known, falling back to the exact Location
-    otherwise. That is what makes the count mean what people expect it to:
-    two friends who explored the same property and pinned it fifty metres
-    apart used to show zero places in common, because their coordinates
-    resolved to different Location rows. Reused by every other "do these
-    profiles/pins share a place" check in the codebase (profile common-pin
-    visibility, wiki community counts, trip common-pin visibility) rather
-    than each reimplementing the same place-vs-location fallback - see
-    docs/GOALS_CODE_AUDIT.md ("Cross-pin aggregate comparison level").
+    Every other pin matches only its exact Location.
+    """
+    return Q(location__place__isnull=False) & ~Q(location__place_id__in=Place.objects.implausible().values("pk"))
+
+
+def pins_sharing_a_place_with(profile: Profile) -> QuerySet[Pin]:
+    """Anyone's pins on something *profile* has also pinned: the same place where a pin's location has one, else the same Location.
+
+    Left in the database, so asking whether two people share a place reads one row however much either has pinned.
 
     Args:
-        profile: The profile whose pins to key.
+        profile: The profile whose pinned places to match.
 
     Returns:
-        Set of ``("place", id)`` / ``("location", id)`` keys.
-    """
-    keys: set[tuple[str, int]] = set()
-    for location_id, place_id in Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", "location__place_id"):
-        keys.add(("place", place_id) if place_id is not None else ("location", location_id))
-    return keys
+        A ``Pin`` queryset to narrow by owner, including *profile*'s own pins."""
+    own = Pin.objects.filter(profile=profile, location__isnull=False)
+    on_place = _on_a_shared_place()
+    return Pin.objects.filter(
+        Q(location__place_id__in=own.filter(on_place).values("location__place_id")) | Q(location_id__in=own.exclude(on_place).values("location_id")),
+    )
 
 
 def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
     """Return the ids of locations pinned by every one of ``profiles``.
-
-    Two profiles count as sharing a place when their pins resolve onto the
-    same real-world thing, not only when they land on the identical
-    coordinate row (see :func:`pinned_place_keys`).
+    Two profiles count as sharing a place when their pins resolve onto the same real-world thing, not only when they land on the identical coordinate row (see :func:`pins_sharing_a_place_with`).
 
     Args:
-        profiles: The profiles to intersect. Fewer than two profiles can
-            never have anything "in common", so that case always returns
-            an empty set rather than one profile's full pin list.
+        profiles: The profiles to intersect.
 
     Returns:
-        The set of ``Location`` ids - one representative per shared place -
-        pinned by all of ``profiles``.
-    """
+        The set of ``Location`` ids - one representative per shared place - pinned by all of ``profiles``."""
     if len(profiles) < 2:
         return set()
-    shared = set.intersection(*[pinned_place_keys(profile) for profile in profiles])
-    if not shared:
-        return set()
-
-    place_ids = [pk for kind, pk in shared if kind == "place"]
-    location_ids = {pk for kind, pk in shared if kind == "location"}
-    if place_ids:
-        # One representative Location per shared place: the callers render a
-        # list of places, and listing the same property once per coordinate
-        # anybody pinned it at would be the old duplication all over again.
-        for place_id in place_ids:
-            representative = Pin.objects.filter(profile=profiles[0], location__place_id=place_id).values_list("location_id", flat=True).first()
-            if representative is not None:
-                location_ids.add(representative)
+    on_place = _on_a_shared_place()
+    shared = Pin.objects.filter(profile=profiles[0], location__isnull=False)
+    for other in profiles[1:]:
+        theirs = Pin.objects.filter(profile=other)
+        shared = shared.filter(
+            (Q(Exists(theirs.filter(location__place_id=OuterRef("location__place_id")))) & on_place) | (Q(Exists(theirs.filter(location_id=OuterRef("location_id")))) & ~on_place),
+        )
+    location_ids = set(shared.exclude(on_place).values_list("location_id", flat=True).distinct())
+    # One representative Location per shared place, so a property pinned at several coordinates is listed once.
+    location_ids.update(shared.filter(on_place).values("location__place_id").annotate(representative=Min("location_id")).values_list("representative", flat=True))
     return location_ids
 
 
@@ -88,9 +74,7 @@ def common_pin_locations(profiles: Sequence[Profile]) -> QuerySet[Location]:
         profiles: The profiles to intersect.
 
     Returns:
-        A ``Location`` queryset for the shared locations, or ``Location.objects.none()``
-        when there are none (or fewer than two profiles were given).
-    """
+        A ``Location`` queryset for the shared locations, or ``Location.objects.none()`` when there are none (or fewer than two profiles were given)."""
     common_ids = common_pin_location_ids(profiles)
     if not common_ids:
         return Location.objects.none()

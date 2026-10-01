@@ -1,14 +1,4 @@
-"""Tests for the direct-message disappearing-message hard-delete sweep.
-
-Regression coverage for a privacy gap: DirectMessage.is_expired_for_recipient
-only ever gated *display* (the recipient saw a tombstone instead of the
-content) - the row, its body/ciphertext, and any attached images stayed in
-the database untouched forever, still returned by search, regardless of the
-sender's "Delete My Messages After" setting. This is the sweep
-(tasks.hard_delete_expired_direct_messages, driven by
-DirectMessageQuerySet.due_for_hard_delete) that actually removes the row -
-for both parties, including the sender - once the timer elapses.
-"""
+"""Tests for the direct-message disappearing-message hard-delete sweep."""
 
 from __future__ import annotations
 
@@ -60,11 +50,37 @@ class DueForHardDeleteQuerySetTests(TestCase):
         self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
 
     def test_unread_is_excluded_regardless_of_retention_choice(self) -> None:
-        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=None)
+        message = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=None
+        )
         self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
 
+    def _sent_days_ago(self, days: int, sender_delete_after: str) -> DirectMessage:
+        message = _make_message(self.sender, self.recipient, sender_delete_after=sender_delete_after, read_at=None)
+        DirectMessage.objects.filter(pk=message.pk).update(created=timezone.now() - datetime.timedelta(days=days))
+        message.refresh_from_db()
+        return message
+
+    def test_unread_self_destructing_message_times_out_after_180_days(self) -> None:
+        for choice in (MessageRetentionChoice.WHEN_READ, MessageRetentionChoice.ONE_YEAR):
+            with self.subTest(choice=choice):
+                stale = self._sent_days_ago(181, choice)
+                fresh = self._sent_days_ago(179, choice)
+                due = DirectMessage.objects.due_for_hard_delete()
+                self.assertIn(stale, due)
+                self.assertNotIn(fresh, due)
+                self.assertTrue(stale.is_expired_for_recipient)
+                self.assertFalse(fresh.is_expired_for_recipient)
+
+    def test_unread_never_message_does_not_time_out(self) -> None:
+        message = self._sent_days_ago(1000, MessageRetentionChoice.NEVER)
+        self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
+        self.assertFalse(message.is_expired_for_recipient)
+
     def test_when_read_is_included_immediately_after_read(self) -> None:
-        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=timezone.now())
+        message = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=timezone.now()
+        )
         self.assertIn(message, DirectMessage.objects.due_for_hard_delete())
 
     def test_one_day_not_yet_elapsed_is_excluded(self) -> None:
@@ -154,11 +170,9 @@ class HardDeleteExpiredDirectMessagesTaskTests(TestCase):
 class HardDeleteBatchingTests(TestCase):
     """A backlog is drained in batches, not pulled into one `IN (...)` list.
 
-    Steady state is one hour of expiries and fits in a single batch; the case
-    this covers is the backlog - a retention-policy change, or the beat worker
-    having been down - where the due set can approach the size of the whole
-    read message history.
-    """
+    Steady state is one hour of expiries and fits in a single batch; the case this covers is the backlog - a
+    retention-policy change, or the beat worker having been down - where the due set can approach the size of
+    the whole read message history."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -187,7 +201,11 @@ class HardDeleteBatchingTests(TestCase):
         self._due(5)
         with CaptureQueriesContext(connection) as captured:
             hard_delete_expired_direct_messages(batch_size=2)
-        deletes = [q["sql"] for q in captured.captured_queries if q["sql"].startswith("DELETE") and "dashboard_direct_messages" in q["sql"]]
+        deletes = [
+            q["sql"]
+            for q in captured.captured_queries
+            if q["sql"].startswith("DELETE") and "dashboard_direct_messages" in q["sql"]
+        ]
         self.assertGreater(len(deletes), 1, "five due messages went out in one DELETE - the batch size was not applied")
 
     def test_max_per_run_leaves_the_remainder_for_the_next_run(self) -> None:
@@ -205,7 +223,9 @@ class HardDeleteBatchingTests(TestCase):
 
     def test_not_yet_due_messages_survive_a_batched_drain(self) -> None:
         self._due(3)
-        keeper = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, read_at=timezone.now())
+        keeper = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, read_at=timezone.now()
+        )
         hard_delete_expired_direct_messages(batch_size=1)
         self.assertEqual(list(DirectMessage.objects.values_list("pk", flat=True)), [keeper.pk])
 
@@ -213,13 +233,8 @@ class HardDeleteBatchingTests(TestCase):
 class WhenReadFirstOpenTests(TestCase):
     """A "delete as soon as read" message is readable exactly once on a cold open.
 
-    Regression test: _thread_context used to mark the thread read BEFORE
-    loading the page, so is_expired_for_recipient was already True by render
-    time and a recipient who opened the conversation cold only ever saw the
-    "no longer available" tombstone - the content was destroyed by the act of
-    trying to read it. The read mark must land after the page is loaded, so
-    the first render shows the content and only later renders tombstone it.
-    """
+    The read mark must land after the page is loaded, so the first render shows the content and only later
+    renders tombstone it."""
 
     SECRET = "the water tower ladder is on the north side"
 
@@ -264,14 +279,11 @@ class WhenReadFirstOpenTests(TestCase):
 class SidebarPreviewTombstoneTests(TestCase):
     """The conversation-list sidebar's last-message preview honors tombstone state too.
 
-    Regression: `_conversation_list.html` rendered `conv.last_message.body`
-    directly (only branching on `is_encrypted`), so a message tombstoned in
-    its own thread bubble - deleted-for-everyone, or expired via the
-    "delete as soon as read" retention setting - still leaked its raw text
-    into the sidebar preview line on every other page render, including the
-    full messages page loaded right after the thread itself had already
-    started tombstoning it.
-    """
+    Regression: `_conversation_list.html` rendered `conv.last_message.body` directly (only branching on
+    `is_encrypted`), so a message tombstoned in its own thread bubble - deleted-for-everyone, or expired via the
+    "delete as soon as read" retention setting - still leaked its raw text into the sidebar preview line on
+    every other page render, including the full messages page loaded right after the thread itself had already
+    started tombstoning it."""
 
     SECRET = "the spare key is under the third flowerpot"
 
@@ -298,7 +310,9 @@ class SidebarPreviewTombstoneTests(TestCase):
     def test_deleted_for_everyone_message_is_not_in_the_sidebar_preview(self) -> None:
         from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
-        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
+        message = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET
+        )
         delete_message_for_everyone(message, self.sender)
         self.client.force_login(self.recipient.user)
         response = self.client.get(reverse("messages.list"))
@@ -308,7 +322,9 @@ class SidebarPreviewTombstoneTests(TestCase):
     def test_the_sender_still_sees_their_own_deleted_message_in_their_own_sidebar(self) -> None:
         from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
-        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
+        message = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET
+        )
         delete_message_for_everyone(message, self.sender)
         self.client.force_login(self.sender.user)
         response = self.client.get(reverse("messages.list"))

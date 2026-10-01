@@ -1,11 +1,5 @@
-"""Additional Pin model tests covering methods not in test_pin_properties.py.
+"""Additional Pin model tests covering methods not in test_pin_properties.py."""
 
-An LLM Believes this file covers the following (this assessment may be correct, or incorrect):
-- effective_color  (mock-based, labels M2M filtered by kind=tag)
-- rating  (DB, requires Review)
-- add_category / change_category  (DB)
-- to_json / to_detail_json  (DB)
-"""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -32,19 +26,8 @@ class PinEffectiveColorTests(SimpleTestCase):
     def _mock_labels(self, mock_labels: MagicMock, labels: list[MagicMock]) -> None:
         """Stand in for ``labels.all()``.
 
-        The stub sits on ``all`` itself because ``icon_source_label`` filters and
-        sorts in Python (to stay on the prefetch cache) instead of calling
-        ``.exclude()``/``.order_by()``. Stubbing a chained call therefore leaves
-        the real call iterating a bare MagicMock, which yields nothing: every
-        expects-a-colour case would see None, and every expects-None case would
-        pass without exercising anything.
-
-        ``kind`` is set so the user-label filter keeps them. ``order``/``name``
-        are set explicitly so that sort has real values to compare - left as
-        MagicMocks the multi-label cases would sort by whatever MagicMock's
-        comparison operators happen to do - and are chosen so list position is
-        the winning order, which is what these tests mean by "first label wins".
-        """
+        The stub sits on ``all`` itself because ``icon_source_label`` filters and sorts in Python (to stay on
+        the prefetch cache) instead of calling ``.exclude()``/``.order_by()``."""
         for index, label in enumerate(labels):
             label.kind = "tag"
             label.order = -index
@@ -172,6 +155,7 @@ class PinHasMeaningfulNameTests(SimpleTestCase):
 
 # -- rating --------------------------------------------------------------------
 
+
 class PinRatingTests(TestCase):
     """rating returns the most recent review rating, or 0 when there are none."""
 
@@ -194,85 +178,8 @@ class PinRatingTests(TestCase):
         self.assertIsInstance(self.pin.rating, int)
 
 
-# -- add_category / change_category --------------------------------------------
-
-class PinAddCategoryTests(TestCase):
-    """add_category creates the Label if needed and links it to the pin."""
-
-    def setUp(self):
-        self.user = baker.make("auth.User")
-        self.location = baker.make("dashboard.Location", latitude="41.0", longitude="-73.0")
-        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
-
-    def test_add_category_returns_a_label(self) -> None:
-        result = self.pin.add_category("factory")
-        self.assertIsNotNone(result)
-
-    def test_add_category_creates_label_with_category_kind(self) -> None:
-        from urbanlens.dashboard.models.labels.model import Label
-
-        self.pin.add_category("hospital")
-
-        self.assertTrue(Label.objects.filter(name__iexact="hospital", kind="category").exists())
-
-    def test_add_category_links_label_to_pin(self) -> None:
-        self.pin.add_category("school")
-        self.pin.refresh_from_db()
-
-        names = [n.lower() for n in self.pin.labels.filter(kind="category").values_list("name", flat=True)]
-
-        self.assertIn("school", names)
-
-    def test_add_category_reuses_an_existing_label_whatever_its_case(self) -> None:
-        """Replaces an older assertion that ``add_category("Prison")`` produced a
-        label literally named "prison".
-
-        It did - by creating a *second* label beside any existing "Prison", which
-        is the duplication migrations 0042/0043 exist to prevent. The lookup is
-        ``name__iexact`` now, so an existing label wins and keeps its own casing;
-        only a genuinely new one is created lowercased.
-        """
-        from urbanlens.dashboard.models.labels.model import Label
-
-        existing = Label.objects.create(name="Prison", kind="category", profile=None)
-
-        result = self.pin.add_category("Prison")
-
-        self.assertEqual(result.pk, existing.pk, "should reuse the existing label, not make a second")
-        # Scoped to global labels: the profile is seeded with its own default
-        # categories, and "Prison" is among them - counting across every profile
-        # would include that unrelated row.
-        self.assertEqual(Label.objects.filter(name__iexact="prison", kind="category", profile__isnull=True).count(), 1)
-
-    def test_add_category_creates_a_new_label_lowercased(self) -> None:
-        result = self.pin.add_category("ZzBrandNewKind")
-
-        self.assertEqual(result.name, "zzbrandnewkind")
-
-
-class PinChangeCategoryTests(TestCase):
-    """change_category replaces all existing categories with the given one."""
-
-    def setUp(self):
-        self.user = baker.make("auth.User")
-        self.location = baker.make("dashboard.Location", latitude="42.0", longitude="-72.0")
-        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
-        self.old_cat = baker.make("dashboard.Label", name="old", kind="category", profile=None)
-        self.new_cat = baker.make("dashboard.Label", name="new_cat", kind="category", profile=None)
-        self.pin.labels.add(self.old_cat)
-
-    def test_change_category_sets_new_category(self) -> None:
-        self.pin.change_category(self.new_cat.id)
-        self.pin.refresh_from_db()
-        self.assertIn(self.new_cat, self.pin.labels.filter(kind="category"))
-
-    def test_change_category_removes_old_category(self) -> None:
-        self.pin.change_category(self.new_cat.id)
-        self.pin.refresh_from_db()
-        self.assertNotIn(self.old_cat, self.pin.labels.filter(kind="category"))
-
-
 # -- to_json / to_detail_json --------------------------------------------------
+
 
 class PinToJsonTests(TestCase):
     """to_json() serialises core pin fields to a dict."""
@@ -280,12 +187,17 @@ class PinToJsonTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make(
-            "dashboard.Location", official_name="Steel Mill",
-            latitude="40.000000", longitude="-74.000000",
+            "dashboard.Location",
+            official_name="Steel Mill",
+            latitude="40.000000",
+            longitude="-74.000000",
         )
         self.pin = baker.make(
-            Pin, profile=self.user.profile, location=self.location,
-            name="My Steel Mill", priority=5,
+            Pin,
+            profile=self.user.profile,
+            location=self.location,
+            name="My Steel Mill",
+            priority=5,
         )
         # to_json() reads place_name, which resolves an uncached Location's
         # name from Google - mock it so tests don't make an outbound API call.
@@ -331,7 +243,9 @@ class PinToDetailJsonTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make(
-            "dashboard.Location", latitude="41.000000", longitude="-73.000000",
+            "dashboard.Location",
+            latitude="41.000000",
+            longitude="-73.000000",
         )
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
 
@@ -353,10 +267,8 @@ class PinToDetailJsonTests(TestCase):
 class PinNameAliasSaveTests(TestCase):
     """Pin.save keeps the alias list in sync with the current name.
 
-    Pins are no longer auto-renamed from external sources; the invariant is
-    that every meaningful persisted name (user-typed or not) has an alias row.
-    Detailed coverage lives in test_name_resolution.py.
-    """
+    Pins are no longer auto-renamed from external sources; the invariant is that every meaningful persisted name
+    (user-typed or not) has an alias row."""
 
     def test_saving_named_pin_records_current_name_alias(self) -> None:
         user = baker.make("auth.User")

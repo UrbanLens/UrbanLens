@@ -1,36 +1,16 @@
 """Avatar resolution, download, emoji-avatar generation, and avatar writes.
-
-:class:`AvatarService` is the read/generate half - it answers "what image
-should this account have" from an OAuth payload, a Gravatar hash, or a
-generated emoji SVG. The module-level ``set_profile_avatar*`` functions are the
-*write* half, and exist because the two call sites that previously wrote
-``Profile.avatar`` did not agree with each other: the profile hero's upload
-form ran the shared ``image_upload_error`` gauntlet (size cap, magic-byte
-sniffing, antivirus) while the inline auto-save field
-(``ProfileFieldUpdateView``, ``field=avatar``) assigned the uploaded file
-straight onto the model with no checks at all - an unauthenticated-by-content
-write of arbitrary bytes into media storage, reachable by any logged-in user.
-Putting the write behind one function means a new surface (the external API's
-``PUT /profiles/{slug}/avatar/``) cannot pick the unguarded variant by
-accident, because the unguarded variant no longer exists.
-
-The gravatar path is deliberately *not* offered here as a reusable function:
-it makes an outbound HTTP fetch keyed on the account's email address, which is
-fine as an explicit button the account owner presses and is not something an
-API credential should be able to trigger on the owner's behalf.
-"""
+Putting the write behind one function means a new surface (the external API's ``PUT /profiles/{slug}/avatar/``) cannot pick the unguarded variant by accident, because the unguarded variant no longer exists."""
 
 from __future__ import annotations
 
 import hashlib
 import logging
-import secrets
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
 
 import requests
 
 from urbanlens.dashboard.models.colors import MaterialColor
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, request_public_url
 
 if TYPE_CHECKING:
     from typing import Any
@@ -42,51 +22,59 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Largest avatar downloaded from an OAuth provider or Gravatar.
+PROVIDER_AVATAR_MAX_BYTES = 512 * 1024
+
 #: Fallback animal when the caller names one that isn't in ``ANIMAL_EMOJIS``.
 DEFAULT_AVATAR_ANIMAL = "fox"
 
 #: Background used when a caller names no colour at all.
 DEFAULT_AVATAR_COLOR = MaterialColor.GREEN.value
 
-#: Background substituted when a caller names a colour outside
-#: ``MaterialColor``. Restricting to the palette is not cosmetic: the value is
-#: interpolated into generated SVG markup, so an arbitrary caller-supplied
-#: string there would be an injection point into a file the site then serves.
-#: Kept distinct from :data:`DEFAULT_AVATAR_COLOR` so "you sent nothing" and
-#: "you sent something we refused" stay visibly different in the result.
+#: Background substituted when a caller names a colour outside ``MaterialColor``.
+#: Restricting to the palette is not cosmetic: the value is interpolated into generated SVG markup,
+#: so an arbitrary caller-supplied string there would be an injection point into a file the site then
+#: serves.
 UNRECOGNIZED_AVATAR_COLOR_FALLBACK = MaterialColor.GREY.value
 
 
 class AvatarUploadError(Exception):
-    """An avatar write was refused before anything was stored.
+    """Base class: an avatar write was refused before anything was stored.
+    ``args[0]`` is log-only detail from whichever ``services.media.images.image_upload_error`` check failed - never surface it to a user."""
 
-    Carries the HTTP status the refusal maps to, because the underlying
-    ``services.media.images.image_upload_error`` already distinguishes them - 413 for
-    an over-large file, 400 for a content-type that doesn't match its bytes,
-    422 for a malware hit, 503 when the scanner itself is unreachable - and
-    collapsing them would tell a client "bad image" when the real answer is
-    "try again in a minute".
-    """
 
-    def __init__(self, message: str, status_code: int = 400) -> None:
-        """Initialize with a caller-safe message and its HTTP status.
+class AvatarTooLargeError(AvatarUploadError):
+    """The uploaded file exceeds the site's max upload size. Maps to HTTP 413."""
 
-        Args:
-            message: Human-readable detail, safe to surface verbatim.
-            status_code: The HTTP status this refusal maps to.
-        """
-        super().__init__(message)
-        self.safe_message = message
-        self.status_code = status_code
+
+class AvatarUnsupportedFormatError(AvatarUploadError):
+    """The upload isn't an accepted image type, or its declared type doesn't match its bytes.
+    The three checks live upstream in ``services.security.content_sniffing`` and are collapsed here because no catch site in this app treats them differently."""
+
+
+class AvatarMalwareDetectedError(AvatarUploadError):
+    """The antivirus scan flagged the upload. Maps to HTTP 422."""
+
+
+class AvatarScanUnavailableError(AvatarUploadError):
+    """The antivirus scanner couldn't be reached to scan the upload. Maps to HTTP 503."""
+
+
+#: Dispatches on the HTTP status ``image_upload_error`` paired with its message - the only structured
+#: signal available for which check failed, since that function hands back a plain ``(message,
+#: status_code)`` tuple shared by a dozen other, unrelated upload call sites this refactor does not
+#: own.
+_AVATAR_ERROR_TYPES_BY_STATUS: dict[int, type[AvatarUploadError]] = {
+    413: AvatarTooLargeError,
+    400: AvatarUnsupportedFormatError,
+    422: AvatarMalwareDetectedError,
+    503: AvatarScanUnavailableError,
+}
 
 
 class AvatarService:
     """Avatar utilities: emoji SVG generation, provider-URL resolution, and image download.
-
-    All methods are class methods so callers never need to instantiate this class.
-    The class groups related constants (ANIMAL_EMOJIS, COLORS) with the functions
-    that consume them, and can be subclassed to swap out the data or extend behavior.
-    """
+    All methods are class methods so callers never need to instantiate this class."""
 
     ANIMAL_EMOJIS: dict[str, str] = {
         "labelr": "🦡",
@@ -182,9 +170,7 @@ class AvatarService:
     @classmethod
     def random_options(cls, n: int = 4) -> list[dict[str, str]]:
         """Return *n* random (animal, emoji, color) dicts for the avatar picker.
-
-        Both animals and colors are sampled without replacement so that no two
-        suggestions share the same animal or the same background color.
+        Both animals and colors are sampled without replacement so that no two suggestions share the same animal or the same background color.
 
         Args:
             n: Number of options to generate.
@@ -196,18 +182,13 @@ class AvatarService:
 
         candidates = list(cls.ANIMAL_EMOJIS.items())
         n = min(n, len(candidates), len(cls.COLORS))
-        chosen_animals = _random.sample(candidates, n)  # nosec B311 - cosmetic avatar suggestions, not security-sensitive
-        chosen_colors = _random.sample(cls.COLORS, n)  # nosec B311 - cosmetic avatar suggestions, not security-sensitive
+        chosen_animals = _random.sample(candidates, n)  # nosec B311 - cosmetic avatar suggestions, not...
+        chosen_colors = _random.sample(cls.COLORS, n)  # nosec B311 - cosmetic avatar suggestions, not...
         return [{"animal": animal, "emoji": emoji, "color": chosen_colors[i]} for i, (animal, emoji) in enumerate(chosen_animals)]
 
     @classmethod
     def resolve_provider_url(cls, backend: Any, user: User, response: dict[str, Any]) -> str | None:
         """Return the provider-specific or Gravatar avatar URL for this user.
-
-        Provider-specific URL resolution:
-        - **Google OAuth2**: ``response['picture']``
-        - **Discord OAuth2**: ``https://cdn.discordapp.com/avatars/{id}/{avatar}.png``
-        - **Gravatar fallback**: ``https://www.gravatar.com/avatar/{md5(email)}``
 
         Args:
             backend: The social-auth backend in use.
@@ -246,102 +227,109 @@ class AvatarService:
     def download(cls, url: str, timeout: int = 5) -> bytes | None:
         """Fetch image bytes from a URL, returning None on any failure.
 
-        Only http and https URLs are accepted; any other scheme is rejected before
-        the network request is made.
+        Every caller today passes a provider CDN or Gravatar url, but the fetch goes through
+        ``request_public_url`` regardless, so a redirect or a future caller cannot reach an internal host.
 
         Args:
             url: The full URL of the image to download.
-            timeout: Request timeout in seconds.
+            timeout: Per-phase timeout in seconds; the whole download gets twice that.
 
         Returns:
-            Raw image bytes, or None if the download failed or returned a non-200 status.
+            Raw image bytes, or None if the url is not a public http(s) one, the download failed or
+            ran over :data:`PROVIDER_AVATAR_MAX_BYTES`, or it returned a non-200 status.
         """
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"}:
-            logger.warning("Rejecting avatar URL with unexpected scheme: %s", parsed.scheme)
-            return None
-
         try:
-            with requests.get(
+            response = request_public_url(
+                "GET",
                 url,
                 headers={"User-Agent": "UrbanLens/1.0"},
-                stream=True,
                 timeout=timeout,
-            ) as response:
-                if response.status_code != 200:
-                    return None
-
-                chunks: list[bytes] = []
-                total_bytes = 0
-                max_bytes = 512 * 1024
-                for chunk in response.iter_content(chunk_size=8192):
-                    if not chunk:
-                        continue
-                    total_bytes += len(chunk)
-                    if total_bytes > max_bytes:
-                        logger.warning("Rejecting avatar response larger than %s bytes: %s", max_bytes, url)
-                        return None
-                    chunks.append(chunk)
-                return b"".join(chunks) or None
+                total_deadline=timeout * 2,
+                max_bytes=PROVIDER_AVATAR_MAX_BYTES,
+            )
+        except UnsafeUrlError:
+            logger.warning("Rejecting avatar URL that is not a public http(s) address")
+            return None
         except requests.RequestException as exc:
             logger.debug("Avatar download failed for %s: %s", url, exc)
             return None
+        if response.status_code != 200:
+            return None
+        return response.content or None
+
+
+def gravatar_preview_url(email: str) -> str:
+    """This site's copy of what Gravatar would give *email*, refreshed daily, so the page never asks Gravatar itself.
+
+    Args:
+        email: The account's address.
+
+    Returns:
+        The in-app address of the preview, or ``""`` without an address.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.services.media.remote_copies import copy_url
+
+    if not email.strip():
+        return ""
+    # MD5 is required by the Gravatar API spec; not used for security.
+    digest = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
+    return copy_url(f"https://www.gravatar.com/avatar/{digest}?s=200&d=identicon", provider="gravatar", edition=timezone.now().date().isoformat())
 
 
 def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile:
     """Store an uploaded image as ``profile``'s avatar.
-
-    Runs the shared ``services.media.images.image_upload_error`` gauntlet first -
-    site-wide size cap, magic-byte content sniffing, antivirus - and stores
-    nothing at all when any check fails. The sniffing step is the one that
-    matters most here: an avatar is rendered by every page that names its
-    owner, so a file that claims to be a PNG and isn't gets the widest possible
-    distribution of anything a user can upload.
-
-    No ``Image`` row is created and no photo quota is consumed: an avatar is a
-    field on the profile, not a library item. That is why the external API
-    gates this on ``social:write`` rather than ``photos:write``.
+    The sniffing step is the one that matters most here: an avatar is rendered by every page that names its owner, so a file that claims to be a PNG and isn't gets the widest possible distribution of anything a user can upload.
 
     Args:
         profile: The profile whose avatar is being replaced.
         uploaded_file: The submitted file.
 
     Returns:
-        The same profile, with ``avatar`` saved.
+        The same profile, with the upload held for the sandbox worker to publish.
 
     Raises:
-        AvatarUploadError: The file failed one of the pre-storage checks. The
-            exception carries the status code that check maps to.
+        AvatarTooLargeError: The file exceeds the site's max upload size.
+        AvatarUnsupportedFormatError: The file isn't an accepted image type, or its declared type doesn't match its bytes.
+        AvatarMalwareDetectedError: The antivirus scan flagged the file.
+        AvatarScanUnavailableError: The antivirus scanner couldn't be reached.
     """
+    from django.conf import settings
+
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.media.images import image_upload_error
+
+    # Before the gauntlet, because the gauntlet's last step is the antivirus
+    # scan and that is what costs: the file is copied into this worker and
+    # streamed to the shared clamd daemon. Refusing after scanning would save
+    # nothing, and the site-wide photo ceiling the gauntlet applies is three
+    # orders of magnitude larger than any picture needs to be.
+    ceiling = settings.AVATAR_MAX_UPLOAD_BYTES
+    if (uploaded_file.size or 0) > ceiling:
+        raise AvatarTooLargeError(f"Avatar is {uploaded_file.size} bytes, over the {ceiling}-byte ceiling")
 
     upload_error = image_upload_error(uploaded_file, MediaKind.PHOTO)
     if upload_error:
         message, status_code = upload_error
-        raise AvatarUploadError(message, status_code)
+        error_cls = _AVATAR_ERROR_TYPES_BY_STATUS.get(status_code, AvatarUploadError)
+        raise error_cls(message)
 
-    profile.avatar = uploaded_file
-    profile.save(update_fields=["avatar"])
+    from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
+
+    profile.save(update_fields=[hold_upload(profile, "avatar", uploaded_file)])
+    queue_held_upload(profile, "avatar")
     return profile
+
+
+#: The stored name of an avatar generated by :func:`set_profile_avatar_from_emoji`, with or without the suffix storage
+#: adds to keep a name unique. Its bytes are the site's own template, so it has nothing to re-encode.
+GENERATED_AVATAR_PATTERN = r"^avatars/emoji_[0-9]+(_[A-Za-z0-9]{7})?\.svg$"
 
 
 def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> Profile:
     """Generate an emoji avatar and store it as ``profile``'s avatar.
-
-    Both inputs are coerced to known-good values rather than rejected, because
-    the site's own picker offers a fixed set of suggestions and a stale one
-    should still produce *an* avatar rather than an error dialog. The coercion
-    is a security boundary as well as a convenience: ``color`` is interpolated
-    directly into the generated SVG, so anything outside ``MaterialColor``
-    would be markup injection into a file the site subsequently serves.
-    Surfaces that want strict validation (the external API does, so a client
-    learns it sent a typo) validate before calling.
-
-    No ``image_upload_error`` pass here, deliberately: the bytes are generated
-    by :meth:`AvatarService.generate_emoji_svg` from a fixed template and two
-    values this function has just restricted to enum members, so there is no
-    untrusted content to sniff or scan.
+    Both inputs are coerced to known-good values rather than rejected, because the site's own picker offers a fixed set of suggestions and a stale one should still produce *an* avatar rather than an error dialog.
 
     Args:
         profile: The profile whose avatar is being replaced.
@@ -349,8 +337,7 @@ def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> 
         color: A ``MaterialColor`` hex value.
 
     Returns:
-        The same profile, with the generated SVG saved to ``avatar``.
-    """
+        The same profile, with the generated SVG saved to ``avatar``."""
     from django.core.files.base import ContentFile
 
     emoji = AvatarService.ANIMAL_EMOJIS.get(animal) or AvatarService.ANIMAL_EMOJIS[DEFAULT_AVATAR_ANIMAL]
@@ -358,20 +345,16 @@ def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> 
         color = UNRECOGNIZED_AVATAR_COLOR_FALLBACK
 
     svg = AvatarService.generate_emoji_svg(emoji, color)
-    profile.avatar.save(f"emoji_{profile.pk}.svg", ContentFile(svg.encode("utf-8")), save=True)
+    from urbanlens.dashboard.services.media.held_upload import discard_held_upload
+
+    profile.avatar.save(f"emoji_{profile.pk}.svg", ContentFile(svg.encode("utf-8")), save=False)
+    profile.save(update_fields=["avatar", discard_held_upload(profile, "avatar")])
     return profile
 
 
 def clear_profile_avatar(profile: Profile) -> Profile:
     """Remove ``profile``'s avatar, deleting the stored file.
-
-    Idempotent - clearing an already-empty avatar is a no-op rather than an
-    error, so a retried mobile DELETE stays safe.
-
-    Uses ``FieldFile.delete`` rather than assigning ``None``, so the underlying
-    file leaves storage too. Leaving it behind would keep a previous avatar
-    fetchable by anyone who had ever seen its URL, which is precisely what a
-    user removing their avatar is asking not to happen.
+    Idempotent - clearing an already-empty avatar is a no-op rather than an error, so a retried mobile DELETE stays safe.
 
     Args:
         profile: The profile whose avatar is being cleared.
@@ -379,6 +362,11 @@ def clear_profile_avatar(profile: Profile) -> Profile:
     Returns:
         The same profile, with ``avatar`` empty.
     """
-    if profile.avatar:
-        profile.avatar.delete(save=True)
+    from urbanlens.dashboard.services.media.held_upload import discard_held_upload
+
+    if profile.avatar or profile.avatar_upload:
+        if profile.avatar:
+            profile.avatar.delete(save=False)
+        profile.avatar = None
+        profile.save(update_fields=["avatar", discard_held_upload(profile, "avatar")])
     return profile

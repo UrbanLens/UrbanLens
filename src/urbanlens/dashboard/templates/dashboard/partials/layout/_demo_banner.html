@@ -1,14 +1,4 @@
-{% comment %}
-Persistent "this is the demo" banner, shown on every page of a demo instance.
-
-Deliberately always visible and not dismissible. Someone who forgets they are in
-the demo will conclude the pins they added have been saved to a real account,
-and the account is deleted within a day - so the banner is load-bearing honesty,
-not decoration.
-
-Only rendered when UL_DEMO_MODE is on, which is true only on the demo
-deployment: see docs/DEMO.md.
-{% endcomment %}
+{% comment %}Persistent "this is the demo" banner, shown on every page of a demo instance.{% endcomment %}
 {% if demo_mode %}
 <div class="demo-banner" role="status">
     <i class="material-symbols-outlined" aria-hidden="true">science</i>

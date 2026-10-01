@@ -1,49 +1,9 @@
 """Merges two of a profile's own pins into one, consolidating every relation.
-
-Distinct from ``controllers.pin_bulk.PinBulkMergeView`` (the map multi-select
-"Merge" button), which only re-parents pins as children - both rows survive,
-untouched, just nested. This module is a true consolidating merge: one pin
-(the "survivor") absorbs the other's (the "loser's") data, and the loser is
-deleted. Used by ``services.pins.pin_merge_suggestions`` to accept a
-``PinMergeSuggestion``, but is itself suggestion-agnostic - any future "merge
-these two pins" affordance can call :func:`merge_pins` directly.
-
-Every relation FK'd to Pin falls into one of three buckets:
-
-- **Safe bulk reassign** - no uniqueness constraint on the target side, so the
-  loser's rows just move onto the survivor (``PinVisit``, ``Image``,
-  ``PinLink``, ``PinPropertySale``, ``LinkExtraction``, ``Comment``,
-  ``PinMarkup``, ``MarkupMap`` FK + M2M, ``PinNote``, ``TripActivity``,
-  ``CustomFieldValue.ref_pin``, ``PinSuggestion``, other ``PinMergeSuggestion``
-  rows, the ``labels`` M2M).
-- **Auto-dedup** - a uniqueness constraint could conflict, but the conflict is
-  unambiguous (identical alias/owner text, the same auto-removal tombstone,
-  the same outstanding share, the same list membership, the same photo already
-  attached) - :func:`merge_pins` resolves these itself, keeping one side by a
-  fixed rule and dropping the redundant other (``PinAlias``, ``PinOwner``,
-  ``PinAutoRemoval``, ``PinShare``, ``PinListItem``, ``ImageAttachment``;
-  ``Review`` similarly, keeping whichever the same reviewer most recently
-  updated). ``FloorplanMarker.linked_pin`` - a synced twin, not a plain FK -
-  is unlinked rather than deleted or reassigned: reassigning it onto the
-  survivor would let a later, unrelated floorplan save silently overwrite the
-  survivor's own name/location with the marker's; unlinking loses nothing,
-  since the marker's own position/kind/floor data lives on the marker, not
-  the twin, and the editor mints it a fresh twin pin on its next save.
-- **Ask the user** - both pins can hold genuinely different content for the
-  same slot (``Article``, a same-type ``Boundary``, a ``CustomFieldValue`` for
-  the same ``CustomField``) - see :func:`plan_merge_conflicts`. Silently
-  picking one side here would be real, silent data loss, so :func:`merge_pins`
-  refuses (:class:`UnresolvedMergeConflictError`) until the caller supplies a
-  ``resolutions`` entry naming which pin's value to keep.
-
-Child pins (``Pin.parent_pin``) are re-parented onto the survivor (mirroring
-``services.pins.pin_restructure.nest_root_pins``), and ``source_share``/
-``inferred_source_share``/``cover_photo`` gap-fill from the loser onto the
-survivor when the survivor has none of its own.
-"""
+Distinct from ``controllers.pin_bulk.PinBulkMergeView`` (the map multi-select "Merge" button), which only re-parents pins as children - both rows survive, untouched, just nested."""
 
 from __future__ import annotations
 
+import collections
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
@@ -51,7 +11,6 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.album.model import Album
-from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
 from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.comments.model import Comment
@@ -74,6 +33,8 @@ from urbanlens.dashboard.models.trips.model import TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.db.models import Model
 
     from urbanlens.dashboard.models.article.model import Article
@@ -102,42 +63,22 @@ class UnresolvedMergeConflictError(ValueError):
 
 
 class PinMergeCollisionError(ValueError):
-    """Raised when a merge cannot proceed without destroying data.
+    """Raised when a merge cannot proceed without destroying data."""
 
-    Two situations produce this, both because leaving a pin parented to
-    ``loser`` would let ``Pin.parent_pin``'s CASCADE take it - and anything
-    nested beneath it, survivor included - out with ``loser.delete()``:
 
-    - A child pin has to be detached to top level (because re-parenting it
-      under the survivor would close a loop), but another top-level pin
-      already occupies its location.
-    - The survivor is itself one of loser's direct children and has to move
-      to loser's own parent, but another top-level pin already occupies the
-      survivor's location (only possible when that parent is None, i.e. the
-      survivor would become a new top-level pin).
+class SurvivorRelocationCollisionError(PinMergeCollisionError):
+    """The survivor is one of loser's direct children and must move to loser's own parent - avoiding being deleted with it - but another top-level pin already occupies that location.
+    Only possible when loser's parent is None, i.e. the survivor would become a new top-level pin."""
 
-    ``safe_message`` is safe to surface directly to the caller.
-    """
 
-    def __init__(self, message: str) -> None:
-        """Store the caller-safe message.
-
-        Args:
-            message: Explanation of which pin blocked the merge.
-        """
-        self.safe_message = message
-        super().__init__(message)
+class ChildDetachCollisionError(PinMergeCollisionError):
+    """A child of loser has to be detached to top level - re-parenting it under the survivor would close a loop - but another top-level pin already occupies its location."""
 
 
 @dataclass(frozen=True, slots=True)
 class MergeFieldConflict:
     """One place two pins hold genuinely different data for the same slot.
-
-    Only the three relations where both sides can hold distinct, real content
-    for one slot ever produce one of these - see the module docstring's
-    "ask the user" bucket. ``key`` is the stable id a caller passes back in
-    ``merge_pins``'s ``resolutions`` dict to say which pin's value to keep.
-    """
+    Only the three relations where both sides can hold distinct, real content for one slot ever produce one of these - see the module docstring's "ask the user" bucket."""
 
     key: str
     label: str
@@ -155,20 +96,68 @@ def _get_floorplan_marker(pin: Pin) -> FloorplanMarker | None:
     return getattr(pin, "floorplan_marker", None)
 
 
-def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
-    """Every field where pin_a and pin_b both hold real, possibly-divergent data.
+@dataclass(frozen=True, slots=True)
+class _PinConflictData:
+    """The three relations a merge can collide on, for one pin."""
+
+    article: Article | None
+    boundaries: dict[str, Boundary]
+    values: dict[int, CustomFieldValue]
+
+
+#: What an unsaved pin has: none of the three relations, so nothing to collide
+#: with. Read-only, and never mutated by the comparison below.
+_NOTHING = _PinConflictData(article=None, boundaries={}, values={})
+
+
+def _conflict_data(pins: Sequence[Pin]) -> dict[int, _PinConflictData]:
+    """Everything :func:`plan_merge_conflicts` compares, for many pins at once.
+    The dict-per-pin collapse is safe because both relations are unique per key - ``boundary_unique_pin`` over ``(pin, boundary_type)`` and ``db_cfv_unique_pin`` over ``(field, pin)`` - which is the assumption the comparison already made.
+
+    Args:
+        pins: The pins to fetch for.
+
+    Returns:
+        One entry per distinct saved pin id."""
+    from urbanlens.dashboard.models.article.model import Article as ArticleModel
+
+    pin_ids = {pin.pk for pin in pins if pin.pk is not None}
+    if not pin_ids:
+        return {}
+
+    articles = {article.pin_id: article for article in ArticleModel.objects.filter(pin_id__in=pin_ids)}
+    boundaries: collections.defaultdict[int, dict[str, Boundary]] = collections.defaultdict(dict)
+    # Safe only while nothing below reads a deferred column; a summary that wanted the geometry
+    # would load it per row and put the fan-out back.
+    for boundary in Boundary.objects.filter(pin_id__in=pin_ids).only("pin", "boundary_type", "updated"):
+        if boundary.pin_id is not None:
+            boundaries[boundary.pin_id][boundary.boundary_type] = boundary
+    values: collections.defaultdict[int, dict[int, CustomFieldValue]] = collections.defaultdict(dict)
+    for value in CustomFieldValue.objects.filter(pin_id__in=pin_ids).select_related("field"):
+        if value.pin_id is not None:
+            values[value.pin_id][value.field_id] = value
+
+    return {pin_id: _PinConflictData(articles.get(pin_id), boundaries[pin_id], values[pin_id]) for pin_id in pin_ids}
+
+
+def _conflicts_between(pin_a: Pin, pin_b: Pin, data: dict[int, _PinConflictData]) -> list[MergeFieldConflict]:
+    """The comparison half of :func:`plan_merge_conflicts`, over fetched data.
 
     Args:
         pin_a: One pin under consideration.
         pin_b: The other pin under consideration.
+        data: Output of :func:`_conflict_data` covering both pins.
 
     Returns:
-        Conflicts the accepting user must resolve before ``merge_pins`` will
-        merge these two pins - empty when nothing needs a decision.
-    """
+        The conflicts between them."""
     conflicts: list[MergeFieldConflict] = []
+    # An unsaved pin has no entry, and correctly has no conflicts: it can hold none of the three
+    # relations.
+    # Django refuses it before that anyway - a related filter on an unsaved instance raises - so
+    # this is about answering rather than crashing, not about permitting something new.
+    side_a, side_b = data.get(pin_a.pk, _NOTHING), data.get(pin_b.pk, _NOTHING)
 
-    article_a, article_b = _get_article(pin_a), _get_article(pin_b)
+    article_a, article_b = side_a.article, side_b.article
     if article_a is not None and article_b is not None:
         conflicts.append(
             MergeFieldConflict(
@@ -179,22 +168,18 @@ def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
             ),
         )
 
-    boundaries_a = {boundary.boundary_type: boundary for boundary in Boundary.objects.filter(pin=pin_a)}
-    boundaries_b = {boundary.boundary_type: boundary for boundary in Boundary.objects.filter(pin=pin_b)}
-    for boundary_type in sorted(set(boundaries_a) & set(boundaries_b)):
+    for boundary_type in sorted(set(side_a.boundaries) & set(side_b.boundaries)):
         conflicts.append(
             MergeFieldConflict(
                 key=f"boundary:{boundary_type}",
                 label=f"Both pins have a {boundary_type} boundary",
-                pin_a_summary=f"Updated {boundaries_a[boundary_type].updated.date().isoformat()}",
-                pin_b_summary=f"Updated {boundaries_b[boundary_type].updated.date().isoformat()}",
+                pin_a_summary=f"Updated {side_a.boundaries[boundary_type].updated.date().isoformat()}",
+                pin_b_summary=f"Updated {side_b.boundaries[boundary_type].updated.date().isoformat()}",
             ),
         )
 
-    values_a = {value.field_id: value for value in CustomFieldValue.objects.filter(pin=pin_a).select_related("field")}
-    values_b = {value.field_id: value for value in CustomFieldValue.objects.filter(pin=pin_b).select_related("field")}
-    for field_id in sorted(set(values_a) & set(values_b)):
-        value_a, value_b = values_a[field_id], values_b[field_id]
+    for field_id in sorted(set(side_a.values) & set(side_b.values)):
+        value_a, value_b = side_a.values[field_id], side_b.values[field_id]
         conflicts.append(
             MergeFieldConflict(
                 key=f"custom_field:{field_id}",
@@ -207,25 +192,40 @@ def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
     return conflicts
 
 
+def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
+    """Every field where pin_a and pin_b both hold real, possibly-divergent data.
+
+    Args:
+        pin_a: One pin under consideration.
+        pin_b: The other pin under consideration.
+
+    Returns:
+        Conflicts the accepting user must resolve before ``merge_pins`` will merge these two pins - empty when nothing needs a decision."""
+    return _conflicts_between(pin_a, pin_b, _conflict_data([pin_a, pin_b]))
+
+
+def plan_merge_conflicts_bulk(pairs: Sequence[tuple[Pin, Pin]]) -> dict[tuple[int, int], list[MergeFieldConflict]]:
+    """Conflicts for many pairs, in three queries for the whole batch.
+    A caller that then *merges* must re-plan per pair with :func:`plan_merge_conflicts`, because each merge changes what the next one collides with.
+
+    Args:
+        pairs: ``(pin_a, pin_b)`` pairs, in any order.
+
+    Returns:
+        Conflicts keyed by ``(pin_a.pk, pin_b.pk)``."""
+    data = _conflict_data([pin for pair in pairs for pin in pair])
+    return {(pin_a.pk, pin_b.pk): _conflicts_between(pin_a, pin_b, data) for pin_a, pin_b in pairs}
+
+
 def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
     """Save a row that may collide with a uniqueness constraint, recoverably.
-
-    Every reassignment in this module runs inside ``merge_pins``' single
-    ``transaction.atomic()`` block. Postgres aborts the *whole* transaction on
-    a failed statement, so catching ``IntegrityError`` there and carrying on
-    makes the next query raise ``TransactionManagementError`` instead - which
-    turned each of this module's "drop the duplicate and continue" recoveries
-    into a merge that failed outright. The nested ``atomic()`` is a savepoint,
-    so only the failed statement rolls back and the caller's recovery can run.
 
     Args:
         instance: The model instance being reassigned onto the survivor.
         update_fields: Fields to write, passed straight to ``save()``.
 
     Returns:
-        True when the row was written; False when it collided and the caller
-        should apply its own dedup rule.
-    """
+        True when the row was written; False when it collided and the caller should apply its own dedup rule."""
     try:
         with transaction.atomic():
             instance.save(update_fields=update_fields)
@@ -235,37 +235,25 @@ def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
 
 
 def _reparent_children(survivor: Pin, loser: Pin) -> None:
-    """Re-parent loser's child pins onto survivor, skipping any that would create a cycle.
-
-    Mirrors ``services.pins.pin_restructure.nest_root_pins`` for the normal case. A
-    child that would create a cycle (survivor sits somewhere beneath that
-    child already) is detached to root instead of just left alone - leaving it
-    pointed at ``loser`` would let ``loser.delete()``'s ``CASCADE`` on
-    ``parent_pin`` destroy that child, and everything nested beneath it,
-    survivor included.
-
-    When survivor is itself one of loser's direct children, it is re-pointed
-    at loser's own parent instead of being left alone - the same CASCADE would
-    otherwise take survivor down with the loser it is supposed to absorb.
-    """
+    """Re-parent loser's child pins onto survivor, skipping any that would create a cycle."""
     for child in list(loser.detail_pins.all()):
         if child.pk == survivor.pk:
             survivor.parent_pin = loser.parent_pin
             if not _save_within_savepoint(survivor, ["parent_pin", "updated"]):
-                raise PinMergeCollisionError(
-                    f"Cannot merge: survivor pin {survivor.pk} has to move to the loser's own parent to avoid being deleted with it, but another top-level pin already occupies its location.",
+                raise SurvivorRelocationCollisionError(
+                    f"Pin merge blocked: survivor pin {survivor.pk} is loser pin {loser.pk}'s direct child and must relocate to loser.parent_pin_id={loser.parent_pin_id} to avoid CASCADE deletion, but a top-level pin already occupies that location.",
                 )
             continue
         if child.would_create_cycle(survivor):
             logger.warning("Pin merge: detaching child pin %s to root - re-parenting under the survivor would create a cycle.", child.pk)
             child.parent_pin = None
             if not _save_within_savepoint(child, ["parent_pin", "updated"]):
-                # It stays parented to the pin about to be deleted, and
-                # Pin.parent_pin CASCADEs - so this child, and the survivor
-                # somewhere beneath it, would both be destroyed by the delete
-                # this detach exists to prevent. Refuse the merge instead.
-                raise PinMergeCollisionError(
-                    f"Cannot merge: child pin {child.pk} has to be detached to top level to avoid a loop, but another top-level pin already occupies its location.",
+                # It stays parented to the pin about to be deleted, and Pin.parent_pin CASCADEs - so
+                # this child, and the survivor somewhere beneath it, would both be destroyed by the
+                # delete this detach exists to prevent.
+                # Refuse the merge instead.
+                raise ChildDetachCollisionError(
+                    f"Pin merge blocked: child pin {child.pk} of loser pin {loser.pk} must detach to top level (survivor pin {survivor.pk} sits beneath it) to avoid a cycle, but a top-level pin already occupies its location.",
                 )
             continue
         child.parent_pin = survivor
@@ -432,14 +420,7 @@ def _merge_lineage(survivor: Pin, loser: Pin) -> None:
 
 
 def _repoint_other_merge_suggestions(survivor: Pin, loser: Pin) -> None:
-    """Repoint any OTHER pending suggestion mentioning loser onto survivor.
-
-    A suggestion naming exactly this (survivor, loser) pair is left alone -
-    the caller (``services.pins.pin_merge_suggestions.accept_pin_merge_suggestion``)
-    marks that one accepted itself, and repointing it here would leave both
-    its pin_a and pin_b pointing at the same pin, violating
-    ``db_pin_merge_suggestion_distinct_pins``.
-    """
+    """Repoint any OTHER pending suggestion mentioning loser onto survivor."""
     for suggestion in PinMergeSuggestion.objects.for_pin(loser):
         if {suggestion.pin_a_id, suggestion.pin_b_id} == {survivor.pk, loser.pk}:
             continue
@@ -466,18 +447,7 @@ def _merge_image_attachments(survivor: Pin, loser: Pin) -> None:
 
 
 def _merge_floorplan_marker(survivor: Pin, loser: Pin) -> None:
-    """Unlink the loser's floorplan-marker twin rather than repointing it.
-
-    ``linked_pin`` is ``OneToOne`` and doubles as a synced twin -
-    ``services.floorplans.serialization._sync_linked_pin`` overwrites
-    whichever pin it points at with the marker's own name/kind/location/icon/
-    color on *every* save of that floorplan document, not just the edited
-    marker's. Repointing it onto survivor would silently overwrite a pin the
-    profile deliberately kept the next time anyone touches that floorplan.
-    Unlinking is safe either way: the marker's own position/kind/floor data
-    lives on the marker itself, not the twin, and the floorplan editor mints a
-    fresh twin pin on its next save.
-    """
+    """Unlink the loser's floorplan-marker twin rather than repointing it."""
     marker = _get_floorplan_marker(loser)
     if marker is None:
         return
@@ -487,18 +457,11 @@ def _merge_floorplan_marker(survivor: Pin, loser: Pin) -> None:
 
 def _merge_albums(survivor: Pin, loser: Pin) -> None:
     """Move the loser's albums onto the survivor, re-slugging on collision.
-
-    ``uq_album_pin_slug`` is unique on ``(parent_pin, slug)``, so a plain
-    reassign fails when both pins have an album with the same slug - two pins
-    each carrying a "Photos" album is the ordinary case, and both hold real
-    images, so neither may be dropped. Clearing the slug lets the model's
-    ``save()`` mint a fresh unique one (it only generates when the slug is
-    empty), keeping both albums.
+    ``uq_album_pin_slug`` is unique on ``(parent_pin, slug)``, so a plain reassign fails when both pins have an album with the same slug - two pins each carrying a "Photos" album is the ordinary case, and both hold real images, so neither may be dropped.
 
     Args:
         survivor: The pin absorbing the albums.
-        loser: The pin being merged away.
-    """
+        loser: The pin being merged away."""
     taken = set(Album.objects.filter(parent_pin=survivor).values_list("slug", flat=True))
     for album in Album.objects.filter(parent_pin=loser):
         album.parent_pin = survivor
@@ -511,28 +474,18 @@ def _merge_albums(survivor: Pin, loser: Pin) -> None:
 def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
     """Merge loser into survivor: reassign every relation, resolve every conflict, delete loser.
 
-    See the module docstring for the full per-relation rule table.
-
     Args:
         survivor: The pin that will remain, absorbing loser's data.
         loser: The pin that will be deleted once its data has moved.
         profile: The profile both pins must belong to.
-        resolutions: Maps each :class:`MergeFieldConflict` key (from
-            :func:`plan_merge_conflicts`) to the pin id whose value should be
-            kept. Every key returned by ``plan_merge_conflicts(survivor, loser)``
-            at call time must be present, or this raises
-            :class:`UnresolvedMergeConflictError` - the caller should recompute
-            the conflict list fresh and re-prompt rather than guess, since pin
-            state may have changed since the form was rendered.
+        resolutions: Maps each :class:`MergeFieldConflict` key (from :func:`plan_merge_conflicts`) to the pin id whose value should be kept.
 
     Returns:
         The survivor pin (refreshed by the merge).
 
     Raises:
-        ValueError: survivor and loser are the same pin, or either doesn't
-            belong to profile.
-        UnresolvedMergeConflictError: a real conflict has no resolution supplied.
-    """
+        ValueError: survivor and loser are the same pin, or either doesn't belong to profile.
+        UnresolvedMergeConflictError: a real conflict has no resolution supplied."""
     if survivor.pk == loser.pk:
         raise ValueError("Cannot merge a pin into itself")
     if survivor.profile_id != profile.pk or loser.profile_id != profile.pk:
@@ -544,7 +497,9 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
     if missing:
         raise UnresolvedMergeConflictError(missing)
 
-    with transaction.atomic():
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
+
+    with transaction.atomic(), deferring_child_boundary_refits():
         _reparent_children(survivor, loser)
         _merge_aliases(survivor, loser)
         _merge_owners(survivor, loser)
@@ -559,10 +514,10 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         survivor.labels.add(*loser.labels.all())
 
         _merge_albums(survivor, loser)
-        # Overlays and custom layers carry no uniqueness constraint on the pin,
-        # so they move straight across. All three of these relations CASCADE
-        # from Pin and postdate this module - without them the loser's albums,
-        # overlays and layers were destroyed by the delete() below.
+        # Overlays and custom layers carry no uniqueness constraint on the pin, so they move
+        # straight across.
+        # All three of these relations CASCADE from Pin and postdate this module - without them the
+        # loser's albums, overlays and layers were destroyed by the delete() below.
         MapImageOverlay.objects.filter(parent_pin=loser).update(parent_pin=survivor)
         CustomLayer.objects.filter(parent_pin=loser).update(parent_pin=survivor)
         # Same drift, two more CASCADE relations that postdate this module:
@@ -591,11 +546,10 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
 
         loser.delete()
 
-        # last_visited is a denormalized copy of the newest PinVisit, and the visits
-        # above moved across via update(), which fires no signal. Recomputing also
-        # saves the survivor, which is what refreshes its cached map payload - the
-        # merge has no other invalidation despite the survivor gaining visits,
-        # images and labels.
+        # last_visited is a denormalized copy of the newest PinVisit, and the visits above moved
+        # across via update(), which fires no signal.
+        # Recomputing also saves the survivor, which is what refreshes its cached map payload - the
+        # merge has no other invalidation despite the survivor gaining visits, images and labels.
         from urbanlens.dashboard.services.visits.visits import sync_last_visited
 
         sync_last_visited(survivor)

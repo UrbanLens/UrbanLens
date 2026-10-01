@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -21,6 +22,9 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "inaturalist-section"
     icon = "forest"
     title = "iNaturalist"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Wildlife"
+    tab_order: ClassVar[int] = 20
     # Shared by fetch() (the actual API search radius) and render_context()
     # (the footer link's radius param) so the "View nearby" link always
     # matches what was actually searched.
@@ -51,19 +55,15 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
             label = obs.get("common_name") or obs.get("scientific_name") or "Unknown species"
             value = obs.get("observed_on") or "Date unknown"
             if (obs.get("attributes") or {}).get("obscured"):
-                # A provider deliberately coarsened this sighting's location
-                # (common for threatened species, sometimes by tens of
-                # kilometres) - showing it as an ordinary precise sighting
-                # would misrepresent it.
+                # A provider deliberately coarsened this sighting's location (common for threatened
+                # species, sometimes by tens of kilometres) - showing it as an ordinary precise
+                # sighting would misrepresent it.
                 value += " (approximate location)"
             meta.append(
                 {
                     "label": label,
                     "value": value,
-                    # Links straight to this specific sighting, not iNaturalist's
-                    # homepage. The field is `url` on REData's NatureObservation;
-                    # reading iNaturalist's own `uri` spelling left every row
-                    # unlinked until 2026-08-19.
+                    # Links straight to this specific sighting, not iNaturalist's homepage.
                     "href": obs.get("url") or "",
                 },
             )
@@ -90,8 +90,19 @@ class INaturalistPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "inaturalist"
     verbose_name: ClassVar[str] = "iNaturalist"
-    description: ClassVar[str] = "Shows recent nearby wildlife/plant sightings on the pin detail page, sourced through REData's nature-observations registry (iNaturalist)."
+    description: ClassVar[str] = "Shows recent nearby wildlife/plant sightings on the Private Pin page, sourced through REData's nature-observations registry (iNaturalist)."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_nature_observations."""
+        return {
+            "redata_nature_observations": ServiceDefaults(
+                display_name="REData Nature Observations",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Nearby wildlife and plant sightings via GET /nature-observations/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_nature_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the iNaturalist pin-detail panel."""

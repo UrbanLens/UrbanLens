@@ -1,0 +1,16 @@
+<div class="card notifications-history-card">
+  {% if notifications %}
+  <ul class="notif-list notif-list--page" role="list">
+    {% for n in notifications %}
+    {% include "dashboard/partials/notifications/notification_item.html" with notif_surface="history" %}
+    {% endfor %}
+  </ul>
+  {% include "dashboard/partials/ui/_pagination_controls.html" %}
+  {% else %}
+  <div class="notif-empty notif-empty--page">
+    <i class="material-icons notif-empty__icon" aria-hidden="true">notifications_none</i>
+    <p class="notif-empty__text">No notifications yet</p>
+    <p class="notif-empty__hint">Activity like friend requests, visit suggestions, and shares will show up here</p>
+  </div>
+  {% endif %}
+</div>

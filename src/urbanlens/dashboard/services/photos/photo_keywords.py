@@ -1,18 +1,10 @@
 """Photo keyword generation pipeline.
-
-Runs entirely in the background (a Celery task enqueued after every upload's
-``process_image_upload``) so uploads are never slowed down. Providers are
-contributed by plugins via ``UrbanLensPlugin.get_photo_keyword_providers()``;
-each enabled provider stores its own keywords in ``ImageKeyword`` rows
-attributed to its slug, so multiple keywording strategies coexist and can be
-regenerated independently. Keywords feed the global search's photo provider.
-"""
+Runs entirely in the background (a Celery task enqueued after every upload's ``process_image_upload``) so uploads are never slowed down."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import io
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
@@ -21,9 +13,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Longest edge (px) of the downscaled copy sent to AI/classifier providers.
-AI_IMAGE_MAX_DIMENSION = 512
-#: Keywords stored per provider per image; extras are dropped by confidence.
+# The copy's dimensions and format belong to the writer that produces it -
+# services.media.images.ANALYSIS_THUMBNAIL_MAX_DIMENSION.
+# Nothing here needs the number: this module reads whatever the sandbox already wrote.
 MAX_KEYWORDS_PER_SOURCE = 30
 
 
@@ -43,25 +35,15 @@ class KeywordResult:
 class PhotoKeywordProvider(ABC):
     """One keywording strategy for uploaded photos.
 
-    Contributed by plugins via
-    :meth:`~urbanlens.dashboard.plugins.base.UrbanLensPlugin.get_photo_keyword_providers`.
-    Providers run in the background per uploaded image; each stores its own
-    ``ImageKeyword`` rows attributed to :attr:`slug`.
-
     Attributes:
         slug: Stable identifier stored on ``ImageKeyword.source``.
-        label: Human-readable name for logs and admin surfaces.
-    """
+        label: Human-readable name for logs and admin surfaces."""
 
     slug: ClassVar[str] = ""
     label: ClassVar[str] = ""
 
     def is_available_for(self, image: Image) -> bool:
         """Whether this provider should run for this image's uploader.
-
-        The pipeline already checks the uploader's ``generate_photo_keywords``
-        setting; override this for provider-specific gates (subscription
-        features, configured credentials, per-profile AI toggles).
 
         Args:
             image: The freshly uploaded image (``profile`` is populated).
@@ -84,56 +66,34 @@ class PhotoKeywordProvider(ABC):
         raise NotImplementedError
 
 
-def downscaled_jpeg_bytes(image: Image, max_dimension: int = AI_IMAGE_MAX_DIMENSION) -> bytes | None:
-    """Produce a small JPEG copy of an image for AI/classifier calls.
-
-    Never sends full-resolution uploads to external services: the copy is
-    capped at ``max_dimension`` on its longest edge and re-encoded as a
-    quality-80 JPEG.
+def analysis_jpeg_bytes(image: Image) -> bytes | None:
+    """Reads bytes; never parses them.
 
     Args:
-        image: The Image row whose stored file to downscale.
-        max_dimension: Longest-edge cap in pixels.
+        image: The Image row whose analysis copy to read.
 
     Returns:
-        JPEG bytes, or None when the stored file is missing or unreadable.
-    """
-    from PIL import Image as PILImage
-
-    if not image.image:
+        JPEG bytes, or None when the row has no analysis copy yet or the file cannot be read."""
+    if not image.analysis_thumbnail:
+        logger.info("Image %s has no analysis copy yet; skipping keyword generation until the backfill writes one", image.pk)
         return None
     try:
-        with image.image.open("rb") as stored_file:
-            img: PILImage.Image = PILImage.open(stored_file)
-            img.load()
-    except (OSError, ValueError, PILImage.DecompressionBombError) as exc:
-        # DecompressionBombError inherits from Exception, not OSError, so it is not
-        # covered by the other two - and PILImage.open() raises it on the header,
-        # before any decode. Without it a single oversized upload aborts keywording.
-        logger.warning("Could not read image %s for keyword downscale: %s", image.pk, exc)
+        with image.analysis_thumbnail.open("rb") as stored_file:
+            data: bytes = stored_file.read()
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not read the analysis copy for image %s: %s", image.pk, exc)
         return None
-
-    img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
-    if img.mode not in ("RGB", "L"):
-        img = img.convert("RGB")
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=80)
-    return buffer.getvalue()
+    return data or None
 
 
 def normalize_keywords(candidates: list[KeywordResult]) -> list[KeywordResult]:
     """Clean and deduplicate provider output before storage.
 
-    Lowercases, trims punctuation/whitespace, drops empties and over-long
-    strings (those are sentences, not tags), dedupes keeping the highest
-    confidence, and caps the list at ``MAX_KEYWORDS_PER_SOURCE``.
-
     Args:
         candidates: Raw provider output.
 
     Returns:
-        Normalized keywords, highest confidence first.
-    """
+        Normalized keywords, highest confidence first."""
     from urbanlens.dashboard.models.images.keyword import MAX_KEYWORD_LENGTH
 
     best: dict[str, KeywordResult] = {}
@@ -150,18 +110,13 @@ def normalize_keywords(candidates: list[KeywordResult]) -> list[KeywordResult]:
 
 def generate_keywords_for_image(image_id: int) -> dict[str, int]:
     """Run every enabled photo-keyword provider for one uploaded image.
-
-    Skips entirely when the uploader turned off ``generate_photo_keywords``.
-    Each provider is isolated: one failing provider is logged and skipped
-    without affecting the others. A provider's previous keywords for this
-    image are replaced by its fresh run.
+    Each provider is isolated: one failing provider is logged and skipped without affecting the others.
 
     Args:
         image_id: PK of the image to keyword.
 
     Returns:
-        Mapping of provider slug to number of keywords stored (for logs/tests).
-    """
+        Mapping of provider slug to number of keywords stored (for logs/tests)."""
     from django.db import transaction
 
     from urbanlens.dashboard.models.images.keyword import ImageKeyword
@@ -190,12 +145,10 @@ def generate_keywords_for_image(image_id: int) -> dict[str, int]:
 
         with transaction.atomic():
             ImageKeyword.objects.filter(image=image, source=provider.slug).delete()
-            # ignore_conflicts because the delete above does not isolate this from
-            # another worker replacing the same provider's keywords. The only caller
-            # is a Celery task, and Celery delivers at least once - a worker lost
-            # mid-task has its message redelivered, so two runs for one image is
-            # ordinary rather than a rare interleaving. Losing that race should leave
-            # the keywords in place, not fail the task.
+            # ignore_conflicts because the delete above does not isolate this from another worker
+            # replacing the same provider's keywords.
+            # The only caller is a Celery task, and Celery delivers at least once - a worker lost
+            # mid-task has its message redelivered, so two runs for one image is ordinary rather
             ImageKeyword.objects.bulk_create(
                 [ImageKeyword(image=image, source=provider.slug, keyword=result.keyword, confidence=result.confidence) for result in keywords],
                 ignore_conflicts=True,

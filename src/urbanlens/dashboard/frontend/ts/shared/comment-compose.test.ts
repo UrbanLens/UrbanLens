@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { installGlobalCommentCompose, toggleReplyForm } from "./comment-compose";
+import { installGlobalCommentCompose, settleCommentImage, toggleReplyForm, watchCommentImages } from "./comment-compose";
+import { processingPlaceholder } from "./photo-processing";
 
-// Installed once, as it is in production: the listeners are delegated from
-// document, so re-installing per test would stack them and multiply every call.
+// Installed at import, as core.js does in production, so the file also passes when run alone.
 installGlobalCommentCompose();
 
 beforeEach(() => {
@@ -119,7 +119,100 @@ describe("activity mention hover", () => {
 });
 
 describe("installGlobalCommentCompose", () => {
-    test("exposes the global the comment partials call from onclick", () => {
-        expect(typeof window.toggleReplyForm).toBe("function");
+    test("leaves no global for markup to call", () => {
+        expect("toggleReplyForm" in window).toBe(false);
+    });
+
+    // Last in the file: without the guard this binds a second set of listeners for good.
+    test("installing a second time does not stack a second set of listeners", () => {
+        installGlobalCommentCompose();
+        const highlight = mock((_id: string, _on: boolean) => {});
+        window.tripHighlightMarker = highlight;
+        document.body.innerHTML = '<a class="mention--activity" data-activity-id="7">#7</a>';
+
+        document.querySelector<HTMLElement>(".mention--activity")!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+
+        expect(highlight).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("comment images still being processed", () => {
+    const READY = { id: 3, url: "/media/comment_images/e.webp", thumb_url: "/media/comment_images/e.webp", processing: false, processing_failed: false };
+
+    function pendingCommentImage(): HTMLAnchorElement {
+        const link = document.createElement("a");
+        link.className = "comment-image-link";
+        link.dataset.id = "3";
+        link.dataset.processing = "pending";
+        link.dataset.processingUrl = "/comments/images/processing/";
+        link.append(processingPlaceholder("comment-image comment-image--processing"));
+        document.body.append(link);
+        return link;
+    }
+
+    test("a settled image replaces the placeholder and becomes the link's target", () => {
+        const link = pendingCommentImage();
+
+        settleCommentImage(link, READY);
+
+        expect(link.querySelector("img")?.getAttribute("src")).toBe(READY.url);
+        expect(link.querySelector("img")?.className).toBe("comment-image");
+        expect(link.getAttribute("href")).toBe(READY.url);
+    });
+
+    test("an image that is gone leaves the comment", () => {
+        const link = pendingCommentImage();
+
+        settleCommentImage(link, null);
+
+        expect(link.isConnected).toBe(false);
+    });
+
+    test("only comment images and picker photos are watched", () => {
+        window.urbanlensProcessingPollers?.forEach((poller) => poller.stop());
+        window.urbanlensProcessingPollers?.clear();
+        pendingCommentImage();
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            `<ul class="cip-picker-grid" data-processing-url="/vault/photos/processing/">
+                <li><button class="cip-picker-item" data-id="9" data-processing="pending" disabled></button></li>
+             </ul>
+             <ul data-processing-url="/other/"><li data-id="4" data-processing="pending"></li></ul>`,
+        );
+
+        watchCommentImages(document);
+
+        expect(window.urbanlensProcessingPollers?.get("/comments/images/processing/")?.size).toBe(1);
+        expect(window.urbanlensProcessingPollers?.get("/vault/photos/processing/")?.size).toBe(1);
+        expect(window.urbanlensProcessingPollers?.get("/other/")).toBeUndefined();
+        window.urbanlensProcessingPollers?.forEach((poller) => poller.stop());
+        window.urbanlensProcessingPollers?.clear();
+    });
+});
+
+describe("markup actions", () => {
+    test("a Reply button opens the form it names", () => {
+        document.body.innerHTML = `<button data-reply-form="reply-form-7"><i>reply</i></button><div id="reply-form-7" hidden><textarea></textarea></div>`;
+        document.querySelector("[data-reply-form] i")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(document.getElementById("reply-form-7")?.hidden).toBe(false);
+    });
+
+    test("the map buttons open and clear the composer for their form, starting where the button says", () => {
+        const opened: unknown[] = [];
+        const cleared: unknown[] = [];
+        window._openCommentMapComposer = (form) => void opened.push(form);
+        window._clearCommentMap = (form) => void cleared.push(form);
+        document.body.innerHTML = `
+          <form id="f">
+            <button type="button" data-comment-map="open" data-default-lat="41.5" data-default-lng="-74.25"><i>map</i></button>
+            <button type="button" data-comment-map="clear">x</button>
+          </form>
+          <div class="comment-compose" id="c"><button type="button" data-comment-map="open">map</button></div>`;
+        document.querySelector('#f [data-comment-map="open"] i')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect([window._commentMapDefaultLat, window._commentMapDefaultLng]).toEqual([41.5, -74.25]);
+        document.querySelector<HTMLElement>('#f [data-comment-map="clear"]')?.click();
+        document.querySelector<HTMLElement>('#c [data-comment-map="open"]')?.click();
+        expect(opened).toEqual([document.getElementById("f"), document.getElementById("c")]);
+        expect(cleared).toEqual([document.getElementById("f")]);
     });
 });

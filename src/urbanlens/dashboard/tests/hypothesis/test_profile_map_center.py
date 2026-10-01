@@ -1,27 +1,14 @@
-﻿"""Property-based and unit tests for Profile.get_map_center and compute_map_center.
+"""Property-based and unit tests for Profile.get_map_center and compute_map_center."""
 
-Invariants verified:
-  - GPS mode always returns None regardless of stored coordinates.
-  - CUSTOM mode returns stored coordinates as floats, or None when either is unset.
-  - AUTO mode returns the cached centroid without touching the DB; falls back to
-    compute_map_center() when the cache is empty.
-  - compute_map_center() finds the densest cluster of pins and returns its centroid,
-    rather than a naive average across all pins (which would land in the ocean for
-    users with pins on multiple continents).
-  - When all pins are nearby, the cluster centroid equals their geographic midpoint.
-  - When pins are spread across continents, the largest regional cluster wins.
-  - The result is written to the DB cache and returned as (float, float).
-  - Pins with no usable coordinates produce None from compute_map_center().
-"""
 from __future__ import annotations
 
 import decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -38,10 +25,9 @@ _db_settings = settings(
 def _pin_at(profile: Profile, lat: float, lng: float, **kwargs) -> Pin:
     """Create a Pin whose linked Location sits at the given coordinates.
 
-    A Pin no longer stores its own coordinates; they live on the shared Location
-    it references (see AddressableModel), so tests that care about a pin's map
-    position must create a Location at those coordinates.
-    """
+    A Pin no longer stores its own coordinates; they live on the shared Location it references (see
+    AddressableModel), so tests that care about a pin's map position must create a Location at those
+    coordinates."""
     location = baker.make(Location, latitude=lat, longitude=lng)
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
@@ -54,6 +40,7 @@ def _profile_with_mode(mode: str, **extra) -> Profile:
 
 
 # -- GPS mode ------------------------------------------------------------------
+
 
 class GetMapCenterGpsModeTests(TestCase):
     """GPS mode must always return None - the browser handles geolocation."""
@@ -92,6 +79,7 @@ class GetMapCenterGpsModeTests(TestCase):
 
 
 # -- CUSTOM mode ---------------------------------------------------------------
+
 
 class GetMapCenterCustomModeTests(TestCase):
     """CUSTOM mode returns the stored coordinates, or None when either is missing."""
@@ -141,9 +129,7 @@ class GetMapCenterCustomModeTests(TestCase):
 
     @given(lat=latitude, lng=longitude)
     @_db_settings
-    def test_custom_mode_returns_stored_values_exactly(
-        self, lat: decimal.Decimal, lng: decimal.Decimal
-    ) -> None:
+    def test_custom_mode_returns_stored_values_exactly(self, lat: decimal.Decimal, lng: decimal.Decimal) -> None:
         profile = _profile_with_mode(
             MapCenterMode.CUSTOM,
             map_custom_latitude=lat,
@@ -157,15 +143,7 @@ class GetMapCenterCustomModeTests(TestCase):
 
 
 class GetMapCenterRememberModeTests(TestCase):
-    """REMEMBER mode returns the stored remembered_map_lat/lng, or None when unset.
-
-    Server-side confirmation for UL-255 ("remember last map position doesn't
-    work") - the read side (this), the write side (SaveMapPositionView, see
-    test_save_map_position_view.py), MapCenterForm.save(), and the map page's
-    JS are all independently correct; see docs/PROBLEMS.md for the more
-    likely actual cause (a separate, unrelated shareable-map-view-URL feature
-    taking precedence over the server-rendered value on page load).
-    """
+    """REMEMBER mode returns the stored remembered_map_lat/lng, or None when unset."""
 
     def test_remember_mode_returns_tuple_when_both_coords_are_set(self) -> None:
         profile = _profile_with_mode(
@@ -218,6 +196,7 @@ class GetMapCenterRememberModeTests(TestCase):
 
 # -- AUTO mode - cached centroid -----------------------------------------------
 
+
 class GetMapCenterAutoCachedTests(TestCase):
     """AUTO mode returns the cached centroid without hitting the DB for pins."""
 
@@ -257,6 +236,7 @@ class GetMapCenterAutoCachedTests(TestCase):
 
 # -- AUTO mode - cold cache ----------------------------------------------------
 
+
 class GetMapCenterAutoColdTests(TestCase):
     """AUTO mode falls back to compute_map_center() when the cache is empty."""
 
@@ -282,6 +262,7 @@ class GetMapCenterAutoColdTests(TestCase):
 
 
 # -- compute_map_center --------------------------------------------------------
+
 
 class ComputeMapCenterTests(TestCase):
     """compute_map_center() averages pin coordinates and persists the result."""
@@ -348,7 +329,11 @@ class ComputeMapCenterTests(TestCase):
     )
     @_db_settings
     def test_two_nearby_pins_result_is_their_midpoint_hypothesis(
-        self, lat1: float, dlat: float, lng1: float, dlng: float,
+        self,
+        lat1: float,
+        dlat: float,
+        lng1: float,
+        dlng: float,
     ) -> None:
         """For two pins that are close together, the cluster centroid equals their midpoint."""
         lat2, lng2 = lat1 + dlat, lng1 + dlng
@@ -362,6 +347,7 @@ class ComputeMapCenterTests(TestCase):
 
 
 # -- Clustering behaviour ------------------------------------------------------
+
 
 class ComputeMapCenterClusteringTests(TestCase):
     """The largest geographic cluster wins over intercontinental spreads."""
@@ -382,15 +368,15 @@ class ComputeMapCenterClusteringTests(TestCase):
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         # Result must be near NYC, not in the middle of the Atlantic.
-        self.assertGreater(result[0], 35.0)   # latitude well above equator
-        self.assertLess(result[0], 50.0)      # but not near London
-        self.assertLess(result[1], -40.0)     # longitude clearly in the Americas
+        self.assertGreater(result[0], 35.0)  # latitude well above equator
+        self.assertLess(result[0], 50.0)  # but not near London
+        self.assertLess(result[1], -40.0)  # longitude clearly in the Americas
 
     def test_equal_sized_clusters_returns_a_cluster_centroid_not_midpoint(self) -> None:
         # One pin in NYC and one in London.  The result must be one of the two
         # locations - NOT the midpoint in the mid-Atlantic (~46°N 37°W).
-        _pin_at(self.profile, 40.7, -74.0)   # NYC
-        _pin_at(self.profile, 51.5, -0.1)    # London
+        _pin_at(self.profile, 40.7, -74.0)  # NYC
+        _pin_at(self.profile, 51.5, -0.1)  # London
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         near_nyc = abs(result[0] - 40.7) < 1.0 and abs(result[1] - -74.0) < 1.0
@@ -410,10 +396,10 @@ class ComputeMapCenterClusteringTests(TestCase):
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         # Result must be in the European latitude/longitude band.
-        self.assertGreater(result[0], 30.0)   # north of Africa
-        self.assertLess(result[0], 60.0)      # south of Scandinavia
+        self.assertGreater(result[0], 30.0)  # north of Africa
+        self.assertLess(result[0], 60.0)  # south of Scandinavia
         self.assertGreater(result[1], -10.0)  # east of Atlantic
-        self.assertLess(result[1], 25.0)      # west of Turkey
+        self.assertLess(result[1], 25.0)  # west of Turkey
 
     @given(n=st.integers(min_value=1, max_value=8))
     @_db_settings
@@ -421,7 +407,7 @@ class ComputeMapCenterClusteringTests(TestCase):
         """The cluster centroid must never fall outside the geographic extent of all pins."""
         lats = [40.0 + i * 0.1 for i in range(n)]
         lngs = [-74.0 - i * 0.1 for i in range(n)]
-        for lat, lng in zip(lats, lngs):
+        for lat, lng in zip(lats, lngs, strict=True):
             _pin_at(self.profile, lat, lng)
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
@@ -432,6 +418,7 @@ class ComputeMapCenterClusteringTests(TestCase):
 
 
 # -- map_default_zoom default --------------------------------------------------
+
 
 class MapDefaultZoomTests(TestCase):
     """map_default_zoom defaults to 13 for new profiles."""

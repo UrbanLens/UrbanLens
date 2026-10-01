@@ -1,10 +1,4 @@
-"""Tests for the multiplayer-stall fixes (SpotGuessr audit finding #1).
-
-Covers ``force_reveal_round`` (the stall-sweep primitive - can end a session
-as ABANDONED), ``expire_round_timer`` (the round-timer primitive - never
-abandons), ``end_session_now`` (the host's manual escape hatch),
-``GameSessionQuerySet.stalled()``, and the Celery sweep task itself.
-"""
+"""Tests for the multiplayer-stall fixes (SpotGuessr audit finding #1)."""
 
 from __future__ import annotations
 
@@ -22,11 +16,19 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GameRound, GameSession, GameSessionStatus, Guess, PlayerModeRating, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import (
+    GameRound,
+    GameSession,
+    GameSessionStatus,
+    Guess,
+    PlayerModeRating,
+    SpotGuessrMode,
+)
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
-    SpotGuessrError,
+    NotSessionHostForEndError,
+    SessionAlreadyEndedError,
     begin_session,
     end_session_now,
     expire_round_timer,
@@ -60,7 +62,14 @@ def _pinned_photo_location(*profiles: Profile) -> Location:
     location = _make_location()
     for profile in profiles:
         baker.make(Pin, profile=profile, location=location)
-    baker.make(Image, location=location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=location))
+    baker.make(
+        Image,
+        location=location,
+        media_type=MediaKind.PHOTO,
+        latitude=None,
+        longitude=None,
+        wiki=baker.make(Wiki, location=location),
+    )
     return location
 
 
@@ -170,7 +179,7 @@ class ExpireRoundTimerTests(TestCase):
 class EndSessionNowTests(TestCase):
     def test_non_host_cannot_end_the_game(self) -> None:
         host, guest, location, session, round_ = _setup_two_player_game()
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(NotSessionHostForEndError):
             end_session_now(session, guest)
 
     def test_host_can_end_a_lobby_before_it_even_starts(self) -> None:
@@ -202,7 +211,7 @@ class EndSessionNowTests(TestCase):
     def test_cannot_end_an_already_completed_session(self) -> None:
         host, guest, location, session, round_ = _setup_two_player_game()
         end_session_now(session, host)
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(SessionAlreadyEndedError):
             end_session_now(session, host)
 
 

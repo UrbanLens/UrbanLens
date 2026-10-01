@@ -1,15 +1,4 @@
-"""Tests for the own-profile "private activity" filters.
-
-Covers two bugs found in the private activity panel's strips (now rendered
-on the Home overview page):
-
-- "High-priority places to visit" only excluded pins by ``last_visited``,
-  missing pins that have a dated ``PinVisit`` but whose ``last_visited``
-  never got synced (e.g. bulk-import paths that create ``PinVisit`` rows
-  without calling ``sync_last_visited``).
-- "Recent trips" showed any trip ordered by ``Trip.updated`` instead of only
-  past trips with a comment posted in the last 7 days.
-"""
+"""Tests for the own-profile "private activity" filters."""
 
 from __future__ import annotations
 
@@ -39,8 +28,12 @@ def _aware(year: int, month: int, day: int) -> datetime.datetime:
 
 def _make_pin(profile, *, last_visited=None, priority=5, name="Priority Spot") -> Pin:
     offset = next(_COORDS)
-    location = baker.make("dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}")
-    return baker.make("dashboard.Pin", profile=profile, location=location, last_visited=last_visited, priority=priority, name=name)
+    location = baker.make(
+        "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
+    )
+    return baker.make(
+        "dashboard.Pin", profile=profile, location=location, last_visited=last_visited, priority=priority, name=name
+    )
 
 
 class PriorityUnvisitedPinsTests(TestCase):
@@ -129,8 +122,12 @@ class RecentTripsQuerySetTests(TestCase):
 
     def test_results_ordered_by_most_recent_comment_first(self) -> None:
         today = timezone.localdate()
-        older_trip = self._trip(start_date=today - datetime.timedelta(days=10), end_date=today - datetime.timedelta(days=8))
-        newer_trip = self._trip(start_date=today - datetime.timedelta(days=20), end_date=today - datetime.timedelta(days=18))
+        older_trip = self._trip(
+            start_date=today - datetime.timedelta(days=10), end_date=today - datetime.timedelta(days=8)
+        )
+        newer_trip = self._trip(
+            start_date=today - datetime.timedelta(days=20), end_date=today - datetime.timedelta(days=18)
+        )
         self._comment(older_trip, timezone.now() - datetime.timedelta(days=5))
         self._comment(newer_trip, timezone.now() - datetime.timedelta(days=1))
         self.assertEqual(self._recent(), [newer_trip, older_trip])

@@ -29,7 +29,9 @@ def _make_pin(profile, **kwargs) -> Pin:
     location = kwargs.pop("location", None)
     if location is None:
         _coord_counter += 1
-        location = baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001)
+        location = baker.make(
+            Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001
+        )
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
@@ -189,7 +191,8 @@ class DetailPinCountFilterTests(TestCase):
     def test_count_is_not_inflated_by_an_unrelated_join(self) -> None:
         """Combining a detail-pin-count filter with a label filter must not
         multiply the Count() via the label m2m join (Count(distinct=True) guards this)."""
-        from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
 
         tag = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Interesting")
         parent = _make_pin(self.profile)
@@ -231,7 +234,9 @@ class MarkViewedTests(TestCase):
     def test_view_updates_last_viewed_smart_list(self) -> None:
         """Viewing a pin resyncs smart lists filtering on last_viewed_after (uses
         save(), so the existing generic post_save resync signal fires for free)."""
-        pin_list = baker.make(PinList, profile=self.profile, is_smart=True, smart_filter={"last_viewed_after": date.today().isoformat()})
+        pin_list = baker.make(
+            PinList, profile=self.profile, is_smart=True, smart_filter={"last_viewed_after": date.today().isoformat()}
+        )
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.mark_viewed()
         self.assertTrue(PinListItem.objects.filter(pin_list=pin_list, pin=self.pin).exists())

@@ -1,17 +1,4 @@
-"""Tests for the wiki page's "up to the parent wiki" link.
-
-Wikis nest themselves - a building's wiki becomes a child of the campus's -
-so a nested page needs a way up. The link is gated on
-``wiki_access.visible_parent_wiki`` rather than rendered from
-``wiki.parent_wiki`` directly, because a breadcrumb to a page the viewer would
-get a 404 from is itself a disclosure: it confirms a place exists that they
-have not earned.
-
-Within one access domain (a building ``PART_OF`` its parcel) the parent is
-always reachable, so the interesting case is the ``MEMBER_OF`` edge: a campus
-made of several parcels is earned only by holding *every* member, so someone
-who pinned one parcel must not be shown the campus above it.
-"""
+"""Tests for the wiki page's "up to the parent wiki" link."""
 
 from __future__ import annotations
 
@@ -49,7 +36,9 @@ class VisibleParentWikiTests(TestCase):
     def test_a_parent_inside_the_same_domain_is_offered(self) -> None:
         """A building sits PART_OF its parcel, so holding either holds both."""
         parcel = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.01))
-        building = make_place(PlaceKind.BUILDING, square(-74.0, 40.0, 0.001), parent=parcel, relation=PlaceRelation.PART_OF)
+        building = make_place(
+            PlaceKind.BUILDING, square(-74.0, 40.0, 0.001), parent=parcel, relation=PlaceRelation.PART_OF
+        )
 
         # Distinct coordinates: Location is unique on (latitude, longitude).
         # The building's point still sits inside both squares.
@@ -66,7 +55,9 @@ class VisibleParentWikiTests(TestCase):
         """Holding one parcel of a multi-parcel campus does not earn the campus,
         so its wiki must not be named on the parcel's page."""
         campus = make_place(PlaceKind.PARCEL, None)
-        parcel_a = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.01), parent=campus, relation=PlaceRelation.MEMBER_OF)
+        parcel_a = make_place(
+            PlaceKind.PARCEL, square(-74.0, 40.0, 0.01), parent=campus, relation=PlaceRelation.MEMBER_OF
+        )
         make_place(PlaceKind.PARCEL, square(-73.0, 40.0, 0.01), parent=campus, relation=PlaceRelation.MEMBER_OF)
 
         campus_location = _location_on(campus, lat=40.5, lng=-73.5)
@@ -97,12 +88,18 @@ class WikiPageParentLinkTests(TestCase):
     def _render_child_page(self, *, same_domain: bool):
         if same_domain:
             parent_place = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.01))
-            child_place = make_place(PlaceKind.BUILDING, square(-74.0, 40.0, 0.001), parent=parent_place, relation=PlaceRelation.PART_OF)
+            child_place = make_place(
+                PlaceKind.BUILDING, square(-74.0, 40.0, 0.001), parent=parent_place, relation=PlaceRelation.PART_OF
+            )
             parent_location = _location_on(parent_place, lat=40.005, lng=-74.005)
         else:
             parent_place = make_place(PlaceKind.PARCEL, None)
-            child_place = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.01), parent=parent_place, relation=PlaceRelation.MEMBER_OF)
-            make_place(PlaceKind.PARCEL, square(-73.0, 40.0, 0.01), parent=parent_place, relation=PlaceRelation.MEMBER_OF)
+            child_place = make_place(
+                PlaceKind.PARCEL, square(-74.0, 40.0, 0.01), parent=parent_place, relation=PlaceRelation.MEMBER_OF
+            )
+            make_place(
+                PlaceKind.PARCEL, square(-73.0, 40.0, 0.01), parent=parent_place, relation=PlaceRelation.MEMBER_OF
+            )
             parent_location = _location_on(parent_place, lat=40.5, lng=-73.5)
 
         child_location = _location_on(child_place, lat=40.0, lng=-74.0)

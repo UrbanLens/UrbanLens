@@ -1,0 +1,38 @@
+{% comment %}The first page of the full photo gallery grid, server-rendered for a fast first paint.{% endcomment %}
+{% for img in items %}
+{% if img.pending_scan %}
+{% comment %}Mirrors renderVaultPhotoTile's processing branch (shared/vault-photo-grid.ts).{% endcomment %}
+<li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="" data-thumb-url=""
+    data-processing="{% if img.processing_failed %}failed{% else %}pending{% endif %}"
+    data-caption="{{ img.display_caption|default:'' }}">
+    <button type="button" class="photo-tile-btn" disabled
+            aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}
+    </button>
+    <button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete({{ img.pk }})">
+        <i class="material-symbols-outlined">delete</i>
+    </button>
+</li>
+{% else %}
+<li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.display_url }}"
+    data-thumb-url="{{ img.thumb_url }}"
+    data-caption="{{ img.display_caption|default:'' }}"
+    data-author="{{ img.author|default:'' }}"
+    data-copyright="{{ img.copyright|default:'' }}"
+    data-source-url="{{ img.source_url|default:'' }}"
+    data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
+    {% comment %}See _widget_recent_photos.html: the image's alt disappears when the thumbnail falls back to an icon, so the name lives on the button.{% endcomment %}
+    <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="photosOpenLightbox({{ img.pk }})">
+        <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
+             data-fade-in
+             data-thumb-fallback="broken_image" data-thumb-fallback-class="photo-tile-fallback">
+        {% if img.latitude and img.longitude %}
+        <span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>
+        {% endif %}
+    </button>
+    <button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete({{ img.pk }})">
+        <i class="material-symbols-outlined">delete</i>
+    </button>
+</li>
+{% endif %}
+{% endfor %}

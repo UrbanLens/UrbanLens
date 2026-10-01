@@ -1,24 +1,8 @@
-"""Google Takeout Semantic Location History importer.
-
-Processes the monthly JSON timeline files that Google Takeout places under
-``Semantic Location History/YYYY/YYYY_MONTH.json``.  Each ``placeVisit``
-entry whose coordinates fall within VISIT_MATCH_RADIUS_M metres of an
-existing pin owned by the target profile has a PinVisit record created for
-it.  Raw ``Records.json`` GPS-point logs are detected but skipped - they
-require clustering that is outside the scope of this import.
-
-Typical usage (called from maps.GoogleMapsGateway.import_pins_streaming):
-
-    from urbanlens.dashboard.services.apis.locations.google.location_history import (
-        detect_location_history_format,
-        import_location_history_streaming,
-    )
-"""
+"""Google Takeout Semantic Location History importer."""
 
 from __future__ import annotations
 
 from datetime import datetime
-import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -55,21 +39,14 @@ def detect_location_history_format(data: dict) -> str | None:
     return None
 
 
-def _parse_semantic(json_data: dict) -> Generator[dict[str, Any], None, None]:
+def parse_semantic_visits(json_data: dict) -> Generator[dict[str, Any], None, None]:
     """Yield one visit dict per qualifying ``placeVisit`` in a timeline JSON.
 
-    Entries below MIN_CONFIDENCE or missing required fields are silently
-    skipped.
-
     Args:
-        json_data: Parsed Semantic Location History dict containing
-            ``timelineObjects``.
+        json_data: Parsed Semantic Location History dict containing ``timelineObjects``.
 
     Yields:
-        Dict with keys: ``latitude``, ``longitude``, ``visited_at``
-        (tz-aware datetime), ``place_name`` (str), ``place_id`` (str|None),
-        ``confidence`` (int).
-    """
+        Dict with keys: ``latitude``, ``longitude``, ``visited_at`` (tz-aware datetime), ``place_name`` (str), ``place_id`` (str|None), ``confidence`` (int)."""
     for obj in json_data.get("timelineObjects", []):
         pv = obj.get("placeVisit")
         if not pv:
@@ -100,160 +77,78 @@ def _parse_semantic(json_data: dict) -> Generator[dict[str, Any], None, None]:
         }
 
 
-def import_location_history_streaming(
-    files: list[tuple[str, bytes]],
+def iter_location_history_events(
+    visits: list[dict[str, Any]],
     profile: Profile,
     radius_m: int = VISIT_MATCH_RADIUS_M,
-) -> Iterator[str]:
-    r"""Stream SSE events while importing Google Takeout Semantic Location History.
-
-    Iterates over every ``placeVisit`` in each uploaded timeline file and
-    attempts to match it to an existing pin.  On a match a PinVisit row is
-    created (idempotent - duplicates are skipped).  ``pin.last_visited`` is
-    updated whenever a newer visit is matched.
-
-    SSE event shapes emitted:
-
-    - ``{type: "start",    total, subtype: "location_history"}``
-    - ``{type: "progress", current, total, percent, matched, skipped,
-          subtype: "location_history"}``
-    - ``{type: "complete", total, matched, skipped,
-          subtype: "location_history"}``
-    - ``{type: "error",    message, subtype: "location_history"}``
+) -> Iterator[dict[str, Any]]:
+    """Log each place visit as a history visit to the profile's nearest pin, one event per whole percent.
 
     Args:
-        files: List of ``(filename, raw_bytes)`` pairs already extracted
-               from any archive by the caller.
-        profile: The user profile whose pins are used for proximity matching.
-        radius_m: Match radius in metres (default 100 m).
+        visits: Dicts shaped like :func:`parse_semantic_visits`'s, with ``latitude``, ``longitude`` and a
+            tz-aware ``visited_at``.
+        profile: The profile whose pins are matched.
+        radius_m: Match radius in metres.
 
     Yields:
-        SSE-formatted strings (``data: {...}\\n\\n``).
+        ``{type, subtype: "location_history", ...}``: ``start`` with ``total``; ``progress`` with
+        ``current``, ``total``, ``percent``, ``matched`` and ``skipped``; then ``complete`` with the
+        final counts, or a lone ``error`` with a ``message``.
     """
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
     from urbanlens.dashboard.services.visits.visits import find_nearest_pin, visit_logging_allowed
 
-    def sse(data: dict) -> str:
-        return f"data: {json.dumps(data)}\n\n"
-
+    subtype = "location_history"
     if not visit_logging_allowed(profile):
-        yield sse(
-            {
-                "type": "error",
-                "message": "Visit logging is turned off - enable it in Settings to import your location history.",
-                "subtype": "location_history",
-            },
-        )
+        yield {"type": "error", "message": "Visit logging is turned off - enable it in Settings to import your location history.", "subtype": subtype}
         return
 
-    all_visits: list[dict[str, Any]] = []
-    for filename, raw_bytes in files:
-        try:
-            data = json.loads(raw_bytes.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
-            logger.debug("Skipping non-JSON file in location history import: %s", filename)
-            continue
-        fmt = detect_location_history_format(data)
-        if fmt == "semantic":
-            batch = list(_parse_semantic(data))
-            logger.info("Parsed %d place visits from %s", len(batch), filename)
-            all_visits.extend(batch)
-        elif fmt == "raw":
-            logger.info(
-                "Skipping raw GPS log (Records.json) - point clustering not supported: %s",
-                filename,
-            )
-        else:
-            logger.debug("File is not a location history format: %s", filename)
-
-    if not all_visits:
-        yield sse(
-            {
-                "type": "error",
-                "message": "No location history entries found in uploaded files.",
-                "subtype": "location_history",
-            },
-        )
+    total = len(visits)
+    if not total:
         return
-
-    total = len(all_visits)
-    yield sse({"type": "start", "total": total, "subtype": "location_history"})
+    yield {"type": "start", "total": total, "subtype": subtype}
 
     matched = 0
     skipped = 0
 
-    # A Takeout export is mostly the same handful of everyday coordinates repeated
-    # thousands of times, and each distinct one costs a PostGIS nearest-neighbour
-    # query. Keyed on the exact pair the file carries, so this dedupes repeats
-    # without changing which pin any given coordinate resolves to.
+    # A Takeout export is mostly the same handful of everyday coordinates repeated thousands of
+    # times, and each distinct one costs a PostGIS nearest-neighbour query.
     nearest_pin_memo: dict[tuple[float, float], Pin | None] = {}
 
-    # One query instead of one per matched visit. Seeded from what is already
-    # stored, then kept current as rows are created, so a duplicate appearing
-    # twice within the same file is still skipped the second time.
+    # Seeded from what is already stored, then kept current, so a duplicate within one file is skipped too.
     seen_visits: set[tuple[int, datetime]] = set(
         PinVisit.objects.filter(pin__profile=profile, source=VisitSource.HISTORY).values_list("pin_id", "visited_at"),
     )
 
     last_percent = -1
 
-    for i, visit in enumerate(all_visits, 1):
+    for i, visit in enumerate(visits, 1):
         coordinates = (visit["latitude"], visit["longitude"])
         if coordinates in nearest_pin_memo:
             pin = nearest_pin_memo[coordinates]
         else:
             pin = find_nearest_pin(visit["latitude"], visit["longitude"], profile, radius_m)
             nearest_pin_memo[coordinates] = pin
-        if pin is not None:
-            already_exists = (pin.pk, visit["visited_at"]) in seen_visits
-            if not already_exists:
-                try:
-                    PinVisit.objects.create(
-                        pin=pin,
-                        visited_at=visit["visited_at"],
-                        source=VisitSource.HISTORY,
-                    )
-                    seen_visits.add((pin.pk, visit["visited_at"]))
-                    if not pin.last_visited or visit["visited_at"] > pin.last_visited:
-                        pin.last_visited = visit["visited_at"]
-                        pin.save(update_fields=["last_visited"])
-                    matched += 1
-                except DatabaseError as exc:
-                    logger.warning("Failed to save visit for pin %s: %s", pin.id, exc)
-                    skipped += 1
-            else:
+        if pin is not None and (pin.pk, visit["visited_at"]) not in seen_visits:
+            try:
+                PinVisit.objects.create(pin=pin, visited_at=visit["visited_at"], source=VisitSource.HISTORY)
+                seen_visits.add((pin.pk, visit["visited_at"]))
+                if not pin.last_visited or visit["visited_at"] > pin.last_visited:
+                    pin.last_visited = visit["visited_at"]
+                    pin.save(update_fields=["last_visited"])
+                matched += 1
+            except DatabaseError as exc:
+                logger.warning("Failed to save visit for pin %s: %s", pin.id, exc)
                 skipped += 1
         else:
             skipped += 1
 
-        # One frame per whole percent (plus the first and last), not one per entry:
-        # a large Takeout export otherwise pushes tens of thousands of SSE frames
-        # for a bar that can only render 100 states, and the stream itself becomes
-        # a bottleneck on both ends.
         percent = min(100, int(i / total * 100))
         if percent != last_percent or i in (1, total):
             last_percent = percent
-            yield sse(
-                {
-                    "type": "progress",
-                    "current": i,
-                    "total": total,
-                    "percent": percent,
-                    "matched": matched,
-                    "skipped": skipped,
-                    "subtype": "location_history",
-                },
-            )
+            yield {"type": "progress", "current": i, "total": total, "percent": percent, "matched": matched, "skipped": skipped, "subtype": subtype}
 
-    yield sse(
-        {
-            "type": "complete",
-            "total": total,
-            "matched": matched,
-            "skipped": skipped,
-            "subtype": "location_history",
-        },
-    )
+    yield {"type": "complete", "total": total, "matched": matched, "skipped": skipped, "subtype": subtype}
 
 
 def _parse_iso_timestamp(value: str | None) -> datetime | None:
@@ -269,11 +164,7 @@ def _parse_iso_timestamp(value: str | None) -> datetime | None:
 
 def _activity_segment_points(segment: dict) -> Generator[Any, None, None]:
     """Yield RawTrackPoint entries for an activitySegment, preferring the timestamped path.
-
-    ``simplifiedRawPath.points`` carries a per-point timestamp when Google
-    recorded one; ``waypointPath.waypoints`` is a coarser fallback with only
-    coordinates, so points from it carry no timestamp.
-    """
+    ``simplifiedRawPath.points`` carries a per-point timestamp when Google recorded one; ``waypointPath.waypoints`` is a coarser fallback with only coordinates, so points from it carry no timestamp."""
     from urbanlens.dashboard.services.import_formats.gpx_tracks import RawTrackPoint
 
     simplified_points = (segment.get("simplifiedRawPath") or {}).get("points") or []
@@ -301,10 +192,7 @@ def _parse_activity_segments(json_data: dict) -> Generator[dict[str, Any], None,
         json_data: Parsed Semantic Location History dict containing ``timelineObjects``.
 
     Yields:
-        Dict with keys: ``points`` (list[RawTrackPoint]), ``started_at``,
-        ``ended_at`` (tz-aware datetime | None), ``distance_meters`` (float | None,
-        Google's own estimate - preferred over recomputing from sparse waypoints).
-    """
+        Dict with keys: ``points`` (list[RawTrackPoint]), ``started_at``, ``ended_at`` (tz-aware datetime | None), ``distance_meters`` (float | None, Google's own estimate - preferred over recomputing from sparse waypoints)."""
     for obj in json_data.get("timelineObjects", []):
         segment = obj.get("activitySegment")
         if not segment:
@@ -324,17 +212,13 @@ def _parse_activity_segments(json_data: dict) -> Generator[dict[str, Any], None,
 def semantic_history_to_routes(json_data: dict, profile: Profile, source_filename: str) -> list[ParsedRoute]:
     """Build unsaved Route candidates from a Semantic Location History file's activitySegments.
 
-    Existing placeVisit -> PinVisit(source=HISTORY) handling is untouched; this
-    is an additive read of the same files for their activitySegment entries.
-
     Args:
         json_data: Parsed Semantic Location History dict.
         profile: Owning profile for the created Route rows.
         source_filename: Original uploaded filename, stored as Route.source_filename.
 
     Returns:
-        List of ParsedRoute - one per qualifying activitySegment.
-    """
+        List of ParsedRoute - one per qualifying activitySegment."""
     from urbanlens.dashboard.models.routes.model import Route, RouteSource
     from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute
     from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure

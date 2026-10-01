@@ -1,11 +1,4 @@
-"""Session orchestration: solo/competitive lifecycle, round generation, answer/vote resolution.
-
-The one place ``controllers.consensus``/``consumers.ConsensusSessionConsumer``
-call into - mirrors ``services.spotguessr.session`` closely, but with three
-extra branches unique to Consensus: trust-check rounds (never touch the
-wiki), ``WIKI_ALIAS`` rounds (additive, never routed through agree/vote), and
-the vote-then-tentative disagreement path (see ``_finish_round``).
-"""
+"""Session orchestration: solo/competitive lifecycle, round generation, answer/vote resolution."""
 
 from __future__ import annotations
 
@@ -39,25 +32,59 @@ DEFAULT_ROUNDS_PER_SESSION = 5
 MIN_ROUNDS_PER_SESSION = 3
 MAX_ROUNDS_PER_SESSION = 20
 
-#: How long a session's current round (answer-collection or vote) can sit
-#: unresolved before the stall-sweep Celery task
-#: (``tasks.sweep_stalled_consensus_sessions``) force-resolves it - the
-#: safety net for a participant who simply closed their tab. Mirrors
-#: SpotGuessr's ``STALL_ROUND_TIMEOUT_MINUTES``.
+#: How long a session's current round (answer-collection or vote) can sit unresolved before the
+#: stall-sweep Celery task (``tasks.sweep_stalled_consensus_sessions``) force-resolves it - the
+#: safety net for a participant who simply closed their tab.
+#: Mirrors SpotGuessr's ``STALL_ROUND_TIMEOUT_MINUTES``.
 STALL_ROUND_TIMEOUT_MINUTES = 10
 
 
 class ConsensusError(Exception):
-    """Raised for invalid session/round/answer/vote/lobby operations.
+    """Raised for invalid session/round/answer/vote/lobby operations."""
 
-    ``safe_message`` is always safe to surface to the caller verbatim - every
-    raise site in this module passes a developer-authored string, never a
-    nested exception's text.
-    """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+class NotHostError(ConsensusError):
+    """The caller isn't this session's host, but the attempted action is host-only."""
+
+
+class LobbyClosedError(ConsensusError):
+    """The session is no longer in its LOBBY phase, so a lobby-only action can't proceed."""
+
+
+class NotFriendError(ConsensusError):
+    """The invitee isn't a connection of the host, so they can't be invited."""
+
+
+class NotInvitedError(ConsensusError):
+    """This profile has no participant record for the session at all."""
+
+
+class NotJoinedError(ConsensusError):
+    """This profile isn't a JOINED participant of the session."""
+
+
+class NoStrategyForFieldKindError(ConsensusError):
+    """The round's ``field_kind`` has no registered :class:`fields.ConsensusFieldStrategy`."""
+
+
+class RoundAlreadySettledError(ConsensusError):
+    """The round already has a terminal resolution - it can't take a new answer."""
+
+
+class DuplicateAnswerError(ConsensusError):
+    """This profile already submitted an answer (or skip) for this round."""
+
+
+class VotingClosedError(ConsensusError):
+    """The round isn't in its VOTE_OPEN disagreement sub-phase."""
+
+
+class VoteRejectedError(ConsensusError):
+    """``voting.record_vote`` refused the vote - see that module for the specific reason."""
+
+
+class SessionAlreadyEndedError(ConsensusError):
+    """The session has already ended (COMPLETED or ABANDONED) - there's nothing left to end."""
 
 
 def _clamp_rounds(total_rounds: int) -> int:
@@ -96,20 +123,20 @@ def start_competitive_session(
 
 
 def invite_to_session(session: ConsensusSession, host: Profile, invitee: Profile) -> ConsensusSessionParticipant:
-    """Invite one friend to a lobby session, notifying them. Host-only, friends-only.
+    """Invite one friend to a lobby session, notifying them.
 
     Raises:
-        ConsensusError: if the caller isn't the host, the session has
-            already started, or ``invitee`` isn't a friend of the host.
-    """
+        NotHostError: ``host`` isn't this session's host.
+        LobbyClosedError: the session has already started.
+        NotFriendError: ``invitee`` isn't a friend of ``host``."""
     from urbanlens.dashboard.services.social.connections import are_connections
 
     if session.host_profile_id != host.pk:
-        raise ConsensusError("Only the host can invite players.")
+        raise NotHostError(f"profile {host.pk} is not host {session.host_profile_id} of session {session.pk}")
     if session.status != ConsensusSessionStatus.LOBBY:
-        raise ConsensusError("Can't invite once the game has started.")
+        raise LobbyClosedError(f"session {session.pk} is {session.status!r}, not LOBBY")
     if not are_connections(host, invitee):
-        raise ConsensusError("You can only invite friends.")
+        raise NotFriendError(f"profile {host.pk} and {invitee.pk} are not connections")
 
     participant, created = ConsensusSessionParticipant.objects.get_or_create(
         session=session,
@@ -146,19 +173,17 @@ def join_session(session: ConsensusSession, profile: Profile) -> ConsensusSessio
     """Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
 
     Raises:
-        ConsensusError: if ``profile`` was never invited, or the roster is
-            already locked (the session isn't in LOBBY) and they hadn't
-            joined before that happened.
-    """
+        NotInvitedError: ``profile`` was never invited.
+        LobbyClosedError: the roster is already locked (the session isn't in LOBBY) and ``profile`` hadn't joined before that happened."""
     try:
         participant = ConsensusSessionParticipant.objects.get(session=session, profile=profile)
     except ConsensusSessionParticipant.DoesNotExist:
-        raise ConsensusError("You were not invited to this session.") from None
+        raise NotInvitedError(f"profile {profile.pk} has no participant record for session {session.pk}") from None
 
     if participant.status == ConsensusSessionParticipantStatus.JOINED:
         return participant
     if session.status != ConsensusSessionStatus.LOBBY:
-        raise ConsensusError("This game has already started - you can no longer join.")
+        raise LobbyClosedError(f"session {session.pk} is {session.status!r}, not LOBBY")
 
     participant.status = ConsensusSessionParticipantStatus.JOINED
     participant.save(update_fields=["status", "updated"])
@@ -170,13 +195,13 @@ def begin_session(session: ConsensusSession, host: Profile) -> ConsensusRound | 
     """Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
 
     Raises:
-        ConsensusError: if the caller isn't the host or the session isn't
-            still in its lobby.
+        NotHostError: the caller isn't the host.
+        LobbyClosedError: the session isn't still in its lobby.
     """
     if session.host_profile_id != host.pk:
-        raise ConsensusError("Only the host can start the game.")
+        raise NotHostError(f"profile {host.pk} is not host {session.host_profile_id} of session {session.pk}")
     if session.status != ConsensusSessionStatus.LOBBY:
-        raise ConsensusError("This session has already started.")
+        raise LobbyClosedError(f"session {session.pk} is {session.status!r}, not LOBBY")
 
     session.status = ConsensusSessionStatus.ACTIVE
     session.save(update_fields=["status", "updated"])
@@ -210,11 +235,7 @@ def _known_value_for_comparison(round_: ConsensusRound) -> Any | None:
 
 def get_or_create_round(session: ConsensusSession) -> ConsensusRound | None:
     """Return the session's current round, creating the next one once the prior round has fully settled.
-
-    Only JOINED participants count. Returns None once every configured
-    round was played, or the eligible pool has nothing left usable - the
-    caller should treat None as "call ``complete_session``."
-    """
+    Only JOINED participants count."""
     joined_participants = list(session.participants.joined().select_related("profile"))
     if not joined_participants:
         return None
@@ -252,9 +273,9 @@ def _get_joined_participant(session: ConsensusSession, profile: Profile) -> Cons
     try:
         participant = ConsensusSessionParticipant.objects.get(session=session, profile=profile)
     except ConsensusSessionParticipant.DoesNotExist:
-        raise ConsensusError("You must join this session before playing.") from None
+        raise NotJoinedError(f"profile {profile.pk} has no participant record for session {session.pk}") from None
     if participant.status != ConsensusSessionParticipantStatus.JOINED:
-        raise ConsensusError("You must join this session before playing.")
+        raise NotJoinedError(f"profile {profile.pk} participant status is {participant.status!r}, not JOINED")
     return participant
 
 
@@ -264,20 +285,17 @@ def submit_answer(round_: ConsensusRound, profile: Profile, value: str | Point |
     Args:
         round_: The round being answered.
         profile: Who's answering - must be a JOINED participant.
-        value: The submitted value (a string for every field kind except
-            ``PHOTO_COORDINATES``, a ``Point`` for that one), or None to
-            skip - a skip still counts toward "has everyone in this round
-            responded," but never contributes to agreement/voting and never
-            earns points.
+        value: The submitted value (a string for every field kind except ``PHOTO_COORDINATES``, a ``Point`` for that one), or None to skip - a skip still counts toward "has everyone in this round responded," but never contributes to agreement/voting and never...
 
     Raises:
-        ConsensusError: if ``profile`` isn't a JOINED participant, this
-            round has already settled, or ``profile`` already answered it.
-    """
+        NotJoinedError: ``profile`` isn't a JOINED participant.
+        NoStrategyForFieldKindError: ``round_.field_kind`` has no registered strategy.
+        RoundAlreadySettledError: this round has already settled.
+        DuplicateAnswerError: ``profile`` already answered it."""
     _get_joined_participant(round_.session, profile)
     strategy = fields.get_strategy(round_.field_kind)
     if strategy is None:
-        raise ConsensusError(f"Field kind {round_.field_kind!r} has no strategy.")
+        raise NoStrategyForFieldKindError(f"field kind {round_.field_kind!r} (round {round_.pk}) has no strategy")
 
     text_value = None
     normalized_text = None
@@ -295,7 +313,7 @@ def submit_answer(round_: ConsensusRound, profile: Profile, value: str | Point |
     with transaction.atomic():
         locked_round = ConsensusRound.objects.select_for_update().get(pk=round_.pk)
         if locked_round.is_settled:
-            raise ConsensusError("This round has already been resolved.")
+            raise RoundAlreadySettledError(f"round {round_.pk} resolution is already {locked_round.resolution!r}")
         try:
             answer = ConsensusAnswer.objects.create(
                 round=locked_round,
@@ -305,7 +323,7 @@ def submit_answer(round_: ConsensusRound, profile: Profile, value: str | Point |
                 guess_point=guess_point,
             )
         except IntegrityError:
-            raise ConsensusError("You've already answered this round.") from None
+            raise DuplicateAnswerError(f"profile {profile.pk} already answered round {round_.pk}") from None
 
         if ConsensusAnswer.objects.for_round(locked_round).count() >= joined_count:
             round_completed_now = True
@@ -361,12 +379,7 @@ def _apply_and_record_edit(round_: ConsensusRound, strategy, value, editor: Prof
 
 
 def _resolve_check_round(round_: ConsensusRound, real_answers: list[ConsensusAnswer], strategy, participant_count: int) -> None:
-    """Score a trust-check round - never touches the wiki, and always pays out as if it were a real round.
-
-    Points are unaffected by correctness (a failed check only costs trust,
-    per the design spec) so the reward loop gives players no signal that
-    this round was any different from an ordinary one.
-    """
+    """Score a trust-check round - never touches the wiki, and always pays out as if it were a real round."""
     known_value = _known_value_for_comparison(round_)
     reward = points.SOLO_ANSWER_POINTS if participant_count <= 1 else points.COMPETITIVE_AGREE_POINTS
     any_correct = False
@@ -435,16 +448,7 @@ def _resolve_competitive_round(round_: ConsensusRound, real_answers: list[Consen
 
 
 def _finish_round(round_: ConsensusRound, answers: list[ConsensusAnswer]) -> None:
-    """Resolve a round whose answer-collection phase just completed (every joined participant responded).
-
-    Dispatches to whichever resolution branch applies - trust-check (never
-    touches the wiki), alias (additive), solo (single answer applies
-    immediately), or competitive (agree immediately, or open a vote on
-    disagreement, see ``_resolve_competitive_round``). Broadcasts
-    ``round.revealed`` regardless of which branch ran, even when the round
-    is still ``VOTE_OPEN`` afterwards - participants need to see the
-    distinct candidates to vote on them.
-    """
+    """Resolve a round whose answer-collection phase just completed (every joined participant responded)."""
     strategy = fields.get_strategy(round_.field_kind)
     session = round_.session
     participant_count = session.participants.joined().count()
@@ -472,10 +476,9 @@ def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
     """Cast a vote during a competitive round's disagreement sub-phase, resolving it once everyone has voted.
 
     Raises:
-        ConsensusError: if ``profile`` isn't a JOINED participant, the round
-            isn't in its vote sub-phase, ``chosen_answer`` isn't part of
-            this round, or ``profile`` already voted this round.
-    """
+        NotJoinedError: ``profile`` isn't a JOINED participant.
+        VotingClosedError: the round isn't in its vote sub-phase.
+        VoteRejectedError: ``chosen_answer`` isn't part of this round, or ``profile`` already voted this round."""
     _get_joined_participant(round_.session, profile)
     session = round_.session
     joined_count = session.participants.joined().count()
@@ -483,11 +486,11 @@ def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
     with transaction.atomic():
         locked_round = ConsensusRound.objects.select_for_update().get(pk=round_.pk)
         if locked_round.resolution != ConsensusRoundResolution.VOTE_OPEN:
-            raise ConsensusError("This round isn't open for voting.")
+            raise VotingClosedError(f"round {round_.pk} resolution is {locked_round.resolution!r}, not VOTE_OPEN")
         try:
             vote = voting.record_vote(locked_round, profile, chosen_answer)
         except voting.ConsensusVotingError as exc:
-            raise ConsensusError(exc.safe_message) from None
+            raise VoteRejectedError(f"record_vote rejected profile {profile.pk}'s vote on round {round_.pk}: {exc}") from exc
 
         if ConsensusVote.objects.for_round(locked_round).count() >= joined_count:
             vote_completed_now = True
@@ -502,11 +505,7 @@ def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
 
 
 def resolve_vote(round_: ConsensusRound) -> None:
-    """Tally a round's votes and resolve its disagreement sub-phase - winner-take-more, or tentative.
-
-    Idempotent: a round no longer ``VOTE_OPEN`` (e.g. resolved by a
-    concurrent caller) is a silent no-op.
-    """
+    """Tally a round's votes and resolve its disagreement sub-phase - winner-take-more, or tentative."""
     if round_.resolution != ConsensusRoundResolution.VOTE_OPEN:
         return
 
@@ -547,16 +546,7 @@ def _advance_or_complete(session: ConsensusSession) -> None:
 
 
 def force_reveal_round(round_: ConsensusRound) -> None:
-    """Force a stalled answer-collection round to completion without waiting for every participant.
-
-    Called by the stall-sweep Celery task
-    (``tasks.sweep_stalled_consensus_sessions``). If literally nobody
-    answered or skipped (zero ``ConsensusAnswer`` rows at all - the whole
-    table walked away), the session is marked ``ABANDONED`` instead of
-    manufacturing an empty next round forever.
-
-    Idempotent: a round no longer ``PENDING`` is a silent no-op.
-    """
+    """Force a stalled answer-collection round to completion without waiting for every participant."""
     session = round_.session
     with transaction.atomic():
         locked_round = ConsensusRound.objects.select_for_update().get(pk=round_.pk)
@@ -577,11 +567,7 @@ def force_reveal_round(round_: ConsensusRound) -> None:
 
 
 def force_resolve_vote(round_: ConsensusRound) -> None:
-    """Force a stalled vote sub-phase to resolve without waiting for every participant to vote.
-
-    Called by the stall-sweep Celery task. A silent no-op if the round
-    isn't (or is no longer) ``VOTE_OPEN``.
-    """
+    """Force a stalled vote sub-phase to resolve without waiting for every participant to vote."""
     resolve_vote(round_)
 
 
@@ -589,13 +575,13 @@ def end_session_now(session: ConsensusSession, host: Profile) -> ConsensusSessio
     """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
 
     Raises:
-        ConsensusError: if the caller isn't the host, or the session has
-            already ended.
+        NotHostError: the caller isn't the host.
+        SessionAlreadyEndedError: the session has already ended.
     """
     if session.host_profile_id != host.pk:
-        raise ConsensusError("Only the host can end the game.")
+        raise NotHostError(f"profile {host.pk} is not host {session.host_profile_id} of session {session.pk}")
     if session.status not in (ConsensusSessionStatus.LOBBY, ConsensusSessionStatus.ACTIVE):
-        raise ConsensusError("This game has already ended.")
+        raise SessionAlreadyEndedError(f"session {session.pk} status is already {session.status!r}")
 
     current_round = ConsensusRound.objects.for_session(session).filter(resolution=ConsensusRoundResolution.PENDING).first()
     if current_round is not None:

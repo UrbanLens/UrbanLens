@@ -105,7 +105,7 @@ declared scopes means access denied, never "no scope needed."
 | `push:manage` | Register/remove this device's push notifications |
 | `custom_fields:read` / `custom_fields:write` | Read your custom field definitions and values / create, edit, delete them |
 | `undo:read` / `undo:write` | Read your recent delete history available to undo / restore a previously deleted item |
-| `panels:read` | Read pin-detail enrichment panels (boundaries and other plugin-contributed data) |
+| `panels:read` | Read Private Pin enrichment panels (boundaries and other plugin-contributed data) |
 | `assistant:write` | Chat with your AI assistant, including creating trips and trip activities it suggests |
 
 **`messages:read`/`messages:write` can never be granted to a PAT**, even one hand-edited to carry
@@ -154,14 +154,29 @@ in a couple of seconds.
   are cases where the caller was already shown the object, so nothing is leaked; each is commented
   in code as deliberate.
 - **Pagination**: page-number style almost everywhere (`{count,next,previous,results}`). The
-  pin/tombstone sync feeds and message-thread endpoints are cursor-based instead. A few small
+  pin/tombstone sync feeds, message-thread endpoints and the memories timeline are cursor-based instead. A few small
   envelopes remain non-paginated by design (a trip's map markers, the undo feed, nearby device
   markers). `memories/journal/`
   and `safety/checkins/{slug}/maps/` used to be among them (a bare top-level array, and a bespoke
   `{entries,total,omitted_sources}` shape) but were normalized onto the standard envelope before v1
   gained any real client depending on the old shape — see their entries below.
+- **Colours** are 6-digit hex, `#rrggbb`. The 3-digit form is *not* accepted: `#f00` is refused
+  exactly like `red`. Anything a colour field cannot store is a 400 naming the field, never a
+  silently substituted default — an API client told 200 while its value was dropped can only find
+  out by reading the record back. `Label.color` and `SavedFilter.color` are narrower still: both are
+  restricted to the shared palette (`COLOR_CHOICES`), so an off-palette hex like `#0a1b2c` is
+  refused there, while `Pin.color` and the label customization override take any 6-digit hex.
+  Missing and blank are unaffected everywhere — they mean "leave it alone" and "clear it".
 - **Versioning**: `v1` changes additively only. A breaking change mints `/v2/` and serves a
   `Sunset` header on `v1`.
+
+  One deliberate exception, 2026-09-05: the colour rule above. Pin create and update, the label bulk
+  edit and the customization override previously accepted any string and stored the default instead
+  — so a client sending `red` got 200 and no colour. Those requests are now 400s, which is a
+  break by the letter of this rule. Taken anyway rather than minting a `/v2/`: nothing was ever
+  stored for those requests, so no client can have been relying on the result, and the alternative
+  was leaving a documented rule that four endpoints did not follow. See `P39` in
+  [`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md).
 - **WebSockets enforce scopes** exactly like HTTP: `ws/messages/` needs `messages:read` to connect
   and `messages:write` to send, `ws/notifications/` needs `notifications:read`, the safety
   check-in chat needs `safety:*`, and the game sockets need `games:*`. Since `messages:*` is
@@ -233,7 +248,7 @@ in a couple of seconds.
 - `DELETE /pins/{pin_slug}/visits/{visit_id}/` — `visits:write` — re-derives the pin's last-visited date.
 
 **Comments** — owner's private annotation, scoped `pins:*` (not `wiki:*`)
-- `GET/POST /pins/{pin_slug}/comments/` — `PinCommentsView` — `pins:read`/`pins:write`. POST: text(≤1000), parent_id(reply, optional). Response: `{id, text, mentions[{display,location_slug}], author(masked), author_is_self, image_url, has_map, reactions:{emoji:{count,reacted}}, parent_was_deleted, created, replies(one level deep)}`.
+- `GET/POST /pins/{pin_slug}/comments/` — `PinCommentsView` — `pins:read`/`pins:write`. POST: text(≤1000), parent_id(reply, optional). Response: `{id, text, mentions[{display,location_slug}], author(masked), author_is_self, image_url(null while image_processing), image_processing, has_map, reactions:{emoji:{count,reacted}}, parent_was_deleted, created, replies(one level deep)}`.
 - `DELETE /pins/{pin_slug}/comments/{comment_id}/` — `pins:write` — scoped to caller's own comment on their own pin.
 - `PUT/DELETE /pins/{pin_slug}/comments/{comment_id}/reactions/{emoji}/` — `pins:write` — declarative set/unset (not toggle). Response: `{reactions: {emoji: {count, reacted}}}`.
 
@@ -257,11 +272,15 @@ in a couple of seconds.
 
 ## Panels
 
-Pin-detail enrichment panels (the same `PanelSource` plugin data backing the internal HTMX tab strip) as JSON — a job-shaped ask/cached-or-pending/poll surface, since a cold fetch talks to an upstream provider from a Celery worker, never on the request thread.
+Private Pin enrichment panels (the same `PanelSource` plugin data backing the internal HTMX tab strip) as JSON — a job-shaped ask/cached-or-pending/poll surface, since a cold fetch talks to an upstream provider from a Celery worker, never on the request thread.
 
 `GET /pins/{pin_slug}/panels/` — `PinPanelsListView` — scopes: `panels:read` — every panel exposed to this API for this pin, with its readiness. A source is listed only when it has declared a non-empty `api_kinds` (the panel author's explicit opt-in — see below), passes its own `gate(pin)` precondition (e.g. has usable coordinates), and the caller holds whatever `SiteFeature` the source requires, if any — a feature-gated source the caller can't see is omitted entirely, the same rule the web tab strip applies. Response: `[{key, kinds[], ready}]`.
 
 `GET /pins/{pin_slug}/panels/{key}/` — `PinPanelDetailView` — scopes: `panels:read` — an unknown key, empty `api_kinds`, failed `gate`, or an ungranted feature gate all answer **404**, identically — never 403, which would confirm a paywalled panel has something to say about this specific pin. Ready → **200** with the panel's own `api_payload(pin)` body (shape varies per `PanelApiKind` — `info`/`media`/`boundary`/`buildings` — declared per source, not fixed by this endpoint). Ready but genuinely empty → **204** (a media search that found zero results is a real answer, not a missing one). Not ready → schedules a fetch and answers **202** `{"ready": false, "poll_after_seconds": N}` — `N` is 2 seconds while a fetch is in flight, larger if scheduling failed (broker down, or this source was recently suppressed after a failure).
+
+The `buildings` body carries `{"buildings": [...], "provider": "...", "unpinned_count": N}`. Each row has `name`, `building_number`, `year_built`, `source`, `source_label`, `latitude`, `longitude`, `has_geometry`, `geometry`, `child_pin_uuid`, `child_pin_name` and **`can_create`**.
+
+Read `can_create` rather than deriving it. A row with no `child_pin_name` is not necessarily one a pin can be made for: a building standing on a point the owner has already pinned with a *non-child* pin is unpinned and uncreatable at once, because a profile may not hold two pins at one point. `unpinned_count` is exactly the rows carrying `can_create`, so a client can show the number and the list without them disagreeing.
 
 **`satellite` and `street_view` are permanently excluded** — empty `api_kinds` by design, not an oversight (see D8 in `docs/notes/mobile_app_notes.md`): their web payload is base64 `data:` URIs (5-15MB/response), and this API's throttle counts requests, not bytes, so exposing them would hand any key holder an unmetered bandwidth amplifier. Needs a signed slide-image proxy that doesn't exist yet.
 
@@ -335,7 +354,7 @@ no-op, never a failed request.
 
 ## Photos
 
-`GET /photos/` — `PhotosView` — scopes: `photos:read` — browse (paginated), **not a sync feed** — no tombstone endpoint. Query: `pin`(slug/uuid, own pins only), `unfiled`(bool), `taken_from`/`taken_to`, `media_type` — response: `{uuid, media_type, source, url(authenticated media-gate path), caption, author, source_url, copyright, latitude, longitude, coordinates_are_estimated, direction, taken_at, created, file_size, labels[], organize_dismissed, state, owner_slug(masked), pin_slug/pin_name/visit_id(owner-only), wiki_slug/wiki_name(gated), dm_peer_slug/dm_peer_name(only if viewer is a DM participant)}`.
+`GET /photos/` — `PhotosView` — scopes: `photos:read` — browse (paginated), **not a sync feed** — no tombstone endpoint. Query: `pin`(slug/uuid, own pins only), `unfiled`(bool), `taken_from`/`taken_to`, `media_type` — response: `{uuid, media_type, source, url(authenticated media-gate path; null while processing), processing, processing_failed, caption, author, source_url, copyright, latitude, longitude, coordinates_are_estimated, direction, taken_at, created, file_size, labels[], organize_dismissed, state, owner_slug(masked), pin_slug/pin_name/visit_id(owner-only), wiki_slug/wiki_name(gated), dm_peer_slug/dm_peer_name(only if viewer is a DM participant)}`.
 
 `POST /photos/` — `photos:write` — multipart upload. Request: file, caption(≤500), pin(slug/uuid), visit(PinVisit id) — response 201 — EXIF-derived fields filled asynchronously, typically still null in this response — errors at 400/403/409/413 (malware/size/duplicate/quota/feature-gate).
 
@@ -370,7 +389,7 @@ no-op, never a failed request.
 
 `GET /memories/journal/` — `MemoriesJournalView` — scopes: `photos:read` — unified journal (visit notes, ratings, comments, article edits), newest first. Query: `page`, `page_size` (standard pagination, `page_size` up to 100) — response: the standard `{count, next, previous, results:[{kind, occurred_at, icon, title, subtitle, body, url, rating}]}` envelope plus `omitted_sources` (journal sources — `visits`/`reviews`/`comments`/`articles` — dropped because the credential lacks that source's domain scope; empty for a session caller or a fully scoped credential).
 
-`GET /memories/timeline/` — `MemoriesTimelineView` — scopes: `photos:read` — the same map/timeline data the internal Memories page renders (routes, trips, visits, photos), newest first. Query: `start`, `end` (ISO dates, default to the trailing 90 days), `bbox` (`minLat,minLng,maxLat,maxLng`, malformed values silently ignored), plus standard `page`/`page_size` — response: the standard `{count, next, previous, results:[{type, occurred_at, ended_at, title, subtitle, latitude, longitude, url, thumbnail_url, icon, color, extra}]}` envelope.
+`GET /memories/timeline/` — `MemoriesTimelineView` — scopes: `photos:read` — the same map/timeline data the internal Memories page renders (routes, trips, visits, photos), newest first. Query: `start`, `end` (ISO dates, default to the trailing 90 days), `bbox` (`minLat,minLng,maxLat,maxLng`, malformed values silently ignored), `before` (ISO datetime, exclusive cursor) and `limit` (1-100, default 50) — cursor-paginated like the message threads: follow `next`, which carries `before`; `count` and `previous` are always null. Each source stops at `limit` + 1 rows, so a wide `start`/`end` costs the same as a narrow one — response: `{count: null, next, previous: null, results:[{type, occurred_at, ended_at, title, subtitle, latitude, longitude, url, thumbnail_url, icon, color, extra}]}`.
 
 `GET /memories/on-this-day/` — `MemoriesOnThisDayApiView` — scopes: `photos:read` — past-year visits/routes/photos matching today's month/day, capped at 10 rows per category (not paginated) — response: `{today, visits:[{pin_slug, pin_name, visited_at, notes}], routes:[{uuid, name, started_at, distance_meters, path}], photos:[...same shape as GET /photos/]}`.
 
@@ -382,9 +401,9 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wikis
 
-`GET /wikis/{location_slug}/` — `WikiDetailApiView.get` — scopes: `wiki:read` — full wiki detail — response: `location_slug, wiki_slug, uuid, name, description, pin_type, indoor_outdoor, date_abandoned, date_last_active, security{8 fields}, latitude, longitude, address, cover_photo_url, boundary, aliases[], links[], stats{danger/vulnerability/priority/rating}, pin_count_low, pin_count_approx, first_pinned(+precision), article{summary}, comment_count, created, updated`.
+`GET /wikis/{location_slug}/` — `WikiDetailApiView.get` — scopes: `wiki:read` — full wiki detail — response: `location_slug, wiki_slug, uuid, revision, name, description, pin_type, indoor_outdoor, date_abandoned, date_last_active, security{8 fields}, latitude, longitude, address, cover_photo_url, boundary, aliases[], links[], stats{danger/vulnerability/priority/rating}, pin_count_low, pin_count_approx, first_pinned(+precision), article{summary}, comment_count, created, updated`.
 
-`PATCH /wikis/{location_slug}/` — scopes: `wiki:write` — apply a community edit — request: `name?, description?, date_abandoned?, date_last_active?, security?{fences,alarms,cameras,security,signs,vps,plywood,locked}` (all optional; unknown top-level keys or empty payload → 400) — strict validation (400 on unrecognized enum/date, unlike the internal form's silent skip); records a `WikiEdit` audit row.
+`PATCH /wikis/{location_slug}/` — scopes: `wiki:write` — apply a community edit — request: `name?, description?, date_abandoned?, date_last_active?, security?{fences,alarms,cameras,security,signs,vps,plywood,locked}, base_revision_id?` (all optional; unknown top-level keys, or nothing but `base_revision_id` → 400) — strict validation (400 on unrecognized enum/date, unlike the internal form's silent skip); records a `WikiEdit` audit row. Send the detail payload's `revision` as `base_revision_id`: a field this edit changes that was written since → **409** `{error, fields}` and nothing is written. Without it, only a write that lands while this request is in flight is refused.
 
 `GET /wikis/{location_slug}/history/` — scopes: `wiki:read` — paginated edit history, newest first — rows: `{id, changes({field:{from,to}}), reverted, editor(masked), created}`.
 
@@ -403,7 +422,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wiki Comments & Reactions
 
-`GET/POST /wikis/{location_slug}/comments/` — scopes: `wiki:read`/`wiki:write` — paginated thread, top-level + one level of replies. Rows: `{id, text(raw markup), mentions[{display,location_slug}], author(masked), author_is_self, image_url, has_map, reactions({emoji:{count,reacted}}), parent_was_deleted, created, replies[]}` — visibility gated incl. an `@location` mention gate that drops (not redacts) comments the viewer hasn't earned access to. POST: `text, parent_id?`.
+`GET/POST /wikis/{location_slug}/comments/` — scopes: `wiki:read`/`wiki:write` — paginated thread, top-level + one level of replies. Rows: `{id, text(raw markup), mentions[{display,location_slug}], author(masked), author_is_self, image_url(null while image_processing), image_processing, has_map, reactions({emoji:{count,reacted}}), parent_was_deleted, created, replies[]}` — visibility gated incl. an `@location` mention gate that drops (not redacts) comments the viewer hasn't earned access to. POST: `text, parent_id?`.
 
 `DELETE /wikis/{location_slug}/comments/{comment_id}/` — scopes: `wiki:write` — caller's own comment only; someone else's id → 404.
 
@@ -421,7 +440,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wiki Gallery
 
-`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, url, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses). Ordered by REData's cached photo-relevance confidence first, upload recency as the tiebreaker/fallback (`services.photos.redata_relevance`).
+`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, uuid, url(null while processing), processing, processing_failed, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses). Ordered by REData's cached photo-relevance confidence first, upload recency as the tiebreaker/fallback (`services.photos.redata_relevance`).
 
 ### Wiki Boundary, Cover Photo & Property Records
 
@@ -455,7 +474,7 @@ All trip views map service exceptions uniformly: not-found→404, permission→4
 - `DELETE /trips/{trip_slug}/leave/` — leave, or decline an invite — **the creator is refused with 400** (must delete or transfer instead).
 - `PUT /trips/{trip_slug}/rsvp/` — set/clear caller's trip-wide RSVP (`yes`|`no`|`maybe`|null).
 - `GET /trips/{trip_slug}/members/` — the roster, paginated — `{profile(masked), status(invited|joined), rsvp, is_organizer, is_creator, created}`.
-- `POST /trips/{trip_slug}/members/` — invite by username — **201** new invite, **200** re-invite (no duplicate notification).
+- `POST /trips/{trip_slug}/members/` — invite by username — **201** new invite, **200** re-invite (no duplicate notification) — **404** for both an unknown username and a block between the two profiles, with an identical message: a distinct 403 for "blocked" would itself confirm the account exists, so it answers exactly like a nonexistent one. The `max_trip_members` cap is checked before the username is resolved, for the same reason - a cap error must never depend on the target existing.
 - `PATCH /trips/{trip_slug}/members/{member_slug}/` — set a member's organizer flag (`is_organizer`, explicit target) — **creator only**, else 403.
 - `DELETE /trips/{trip_slug}/members/{member_slug}/` — remove a member — **members may remove themselves; otherwise creator only** → 403.
 
@@ -471,7 +490,7 @@ All trip views map service exceptions uniformly: not-found→404, permission→4
 
 ### Trip Comments & Reactions
 
-- `GET /trips/{trip_slug}/comments/` — paginated top-level comments, replies nest one level only — `{id, text, rendered_html, author(masked), image_url, has_map, created, can_delete, reactions[], replies[]}`.
+- `GET /trips/{trip_slug}/comments/` — paginated top-level comments, replies nest one level only — `{id, text, rendered_html, author(masked), image_url(null while image_processing), image_processing, has_map, created, can_delete, reactions[], replies[]}`.
 - `POST /trips/{trip_slug}/comments/` — `text`(required), `parent_id?` — image/markup-map attachments are **web-only** — 403 gated by `allow_comments`.
 - `DELETE /trips/{trip_slug}/comments/{comment_id}/` — **comment's own author, or the trip's creator** → else 403.
 - `PUT /trips/{trip_slug}/comments/{comment_id}/reactions/` — set an explicit target state (not toggle): `{emoji(allowlisted), reacted(bool)}`.
@@ -492,7 +511,7 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 
 - `GET /messages/conversations/` — unified inbox, DMs + groups merged, most recent first — `{kind, peer_slug/group_uuid, display_name, unread_count, is_muted, last_message, ...}`.
 - `GET /messages/{peer_slug}/` — one page of a 1:1 thread, oldest-first, cursor-paginated — 404 if `peer_slug` doesn't resolve or is reserved (`conversations`, `settings`, `groups`).
-- `POST /messages/{peer_slug}/` — send a message, optionally with one `@pin`/`@trip`/`@friend` share — request: `body` or `ciphertext`+`nonce`+`key_version`(never both), `reply_to_id`, `markup_map_id`, `image_ids[]`(max 20, integer pks) and/or `image_uuids[]`(max 20, `Image.uuid` — **preferred for new clients**, additive alongside `image_ids` rather than replacing it), `shared_pin_id`/`shared_trip_slug`/`shared_profile_slug`(exactly one), `client_uuid`(idempotency) — 201/200 replay — pin shares preserve `LocationExposure` provenance. Both attachment fields are scoped to the sender's own not-yet-attached images and may be combined in one request.
+- `POST /messages/{peer_slug}/` — send a message, optionally with one `@pin`/`@trip`/`@friend` share — request: `body` or `ciphertext`+`nonce`+`key_version`(never both), `reply_to_id`, `markup_map_id`, `image_ids[]`(max 20, integer pks) and/or `image_uuids[]`(max 20, `Image.uuid` — **preferred for new clients**, additive alongside `image_ids` rather than replacing it), `shared_pin_id`/`shared_trip_slug`/`shared_profile_slug`(exactly one), `client_uuid`(idempotency) — 201/200 replay — pin shares preserve `LocationExposure` provenance; a `@trip` invite to a trip at its member cap is 400. Both attachment fields are scoped to the sender's own not-yet-attached images and may be combined in one request.
 - `POST /messages/{peer_slug}/read/` — mark thread read — `{marked_read: <count>}`.
 - `POST /messages/{peer_slug}/react/{message_id}/` — toggle emoji reaction — 400 if emoji fails a safety check (relayed verbatim to the other party's client).
 - `DELETE /messages/{peer_slug}/messages/{message_id}/` — delete one message — query: `?scope=everyone|self`(default self) — `everyone`(sender only) tombstones for recipient + revokes any carried share; `self`(recipient only) hides just caller's view.
@@ -500,7 +519,7 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 
 ### Group Chats
 
-- `GET/POST /messages/groups/` — list caller's groups / create one (`name`, `member_slugs[]`(1-50)) — 400 on unknown slugs.
+- `GET/POST /messages/groups/` — list caller's groups / create one (`name`, `member_slugs[]`(1-50)) — 403 with one message for an unknown slug and for someone not accepting messages from the caller (P149).
 - `GET/PATCH /messages/groups/{group_uuid}/` — one page of the group thread, cursor-paginated / rename (any active member may) — 404 (not 403) for a non-member.
 - `POST /messages/groups/{group_uuid}/messages/` — send into the group.
 - `POST /messages/groups/{group_uuid}/read/` — advance read mark to now.
@@ -538,9 +557,9 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 - `DELETE /safety/checkins/{checkin_slug}/` — stages an Undo History entry.
 - `POST /safety/checkins/{checkin_slug}/check-in/` — caller checks in, resolving it — 409 if already resolved.
 - `POST /safety/checkins/{checkin_slug}/cancel/` — cancel so it never escalates — 409 if already resolved.
-- `POST /safety/checkins/{checkin_slug}/partners/` — invite a partner by username — accept/decline live under `safety/partner-invites/`, not here.
+- `POST /safety/checkins/{checkin_slug}/partners/` — invite a partner by username — accept/decline live under `safety/partner-invites/`, not here. **400** with an identical message for both an unknown username and a block between the two profiles (same enumeration reasoning as the trip-members endpoint above); the `max_safety_checkin_partners` cap is likewise checked before the username is resolved.
 - `DELETE /safety/checkins/{checkin_slug}/partners/{partner_id}/` — remove a partner — also force-closes an accepted partner's open WebSocket.
-- `GET/POST /safety/checkins/{checkin_slug}/photos/` — list / attach an already-uploaded image by uuid (not a second upload path).
+- `GET/POST /safety/checkins/{checkin_slug}/photos/` — list / attach an already-uploaded image by uuid (not a second upload path). Rows: `{id, uuid, caption, url, processing, processing_failed, created}`; `url` is null while `processing`.
 - `DELETE /safety/checkins/{checkin_slug}/photos/{image_id}/` — delete photo + stored file.
 - `GET/POST /safety/checkins/{checkin_slug}/maps/` — primary route map + attached reference maps, standard `{count, next, previous, results:[{uuid, title, is_primary}]}` envelope / attach one of caller's own maps (POST returns the same envelope).
 - `DELETE /safety/checkins/{checkin_slug}/maps/{map_uuid}/` — detach a reference map — map itself untouched.
@@ -579,9 +598,9 @@ the same marker, nothing in its stored fields or its API representation distingu
 contributor from another. Markers are also only ever returned for wikis the caller has already
 discovered, via the same `wiki_access` visibility gate every other wiki-scoped read in this API uses.
 
-`POST /device-scans/` — `DeviceScanUploadView` — scopes: `device_scans:write` — upload one batch from a walked route. Request: `client_session_uuid?`, `devices: [{mac_address, device_name?, device_type_guess?("camera"|"sensor"|"tracker"|"access_point"|"phone"|"wearable"|"iot"|"other"|null), detected(default true), estimated_latitude, estimated_longitude, expected_marker_uuid?(from a prior `nearby/` response, confirms/refutes that marker), readings?: [{latitude, longitude, signal_strength?, observed_at}]}]` (≤200 devices/upload, ≤500 readings/device) — response **202**: `{upload_uuid}` — classification, wiki-matching, and marker clustering all happen afterward in the background (`dashboard.tasks.process_device_scan_upload`); this response describes nothing about what was found, and nothing about it is ever readable back through this API. Attribution to the caller's account is controlled entirely by `Profile.track_device_scans` (see [Account & Identity](#account--identity)) — authentication is always required regardless of this preference, but the stored data carries no profile reference when it's off; either way the upload is fully processed, since classification and the community marker it may produce don't need an owner. Camera/sensor/tracker detections update a fuzzy marker on every wiki (including child wikis) whose boundary contains the reported coordinates, possibly several or none; other device types are recorded but never raise a marker.
+`POST /device-scans/` — `DeviceScanUploadView` — scopes: `device_scans:write` — upload one batch from a walked route. Request: `client_session_uuid?`, `devices: [{mac_address, device_name?, device_type_guess?("camera"|"sensor"|"tracker"|"access_point"|"phone"|"wearable"|"iot"|"other"|null), detected(default true), estimated_latitude, estimated_longitude, expected_marker_uuid?(from a prior `nearby/` response, confirms/refutes that marker), readings?: [{latitude, longitude, signal_strength?, observed_at}]}]` (≤200 devices/upload, ≤500 readings/device) — `client_session_uuid` is an idempotency key, one per upload batch: a retry carrying a value already stored answers **202** with the original `upload_uuid` and stores nothing — response **202**: `{upload_uuid}` — classification, wiki-matching, and marker clustering all happen afterward in the background (`dashboard.tasks.process_device_scan_upload`); this response describes nothing about what was found, and nothing about it is ever readable back through this API. Attribution to the caller's account is controlled entirely by `Profile.track_device_scans` (see [Account & Identity](#account--identity)) — authentication is always required regardless of this preference, but the stored data carries no profile reference when it's off; either way the upload is fully processed, since classification and the community marker it may produce don't need an owner. Each upload is kept as its own record and never overwrites another's: a device's shown name and type are summarised from every upload's `device_name` and `device_type_guess`, each account counting once by its latest report (`unknown` is not a vote), with a server heuristic only when nobody reported a type. Camera/sensor/tracker detections update a fuzzy marker on each wiki (including child wikis) whose boundary contains the reported coordinates and that the caller could see when uploading, possibly several or none; other device types are recorded but never raise a marker.
 
-`GET /device-scans/nearby/` — `NearbyDeviceMarkersView` — scopes: `device_scans:read` — devices already known nearby, so the app can decide when to turn scanning on or enrich what it shows on a live detection. Query: `latitude`, `longitude`, `radius_meters?`(default 500, max 50000). Response: `{markers: [{marker_uuid, device: {mac_address, device_type, display_name}, latitude, longitude, radius_meters, confidence, avg_signal_strength, last_observed_at, status("active"|"stale")}]}` — `presumed_removed`/`dismissed` markers are never returned, and no field here ever identifies a contributor. The fuzzy area (`radius_meters`) shrinks and `confidence` rises as more scans corroborate the same location over time, weighted toward recent activity; a device that appears to have moved shows up as two separate markers until the old one goes stale. A caller reporting `expected_marker_uuid` with `detected: false` on a later upload feeds an absence streak that eventually flips a marker to `presumed_removed`.
+`GET /device-scans/nearby/` — `NearbyDeviceMarkersView` — scopes: `device_scans:read` — devices already known nearby, so the app can decide when to turn scanning on or enrich what it shows on a live detection. Query: `latitude`, `longitude`, `radius_meters?`(default 500, max 50000). Response: `{markers: [{marker_uuid, device: {mac_address, device_type, display_name}, latitude, longitude, radius_meters, confidence, avg_signal_strength, last_observed_at, status("active"|"stale")}]}` — `presumed_removed`/`dismissed` markers are never returned, and no field here ever identifies a contributor. The fuzzy area (`radius_meters`) shrinks and `confidence` rises as more accounts corroborate the same location over time, weighted toward recent activity, each account counting once; a device that appears to have moved shows up as two separate markers until the old one goes stale. A caller reporting `expected_marker_uuid` with `detected: false` on a later upload counts toward the marker's absence; three different accounts reporting it missing since it was last seen flip it to `presumed_removed`, and one account repeating the report counts once.
 
 ---
 
@@ -686,9 +705,63 @@ A thin, scope-aware wrapper over the existing Undo History service (`services.un
 
 ## AI Assistant
 
-`POST /assistant/message/` — `AssistantMessageView` — scopes: `assistant:write` — one chat turn against the same tool-calling assistant (UL-293) the website's session-based chat uses (`services.ai.assistant.run_assistant_turn`), but **stateless**: a bearer-token client has no session to keep history in, so the client carries `history` in the request body and resends the `history` this endpoint returns as the next call's input. Request: `{message, history: [{role:"user"|"assistant", content}]}` — `history` capped to the last 20 entries server-side both on the way in and the way out. Response: `{reply, actions[], history}` — `actions` are human-readable labels of anything the assistant actually did (e.g. "Created a trip"); it can only act through a small allowlisted tool set scoped to the caller's own data, never deletes/shares/changes privacy settings, and every tool result it sees is JSON, never raw prose from another account. **503** `{"error": "AI features are currently turned off for your account or this site."}` when AI is disabled — own extra throttle (`external_api_assistant_message`, default 60/hour) stacked on the standard three, since one turn can fan out to several billed model calls.
+The assistant runs on an isolated `ai-worker` (UL-163 sandboxing), never inline in the web
+process — a turn is enqueued, then polled, the same job-shaped request/poll flow every other
+AI-costed endpoint in this API uses (see the [Panels](#panels) 202 pattern).
 
-`POST /assistant/reset/` — `AssistantResetView` — scopes: `assistant:write` — a genuine no-op for this stateless shape (`{"history": []}`) — kept for surface symmetry with the web chat's reset button; a client "resets" by simply discarding its own `history` and sending an empty list next time.
+`POST /assistant/message/` — `AssistantMessageView` — scopes: `assistant:write` — enqueue one
+chat turn against the same tool-calling assistant (UL-293) the website's session-based chat uses
+(`services.ai.tasks.run_assistant_turn_task`), but **stateless**: a bearer-token client has no
+session to keep history in, so the client carries `history` in the request body and resends the
+`history` a resolved poll returns as the next call's input. Request:
+`{message, history: [{role:"user"|"assistant", content}], page_path}` — `history` capped to the
+last 20 entries server-side. `page_path` is optional — a client-side "screen" path (mirroring the
+web chat's own `window.location.pathname`), resolved server-side under the caller's own access
+rules (`services.ai.page_context`) rather than trusted as-is; unrecognized or inaccessible paths
+resolve to no page context, silently, never an error. Nothing in the assistant's tool set reads
+the resolved page yet. There is no `dismissals` field: the web chat's own dismissal ring
+(`recent_dismissals`/`reopen_explainer` - services.ai.dismissals) is captured from explainer/
+onboarding-tour DOM the caller here has no equivalent of, so those two tools always see an empty
+ring over this API. Response: **202** `{turn_id, ready: false, poll_after_seconds}`. **503**
+`{"error": "..."}` when AI is disabled. **409** `{"error": "..."}` when a previous message from
+this caller is still being processed — wait for it to resolve before sending another; own extra
+throttle (`external_api_assistant_message`, default 60/hour) stacked on the standard three, since
+one turn can fan out to several billed model calls.
+
+`GET /assistant/turn/<turn_id>/` — `AssistantTurnPollView` — scopes: `assistant:write` — poll a
+turn started by the endpoint above. Still running: **202** `{ready: false, poll_after_seconds}` —
+back off and retry after that many seconds, appending `?attempt=N` (0-indexed) so the pacing grows
+the way the web chat's own poll does; a client that gives up polling loses nothing server-side, it
+can simply stop. Resolved: **200** `{reply, actions[], proposals[], history}` — `actions` are
+human-readable labels of anything the assistant actually did (e.g. "Created a trip"); it can only
+act through a small allowlisted tool set scoped to the caller's own data, never deletes/shares/
+changes privacy settings, and every tool result it sees is JSON, never raw prose from another
+account. A turn that failed or ran too long still resolves **200** with a plain-language `reply`
+explaining that, rather than an error status — a client can render every poll outcome the same way.
+**404** for an unknown or expired turn id, or one that belongs to a different caller — identical
+either way, so a guessed id can't distinguish the two.
+
+Every write the assistant can perform (`create_trip`, `add_trip_activity`, `undo_last_action`) is confirm-gated: the
+tool call itself only ever produces a **proposal**, never a live write, regardless of which
+process actually ran the model turn. `proposals[]` entries are `{n, tool, confirm_label}` — `n` is
+the proposal's 0-based index within this turn, `confirm_label` is the button/action text (e.g.
+"Create trip"). Deliberately absent: the tool's arguments — those stay server-side, bound to the
+turn and the caller's profile, until confirmed.
+
+`POST /assistant/turn/<turn_id>/confirm/<n>/` — `AssistantProposalConfirmView` — scopes:
+`assistant:write` — execute proposal `n` from that turn for real. **200** `{status: "done"|
+"error", message}` on success or on a handler-level failure (e.g. invalid state at execution
+time) — both are 200 because the *request* succeeded; `message` is what to show the user either
+way. Confirming the same proposal twice (a retry, a double-tap) is a safe no-op: the second call
+returns `{"status": "done", "message": "Already confirmed."}` rather than running the write again
+— claimed atomically, not by re-checking after the fact, so two concurrent confirms can't both
+win. **404** when the proposal id is unknown, out of range, expired (proposals share the turn's
+TTL), or belongs to a different caller's turn — identical either way.
+
+`POST /assistant/reset/` — `AssistantResetView` — scopes: `assistant:write` — a genuine no-op for
+this stateless shape (`{"history": []}`) — kept for surface symmetry with the web chat's reset
+button; a client "resets" by simply discarding its own `history` and sending an empty list next
+time.
 
 ---
 
@@ -702,7 +775,7 @@ Mounted at `dashboard/e2ee/` (not under `api/external/v1/`, but published in the
 
 `GET /dashboard/e2ee/keys/` — `E2EEOwnKeysView` — scopes: `messages:read` — the caller's full bundle including wrapped blobs — returns `{"enrolled": false}` as a normal 200 (not 404) when not yet enrolled, since it's polled on every page load for the encryption-status indicator.
 
-`GET /dashboard/e2ee/keys/{profile_slug}/` — `E2EEPartnerKeyView` — scopes: `messages:read` — a conversation partner's public key only — response: `{public_key, version}` — 404 when the partner has no bundle or no DM relationship is permitted in either direction.
+`GET /dashboard/e2ee/keys/{profile_slug}/` — `E2EEPartnerKeyView` — scopes: `messages:read` — a conversation partner's public key only — response: `{public_key, version}` — 404 when the partner has no bundle, or the pair share no conversation and the partner would refuse a message from the caller (P149).
 
 `GET/POST /dashboard/e2ee/conversation-key/{profile_slug}/` — `E2EEConversationKeyView` — scopes: `messages:read`/`messages:write` — GET returns the caller's wrapped copy of every key version for the pair (`{keys:[{version,wrapped_key}], latest}`) — existing keys are always returned regardless of the *current* relationship, so a participant keeps the ability to decrypt history even after a block. POST stores the next version (`version`, `wrapped_for_me`, `wrapped_for_partner`) — 409 on a version mismatch (expected value returned for retry) or if either participant isn't enrolled; a concurrent-create race returns the winner's copy at 200 instead of erroring.
 

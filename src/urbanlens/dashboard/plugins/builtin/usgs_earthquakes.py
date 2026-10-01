@@ -6,16 +6,15 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
-#: This panel is specifically "Recent Seismic Activity" - REData's hazards
-#: endpoint pools other event kinds (flood, wildfire, ...) behind the same
-#: shared registry, so results are filtered to this one even though the only
-#: provider configured today (usgs_earthquakes) never returns anything else.
+#: This panel is specifically "Recent Seismic Activity" - REData's hazards endpoint pools other event
+#: kinds (flood, wildfire, ...) behind the same shared registry, so results are filtered to this one
+#: even though the only provider configured today (usgs_earthquakes) never returns anything else.
 _EARTHQUAKE_EVENT_TYPE = "earthquake"
 
 
@@ -24,9 +23,13 @@ class UsgsEarthquakePanelSource(CoordinateGatedInfoPanelSource):
 
     key = "usgs_earthquakes"
     cache_source = "usgs_earthquakes"
+    site_level: ClassVar[bool] = True
     section_id = "usgs-earthquakes-section"
     icon = "vibration"
     title = "Recent Seismic Activity"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Seismic"
+    tab_order: ClassVar[int] = 30
 
     def gate(self, pin: Pin) -> bool:
         """Also requires REData to be configured - this panel has no other data source."""
@@ -77,7 +80,7 @@ class UsgsEarthquakePlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "usgs_earthquakes"
     verbose_name: ClassVar[str] = "USGS Earthquake Hazards"
-    description: ClassVar[str] = "Shows recent nearby seismic activity as structural-risk context on the pin detail page, sourced through REData's natural-hazards registry (USGS FDSN event catalog)."
+    description: ClassVar[str] = "Shows recent nearby seismic activity as structural-risk context on the Private Pin page, sourced through REData's natural-hazards registry (USGS FDSN event catalog)."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

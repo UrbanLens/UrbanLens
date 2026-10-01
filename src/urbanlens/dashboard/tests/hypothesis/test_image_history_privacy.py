@@ -1,12 +1,4 @@
-"""Tests for photo GPS/location privacy when a profile has visit-history tracking off.
-
-Covers process_image_upload()'s ``strip_location`` behavior:
-- Image.latitude/longitude are never populated from EXIF GPS
-- the stored file's own embedded GPS EXIF tag is stripped, even when no
-  resize/WebP conversion would otherwise be needed
-- exif_data never carries a GPSInfo block
-- no VisitSuggestion is raised from the photo
-"""
+"""Tests for photo GPS/location privacy when a profile has visit-history tracking off."""
 
 from __future__ import annotations
 
@@ -53,7 +45,9 @@ class ProcessImageUploadLocationPrivacyTests(TestCase):
         profile = User.objects.create(username=f"u{Image.objects.count()}").profile
         profile.track_pin_visits = track_pin_visits
         profile.save(update_fields=["track_pin_visits"])
-        return Image.objects.create(image=SimpleUploadedFile("photo.jpg", _geotagged_jpeg_bytes(), content_type="image/jpeg"), profile=profile)
+        return Image.objects.create(
+            image=SimpleUploadedFile("photo.jpg", _geotagged_jpeg_bytes(), content_type="image/jpeg"), profile=profile
+        )
 
     def test_tracking_off_strips_lat_lng_exif_and_file(self):
         row = self._make_image_row(track_pin_visits=False)

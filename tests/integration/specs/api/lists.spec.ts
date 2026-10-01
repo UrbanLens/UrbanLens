@@ -1,13 +1,4 @@
-/**
- * Pin lists, including the smart ones that derive their membership.
- *
- * A plain list is a join table and would be adequately covered by a unit test.
- * A *smart* list is not: its membership is recomputed from a saved filter's
- * criteria, by a service that reads real pins out of a real database, and the
- * resync path exists precisely because that recomputation happens after the
- * fact rather than at read time. "The list is empty" and "the resync never ran"
- * are indistinguishable from inside one process with two fixture rows.
- */
+/** Pin lists, including the smart ones that derive their membership. A plain list is a join table and would be adequately covered by a unit test. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
@@ -65,12 +56,7 @@ test.describe("lists", () => {
 
         const response = await api.post(`lists/${list.slug}/items/`, { pin_uuids: ["00000000-0000-4000-8000-000000000000"] });
 
-        // 200 with `added: 0`, not a 4xx - and that is the right shape for a
-        // bulk endpoint, because a batch can be partly valid. What would be
-        // wrong is accepting the unknown id *silently*: a client that cannot
-        // tell the difference between "added" and "ignored" shows the user a
-        // pin in a list it is not in. The count is what makes it tellable, so
-        // the count is what this asserts.
+        // 200 with `added: 0`: a batch can be partly valid, but the count must tell added apart from ignored.
         expect(response.status(), `adding an unknown pin uuid answered ${response.status()}`).toBe(200);
         const body = (await response.json()) as { added?: number };
         expect(body, `the response does not report how many pins were added: ${JSON.stringify(body)}`).toHaveProperty("added");

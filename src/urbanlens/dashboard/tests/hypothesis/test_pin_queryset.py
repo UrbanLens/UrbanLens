@@ -1,11 +1,5 @@
-"""Tests for PinQuerySet filter methods and PinManager.get_nearby_or_create.
+"""Tests for PinQuerySet filter methods and PinManager.get_nearby_or_create."""
 
-Covers structural pin-type filters (root_pins, detail_pins, location_detail_pins),
-temporal visit filters (never_visited), rating filters (rated/rated_over/rated_under),
-tag hierarchy traversal (by_tag), and the proximity-based manager method.
-
-All tests require the database.
-"""
 from __future__ import annotations
 
 from datetime import date
@@ -18,7 +12,6 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.reviews.model import Review
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -34,12 +27,16 @@ class PinQuerySetStructureTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         # Root: no parent_pin
         self.root = baker.make(
-            Pin, profile=self.profile, location=self.location,
+            Pin,
+            profile=self.profile,
+            location=self.location,
             parent_pin=None,
         )
         # Detail: parent_pin set
         self.detail = baker.make(
-            Pin, profile=self.profile, location=self.location,
+            Pin,
+            profile=self.profile,
+            location=self.location,
             parent_pin=self.root,
         )
 
@@ -64,8 +61,12 @@ class PinQuerySetWithinBoundsTests(TestCase):
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
-        self.inside = baker.make(Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="40.0", longitude="-74.0"))
-        self.outside = baker.make(Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="45.0", longitude="-80.0"))
+        self.inside = baker.make(
+            Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        )
+        self.outside = baker.make(
+            Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="45.0", longitude="-80.0")
+        )
 
     def _qs(self):
         return Pin.objects.filter(profile=self.profile)
@@ -94,7 +95,7 @@ class PinQuerySetWithinBoundsTests(TestCase):
 
 
 class WikiQuerySetStructureTests(TestCase):
-    """root_wikis / child_wikis partition wikis by the parent_wiki FK."""
+    """child_wikis() selects wikis nested under a parent via the parent_wiki FK."""
 
     def setUp(self):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
@@ -111,12 +112,6 @@ class WikiQuerySetStructureTests(TestCase):
 
         return Wiki.objects.filter(pk__in=[self.wiki.pk, self.child.pk])
 
-    def test_root_wikis_includes_root(self) -> None:
-        self.assertIn(self.wiki, self._qs().root_wikis())
-
-    def test_root_wikis_excludes_child(self) -> None:
-        self.assertNotIn(self.child, self._qs().root_wikis())
-
     def test_child_wikis_includes_child(self) -> None:
         self.assertIn(self.child, self._qs().child_wikis())
 
@@ -125,6 +120,7 @@ class WikiQuerySetStructureTests(TestCase):
 
 
 # -- never_visited -------------------------------------------------------------
+
 
 class PinQuerySetNeverVisitedTests(TestCase):
     """never_visited() returns only pins with last_visited == None."""
@@ -144,97 +140,8 @@ class PinQuerySetNeverVisitedTests(TestCase):
         self.assertNotIn(self.visited, self._qs().never_visited())
 
 
-# -- rated / rated_over / rated_under -----------------------------------------
-
-class PinQuerySetRatingTests(TestCase):
-    """rated() / rated_over() / rated_under() filter by linked review score."""
-
-    def setUp(self):
-        self.user = baker.make("auth.User")
-        self.profile = self.user.profile
-        self.pin_3 = baker.make(Pin, profile=self.profile)
-        self.pin_5 = baker.make(Pin, profile=self.profile)
-        baker.make(Review, profile=self.profile, pin=self.pin_3, rating=3)
-        baker.make(Review, profile=self.profile, pin=self.pin_5, rating=5)
-
-    def _qs(self):
-        return Pin.objects.filter(profile=self.profile)
-
-    def test_rated_finds_exact_match(self) -> None:
-        qs = self._qs().rated(3)
-        self.assertIn(self.pin_3, qs)
-        self.assertNotIn(self.pin_5, qs)
-
-    def test_rated_excludes_non_matching_score(self) -> None:
-        self.assertFalse(self._qs().rated(4).filter(pk__in=[self.pin_3.pk, self.pin_5.pk]).exists())
-
-    def test_rated_over_includes_equal_rating(self) -> None:
-        self.assertIn(self.pin_3, self._qs().rated_over(3))
-
-    def test_rated_over_includes_higher_rating(self) -> None:
-        self.assertIn(self.pin_5, self._qs().rated_over(3))
-
-    def test_rated_over_excludes_lower_rating(self) -> None:
-        self.assertNotIn(self.pin_3, self._qs().rated_over(4))
-
-    def test_rated_under_includes_equal_rating(self) -> None:
-        self.assertIn(self.pin_3, self._qs().rated_under(3))
-
-    def test_rated_under_excludes_higher_rating(self) -> None:
-        self.assertNotIn(self.pin_5, self._qs().rated_under(3))
-
-
-# -- by_tag --------------------------------------------------------------------
-
-class PinQuerySetByTagTests(TestCase):
-    """by_tag() traverses the Label parents M2M to include descendant tags."""
-
-    def setUp(self):
-        self.profile = baker.make("auth.User").profile
-        self.parent_tag = baker.make("dashboard.Label", kind="tag", profile=None)
-        self.child_tag = baker.make("dashboard.Label", kind="tag", profile=None)
-        self.child_tag.parents.add(self.parent_tag)
-        self.other_tag = baker.make("dashboard.Label", kind="tag", profile=None)
-
-        # A profile may hold only one root pin per Location, so each pin here
-        # gets its own.
-        self.pin_parent = baker.make(Pin, profile=self.profile)
-        self.pin_parent.labels.add(self.parent_tag)
-
-        self.pin_child = baker.make(Pin, profile=self.profile)
-        self.pin_child.labels.add(self.child_tag)
-
-        self.pin_other = baker.make(Pin, profile=self.profile)
-        self.pin_other.labels.add(self.other_tag)
-
-        self.pin_none = baker.make(Pin, profile=self.profile)
-
-    def _qs(self):
-        return Pin.objects.filter(profile=self.profile)
-
-    def test_by_parent_tag_includes_directly_tagged_pin(self) -> None:
-        qs = self._qs().by_tag(self.parent_tag.id)
-        self.assertIn(self.pin_parent, qs)
-
-    def test_by_parent_tag_includes_pin_tagged_with_descendant(self) -> None:
-        qs = self._qs().by_tag(self.parent_tag.id)
-        self.assertIn(self.pin_child, qs)
-
-    def test_by_parent_tag_excludes_unrelated_tag(self) -> None:
-        qs = self._qs().by_tag(self.parent_tag.id)
-        self.assertNotIn(self.pin_other, qs)
-
-    def test_by_parent_tag_excludes_untagged_pin(self) -> None:
-        qs = self._qs().by_tag(self.parent_tag.id)
-        self.assertNotIn(self.pin_none, qs)
-
-    def test_by_child_tag_excludes_pin_with_only_parent_tag(self) -> None:
-        # Ancestry is one-way - child tag does not imply parent tag
-        qs = self._qs().by_tag(self.child_tag.id)
-        self.assertNotIn(self.pin_parent, qs)
-
-
 # -- PinManager.get_nearby_or_create -------------------------------------------
+
 
 class PinManagerGetNearbyOrCreateGuardTests(TestCase):
     """get_nearby_or_create() returns (None, False) for invalid inputs."""
@@ -266,7 +173,9 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
         loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         # Seed an existing pin at a known coordinate using the manager.
         self.existing, _ = Pin.objects.get_nearby_or_create(
-            40.0, -74.0, self.profile,
+            40.0,
+            -74.0,
+            self.profile,
             threshold_meters=100,
             defaults={"location": loc},
         )
@@ -279,7 +188,10 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
     def test_distant_point_creates_new_pin(self) -> None:
         loc: Location = baker.make(Location, latitude="51.5", longitude="-0.1")
         pin, created = Pin.objects.get_nearby_or_create(
-            51.5, -0.1, self.profile, defaults={"location": loc},
+            51.5,
+            -0.1,
+            self.profile,
+            defaults={"location": loc},
         )
         self.assertTrue(created)
         self.assertNotEqual(pin.pk, self.existing.pk)
@@ -287,7 +199,10 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
     def test_created_pin_is_persisted(self) -> None:
         loc: Location = baker.make(Location, latitude="51.5", longitude="-0.1")
         pin, created = Pin.objects.get_nearby_or_create(
-            51.5, -0.1, self.profile, defaults={"location": loc},
+            51.5,
+            -0.1,
+            self.profile,
+            defaults={"location": loc},
         )
         self.assertTrue(created)
         self.assertTrue(Pin.objects.filter(pk=pin.pk).exists())
@@ -303,11 +218,9 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
 class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
     """get_nearby_or_create() must also dedupe against an existing *child* pin.
 
-    Import previously only looked for a root pin (parent_pin__isnull=True) at the
-    Location, so importing a placemark that matched an existing child/child pin's
-    coordinates silently created a brand-new, disconnected root pin instead of
-    merging into it.
-    """
+    Import previously only looked for a root pin (parent_pin__isnull=True) at the Location, so importing a
+    placemark that matched an existing child/child pin's coordinates silently created a brand-new, disconnected
+    root pin instead of merging into it."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
@@ -327,45 +240,3 @@ class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
         pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, threshold_meters=100)
         self.assertFalse(created)
         self.assertEqual(pin.pk, root.pk)
-
-
-class PinQuerySetWithCachedPhotosTests(TestCase):
-    """with_cached_photos() - "does this pin's location already have a stored photo" lookup.
-
-    A pure DB predicate (no external API call) - see services.photos.photo_enrichment for the
-    background job that populates these Image rows.
-    """
-
-    def setUp(self):
-        self.profile = baker.make("auth.User").profile
-
-    def test_pin_with_a_location_photo_is_included(self) -> None:
-        from urbanlens.dashboard.models.images.model import Image, MediaKind
-
-        location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
-        pin = baker.make(Pin, profile=self.profile, location=location)
-        baker.make(Image, location=location, media_type=MediaKind.PHOTO, pin=None, profile=None)
-        self.assertIn(pin, Pin.objects.with_cached_photos())
-
-    def test_pin_with_no_images_anywhere_is_excluded(self) -> None:
-        location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
-        pin = baker.make(Pin, profile=self.profile, location=location)
-        self.assertNotIn(pin, Pin.objects.with_cached_photos())
-
-    def test_a_different_locations_photo_does_not_leak_in(self) -> None:
-        from urbanlens.dashboard.models.images.model import Image, MediaKind
-
-        photographed_location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
-        baker.make(Image, location=photographed_location, media_type=MediaKind.PHOTO, pin=None, profile=None)
-
-        bare_location = baker.make("dashboard.Location", latitude="41.0", longitude="-75.0")
-        pin = baker.make(Pin, profile=self.profile, location=bare_location)
-        self.assertNotIn(pin, Pin.objects.with_cached_photos())
-
-    def test_non_photo_media_does_not_count(self) -> None:
-        from urbanlens.dashboard.models.images.model import Image, MediaKind
-
-        location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
-        pin = baker.make(Pin, profile=self.profile, location=location)
-        baker.make(Image, location=location, media_type=MediaKind.VIDEO, pin=None, profile=None)
-        self.assertNotIn(pin, Pin.objects.with_cached_photos())

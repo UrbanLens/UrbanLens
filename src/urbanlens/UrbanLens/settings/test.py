@@ -1,82 +1,105 @@
+import atexit
 import os
+import shutil
+import tempfile
 
-from urbanlens.UrbanLens.settings._gdal_windows import local_windows_gdal_overrides
+from pydantic_core import Url
+
+from urbanlens.UrbanLens.settings import _metrics
+from urbanlens.UrbanLens.settings._gdal_local import local_gdal_overrides
 from urbanlens.UrbanLens.settings.app import settings as _app_settings
 from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
 TESTING = True
 
-# django-perf-rec writes each covered view's query *fingerprint* to a .perf.yml
-# beside its test, so an N+1 arrives as a reviewable diff rather than as a
-# number nobody can interpret.
-#
-# MODE decides what a missing record means. "once" writes it and passes, which
-# is what you want the first time you cover a view. In CI a missing record means
-# the file was never committed, and silently recording it there would assert
-# whatever the code does today - including the regression under review - so it
-# fails instead.
+# A `test` module is under test by definition; xdist workers hide pytest from argv, so fix storage here.
+STORAGES = {**STORAGES, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}  # noqa: F405
+
+# Query fingerprints land beside tests as reviewable diffs; CI fails on missing records instead.
 PERF_REC = {"MODE": "none" if os.getenv("CI") else "once"}
 
-# Django's default PBKDF2 hasher runs ~1.2M iterations per call, which is the
-# point in production and pure overhead in tests - every baked User, every
-# generate_api_key, and every authenticate_api_key pays it. It was not merely
-# slow: ApiKeyWebSocketAuthTests.test_valid_api_key_authenticates_an_anonymous_socket
-# hashed inside the connection handshake and blew past WebsocketCommunicator's
-# 1-second default connect timeout, failing as an opaque asyncio TimeoutError.
-# (Its OAuth2 sibling passed throughout - that path is a plain indexed lookup
-# with no hashing, which is what made the failure look consumer-specific.)
-# Test-only: base.py keeps the real hashers for every other environment.
+# Django streams media itself, whatever UL_ENVIRONMENT says, so CI ("testing") serves like a dev runner; tests of
+# the nginx hand-off turn it on themselves.
+MEDIA_X_ACCEL = False
+
+# Production hashing is pure overhead in tests and can blow handshake timeouts.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
-# The real cache is Redis/valkey-backed, which makes every test whose request path
-# touches the cache depend on a live external service. Two problems with that: the
-# suite's own network guard (core.testing_network) only permits localhost, so running
-# against a compose stack - where the cache resolves to a container bridge IP - fails
-# any such test with an opaque "External network access is disabled during tests"
-# rather than anything about the code; and tests would otherwise share one cache
-# instance, so entries bleed between them. locmem is per-process and needs nothing
-# running.
+# locmem: no live service needed and no cross-test bleed (network guard only allows localhost).
+#
+# Both aliases name the same location on purpose. What separates them in a deployment is which
+# Dragonfly they connect to and whether it may evict, neither of which locmem has; what a test
+# asserts is what was cached, and a second store would only mean every test seeding a proxied
+# body had to know which one. test_proxied_bytes_have_their_own_store.py covers the wiring.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "BACKEND": "urbanlens.core.cache_backend.AtomicLocMemCache",
         "LOCATION": "urbanlens-tests",
+    },
+    # Its own LOCATION, not the default's: LocMemCache shares storage by LOCATION, and one shared
+    # between them hides every place production writes proxied bytes to the wrong store.
+    PROXIED_BYTES_CACHE: {  # noqa: F405
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "urbanlens-tests-proxied",
     },
 }
 
-# Same reasoning as CACHES above, for the Celery broker. base.py points it at
-# valkey, so every `apply_async` in a test opened a real broker connection - which
-# the network guard blocks, raising RuntimeError, which `safely_enqueue_task`
-# catches and reports as "broker unreachable" by returning None. Callers that treat
-# that as "give up quietly" then took their failure path: the pin-detail panel views
-# returned 204 instead of a panel, and twelve tests failed asserting a behaviour the
-# code only exhibits when the broker is down.
-#
-# `memory://` is Celery's in-process transport - enqueueing succeeds and needs
-# nothing running. Tasks still do not execute, since no worker consumes the queue
-# and CELERY_TASK_ALWAYS_EAGER stays opt-in via UL_CELERY_TASK_ALWAYS_EAGER, so a
-# test asserting a request only *scheduled* work still sees exactly that.
+# In-process broker; tasks still don't run without ALWAYS_EAGER, so scheduling-only assertions hold.
 CELERY_BROKER_URL = "memory://"
 CELERY_RESULT_BACKEND = "cache+memory://"
 
-# No clamd daemon runs in the test environment - tests that exercise the
-# malware-rejection path (services.security.malware_scan) mock it explicitly; every
-# other upload test should hit the "clean" no-op path instead of a 503 from
-# an unreachable scanner (see AppSettings.clamav_enabled's fail-closed
-# behavior).
+# One in-memory layer for the suite; flush in teardown if a lingering subscription ever bites.
+CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+# No clamd in tests; malware-path tests mock it, the rest take the clean no-op.
 _app_settings.clamav_enabled = False
 
-# model_bakery's default related-object generation collides with the
-# create_user_profile post_save signal (see urbanlens.core.tests.baker).
+# Force None so a developer .env can't trigger live VirusTotal calls.
+_app_settings.virustotal_api_key = None
+
+# Guarantee tests never spend provider tokens, regardless of runner or local .env.
+# Placeholder (not None) so adapter construction still exercises the tested path.
+_app_settings.anthropic_api_key = "test-placeholder-not-a-key"
+_app_settings.openai_api_key = "test-placeholder-not-a-key"
+_app_settings.cloudflare_ai_api_key = "test-placeholder-not-a-key"
+_app_settings.huggingface_ai_api_key = None
+# Policy-valid host with no real account; keeps test artifacts shippable. Url-typed to match production.
+_app_settings.cloudflare_worker_ai_endpoint = Url("https://api.cloudflare.com/client/v4/accounts/TESTACCOUNT/ai/run")
+# Never address a real ai-inference service; tests mock at the adapter.
+_app_settings.ai_inference_url = None
+
+# Throwaway MEDIA_ROOT per process (TestCase rolls back the DB, not the filesystem).
+_test_media_root = tempfile.mkdtemp(prefix="urbanlens-test-media-")
+atexit.register(lambda: shutil.rmtree(_test_media_root, ignore_errors=True))
+MEDIA_ROOT = _test_media_root
+
+# Suite calls parsers directly; boundary tests re-raise to deny.
+UL_UNTRUSTED_PARSE_POLICY = "allow"
+# No media-worker drains queues under pytest; default routing plus eager still runs where asked.
+UL_SANDBOX_ENABLED = False
+
+# Suite calls LocalInferenceClient directly with mocked adapters.
+UL_DIRECT_INFERENCE_POLICY = "allow"
+
+# Assistant turns run in-process under eager; boundary tests flip this off.
+UL_AI_WORKER_ENABLED = True
+
+# Pin metrics off for determinism; derived values undone explicitly due to import order.
+UL_METRICS_ENABLED = False
+UL_METRICS_INSTRUMENTED = False
+_app_settings.metrics_enabled = False
+CELERY_WORKER_SEND_TASK_EVENTS = False
+INSTALLED_APPS = [app for app in INSTALLED_APPS if app != "django_prometheus"]  # noqa: F405
+MIDDLEWARE = [middleware for middleware in MIDDLEWARE if not middleware.startswith("django_prometheus.")]  # noqa: F405
+# Single-process values so per-test registries actually isolate (see helper).
+_metrics.disable_multiprocess_metrics()
+
+# model_bakery collides with the create_user_profile signal; use the signal-safe baker.
 BAKER_CUSTOM_CLASS = "urbanlens.core.tests.baker.SignalSafeBaker"
 
-# model_bakery dispatches by exact field class, so EncryptedTextField (a
-# TextField subclass used by ImmichAccount/FlickrAccount/GooglePhotosAccount/
-# GoogleCalendarAccount/SiteSettings) isn't picked up by TextField's built-in
-# generator - baker.make() would otherwise raise TypeError for any of those
-# fields left at their default. Reuse the same plain-text generator TextField
-# gets.
+# EncryptedTextField needs TextField's plain-text generator or baker.make() raises TypeError.
 BAKER_CUSTOM_FIELDS_GEN = {
     "urbanlens.dashboard.models.fields.EncryptedTextField": "model_bakery.random_gen.gen_string",
 }
 
-globals().update(local_windows_gdal_overrides())
+globals().update(local_gdal_overrides())

@@ -7,11 +7,7 @@ from urbanlens.dashboard.models import abstract
 
 def normalize_auto_removal_value(kind: str, value: str) -> str:
     """Normalize a value the same way for both recording and checking a tombstone.
-
-    Alias/owner names are matched case-insensitively (mirroring the DB-level
-    case-insensitive uniqueness on aliases/owners); label values are already
-    a bare primary-key string and links are matched by their exact URL, so
-    both are left as-is beyond trimming.
+    Alias/owner names are matched case-insensitively (mirroring the DB-level case-insensitive uniqueness on aliases/owners); label values are already a bare primary-key string and links are matched by their exact URL, so both are left as-is beyond trimming.
     """
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind
 
@@ -24,12 +20,11 @@ def normalize_auto_removal_value(kind: str, value: str) -> str:
 class AutoRemovalQuerySet(abstract.DashboardQuerySet):
     """QuerySet for the PinAutoRemoval/WikiAutoRemoval tombstone models."""
 
-    def of_kind(self, kind: str) -> AutoRemovalQuerySet:
-        """Restrict to tombstones of the given kind (see ``AutoRemovalKind``)."""
-        return self.filter(kind=kind)
+
+_AutoRemovalManagerBase = abstract.DashboardManager.from_queryset(AutoRemovalQuerySet)
 
 
-class AutoRemovalManager(abstract.DashboardManager.from_queryset(AutoRemovalQuerySet)):
+class AutoRemovalManager(_AutoRemovalManagerBase):
     """Manager for the PinAutoRemoval/WikiAutoRemoval tombstone models.
 
     Callers pass the owning parent as a keyword matching the concrete model's

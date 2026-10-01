@@ -47,24 +47,78 @@ MAX_ROUNDS_PER_SESSION = 20
 #: ``services.spotguessr.session.STALL_ROUND_TIMEOUT_MINUTES``.
 STALL_ROUND_TIMEOUT_MINUTES = 10
 
-#: Flat points for a correct answer - unlike SpotGuessr's distance-decay
-#: curve, a Trivia answer is a binary right/wrong, so there's no continuous
-#: closeness to curve (Phase 3's AI-judged "close enough" match is still
-#: either right or wrong, just judged more leniently - it doesn't introduce
-#: partial credit).
+#: Flat points for a correct answer - a Trivia answer is binary right/wrong,
+#: so there is no closeness curve and no partial credit.
 POINTS_FOR_CORRECT_ANSWER = 1000
 
 
 class TriviaError(Exception):
-    """Raised for invalid session/round/answer operations.
+    """Raised for an invalid Trivia session/round/answer operation.
 
-    ``safe_message`` is always safe to surface to the caller verbatim - every
-    raise site in this module passes a developer-authored string.
+    The message is for logs, not the response: HTTP-facing callers must
+    catch a subclass (or this base class) and author their own user-facing
+    text, so a new ``raise`` here can never smuggle text into a response.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class InviteNotHostError(TriviaError):
+    """The caller isn't this session's host, and only the host may invite players."""
+
+
+class InviteAfterLobbyClosedError(TriviaError):
+    """The session has left LOBBY, so no more invites can go out."""
+
+
+class InviteeNotFriendError(TriviaError):
+    """The invitee isn't a connection of the host - only friends may be invited."""
+
+
+class NotInvitedError(TriviaError):
+    """The profile has no participant row for this session - it was never invited."""
+
+
+class JoinAfterLobbyClosedError(TriviaError):
+    """The roster locked (the session left LOBBY) before this profile joined."""
+
+
+class BeginNotHostError(TriviaError):
+    """The caller isn't this session's host, and only the host may begin the game."""
+
+
+class SessionAlreadyBegunError(TriviaError):
+    """The session has already left LOBBY, so it can't be begun a second time."""
+
+
+class NotJoinedParticipantError(TriviaError):
+    """The profile isn't a JOINED participant of this round's session."""
+
+
+class DuplicateAnswerError(TriviaError):
+    """This profile already submitted an answer for this round."""
+
+
+class EndSessionNotHostError(TriviaError):
+    """The caller isn't this session's host, and only the host may end the game."""
+
+
+class SessionAlreadyEndedError(TriviaError):
+    """The session is neither LOBBY nor ACTIVE - it has already ended."""
+
+
+class NotASessionParticipantError(TriviaError):
+    """The calling profile has no participant row for this session."""
+
+
+class KickNotHostError(TriviaError):
+    """The caller isn't this session's host, and only the host may remove a player."""
+
+
+class CannotKickHostError(TriviaError):
+    """The kick target is the host themselves - use ``end_session_now`` instead."""
+
+
+class TargetNotAParticipantError(TriviaError):
+    """The kick target has no participant row for this session."""
 
 
 @dataclass(frozen=True)
@@ -82,12 +136,9 @@ class TriviaConfig:
     def geo_bounds(self) -> GEOSGeometry | None:
         """The configured geographic restriction as a GEOS geometry, or None.
 
-        Split at the antimeridian here rather than at each query: the callers all
-        run planar ``__within`` lookups (``ST_Within`` has no geography
-        implementation), and an area a player drew across the date line arrives
-        with unwrapped coordinates that match nothing on its far side. Splitting
-        at the source means every consumer - eligibility counts, round selection,
-        the external API - inherits the fix.
+        Split at the antimeridian here, not per query: callers run planar
+        ``__within`` lookups, so an area drawn across the date line would
+        otherwise match nothing on its far side.
 
         Returns:
             The restriction geometry, or None when unrestricted.
@@ -130,10 +181,8 @@ def start_multiplayer_session(
 ) -> TriviaSession:
     """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
 
-    The host's own participant row is created JOINED immediately - no
-    invite step for yourself. Each invitee gets an INVITED row plus a
-    notification (see ``_notify_invite``). Mirrors
-    ``services.spotguessr.session.start_multiplayer_session``.
+    The host joins immediately; each invitee gets an INVITED row plus a
+    notification. Mirrors ``spotguessr.session.start_multiplayer_session``.
     """
     session = TriviaSession.objects.create(
         host_profile=host,
@@ -154,15 +203,16 @@ def invite_to_session(session: TriviaSession, host: Profile, invitee: Profile) -
     non-friend is rejected server-side, not just hidden in a picker UI.
 
     Raises:
-        TriviaError: if the caller isn't the host, the session has already
-            started, or ``invitee`` isn't a friend of the host.
+        InviteNotHostError: ``host`` isn't this session's host.
+        InviteAfterLobbyClosedError: The session has already left LOBBY.
+        InviteeNotFriendError: ``invitee`` isn't a connection of ``host``.
     """
     if session.host_profile_id != host.pk:
-        raise TriviaError("Only the host can invite players.")
+        raise InviteNotHostError("Caller is not the session host; only the host may invite players.")
     if session.status != TriviaSessionStatus.LOBBY:
-        raise TriviaError("Can't invite once the game has started.")
+        raise InviteAfterLobbyClosedError("Session is no longer in LOBBY status; invites are closed once play begins.")
     if not are_connections(host, invitee):
-        raise TriviaError("You can only invite friends.")
+        raise InviteeNotFriendError("Invitee is not a connection (friend) of the host; only friends may be invited.")
 
     participant, created = TriviaSessionParticipant.objects.get_or_create(
         session=session,
@@ -172,9 +222,8 @@ def invite_to_session(session: TriviaSession, host: Profile, invitee: Profile) -
     if created:
         _notify_invite(host, invitee, session)
     elif participant.status == TriviaSessionParticipantStatus.LEFT:
-        # A departed participant's row already exists (LEFT is terminal, see
-        # the model docstring) - get_or_create would otherwise silently
-        # return it unchanged instead of actually re-inviting them.
+        # LEFT is terminal - get_or_create would otherwise return the dead
+        # row unchanged instead of actually re-inviting them.
         participant.status = TriviaSessionParticipantStatus.INVITED
         participant.save(update_fields=["status", "updated"])
         _notify_invite(host, invitee, session)
@@ -211,21 +260,27 @@ def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParti
     reconnecting participant). Only actually-new joins are rejected once the
     roster is locked.
 
+    A profile that left or was kicked holds no invitation any more; only the
+    host's fresh ``invite_to_session`` lets it back in.
+
     Raises:
-        TriviaError: if ``profile`` was never invited to this session, or
-            the roster is already locked (the session isn't in LOBBY) and
-            they hadn't joined before that happened.
+        NotInvitedError: ``profile`` has no live invitation to this session.
+        JoinAfterLobbyClosedError: The roster is already locked (the
+            session isn't in LOBBY) and ``profile`` hadn't joined before
+            that happened.
     """
     try:
         participant = TriviaSessionParticipant.objects.get(session=session, profile=profile)
     except TriviaSessionParticipant.DoesNotExist:
-        raise TriviaError("You were not invited to this session.") from None
+        raise NotInvitedError("No TriviaSessionParticipant row exists for this profile on this session; it was never invited.") from None
 
+    if participant.status == TriviaSessionParticipantStatus.LEFT:
+        raise NotInvitedError("This profile left or was removed from the session; it needs a fresh invitation to rejoin.")
     if participant.status == TriviaSessionParticipantStatus.JOINED:
         return participant
 
     if session.status != TriviaSessionStatus.LOBBY:
-        raise TriviaError("This game has already started - you can no longer join.")
+        raise JoinAfterLobbyClosedError("Session left LOBBY before this profile joined; the roster is locked.")
 
     participant.status = TriviaSessionParticipantStatus.JOINED
     participant.save(update_fields=["status", "updated"])
@@ -236,21 +291,18 @@ def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParti
 def begin_session(session: TriviaSession, host: Profile) -> TriviaRound | None:
     """Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
 
-    Unlike solo start, the joined roster's combined eligibility can't be
-    checked before this point (invitees may not have joined yet). If
-    locking the roster reveals there's nothing eligible for this group, the
-    session is left ACTIVE (not marked COMPLETED) since it never actually
-    played anything - the caller should report ``{"finished": false,
-    "no_eligible_questions": true}``, mirroring ``SpotGuessrBeginView``.
+    Group eligibility is only checkable once the roster locks. If nothing is
+    eligible, the session stays ACTIVE (it never played) - report
+    ``{"finished": false, "no_eligible_questions": true}``.
 
     Raises:
-        TriviaError: if the caller isn't the host or the session isn't
-            still in its lobby.
+        BeginNotHostError: The caller isn't this session's host.
+        SessionAlreadyBegunError: The session isn't still in its lobby.
     """
     if session.host_profile_id != host.pk:
-        raise TriviaError("Only the host can start the game.")
+        raise BeginNotHostError("Caller is not the session host; only the host may begin the game.")
     if session.status != TriviaSessionStatus.LOBBY:
-        raise TriviaError("This session has already started.")
+        raise SessionAlreadyBegunError("Session is not in LOBBY status; it has already begun.")
 
     session.status = TriviaSessionStatus.ACTIVE
     session.save(update_fields=["status", "updated"])
@@ -281,12 +333,9 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
     existing_rounds = list(TriviaRound.objects.for_session(session).select_related("question"))
     if existing_rounds:
         last_round = existing_rounds[-1]
-        # A revealed round is finished no matter how many people answered it.
-        # Testing only the answer count treated a *force*-revealed round (the
-        # stall sweep's whole purpose - see force_reveal_round) as still in
-        # progress, so it was handed back here forever: the session could
-        # neither advance to the next round nor complete, because
-        # _advance_or_complete only completes when this returns None.
+        # A revealed round is finished no matter how many answered it - the
+        # answer count alone would re-serve a force-revealed round forever,
+        # stalling the session.
         if last_round.revealed_at is None and TriviaAnswer.objects.for_round(last_round).count() < participant_count:
             return last_round
 
@@ -298,10 +347,8 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
 
     candidates = list(eligibility.eligible_questions(participants, geo_bounds=config.geo_bounds, exclude_question_ids=excluded_question_ids))
 
-    # A solo player may very rarely see their own not-yet-approved question -
-    # never in multiplayer, and never any other player's. See
-    # eligibility.solo_own_pending_questions's docstring for the full spec
-    # rationale (no feedback loop for the submitter to probe the filter).
+    # Rarely, a solo player may see their own not-yet-approved question -
+    # never anyone else's. See solo_own_pending_questions's docstring.
     weight_overrides: dict[int, float] = {}
     if participant_count == 1:
         own_pending = list(eligibility.solo_own_pending_questions(participants[0], geo_bounds=config.geo_bounds, exclude_question_ids=excluded_question_ids))
@@ -318,29 +365,23 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
 def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> TriviaAnswer:
     """Score and record ``profile``'s answer for ``round_``.
 
-    Triggers the Glicko-2 rating update (``apply_round_ratings``) and the
-    question's ``NO_REACTION`` vote backfill once every joined participant
-    has answered, then eagerly advances to the next round (or completes the
-    session) - mirrors ``services.spotguessr.session.submit_guess``, including
-    the real-time broadcast sequence (``answer.submitted`` immediately, then
-    ``round.revealed`` + either ``round.started`` or ``session.completed``
-    once the round completes; a no-op without a channel layer listener, so
-    solo sessions work exactly the same as before). On a normalized-string
-    mismatch, falls back to ``services.trivia.answer_check`` (gated on
-    ``SiteFeature.AI`` - a profile without it simply gets exact-match-only,
-    never blocked from playing).
+    Rates and backfills ``NO_REACTION`` votes once everyone answered, then
+    advances (mirrors ``spotguessr.session.submit_guess``, including the
+    broadcast sequence). A normalized-string mismatch falls back to
+    ``answer_check`` (``SiteFeature.AI``-gated; without it, exact-match
+    only - never blocked from playing).
 
     Raises:
-        TriviaError: if ``profile`` isn't a JOINED participant of this
-            round's session (e.g. still INVITED, never joined), or if
-            ``profile`` already answered this round.
+        NotJoinedParticipantError: ``profile`` isn't a JOINED participant
+            of this round's session (e.g. still INVITED, never joined).
+        DuplicateAnswerError: ``profile`` already answered this round.
     """
     try:
         participant = TriviaSessionParticipant.objects.get(session=round_.session, profile=profile)
     except TriviaSessionParticipant.DoesNotExist:
-        raise TriviaError("You must join this session before submitting an answer.") from None
+        raise NotJoinedParticipantError("Profile is not a JOINED participant of this round's session.") from None
     if participant.status != TriviaSessionParticipantStatus.JOINED:
-        raise TriviaError("You must join this session before submitting an answer.")
+        raise NotJoinedParticipantError("Profile is not a JOINED participant of this round's session.")
 
     question = round_.question
     is_correct = TriviaQuestion.normalize_answer(raw_answer) == question.answer_normalized
@@ -368,7 +409,7 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
                 points=points,
             )
         except IntegrityError:
-            raise TriviaError("This profile has already answered this round.") from None
+            raise DuplicateAnswerError("Profile has already submitted an answer for this round (unique constraint violation).") from None
 
         TriviaSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points)
 
@@ -392,17 +433,10 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
 def _finish_round(round_: TriviaRound, completed_answers: list[TriviaAnswer]) -> None:
     """Rate, backfill vote signal, and broadcast the reveal for a just-completed round.
 
-    Shared by ``submit_answer`` (the normal "everyone answered" path),
-    ``force_reveal_round`` (the stall-sweep path), ``end_session_now``
-    (the host-ended path), and the participant-removal path
-    (``leave_session``/``kick_participant``, via ``_remove_participant``) -
-    ``completed_answers`` may be a strict subset of the joined roster, or
-    empty, in every path but the first. A participant with no answer this
-    round simply isn't rated for it (see ``apply_round_ratings``, which only
-    touches profiles present in ``completed_answers``); the reveal still
-    broadcasts even with zero answers, so "nobody answered in time" reads as
-    a normal (if empty) round result rather than silently stalling. Mirrors
-    ``services.spotguessr.session._finish_round``.
+    Shared by the answer/stall-sweep/host-end/removal paths, so
+    ``completed_answers`` may be a subset of the roster or empty. A
+    participant with no answer isn't rated; the reveal still broadcasts, so
+    "nobody answered in time" reads as an empty round, not a stall.
     """
     if completed_answers:
         apply_round_ratings(round_, completed_answers)
@@ -423,21 +457,15 @@ def _advance_or_complete(session: TriviaSession) -> None:
 def force_reveal_round(round_: TriviaRound) -> None:
     """Force a stalled round to completion without waiting for every participant to answer.
 
-    Called by the stall-sweep Celery task (``tasks.sweep_stalled_trivia_sessions``)
-    for a round that's simply been open too long - the safety net for a
-    participant who closed their tab mid-round, which ``submit_answer``'s
-    "every joined participant answered" gate has no way to detect on its
-    own. Mirrors ``services.spotguessr.session.force_reveal_round``.
+    Called by the stall-sweep Celery task for a round open too long - the
+    safety net for a participant who closed their tab. Mirrors
+    ``spotguessr.session.force_reveal_round``.
 
-    A participant who never answered this round simply scores 0 for it and
-    isn't rated (see ``_finish_round``). If literally nobody answered - the
-    whole table walked away - the session is marked ``ABANDONED`` instead of
-    manufacturing an empty next round forever; a round with at least one
-    answer instead reveals normally and advances/completes exactly like
-    ``submit_answer`` would.
+    A participant who never answered scores 0 and isn't rated. With zero
+    answers the session is marked ``ABANDONED``; otherwise the round reveals
+    and advances exactly like ``submit_answer``.
 
-    Idempotent: a round already revealed (e.g. an answer completed it in the
-    instant before the sweep fired) is a silent no-op.
+    Idempotent: an already-revealed round is a silent no-op.
     """
     session = round_.session
     with transaction.atomic():
@@ -462,24 +490,19 @@ def force_reveal_round(round_: TriviaRound) -> None:
 def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
     """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
 
-    Unlike ``force_reveal_round`` (which only fires once a round's own stall
-    timeout elapses), this ends the whole session on request - the host
-    doesn't have to wait out a stalled/AFK player at all. Works from either
-    LOBBY (cancels a game that never started) or ACTIVE. If a round is still
-    open, it's revealed first using whichever answers already exist, so
-    in-flight progress isn't silently dropped from the final scoreboard -
-    but the session always ends as COMPLETED (never ABANDONED), since ending
-    it is exactly what the host asked for. Mirrors
-    ``services.spotguessr.session.end_session_now``.
+    Ends the whole session on request, from LOBBY or ACTIVE - the host never
+    waits out a stalled player. An open round is revealed first from existing
+    answers; the session always ends as COMPLETED (never ABANDONED). Mirrors
+    ``spotguessr.session.end_session_now``.
 
     Raises:
-        TriviaError: if the caller isn't the host, or the session has
-            already ended.
+        EndSessionNotHostError: The caller isn't this session's host.
+        SessionAlreadyEndedError: The session has already ended.
     """
     if session.host_profile_id != host.pk:
-        raise TriviaError("Only the host can end the game.")
+        raise EndSessionNotHostError("Caller is not the session host; only the host may end the game.")
     if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
-        raise TriviaError("This game has already ended.")
+        raise SessionAlreadyEndedError("Session status is neither LOBBY nor ACTIVE; it has already ended.")
 
     current_round = TriviaRound.objects.for_session(session).filter(revealed_at__isnull=True).first()
     if current_round is not None:
@@ -499,23 +522,16 @@ def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
 
 
 def _remove_participant(session: TriviaSession, participant: TriviaSessionParticipant, *, reason: str) -> None:
-    """Mark ``participant`` LEFT, transfer host / abandon the session if needed, and finish an in-flight round if the removal just completed it.
+    """Mark ``participant`` LEFT, transfer host / abandon if needed, and finish an in-flight round if the removal just completed it.
 
-    Shared by ``leave_session`` and ``kick_participant`` - the two only
-    differ in who's allowed to call this and the broadcast ``reason``
-    ("left" vs. "kicked"). No SpotGuessr equivalent exists yet - this is
-    new ground, not a port.
+    Shared by ``leave_session`` and ``kick_participant`` (they differ only in
+    caller and broadcast ``reason``).
 
-    - If the departing participant was the host, host is transferred to the
-      earliest-joined remaining JOINED participant (an INVITED profile can
-      never become host - they haven't actually joined). If nobody JOINED
-      remains, the session is marked ``ABANDONED`` - the whole table left,
-      the same terminal state a zero-answer stall reaches.
-    - If the departure was a currently-JOINED participant and the session is
-      ACTIVE, whatever round is still open is re-checked: removing the last
-      holdout can complete a round exactly the way their own answer would
-      have, so that path reuses ``_finish_round``/``_advance_or_complete``
-      rather than leaving the round stalled until the next stall-sweep.
+    - Host departure transfers host to the earliest-joined remaining JOINED
+      participant; with nobody JOINED left the session is ``ABANDONED``.
+    - Removing the last holdout on an ACTIVE round can complete it exactly
+      like their answer would, so that path reuses ``_finish_round`` /
+      ``_advance_or_complete`` instead of waiting for the stall sweep.
     """
     was_host = session.host_profile_id == participant.profile_id
     was_joined = participant.status == TriviaSessionParticipantStatus.JOINED
@@ -578,15 +594,16 @@ def leave_session(session: TriviaSession, profile: Profile) -> None:
     completion).
 
     Raises:
-        TriviaError: if ``profile`` isn't a participant of this session, or
-            the session has already ended.
+        SessionAlreadyEndedError: The session has already ended.
+        NotASessionParticipantError: ``profile`` isn't a participant of
+            this session.
     """
     if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
-        raise TriviaError("This game has already ended.")
+        raise SessionAlreadyEndedError("Session status is neither LOBBY nor ACTIVE; it has already ended.")
     try:
         participant = TriviaSessionParticipant.objects.get(session=session, profile=profile)
     except TriviaSessionParticipant.DoesNotExist:
-        raise TriviaError("You are not part of this session.") from None
+        raise NotASessionParticipantError("No TriviaSessionParticipant row exists for this profile on this session.") from None
     if participant.status == TriviaSessionParticipantStatus.LEFT:
         return
     _remove_participant(session, participant, reason="left")
@@ -601,20 +618,22 @@ def kick_participant(session: TriviaSession, host: Profile, target_profile: Prof
     ``target_profile`` already left.
 
     Raises:
-        TriviaError: if the caller isn't the host, the target is the host
-            themselves, the target isn't a participant, or the session has
-            already ended.
+        KickNotHostError: The caller isn't this session's host.
+        CannotKickHostError: ``target_profile`` is the host themselves.
+        SessionAlreadyEndedError: The session has already ended.
+        TargetNotAParticipantError: ``target_profile`` isn't a participant
+            of this session.
     """
     if session.host_profile_id != host.pk:
-        raise TriviaError("Only the host can remove a player.")
+        raise KickNotHostError("Caller is not the session host; only the host may remove a player.")
     if target_profile.pk == host.pk:
-        raise TriviaError("The host can't remove themselves - use End game instead.")
+        raise CannotKickHostError("Kick target is the session host; use end_session_now to end the game instead.")
     if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
-        raise TriviaError("This game has already ended.")
+        raise SessionAlreadyEndedError("Session status is neither LOBBY nor ACTIVE; it has already ended.")
     try:
         participant = TriviaSessionParticipant.objects.get(session=session, profile=target_profile)
     except TriviaSessionParticipant.DoesNotExist:
-        raise TriviaError("That profile is not part of this session.") from None
+        raise TargetNotAParticipantError("No TriviaSessionParticipant row exists for the target profile on this session.") from None
     if participant.status == TriviaSessionParticipantStatus.LEFT:
         return
     _remove_participant(session, participant, reason="kicked")

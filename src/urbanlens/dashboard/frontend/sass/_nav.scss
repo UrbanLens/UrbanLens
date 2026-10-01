@@ -36,6 +36,7 @@ nav {
 }
 
 .app-nav-logo {
+    flex-shrink: 0;
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -47,6 +48,16 @@ nav {
     font-weight: 700;
     color: var(--ul-grey-0);
     letter-spacing: -0.01em;
+    @include truncate;
+
+    // Gone rather than truncated on a phone, and at tablet width where the links need the room.
+    @include down($breakpoint-xs) {
+        display: none;
+    }
+
+    @include between($breakpoint-sm, $breakpoint-md) {
+        display: none;
+    }
 }
 
 // -- Mobile hamburger ---------------------------------------------------------
@@ -85,12 +96,12 @@ nav {
     padding: 0;
     gap: 0.25rem;
     flex: 1;
-    
+
     > li {
         &:not(.app-nav-link--active):hover {
             background: rgba(255, 255, 255, 0.1);
         }
-        
+
         &:hover {
             a {
                 color: #fff;
@@ -112,6 +123,11 @@ nav {
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
 
+    // Every link still shows at tablet width, so each gives up some padding.
+    @include between($breakpoint-sm, $breakpoint-md) {
+        padding: 0 0.5rem;
+    }
+
     // Current section - stays visually distinct from the transient :hover state.
     &--active {
         background: rgba(255, 255, 255, 0.05);
@@ -126,6 +142,8 @@ nav {
     align-items: center;
     gap: 0.5rem;
     margin-left: auto;
+    // Fixed, and deliberately so: these are icon buttons with nothing to give up.
+    flex-shrink: 0;
 }
 
 // -- User avatar component (reusable) -----------------------------------------
@@ -201,6 +219,21 @@ nav {
     font-weight: 500;
     max-width: 12rem;
     @include truncate;
+
+    // Dropped rather than truncated on a phone, and at tablet width where the links need the room;
+    // the avatar and the dropdown's header still say who is signed in.
+    @include down($breakpoint-xs) {
+        display: none;
+    }
+
+    @include between($breakpoint-sm, $breakpoint-md) {
+        display: none;
+    }
+}
+
+.nav-user,
+.nav-user-btn {
+    flex-shrink: 0;
 }
 
 .nav-chevron {
@@ -359,9 +392,7 @@ nav {
 }
 
 // -- Site footer --------------------------------------------------------------
-// Mobile-first flex layout: version sits at the start, everything else
-// (Github link, and on the map page the live attribution text) sits at the
-// end, on every page - not just the map page.
+// Mobile-first flex layout: version sits at the start, everything else (Github link, and on the map page the live attribution text) sits.
 .page-footer {
     background-color: var(--nav-bg);
     color: var(--ul-grey-4);
@@ -452,12 +483,7 @@ nav {
         }
     }
 
-    // .page-footer__github is inline-flex at the base selector (so its
-    // icon/text/link line up when it's a direct flex child of the plain
-    // footer). Here it's nested inside .page-footer__meta, a block div,
-    // so an inline-flex box just shrinks to content and sits left,
-    // ignoring the text-align: right above. Force it block-level and
-    // right-justify its flex children directly instead.
+    // .page-footer__github is inline-flex at the base selector.
     .page-footer__github {
         display: flex;
         justify-content: flex-end;
@@ -552,6 +578,24 @@ nav {
         letter-spacing: -.01em;
         color: var(--ul-grey-8);
     }
+
+    &__actions {
+        display: flex;
+        align-items: center;
+        gap: .15rem;
+    }
+
+    &__all-link {
+        font-size: .76rem;
+        font-weight: 600;
+        color: var(--primary-color);
+        padding: .25rem .55rem;
+        border-radius: $radius-sm;
+
+        &:hover {
+            background: var(--ul-hover-bg-primary);
+        }
+    }
 }
 
 .notif-mark-all-btn {
@@ -583,10 +627,21 @@ nav {
     gap: .75rem;
     padding: .75rem 1rem .75rem .9rem;
     cursor: default;
-    transition: background .15s ease, border-color .15s ease, opacity .15s ease;
+    transition: background .15s ease, border-color .15s ease, opacity .25s ease, max-height .25s ease, padding .25s ease, margin .25s ease;
     border-left: 3px solid transparent;
     border-bottom: 1px solid var(--ul-surface-border);
     position: relative;
+    max-height: 240px;
+    overflow: hidden;
+
+    &.htmx-swapping {
+        opacity: 0;
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin: 0;
+        border-bottom-width: 0;
+    }
 
     &:last-child {
         border-bottom: none;
@@ -795,6 +850,31 @@ nav {
         color: var(--ul-grey-6);
         margin: 0;
     }
+
+    &--page {
+        padding: 3rem 1.5rem;
+    }
+}
+
+.notifications-page {
+    .page-inner {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 1.25rem 1rem 2.5rem;
+    }
+}
+
+.notifications-history-card {
+    padding: 0;
+    overflow: hidden;
+}
+
+.notif-list--page {
+    padding: 0;
+
+    .notif-item:last-child {
+        border-bottom: 1px solid var(--ul-surface-border);
+    }
 }
 
 // Inline Accept / Decline buttons inside a friend_request notification
@@ -929,9 +1009,6 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
         }
 
         // WhatsApp/SMS columns before a number is connected on the profile.
-        // Not the disabled attribute - that would drop the field from the
-        // form entirely, silently clearing any stored preference the next
-        // time an unrelated checkbox in this same auto-saving form changes.
         &--unavailable {
             cursor: not-allowed;
 
@@ -1109,6 +1186,12 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
     .app-nav-right {
         margin-left: 0;
     }
+
+    // The bar's one elastic element, but only once the links are hidden.
+    .app-nav-brand {
+        flex-shrink: 1;
+        min-width: 0;
+    }
 }
 
 [data-theme="dark"] {
@@ -1122,13 +1205,13 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
             }
         }
     }
-   
+
     .app-nav-brand-name {
         color: var(--ul-grey-9);
     }
 
     .page-footer {
-        color: var(--ul-grey-6);    
+        color: var(--ul-grey-6);
         background-color: rgb(5, 12, 22); // slightly muted nav-bg
 
         &__meta {

@@ -1,12 +1,7 @@
 import { IconPicker } from "./icon-picker";
 
 /**
- * organize/index.html's icon picker additionally supports custom-image
- * upload (with a "clear custom icon" flag cleared/set alongside picks) and
- * notifies whichever bulk-edit tab owns a "-bulk-edit" picker id so its
- * Apply/Convert button label can refresh. Registered per-namespace by
- * organize.ts via `registerBulkStateUpdater` rather than hardcoding tab names
- * here, keeping this module agnostic of which tabs exist.
+ * organize/index.html's icon picker additionally supports custom-image upload.
  */
 const bulkStateUpdaters = new Map<string, () => void>();
 
@@ -20,8 +15,7 @@ export const OrganizeIconPicker = {
     pick(id: string, icon: string, btn: HTMLElement | null): void {
         IconPicker.pick(id, icon, btn);
 
-        // Picking anything from the grid (a real icon or "None") replaces
-        // whatever custom icon was previously uploaded for this label.
+        // Picking anything from the grid (a real icon or "None") replaces whatever custom icon was previously uploaded for this label.
         const clearFlag = document.getElementById(`edit-clear-custom-${id}`) as HTMLInputElement | null;
         if (clearFlag) clearFlag.value = "1";
 

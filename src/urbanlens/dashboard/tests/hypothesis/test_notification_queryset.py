@@ -1,10 +1,5 @@
-"""Tests for NotificationLog QuerySet and Manager.
+"""Tests for NotificationLog QuerySet and Manager."""
 
-Covers:
-- unread()       - lines 12-13
-- for_profile()  - line 17
-- mark_read()    - lines 21-22
-"""
 from __future__ import annotations
 
 from model_bakery import baker
@@ -81,22 +76,34 @@ class NotificationQuerySetForProfileTests(TestCase):
         self.assertEqual(qs.count(), 2)
 
 
+class NotificationQuerySetForInboxTests(TestCase):
+    """for_inbox() excludes dismissed notifications from the bell list."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.active = baker.make(NotificationLog, profile=self.profile, status=Status.READ, title="Active")
+        self.dismissed = baker.make(NotificationLog, profile=self.profile, status=Status.DISMISSED, title="Dismissed")
+
+    def test_for_inbox_includes_read_and_unread(self):
+        qs = NotificationLog.objects.for_profile(self.profile).for_inbox()
+        self.assertIn(self.active, qs)
+
+    def test_for_inbox_excludes_dismissed(self):
+        qs = NotificationLog.objects.for_profile(self.profile).for_inbox()
+        self.assertNotIn(self.dismissed, qs)
+
+
 class NotificationQuerySetMarkReadTests(TestCase):
     """mark_read() updates the status to READ and returns the count updated."""
 
     def setUp(self):
         self.user = baker.make("auth.User")
         self.profile = self.user.profile
-        self.n1 = baker.make(
-            NotificationLog, profile=self.profile, status=Status.UNREAD, title="A"
-        )
-        self.n2 = baker.make(
-            NotificationLog, profile=self.profile, status=Status.UNREAD, title="B"
-        )
+        self.n1 = baker.make(NotificationLog, profile=self.profile, status=Status.UNREAD, title="A")
+        self.n2 = baker.make(NotificationLog, profile=self.profile, status=Status.UNREAD, title="B")
         # One already-read; should not be double-counted.
-        self.n3 = baker.make(
-            NotificationLog, profile=self.profile, status=Status.READ, title="C"
-        )
+        self.n3 = baker.make(NotificationLog, profile=self.profile, status=Status.READ, title="C")
 
     def test_mark_read_returns_updated_count(self):
         count = NotificationLog.objects.filter(profile=self.profile).unread().mark_read()
@@ -124,3 +131,18 @@ class NotificationQuerySetMarkReadTests(TestCase):
         NotificationLog.objects.for_profile(self.profile).unread().mark_read()
         remaining = NotificationLog.objects.for_profile(self.profile).unread()
         self.assertEqual(remaining.count(), 0)
+
+
+class NotificationQuerySetMarkDismissedTests(TestCase):
+    """mark_dismissed() updates status and returns the count updated."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.n1 = baker.make(NotificationLog, profile=self.profile, status=Status.UNREAD, title="A")
+
+    def test_mark_dismissed_sets_status(self):
+        count = NotificationLog.objects.filter(pk=self.n1.pk).mark_dismissed()
+        self.assertEqual(count, 1)
+        self.n1.refresh_from_db()
+        self.assertEqual(self.n1.status, Status.DISMISSED)

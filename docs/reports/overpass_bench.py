@@ -1,8 +1,7 @@
-"""Benchmark UrbanLens' Overpass mirror pool against the new self-hosted instance.
+"""Benchmark the Overpass mirror pool against the self-hosted instance.
 
-Runs an identical set of Overpass QL programs - ranging from a trivial single-node
-lookup to region-wide area scans - against every configured endpoint, recording
-time-to-first-byte, total wall time, payload size and element count.
+Runs the same Overpass QL programs against every endpoint, recording
+time-to-first-byte, wall time, payload size and element count.
 
 Usage:
     python overpass_bench.py [--rounds N] [--out results.json] [--only light|heavy|all]
@@ -53,8 +52,7 @@ out tags geom qt;
 """.strip()
 
 
-# A real-ish parcel ring (Bethlehem Steel site, Bethlehem PA) for the poly: filter,
-# matching what plugins.builtin.parcel_buildings sends for a large industrial site.
+# Parcel ring for the poly: filter, matching parcel_buildings on a large industrial site.
 _STEEL_RING = [
     (40.6120, -75.3800),
     (40.6120, -75.3550),
@@ -72,10 +70,7 @@ class Query:
     ql: str
     note: str
     rounds: int = 2
-    #: Endpoints are hit concurrently by default - they are independent servers,
-    #: so queue wait on one does not perturb another. Queries whose payloads are
-    #: large enough to saturate the *client's* bandwidth must run serially, or
-    #: concurrent transfers would contend and inflate every measurement.
+    #: Serialise only bandwidth-heavy queries; concurrent transfers would inflate every measurement.
     parallel_safe: bool = True
 
 
@@ -219,8 +214,7 @@ def main() -> int:
     parser.add_argument("--only", default="all", choices=["all", "light", "medium", "heavy", "nonheavy"])
     parser.add_argument("--pause", type=float, default=2.0, help="Seconds between requests to be polite.")
     parser.add_argument("--seed", type=int, default=1337)
-    # Matches OverpassGateway.timeout in production: a mirror that needs longer than
-    # this has already failed the app, so there is nothing to learn by waiting.
+    # Mirror production OverpassGateway.timeout; slower mirrors have already failed the app.
     parser.add_argument("--timeout", type=float, default=30.0, help="Client abort for light/medium queries.")
     parser.add_argument("--heavy-timeout", type=float, default=60.0, help="Client abort for heavy queries.")
     args = parser.parse_args()

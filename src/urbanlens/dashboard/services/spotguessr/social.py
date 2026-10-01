@@ -1,7 +1,4 @@
-"""Ratings visibility: your own ratings + friends' ratings with opt-out.
-
-See ``docs/designs/drafts/spotguessr.md`` ("Social: ratings visibility").
-"""
+"""Ratings visibility: your own ratings + friends' ratings with opt-out."""
 
 from __future__ import annotations
 
@@ -23,25 +20,16 @@ def friend_profiles(profile: Profile) -> list[Profile]:
 def visible_friend_ratings(profile: Profile) -> list[dict]:
     """Each visible friend's most-recently-played mode rating, excluding anyone who has opted out.
 
-    Each friend's own most-recently-played mode is used independently
-    (rather than a single fixed mode for everyone) - a Named Place/Street
-    View-only friend previously showed no rating at all, since the lookup
-    was hardcoded to Photos mode.
-
     Returns:
-        A list of ``{"profile": Profile, "rating": PlayerModeRating | None}``
-        dicts, one per visible friend - friends who haven't played yet still
-        appear, with ``rating=None``, since the opt-out is about visibility,
-        not about hiding the fact that a friend hasn't played.
-    """
-    visible = []
-    for friend in friend_profiles(profile):
-        try:
-            preference = friend.spotguessr_preference
-        except SpotGuessrPreference.DoesNotExist:
-            preference = None
-        if preference is not None and not preference.show_ratings_to_friends:
-            continue
-        rating = PlayerModeRating.objects.filter(profile=friend).order_by("-last_played_at").first()
-        visible.append({"profile": friend, "rating": rating})
-    return visible
+        A list of ``{"profile": Profile, "rating": PlayerModeRating | None}`` dicts, one per visible friend - friends who haven't played yet still appear, with ``rating=None``, since the opt-out is about visibility, not about hiding the fact that a friend hasn't played."""
+    friends = friend_profiles(profile)
+    if not friends:
+        return []
+    friend_ids = [friend.pk for friend in friends]
+
+    opted_out_ids = set(SpotGuessrPreference.objects.filter(profile_id__in=friend_ids, show_ratings_to_friends=False).values_list("profile_id", flat=True))
+    # DISTINCT ON (profile_id) with a matching leading ORDER BY: the latest
+    # PlayerModeRating per friend in one query rather than one query each.
+    latest_ratings = {rating.profile_id: rating for rating in PlayerModeRating.objects.filter(profile_id__in=friend_ids).order_by("profile_id", "-last_played_at").distinct("profile_id")}
+
+    return [{"profile": friend, "rating": latest_ratings.get(friend.pk)} for friend in friends if friend.pk not in opted_out_ids]

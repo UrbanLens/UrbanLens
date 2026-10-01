@@ -1,16 +1,6 @@
 /**
- * Waiting for HTMX, which is how most of this application updates itself.
- *
- * Playwright's auto-waiting covers "the element I am about to click exists". It
- * does not cover "the fragment I clicked has come back and been swapped in",
- * which is the step every HTMX interaction in this app depends on. Without an
- * explicit wait, an assertion races the swap and fails roughly one run in ten -
- * the single largest source of flake in a suite like this.
- *
- * The counter is installed as an init script rather than inferred from the
- * `.htmx-request` class, because that class only exists *while* a request is in
- * flight: a check that happens to run between the click and the request
- * starting sees a quiet page and returns immediately.
+ * Waiting for HTMX, which is how most of this application updates itself. Playwright's auto-waiting
+ * covers "the element I am about to click exists".
  */
 
 import type { BrowserContext, Locator, Page } from "@playwright/test";
@@ -68,8 +58,9 @@ export async function installHtmxTracking(target: Page | BrowserContext): Promis
             w[counter] = state;
             // Listened for on `document` rather than `document.body`: these
             // events bubble, and body does not exist yet at init-script time.
-            document.addEventListener("htmx:beforeRequest", () => {
-                state.pending += 1;
+            // A request the page cancels here is never sent and never finishes.
+            document.addEventListener("htmx:beforeRequest", (event) => {
+                if (!event.defaultPrevented) state.pending += 1;
             });
             const finish = (): void => {
                 state.pending = Math.max(0, state.pending - 1);

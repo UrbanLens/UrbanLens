@@ -1,9 +1,5 @@
 /**
- * The key cache is per-profile, and clearing one profile must not touch
- * another's. Two accounts sharing a browser is the case that matters: an
- * over-broad wipe silently locks the account that was not being reset, and
- * "my messages stopped decrypting" is a hard bug to trace back to someone
- * else's key reset.
+ * The key cache is per-profile, and clearing one profile must not touch another's.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 

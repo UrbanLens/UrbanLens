@@ -1,20 +1,16 @@
-"""Tests for Consensus photo eligibility/capture (services.consensus.fields' PHOTO_COORDINATES strategy, services.consensus.photos).
-
-An Image only ever becomes a ``PHOTO_COORDINATES`` round candidate through
-``wiki.images`` - i.e. only once explicitly attached to that specific wiki
-(``Image.wiki`` set) - never merely because a player who can see the wiki
-also owns some other private photo. This is the same privacy invariant
-SpotGuessr's own photo selection enforces (a prior bug, fixed in commit
-``afc7ee8b``, leaked private pin photos into other players' game sessions
-when this gate was missing).
-"""
+"""Tests for Consensus photo eligibility/capture (services.consensus.fields' PHOTO_COORDINATES strategy, services.consensus.photos)."""
 
 from __future__ import annotations
 
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind, ConsensusRound, ConsensusSession, ConsensusSessionStatus
+from urbanlens.dashboard.models.consensus.model import (
+    ConsensusFieldKind,
+    ConsensusRound,
+    ConsensusSession,
+    ConsensusSessionStatus,
+)
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
@@ -60,7 +56,9 @@ class RecordInRoundUploadTests(TestCase):
         profile = _make_profile()
         wiki = baker.make(Wiki, location=baker.make(Location))
         session = ConsensusSession.objects.create(host_profile=profile, status=ConsensusSessionStatus.ACTIVE)
-        round_ = ConsensusRound.objects.create(session=session, sequence_index=0, wiki=wiki, field_kind=ConsensusFieldKind.PHOTO_COORDINATES)
+        round_ = ConsensusRound.objects.create(
+            session=session, sequence_index=0, wiki=wiki, field_kind=ConsensusFieldKind.PHOTO_COORDINATES
+        )
         image = baker.make(Image, wiki=None, profile=profile)
 
         record_in_round_upload(round_, image, profile)
@@ -73,7 +71,9 @@ class RecordInRoundUploadTests(TestCase):
         original_wiki = baker.make(Wiki, location=baker.make(Location))
         round_wiki = baker.make(Wiki, location=baker.make(Location))
         session = ConsensusSession.objects.create(host_profile=profile, status=ConsensusSessionStatus.ACTIVE)
-        round_ = ConsensusRound.objects.create(session=session, sequence_index=0, wiki=round_wiki, field_kind=ConsensusFieldKind.PHOTO_COORDINATES)
+        round_ = ConsensusRound.objects.create(
+            session=session, sequence_index=0, wiki=round_wiki, field_kind=ConsensusFieldKind.PHOTO_COORDINATES
+        )
         image = baker.make(Image, wiki=original_wiki, profile=profile)
 
         record_in_round_upload(round_, image, profile)

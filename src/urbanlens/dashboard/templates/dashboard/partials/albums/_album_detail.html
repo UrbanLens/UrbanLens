@@ -1,4 +1,4 @@
-{% load map_components %}
+{% load map_components static %}
 {% comment %}
 One album's own view, swapped into #albums-panel in place of the album list.
 Carries the same root id so the "All albums" link can swap back.
@@ -9,20 +9,30 @@ and the two large secondary surfaces - the map and the "add existing photos"
 picker - are opt-in panels rather than always-rendered page content.
 
 Expects (from controllers.albums._album_detail_context):
-  album, images, available_images, photo_count, cover, date_start, date_end
-  map_photos, placed_count
+  album, grid_images, available_image_count, eligible_url, photo_count, cover, date_start, date_end
+  map_photos, placed_count, map_truncated, map_total
   back_url, list_url, add_url, remove_url, reorder_url, edit_url, upload_url,
-  reposition_base
+  items_url, reposition_base
 {% endcomment %}
 <div id="albums-panel" class="albums-panel album-detail"
+     data-processing-url="{% url 'vault.photos.processing' %}"
      data-album-slug="{{ album.slug }}"
+     data-album-pin-slug="{% if pin %}{{ pin.slug }}{% endif %}"
      data-refresh-url="{{ detail_url }}"
      data-list-url="{{ list_url }}"
      data-reorder-url="{{ reorder_url }}"
      data-remove-url="{{ remove_url }}"
      data-add-url="{{ add_url }}"
      data-upload-url="{{ upload_url }}"
-     data-reposition-base="{{ reposition_base }}">
+     data-edit-url="{{ edit_url }}"
+     data-move-url="{{ move_url|default:'' }}"
+     data-items-url="{{ items_url }}"
+     data-reposition-base="{{ reposition_base }}"
+     data-gallery-bulk-url="{{ gallery_bulk_url|default:'' }}"
+     data-gallery-wiki-url="{{ gallery_wiki_url|default:'' }}"
+     data-pin-share-dialog-url="{{ pin_share_dialog_url|default:'' }}"
+     data-failure-url="{{ failure_url|default:'' }}"
+     data-grid-page-size="{{ grid_page_size|default:48 }}">
 
   <header class="albums-toolbar album-detail-toolbar">
     <button type="button" class="btn btn--ghost album-back-btn" data-album-back
@@ -46,6 +56,10 @@ Expects (from controllers.albums._album_detail_context):
     </div>
 
     <div class="album-detail-actions">
+      <button type="button" class="gallery-import-photos-btn" id="albums-select-btn"
+              data-album-select-toggle title="Select photos">
+        <i class="material-symbols-outlined">checklist</i>
+      </button>
       <input type="file" id="album-file-input" accept="image/*" multiple hidden aria-label="Choose photos to add">
       <button type="button" class="btn btn--primary" data-album-upload-btn>
         <i class="material-symbols-outlined">upload</i>
@@ -57,7 +71,7 @@ Expects (from controllers.albums._album_detail_context):
           <i class="material-symbols-outlined">more_vert</i>
         </summary>
         <div class="album-menu-list">
-          {% if available_images %}
+          {% if available_image_count %}
           <button type="button" class="album-menu-item" data-album-picker-open>
             <i class="material-symbols-outlined">library_add</i> Add from this {{ context_type|default:"place" }}
           </button>
@@ -66,18 +80,11 @@ Expects (from controllers.albums._album_detail_context):
                   aria-controls="album-map-section" aria-expanded="false">
             <i class="material-symbols-outlined">map</i> Show photo map
           </button>
-
-          <form class="album-menu-form" hx-post="{{ edit_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
-                hx-trigger="change from:find input">
-            {% csrf_token %}
-            <label class="album-menu-item album-menu-item--toggle">
-              <input type="checkbox" name="manual_order" value="1" {% if album.manual_order %}checked{% endif %}>
-              <span>
-                <strong>Custom order</strong>
-                <small>Drag photos to arrange them. Off shows newest first.</small>
-              </span>
-            </label>
-          </form>
+          {% if move_url %}
+          <button type="button" class="album-menu-item" data-album-move data-move-url="{{ move_url }}" data-current-pin="{{ pin.slug }}">
+            <i class="material-symbols-outlined">drive_file_move</i> Move to another pin
+          </button>
+          {% endif %}
 
           <button type="button" class="album-menu-item album-menu-item--danger"
                   hx-post="{{ delete_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
@@ -93,15 +100,13 @@ Expects (from controllers.albums._album_detail_context):
   <p class="album-detail-description">{{ album.description }}</p>
   {% endif %}
 
-  {% comment %}
-  Photo map. Hidden until asked for from the menu - it is a correction tool,
-  not the album's primary content. Initialised by shared/album-map.ts, which
-  drives the same Leaflet photo-marker layer the pin detail map uses.
-  {% endcomment %}
+  {% comment %}Photo map.{% endcomment %}
   <section id="album-map-section" class="album-map-section" hidden>
     <div class="album-map-head">
       <span class="album-map-hint settings-help">
-        {% if placed_count %}
+        {% if map_truncated %}
+        Showing {{ map_photos|length }} of {{ map_total }} placed photos, spread across the area. Drag a marker to correct where a photo was taken.
+        {% elif placed_count %}
         Drag a marker to correct where a photo was taken. Only your own photos can be moved.
         {% else %}
         None of this album's photos have a position yet.
@@ -120,18 +125,15 @@ Expects (from controllers.albums._album_detail_context):
     </div>
   </section>
 
-  {% if images %}
+  {% if photo_count %}
   <ul class="gallery-grid album-items-grid" id="album-items-grid"
-      {% if album.manual_order %}data-album-sortable="1"{% endif %}>
-    {% for img in images %}
-    <li class="gallery-item album-item" data-item-id="{{ img.album_item_id }}" data-id="{{ img.pk }}">
-      <img src="{{ img.display_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
-      <button type="button" class="album-item-remove" title="Remove from this album"
-              aria-label="Remove from this album" data-image-id="{{ img.pk }}">
-        <i class="material-symbols-outlined">close</i>
-      </button>
-      {% if img.caption %}<p class="album-item-caption">{{ img.caption }}</p>{% endif %}
-    </li>
+      data-photo-grid
+      data-items-url="{{ items_url }}"
+      data-photo-count="{{ photo_count }}"
+      data-grid-page-size="{{ grid_page_size|default:48 }}"
+      data-album-sortable="1">
+    {% for img in grid_images %}
+    {% include "dashboard/partials/albums/_photo_tile.html" with img=img profile=profile in_album=True album_slug=album.slug %}
     {% endfor %}
   </ul>
   {% else %}
@@ -139,13 +141,13 @@ Expects (from controllers.albums._album_detail_context):
     <i class="material-symbols-outlined">add_photo_alternate</i>
     <p>This album is empty.</p>
     <p class="settings-help">Drop photos anywhere on this page, use <strong>Add photos</strong> to upload,
-      {% if available_images %}or pick from the ones already here.{% else %}or upload some to this {{ context_type|default:"place" }} first.{% endif %}
+      {% if available_image_count %}or pick from the ones already here.{% else %}or upload some to this {{ context_type|default:"place" }} first.{% endif %}
     </p>
     <div class="album-empty-actions">
       <button type="button" class="btn btn--primary" data-album-upload-btn>
         <i class="material-symbols-outlined">upload</i> Upload photos
       </button>
-      {% if available_images %}
+      {% if available_image_count %}
       <button type="button" class="btn btn--ghost" data-album-picker-open>
         <i class="material-symbols-outlined">library_add</i> Pick existing
       </button>
@@ -154,12 +156,8 @@ Expects (from controllers.albums._album_detail_context):
   </div>
   {% endif %}
 
-  {% comment %}
-  "Add from photos already here" picker. A dialog rather than a second grid
-  below the album, which previously doubled the page's length and made it
-  ambiguous which grid was the album.
-  {% endcomment %}
-  {% if available_images %}
+  {% comment %}"Add from photos already here" picker.{% endcomment %}
+  {% if available_image_count %}
   <dialog id="album-picker-dialog" class="ul-dialog album-picker-dialog" aria-label="Add photos to album">
     <form method="dialog" class="album-picker-head">
       <h4>Add photos to &ldquo;{{ album.name }}&rdquo;</h4>
@@ -168,17 +166,10 @@ Expects (from controllers.albums._album_detail_context):
       </button>
     </form>
     <p class="settings-help album-picker-hint">Click a photo to add it. It stays in the {{ context_type|default:"place" }}'s photos too.</p>
-    <ul class="gallery-grid album-add-grid">
-      {% for img in available_images %}
-      <li class="gallery-item album-add-item" data-id="{{ img.pk }}">
-        <button type="button" class="album-item-add" title="Add to this album"
-                aria-label="Add to this album" data-image-id="{{ img.pk }}">
-          <img src="{{ img.display_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
-          <span class="album-add-tick"><i class="material-symbols-outlined">add</i></span>
-        </button>
-      </li>
-      {% endfor %}
-    </ul>
+    {% comment %}Filled when the dialog opens, a page at a time, from eligible_url.{% endcomment %}
+    <ul class="gallery-grid album-add-grid" data-album-eligible-url="{{ eligible_url }}"></ul>
+    <div class="album-picker-status" data-album-picker-status hidden></div>
+    <button type="button" class="btn btn--ghost album-picker-more" data-album-picker-more hidden>Show more photos</button>
   </dialog>
   {% endif %}
 
@@ -194,4 +185,9 @@ Expects (from controllers.albums._album_detail_context):
   </div>
 
   {{ map_photos|json_script:"album-map-photos" }}
+
+  {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="albums" actions=album_bulk_actions %}
+  {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_url=picker_url %}
+  {% include "dashboard/partials/albums/_move_album_dialog.html" %}
 </div>
+<script src="{% static 'js/bulk-toolbar.js' %}"></script>

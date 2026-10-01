@@ -9,9 +9,8 @@
       hx-target="#comment-panel"
       hx-swap="outerHTML"
       hx-encoding="multipart/form-data"
-      hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);_clearCommentImage(this);this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
-      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-      hx-on:submit="if(!window._validateCommentForm||!_validateCommentForm(this)){event.preventDefault();if(window.toastr)toastr.warning('Please add some text, a photo, or a map.');return false;}">
+      data-ul-on-success="reset comment-clear-map comment-clear-image comment-close-reply"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   {% if parent_id %}<input type="hidden" name="parent_id" value="{{ parent_id }}">{% endif %}
   {# Hidden field that carries the map snapshot - populated by the composer JS #}
   <input type="hidden" name="map_data" class="comment-map-data-field" value="">

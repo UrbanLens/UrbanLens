@@ -1,13 +1,5 @@
 {% load humanize %}
-{% comment %}
-Lists tab content, lazy-loaded via HTMX into Organize's "Lists" panel (see
-organize/index.html and PinListsIndexView.get - only ever requested with an
-HX-Request header; direct navigation to /lists/ redirects to Organize instead).
-
-Context:
-  pin_lists - PinList queryset for the current profile, already sorted
-  sort      - current sort key ("updated", "name", or "pin_count")
-{% endcomment %}
+{% comment %}Lists tab content, lazy-loaded via HTMX into Organize's "Lists" panel.{% endcomment %}
 <div class="pin-lists-toolbar">
     <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."
            oninput="pinListsFilterCards(this.value)" autocomplete="off">
@@ -22,7 +14,7 @@ Context:
             <option value="pin_count" {% if sort == 'pin_count' %}selected{% endif %}>Pin count</option>
         </select>
     </div>
-    <button type="button" class="btn btn--primary btn--lg" onclick="document.getElementById('create-list-dialog').showModal()">
+    <button type="button" class="btn btn--primary btn--lg" data-dialog-open="create-list-dialog">
         <i class="material-symbols-outlined">add</i>
         New List
     </button>
@@ -62,7 +54,7 @@ Context:
     {% include "dashboard/partials/ui/_dialog_header.html" with title="New List" %}
     <div class="ul-dialog-body">
         <form hx-post="{% url 'lists.create' %}" hx-swap="none"
-            hx-on::after-request="if(event.detail.successful){window.location = JSON.parse(event.detail.xhr.responseText).redirect;}">
+            data-ul-on-success="redirect-json">
             {% csrf_token %}
             <div class="form-row">
                 <label for="pin-list-name">List name <span class="required">*</span></label>
@@ -74,7 +66,7 @@ Context:
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg">Create List</button>
-                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
             </div>
         </form>
     </div>

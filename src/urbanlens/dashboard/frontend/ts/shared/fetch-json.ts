@@ -1,21 +1,17 @@
 /**
- * JSON requests that fail loudly.
- *
- * ``fetch`` resolves for 400s and 500s - it only rejects when the request never
- * completed - so ``fetch(...).then(r => r.json())`` treats a rejected write as a
- * success. Several call sites did exactly that and reported "Rating saved" or
- * "Updated successfully" for requests the server had refused.
- *
- * Everything here throws on a non-2xx, carrying the server's own message when it
- * sent one, so a caller's ``catch`` can say something more useful than "failed".
- *
- * Promoted out of the map page's private ``_fetchJson``, which already had the
- * ``!resp.ok`` check the mutating calls in the very same file were missing.
+ * HTTP requests that fail loudly.
  */
+
+import type { FetchInit } from "./site-runtime";
 
 export interface FetchJsonOptions extends RequestInit {
     /** Abort after this long. Default two minutes, matching the map's tile fetches. */
     timeoutMs?: number;
+
+    /**
+ * This caller shows the user its own message, so suppress the generic one.
+ */
+    reportsItsOwnErrors?: boolean;
 }
 
 export class HttpError extends Error {
@@ -33,11 +29,6 @@ const MAX_PLAIN_TEXT_MESSAGE = 200;
 
 /**
  * A body that is a short line of prose, not a document.
- *
- * Many of this project's views answer a refused write with a bare
- * ``HttpResponse("Select at most 500 pins at a time.", status=400)`` rather than
- * JSON - which is exactly the sentence the user needs. Only markup and
- * paragraphs are worth discarding.
  */
 function isReadableText(text: string): boolean {
     return text.length <= MAX_PLAIN_TEXT_MESSAGE && !text.includes("<") && !text.includes("\n");
@@ -71,28 +62,41 @@ async function errorMessage(response: Response): Promise<string> {
     }
 }
 
-export async function fetchJson<T = unknown>(url: string, options: FetchJsonOptions = {}): Promise<T | null> {
-    const { timeoutMs = 120000, ...init } = options;
+/**
+ * Make the request under the timeout, throw on a non-2xx, and read the body.
+ */
+async function requestBody<T>(url: string, options: FetchJsonOptions, read: (response: Response) => Promise<T>): Promise<T> {
+    const { timeoutMs = 120000, reportsItsOwnErrors = false, ...init } = options;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-        const response = await fetch(url, { ...init, signal: controller.signal });
+        // `__ulReported` is what base.html's wrapper reads; `fetch` ignores it.
+        const request: FetchInit = { ...init, __ulReported: reportsItsOwnErrors, signal: controller.signal };
+        const response = await fetch(url, request);
         if (!response.ok) throw new HttpError(response.status, await errorMessage(response));
-        // 204 has no body, and calling .json() on it throws. Callers that expect
-        // nothing back (a recorded position, a DRF delete) would otherwise see a
-        // successful request as a failure.
-        if (response.status === 204) return null;
-        return (await response.json()) as T;
+        return await read(response);
     } finally {
         clearTimeout(timer);
     }
 }
 
-/** Send JSON with the CSRF header Django requires for unsafe methods. */
-export async function sendJson<T = unknown>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown, options: FetchJsonOptions = {}): Promise<T | null> {
+export async function fetchJson<T = unknown>(url: string, options: FetchJsonOptions = {}): Promise<T | null> {
+    // 204 has no body, and calling .json() on it throws.
+    return requestBody<T | null>(url, options, async (response) => (response.status === 204 ? null : ((await response.json()) as T)));
+}
+
+/**
+ * The same request, for an endpoint that answers with markup rather than JSON.
+ */
+export async function fetchText(url: string, options: FetchJsonOptions = {}): Promise<string> {
+    return requestBody(url, options, (response) => response.text());
+}
+
+/** The JSON body and CSRF header Django requires for an unsafe method. */
+function writeInit(method: string, body: unknown, options: FetchJsonOptions): FetchJsonOptions {
     const { headers, ...rest } = options;
-    return fetchJson<T>(url, {
+    return {
         method,
         headers: {
             "Content-Type": "application/json",
@@ -101,7 +105,17 @@ export async function sendJson<T = unknown>(url: string, method: "POST" | "PUT" 
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         ...rest,
-    });
+    };
+}
+
+/** Send JSON with the CSRF header Django requires for unsafe methods. */
+export async function sendJson<T = unknown>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown, options: FetchJsonOptions = {}): Promise<T | null> {
+    return fetchJson<T>(url, writeInit(method, body, options));
+}
+
+/** Send JSON to an endpoint that answers with markup. */
+export async function sendForText(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown, options: FetchJsonOptions = {}): Promise<string> {
+    return fetchText(url, writeInit(method, body, options));
 }
 
 declare global {

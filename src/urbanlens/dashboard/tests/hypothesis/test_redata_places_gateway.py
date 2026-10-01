@@ -1,16 +1,13 @@
-"""Tests for RedataPlacesGateway against REData's shipped contract
-(``../REData/docs/api-reference.md``, "Google Places API (New) - real place details").
-
-Constructs the gateway with a mock ``session`` (Gateway.__post_init__ leaves a
-non-default session untouched, skipping the DB-backed rate-limiting wrapper -
-see gateway.py) so these stay pure unit tests with no database access.
-"""
+"""Tests for RedataPlacesGateway against REData's shipped contract (``../REData/docs/api-reference.md``, "Google Places API (New) - real place details")."""
 
 from __future__ import annotations
 
+import io
 from unittest import mock
 
 import pytest
+import requests
+from urllib3 import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
@@ -61,7 +58,9 @@ class SearchNearbyTests(SimpleTestCase):
         session = mock.Mock()
         session.get.return_value = _response(200, [{"place_id": "p1", "name": "Sydney Opera House"}])
 
-        result = _gateway(session).search_nearby(1.0, 2.0, radius_meters=500, included_types=["historical_landmark"], max_results=10)
+        result = _gateway(session).search_nearby(
+            1.0, 2.0, radius_meters=500, included_types=["historical_landmark"], max_results=10
+        )
 
         self.assertEqual(result, [{"place_id": "p1", "name": "Sydney Opera House"}])
         params = session.get.call_args.kwargs["params"]
@@ -120,7 +119,10 @@ class SearchTextTests(SimpleTestCase):
 class AutocompleteTests(SimpleTestCase):
     def test_parses_the_bare_array_response(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(200, [{"kind": "place", "place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}])
+        session.get.return_value = _response(
+            200,
+            [{"kind": "place", "place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}],
+        )
 
         result = _gateway(session).autocomplete("sydney opera")
 
@@ -137,7 +139,11 @@ class AutocompleteTests(SimpleTestCase):
 class DownloadPhotoTests(SimpleTestCase):
     def test_200_returns_content_and_content_type(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(200, None)
+        streamed = requests.Response()
+        streamed.status_code = 200
+        streamed.headers["Content-Type"] = "image/jpeg"
+        streamed.raw = HTTPResponse(body=io.BytesIO(b"fake-bytes"), status=200, preload_content=False)
+        session.get.return_value = streamed
 
         result = _gateway(session).download_photo("p1", 5)
 

@@ -8,14 +8,20 @@ from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.subscriptions.access_state import AccessBearingQuerySet
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+    from urbanlens.dashboard.models.subscriptions.model import (  # noqa: F401 - mypy needs these; ruff does not
+        PendingSubscriptionGrant,
+        SubscriptionRole,
+        UserSubscription,
+    )
 
 
-class SubscriptionRoleQuerySet(abstract.DashboardQuerySet):
+class SubscriptionRoleQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet["SubscriptionRole"]):
     """Custom queryset for SubscriptionRole models."""
 
     def get_by_slug(self, slug: str):
@@ -30,21 +36,18 @@ class SubscriptionRoleQuerySet(abstract.DashboardQuerySet):
         return self.filter(slug=slug).first()
 
 
-class SubscriptionRoleManager(abstract.DashboardManager.from_queryset(SubscriptionRoleQuerySet)):
+_SubscriptionRoleManagerBase = abstract.DashboardManager.from_queryset(SubscriptionRoleQuerySet)
+
+
+class SubscriptionRoleManager(_SubscriptionRoleManagerBase):
     """Custom query manager for SubscriptionRole models."""
 
 
-class UserSubscriptionQuerySet(abstract.DashboardQuerySet):
+class UserSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet["UserSubscription"]):
     """Custom queryset for UserSubscription models."""
 
     def not_revoked(self) -> UserSubscriptionQuerySet:
         """Subscriptions that haven't been explicitly revoked.
-
-        Deliberately does not check ``expires_at`` - unlike ``active()``, this
-        also includes grants that have quietly expired but were never
-        explicitly revoked (e.g. the site-admin "grants I've issued" list,
-        which wants to keep showing an admin's past grants even once they
-        lapse).
 
         Returns:
             Matching subscriptions.
@@ -83,11 +86,14 @@ class UserSubscriptionQuerySet(abstract.DashboardQuerySet):
         return self.not_revoked().filter(granted_by=admin_user)
 
 
-class UserSubscriptionManager(abstract.DashboardManager.from_queryset(UserSubscriptionQuerySet)):
+_UserSubscriptionManagerBase = abstract.DashboardManager.from_queryset(UserSubscriptionQuerySet)
+
+
+class UserSubscriptionManager(_UserSubscriptionManagerBase):
     """Custom query manager for UserSubscription models."""
 
 
-class PendingSubscriptionGrantQuerySet(abstract.DashboardQuerySet):
+class PendingSubscriptionGrantQuerySet(abstract.DashboardQuerySet["PendingSubscriptionGrant"]):
     """Custom queryset for PendingSubscriptionGrant models."""
 
     def for_invitation(self, invitation: FriendInvitation) -> PendingSubscriptionGrantQuerySet:
@@ -103,5 +109,8 @@ class PendingSubscriptionGrantQuerySet(abstract.DashboardQuerySet):
         return self.filter(invitation=invitation).select_related("role", "granted_by")
 
 
-class PendingSubscriptionGrantManager(abstract.DashboardManager.from_queryset(PendingSubscriptionGrantQuerySet)):
+_PendingSubscriptionGrantManagerBase = abstract.DashboardManager.from_queryset(PendingSubscriptionGrantQuerySet)
+
+
+class PendingSubscriptionGrantManager(_PendingSubscriptionGrantManagerBase):
     """Custom query manager for PendingSubscriptionGrant models."""

@@ -1,18 +1,4 @@
-"""A game area drawn across the date line must still find its pins.
-
-SpotGuessr and Trivia both let a player restrict a session to an area they draw
-on the map, stored as GeoJSON and queried with planar ``__within`` (``ST_Within``
-has no geography implementation). An area drawn across the antimeridian arrives
-with unwrapped coordinates - Leaflet gives 179 to 181 - which matches nothing on
-its far side, so a player near the line sees "no eligible locations" for an area
-full of their own pins.
-
-Fixed at the source: ``GameConfig.geo_bounds`` splits before returning, so every
-consumer inherits it - eligibility counts, round selection, and the external API's
-eligible-pins endpoints - rather than each query site needing to remember. That
-placement is the point, and is why this file tests the property rather than any
-one caller.
-"""
+"""A game area drawn across the date line must still find its pins."""
 
 from __future__ import annotations
 
@@ -20,8 +6,14 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.spotguessr.session import GameConfig as SpotGuessrConfig
 from urbanlens.dashboard.services.trivia.session import TriviaConfig
 
-_ACROSS = {"type": "Polygon", "coordinates": [[[179.0, -20.0], [181.0, -20.0], [181.0, -10.0], [179.0, -10.0], [179.0, -20.0]]]}
-_ORDINARY = {"type": "Polygon", "coordinates": [[[-72.0, 41.0], [-71.0, 41.0], [-71.0, 42.0], [-72.0, 42.0], [-72.0, 41.0]]]}
+_ACROSS = {
+    "type": "Polygon",
+    "coordinates": [[[179.0, -20.0], [181.0, -20.0], [181.0, -10.0], [179.0, -10.0], [179.0, -20.0]]],
+}
+_ORDINARY = {
+    "type": "Polygon",
+    "coordinates": [[[-72.0, 41.0], [-71.0, 41.0], [-71.0, 42.0], [-72.0, 42.0], [-72.0, 41.0]]],
+}
 
 
 class GameBoundsAntimeridianTests(SimpleTestCase):

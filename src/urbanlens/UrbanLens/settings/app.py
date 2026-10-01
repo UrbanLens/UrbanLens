@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
+import re
 from typing import Annotated, Any, Self
 
 from django import conf
@@ -15,38 +15,33 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.environments.factory import select_environment
-from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
+from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes, environment_from_env
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
 
 logger = logging.getLogger(__name__)
 
-# DEFAULT_ROOT is src/, but .env lives one level up at the project root.
-# List both so either location works; later entry wins if both exist.
+# .env lives at repo root; also check src/ so either location works.
 _ENV_FILE_PATHS = [
     Path(DEFAULT_ROOT, ".env"),
     Path(DEFAULT_ROOT.parent, ".env"),
 ]
 
-#: Floors enforced on ``field_encryption_key`` (see ``_reject_weak_encryption_keys``).
-#: 32 characters is well below the 64 the documented generator produces, so it
-#: rejects hand-typed keys without failing a legitimately generated one. The
-#: alphabet floor is set against the distribution of random output rather than
-#: against any particular bad key: a random 32-character urlsafe-base64 string
-#: has ~26 distinct characters on average and falls below 16 only very rarely,
-#: while degenerate input (repeated characters, a short string concatenated with
-#: itself) lands under it immediately.
+#: Where a `.env` is just a checkout convenience; elsewhere env vars rule and `.env` stays out of the image.
+_ENV_FILE_ENVIRONMENTS = frozenset({EnvironmentTypes.LOCAL, EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.TESTING})
+
+#: Floors for field_encryption_key; rejects hand-typed keys, accepts generated ones.
 MIN_FIELD_ENCRYPTION_KEY_LENGTH = 32
 MIN_FIELD_ENCRYPTION_KEY_ALPHABET = 16
 
 
 def _encryption_key_weakness(key: str) -> str | None:
-    """Describe why a field-encryption key is too weak to encrypt under, if it is.
+    """Describe why a key is too weak, if it is.
 
     Args:
         key: The candidate key.
 
     Returns:
-        An operator-facing explanation, or None when the key clears both floors.
+        Operator-facing explanation, or None when acceptable.
     """
     if len(key) < MIN_FIELD_ENCRYPTION_KEY_LENGTH:
         return (
@@ -54,8 +49,7 @@ def _encryption_key_weakness(key: str) -> str | None:
             f"(got {len(key)}). Generate one with: "
             'python -c "import secrets; print(secrets.token_urlsafe(64))"'
         )
-    # A crude stand-in for entropy, calibrated against random output rather
-    # than against any specific bad key - see the constant.
+    # Crude entropy stand-in calibrated against random output.
     if len(set(key)) < MIN_FIELD_ENCRYPTION_KEY_ALPHABET:
         return (
             f"field_encryption_key uses only {len(set(key))} distinct characters, which is too "
@@ -66,20 +60,12 @@ def _encryption_key_weakness(key: str) -> str | None:
 
 
 def _default_allowed_hosts() -> list[str]:
-    """Return the default ``ALLOWED_HOSTS`` list for the current environment.
-
-    ``localhost`` and ``127.0.0.1`` are always included so Docker's internal
-    ``curl http://localhost:8000/health/`` healthchecks (see docker-compose.yml)
-    succeed without opening the app to arbitrary public Host headers. Override
-    the full list via ``UL_ALLOWED_HOSTS`` when deploying to a custom domain.
-    """
+    """Default ALLOWED_HOSTS, including localhost for container healthchecks."""
     return ["urbanlens.org", "localhost", "127.0.0.1"]
 
 
 class AppSettingsMeta(ModelMetaclass):
-    """
-    Metaclass to ensure only one instance of the class is created
-    """
+    """Singleton metaclass."""
 
     _instances: dict[type, Any] = {}
 
@@ -91,23 +77,18 @@ class AppSettingsMeta(ModelMetaclass):
 
 
 class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
-    """
-    Class to hold settings for the application.
-    """
+    """Application settings."""
 
     project_root: Path = Field(default=DEFAULT_ROOT, description="The root directory of the project")
     project_name: str = Field(default="URBANLENS", description="The name of the project")
     app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
-    environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
+    environment_name: str = Field(
+        default_factory=lambda: str(environment_from_env()),
+        validation_alias="UL_ENVIRONMENT",
+        description="The deployment environment, read from UL_ENVIRONMENT exactly as settings.ENVIRONMENT_NAME is",
+    )
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
-    # default_factory, not default=get_random_secret_key() - a plain `default=` value is
-    # computed once at class-definition time rather than per instantiation, which is
-    # the standard pydantic mutable/computed-default footgun even though it's harmless
-    # here specifically (AppSettingsMeta makes this class a process-wide singleton).
-    # NOTE: this field has no wired env var in any deployment (UL_SECRET_KEY is never
-    # set) - nothing outside this file should ever read it as if it were stable across
-    # processes. dashboard/models/fields.py used to and that was a real bug; see its
-    # comment for the fix (falls back to Django's actual SECRET_KEY instead).
+    # default_factory so each instantiation gets a fresh key; never read as stable across processes.
     secret_key: str = Field(default_factory=get_random_secret_key, description="The secret key")
     field_encryption_key: str | None = Field(
         default=None,
@@ -147,6 +128,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     email_password: str | None = Field(default=None, description="SMTP password or app password")
     email_tls: bool = Field(default=True, description="Use STARTTLS (port 587)")
     email_use_ssl: bool = Field(default=False, description="Use SSL instead of STARTTLS (port 465)")
+    email_timeout: int = Field(default=10, gt=0, le=60, description="Seconds a single SMTP connect/send may take before it is abandoned")
     backup_enabled: bool = Field(default=True, description="Whether scheduled database backups are enabled")
     backup_frequency_hours: int = Field(default=24, description="How often scheduled database backups should run, in hours")
     backup_retention: int = Field(default=30, description="The number of backup files to retain")
@@ -162,6 +144,340 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     clamav_host: str = Field(default="urbanlens_clamav", description="Hostname of the clamd daemon (see the clamav service in docker-compose.yml)")
     clamav_port: int = Field(default=3310, description="Port of the clamd daemon")
     clamav_timeout_seconds: float = Field(default=15.0, description="Socket timeout for a single clamd scan request")
+    media_base_url: str = Field(
+        default="",
+        description=(
+            "Origin that serves user uploads, e.g. https://media.urbanlens.org. Point it at the media-nginx "
+            "container's published port (UL_MEDIA_PORT). Serving uploads from their own origin means anything "
+            "that slips past validation executes where there is no session cookie and no app data; authentication "
+            "there uses a separate media-only signed cookie. Leave empty to serve /media/ from the app's own "
+            "hostname, which is what local development does. The host must also appear in UL_ALLOWED_HOSTS."
+        ),
+    )
+    media_cookie_domain: str = Field(
+        default="",
+        description=(
+            "Domain attribute for the media cookie. Empty (the default) derives the deepest domain the site host "
+            "and media host share, which is right whenever the media origin is a sibling subdomain. Set this only "
+            "when the two hosts are not related that way, and never to a public suffix."
+        ),
+    )
+    max_request_body_mb: int = Field(
+        default=0,
+        description=(
+            "Largest request body this deployment's ingress will pass, in MB, or 0 when nothing in front of the "
+            "app imposes one. A CDN or proxy that rejects an oversized body answers the browser itself, so the "
+            "app never sees the request and cannot explain it - setting this caps the upload size the app "
+            "advertises and enforces, so the user is told before the bytes are sent. Cloudflare's free and pro "
+            "plans cap it at 100."
+        ),
+    )
+    media_storage_backend: str = Field(
+        default="filesystem",
+        description=(
+            "Where user uploads are stored: 'filesystem' (the default, and the only thing a single-machine "
+            "self-host needs) or 's3' for any S3-compatible object store, including Garage. Switching to 's3' "
+            "changes nothing about who may read a file: uploads stay behind the media gate either way, and "
+            "FileField.url keeps returning a /media/ path rather than a presigned bucket URL."
+        ),
+    )
+    s3_endpoint_url: str = Field(
+        default="",
+        description=(
+            "Base URL of the S3-compatible API, e.g. http://garage-s3.garage.svc.cluster.local:3900. Required "
+            "when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."
+        ),
+    )
+    s3_bucket_name: str = Field(default="", description="Bucket holding user uploads. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_access_key_id: str | None = Field(default=None, description="Access key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_secret_access_key: str | None = Field(default=None, description="Secret key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_region_name: str = Field(
+        default="garage",
+        description="Region the object store advertises. Garage uses whatever its cluster was initialised with; SigV4 needs it to match.",
+    )
+    s3_addressing_style: str = Field(
+        default="path",
+        description=(
+            "'path' (endpoint/bucket/key) or 'virtual' (bucket.endpoint/key). Garage and most self-hosted stores "
+            "need 'path', because virtual-host style needs a wildcard DNS record and a wildcard certificate."
+        ),
+    )
+    media_x_accel_object_prefix: str = Field(
+        default="",
+        description=(
+            "Internal nginx location that proxies the object store, e.g. '/_object_media/'. When set alongside "
+            "UL_MEDIA_STORAGE_BACKEND=s3, the gate authorizes the request and then hands nginx a URL it signed "
+            "itself, so the bytes never pass through Django and the client never receives a signed URL. Leave "
+            "empty and the gate streams the object itself, which is what a deployment with no nginx must do."
+        ),
+    )
+    process_role: str = Field(
+        default="unspecified",
+        description=(
+            "What this process is: web, websocket, worker, bulk, panels, sandbox, ai, inference, beat, metrics, or "
+            "setup. Set per service in docker-compose.yml, which also logs each in to Postgres as ul_<role>. "
+            "Only 'sandbox' may hand untrusted uploaded bytes to a parser (Pillow, ffmpeg, "
+            "LibreOffice, GDAL, zipfile); see UL_UNTRUSTED_PARSE_POLICY."
+        ),
+    )
+    slow_request_ms: int = Field(
+        default=1000,
+        description=(
+            "Log a warning naming any request slower than this many milliseconds, with its wall time, CPU time, and "
+            "SQL time/statement-count/rows-fetched. Those three separate a slow database from a busy worker, which "
+            "need different fixes and which nothing recorded when the map endpoint was timing out. Set to 0 or less "
+            "to disable the instrument; turn it down when hunting something specific."
+        ),
+    )
+    map_document_max_pins: int = Field(
+        default=30_000,
+        description=(
+            "Largest account the map's single-document fetch will serve. Above this the endpoint answers with a "
+            "header telling the client to use the paged endpoint instead, so a very large account degrades to more "
+            "round trips rather than to one response nobody can hold. Raising it costs client memory and time to "
+            "first marker, not server memory - the document is streamed in batches either way."
+        ),
+    )
+    import_preview_max_concurrent_parses: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "How many pin import previews the sandbox worker reads at once, site-wide; the rest wait their turn. "
+            "One preview holds an extracted entry of up to 1 GB plus whatever its parser builds from it, and "
+            "media-worker reads two jobs at a time in 3 GB, so raising this risks an OOM kill that takes a photo "
+            "upload down with the preview."
+        ),
+    )
+    cache_breaker_seconds: float = Field(
+        default=10.0,
+        description=(
+            "How long one failed cache call makes the rest of this worker's calls answer as a miss without "
+            "touching the store. A request makes roughly a dozen cache calls, so without this an outage costs "
+            "socket_timeout once each - measured at 32 seconds per request, which is slower than failing. Set to "
+            "0 to try the store every time and only suppress the error."
+        ),
+    )
+    markup_max_geometry_points: int = Field(
+        default=10_000,
+        description=(
+            "How many coordinate pairs one markup shape may carry. `geometry` is written from the request body into "
+            "a JSONField, and on a community wiki it is read back by everyone who opens the page - so without this "
+            "one person's drawing sets what every later viewer downloads. Far above a shape somebody drew; a "
+            "million-point polygon is not one."
+        ),
+    )
+    markup_max_items_per_response: int = Field(
+        default=2_000,
+        description=(
+            "How many markup items one JSON response returns. The reader answers for a whole pin/wiki subtree at "
+            "once. Capped with a `truncated` marker rather than refused - a subtree that has genuinely grown past "
+            "this should still render what fits and say that it did."
+        ),
+    )
+    avatar_max_upload_bytes: int = Field(
+        default=5_000_000,
+        description=(
+            "Largest profile picture an upload may carry. Avatars were bounded only by the site-wide photo/video "
+            "ceiling - 250MB by default - and the antivirus scan runs inside the request, copying the file into the "
+            "worker and streaming it to the shared clamd daemon, so one person changing their picture could occupy "
+            "a worker and that daemon for as long as a quarter-gigabyte scan takes. Bounded rather than moved off "
+            "the request: deferring would mean serving a picture nobody has scanned yet, and unlike a comment image "
+            "an avatar has no `pending_scan` gate to hide behind. The OAuth download path is tighter still at 512KB, "
+            "where the bytes are not the user's choice at all."
+        ),
+    )
+    immich_max_thumbnail_bytes: int = Field(
+        default=8_000_000,
+        description=(
+            "Largest thumbnail body the Immich proxy will read from a user's own server. The server on the other "
+            "end is configured by the account holder and `size=thumbnail` is a request rather than a guarantee, so "
+            "without this one account's server decides how much memory a shared worker spends. Streamed and refused "
+            "as soon as the ceiling is passed, so a hostile or broken server costs a few chunks rather than its "
+            "whole body. Far above any real thumbnail. Originals are bounded separately, by the site's own upload "
+            "limit - a file the site would refuse from a browser is not one it should accept from Immich."
+        ),
+    )
+    immich_max_json_bytes: int = Field(
+        default=32 * 1024 * 1024,
+        gt=0,
+        description=(
+            "Largest JSON body the Immich gateway will read from a user's own server. A library page or the marker "
+            "list is a few megabytes; past this the answer is refused rather than parsed, because the server is the "
+            "account holder's choice and the memory is a shared worker's."
+        ),
+    )
+    immich_thumbnail_deadline_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description=(
+            "Wall-clock budget for one Immich thumbnail fetch on a web request, redirects and body included. The "
+            "per-read timeout bounds each read, not their sum, so without this a server that drips bytes holds a "
+            "request thread for as long as it likes."
+        ),
+    )
+    immich_upstream_concurrency: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many Immich thumbnails one web process may be fetching at once, across all accounts. Below "
+            "gunicorn's `--threads 4`, so slow Immich servers cannot occupy every thread in a process. Over the cap "
+            "the proxy answers 503 with Retry-After and the picker retries the image."
+        ),
+    )
+    immich_profile_upstream_concurrency: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "How many Immich thumbnails one account may be fetching at once across every web process, leased in the "
+            "shared cache. The per-process cap alone lets one account pointed at a slow server hold that cap in every "
+            "process at once."
+        ),
+    )
+    public_costs_page_cache_seconds: int = Field(
+        default=600,
+        description=(
+            "How long the public costs page reuses its computed figures. The page is anonymous and every number on "
+            "it is a trailing thirty-day or monthly aggregate - including one that joins every user against every "
+            "pin they own - so recomputing per request buys freshness nobody can perceive. Only the figures are "
+            "cached, never the response, so turning the page off still takes effect immediately."
+        ),
+    )
+    markup_max_shapes_per_snapshot: int = Field(
+        default=2_000,
+        description=(
+            "How many shapes one submitted map snapshot may carry. The snapshot composer is a second write door onto "
+            "the same markup table that `markup_max_geometry_points` guards, reached by pin and wiki comments, "
+            "visits, memories, trips and lists - and each shape is stored with its own INSERT plus two receivers, so "
+            "the cost is whatever the submitter puts in one field. Trimmed rather than refused: the callers read a "
+            'rejected snapshot as "no map was submitted", which deletes the map the user already had.'
+        ),
+    )
+    label_reorder_max_ids: int = Field(
+        default=1000,
+        gt=0,
+        description=(
+            "How many label ids one reorder request may name. Both doors onto the action read this: the "
+            "Organize page's priority save and the external API's reorder serializer, which previously "
+            "carried a literal of its own while the internal view had no ceiling at all. A reorder is one "
+            "bulk_update of an order column rather than per-label graph work, so this is deliberately far "
+            "above label_bulk_edit_max_ids - it bounds the size of the id list itself, not the work per id."
+        ),
+    )
+    label_bulk_edit_max_ids: int = Field(
+        default=500,
+        description=(
+            "How many label ids one bulk edit may carry, in any of its three lists. Every (label, parent) pair walks "
+            "the label graph in the database and every label saved touches every pin carrying it, so the cost is the "
+            "product of two numbers the caller picks. Refused rather than trimmed: a bulk edit that silently applied "
+            "to some of what was selected is worse than one that says no."
+        ),
+    )
+    max_smart_lists_per_sync: int = Field(
+        default=25,
+        description=(
+            "How many smart lists one pin save may be evaluated against inside the request. Each list deserialises "
+            "its criteria and runs its own query, and a bulk edit multiplies that by how many pins were touched. "
+            "Nothing is dropped past this - the whole sync moves to the bulk queue instead."
+        ),
+    )
+    immich_marker_cache_max_assets: int = Field(
+        default=25_000,
+        description=(
+            "Largest Immich library whose marker list is cached for reuse across pins. The list is the whole "
+            "geolocated library, and it lands in the Dragonfly that also holds sessions and the Channels layer, so a "
+            "library past this is served and not stored - the picker still works, it just re-fetches. Roughly a "
+            "hundred bytes per marker."
+        ),
+    )
+    search_max_label_groups: int = Field(
+        default=8,
+        description=(
+            "How many label filter groups one search may carry. The groups arrive as client-supplied JSON and each "
+            "one adds conditions to the query, so without a ceiling the request decides how much work it is."
+        ),
+    )
+    search_max_label_filter_ids: int = Field(
+        default=20,
+        description=(
+            "How many label ids one search may filter on, across all its groups. Each id becomes a join on the "
+            "pin-label table, and a planner handles a handful well and dozens badly. Far above what the filter UI "
+            "produces. An over-long filter is trimmed, not refused, so a saved filter from before this existed "
+            "still returns results."
+        ),
+    )
+    search_max_label_expansion: int = Field(
+        default=10_000,
+        description=(
+            "How many labels one id may expand to when its descendants are resolved. A safety valve on the size of "
+            "the id list handed to the pin query, not an operating limit - the expansion itself is one recursive "
+            "query however deep the tree. Set well above any real label tree because trimming is not "
+            "direction-safe: a short set narrows an 'and'/'or' group but widens a 'not' one, since there is less "
+            "to exclude. Trimming logs a warning so it is never silent."
+        ),
+    )
+    websocket_max_sockets_per_account: int = Field(
+        default=20,
+        description=(
+            "How many WebSocket connections one account may hold open at once. An idle socket sends nothing, so the "
+            "inbound-volume limits charge it nothing, while it still occupies one of nginx's worker_connections "
+            "(shared with every HTTP request) and a slot in the single daphne behind them. Generous enough for many "
+            "tabs and several live features at once; far below what exhausting the pool takes. The cap fails open - "
+            "a Dragonfly outage must not become 'nobody may open a socket'."
+        ),
+    )
+    external_media_daily_bytes: int = Field(
+        default=512 * 1024 * 1024,
+        description=(
+            "How many bytes of external media one profile may cache in a rolling 24 hours. These rows are exempt "
+            "from the uploader's storage quota on purpose - the person who upvoted someone else's photo into the "
+            "cache did not author it - which left nothing at all bounding them, so one account could fill the "
+            "volume the database lives on. The exemption is about who is charged; this is about how fast. Far above "
+            "what contributing normally costs, and far below what filling a disk takes."
+        ),
+    )
+    map_document_cache_seconds: int = Field(
+        default=6 * 60 * 60,
+        description=(
+            "How long a built map document stays in Dragonfly. Entries are keyed by their content's fingerprint, so a "
+            "stale one is never read - this only decides how long an unread entry occupies memory. 0 disables the "
+            "cache, which must leave the endpoint correct, only slower."
+        ),
+    )
+    sandbox_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether the media-worker containers are deployed to drain the 'sandbox' and 'sandbox_batch' Celery queues. When false, "
+            "untrusted-parse tasks fall back to the default queue so an install without that container still "
+            "processes uploads - without the isolation. Set UL_SANDBOX_ENABLED=false only where no media-worker runs."
+        ),
+    )
+    ai_worker_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether an ai-worker container is deployed to drain the 'ai' Celery queue. Unlike "
+            "UL_SANDBOX_ENABLED, this has no degrade-to-default-queue fallback: when false, the assistant "
+            "is simply unavailable (see services.ai.access.assistant_available), because the default "
+            "worker holds REData/OAuth credentials the assistant's tool loop must never run alongside."
+        ),
+    )
+    untrusted_parse_policy: str = Field(
+        default="warn",
+        description=(
+            "How a process reacts when it is about to parse untrusted uploaded bytes outside the sandbox worker: "
+            "'deny' raises, 'warn' logs and proceeds, 'allow' disables the check. Production should be 'deny'; "
+            "'warn' exists to collect violations during a rollout, and the test settings force 'allow' because the "
+            "suite calls the parsers directly."
+        ),
+    )
+    direct_inference_policy: str = Field(
+        default="warn",
+        description=(
+            "How a process reacts when it is about to call an AI provider directly, in-process, instead of "
+            "through ai-inference: 'deny' raises, 'warn' logs and proceeds, 'allow' disables the check. Production "
+            "should be 'deny'; a local checkout with no UL_PROCESS_ROLE set is always allowed regardless of this "
+            "setting, since it has no ai-inference container to talk to. See services.sandbox.guard.check_direct_inference."
+        ),
+    )
     allow_dev_toolbar_for_non_admins: bool = Field(
         default=False,
         description=(
@@ -170,12 +486,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     csp_enforce: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "Send the Content-Security-Policy as an enforcing header instead of "
-            "Content-Security-Policy-Report-Only. Defaults to report-only so a deployment collects "
-            "violation reports for a release before anything is actually blocked. Set UL_CSP_ENFORCE=true "
-            "per environment once the reports for that environment are clean - see docs/NOTES.md."
+            "Send the Content-Security-Policy as an enforcing header. Set UL_CSP_ENFORCE=false to "
+            "fall back to Content-Security-Policy-Report-Only, which blocks nothing - an escape hatch "
+            "while a violation that breaks a page is fixed, not a resting state."
         ),
     )
     trusted_proxy_count: int = Field(
@@ -191,6 +506,206 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
 
+    websocket_max_frame_chars: int = Field(
+        default=65_536,
+        ge=1,
+        description=(
+            "Largest inbound WebSocket frame, in characters, a chat consumer will parse. Compared "
+            "against the raw frame before it is JSON-decoded, so an oversized frame costs a length "
+            "check rather than a full parse. Has to stay above the largest legitimate frame: a "
+            "direct message carries up to a 40,000-character ciphertext, and a 4,000-character "
+            "safety message escapes to roughly 24,000 characters when a client sends ASCII-safe "
+            "JSON. Cannot be disabled - a size cap with an off switch is a size cap somebody turns off."
+        ),
+    )
+    websocket_frames_per_minute: int = Field(
+        default=360,
+        description=(
+            "Inbound frames one sender may send per minute, sustained, on one socket family, counting "
+            "every frame - keep-alives, typing indicators and messages alike - because each one costs "
+            "parsing and dispatch whether or not it writes. Must stay above "
+            "UL_MESSAGES_PER_MINUTE plus typing (one per 3s) and keep-alives, or it refuses messages "
+            "the message budget allows. 0 disables it."
+        ),
+    )
+    websocket_frame_burst: int = Field(
+        default=60,
+        description=(
+            "Frames one sender may send back to back before UL_WEBSOCKET_FRAMES_PER_MINUTE's refill "
+            "rate applies. Must stay above UL_MESSAGE_BURST. Capped at the per-minute value."
+        ),
+    )
+    websocket_fanout_frames_per_minute: int = Field(
+        default=20,
+        description=(
+            "Inbound frames per minute that fan out to other people without writing a row - today "
+            "just the direct-message typing indicator, which is delivered into the recipient's "
+            "group. Charged on top of UL_WEBSOCKET_FRAMES_PER_MINUTE. 0 disables it."
+        ),
+    )
+    messages_per_minute: int = Field(
+        default=240,
+        description=(
+            "Chat messages one sender may create per minute, sustained, counted at the service layer "
+            "so the WebSocket and the HTTP fallback share one budget rather than one each - every "
+            "socket write here is also reachable as a plain POST. Direct and group messages share a "
+            "per-sender budget; safety check-in and game session chat are scoped per conversation, "
+            "so handling two at once does not throttle either. People send single emoji or split a "
+            "sentence into several messages, so this sits above what a person sends and well below "
+            "the ~15-30/s that one sender needs to saturate daphne (X31). 0 disables it."
+        ),
+    )
+    message_burst: int = Field(
+        default=30,
+        description=(
+            "Chat messages one sender may send back to back before UL_MESSAGES_PER_MINUTE's refill "
+            "rate applies. Capped at the per-minute value."
+        ),
+    )
+
+    metrics_enabled: bool = Field(
+        default=False,
+        description=(
+            "Expose Prometheus metrics at /metrics on this process. Off by default, and the route is "
+            "not registered at all when off - an absent URL cannot be misconfigured open, whereas a "
+            "guard inside a view is a line somebody can move. Set per service in docker-compose.yml: "
+            "the gunicorn 'app' service wants it, and every other role is a separate decision (app-ws "
+            "serves only /ws/, so its HTTP metrics would be empty). Enabling this in staging or "
+            "production without UL_METRICS_TOKEN or UL_METRICS_ALLOWED_CIDRS is a startup error - see "
+            "dashboard.checks.check_metrics_endpoint_is_guarded."
+        ),
+    )
+    db_app_pass: str = Field(
+        default="",
+        description=(
+            "Password for the per-tier Postgres login roles (ul_web, ul_sandbox, ...) that db-setup creates. Distinct "
+            "from UL_DB_PASS, the owner's, so no serving tier holds superuser credentials. Unset falls back to "
+            "UL_DB_PASS outside production; in production db-setup refuses to run without it."
+        ),
+    )
+    external_api_write_rate: str = Field(
+        default="300/hour",
+        description="Per-credential external-API write cap, as DRF's 'N/period'. Raise it only on a deployment the integration suite drives.",
+    )
+    external_api_burst_rate: str = Field(
+        default="60/minute",
+        description="Per-credential external-API cap across every request, as DRF's 'N/period'.",
+    )
+    external_api_read_rate: str = Field(
+        default="1000/hour",
+        description="Per-credential external-API read cap, as DRF's 'N/period'. Raise it only on a deployment the integration suite drives.",
+    )
+    metrics_token: str = Field(
+        default="",
+        description=(
+            "Bearer token a scraper must present as 'Authorization: Bearer <token>' to read /metrics. "
+            "Compared in constant time. Empty disables token authentication, which is only acceptable "
+            "when UL_METRICS_ALLOWED_CIDRS is set instead. Prometheus sends this via a scrape job's "
+            "'authorization' block."
+        ),
+    )
+    metrics_allowed_cidrs: str = Field(
+        default="",
+        description=(
+            "Comma-separated CIDRs (IPv4 or IPv6) permitted to read /metrics, e.g. "
+            "'10.2.0.0/24,127.0.0.1/32'. Empty disables the network check. The client address is "
+            "resolved the same way the rate limiters resolve it, honouring UL_TRUSTED_PROXY_COUNT, so "
+            "a forged X-Forwarded-For cannot spoof its way into the allowlist. Combine with "
+            "UL_METRICS_TOKEN for defense in depth; either alone satisfies the startup check."
+        ),
+    )
+    allow_outbound_apis: bool | None = Field(
+        default=None,
+        description=(
+            "Whether this deployment may call external providers. Unset means 'decide from the "
+            "environment': development and local refuse, everything else calls out. Setting it "
+            "explicitly overrides that in either direction, which is what makes it useful twice. "
+            "True on a development box while working on an integration itself. **False on a "
+            "throwaway environment that is not a development one** - `dev_env.py --environment "
+            "staging` sets UL_ENVIRONMENT=staging to get gunicorn, and the application branches on "
+            "that one variable, so a disposable environment is otherwise indistinguishable from a "
+            "real deployment and would call providers for real. False also works as an incident "
+            "switch on a real deployment when a provider needs to be taken out of the path. "
+            "Off-by-default for development exists because those calls are a side effect of work "
+            "nobody is watching: one load run's pin import enqueued 2,644 background tasks that "
+            "spent hours on the wire against the production REData, which bills a step later "
+            "(P109). The demo has its own narrower rule that this cannot reopen. Enforced in "
+            "services.core.rate_limiter.outbound_calls_permitted, the one point every gateway call "
+            "passes through."
+        ),
+    )
+    protomaps_api_key: str = Field(
+        default="",
+        description=(
+            "Buy the street and dark basemaps from Protomaps' hosted API instead of drawing them "
+            "from this deployment's own mirror. Set it and those two layers are served through "
+            "this origin: VectorBasemapStyleView rewrites the hosted style's tiles to "
+            "VectorBasemapTileView, which fetches them with the key server-side. Glyphs and "
+            "sprites stay on protomaps.github.io, which the CSP admits to connect-src whenever "
+            "this is set. Leave it empty and the layers keep whatever REData published."
+        ),
+    )
+    basemap_style_base_url: str = Field(
+        default="",
+        description=(
+            "Origins serving this deployment's vector basemap - the style documents, "
+            "their glyphs and sprites, and the tiles they name. Whitespace- or comma-separated, "
+            "because a style's assets need not share a host with its tiles. Protomaps' hosted "
+            "basemap needs nothing here; protomaps_api_key admits its glyph host. Admitted to CSP's "
+            "connect-src, and nothing else: it is not where tiles are fetched "
+            "from by this server, it is where the *browser* is allowed to fetch them from. A "
+            "raster layer is proxied same-origin and needs no exception, so a deployment whose "
+            "REData offers only raster layers can leave this unset. "
+            "Set it to the origin in REData's published style_url. For the hosted instance that "
+            "is https://tiles.urbanlens.org, which serves the style documents, the glyphs and "
+            "sprites they name, and the Protomaps planet archive behind them - measured "
+            "2026-09-20: styles/street.json, styles/dark.json and styles/terrain.json all answer "
+            "anonymously, with access-control-allow-origin: * and Content-Range exposed for the "
+            "archive's range reads. Without this the browser is refused all four."
+        ),
+    )
+    request_upstream_concurrency: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many fetches one web process may have in flight to each upstream a page calls while the user "
+            "waits: place search, nearby places, trip forecasts, the historical-map list, REData media, Flickr "
+            "albums. Each upstream has its own count (services.core.request_upstream). Below gunicorn's "
+            "`--threads 4`, so one slow upstream cannot hold every thread in a process; over the cap the caller "
+            "is told the upstream is busy at once instead of waiting."
+        ),
+    )
+    historical_tile_upstream_concurrency: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many warped historical-map tiles one web process may be fetching from REData at "
+            "the same time. Its own count rather than the basemap one's, because an overlay "
+            "nobody has switched on must not be able to starve the base layer under it - and "
+            "because REData warps these on demand, so they are slower than a basemap tile rather "
+            "than faster. See basemap_tile_upstream_concurrency for why the bound exists at all."
+        ),
+    )
+    basemap_tile_upstream_concurrency: int = Field(
+        default=6,
+        ge=1,
+        description=(
+            "How many basemap tiles one web process may be fetching upstream at the same time. A "
+            "tile that is already cached never counts against it - this bounds only the slow path. "
+            "A map viewport is ~30 tiles and the browser asks for all of them at once, so without "
+            "a bound a single cold map load occupies every request thread in the process for as "
+            "long as the upstream takes, and the rest of the site queues behind it. Over the cap "
+            "the proxy answers 503 immediately rather than waiting, because a thread waiting for a "
+            "slot is the very thing being rationed; the client draws its error tile and re-asks on "
+            "the next pan, by which time the tiles that did get through are cached. Note that "
+            "gunicorn runs `--threads 4` (package.json), which is the real ceiling: at or above 4 "
+            "this setting stops binding and the thread pool rations instead. The default sits above "
+            "it deliberately - one page asks for at most OWN_TILE_CONCURRENCY tiles at once "
+            "(own-tiles.ts), and refusing any of them costs a visible grey square, which is worse "
+            "than letting a map use the threads it is asking for. Lower it below 4 to reserve "
+            "threads for the rest of the site, once there is a reason to."
+        ),
+    )
     demo_mode: bool = Field(
         default=False,
         description=(
@@ -235,6 +750,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     test_runner: str = Field(default="urbanlens.core.tests.runner.TestRunner", description="The test runner")
 
     # Urls
+    deployment_name : str | None = Field(default=None, description="K3s site/node name, if any. Used to distinguish between deployments.")
     login_url: str = Field(default="login", description="The login url")
     static_url: str = Field(default="static/", description="The static url")
 
@@ -248,17 +764,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     static_root: Path = Field(default=Path("frontend/static"), description="The name of the static directory")
 
     # APIs
-    #: Root of a mirror of the third-party scripts and stylesheets in
-    #: dashboard/services/core/vendor_assets.py. Unset, every one of them is
-    #: fetched from its public CDN, which is the historical behaviour and still
-    #: the default. Set, every tag points at the mirror instead - decided when
-    #: the page is rendered, so nothing branches at call time and nothing waits
-    #: for a CDN request to fail first.
-    #:
-    #: The mirrored files are deliberately not in this repository: they are other
-    #: projects' releases with their own licences, and vendoring them into an
-    #: open-source application is a redistribution decision this project has not
-    #: made. Point this at wherever they are served from.
     vendor_asset_base_url: Url | None = Field(default=None, description="Root of a mirror of the third-party JS/CSS assets; unset uses the public CDNs")
     cloudflare_ai_endpoint: Url | None = Field(default=None, description="The cloudflare ai endpoint")
     cloudflare_worker_ai_endpoint: Url | None = Field(default=None, description="The cloudflare worker ai endpoint")
@@ -267,6 +772,30 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     huggingface_ai_api_key: str | None = Field(default=None, description="The huggingface ai key")
     openai_api_key: str | None = Field(default=None, description="The openai key")
     anthropic_api_key: str | None = Field(default=None, description="The anthropic (claude) key")
+    ai_inference_url: str | None = Field(
+        default=None,
+        description=(
+            "Base URL of the sandboxed ai-inference service (e.g. http://ai-inference:8002). When set, "
+            "LLMGateway calls providers through it instead of in-process; when unset, it falls back to "
+            "calling the provider SDKs directly here (LocalInferenceClient) - the pre-sandbox behavior, "
+            "gated by UL_DIRECT_INFERENCE_POLICY so a deployed container can't silently take this path."
+        ),
+    )
+    ai_inference_token: str | None = Field(
+        default=None,
+        description=(
+            "Shared bearer secret presented to ai-inference. Must match that service's own copy of the "
+            "same variable exactly - it is the same credential, not two."
+        ),
+    )
+    ai_inference_timeout_seconds: float = Field(
+        default=90.0,
+        description=(
+            "How long to wait for a single ai-inference HTTP call before giving up. Comfortably above "
+            "that service's own worst case (a 30s provider timeout, one retry) so this client is never "
+            "the one that times out first."
+        ),
+    )
     google_unrestricted_api_key: str | None = Field(default=None, description="The google unrestricted api key")
     google_domain_restricted_api_key: str | None = Field(default=None, description="The google domain restricted api key")
     google_public_api_key: str | None = Field(default=None, description="The google public api key")
@@ -282,8 +811,27 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
     ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
+    osrm_base_url: str | None = Field(
+        default=None,
+        description=(
+            "Base URL of an OSRM routing server, no trailing slash (e.g. http://osrm:5000). Unset (the default) "
+            "uses OSRM's public demo instance, which the OSRM project documents as dev/testing only - rate-limited, "
+            "with no uptime guarantee. Any deployment whose drive-time answers matter should self-host "
+            "(docker run osrm/osrm-backend over a pre-processed .osrm extract) and point this at it. No API key "
+            "either way."
+        ),
+    )
     redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
     redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
+    virustotal_api_key: str | None = Field(
+        default=None,
+        description=(
+            "VirusTotal API key (public/free tier), sent as the x-apikey header. When set, externally-fetched "
+            "(non-upload) image assets are looked up by hash on VirusTotal before falling back to ClamAV - see "
+            "services.security.virustotal_scan. Unset (the default) skips VirusTotal entirely; those assets go "
+            "straight to ClamAV, same as every upload."
+        ),
+    )
     discord_client_secret: str | None = Field(default=None, description="The discord client secret")
     discord_client_id: str | None = Field(default=None, description="The discord client ID")
     twilio_account_sid: str | None = Field(default=None, description="The Twilio account SID, for outbound SMS/WhatsApp notifications")
@@ -309,20 +857,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     @property
     def debug(self) -> bool:
-        """
-        Whether or not debugging is enabled
-        """
+        """Whether debugging is enabled."""
         if self._environment:
             return self._environment.debug
-        # This is only used prior to the environment being set.
-        # -- after that, it is propogated to the environment
+        # Only before the environment is set; afterwards it propagates there.
         return self.debug_override or False
 
     @debug.setter
     def debug(self, value: bool) -> None:
-        """
-        Set the debug value
-        """
+        """Set the debug value."""
         self.debug_override = value
 
         if self._environment:
@@ -330,23 +873,17 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
     @property
     def environment(self) -> BaseEnvironment | None:
-        """
-        The environment
-        """
+        """The environment."""
         return self._environment
 
     @property
     def secrets(self) -> dict:
-        """
-        The secrets dictionary
-        """
+        """The secrets."""
         return self._secrets or {}
 
     @property
     def paths(self) -> dict[str, Path]:
-        """
-        Returns a dictionary of directories
-        """
+        """Directories."""
         return {
             "project_root": self.project_root,
             "base_dir": self.base_dir,
@@ -378,33 +915,50 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @field_validator("environment_name", mode="before")
+    @classmethod
+    def _resolve_environment_name(cls, value: Any) -> str:
+        """Parse ``UL_ENVIRONMENT`` with the same resolver the Django settings use.
+
+        Args:
+            value: The raw value pydantic read.
+
+        Returns:
+            The normalised environment name.
+        """
+        return str(environment_from_env({"UL_ENVIRONMENT": str(value or "")}))
+
+    @field_validator("external_api_write_rate", "external_api_burst_rate", "external_api_read_rate", mode="after")
+    @classmethod
+    def _require_throttle_rate(cls, value: str) -> str:
+        """Refuse a rate DRF would only reject on the first throttled request.
+
+        Args:
+            value: The configured rate.
+
+        Returns:
+            The value unchanged when it is ``N/period``.
+
+        Raises:
+            ValueError: When it is not.
+        """
+        if not re.fullmatch(r"[1-9]\d*/(s|sec|second|m|min|minute|h|hour|d|day)", value.strip()):
+            raise ValueError(f"expected 'N/period' such as '300/hour', got {value!r}")
+        return value.strip()
+
     @field_validator("field_encryption_key", mode="after")
     @classmethod
     def _reject_weak_encryption_keys(cls, value: str | None) -> str | None:
-        """Refuse an active field-encryption key weak enough to brute-force offline.
-
-        The derivation is a single unsalted SHA256 (``models.fields._derive_fernet``),
-        so key strength *is* input strength - there is no stretching to hide behind.
-        Fernet tokens carry their own HMAC, so one stolen ciphertext row lets an
-        attacker verify guesses offline at hashing speed. Rejecting at configuration
-        time is the only point where this is still cheap to fix, and the operator
-        setting this variable is by definition trying to harden the install.
-
-        This is a floor, not an entropy oracle: it reliably catches short and
-        degenerate keys, but a sufficiently long hand-written passphrase will pass
-        while still being far weaker than generated output. Use the documented
-        ``secrets.token_urlsafe(64)`` command rather than treating acceptance here
-        as an endorsement.
+        """Refuse an active key weak enough for offline brute force.
 
         Args:
             value: The configured active key, if any.
 
         Returns:
-            The value unchanged when it is acceptable.
+            The value unchanged when acceptable.
 
         Raises:
-            ValueError: When the key is too short or too repetitive to be a
-                machine-generated secret.
+            ValueError: When the key is too short or too repetitive.
         """
         weakness = _encryption_key_weakness(value) if value else None
         if weakness:
@@ -414,15 +968,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @field_validator("field_encryption_key_fallbacks", mode="after")
     @classmethod
     def _warn_about_weak_fallback_keys(cls, value: list[str]) -> list[str]:
-        """Accept retired keys that would be refused as the active key, and say so.
-
-        Applying the floor here too would strand exactly the installs that need
-        to move off a weak key: the documented rotation is to list the old key
-        as a fallback, run ``manage.py rotate_field_encryption``, then drop it -
-        and a validator that refuses the old key stops the settings module from
-        loading at all, so the command that fixes it cannot start either. A
-        fallback only ever decrypts, and only until the rotation finishes, so
-        the useful action is a loud warning rather than a locked door.
+        """Warn (not fail) on weak retired keys so rotation can still run.
 
         Args:
             value: The configured retired keys.
@@ -460,15 +1006,20 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                 if env_path.stat().st_size == 0:
                     logger.warning("Found .env file but it is empty: %s", env_path)
                 return
-        logger.warning(
-            ".env file not found; API keys and secrets will be missing. Checked: %s",
-            ", ".join(str(p) for p in _ENV_FILE_PATHS),
-        )
+        checked = ", ".join(str(p) for p in _ENV_FILE_PATHS)
+        # Read UL_ENVIRONMENT directly; this field isn't wired to it.
+        environment_name = environment_from_env()
+        if environment_name not in _ENV_FILE_ENVIRONMENTS:
+            logger.info(
+                "No .env file in %s, and none is needed: this environment is configured from real environment variables. Checked: %s",
+                environment_name,
+                checked,
+            )
+            return
+        logger.warning(".env file not found; API keys and secrets will be missing. Checked: %s", checked)
 
     def ensure_paths(self) -> None:
-        """
-        Ensure the directories are absolute and exist.
-        """
+        """Ensure directories are absolute and exist."""
         for key, value in self.paths.items():
             try:
                 if not isinstance(value, Path):
@@ -481,20 +1032,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                     setattr(self, key, value)
 
                 if not value.exists():
-                    # A path containing a period is inferred to be a file, so only its
-                    # parent is ensured; anything else is a directory and is created
-                    # itself. Getting this backwards silently leaves directory-valued
-                    # settings (backups_dir, downloads_dir, exports_dir, static_root)
-                    # uncreated while their parents exist, which fails far from here.
+                    # Dotted names are files (ensure parent); else directories.
                     if "." not in value.name:
                         value.mkdir(parents=True, exist_ok=True)
                     else:
                         value.parent.mkdir(parents=True, exist_ok=True)
             except OSError:
-                # OSError, not FileNotFoundError: a read-only or wrong-owner app
-                # directory raises PermissionError, and letting that escape takes
-                # down settings import - and therefore every process - without
-                # reporting which path was at fault.
+                # Report the path; a bare raise would hide which one failed.
                 logger.warning("Could not ensure path %s (%s); continuing without it.", key, value, exc_info=True)
 
         # Ensure app.log, debugging.log, and test.log exist in log dir
@@ -506,16 +1050,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                 if not filepath.exists():
                     filepath.write_text("")
             except OSError:
-                # Pre-creating these is a convenience for the file handlers, not a
-                # requirement. Django's own logging config reports an unwritable log
-                # directory far more usefully than an unhandled error at import time,
-                # which surfaces as a silent container that never binds a port.
+                # Convenience only; Django reports an unwritable log dir itself.
                 logger.warning("Could not pre-create %s in %s; continuing.", filename, self.log_root, exc_info=True)
 
     def refresh_django(self):
-        """
-        Refresh django.conf.settings with the current settings
-        """
+        """Refresh django.conf.settings with current values."""
         for key, value in self.__dict__.items():
             # Filter out settings we don't want to propogate back to django
             if key.startswith("_") or key in ["model_config", "paths", "secrets", "databases", "logging", "django"]:
@@ -536,15 +1075,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         """
 
     def select_environment(self, new_environment_name: EnvironmentTypes | None = None) -> BaseEnvironment:
-        """
-        Select the environment
+        """Select the environment.
 
         Args:
-            new_environment_name (EnvironmentTypes | None, optional):
-                The name of the environment to switch to. Defaults to None.
+            new_environment_name: Environment to switch to, if any.
 
         Returns:
-            BaseEnvironment: The environment to use
+            The environment in use.
         """
         if self._environment is not None and self.environment_name == new_environment_name:
             return self._environment
@@ -562,9 +1099,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         return self._environment
 
     def __getattr__(self, name: str):
-        """
-        Get an attribute that is fully uppercase (from django settings) as a parameter here (as lowercase)
-        """
+        """Resolve lowercase names from uppercase Django settings."""
         key = name.lower()
         if key in self.__dict__:
             return self.__dict__[key]

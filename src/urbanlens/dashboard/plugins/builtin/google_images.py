@@ -1,13 +1,5 @@
 """Google Images plugin: a Media-gallery photo tab sourced from Google Image Search, via REData.
-
-Searched by the pin's address only - never by its user-given name, which may
-be a nickname or physical description that doesn't match anything Google
-would associate with the place. REData's ``/search/web/?images=true`` only
-ever tries providers with an image mode (today, Google Programmable Search),
-so this panel keeps its historical name/slug (``google_images``) for
-``UL_DISABLED_PLUGINS`` continuity even though it no longer holds its own
-Google Custom Search credentials - REData does.
-"""
+Searched by the pin's address only - never by its user-given name, which may be a nickname or physical description that doesn't match anything Google would associate with the place."""
 
 from __future__ import annotations
 
@@ -53,10 +45,9 @@ class GoogleImagesPanelSource(GalleryMediaSource):
                 results = RedataSearchGateway().search_web(address, images=True, max_results=_MAX_IMAGES)
             except LocationContextUnavailableError as exc:
                 # Quota exhaustion, misconfiguration, or a REData-side outage.
-                # Nothing is written: the existence of a cache row is what marks
-                # this source as fetched, so caching an empty list here would
-                # turn a transient failure into a permanent "no images here"
-                # that nothing retries. Returning leaves it to the next pass.
+                # Nothing is written: the existence of a cache row is what marks this source as
+                # fetched, so caching an empty list here would turn a transient failure into a
+                # permanent "no images here" that nothing retries.
                 import logging
 
                 logging.getLogger(__name__).warning("REData image search failed for %r, leaving it unfetched to retry: %s", address, exc)
@@ -64,13 +55,7 @@ class GoogleImagesPanelSource(GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, {"items": results}, query_key=address)
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Rebuild ``MediaItem``s from the cached search results.
-
-        REData's image-mode results carry the image itself under
-        ``thumbnail`` and the page it was found on under ``link`` (see
-        ``RedataSearchGateway.search_web``) - there is no separate smaller
-        preview, so the same URL serves as both the item and its thumbnail.
-        """
+        """Rebuild ``MediaItem``s from the cached search results."""
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         items = (data or {}).get("items") or []
@@ -82,7 +67,7 @@ class GoogleImagesPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "google_images"
     verbose_name: ClassVar[str] = "Google Images"
-    description: ClassVar[str] = "Adds up to 10 Google Image Search results (by address) to the pin detail page's Media gallery, via REData's web-search endpoint."
+    description: ClassVar[str] = "Adds up to 10 Google Image Search results (by address) to the Private Pin page's Media gallery, via REData's web-search endpoint."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

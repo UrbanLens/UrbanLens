@@ -1,29 +1,5 @@
 /**
- * Shared label pickers - the one implementation behind every place labels are
- * picked (docs/PROBLEMS.md "Saved-filter include/exclude label picker" entry;
- * extraction authorized 2026-07-23).
- *
- * Two factories, installed globally as `window.UrbanLensLabelPicker` via the
- * core.js classic bundle (see entries-classic/core.ts):
- *
- * - `createFilterPicker(options)` - the rich include/exclude picker extracted
- *   from the main map's filter sidebar: click-to-include /
- *   right-click-to-exclude, removable chips, drag between the Include and
- *   Exclude columns (or out to remove), an AND/OR combinator toggle, and a
- *   formula bar (`(Visited / "Want To Go") - Demolished`) whose parsed groups
- *   serialize to the `label_groups` JSON shape `PinQuerySet.apply_label_groups`
- *   consumes. Consumers: the main map sidebar and the saved-filter
- *   dialog/detail page.
- * - `createChipPicker(options)` - the flat search-and-chips picker (previously
- *   duplicated as the map page's `_makeLabelChipPicker` and the saved-filter
- *   scripts' `_sfMakeLabelPicker`). Consumers: the bulk-edit dialog's
- *   add/remove label sections (two independent candidate pools, so the rich
- *   include/exclude pairing deliberately does not apply there).
- *
- * The DOM contract is class-based (`.fp-label-avail` buttons carrying
- * `data-label-id/-name/-text/-color/-icon`, chip/columns markup styled by
- * `_map.scss`'s `fp-*` rules, which are global) with every element handed in
- * explicitly - no hardcoded ids, so several pickers can coexist on one page.
+ * Shared label pickers - the one implementation behind every place labels are picked.
  */
 
 /** One selectable label, as read off an availability button's data attributes. */
@@ -41,12 +17,10 @@ export interface LabelGroup {
 }
 
 import { safeColor } from "./color-safety";
+import { escHtml } from "./escape-html";
 
 type ChipMode = "incl" | "excl";
 
-function escHtml(value: unknown): string {
-    return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 
 /**
@@ -137,6 +111,37 @@ export interface FilterPickerApi {
     mergeIncludeIds(ids: Array<number | string>): void;
     /** Whether nothing is selected and no formula is active. */
     isEmpty(): boolean;
+}
+
+/**
+ * True when a `contextmenu` emits no follow-up click to suppress.
+ *
+ * Two such sources, and only the first is a pointer: a real mouse right-click,
+ * which also cannot be racing a long-press timer since `startPress` ignores
+ * mouse pointers; and a *keyboard* context menu - the Menu key, or Shift+F10 -
+ * which reports `pointerType: ""`, `button: 0` and `detail: 0`. Read as a
+ * pointer event, that last one looks exactly like a touch long-press, so it
+ * used to arm the suppression and leave the guard set until some unrelated
+ * later click, swallowing the Enter or Space a keyboard user pressed next.
+ *
+ * `detail` is the discriminator: a touch long-press carries a real click count,
+ * a keyboard-synthesised event carries 0.
+ *
+ * Not measured, and worth measuring before relying on it further: the `detail`
+ * branch is only reached where `contextmenu` arrives as a plain MouseEvent with
+ * no `pointerType`, and those are the same engines where a long-press might
+ * also report `detail: 0`. If one does, the suppression stops arming there and
+ * a long-press double-fires - the failure this replaced, in the other
+ * direction. Every engine tested reports `pointerType`, so the branch is a
+ * fallback rather than the normal path.
+ *
+ * Exported for its test: the two callers are inside picker closures, and the
+ * rule is about event shapes rather than about the DOM around them.
+ */
+export function emitsNoFollowUpClick(event: MouseEvent): boolean {
+    const pointerType = (event as PointerEvent).pointerType;
+    if (pointerType) return pointerType === "mouse";
+    return event.button === 2 || event.detail === 0;
 }
 
 export function createFilterPicker(options: FilterPickerOptions): FilterPickerApi {
@@ -241,18 +246,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         document.addEventListener("click", releasePress);
         document.addEventListener("pointerdown", releasePress);
         return true;
-    }
-
-    /**
-     * True when a `contextmenu` came from a real mouse right-click, which emits
-     * no follow-up click to suppress - and can't be racing a long-press timer
-     * either, since startPress ignores mouse pointers. Arming the suppression
-     * for it would leave the guard set until some unrelated later click,
-     * swallowing keyboard (Enter/Space) activations in the meantime.
-     */
-    function isMouseContextMenu(event: MouseEvent): boolean {
-        const pointerType = (event as PointerEvent).pointerType;
-        return pointerType ? pointerType === "mouse" : event.button === 2;
     }
 
     /**
@@ -456,7 +449,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
                 });
                 chip.addEventListener("contextmenu", (e) => {
                     e.preventDefault();
-                    if (claimPress(!isMouseContextMenu(e))) toggleLabelMode(id);
+                    if (claimPress(!emitsNoFollowUpClick(e))) toggleLabelMode(id);
                 });
                 chip.addEventListener("pointerdown", (e) => startPress(e, () => toggleLabelMode(id)));
                 chip.querySelector<HTMLElement>(".fp-label-chip-toggle")?.addEventListener("click", (e) => {
@@ -601,7 +594,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
         if (!btn) return;
         e.preventDefault();
-        if (claimPress(!isMouseContextMenu(e))) addLabel(btn, "excl");
+        if (claimPress(!emitsNoFollowUpClick(e))) addLabel(btn, "excl");
     });
     els.list.addEventListener("pointerdown", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
@@ -1157,8 +1150,7 @@ export function createChipPicker(options: ChipPickerOptions): ChipPickerApi {
 }
 
 // ---------------------------------------------------------------------------
-// Global installation (core.js)
-// ---------------------------------------------------------------------------
+// Global installation (core.js) ---------------------------------------------------------------------------
 
 export interface UrbanLensLabelPickerGlobal {
     createFilterPicker: typeof createFilterPicker;
@@ -1166,8 +1158,11 @@ export interface UrbanLensLabelPickerGlobal {
 }
 
 export function installGlobalLabelPicker(): void {
-    (window as unknown as { UrbanLensLabelPicker: UrbanLensLabelPickerGlobal }).UrbanLensLabelPicker = {
-        createFilterPicker,
-        createChipPicker,
-    };
+    window.UrbanLensLabelPicker = { createFilterPicker, createChipPicker };
+}
+
+declare global {
+    interface Window {
+        UrbanLensLabelPicker?: UrbanLensLabelPickerGlobal;
+    }
 }

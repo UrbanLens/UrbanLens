@@ -2,21 +2,13 @@
 #
 # Run the integration suite against a deployed instance.
 #
-# The suite itself is `tests/integration/` (Playwright). This wrapper exists for
-# the three things that are easy to get wrong by hand and expensive to discover
-# thirty seconds into a run:
-#
-#   - the browser build has to match the @playwright/test version exactly, or
-#     the run fails with a version-mismatch error that reads like a bug;
-#   - the target has to be stated explicitly, because the default for a suite
-#     that writes and deletes data must never be "whatever was set last";
-#   - the accounts have to be provisioned on the deployment first, since sign-up
-#     alone leaves an account inactive pending an emailed link nothing here can
-#     click.
+# Wrapper pins the matching browser build, requires an explicit target, and needs provisioned accounts.
 #
 # Usage:
 #   bin/run_integration_tests.sh --url https://s1.dev.urbanlens.org
 #   bin/run_integration_tests.sh --url ... --project smoke
+#   bin/run_integration_tests.sh --url ... --project location   # sets UL_E2E_LOCATION_DATA=1
+#   bin/run_integration_tests.sh --url ... --project slow       # sets UL_E2E_SLOW=1
 #   bin/run_integration_tests.sh --url ... --docker         # no local Node needed
 #   bin/run_integration_tests.sh --url ... -- --grep "@slow" # pass through
 #
@@ -39,7 +31,11 @@ usage() {
 
 		  --url URL                 The deployment to test (or set UL_E2E_BASE_URL).
 		  --project NAME            Restrict to one project; repeatable.
-		                            smoke | services | api | ui | a11y | visual
+		                            smoke | services | api | ui | a11y | security |
+		                            location | slow | visual | ui-firefox | ui-webkit | ui-mobile
+		                            The last six are opt-in; naming one sets its
+		                            UL_E2E_LOCATION_DATA / UL_E2E_SLOW / UL_E2E_VISUAL /
+		                            UL_E2E_CROSS_BROWSER.
 		  --docker                  Run in the official Playwright image; needs no
 		                            local Node or browsers.
 		  --skip-browser-install    Do not check for a matching browser build.
@@ -58,6 +54,12 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--project)
 			PROJECTS+=("--project=$2")
+			case "$2" in
+				location) export UL_E2E_LOCATION_DATA="${UL_E2E_LOCATION_DATA:-1}" ;;
+				slow) export UL_E2E_SLOW="${UL_E2E_SLOW:-1}" ;;
+				visual) export UL_E2E_VISUAL="${UL_E2E_VISUAL:-1}" ;;
+				ui-firefox | ui-webkit | ui-mobile) export UL_E2E_CROSS_BROWSER="${UL_E2E_CROSS_BROWSER:-1}" ;;
+			esac
 			shift 2
 			;;
 		--docker)
@@ -85,9 +87,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-# node_modules lives in the (gitignored) suite directory and is mounted into the
-# container, so it survives between runs. `npm ci` would delete and rebuild it
-# every time, which is minutes per run for no benefit.
+# node_modules is mounted into the container and reused; `npm ci` every run would cost minutes.
 install_command() {
 	if [[ -d "${SUITE_DIR}/node_modules" ]]; then
 		echo "true"
@@ -118,8 +118,7 @@ if [[ -z "${UL_E2E_ACCOUNTS_FILE:-}" && -z "${UL_E2E_USERNAME:-}" && ! -f "${SUI
 	exit 2
 fi
 
-# The image tag and the installed package must be the same version, so both are
-# read from the one place that pins it.
+# Image tag and package must match; both read from the pinned version.
 PLAYWRIGHT_VERSION="$(grep -o '"@playwright/test": *"[^"]*"' "${SUITE_DIR}/package.json" | grep -o '[0-9][0-9.]*')"
 if [[ -z "${PLAYWRIGHT_VERSION}" ]]; then
 	echo "error: could not read the pinned @playwright/test version from ${SUITE_DIR}/package.json" >&2
@@ -127,38 +126,38 @@ if [[ -z "${PLAYWRIGHT_VERSION}" ]]; then
 fi
 
 export UL_E2E_BASE_URL="${BASE_URL}"
+# The Docker runner mounts only the suite directory, so git cannot be asked from inside it.
+UL_E2E_GIT_SHA="${UL_E2E_GIT_SHA:-$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || true)}"
+export UL_E2E_GIT_SHA
 
 if [[ ${USE_DOCKER} -eq 1 ]]; then
-	# The official image carries a matching Node and matching browsers, so this
-	# is the path that needs nothing installed on the machine running it.
+	# Official image already carries matching Node and browsers.
 	IMAGE="mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble"
 	echo "Running in ${IMAGE} against ${BASE_URL}"
 
-	# Interactive only when there is a terminal to be interactive with; `-it`
-	# against a pipe (a CI step, an `ssh host '...'`) fails outright.
+	# `-it` only with a terminal; against a pipe it fails.
 	TTY_FLAGS=()
 	if [[ -t 0 && -t 1 ]]; then
 		TTY_FLAGS=(-it)
 	fi
 
-	# `--ipc=host` because Chromium's default 64MB shared-memory allocation in a
-	# container makes tabs crash on large pages; `--network=host` so a target on
-	# this machine (or reachable only from it) resolves the same way it does here.
+	# Every exported UL_E2E_* variable, so a new one needs no edit here.
+	ENV_FLAGS=(-e CI)
+	while IFS= read -r name; do
+		ENV_FLAGS+=(-e "${name}")
+	done < <(compgen -e | grep '^UL_E2E_' || true)
+
+	# Larger shm so Chromium tabs survive large pages; host networking so local targets resolve.
+	# Run as the caller so reports/ and node_modules/ stay writable by a later host run.
 	exec docker run --rm ${TTY_FLAGS[@]+"${TTY_FLAGS[@]}"} \
+		--user "$(id -u):$(id -g)" \
+		-e HOME=/tmp \
 		--ipc=host \
 		--network=host \
 		-v "${SUITE_DIR}:/suite" \
 		${UL_E2E_ACCOUNTS_FILE:+-v "${UL_E2E_ACCOUNTS_FILE}:${UL_E2E_ACCOUNTS_FILE}:ro"} \
 		-w /suite \
-		-e UL_E2E_BASE_URL \
-		-e UL_E2E_ACCOUNTS_FILE \
-		-e UL_E2E_USERNAME -e UL_E2E_PASSWORD -e UL_E2E_API_KEY -e UL_E2E_SCOPES \
-		-e UL_E2E_RESTRICTED_API_KEY -e UL_E2E_RESTRICTED_SCOPES \
-		-e UL_E2E_SECONDARY_USERNAME -e UL_E2E_SECONDARY_PASSWORD -e UL_E2E_SECONDARY_API_KEY \
-		-e UL_E2E_IGNORE_HTTPS_ERRORS -e UL_E2E_EXPECT_PRIMARY -e UL_E2E_REDATA_URL \
-		-e UL_E2E_WORKERS -e UL_E2E_RETRIES -e UL_E2E_RUN_ID -e UL_E2E_STRICT_CONSOLE \
-		-e UL_E2E_CROSS_BROWSER -e UL_E2E_VISUAL -e UL_E2E_WS_IDLE_SECONDS \
-		-e CI \
+		"${ENV_FLAGS[@]}" \
 		"${IMAGE}" \
 		bash -lc "$(install_command) && npx playwright test ${PROJECTS[*]:-} ${PASSTHROUGH[*]:-}"
 fi
@@ -176,8 +175,7 @@ if [[ ! -d node_modules ]]; then
 fi
 
 if [[ ${INSTALL_BROWSERS} -eq 1 ]]; then
-	# Cheap when already present: this verifies the browser build matching the
-	# installed package is there and downloads it only if it is not.
+	# No-op when the matching build is already present.
 	npx playwright install chromium
 	if [[ "${UL_E2E_CROSS_BROWSER:-0}" != "0" ]]; then
 		npx playwright install firefox webkit
@@ -185,6 +183,5 @@ if [[ ${INSTALL_BROWSERS} -eq 1 ]]; then
 fi
 
 echo "Running the integration suite against ${BASE_URL}"
-# The `${arr[@]+...}` form rather than a bare `"${arr[@]}"`: under `set -u`, an
-# empty array expansion is an unbound-variable error on bash 3.2 (macOS).
+# `${arr[@]+...}` guards empty arrays under `set -u` on bash 3.2.
 npx playwright test ${PROJECTS[@]+"${PROJECTS[@]}"} ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}

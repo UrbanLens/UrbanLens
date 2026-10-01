@@ -1,13 +1,4 @@
-"""Provider-agnostic Google OAuth 2.0 authorization-code flow helpers.
-
-Extracted from ``dashboard/services/apis/calendar/google.py`` so any feature
-needing its own Google OAuth grant (Calendar, Google Photos, ...) can reuse
-the same token exchange/refresh/revoke mechanics against the site's one
-Google OAuth client (``UL_GOOGLE_CLIENT_ID``/``UL_GOOGLE_CLIENT_SECRET``),
-each requesting whatever scopes its feature needs. Every function here is
-scope-agnostic - callers pass their own ``scopes``/client credentials rather
-than this module hardcoding any one feature's grant.
-"""
+"""Provider-agnostic Google OAuth 2.0 authorization-code flow helpers."""
 
 from __future__ import annotations
 
@@ -28,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a credential
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a...
 GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 
 _OAUTH_TIMEOUT = 30
@@ -40,13 +31,7 @@ class GoogleOAuthNotConfiguredError(RuntimeError):
 
 class GoogleAuthExpiredError(GatewayRequestError):
     """Raised when Google has rejected the stored grant entirely (not a transient failure).
-
-    Covers a refused token refresh (revoked/expired refresh token) and a
-    missing refresh token. Distinct from the generic ``GatewayRequestError``
-    so callers can tell "this connection is dead, prompt the user to
-    reconnect" apart from a transient or unrelated API failure that doesn't
-    warrant discarding the stored credentials.
-    """
+    Distinct from the generic ``GatewayRequestError`` so callers can tell "this connection is dead, prompt the user to reconnect" apart from a transient or unrelated API failure that doesn't warrant discarding the stored credentials."""
 
 
 def build_authorization_url(
@@ -66,12 +51,10 @@ def build_authorization_url(
         scopes: OAuth scopes to request.
         state: Signed opaque state token, verified on callback.
         access_type: ``"offline"`` (default) so Google issues a refresh token.
-        prompt: ``"consent"`` (default) so a refresh token is issued even on
-            a re-authorization.
+        prompt: ``"consent"`` (default) so a refresh token is issued even on a re-authorization.
 
     Returns:
-        Fully-formed authorization URL to redirect the user to.
-    """
+        Fully-formed authorization URL to redirect the user to."""
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -94,12 +77,10 @@ def exchange_code_for_tokens(client_id: str, client_secret: str, code: str, redi
         redirect_uri: The same redirect URI used to obtain the code.
 
     Returns:
-        Token response payload (``access_token``, ``refresh_token``,
-        ``expires_in``, ``id_token``, ``scope``, ...).
+        Token response payload (``access_token``, ``refresh_token``, ``expires_in``, ``id_token``, ``scope``, ...).
 
     Raises:
-        GatewayRequestError: When the token exchange fails.
-    """
+        GatewayRequestError: When the token exchange fails."""
     response = requests.post(
         GOOGLE_TOKEN_URL,
         data={
@@ -129,8 +110,7 @@ def refresh_access_token(client_id: str, client_secret: str, refresh_token: str)
         Token response payload (``access_token``, ``expires_in``, ...).
 
     Raises:
-        GoogleAuthExpiredError: When the refresh fails (e.g. access revoked).
-    """
+        GoogleAuthExpiredError: When the refresh fails (e.g. access revoked)."""
     response = requests.post(
         GOOGLE_TOKEN_URL,
         data={
@@ -166,17 +146,13 @@ def revoke_token(token: str) -> bool:
 
 def extract_email_from_id_token(id_token: str | None) -> str | None:
     """Read the ``email`` claim from an OAuth ``id_token``.
-
-    The token arrives directly from Google's token endpoint over TLS, so the
-    payload is decoded without signature verification - it is used for
-    display only, never for authentication.
+    The token arrives directly from Google's token endpoint over TLS, so the payload is decoded without signature verification - it is used for display only, never for authentication.
 
     Args:
         id_token: Raw JWT string from the token response, if any.
 
     Returns:
-        The email claim, or None when absent or unparsable.
-    """
+        The email claim, or None when absent or unparsable."""
     if not id_token:
         return None
     parts = id_token.split(".")

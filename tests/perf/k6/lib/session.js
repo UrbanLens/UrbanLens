@@ -1,0 +1,189 @@
+/** Signing in, and the two Django behaviours that make it more than one POST. */
+
+import http from "k6/http";
+import { fail } from "k6";
+
+const LOGIN_PATH = "/accounts/login/";
+
+/**
+ * Sign in as one account, leaving the session cookie in this VU's jar.
+ *
+ * @param {string} baseUrl Origin under test, no trailing slash.
+ * @param {{username: string, password: string, role: string}} account
+ * @returns {{baseUrl: string, role: string, csrfToken: string}} A handle to pass to the request helpers below.
+ */
+export function signIn(baseUrl, account) {
+    const loginUrl = `${baseUrl}${LOGIN_PATH}`;
+    // Own jar so this always starts anonymous: the shared VU jar would redirect an already-authenticated login to the map.
+    const jar = new http.CookieJar();
+    const form = http.get(loginUrl, { tags: { endpoint: "login_form", phase: "setup" }, responseType: "text", jar });
+    if (form.status !== 200) {
+        fail(`GET ${loginUrl} answered ${form.status}; the target is not serving the sign-in page.`);
+    }
+    if (!form.url.includes(LOGIN_PATH)) {
+        fail(`GET ${loginUrl} was redirected to ${form.url}. That happens when the request is already authenticated, which means this jar is not the empty one it is supposed to be.`);
+    }
+
+    const token = csrfToken(baseUrl, jar);
+    if (!token) {
+        fail(`No csrftoken cookie after GET ${loginUrl}. Django sets it on that page, so this means something in front of the app is stripping Set-Cookie.`);
+    }
+
+    const response = http.post(
+        loginUrl,
+        { csrfmiddlewaretoken: token, username: account.username, password: account.password },
+        {
+            headers: unsafeHeaders(baseUrl, loginUrl),
+            // Not followed: 302 means success, 200 means the form again. Following would also pay for a full map render.
+            redirects: 0,
+            jar,
+            tags: { endpoint: "login", phase: "setup" },
+            // Kept for the failure path: the form body says why, and a 403 page says whether it was CSRF.
+            responseType: "text",
+        },
+    );
+
+    if (response.status !== 302) {
+        fail(`Sign-in as "${account.username}" did not happen (HTTP ${response.status}). ${diagnose(response)}`);
+    }
+    const destination = response.headers.Location || "";
+    if (destination.includes(LOGIN_PATH)) {
+        fail(`Sign-in as "${account.username}" bounced back to ${destination}: the credentials were accepted but no session was kept.`);
+    }
+
+    // The token is rotated on login, so the pre-login one is stale for every
+    // POST after this.
+    const cookies = cookiesFor(baseUrl, jar);
+    if (!cookies.sessionid) {
+        fail(`Signing in as "${account.username}" left no session cookie, so nothing after this would be authenticated.`);
+    }
+    // Carries the jar as well as the cookies so a caller in `setup` can keep
+    // using this session directly without adopting it first.
+    return { baseUrl, role: account.role, cookies, jar };
+}
+
+/**
+ * Adopt cookies minted by `signIn` into *this* VU's jar. Each k6 VU is its own runtime with its own cookie jar, so a session established in `setup` does not reach them by itself.
+ *
+ * @param {string} baseUrl Origin under test, no trailing slash.
+ * @param {string} role Which account these cookies belong to.
+ * @param {{sessionid: string, csrftoken: string}} cookies From `signIn`.
+ * @returns {{baseUrl: string, role: string}} A handle for the request helpers.
+ */
+export function adopt(baseUrl, role, cookies) {
+    const jar = new http.CookieJar();
+    for (const name of SESSION_COOKIES) {
+        if (cookies[name]) {
+            jar.set(`${baseUrl}/`, name, cookies[name], { path: "/" });
+        }
+    }
+    return { baseUrl, role, jar };
+}
+
+/** The two cookies a signed-in request needs. */
+const SESSION_COOKIES = ["sessionid", "csrftoken"];
+
+/** Both session cookies as a plain object, for handing to another VU. */
+export function cookiesFor(baseUrl, jar) {
+    const held = (jar || http.cookieJar()).cookiesForURL(`${baseUrl}/`);
+    const cookies = {};
+    for (const name of SESSION_COOKIES) {
+        if (held[name]) {
+            cookies[name] = held[name][0];
+        }
+    }
+    return cookies;
+}
+
+/**
+ * The current CSRF token for a jar.
+ *
+ * @param {string} baseUrl Origin under test, no trailing slash.
+ * @param {object} jar The jar to read. Defaults to the VU's own, which is correct inside `setup` and wrong everywhere else - see the note on `adopt` about k6 resetting it between iterations.
+ */
+export function csrfToken(baseUrl, jar) {
+    const cookies = (jar || http.cookieJar()).cookiesForURL(`${baseUrl}/`);
+    return cookies.csrftoken ? cookies.csrftoken[0] : "";
+}
+
+/** Headers Django requires on any unsafe method, given where the request claims to come from. */
+export function unsafeHeaders(baseUrl, referer) {
+    return {
+        Origin: baseUrl,
+        Referer: referer || `${baseUrl}/`,
+        "X-Requested-With": "XMLHttpRequest",
+    };
+}
+
+/** GET, tagged so the summary can slice by endpoint and by what the actor was doing. */
+export function get(session, path, tags, extra) {
+    return http.get(`${session.baseUrl}${path}`, getParams(session, tags, extra));
+}
+
+/** The params `get` sends, for building an `http.batch` of the same requests. */
+export function getParams(session, tags, extra) {
+    return Object.assign(
+        { headers: sessionHeaders(session), tags: Object.assign({ role: session.role }, tags) },
+        jarParam(session),
+        extra,
+    );
+}
+
+/** The session's own jar as request params, or nothing when it has none. */
+function jarParam(session) {
+    return session.jar ? { jar: session.jar } : {};
+}
+
+/** Headers every request in *session* carries, under the call's own. */
+function sessionHeaders(session, headers) {
+    return Object.assign({}, session.headers || {}, headers || {});
+}
+
+/**
+ * POST a form, refreshing the CSRF token from the jar each time.
+ *
+ * @param {object} extra Merged into k6's request params. `timeout` above all: its default of 60s is shorter than several of the things measured here, and a request the harness cut off is recorded as an error the server never made.
+ */
+export function postForm(session, path, body, tags, extra) {
+    const url = `${session.baseUrl}${path}`;
+    const payload = Object.assign({ csrfmiddlewaretoken: csrfToken(session.baseUrl, session.jar) }, body);
+    return http.post(
+        url,
+        payload,
+        Object.assign(
+            { headers: sessionHeaders(session, unsafeHeaders(session.baseUrl, url)), tags: Object.assign({ role: session.role }, tags) },
+            jarParam(session),
+            extra,
+        ),
+    );
+}
+
+/** POST a JSON document, for the endpoints that take one. */
+export function postJson(session, path, document, tags, extra) {
+    const url = `${session.baseUrl}${path}`;
+    const headers = sessionHeaders(session, Object.assign({ "Content-Type": "application/json" }, unsafeHeaders(session.baseUrl, url)));
+    headers["X-CSRFToken"] = csrfToken(session.baseUrl, session.jar);
+    return http.post(
+        url,
+        JSON.stringify(document),
+        Object.assign({ headers, tags: Object.assign({ role: session.role }, tags) }, jarParam(session), extra),
+    );
+}
+
+/** Whatever the response can say about why sign-in did not happen. */
+function diagnose(response) {
+    const body = response.body || "";
+    if (/CSRF verification failed|CSRF cookie not set/i.test(body)) {
+        return "Django refused the POST for CSRF. That is almost always the target's UL_SITE_URL not matching the --url this ran against: Django only trusts origins it was configured for.";
+    }
+    if (/hasn't been verified|has not been verified/i.test(body)) {
+        return "The account exists but its email is unverified. Re-run provision_integration_env on the target.";
+    }
+    if (/too many|locked/i.test(body)) {
+        return "The account is rate-limited or locked out from earlier failed attempts.";
+    }
+    if (/two-factor|2fa/i.test(body)) {
+        return "The account has a second factor, which this cannot answer. Re-run provision_integration_env to clear it.";
+    }
+    return "The form came back without a recognised error; the credentials in the manifest are probably not the current ones.";
+}

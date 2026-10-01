@@ -3,64 +3,113 @@
 from __future__ import annotations
 
 import posixpath
-from typing import TYPE_CHECKING
+import secrets
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, FloatField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, PositiveIntegerField, TextField, URLField, UUIDField
+from django.db.models import (
+    CASCADE,
+    SET_NULL,
+    BigIntegerField,
+    BooleanField,
+    CharField,
+    DateTimeField,
+    DecimalField,
+    FloatField,
+    ForeignKey,
+    ImageField,
+    Index,
+    IntegerField,
+    ManyToManyField,
+    PositiveIntegerField,
+    PositiveSmallIntegerField,
+    Q,
+    TextField,
+    URLField,
+)
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
-from urbanlens.dashboard.models.fields import EncryptedJSONField
+from urbanlens.dashboard.models.fields import EncryptedJSONField, EncryptedTextField
 from urbanlens.dashboard.models.images.queryset import ImageManager
+from urbanlens.dashboard.services.media.access import declares_media_family
 
 if TYPE_CHECKING:
+    from datetime import datetime
     from decimal import Decimal
 
-# Room for "pin_images/" (11 chars) plus the ~8-character suffix
-# Storage.get_available_name appends on a filename collision, comfortably
-# inside the field's max_length below. Uploaded filenames are arbitrary and
-# unbounded - a browser drag-drop, a device-scan import, or a Media-gallery
-# URL can each hand over a name well past 100 characters, which overflowed
-# the field's old default max_length (100) outright and raised
-# SuspiciousFileOperation instead of storing the file.
-_UPLOAD_STEM_LIMIT = 80
 _UPLOAD_EXT_LIMIT = 12
 
+# Randomness for upload directory names; bucket prefix avoids one flat directory.
+_UPLOAD_TOKEN_BYTES = 12
 
-def pin_image_upload_path(instance: Image, filename: str) -> str:
-    """Storage path for an uploaded Image file, trimming an overlong name to fit.
+_UPLOAD_BUCKET_CHARS = 2
 
-    Not underscore-prefixed despite being an internal helper - Django
-    migrations serialize a callable ``upload_to`` by importable reference, so
-    this needs to read as public to both ruff and any future migration.
 
-    Only the stem is trimmed, not the extension, and the trim always comes
-    from the end - the filename's *prefix* must survive into storage for
-    ``services.media.images.is_camera_generated_filename`` to keep recognizing
-    camera-named uploads (e.g. ``PXL_20260709_123456.jpg``) for its
-    author-attribution heuristic.
+def _random_upload_dir() -> str:
+    """Return a fresh ``<bucket>/<token>`` directory for one stored file.
+
+    Returns:
+        Two path segments, e.g. ``"a7/Kd3xq8Lm2Zpq"``.
     """
+    token = secrets.token_urlsafe(_UPLOAD_TOKEN_BYTES)
+    return f"{token[:_UPLOAD_BUCKET_CHARS]}/{token[_UPLOAD_BUCKET_CHARS:]}"
+
+
+def anonymized_media_stem(instance: Image | None) -> str:
+    """Random filename stem, year-prefixed when a capture date is known.
+
+    The uploaded filename never reaches storage, since device names can leak
+    capture details; only the year is kept for downloaded files.
+
+    Args:
+        instance: The Image being saved, or None/a bare instance for a
+            standalone call (tests, or a migration's historical model).
+
+    Returns:
+        ``"<year>-<uuid4 hex>"`` when a capture year is known, else the bare token.
+    """
+    taken = getattr(instance, "taken_at", None) or getattr(instance, "filename_taken_at", None)
+    token = uuid4().hex
+    return f"{taken.year}-{token}" if taken is not None else token
+
+
+@declares_media_family("pin_images")
+def pin_image_upload_path(instance: Image, filename: str) -> str:
+    """Storage path under a random directory with an opaque name.
+
+    Migrations serialize ``upload_to`` by reference, so this stays public.
+    """
+    ext = posixpath.splitext(filename)[1]
+    return f"pin_images/{_random_upload_dir()}/{anonymized_media_stem(instance)}{ext[:_UPLOAD_EXT_LIMIT]}"
+
+
+@declares_media_family("pin_images")
+def pin_image_thumbnail_path(instance: Image, filename: str) -> str:
+    """Storage path for the grid thumbnail under its own random directory."""
     stem, ext = posixpath.splitext(filename)
-    return f"pin_images/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
+    return f"pin_images/thumbs/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
+
+
+@declares_media_family("pin_images")
+def pin_image_marker_thumbnail_path(instance: Image, filename: str) -> str:
+    """Storage path for the tiny map-marker thumbnail."""
+    stem, ext = posixpath.splitext(filename)
+    return f"pin_images/markers/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
+
+
+@declares_media_family("pin_images")
+def pin_image_analysis_thumbnail_path(instance: Image, filename: str) -> str:
+    """Storage path for the copy sent to vision models."""
+    stem, ext = posixpath.splitext(filename)
+    return f"pin_images/analysis/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
 class ImageSource(TextChoices):
-    """Where a photo originated - drives the Media section's per-source tabs.
-
-    ``UPLOAD`` is the default for ordinary user uploads (personal galleries).
-    Most external values are set only on rows materialized from the Media
-    gallery's transient provider results (see ``services.pins.external_data`` and
-    ``services.media.media_materialize``) when a user sends one to a wiki or sets it
-    as a cover photo - the Media gallery itself renders straight from each
-    provider's live results without persisting an ``Image`` row per item.
-    ``EXTERNAL_API`` is the exception: it's set on candidate photos an
-    external-app pin suggestion submits (see ``services.pins.pin_suggestions.attach_suggestion_photos``),
-    staged against a ``PinSuggestion`` rather than materialized from the Media gallery.
-    """
+    """Where a photo originated; drives the Media section's per-source tabs."""
 
     UPLOAD = "upload", "Upload"
-    #: A URL somebody pasted, whose bytes were then fetched and stored like any
-    #: upload. The address itself is kept in ``source_url``.
+    #: Pasted URL whose bytes were fetched and stored like an upload.
     LINKED_URL = "linked_url", "Linked URL"
     YELP = "yelp", "Yelp"
     GOOGLE_IMAGES = "google_images", "Google Images"
@@ -80,15 +129,18 @@ class ImageSource(TextChoices):
     GOOGLE_STREET_VIEW = "google_street_view", "Google Street View"
     GOOGLE_SATELLITE = "google_satellite", "Google Satellite"
 
+    @classmethod
+    def personal_library(cls) -> frozenset[str]:
+        """Sources that mean this profile's own picture.
+
+        Returns:
+            The ``ImageSource`` values that denote the profile's own picture.
+        """
+        return frozenset({cls.UPLOAD, cls.IMMICH, cls.GOOGLE_PHOTOS, cls.FLICKR})
+
 
 class MediaKind(TextChoices):
-    """What kind of file this Image row actually holds.
-
-    Photos, videos, and documents all share every other field on this model
-    (caption, author, location, labels, etc.) - this is only a discriminator
-    for upload-time processing (services.media.videos/services.media.documents) and
-    display (player vs. viewer vs. image tag).
-    """
+    """What kind of file this Image row holds."""
 
     PHOTO = "photo", "Photo"
     VIDEO = "video", "Video"
@@ -96,38 +148,31 @@ class MediaKind(TextChoices):
 
 
 class QuotaExemption(TextChoices):
-    """Why a stored file's bytes don't count against its uploader's quota.
-
-    The empty default means "counts normally".
-
-    ``EXTERNAL_MEDIA`` is a locally cached copy of someone else's photo, kept
-    so the gallery doesn't depend on a provider's URL staying alive. The
-    person who happened to upvote it didn't author it and shouldn't pay for
-    caching it - storage the whole community benefits from.
-
-    ``COMMUNITY_CONTRIBUTION`` is a user's own photo, shared to a wiki, that
-    enough other people marked relevant - the quota bonus is the reward for
-    contributing it. See ``services.media.quota_rewards``.
-
-    ``SHARED_COPY`` is a recipient's copy of a photo accepted from a pin
-    share: it points at the same stored file as the sender's row
-    (``services.sharing.pin_sharing.create_pin_from_share``) rather than a
-    second copy of the bytes, so it occupies no storage of the recipient's
-    own to charge them for.
-    """
+    """Why a stored file's bytes don't count against its uploader's quota."""
 
     EXTERNAL_MEDIA = "external_media", "Cached external media"
     COMMUNITY_CONTRIBUTION = "community", "Community-valued contribution"
     SHARED_COPY = "shared_copy", "Copy of a shared photo"
+    DEDUPLICATED = "deduplicated", "Same file already stored for this user"
+    WIKI_COPY = "wiki_copy", "Copy of a wiki photo"
 
 
 class Image(abstract.FrontendDashboardModel):
     """A photo, video, or document uploaded by a user, attached to a pin, community wiki, or safety check-in."""
 
     image = ImageField(upload_to=pin_image_upload_path, max_length=255)
+    # Grid preview; empty until generated.
+    thumbnail = ImageField(upload_to=pin_image_thumbnail_path, max_length=255, null=True, blank=True)
+    # Map-marker preview; empty until generated.
+    marker_thumbnail = ImageField(upload_to=pin_image_marker_thumbnail_path, max_length=255, null=True, blank=True)
+    # Separate copy for vision models.
+    analysis_thumbnail = ImageField(upload_to=pin_image_analysis_thumbnail_path, max_length=255, null=True, blank=True)
+    # True upload filename, kept for attribution and downloads.
+    original_filename = EncryptedTextField(blank=True, default="", fail_soft=True)
+    # Capture date parsed from the filename when EXIF has none.
+    filename_taken_at = DateTimeField(null=True, blank=True)
     media_type = CharField(max_length=10, choices=MediaKind.choices, default=MediaKind.PHOTO, db_index=True)
-    # Provenance for the Media gallery's per-source tabs (see ImageSource). Only
-    # meaningful once a row exists; almost every Image row is a plain upload.
+    # Media-gallery source tab.
     source = CharField(max_length=30, choices=ImageSource.choices, default=ImageSource.UPLOAD)
     pin = ForeignKey(
         "dashboard.Pin",
@@ -143,11 +188,7 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
-    # The shared Location this photo belongs to - the canonical "which place is
-    # this a photo of" link, set from the pin/wiki it was uploaded to or resolved
-    # from its GPS via Location.objects.get_nearby_or_create. Distinct from
-    # `latitude`/`longitude` below: Location coordinates are immutable and shared
-    # (snapped within ~50m), so this FK cannot carry per-photo GPS precision.
+    # Shared place this photo depicts; per-photo GPS lives on latitude/longitude.
     location = ForeignKey(
         "dashboard.Location",
         on_delete=SET_NULL,
@@ -162,9 +203,7 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
-    # The specific visit this photo documents, if the user attached it to one.
-    # SET_NULL (not CASCADE) so deleting a visit record leaves the photo in the
-    # pin/wiki gallery - it just loses its visit association.
+    # Visit this photo documents, if attached to one.
     visit = ForeignKey(
         "dashboard.PinVisit",
         on_delete=SET_NULL,
@@ -172,7 +211,7 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
-    # The direct message this photo was attached to, if sent as a DM attachment.
+    # DM this photo was sent as an attachment, if any.
     direct_message = ForeignKey(
         "dashboard.DirectMessage",
         on_delete=SET_NULL,
@@ -180,11 +219,7 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
-    # Set only while this is a candidate photo the user opted to upload during a
-    # local-folder location scan, staged for possible import into a pin's gallery
-    # if the pending PinSuggestion is accepted. Cleared (set back to null) once the
-    # photo graduates to a real gallery photo on accept; the row itself is deleted
-    # (not just unlinked) if the suggestion is rejected or the photo wasn't selected.
+    # Staged candidate photo awaiting PinSuggestion acceptance.
     pin_suggestion = ForeignKey(
         "dashboard.PinSuggestion",
         on_delete=SET_NULL,
@@ -199,150 +234,106 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
+    # Provenance for a wiki-to-pin copy; FKs stay to preserve attribution.
+    copied_from = ForeignKey(
+        "self",
+        on_delete=SET_NULL,
+        related_name="copies",
+        null=True,
+        blank=True,
+    )
+    copied_from_profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    copied_from_location = ForeignKey(
+        "dashboard.Location",
+        on_delete=SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    copied_from_label = CharField(max_length=255, blank=True, default="")
     caption = CharField(max_length=500, null=True, blank=True)
-    # Attribution fields, shown in the lightbox. Auto-populated from EXIF/PNG
-    # metadata by process_image_upload when present; when a photo has none of
-    # author/source_url/caption/copyright AND its filename matches a common
-    # phone/camera auto-naming convention (e.g. PXL_20260709_123456.jpg), the
-    # uploader is assumed to be the author. Any other unattributed photo is
-    # left blank rather than guessed at.
+    # Attribution shown in the lightbox; unattributed non-camera filenames stay blank.
     author = CharField(max_length=255, null=True, blank=True)
     source_url = URLField(max_length=500, null=True, blank=True)
-    #: The address the bytes themselves came from, when that differs from the page
-    #: above. Both are kept because they rot independently: a provider's landing
-    #: page can be reorganised - or be a feed that simply moves on, as a "recent
-    #: photos" page does - while the file stays exactly where it was, and the file
-    #: can be replaced while the page still describes the picture. Storing one
-    #: threw the other away; materialize_media_item was handed both and persisted
-    #: only the page.
+    #: Direct file address when it differs from the attribution page above.
     source_media_url = URLField(max_length=500, null=True, blank=True)
     copyright = CharField(max_length=255, null=True, blank=True)
-    # Set only on rows materialized from the Media gallery's transient provider
-    # results (see services.media.media_materialize) - the *raw* provider panel key
-    # (e.g. "wikimedia", "loc") and the sha1 hash of the item's full-resolution
-    # url, i.e. exactly the (source, item_key) identity MediaRelevance marks
-    # are keyed by (models.images.relevance.media_item_key). `source_url`
-    # can't stand in for this: it's set to `page_url or url`, which diverges
-    # from the raw `url` that item_key is always hashed from whenever a
-    # provider supplies a page_url - these two fields are what let a
-    # materialized Image row be reliably joined back to its wiki votes (see
-    # services.media.media_relevance.effective_relevance). Deliberately NOT the
-    # same value as `source` above, which stores the *translated*
-    # ImageSource value and can differ from the raw panel key (see
-    # media_materialize._PANEL_KEY_TO_IMAGE_SOURCE).
+    # Raw provider key plus item hash joining a materialized row back to its votes.
     media_source_key = CharField(max_length=30, null=True, blank=True)
     media_item_key = CharField(max_length=40, null=True, blank=True)
-    # The photo's own GPS position (EXIF, or user drag-placement on the map).
-    # Kept separate from the `location` FK so each photo can scatter at its exact
-    # capture point on the map layer; `location` records which shared place the
-    # photo belongs to.
-    #
-    # KNOWN OMISSION: one pair of columns holds two different provenances - what
-    # EXIF reported, and where a person put it - with nothing in the schema
-    # recording which a given row holds. Two consequences worth knowing before
-    # writing here:
-    #   * The EXIF answer survives only in `exif_data["GPSInfo"]`, and only for
-    #     profiles that did not opt out of location metadata (tasks.py pops
-    #     GPSInfo when strip_location is set).
-    #   * tasks.process_image_upload rewrites these columns unconditionally from
-    #     EXIF, and a dozen call sites can re-enqueue it, so a re-run replaces a
-    #     manually corrected position with the EXIF one.
-    # TODO: add exif_latitude/exif_longitude (or a coordinate_source field)
-    # before any NEW writer is introduced. Placing a photo from the floorplan
-    # editor is deliberately NOT that writer until this exists.
+    # Photo's own GPS; separate from the shared Location FK.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    # Crowd-sourced approximation of this photo's own position, from
-    # anonymized SpotGuessr guesses (services.photos.photo_coordinates) - only ever
-    # set once a photo has accumulated enough guesses to be worth showing,
-    # and always deferred to `latitude`/`longitude` above the moment a real
-    # (manual or EXIF) position exists for this photo - see effective_latitude/
-    # effective_longitude below. Never treat this as confirmed; it exists
-    # specifically to surface still-unplaced photos on maps so a wiki user
-    # notices and corrects the exact placement.
+    # Original camera-reported position, never overwritten once set.
+    exif_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    exif_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # Crowd-sourced position estimate; defers to real GPS when present.
     estimated_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     estimated_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    # Compass bearing (0-360, true or magnetic north per the device's own
-    # EXIF GPSImgDirectionRef - not itself preserved, see
-    # services.media.images.extract_gps_direction) the camera was facing when this
-    # photo was taken. Standardized field for a future "same place, same
-    # angle, over time" comparison UI - not read or displayed anywhere yet.
-    # Same GPS-IFD-sourced privacy opt-out as latitude/longitude: never
-    # extracted for a profile with visit-history tracking off.
-    #
-    # TODO: EXIF is currently the only writer - there is no UI that sets a
-    # heading. The planned first consumer is a photo attached to a floorplan
-    # item (FloorplanReference), pointed at the thing it depicts. That UI has to
-    # declare its own reference frame, because GPSImgDirectionRef - true versus
-    # magnetic north - is not preserved (services.media.images.extract_gps_direction),
-    # so a manually set heading and an EXIF one are not directly comparable.
+    # Compass bearing the camera faced; EXIF-only for now.
+    # TODO: no UI sets a heading yet.
     direction = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    # SHA-256 hex digest of the uploaded file, used to reject duplicate uploads.
-    # Nullable because rows predating this field are backfilled lazily (in
-    # process_image_upload) - duplicate checks simply skip unhashed rows.
+    # Pitch/roll from panorama/drone metadata; most rows lack these.
+    exif_pitch = DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    exif_roll = DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    # Altitude in meters, from EXIF.
+    exif_altitude = DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    # Camera/lens ID and exposure, sourced once from EXIF.
+    exif_camera_make = CharField(max_length=255, null=True, blank=True)
+    exif_camera_model = CharField(max_length=255, null=True, blank=True)
+    exif_lens_model = CharField(max_length=255, null=True, blank=True)
+    # Shutter speed as a display string (e.g. "1/250").
+    exif_shutter_speed = CharField(max_length=32, null=True, blank=True)
+    exif_aperture = DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    exif_focal_length = DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
+    # Floor taken on; reserved for future use, currently unset.
+    exif_floor = IntegerField(null=True, blank=True)
+    # SHA-256 of the file, for duplicate rejection.
     checksum = CharField(max_length=64, null=True, blank=True, db_index=True)
-    # EXIF DateTimeOriginal (capture time), when present - distinct from
-    # `created`/`updated`, which only track upload time. Null for photos with
-    # no EXIF data or that predate this field; consumers should fall back to
-    # `created` when absent.
+    # EXIF capture time; distinct from upload time. Falls back to ``created``.
     taken_at = DateTimeField(null=True, blank=True)
-    # Bytes currently occupied by the stored file - the size after any
-    # downscaling/webp conversion, counted against the uploader's storage quota.
-    # Nullable because rows predating this field are backfilled lazily by
-    # process_image_upload; usage sums simply skip unmeasured rows until then.
+    # Stored file size after processing, counted against quota.
     file_size = BigIntegerField(null=True, blank=True)
-    # Why this row's bytes don't count against its profile's storage quota
-    # (empty = they do). Set at creation by whichever path produced a row that
-    # owns no exclusive storage of its own - services.media.media_materialize
-    # (EXTERNAL_MEDIA), services.media.quota_rewards (COMMUNITY_CONTRIBUTION),
-    # services.sharing.pin_sharing (SHARED_COPY) - see QuotaExemption for what
-    # each value means. Materialized rather than recomputed because the community-contribution
-    # case is a one-way reward: a photo that earned its exemption keeps it
-    # even if voters later change their minds, so a user's stored photos can
-    # never retroactively push them over quota.
+    # Set once upload processing strips EXIF and rewrites the file.
+    upload_processed_at = DateTimeField(null=True, blank=True)
+    # Set when upload processing definitively fails.
+    upload_failed_at = DateTimeField(null=True, blank=True)
+    # Recovery-sweep retry count; bounded so poison files stop requeuing.
+    upload_sweep_attempts = PositiveSmallIntegerField(default=0)
+    # Why this row is exempt from quota; empty means it counts.
     quota_exempt_reason = CharField(max_length=20, blank=True, default="", choices=QuotaExemption.choices)
-    # Full EXIF metadata captured from the original upload BEFORE any
-    # downscaling or format conversion. Keys are human-readable tag names;
-    # values are JSON-sanitized (rationals/bytes stringified).
-    #
-    # Encrypted, and the only copy: the stored file has its EXIF removed on the
-    # way in (see services.media.images.downscale_stored_image), so this column
-    # holds what the photo no longer carries - camera make, model and serial,
-    # and, unless the uploader opted out of location, where the shot was taken.
-    # fail_soft because there is nothing to re-fetch it from: a key mismatch
-    # must degrade this one field rather than break every gallery that loads a
-    # photo row. Never filter on its contents; ciphertext does not compare.
+    # Full EXIF from the original upload; encrypted, never filter on it.
     exif_data = EncryptedJSONField(null=True, blank=True, fail_soft=True)
-    # Extracted text for a document upload: the PDF's native text layer plus
-    # OCR output from any embedded raster images (see services.media.documents).
-    # Searched by the Media section's search box (labels__name, caption, etc.)
-    # the same way as every other text field on this model.
+    # XMP/IPTC keywords, read alongside exif_data for the same reason: the rewrite drops
+    # them. None until the upload task has read the file.
+    embedded_keywords = EncryptedJSONField(null=True, blank=True, fail_soft=True)
+    # Extracted document text, searched like caption.
     ocr_text = TextField(null=True, blank=True)
-    # Set when the user explicitly clears an unfiled photo out of the Memories
-    # "needs attention" organize queue without deleting it (e.g. a photo with no
-    # GPS they don't want to tie to a visit). Keeps that queue finite; the photo
-    # still appears in the full gallery.
+    # Cleared from the Memories organize queue without deleting.
     organize_dismissed = BooleanField(default=False)
-    # Media (kind='media') labels help the user find this photo/video/document
-    # via the main site search; unlike Pin/Wiki labels, media labels have no
-    # effect on map icons or filtering.
+    # Keeps GPS but omits the photo from map layers.
+    map_hidden = BooleanField(default=False)
+    # True while the raw upload awaits processing; visible to uploader only.
+    pending_scan = BooleanField(default=False)
+    # When the stored file was last found unreadable, so thumbnail sweeps stop retrying
+    # a row whose bytes are gone. A timestamp rather than a flag: a flag is one storage
+    # outage away from marking the whole library permanently broken, where a timestamp
+    # lets the sweep back off (THUMBNAIL_RETRY_AFTER_UNREADABLE) and retry later.
+    # Cleared the moment a read succeeds.
+    media_unreadable_at = DateTimeField(null=True, blank=True)
+    # Search-only labels; no effect on map icons.
     labels = ManyToManyField("dashboard.Label", related_name="images", blank=True)
-    # Cached relevance score from REData's photo-scoring service
-    # (services.photos.redata_relevance) - "how likely is this really a photo of
-    # this place", a calibrated probability in [0.02, 0.98]. Never computed
-    # locally: set from the response to submitting this photo (POST /photos/)
-    # and left untouched afterward - REData caches its own score indefinitely
-    # and only ever changes it when a newer model is promoted, which this row
-    # doesn't proactively poll for. Null for any photo never submitted (no
-    # location, REData not configured, or submission still pending/failed) -
-    # ordering queries must treat null as "unknown", not "irrelevant".
+    # Cached external photo-relevance score; null means unknown.
     redata_confidence = FloatField(null=True, blank=True)
-    # "heuristic" or "model" - which of REData's two scorers produced
-    # redata_confidence, kept mostly for admin/debugging visibility.
+    # Which scorer produced the confidence above.
     redata_scorer = CharField(max_length=10, null=True, blank=True)
-    # The trained model version that scored this photo, when redata_scorer is
-    # "model" - null both before scoring and whenever the heuristic scorer
-    # answered instead.
+    # Model version behind the score, when applicable.
     redata_model_version = PositiveIntegerField(null=True, blank=True)
     redata_scored_at = DateTimeField(null=True, blank=True)
 
@@ -355,53 +346,150 @@ class Image(abstract.FrontendDashboardModel):
         direct_message_id: int | None
         profile_id: int | None
         pin_suggestion_id: int | None
+        copied_from_id: int | None
+        copied_from_profile_id: int | None
+        copied_from_location_id: int | None
+        # Stamped by album helpers; absent otherwise.
+        album_item_id: int
 
     objects = ImageManager()
 
+    def save(self, *args, **kwargs) -> None:
+        """Capture the upload's true filename before storage anonymizes it."""
+        incoming_name = self.image.name if self.image else None
+        if incoming_name and not self.image._committed and not self.original_filename:  # type: ignore[attr-defined]  # noqa: SLF001
+            self.original_filename = incoming_name
+            if self.filename_taken_at is None:
+                from urbanlens.dashboard.services.media.images import extract_filename_taken_at
+
+                self.filename_taken_at = extract_filename_taken_at(incoming_name)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_own_contribution(self) -> bool:
+        """Whether ``profile`` photographed this rather than up-voting it.
+
+        Returns:
+            True when this profile contributed the picture itself.
+        """
+        return self.profile_id is not None and self.source in ImageSource.personal_library() and not self.media_source_key
+
     @property
     def attribution_url(self) -> str:
-        """Where to send a person to see this photo in its original context.
-
-        Prefers the provider's page, which is the one meant to be read by a
-        human, and falls back to the file itself when there is no page.
-        """
+        """Provider page for this photo, falling back to the file itself."""
         return self.source_url or self.source_media_url or ""
 
     @property
     def origin_media_url(self) -> str:
-        """Where the bytes came from, for re-fetching or comparison.
-
-        The opposite preference to :attr:`attribution_url`: a landing page is no
-        use for fetching an image, so the direct address wins when there is one.
-        """
+        """Direct file address for this photo, falling back to the page."""
         return self.source_media_url or self.source_url or ""
 
     @property
-    def display_url(self) -> str:
-        """The URL to render this photo from.
+    def is_processing(self) -> bool:
+        """Whether the stored file is still the raw upload, awaiting the re-encode that replaces it."""
+        return self.pending_scan and self.upload_failed_at is None
 
-        A row can exist without a stored file - an external gallery item whose
-        download failed still carries its ``source_url`` - and reading
-        ``image.url`` on one of those raises. Templates and serializers use
-        this instead so a single such row can't break a whole grid.
+    @property
+    def processing_failed(self) -> bool:
+        """Whether processing gave up on this upload, leaving it with no servable file."""
+        return self.pending_scan and self.upload_failed_at is not None
+
+    @property
+    def file_url(self) -> str | None:
+        """The stored file's URL, or None when there is none to serve.
+
+        None while ``pending_scan`` is set: the stored file is then the raw upload, which its
+        re-encode replaces and deletes, so a URL for it 404s moments later.
+
+        Returns:
+            The stored file's URL, or None.
+        """
+        if self.pending_scan or not self.image:
+            return None
+        return self.image.url
+
+    @property
+    def display_url(self) -> str:
+        """Stored file URL, falling back to the remote source.
 
         Returns:
             The stored file's URL, the remote source URL, or "" when neither
-            is set.
+            is set or the upload is still pending (see ``file_url``).
         """
+        if self.pending_scan:
+            return ""
         if self.image:
             return self.image.url
         return self.source_url or ""
 
     @property
-    def effective_latitude(self) -> Decimal | None:
-        """The best-known latitude for this photo.
+    def thumb_url(self) -> str:
+        """Grid thumbnail URL, falling back to the original.
 
-        Prefers the photo's own real (manual/EXIF) GPS position; then a
-        crowd-sourced SpotGuessr estimate, if one exists; then falls back to
-        the coordinates of the shared Location it belongs to. A real
-        position always wins outright, no matter how many guesses back the
-        estimate - see ``estimated_latitude``'s docstring.
+        Returns:
+            The thumbnail URL, the original's URL, or "" (always, while pending).
+        """
+        if self.thumbnail and not self.pending_scan:
+            return self.thumbnail.url
+        return self.display_url
+
+    @property
+    def marker_thumb_url(self) -> str:
+        """Marker thumbnail URL, falling back through larger images.
+
+        Returns:
+            The marker thumbnail's URL, then the grid thumbnail's, then the
+            original's, or "" (always, while pending).
+        """
+        if self.marker_thumbnail and not self.pending_scan:
+            return self.marker_thumbnail.url
+        return self.thumb_url
+
+    @property
+    def effective_taken_at(self) -> datetime | None:
+        """Best-known capture time: EXIF first, then filename date.
+
+        Returns:
+            The capture time, or None when neither source has one.
+        """
+        return self.taken_at or self.filename_taken_at
+
+    #: Extension -> icon name for document tiles without thumbnails.
+    _DOCUMENT_ICONS_BY_EXTENSION: ClassVar[dict[str, str]] = {
+        "pdf": "picture_as_pdf",
+        "doc": "description",
+        "docx": "description",
+        "odt": "description",
+        "rtf": "article",
+        "txt": "article",
+        "xls": "table_chart",
+        "xlsx": "table_chart",
+        "ods": "table_chart",
+        "csv": "table_chart",
+        "ppt": "slideshow",
+        "pptx": "slideshow",
+        "odp": "slideshow",
+    }
+
+    @property
+    def display_caption(self) -> str:
+        """Stripped caption, or ``""``; whitespace alone counts as none.
+
+        Returns:
+            The caption with surrounding whitespace removed, or an empty string.
+        """
+        return (self.caption or "").strip()
+
+    @property
+    def document_icon(self) -> str:
+        """Icon name for this document's tile, from its filename extension."""
+        name = self.caption or (self.image.name or "" if self.image else "")
+        extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        return self._DOCUMENT_ICONS_BY_EXTENSION.get(extension, "insert_drive_file")
+
+    @property
+    def effective_latitude(self) -> Decimal | None:
+        """Best-known latitude: real GPS, then estimate, then Location.
 
         Returns:
             The latitude, or None when the photo has no position of any kind
@@ -418,13 +506,7 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def effective_longitude(self) -> Decimal | None:
-        """The best-known longitude for this photo.
-
-        Prefers the photo's own real (manual/EXIF) GPS position; then a
-        crowd-sourced SpotGuessr estimate, if one exists; then falls back to
-        the coordinates of the shared Location it belongs to. A real
-        position always wins outright, no matter how many guesses back the
-        estimate - see ``estimated_latitude``'s docstring.
+        """Best-known longitude: real GPS, then estimate, then Location.
 
         Returns:
             The longitude, or None when the photo has no position of any
@@ -444,10 +526,10 @@ class Image(abstract.FrontendDashboardModel):
         get_latest_by = "updated"
         indexes = [
             Index(fields=["location", "media_source_key", "media_item_key"], name="idxdb_image_media_key"),
-            # Serves both halves of quota accounting (used vs. exempt bytes),
-            # which always filter by profile first. Composite rather than a
-            # standalone index on quota_exempt_reason: that column has three
-            # values, so indexing it alone would rarely be chosen by the
-            # planner while still costing a write on every photo upload.
-            Index(fields=["profile", "quota_exempt_reason"], name="idxdb_image_profile_quota"),
+            # Covers the quota sum, which runs under every upload reservation.
+            Index(fields=["profile", "quota_exempt_reason"], include=["file_size"], name="idxdb_image_quota_usage"),
+            # Failed uploads stay pending until the discard sweep takes them; the stalled sweep skips them.
+            Index(fields=["created"], name="idxdb_image_pending_created", condition=Q(pending_scan=True, upload_failed_at__isnull=True)),
+            Index(fields=["profile", "copied_from_profile"], name="idxdb_img_profile_copied_from"),
+            Index(fields=["profile", "media_type", "-created", "-id"], name="idxdb_img_profile_kind_recent"),
         ]

@@ -1,39 +1,16 @@
 """Channels WebSocket middleware accepting PAT/OAuth2 credentials, not just sessions.
 
-``channels.auth.AuthMiddlewareStack`` only ever populates ``scope["user"]``
-from Django's session cookie, so a native client authenticating the way
-``external_api`` does over HTTP - a PAT-style ``ApiKey`` bearer token or a
-django-oauth-toolkit OAuth2 access token - has no way to open
-``ws/notifications/``, ``ws/messages/``, or the owner-side safety check-in
-chat (``ws/safety/checkin/<uuid>/chat/``); all three gate on
-``scope["user"].is_authenticated`` alone. The token-authenticated contact
-route (``ws/safety/contact/<token>/chat/``) is unaffected - it resolves its
-token itself, inside the consumer, independent of ``scope["user"]``.
-
-:class:`ApiKeyAuthMiddleware` closes that gap without touching any consumer:
-nested *inside* ``AuthMiddlewareStack`` (see :func:`ApiKeyAuthMiddlewareStack`),
-it only runs once the session has already left the connection anonymous, and
-resolves a ``?key=<token>`` query-string credential using the exact same
-lookups ``external_api.authentication.ApiKeyAuthentication``/
-``OAuth2Authentication`` use over HTTP. A session, when present, always wins.
-
-Authenticating is only half the job, though. Over HTTP, resolving a credential
-is immediately followed by ``external_api.permissions.HasApiKeyScope``, which
-holds the credential to the scopes it was actually granted; a socket that only
-learned *who* the credential belongs to would let any valid bearer token reach
-every consumer, turning a narrow ``pins:read`` key into a pass for someone's
-safety-check-in chat and letting a PAT reach direct messages that
-``OAUTH2_ONLY_SCOPES`` refuses it on every HTTP route. So this middleware also
-publishes the resolved credential itself as ``scope["api_credential"]``, and
-the consumers run the same ``credential_grants`` check DRF does.
-
-``scope["api_credential"]`` is always present and is ``None`` for a
-session-authenticated (or anonymous) connection. That None is load-bearing: it
-is exactly the discriminator ``external_api.mixins.IsSessionAuthenticated``
-uses over HTTP (``request.auth is None`` means "a browser session, not a
-credential"), and it is what lets the consumers apply scope enforcement to
-credential connections while leaving the web client's behavior byte-for-byte
-unchanged.
+``channels.auth.AuthMiddlewareStack`` only ever populates ``scope["user"]`` from Django's session
+cookie, so a native client authenticating the way ``external_api`` does over HTTP - a PAT-style
+``ApiKey`` bearer token or a django-oauth-toolkit OAuth2 access token - has no way to open
+``ws/notifications/``, ``ws/messages/``, or the owner-side safety check-in chat
+(``ws/safety/checkin/<uuid>/chat/``); all three gate on ``scope["user"].is_authenticated`` alone.
+Over HTTP, resolving a credential is immediately followed by
+``external_api.permissions.HasApiKeyScope``, which holds the credential to the scopes it was
+actually granted; a socket that only learned *who* the credential belongs to would let any valid
+bearer token reach every consumer, turning a narrow ``pins:read`` key into a pass for someone's
+safety-check-in chat and letting a PAT reach direct messages that ``OAUTH2_ONLY_SCOPES`` refuses it
+on every HTTP route.
 """
 
 from __future__ import annotations
@@ -41,20 +18,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
+from asgiref.sync import sync_to_async
 from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
 
-from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, authenticate_api_key
+from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, api_key_candidate, finish_api_key_authentication, verify_api_key_secret
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser
 
-#: Scope key carrying the resolved ``ApiKey``/``AccessToken``, or None for a
-#: session/anonymous connection. Consumers read it through
-#: ``scope.get(...)`` rather than ``scope[...]``: unit tests (and any future
-#: ASGI entrypoint) may instantiate a consumer without this middleware in the
-#: stack, and a missing key must degrade to "no credential", never to a
-#: KeyError that kills the socket.
+#: Scope key carrying the resolved ``ApiKey``/``AccessToken``, or None for a session/anonymous connection.
 CREDENTIAL_SCOPE_KEY = "api_credential"
 
 
@@ -75,10 +48,7 @@ class ApiKeyAuthMiddleware:
         Returns:
             Whatever the wrapped application returns.
         """
-        # Set unconditionally, and *first*, so the key exists even on the paths
-        # that resolve nothing. A consumer must be able to tell "no credential"
-        # from "credential not looked at yet"; leaving the key absent on some
-        # branches would make the two indistinguishable.
+        # Set unconditionally, and *first*, so the key exists even on the paths that resolve nothing.
         scope = {**scope, CREDENTIAL_SCOPE_KEY: None}
         user = scope.get("user")
         if user is None or not user.is_authenticated:
@@ -97,23 +67,44 @@ class ApiKeyAuthMiddleware:
         values = parse_qs(query_string).get("key")
         return values[0] if values else None
 
-    @database_sync_to_async
-    def _resolve(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
+    async def _resolve(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
         """Resolve *token* as either a PAT key or an OAuth2 access token.
 
         Args:
             token: The raw ``?key=`` value presented by the client.
 
         Returns:
-            ``(user, credential)`` on success - the credential being the same
-            object DRF would put in ``request.auth`` for the equivalent HTTP
-            request, so ``external_api.permissions.credential_grants`` can be
-            applied to it verbatim. None when the token doesn't resolve.
+            ``(user, credential)`` on success - the credential being the same object DRF would put in
+            ``request.auth`` for the equivalent HTTP...
         """
         if token.startswith(f"{KEY_LABEL}_"):
-            api_key = authenticate_api_key(token)
-            return (api_key.user, api_key) if api_key is not None else None
-        return self._resolve_oauth2_token(token)
+            return await self._resolve_api_key(token)
+        return await database_sync_to_async(self._resolve_oauth2_token)(token)
+
+    async def _resolve_api_key(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
+        """Resolve a PAT key, keeping the verification off the shared thread.
+
+        ``database_sync_to_async`` is thread-sensitive by default, so every call to it in this process
+        runs in the one executor thread all of Channels' database work queues on. A current-format key
+        verifies in one SHA-256, but a key issued before P146 still costs a full PBKDF2 until its first
+        use rewrites it, and one client reconnecting in a loop with such a key would stall every other
+        socket's database access. So only the lookup and the writes run there.
+
+        Args:
+            token: The raw ``?key=`` value, already known to carry the PAT label.
+
+        Returns:
+            ``(user, key)`` when the secret checks out, else None.
+        """
+        candidate = await database_sync_to_async(api_key_candidate)(token)
+        if candidate is None:
+            return None
+        api_key, secret = candidate
+        is_correct, is_legacy = await sync_to_async(verify_api_key_secret, thread_sensitive=False)(secret, api_key.key_hash)
+        if not is_correct:
+            return None
+        await database_sync_to_async(finish_api_key_authentication)(api_key, secret, is_legacy=is_legacy)
+        return (api_key.user, api_key)
 
     @staticmethod
     def _resolve_oauth2_token(token: str) -> tuple[AbstractBaseUser, Any] | None:
@@ -123,15 +114,14 @@ class ApiKeyAuthMiddleware:
             token: The raw access-token string.
 
         Returns:
-            ``(user, access_token)``, or None for an unknown or expired token,
-            or for a client-credentials token that has no resource owner at
-            all (there is no user for such a token to act as here).
+            ``(user, access_token)``, or None for an unknown or expired token, for a deactivated owner's, or for a
+            client-credentials token that has no resource owner at all...
         """
         from oauth2_provider.models import get_access_token_model
 
         access_token_model = get_access_token_model()
         access_token = access_token_model.objects.select_related("user").filter(token=token).first()
-        if access_token is None or access_token.is_expired() or access_token.user is None:
+        if access_token is None or access_token.is_expired() or access_token.user is None or not access_token.user.is_active:
             return None
         return (access_token.user, access_token)
 

@@ -1,11 +1,4 @@
-"""Tests for SubscriptionRoleQuerySet/UserSubscriptionQuerySet.
-
-Part of the ongoing "every model gets its own queryset/manager" cleanup -
-these two models were still on the bare default manager despite several
-genuinely duplicated call-site shapes across controllers/subscriptions/model.py
-itself (SubscriptionRole.objects.filter(slug=...).first(), and three distinct
-UserSubscription "not revoked"/"active" shapes).
-"""
+"""Tests for SubscriptionRoleQuerySet/UserSubscriptionQuerySet."""
 
 from __future__ import annotations
 
@@ -62,7 +55,9 @@ class UserSubscriptionActiveTests(TestCase):
         self.role = baker.make(SubscriptionRole)
 
     def test_indefinite_subscription_is_active(self) -> None:
-        sub = baker.make(UserSubscription, user=self.user, role=self.role, granted_by=self.admin, revoked_at=None, expires_at=None)
+        sub = baker.make(
+            UserSubscription, user=self.user, role=self.role, granted_by=self.admin, revoked_at=None, expires_at=None
+        )
         self.assertEqual(list(UserSubscription.objects.active()), [sub])
 
     def test_expired_subscription_is_excluded(self) -> None:

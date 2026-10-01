@@ -10,9 +10,7 @@ from django.db.models import Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    import datetime
-
-    from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement
+    from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile import Profile
 
 
@@ -35,9 +33,7 @@ class AchievementQuerySet(abstract.PublicDashboardQuerySet["Achievement"]):
 
     def listable_for(self, profile: Profile | int | None) -> Self:
         """Return awards a given viewer should see in a catalogue listing.
-
-        Secret awards stay hidden until earned, so they are included only when
-        *profile* already holds them.
+        Secret awards stay hidden until earned, so they are included only when *profile* already holds them.
 
         Args:
             profile: The profile whose earned set unlocks secret awards, or
@@ -49,7 +45,10 @@ class AchievementQuerySet(abstract.PublicDashboardQuerySet["Achievement"]):
         return self.filter(Q(is_secret=False) | Q(awards__profile_id=profile_id)).distinct()
 
 
-class AchievementManager(abstract.PublicDashboardManager.from_queryset(AchievementQuerySet)):
+_AchievementManagerBase = abstract.PublicDashboardManager.from_queryset(AchievementQuerySet)
+
+
+class AchievementManager(_AchievementManagerBase["Achievement"]):
     pass
 
 
@@ -76,26 +75,21 @@ class UserAchievementQuerySet(abstract.FrontendDashboardQuerySet["UserAchievemen
         return set(self.values_list("achievement_id", flat=True))
 
 
-class UserAchievementManager(abstract.FrontendDashboardManager.from_queryset(UserAchievementQuerySet)):
+_UserAchievementManagerBase = abstract.FrontendDashboardManager.from_queryset(UserAchievementQuerySet)
+
+
+class UserAchievementManager(_UserAchievementManagerBase["UserAchievement"]):
     pass
 
 
 class ProfileActivityDayQuerySet(abstract.DashboardQuerySet["ProfileActivityDay"]):
     """Filters over the raw per-day activity log that backs streaks."""
 
-    def for_profile(self, profile: Profile | int) -> Self:
-        if isinstance(profile, int):
-            return self.filter(profile_id=profile)
-        return self.filter(profile=profile)
 
-    def of_kind(self, kind: str) -> Self:
-        return self.filter(kind=kind)
-
-    def since(self, day: datetime.date) -> Self:
-        return self.filter(day__gte=day)
+_ProfileActivityDayManagerBase = abstract.DashboardManager.from_queryset(ProfileActivityDayQuerySet)
 
 
-class ProfileActivityDayManager(abstract.DashboardManager.from_queryset(ProfileActivityDayQuerySet)):
+class ProfileActivityDayManager(_ProfileActivityDayManagerBase["ProfileActivityDay"]):
     pass
 
 
@@ -107,9 +101,9 @@ class ProfileStreakQuerySet(abstract.DashboardQuerySet["ProfileStreak"]):
             return self.filter(profile_id=profile)
         return self.filter(profile=profile)
 
-    def of_kind(self, kind: str) -> Self:
-        return self.filter(kind=kind)
+
+_ProfileStreakManagerBase = abstract.DashboardManager.from_queryset(ProfileStreakQuerySet)
 
 
-class ProfileStreakManager(abstract.DashboardManager.from_queryset(ProfileStreakQuerySet)):
+class ProfileStreakManager(_ProfileStreakManagerBase["ProfileStreak"]):
     pass

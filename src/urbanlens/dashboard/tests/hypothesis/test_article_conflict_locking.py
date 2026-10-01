@@ -1,23 +1,8 @@
-"""The article conflict check has to be serialised, not just present.
-
-`save_article_checked` reads the latest revision id, compares it to the one the
-editor started from, and then writes. Without a lock that sequence is a TOCTOU:
-two editors who both loaded revision R both read `latest_id == R`, both pass the
-check, and both append. One editor's save then silently stops being the current
-article - the precise outcome the conflict check exists to prevent, and they were
-told it succeeded.
-
-Nothing else catches it. `ArticleRevision` carries no revision number and no
-unique constraint, and "latest" is just `-created`, so there is no database-level
-guard to fall back on. A *first* save is safe without a lock because
-`Article.pin`/`.wiki` are `OneToOneField` - the second insert loses there.
-
-The lock is asserted by inspecting the SQL actually issued, rather than by racing
-two threads: a thread race is timing-dependent and would be flaky in CI, while
-`FOR UPDATE` appearing in the statement is exactly the mechanism under test.
-"""
+"""The article conflict check has to be serialised, not just present."""
 
 from __future__ import annotations
+
+from unittest import mock
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -95,3 +80,82 @@ class ArticleConflictLockingTests(TestCase):
             any("article" in sql.lower() for sql in locking),
             f"the lock should be on the article row, got: {locking[:2]}",
         )
+
+
+class ConcealedViewerConflictCheckTests(TestCase):
+    """A concealed viewer's conflict check is scoped to what they were shown, not the true latest.
+
+    ``concealment_active`` is hardcoded False today (the reputation ledger it needs doesn't exist yet), so this
+    branch is currently dead in production - mocked here so a regression is caught before the day it starts
+    returning True, rather than after."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.author = Profile.objects.get(user=baker.make("auth.User"))
+        self.stranger = Profile.objects.get(user=baker.make("auth.User"))
+        self.viewer = Profile.objects.get(user=baker.make("auth.User"))
+        self.wiki = baker.make("dashboard.Wiki")
+
+    def test_a_revision_hidden_from_a_concealed_viewer_does_not_conflict_their_save(self) -> None:
+        """The viewer's base was the last thing *they* could see - a stranger's edit past that isn't a conflict."""
+        article, first = save_article_checked(
+            editor=self.author,
+            content="First draft.",
+            edit_summary="",
+            base_revision_id=None,
+            wiki=self.wiki,
+        )
+        assert first is not None
+        save_article_checked(
+            editor=self.stranger,
+            content="A stranger's edit, invisible to the viewer.",
+            edit_summary="",
+            base_revision_id=latest_revision_id(article),
+            wiki=self.wiki,
+        )
+
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            # Without the concealment carve-out, this would incorrectly conflict against
+            # the stranger's revision, which this viewer was never shown.
+            _article, revision = save_article_checked(
+                editor=self.viewer,
+                content="The viewer's edit, based on what they saw.",
+                edit_summary="",
+                base_revision_id=first.pk,
+                viewer=self.viewer,
+                wiki=self.wiki,
+            )
+
+        self.assertIsNotNone(revision)
+
+    def test_a_visible_edit_still_conflicts_a_concealed_viewer(self) -> None:
+        """The carve-out narrows what conflicts for a concealed viewer - it doesn't disable the check."""
+        article, first = save_article_checked(
+            editor=self.author,
+            content="First draft.",
+            edit_summary="",
+            base_revision_id=None,
+            wiki=self.wiki,
+        )
+        assert first is not None
+        save_article_checked(
+            editor=self.viewer,
+            content="The viewer's own earlier edit.",
+            edit_summary="",
+            base_revision_id=latest_revision_id(article),
+            viewer=self.viewer,
+            wiki=self.wiki,
+        )
+
+        with (
+            mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True),
+            self.assertRaises(ArticleConflictError),
+        ):
+            save_article_checked(
+                editor=self.viewer,
+                content="Based on stale info.",
+                edit_summary="",
+                base_revision_id=first.pk,
+                viewer=self.viewer,
+                wiki=self.wiki,
+            )

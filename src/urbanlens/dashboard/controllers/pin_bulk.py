@@ -4,28 +4,26 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
-from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
-from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
-from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
+from urbanlens.dashboard.services.pins.pin_bulk import MAX_BULK_PINS, UNSET, BulkPinEdit, BulkPinError, Unset, bulk_delete_pins, bulk_edit_pins, bulk_merge_under
+from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -36,28 +34,13 @@ logger = logging.getLogger(__name__)
 
 _ORGANIZE_KINDS = frozenset({KIND_TAG, KIND_CATEGORY, KIND_STATUS})
 
-#: Most pins one bulk request may name. Not a new policy - every external-API
-#: equivalent already declares `max_length=500` on its uuid list
-#: (`serializers_pin_bulk.py`); this is the same number on the surface the map's
-#: select tool drives, which had no bound at all.
-#:
-#: It matters because these edits cannot be one `UPDATE`. `Pin` carries eight
-#: live `post_save` receivers (map-pin cache, smart-list membership, wiki stat
-#: sync, draft-wiki creation, boundary refit, map-center invalidation,
-#: detail-pin resync, achievements), so every selected pin needs a real
-#: `save()`. Measured cost is ~2 queries per pin for a style or description
-#: edit and ~7 for a rating (`Review.update_or_create` plus its own receivers),
-#: so an unbounded selection turns one click into tens of thousands of queries
-#: inside a single request/response cycle.
-_MAX_BULK_PINS = 500
-
 #: Shared wording so every bulk endpoint refuses identically.
-_TOO_MANY_PINS = f"Select at most {_MAX_BULK_PINS} pins at a time."
+_TOO_MANY_PINS = f"Select at most {MAX_BULK_PINS} pins at a time."
 
 
 def _too_many(uuids: list[str]) -> bool:
     """Report whether a request named more pins than one call may carry."""
-    return len(uuids) > _MAX_BULK_PINS
+    return len(uuids) > MAX_BULK_PINS
 
 
 def _request_profile(request: HttpRequest) -> Profile:
@@ -70,7 +53,7 @@ def _request_profile(request: HttpRequest) -> Profile:
 def _parse_uuids_json(request: HttpRequest, key: str = "uuids") -> tuple[list[str] | None, HttpResponse | None]:
     """Parse a JSON body containing a list of pin uuid strings under ``key``."""
     try:
-        data = json.loads(request.body)
+        data = posted_json_object(request)
         uuids = [str(x) for x in data.get(key, [])]
     except (json.JSONDecodeError, ValueError, TypeError):
         return None, JsonResponse({"error": "Invalid data"}, status=400)
@@ -107,20 +90,16 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
         if not pins:
             return HttpResponse("No matching pins.", status=404)
 
-        subtree = list(Pin.objects.filter(pk__in=[p.pk for p in pins]).with_descendants())
-        with transaction.atomic():
-            # The stash must happen inside the same atomic block as the delete: stashing
-            # first and deleting after ensures a mid-delete failure rolls back both together,
-            # rather than leaving a committed UndoAction claiming a deletion that never
-            # actually happened. Pin.parent_pin is on_delete=CASCADE, so deleting just the
-            # originally-selected pins already cascades to every descendant captured in
-            # `subtree` above in one bulk operation - no need to delete each subtree member
-            # individually.
-            undo_action = stash_for_undo(PIN_MODEL_LABEL, subtree, profile)
-            Pin.objects.filter(pk__in=[p.pk for p in pins]).delete()
-
-        descendant_count = len(subtree) - len(pins)
-        return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins), "descendant_count": descendant_count, "total_count": len(subtree)})
+        result = bulk_delete_pins(profile, pins)
+        return JsonResponse(
+            {
+                "ok": True,
+                "undo_token": str(result.undo_action.uuid),
+                "count": len(result.deleted),
+                "descendant_count": result.descendant_count,
+                "total_count": len(result.subtree),
+            }
+        )
 
 
 class PinBulkUndoView(LoginRequiredMixin, View):
@@ -128,7 +107,7 @@ class PinBulkUndoView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             token = str(data.get("token") or "")
         except (json.JSONDecodeError, ValueError, TypeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
@@ -158,7 +137,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             target_uuid = str(data.get("target_uuid") or "")
             source_uuids = [str(x) for x in data.get("source_uuids", [])]
         except (json.JSONDecodeError, ValueError, TypeError):
@@ -168,37 +147,17 @@ class PinBulkMergeView(LoginRequiredMixin, View):
             return HttpResponse("target_uuid is required.", status=400)
         if not source_uuids:
             return HttpResponse("At least one source_uuid is required.", status=400)
+        # Before any database work: a request that is too large should not first pay for being too large.
+        if _too_many(source_uuids):
+            return HttpResponse(_TOO_MANY_PINS, status=400)
 
         profile = _request_profile(request)
         target = get_object_or_404(Pin.objects.filter(profile=profile), uuid=target_uuid)
-        if target.parent_pin_id is not None:
-            # The target is itself a child pin - promote it to top-level first, since
-            # merging always makes the chosen target the new top-level pin.
-            conflict = Pin.objects.filter(profile=profile, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists()
-            if conflict:
-                return HttpResponse("You already have a top-level pin at this exact location. Choose a different pin as the merge target.", status=400)
-            target.parent_pin = None
-            target.save(update_fields=["parent_pin", "updated"])
-        sources = list(_owned_pins(profile, source_uuids).exclude(pk=target.pk))
-        if not sources:
-            return HttpResponse("No valid source pins.", status=400)
-
-        merged = 0
-        for source in sources:
-            # Structurally unreachable: by this point target is always root (either
-            # already was, or was just promoted above), so it has no ancestors for
-            # would_create_cycle to find a source in - kept as defense-in-depth per
-            # the model's own guard contract, same as the original root-only version.
-            if source.would_create_cycle(target):
-                continue
-            source.parent_pin = target
-            source.save(update_fields=["parent_pin", "updated"])
-            merged += 1
-
-        if not merged:
-            return HttpResponse("Merge would create a cycle.", status=400)
-
-        return JsonResponse({"ok": True, "merged": merged, "target_uuid": str(target.uuid)})
+        try:
+            result = bulk_merge_under(target, list(_owned_pins(profile, source_uuids)))
+        except BulkPinError as exc:
+            return HttpResponse(exc.message, status=400)
+        return JsonResponse({"ok": True, "merged": len(result.merged), "target_uuid": str(target.uuid)})
 
 
 class PinBulkEditView(LoginRequiredMixin, View):
@@ -206,7 +165,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
         except (json.JSONDecodeError, ValueError, TypeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
@@ -235,14 +194,12 @@ class PinBulkEditView(LoginRequiredMixin, View):
             if len(value) > max_length:
                 return HttpResponse(f"{request_field} is too long.", status=400)
             if model_field.endswith("color"):
-                # Length alone is not enough: these are interpolated into style="..."
-                # by the map and organize renderers, and `x" onmouse` is ten characters.
-                # Border colours keep the "none" sentinel, which means "no border".
+                # Length alone is not enough: these are interpolated into style="..." by the map and organize
+                # renderers, and `x" onmouse` is ten characters.
                 value = clean_color(value, default="", allow_none_keyword=model_field != "color") or ""
             elif model_field == "icon":
-                # Same reasoning one branch over: an icon becomes glyph text, an
-                # <img src="...">, or an emoji depending on its shape, so a value
-                # that is none of the three has no business being stored.
+                # Same reasoning one branch over: an icon becomes glyph text, an <img src="...">, or an emoji
+                # depending on its shape, so a value that is none of the three has no business being stored.
                 value = clean_icon(value, default="")
             style_updates[model_field] = value or None
 
@@ -262,69 +219,53 @@ class PinBulkEditView(LoginRequiredMixin, View):
             style_updates[model_field] = int_value
 
         description = data.get("description")
+        new_description: str | Literal[Unset.UNSET] = UNSET
         if description is not None and str(description).strip():
             length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
             if length_error:
                 return HttpResponse(length_error, status=400)
-            for pin in pins:
-                pin.description = description
-                pin.save(update_fields=["description", "updated"])
+            new_description = str(description)
 
-        if style_updates:
-            update_fields = [*style_updates, "updated"]
-            for pin in pins:
-                for field, field_value in style_updates.items():
-                    setattr(pin, field, field_value)
-                pin.save(update_fields=update_fields)
-
-        # rating lives on Review (one per profile/pin pair, see PinEditView.post
-        # for the single-pin equivalent) - 0 explicitly clears every selected
-        # pin's review; absent/invalid leaves ratings untouched.
+        # 0 clears every selected pin's review; absent or out of range leaves ratings alone.
         rating_raw = data.get("rating")
+        rating: int | None | Literal[Unset.UNSET] = UNSET
         if rating_raw is not None and str(rating_raw).strip():
             try:
-                rating = int(rating_raw)
+                parsed_rating = int(rating_raw)
             except (TypeError, ValueError):
+                parsed_rating = -1
+            if 1 <= parsed_rating <= 5:
+                rating = parsed_rating
+            elif parsed_rating == 0:
                 rating = None
-            if rating is not None and 1 <= rating <= 5:
-                for pin in pins:
-                    Review.objects.update_or_create(profile=profile, pin=pin, defaults={"rating": rating})
-            elif rating == 0:
-                Review.objects.filter(profile=profile, pin__in=pins).delete()
 
+        add_labels: list[Label] = []
         if add_ids := [int(x) for x in data.get("add_label_ids", [])]:
-            valid = list(Label.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
-            for pin in pins:
-                pin.labels.add(*valid)
+            add_labels = list(Label.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
 
+        remove_labels: list[Label] = []
         if remove_ids := [int(x) for x in data.get("remove_label_ids", [])]:
-            # Never trust the client's option list - only remove labels that are
-            # actually present on at least one of the selected pins.
-            removable = list(
-                Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct(),
-            )
-            for pin in pins:
-                current_ids = set(pin.labels.filter(pk__in=[label.pk for label in removable]).values_list("pk", flat=True))
-                present = [label for label in removable if label.pk in current_ids]
-                for label in present:
-                    # Tombstone first: keyword/AI auto-tagging can otherwise silently
-                    # reattach a label a user just bulk-removed.
-                    PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
-                if present:
-                    pin.labels.remove(*present)
+            # Never trust the client's option list - only labels present on at least one selected pin.
+            remove_labels = list(Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct())
 
-        reparented = 0
+        parent: Pin | Literal[Unset.UNSET] = UNSET
         parent_uuid = str(data.get("parent_uuid") or "").strip()
         if parent_uuid:
             parent = get_object_or_404(Pin.objects.filter(profile=profile), uuid=parent_uuid)
-            for pin in pins:
-                if pin.pk == parent.pk or pin.would_create_cycle(parent):
-                    continue
-                pin.parent_pin = parent
-                pin.save(update_fields=["parent_pin", "updated"])
-                reparented += 1
 
-        return JsonResponse({"ok": True, "count": len(pins), "reparented": reparented})
+        result = bulk_edit_pins(
+            profile,
+            pins,
+            BulkPinEdit(
+                description=new_description,
+                style=style_updates,
+                rating=rating,
+                add_labels=add_labels,
+                remove_labels=remove_labels,
+                parent=parent,
+            ),
+        )
+        return JsonResponse({"ok": True, "count": result.count, "reparented": result.reparented})
 
 
 class PinBulkEditLabelOptionsView(LoginRequiredMixin, View):
@@ -376,10 +317,9 @@ class PinParentSearchView(LoginRequiredMixin, View):
 class PinBulkExportView(LoginRequiredMixin, View):
     """Download selected pins as GeoJSON/KML/GPX/CSV (UL-377/UL-382, plain form POST).
 
-    A plain (non-JSON) form POST, not fetch/JSON like the other bulk views -
-    submitted via a throwaway <form target="_blank"> so the browser handles
-    the file download itself from the Content-Disposition header, with no
-    URL-length limit on the pin count and no client-side blob handling.
+    A plain (non-JSON) form POST, not fetch/JSON like the other bulk views - submitted via a throwaway
+    <form target="_blank"> so the browser handles the file download itself from the Content-Disposition
+    header, with no URL-length limit on the pin count and no client-side blob handling.
     """
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:

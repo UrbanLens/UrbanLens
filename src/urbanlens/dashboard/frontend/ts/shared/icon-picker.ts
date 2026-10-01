@@ -1,13 +1,110 @@
 /**
- * Icon picker widget shared by categories/tags/organize's create and bulk-edit
- * dialogs (dashboard/partials/ui/_icon_picker.html). The partial's markup calls
- * `IconPicker.toggle/setTab/search/pick(...)` via inline onclick/oninput
- * attributes, including markup injected later via HTMX (edit dialogs) - so
- * this stays a `window.IconPicker` global rather than an imported class,
- * matching the existing contract instead of rewriting every template that
- * includes that partial (including pages outside this migration's scope).
+ * Icon picker widget shared by categories/tags/organize's create and bulk-edit dialogs (dashboard/partials/ui/_icon_picker.html).
  */
+import { escHtml } from "./escape-html";
+
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
+
+/**
+ * The catalogue is fetched once per page rather than rendered into every picker.
+ */
+interface IconCatalogue {
+    tabs: string;
+    items: string;
+}
+
+let gridRequest: Promise<IconCatalogue> | null = null;
+
+/** Split the one response into its two fragments, once, rather than per picker. */
+function parseCatalogue(html: string): IconCatalogue {
+    const holder = document.createElement("template");
+    holder.innerHTML = html;
+    return {
+        tabs: holder.content.querySelector("[data-icon-picker-tabs]")?.innerHTML ?? "",
+        items: holder.content.querySelector("[data-icon-picker-items]")?.innerHTML ?? "",
+    };
+}
+
+function loadCatalogue(url: string): Promise<IconCatalogue> {
+    if (!gridRequest) {
+        gridRequest = fetch(url, { credentials: "same-origin" })
+            .then((response) => {
+                if (!response.ok) throw new Error(`icon grid: HTTP ${response.status}`);
+                return response.text();
+            })
+            .then(parseCatalogue)
+            .catch((error) => {
+                // Dropped so the next open retries.
+                gridRequest = null;
+                throw error;
+            });
+    }
+    return gridRequest;
+}
+
+/** Drops the cached catalogue request, so a test starts from an unfetched page. */
+export function resetIconGridForTests(): void {
+    gridRequest = null;
+}
+
+/**
+ * Marks the item matching this picker's current value, which the server used to render.
+ */
+function markSelectedIcon(id: string, grid: HTMLElement): void {
+    const input = document.getElementById(`icon-value-${id}`) as HTMLInputElement | null;
+    const current = input?.value ?? "";
+    if (!current) return;
+    grid.querySelectorAll<HTMLElement>(".icon-picker-item").forEach((item) => {
+        item.classList.toggle("selected", item.dataset.icon === current);
+    });
+}
+
+function statusNode(grid: HTMLElement): HTMLElement {
+    let node = grid.querySelector<HTMLElement>(".icon-picker-status");
+    if (!node) {
+        node = document.createElement("div");
+        node.className = "icon-picker-status";
+        grid.appendChild(node);
+    }
+    return node;
+}
+
+/** Fills a picker's tabs and grid from the shared catalogue, at most once per picker. */
+export async function fillIconGrid(id: string): Promise<void> {
+    const grid = document.getElementById(`icon-grid-${id}`);
+    if (!grid || grid.dataset.iconsLoaded === "1") return;
+    const url = grid.dataset.gridUrl;
+    if (!url) return;
+
+    const status = statusNode(grid);
+    status.textContent = "Loading icons...";
+    try {
+        const catalogue = await loadCatalogue(url);
+        // Re-checked: two opens can await the same promise, and the second must
+        // not append a second copy of the catalogue.
+        if (grid.dataset.iconsLoaded === "1") return;
+        grid.insertAdjacentHTML("beforeend", catalogue.items);
+        document.getElementById(`icon-tabs-${id}`)?.insertAdjacentHTML("beforeend", catalogue.tabs);
+        grid.dataset.iconsLoaded = "1";
+        status.remove();
+        markSelectedIcon(id, grid);
+    } catch {
+        status.textContent = "Icons could not be loaded. Close and reopen to try again.";
+    }
+}
+
+/** Re-applies whatever filter is showing, for items that arrived after it was set. */
+function reapplyFilter(id: string): void {
+    const panel = document.getElementById(`icon-panel-${id}`);
+    const search = panel?.querySelector<HTMLInputElement>(".icon-picker-search-input");
+    const query = search?.value.trim() ?? "";
+    if (query) {
+        IconPicker.search(id, query);
+        return;
+    }
+    const activeTab = panel?.querySelector<HTMLElement>(".icon-tab.active");
+    IconPicker.setTabSilent(id, activeTab?.dataset.cat ?? "");
+}
 
 export const IconPicker = {
     toggle(id: string): void {
@@ -23,6 +120,8 @@ export const IconPicker = {
                 search.focus();
             }
             IconPicker.setTabSilent(id, "");
+            // Revealed first, filled second: the panel's chrome (search, tabs) is already there, so the fetch shows as a loading row inside an open.
+            void fillIconGrid(id).then(() => reapplyFilter(id));
         }
     },
 
@@ -74,10 +173,7 @@ export const IconPicker = {
         const input = document.getElementById(`icon-value-${id}`) as HTMLInputElement | null;
         if (input) {
             input.value = icon;
-            // Assigning .value fires nothing, so until now the only way to
-            // learn about a pick was to read the field at form-submit time.
-            // That is why this picker could only be used inside a form; a
-            // panel that has to react to a choice had no way to hear it.
+            // Assigning .value fires nothing, so until now the only way to learn about a pick was to read the field at form-submit time.
             input.dispatchEvent(new Event("input", { bubbles: true }));
             input.dispatchEvent(new Event("change", { bubbles: true }));
         }
@@ -102,8 +198,8 @@ export const IconPicker = {
 export function renderIconGlyphHtml(icon: string): string {
     if (!icon) return '<span class="icon-picker-none-label">No icon</span>';
     return MATERIAL_ICON_NAME.test(icon)
-        ? `<i class="material-icons icon-picker-current-mi">${icon}</i>`
-        : `<span class="icon-picker-current-glyph">${icon}</span>`;
+        ? `<i class="material-icons icon-picker-current-mi">${escHtml(icon)}</i>`
+        : `<span class="icon-picker-current-glyph">${escHtml(icon)}</span>`;
 }
 
 /** Resets an icon picker instance back to "no icon" (used by new-item form resets). */

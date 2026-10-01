@@ -1,28 +1,11 @@
 """One-off, read-only audit for BLOCKED ``Friendship`` rows that may predate
-``services.social.friendship.block_profile``'s ``from_profile``/``to_profile``
-normalization fix.
+``services.social.friendship.block_profile``'s ``from_profile``/``to_profile`` normalization fix.
 
-``block_profile`` used to reuse whichever row already joined a pair without
-swapping the two foreign keys, so a block placed on an inbound friend request
-(or an existing friend) could leave the row's ``from_profile`` - the only
-record of who blocked whom, per ``_placed_the_block`` - pointing at the
-person who was actually *blocked*, not the blocker. A block placed against a
-complete stranger, with no prior row, was never affected: the fresh-row path
-(``Friendship.objects.create(from_profile=actor, ...)``) always stamped the
-actor correctly, before and after the fix. See docs/PROBLEMS.md, "Blocked
-Friendship rows created before block_profile started normalizing direction
-may record the wrong blocker".
-
-There is no ``blocked_by`` column and never was, so nothing here can prove a
-given row is actually inverted - that signal is gone. What this reports is
-which BLOCKED rows are even *reachable* by the bug: created before the fix
-shipped, and showing a sign of having started life as something other than a
-fresh block (a stored ``request_message``, or an ``updated`` timestamp well
-after ``created``) - i.e. the row went through the reuse path the bug lived
-in, rather than the always-correct create path.
-
-Never writes. Flagged rows are for a human to review - and, where the two
-people involved can confirm who actually placed the block, correct by hand.
+A block placed against a complete stranger, with no prior row, was never affected: the fresh-row
+path (``Friendship.objects.create(from_profile=actor, ...)``) always stamped the actor correctly,
+before and after the fix.
+There is no ``blocked_by`` column and never was, so nothing here can prove a given row is actually
+inverted - that signal is gone.
 """
 
 from __future__ import annotations
@@ -35,12 +18,9 @@ from django.utils.dateparse import parse_date
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 
-#: Below this gap between `created` and `updated`, a row is treated as having
-#: gone straight from nonexistent to BLOCKED in one `Friendship.objects.create`
-#: call - the always-correct path - rather than through the reuse path the bug
-#: lived in. Generous on purpose: a fresh create's two timestamps come from the
-#: same INSERT and should be identical (or microseconds apart), so minutes of
-#: slack costs nothing while still catching same-day reuse.
+#: Below this gap between `created` and `updated`, a row is treated as having gone straight from nonexistent to
+#: BLOCKED in one `Friendship.objects.create` call - the always-correct path - rather than through the reuse
+#: path the bug lived in.
 _FRESH_CREATE_TOLERANCE = datetime.timedelta(minutes=5)
 
 

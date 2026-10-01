@@ -1,0 +1,32 @@
+{# Calendar import progress - returned by CalendarImportView's POST and polled from CalendarImportProgressView. #}
+{% if state == "SUCCESS" %}
+<div class="immich-import-progress">
+    <div class="immich-import-status-msg">
+        <i class="material-symbols-outlined">check_circle</i>
+        <span>{{ message|default:"Import complete." }}</span>
+    </div>
+    {% if created %}
+    <div hx-get="{% url 'trips.list' %}" hx-select="#trip-list" hx-target="#trip-list" hx-swap="outerHTML" hx-trigger="load"></div>
+    {% endif %}
+    <div class="form-actions">
+        <button type="button" class="btn btn--ghost" data-dialog-close>Close</button>
+    </div>
+</div>
+{% elif state == "FAILURE" or state == "REVOKED" %}
+<div class="immich-import-progress">
+    <div class="immich-import-error-msg">
+        <i class="material-symbols-outlined">error</i>
+        <span>{{ error|default:"Import failed. Please try again." }}</span>
+    </div>
+</div>
+{% else %}
+<div class="immich-import-progress" hx-get="{{ progress_url }}" hx-trigger="load delay:1s" hx-swap="outerHTML">
+    <div class="immich-import-progress-label">
+        <span>{{ message|default:"Working..." }}</span>
+        <span class="immich-import-progress-pct">{{ percent|default:0 }}%</span>
+    </div>
+    <div class="immich-import-progress-track">
+        <div class="immich-import-progress-bar" style="width: {{ percent|default:0 }}%;"></div>
+    </div>
+</div>
+{% endif %}

@@ -2,21 +2,23 @@
 
 Two groups of views:
 
-- Settings ("Connect Immich"): ``ImmichSettingsView`` / ``ImmichDisconnectView``,
-  loaded as an HTMX subsection on the settings page (mirrors ``UndoHistoryView``).
-- Pin detail ("Import from Immich"): search, a thumbnail proxy (keeps the API
-  key server-side), and a Celery-backed import with progress polling.
+- Settings ("Connect Immich"): ``ImmichSettingsView`` / ``ImmichDisconnectView``, loaded as an HTMX
+  subsection on the settings page (mirrors ``UndoHistoryView``).
+- Pin detail ("Import from Immich"): search, a thumbnail proxy (keeps the API key server-side), and
+  a Celery-backed import with progress polling.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+import math
+from typing import TYPE_CHECKING, Protocol
 
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -25,14 +27,23 @@ from urbanlens.dashboard.forms.immich_form import ImmichAccountForm
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile, _haversine_km
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
+from urbanlens.dashboard.services.apis.immich.nearby import NEARBY_ASSET_LIMIT, nearby_assets, within_radius
+from urbanlens.dashboard.services.core import bounded_cache, single_flight
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.core.upstream_slots import KeyedUpstreamSlots, UpstreamSlots
+from urbanlens.dashboard.services.media.proxied_media import proxied_media_response, retry_later_response
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
+from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
@@ -42,11 +53,15 @@ _PICKER_PARTIAL = "dashboard/partials/pins/_immich_picker_dialog.html"
 _PROGRESS_PARTIAL = "dashboard/partials/pins/_immich_import_progress.html"
 _SCAN_PROGRESS_PARTIAL = "dashboard/partials/settings/_immich_scan_progress.html"
 _THUMBNAIL_CACHE_TTL = 60 * 60 * 24
-#: How long a profile's active library-scan task id is remembered, so
-#: navigating away from Tools and coming back later resumes the progress bar
-#: instead of losing track of an already-running scan. Generous relative to
-#: how long even a very large library sweep should realistically take.
-_SCAN_TASK_ID_TTL = 60 * 60 * 6
+#: What a thumbnail refused for want of a slot tells the browser to wait.
+_THUMBNAIL_RETRY_SECONDS = 2
+#: Per account: a picker page shows a few dozen thumbnails, and each retry of a refused one counts.
+IMMICH_THUMBNAIL_RATE = Rate(limit=600, window_seconds=300)
+#: The thumbnail fetch is a GET, which the throttle does not count by default.
+IMMICH_THUMBNAIL_METHODS = frozenset({"GET"})
+#: How long a profile's active library-scan task id is remembered, so navigating away from Tools and coming back
+#: later resumes the progress bar instead of losing track of an already-running scan.
+_SCAN_TASK_ID_TTL = 60 * 75
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
 _EMPTY_MESSAGES: dict[str, str] = {
@@ -54,6 +69,18 @@ _EMPTY_MESSAGES: dict[str, str] = {
     PhotoImportMode.VISITS: "No photos found on your recorded visit dates.",
     PhotoImportMode.ALL: "No photos found in your library.",
 }
+
+
+class _HasAssetId(Protocol):
+    """The only thing this view needs from whichever endpoint answered.
+
+    A read-only property rather than ``id: str``: both result types are frozen dataclasses, and a
+    protocol declaring a settable attribute is not satisfied by one that cannot be set.
+    """
+
+    @property
+    def id(self) -> str:
+        """The Immich asset id."""
 
 
 def _request_profile(request: HttpRequest) -> Profile:
@@ -73,19 +100,19 @@ def _scan_task_cache_key(profile_id: int) -> str:
 def get_active_scan_task_id(profile_id: int) -> str | None:
     """Return the task id of `profile_id`'s in-progress library scan, if any.
 
-    Lets a fresh page load (a new visit, or returning after navigating away)
-    resume polling an already-running scan instead of only ever offering the
-    bare "start a scan" button - see ToolsIndexView.get().
+    Lets a fresh page load (a new visit, or returning after navigating away) resume polling an
+    already-running scan instead of only ever offering the bare "start a scan" button - see
+    ToolsIndexView.get().
     """
     return cache.get(_scan_task_cache_key(profile_id))
 
 
 def _set_active_scan_task_id(profile_id: int, task_id: str) -> None:
-    cache.set(_scan_task_cache_key(profile_id), task_id, timeout=_SCAN_TASK_ID_TTL)
+    single_flight.adopt(_scan_task_cache_key(profile_id), task_id, _SCAN_TASK_ID_TTL)
 
 
 def _clear_active_scan_task_id(profile_id: int) -> None:
-    cache.delete(_scan_task_cache_key(profile_id))
+    single_flight.release(_scan_task_cache_key(profile_id))
 
 
 # -- Settings: connect / disconnect -------------------------------------------
@@ -113,8 +140,8 @@ class ImmichSettingsView(LoginRequiredMixin, View):
 
         from django.utils import timezone
 
-        account, _created = ImmichAccount.objects.update_or_create(
-            profile=profile,
+        account, _created = ImmichAccount.objects.connect_for_profile(
+            profile,
             defaults={"server_url": candidate.server_url, "api_key": candidate.api_key, "last_verified": timezone.now()},
         )
         response = render(request, _SETTINGS_PARTIAL, {"account": account, "form": None})
@@ -134,14 +161,15 @@ class ImmichDisconnectView(LoginRequiredMixin, View):
 class ImmichLibraryScanStartView(LoginRequiredMixin, View):
     """POST /settings/immich/scan/ - enqueue a full-library location sweep.
 
-    Explicit, opt-in action (a button on the Immich settings subsection) -
-    never triggered automatically on connect. Only produces/updates
-    ``PinSuggestion`` rows for the user to review; see ``tasks.sweep_immich_library_locations``.
+    Explicit, opt-in action (a button on the Immich settings subsection) - never triggered automatically
+    on connect.
+    Only produces/updates ``PinSuggestion`` rows for the user to review; see
+    ``tasks.sweep_immich_library_locations``.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
-        if not ImmichAccount.objects.filter(profile=profile).exists():
+        if ImmichAccount.objects.get_for_profile(profile) is None:
             return HttpResponse('<p class="immich-import-error">Immich is not connected.</p>', status=400)
         if not profile.external_apis_enabled:
             return HttpResponse('<p class="immich-import-error">External lookups are turned off in your settings.</p>', status=400)
@@ -150,8 +178,19 @@ class ImmichLibraryScanStartView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.tasks import sweep_immich_library_locations
 
-        result = safely_enqueue_task(sweep_immich_library_locations, profile.pk)
+        # Claimed before the enqueue, not after: a double-click that got past a
+        # read-then-write check would enqueue two full-library sweeps.
+        if not single_flight.claim(_scan_task_cache_key(profile.pk), _SCAN_TASK_ID_TTL):
+            running = get_active_scan_task_id(profile.pk)
+            return render(
+                request,
+                _SCAN_PROGRESS_PARTIAL,
+                {"task_id": running, "state": "PENDING", "percent": 0, "message": "A scan is already running."},
+            )
+
+        result = safely_enqueue_task(sweep_immich_library_locations, profile.pk, durable=False)
         if result is None:
+            _clear_active_scan_task_id(profile.pk)
             return render(request, _SCAN_PROGRESS_PARTIAL, {"state": "FAILURE", "message": "Scan queue is unavailable. Please try again later."}, status=503)
         _set_active_scan_task_id(profile.pk, result.id)
         return render(request, _SCAN_PROGRESS_PARTIAL, {"task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting scan..."})
@@ -186,8 +225,8 @@ class ImmichLibraryScanProgressView(LoginRequiredMixin, View):
 class PinImmichSearchView(LoginRequiredMixin, View):
     """GET pin/<slug>/immich/search/ - photos on the user's Immich server, filtered by mode.
 
-    Three modes (see ``PhotoImportMode``): nearby this pin's location, taken on
-    one of the pin's recorded PinVisit dates, or unfiltered (most recent first).
+    Three modes (see ``PhotoImportMode``): nearby this pin's location, taken on one of the pin's
+    recorded PinVisit dates, or unfiltered (most recent first).
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -219,22 +258,48 @@ class PinImmichSearchView(LoginRequiredMixin, View):
             return render(request, _PICKER_PARTIAL, {**context, "error": "External lookups are turned off in your settings."})
 
         gateway = ImmichGateway(account=account)
+        # The three modes answer from two different Immich endpoints, so they return two different shapes - a
+        # MapMarker carries coordinates, a SearchAsset does not. All this view needs from either is the id it
+        # renders and de-dupes on, which is what the annotation says.
+        results: Sequence[_HasAssetId] | None
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+
         try:
             if mode == PhotoImportMode.VISITS:
                 dates = visit_dates_for_pin(pin)
                 if not dates:
                     return render(request, _PICKER_PARTIAL, {**context, "assets": [], "empty_message": "No recorded visits for this pin yet."})
-                results = gateway.search_by_dates(dates)
+                # One metadata search per date, because Immich's search takes a
+                # range rather than a set of days. The per-call timeout bounds
+                # each of up to MAX_VISIT_DATES calls and nothing bounded their
+                # sum, so the request could outlast every one of them being met.
+                results = call_with_deadline(lambda: gateway.search_by_dates(dates), timeout=EXTERNAL_CALL_DEADLINE, default=None, name="immich_search_by_dates")
             elif mode == PhotoImportMode.ALL:
-                results = gateway.list_recent()
+                results = call_with_deadline(gateway.list_recent, timeout=EXTERNAL_CALL_DEADLINE, default=None, name="immich_list_recent")
             else:
                 if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
                     return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
                 pin_point = (float(pin.location.latitude), float(pin.location.longitude))
-                markers = gateway.get_map_markers()
-                results = [marker for marker in markers if _haversine_km(pin_point, (marker.lat, marker.lon)) * 1000 <= radius_m]
-        except GatewayRequestError as exc:
-            return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
+                # Measured and cached per pin, so the radius <select>'s six options share one library download
+                # instead of one each.
+                neighbourhood = call_with_deadline(lambda: nearby_assets(gateway, account, pin_point), timeout=EXTERNAL_CALL_DEADLINE, default=None, name="immich_nearby_assets")
+                if neighbourhood is not None:
+                    results = within_radius(neighbourhood, radius_m)
+                    context["nearby_limit"] = NEARBY_ASSET_LIMIT
+                    # Reported by the cap, not inferred from the result's length: a
+                    # library of exactly the cap size shows everything it has.
+                    context["nearby_truncated"] = neighbourhood.truncated
+                else:
+                    results = None
+        except (GatewayRequestError, RequestCancelledError) as exc:
+            logger.warning("Immich picker request failed: %s", exc)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Immich library right now."})
+
+        # `call_with_deadline` returns its default only on timeout; anything the
+        # gateway itself raises has already been handled above.
+        if results is None:
+            logger.warning("Immich picker exceeded the external-call deadline for pin %s", pin.pk)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Immich library right now."})
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
         assets = [{"id": result.id, "already_imported": account.asset_web_url(result.id) in already_imported} for result in results]
@@ -244,9 +309,9 @@ class PinImmichSearchView(LoginRequiredMixin, View):
 class PinImmichThumbnailView(LoginRequiredMixin, View):
     """GET pin/<slug>/immich/thumbnail/<asset_id>/ - proxies one Immich thumbnail.
 
-    The API key must never reach the browser, so thumbnails can't be linked
-    to directly - this view fetches them server-side and caches the bytes
-    briefly to avoid re-hitting the user's server on every dialog reopen.
+    The API key must never reach the browser, so thumbnails can't be linked to directly - this view
+    fetches them server-side and caches the bytes briefly to avoid re-hitting the user's server on every
+    dialog reopen.
     """
 
     def get(self, request: HttpRequest, pin_slug: str, asset_id: str) -> HttpResponse:
@@ -254,18 +319,78 @@ class PinImmichThumbnailView(LoginRequiredMixin, View):
         account = ImmichAccount.objects.get_for_profile(profile)
         if account is None:
             raise Http404
-        cache_key = f"ul_immich_thumb_{account.pk}_{asset_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            content, content_type = cached
-            return mark_private_media(HttpResponse(content, content_type=content_type))
+        return immich_thumbnail_response(account, asset_id)
 
-        try:
-            content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
-        except GatewayRequestError:
-            return HttpResponse(status=502)
-        cache.set(cache_key, (content, content_type), _THUMBNAIL_CACHE_TTL)
-        return mark_private_media(HttpResponse(content, content_type=content_type))
+
+class ImmichThumbnailSlots(UpstreamSlots):
+    """The process-wide bound on Immich thumbnails being fetched at once, across every account."""
+
+    @classmethod
+    def limit(cls) -> int:
+        """How many Immich thumbnail fetches one process may have in flight.
+
+        Returns:
+            ``immich_upstream_concurrency``.
+        """
+        return app_settings.immich_upstream_concurrency
+
+
+class ImmichProfileSlots(KeyedUpstreamSlots):
+    """The fleet-wide bound on Immich thumbnails one account may be fetching at once."""
+
+    scope = "immich.thumbnail"
+
+    @classmethod
+    def limit(cls) -> int:
+        """How many Immich thumbnail fetches one account may have in flight.
+
+        Returns:
+            ``immich_profile_upstream_concurrency``.
+        """
+        return app_settings.immich_profile_upstream_concurrency
+
+    @classmethod
+    def lease_seconds(cls) -> int:
+        """Longer than the fetch deadline, so a live fetch never loses its slot.
+
+        Returns:
+            Seconds.
+        """
+        return math.ceil(settings.IMMICH_THUMBNAIL_DEADLINE_SECONDS) + 5
+
+
+def immich_thumbnail_response(account: ImmichAccount, asset_id: str) -> HttpResponse:
+    """Serve one Immich thumbnail from the cache, or fetch it inside this process's and this account's slots.
+
+    Shared by the pin picker and the pin-suggestion cards, which differ only in how they authorise the asset.
+
+    Args:
+        account: The requesting profile's own Immich account.
+        asset_id: The asset whose thumbnail to serve.
+
+    Returns:
+        The thumbnail; 503 with Retry-After when either bound is full; 502 when the fetch failed.
+    """
+    cache_key = f"ul_immich_thumb_{account.pk}_{asset_id}"
+    label = f"Immich thumbnail {asset_id}"
+    cached = bounded_cache.get_or_none(cache_key, label=label)
+    if cached is not None:
+        content, content_type = cached
+        return mark_private_media(proxied_media_response(content, content_type))
+
+    with ImmichThumbnailSlots.hold() as process_slot:
+        if not process_slot:
+            return retry_later_response(_THUMBNAIL_RETRY_SECONDS)
+        with ImmichProfileSlots.hold(account.profile_id) as account_slot:
+            if not account_slot:
+                return retry_later_response(_THUMBNAIL_RETRY_SECONDS)
+            try:
+                content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
+            except GatewayRequestError:
+                return HttpResponse(status=502)
+    # `size=thumbnail` is a request, not a guarantee, so what comes back is not assumed to fit.
+    bounded_cache.set_if_small(cache_key, content, content_type, _THUMBNAIL_CACHE_TTL, label=label)
+    return mark_private_media(proxied_media_response(content, content_type))
 
 
 class PinImmichImportView(LoginRequiredMixin, View):
@@ -277,12 +402,12 @@ class PinImmichImportView(LoginRequiredMixin, View):
         asset_ids = request.POST.getlist("asset_ids")
         if not asset_ids:
             return HttpResponse('<p class="immich-import-error">Select at least one photo to import.</p>', status=400)
-        if not ImmichAccount.objects.filter(profile=profile).exists():
+        if ImmichAccount.objects.get_for_profile(profile) is None:
             return HttpResponse('<p class="immich-import-error">Immich is not connected.</p>', status=400)
 
         from urbanlens.dashboard.tasks import import_immich_photos
 
-        result = safely_enqueue_task(import_immich_photos, pin.pk, profile.pk, asset_ids)
+        result = safely_enqueue_task(import_immich_photos, pin.pk, profile.pk, asset_ids, durable=False)
         if result is None:
             return render(request, _PROGRESS_PARTIAL, {"pin": pin, "state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
         return render(request, _PROGRESS_PARTIAL, {"pin": pin, "task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting import..."})

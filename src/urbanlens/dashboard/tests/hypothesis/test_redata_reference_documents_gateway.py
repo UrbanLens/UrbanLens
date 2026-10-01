@@ -1,12 +1,4 @@
-"""Tests for the REData-backed reference-document media providers (Smithsonian,
-Library of Congress, Internet Archive) -
-``services.apis.locations.redata_reference_documents_gateway``.
-
-Mirrors ``test_redata_context_gateway.py``'s conventions: a mocked ``session``
-for the gateway-level tests (no DB, no network), and a mocked
-``RedataReferenceDocumentsGateway.search`` for the provider-level tests, since
-those only care about turning a result dict into a ``MediaItem``.
-"""
+"""Tests for the REData-backed reference-document media providers (Smithsonian, Library of Congress, Internet Archive) - ``services.apis.locations.redata_reference_documents_gateway``."""
 
 from __future__ import annotations
 
@@ -27,12 +19,6 @@ from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gate
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 
-    # See test_redata_media_gateway.py's identical trick: gives the mixin's own
-    # methods real assertX()/provider_cls typing under mypy without unittest
-    # actually discovering and running _ProviderMediaMappingMixin on its own
-    # (it has no provider_cls/redata_provider/display_name set) - a
-    # unittest.TestCase subclass is collected by class regardless of name, so
-    # the real base must stay `object` at runtime.
     _MixinBase = SimpleTestCase
 else:
     _MixinBase = object
@@ -123,7 +109,15 @@ class _ProviderMediaMappingMixin(_MixinBase):
         mock_search.assert_not_called()
 
     def test_maps_title_url_and_thumbnail(self) -> None:
-        results = [{"title": "The ruins", "url": "https://example.test/a", "thumbnail_url": "https://example.test/a-thumb", "date_text": "c. 1890", "license": "Public Domain"}]
+        results = [
+            {
+                "title": "The ruins",
+                "url": "https://example.test/a",
+                "thumbnail_url": "https://example.test/a-thumb",
+                "date_text": "c. 1890",
+                "license": "Public Domain",
+            }
+        ]
         items, _ = self._items(results)
         self.assertEqual(len(items), 1)
         item = items[0]
@@ -153,7 +147,11 @@ class _ProviderMediaMappingMixin(_MixinBase):
     def test_a_gateway_failure_propagates_rather_than_being_swallowed(self) -> None:
         with (
             mock.patch.object(RedataReferenceDocumentsGateway, "__post_init__", return_value=None),
-            mock.patch.object(RedataReferenceDocumentsGateway, "search", side_effect=LocationContextUnavailableError("source_error", "down")),
+            mock.patch.object(
+                RedataReferenceDocumentsGateway,
+                "search",
+                side_effect=LocationContextUnavailableError("source_error", "down"),
+            ),
             pytest.raises(LocationContextUnavailableError),
         ):
             list(self.provider_cls()._generate_media("Bannerman Castle"))

@@ -1,7 +1,5 @@
-"""Regression tests for UL-150: pins imported with a new "create category" label
+"""Regression tests for UL-150: pins imported with a new "create category" label"""
 
-must actually be added to that label, not just create it unattached.
-"""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -11,7 +9,6 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
@@ -21,7 +18,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LE
 
 
 class ImportPreviewStreamingLabelAssignmentTests(TestCase):
-    """GoogleMapsGateway.import_preview_streaming() attaches labels to imported pins."""
+    """GoogleMapsGateway.iter_confirmed_import_events() attaches labels to imported pins."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -29,7 +26,7 @@ class ImportPreviewStreamingLabelAssignmentTests(TestCase):
         self.gateway = GoogleMapsGateway(api_key="test-key")
 
     def _run(self, confirmed_lists: list[dict]) -> list[dict]:
-        return list(self.gateway.import_preview_streaming(confirmed_lists, self.profile, auto_tag=False))
+        return list(self.gateway.iter_confirmed_import_events(confirmed_lists, self.profile, auto_tag=False))
 
     def test_newly_created_category_label_is_attached_to_pin(self) -> None:
         self._run(
@@ -89,7 +86,7 @@ class ImportPreviewStreamingLabelAssignmentTests(TestCase):
 class ImportPreviewDescriptionLengthTests(TestCase):
     """_preview_pins() must not silently truncate descriptions that later get saved verbatim.
 
-    The confirm/save step (import_preview_streaming) re-uses the exact dict
+    The confirm/save step (iter_confirmed_import_events) re-uses the exact dict
     _preview_pins() built for the client-facing preview - it never re-parses the
     original file. A tight, display-oriented cutoff there used to permanently
     truncate every imported pin's description to 500 characters, even though the
@@ -119,7 +116,7 @@ class ImportPreviewDescriptionLengthTests(TestCase):
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         list(
-            self.gateway.import_preview_streaming(
+            self.gateway.iter_confirmed_import_events(
                 [{"stem": "", "create_category": False, "label_ids": [], "pins": preview}],
                 self.profile,
                 auto_tag=False,
@@ -131,22 +128,14 @@ class ImportPreviewDescriptionLengthTests(TestCase):
 
 
 class ImportPreviewLegacyRepairFlagTests(TestCase):
-    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin,
-    or whose own coordinates are simply untrustworthy.
+    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin, or whose own coordinates are simply untrustworthy.
 
-    Regression coverage for the bug where re-importing to trigger the TEMPORARY
-    legacy CID coordinate repair (see services.apis.locations.legacy_cid_coordinate_fix)
-    never worked: the preview step's client-side "already on your map" check
-    compared the same S2-derived (lat, lng) guess that originally mis-placed the
-    pin against the user's existing pins, found that same legacy pin sitting
-    right there, and pre-deselected the record - so it was never sent to the
-    server-side repair at all. needs_repair tells the client to skip that check.
-
-    Also covers the broader, independent TEMPORARY condition: any record whose
-    own cid came from the imprecise S2-cell URL guess (_csv_row_iter's
-    "s2_guess") is force-selected even when no specific legacy pin match is
-    found - not every affected row still has one to find.
-    """
+    Regression coverage for the bug where re-importing to trigger the TEMPORARY legacy CID coordinate repair
+    (see services.apis.locations.legacy_cid_coordinate_fix) never worked: the preview step's client-side
+    "already on your map" check compared the same S2-derived (lat, lng) guess that originally mis-placed the pin
+    against the user's existing pins, found that same legacy pin sitting right there, and pre-deselected the
+    record - so it was never sent to the server-side repair at all. needs_repair tells the client to skip that
+    check."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -189,32 +178,57 @@ class ImportPreviewLegacyRepairFlagTests(TestCase):
     def test_flags_a_record_whose_cid_came_from_the_imprecise_s2_guess(self) -> None:
         """TEMPORARY: force-selected on its own merits - no matching legacy pin
         needed, since not every affected row still has one to find."""
-        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999, "s2_guess": True}]
+        raw_pins = [
+            {
+                "latitude": 41.0,
+                "longitude": -75.0,
+                "name": "Brand New Spot",
+                "description": "",
+                "cid": 999999,
+                "s2_guess": True,
+            }
+        ]
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         self.assertTrue(preview[0].get("needs_repair"))
 
     def test_does_not_flag_a_record_whose_cid_did_not_come_from_the_s2_guess(self) -> None:
-        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999, "s2_guess": False}]
+        raw_pins = [
+            {
+                "latitude": 41.0,
+                "longitude": -75.0,
+                "name": "Brand New Spot",
+                "description": "",
+                "cid": 999999,
+                "s2_guess": False,
+            }
+        ]
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         self.assertNotIn("needs_repair", preview[0])
 
 
 class ImportPreviewMapsUrlPassthroughTests(TestCase):
-    """_preview_pins() carries a row's source Google Maps URL through to the preview
-    dict unchanged - not displayed, but re-used by a deferred REData lookup
-    (cid_resolution.resolve_cids), which resolves via the place's own URL faster
-    and more reliably than the bare cid alone. See GoogleMapsGateway._csv_row_iter.
-    """
+    """_preview_pins() carries a row's source Google Maps URL through to the preview dict unchanged - not displayed, but re-used by a deferred REData lookup (cid_resolution.resolve_cids), which resolves via the place's own URL faster and more reliably than the bare cid alone. See GoogleMapsGateway._csv_row_iter."""
 
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make("auth.User").profile
 
     def test_maps_url_is_carried_through_to_the_preview_dict(self) -> None:
-        url = "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"
-        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Black Point Ruins", "description": "", "cid": 0x59AC8820518A7E79, "maps_url": url}]
+        url = (
+            "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"
+        )
+        raw_pins = [
+            {
+                "latitude": 41.0,
+                "longitude": -75.0,
+                "name": "Black Point Ruins",
+                "description": "",
+                "cid": 0x59AC8820518A7E79,
+                "maps_url": url,
+            }
+        ]
 
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
@@ -240,8 +254,15 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
 
     def _run(self, description: str, *, name: str = "Old Mill", lat: float = 40.0, lng: float = -74.0):
         return list(
-            self.gateway.import_preview_streaming(
-                [{"stem": "", "create_category": False, "label_ids": [], "pins": [{"name": name, "lat": lat, "lng": lng, "description": description}]}],
+            self.gateway.iter_confirmed_import_events(
+                [
+                    {
+                        "stem": "",
+                        "create_category": False,
+                        "label_ids": [],
+                        "pins": [{"name": name, "lat": lat, "lng": lng, "description": description}],
+                    }
+                ],
                 self.profile,
                 auto_tag=False,
             ),
@@ -250,7 +271,7 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
     def test_html_is_stripped_from_the_saved_description(self) -> None:
         # The <img> makes the importer try to materialize the photo, which fetches
         # the URL. Unmocked, that reaches the real internet: the suite's network
-        # guard raises, `import_preview_streaming` catches RuntimeError and yields
+        # guard raises, `iter_confirmed_import_events` catches RuntimeError and yields
         # "Import failed unexpectedly", and this test still passed because the pin
         # was already created by then - so it was asserting against a *failed*
         # import. Mocked the same way test_img_src_becomes_a_pin_photo_not_a_link
@@ -289,7 +310,9 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
         self.assertEqual(fake_image.pin, pin)
 
     def test_extras_are_not_applied_when_merging_into_an_existing_pin(self) -> None:
-        existing, _created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, defaults={"name": "Existing Pin"})
+        existing, _created = Pin.objects.get_nearby_or_create(
+            40.0, -74.0, self.profile, defaults={"name": "Existing Pin"}
+        )
         self._run('<a href="https://example.com/story">link</a>', name="Old Mill", lat=40.0, lng=-74.0)
         existing.refresh_from_db()
         self.assertEqual(existing.links.count(), 0)
@@ -297,10 +320,7 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
 
 
 class ImportPreviewNamesBlankPinOnReimportTests(TestCase):
-    """UL-207: a pin imported without a name should pick one up from a later
-    re-import of the same coordinates (e.g. Google Takeout's Labelled Places),
-    since get_nearby_or_create's `defaults` are only ever applied when
-    creating a brand-new row, never to an existing one it merges into."""
+    """Google Takeout's Labelled Places), since get_nearby_or_create's `defaults` are only ever applied when creating a brand-new row, never to an existing one it merges into."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -309,8 +329,15 @@ class ImportPreviewNamesBlankPinOnReimportTests(TestCase):
 
     def _import(self, name: str) -> list[dict]:
         return list(
-            self.gateway.import_preview_streaming(
-                [{"stem": "", "create_category": False, "label_ids": [], "pins": [{"name": name, "lat": 40.0, "lng": -74.0, "description": ""}]}],
+            self.gateway.iter_confirmed_import_events(
+                [
+                    {
+                        "stem": "",
+                        "create_category": False,
+                        "label_ids": [],
+                        "pins": [{"name": name, "lat": 40.0, "lng": -74.0, "description": ""}],
+                    }
+                ],
                 self.profile,
                 auto_tag=False,
             ),

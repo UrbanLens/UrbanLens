@@ -1,10 +1,4 @@
-"""Tests that direct-message photo uploads flow through the shared photo pipeline.
-
-Photos attached to DMs are uploads like any other: the upload endpoint must
-queue ``process_image_upload`` (EXIF GPS/capture-time extraction, location
-resolution, visit suggestion), and DM-attached images must appear in the
-uploader's Memories gallery and organize queue rather than being excluded.
-"""
+"""Tests that direct-message photo uploads flow through the shared photo pipeline."""
 
 from __future__ import annotations
 

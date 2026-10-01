@@ -1,15 +1,4 @@
-"""Query-count regression guards for the highest-traffic pages.
-
-Amplification has been found three times in this codebase - the notification
-dropdown's reverse-OneToOne reads, the Memories trip source re-deriving each
-trip's dates, SpotGuessr re-running eligibility per retry attempt - and every
-one was invisible to inspection and obvious to a counter. So these assert the
-shape rather than a magic number: build N items, count, add one more, count
-again, and require the delta to be zero.
-
-A page costing a fixed 40 queries is not an N+1 and is not what these catch;
-they only fail when cost scales with content.
-"""
+"""Query-count regression guards for the highest-traffic pages."""
 
 from __future__ import annotations
 
@@ -52,12 +41,9 @@ class _AmplificationTestCase(TestCase):
     def assert_flat(self, build_one, measure, *, baseline: int = 3, extra: int = 3) -> None:
         """Assert the query count does not grow when ``extra`` more items are added.
 
-        A warm-up call is measured and discarded first: the first request of a test
-        populates per-process caches (the SiteSettings memo, session and permission
-        lookups), so comparing against it reports a *decrease* and tells you nothing
-        about scaling. Growth is what matters, so the assertion is one-sided - a page
-        getting cheaper is never the bug being hunted here.
-        """
+        A warm-up call is measured and discarded first: the first request of a test populates per-process caches
+        (the SiteSettings memo, session and permission lookups), so comparing against it reports a *decrease*
+        and tells you nothing about scaling."""
         for _ in range(baseline):
             build_one()
         measure()  # warm-up, deliberately not counted
@@ -84,6 +70,24 @@ class MapPinPayloadAmplificationTests(_AmplificationTestCase):
     """The map's pin payload - the single highest-traffic serialization in the app."""
 
     def _pin_with_labels(self) -> Pin:
+        """A pin carrying the profile's labels - the same ones every time.
+
+        Minting a fresh pair per pin measured two things at once: the payload's
+        cost per *pin*, which is what this asserts, and the cost of a label the
+        per-profile label resolution has not seen before, which is a fixed pair
+        of batched queries however many labels are new. The second showed up as
+        growth (2 queries, then 4) on a fixture that grows both at once.
+        """
+        if not hasattr(self, "_shared_labels"):
+            self._shared_labels = [
+                baker.make(Label, profile=self.profile, kind="tag"),
+                baker.make(Label, profile=self.profile, kind="category"),
+            ]
+        pin = baker.make(Pin, profile=self.profile, location=self._next_location())
+        pin.labels.add(*self._shared_labels)
+        return pin
+
+    def _pin_with_its_own_labels(self) -> Pin:
         pin = baker.make(Pin, profile=self.profile, location=self._next_location())
         pin.labels.add(baker.make(Label, profile=self.profile, kind="tag"))
         pin.labels.add(baker.make(Label, profile=self.profile, kind="category"))
@@ -99,9 +103,38 @@ class MapPinPayloadAmplificationTests(_AmplificationTestCase):
 
         self.assert_flat(self._pin_with_labels, measure)
 
+    def test_it_is_flat_in_label_count_too(self) -> None:
+        """A label nobody has seen costs a fixed pair of batched reads, not one per label.
+
+        The half the test above deliberately holds still, asserted on its own so
+        holding it still does not lose the coverage.
+        """
+        service = MapPinPayloadService(self.profile)
+
+        def measure() -> None:
+            service.all(Pin.objects.filter(profile=self.profile))
+
+        for _ in range(3):
+            self._pin_with_its_own_labels()
+        measure()  # warm-up, as assert_flat does
+
+        with CaptureQueriesContext(connection) as first:
+            measure()
+        for _ in range(6):
+            self._pin_with_its_own_labels()
+        with CaptureQueriesContext(connection) as second:
+            measure()
+
+        before, after = len(first.captured_queries), len(second.captured_queries)
+        self.assertLessEqual(
+            after - before,
+            2,
+            f"twelve new labels cost {after - before} more queries than four did, so label resolution is not batched",
+        )
+
 
 class PinDetailPageAmplificationTests(_AmplificationTestCase):
-    """The pin detail page against its own content - labels, images, comments, visits."""
+    """The Private Pin page against its own content - labels, images, comments, visits."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -140,10 +173,8 @@ class PinDetailPageAmplificationTests(_AmplificationTestCase):
 class WikiPageAmplificationTests(_AmplificationTestCase):
     """The community wiki page against its own content.
 
-    The viewer needs a pin at the location: wiki visibility is gated on discovery
-    (``location_visible_to``), so without one every request here would 404 and the
-    measurement would be of an error page.
-    """
+    The viewer needs a pin at the location: wiki visibility is gated on discovery (``location_visible_to``), so
+    without one every request here would 404 and the measurement would be of an error page."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -176,13 +207,21 @@ class WikiPageAmplificationTests(_AmplificationTestCase):
 
         def add_link() -> None:
             counter["n"] += 1
-            baker.make(WikiLink, wiki=self.wiki, name=f"Link {counter['n']}", url=f"https://example.test/{counter['n']}", created_by=self.profile)
+            baker.make(
+                WikiLink,
+                wiki=self.wiki,
+                name=f"Link {counter['n']}",
+                url=f"https://example.test/{counter['n']}",
+                created_by=self.profile,
+            )
 
         self.assert_flat(add_link, self._measure)
 
     def test_the_page_is_flat_in_edit_history_count(self) -> None:
         def add_edit() -> None:
-            baker.make(WikiEdit, wiki=self.wiki, editor=baker.make(User).profile, changes={"name": {"from": "a", "to": "b"}})
+            baker.make(
+                WikiEdit, wiki=self.wiki, editor=baker.make(User).profile, changes={"name": {"from": "a", "to": "b"}}
+            )
 
         self.assert_flat(add_edit, self._measure)
 
@@ -193,7 +232,9 @@ class TripDetailAmplificationTests(_AmplificationTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.client.force_login(self.user)
-        self.trip = baker.make(Trip, creator=self.profile, allow_edit_activities="everyone", allow_add_activities="everyone")
+        self.trip = baker.make(
+            Trip, creator=self.profile, allow_edit_activities="everyone", allow_add_activities="everyone"
+        )
         self.trip.profiles.add(self.profile)
         self.url = reverse("trips.detail", kwargs={"trip_slug": self.trip.slug})
 
@@ -205,7 +246,13 @@ class TripDetailAmplificationTests(_AmplificationTestCase):
 
         def add_activity() -> None:
             counter["n"] += 1
-            baker.make(TripActivity, trip=self.trip, title=f"Stop {counter['n']}", location=self._next_location(), order=counter["n"])
+            baker.make(
+                TripActivity,
+                trip=self.trip,
+                title=f"Stop {counter['n']}",
+                location=self._next_location(),
+                order=counter["n"],
+            )
 
         self.assert_flat(add_activity, self._measure)
 

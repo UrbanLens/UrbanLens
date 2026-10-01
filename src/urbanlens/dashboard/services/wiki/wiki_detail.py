@@ -1,15 +1,4 @@
-"""Full wiki-detail payload for the external API's ``GET /wikis/{location_slug}/``.
-
-Deliberately shaped like ``services.pins.pin_detail.build_pin_detail`` - same
-module layout, same ``_isoformat_or_none``/``_boundary_geojson`` helpers, same
-"assemble a plain JSON-safe dict, let the serializer document it" contract - so
-a reader who has understood one immediately understands the other.
-
-The privacy-sensitive parts are delegated rather than reimplemented:
-``services.wiki.community_counts.wiki_community_summary`` owns the pinned-user count
-and the ``first_pinned`` fuzzing, and ``WikiStatVote.objects.composite`` owns
-the per-field vote counts. Nothing here recomputes either.
-"""
+"""Full wiki-detail payload for the external API's ``GET /wikis/{location_slug}/``."""
 
 from __future__ import annotations
 
@@ -50,18 +39,14 @@ def _boundary_geojson(wiki: Wiki) -> dict[str, Any] | None:
 
 def masked_editor_name(profile: Profile | None, viewer: Profile) -> str | None:
     """Resolve an editor's display name as *viewer* is permitted to see it.
-
-    Wiki content is authored by many people a viewer may have no standing to
-    see, so every attributed name on this surface goes through the same
-    identity-visibility masking the comment thread uses.
+    Wiki content is authored by many people a viewer may have no standing to see, so every attributed name on this surface goes through the same identity-visibility masking the comment thread uses.
 
     Args:
         profile: The attributed profile, or None for a system/deleted author.
         viewer: The requesting profile.
 
     Returns:
-        The masked display name, or None when there is no attributed author.
-    """
+        The masked display name, or None when there is no attributed author."""
     if profile is None:
         return None
     identity = resolve_visible_identities(viewer, [profile]).get(profile.pk) or {}
@@ -72,19 +57,12 @@ def masked_editor_name(profile: Profile | None, viewer: Profile) -> str | None:
 def _article_summary(wiki: Wiki, profile: Profile) -> dict[str, Any] | None:
     """Summarize the wiki's article without shipping its full body.
 
-    Concealed for a viewer who is gated, in every part: the body it counts
-    words from, the revision it names as the edit baseline, and who it credits.
-    A summary is a description of content, so leaving it unconcealed beside
-    concealed fields reports the size and recency of a write-up the same
-    response refuses to show.
-
     Args:
         wiki: The wiki whose article to summarize.
         profile: The requesting profile, for author masking.
 
     Returns:
-        A summary dict, or None when this viewer has no article to see.
-    """
+        A summary dict, or None when this viewer has no article to see."""
     from urbanlens.dashboard.services.wiki.articles import get_article
     from urbanlens.dashboard.services.wiki.concealment import conceal_article, is_concealed, visible_rows
 
@@ -120,9 +98,7 @@ def _stats(wiki: Wiki, profile: Profile, *, conceal: bool = False) -> dict[str, 
         conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
-        ``{field: {rounded, exact, count, my_vote}}`` for every stat field.
-        ``count`` is already privacy-fuzzed by the queryset's composite method.
-    """
+        ``{field: {rounded, exact, count, my_vote}}`` for every stat field."""
     stats: dict[str, dict[str, Any]] = {}
     for field in WikiStatField.values:
         composite = WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal, viewer=profile)
@@ -139,20 +115,14 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
     """Assemble the full detail payload for one wiki.
 
     Args:
-        wiki: The wiki to serialize. Caller is responsible for the visibility
-            check - this never gates access itself (see
-            ``services.wiki.wiki_access.resolve_visible_wiki``, which every caller
-            must go through first).
+        wiki: The wiki to serialize.
         location: The wiki's Location, already resolved by that same call.
-        profile: The requesting profile, needed for own-vote lookup, author
-            masking, and the concealment decision.
+        profile: The requesting profile, needed for own-vote lookup, author masking, and the concealment decision.
 
     Returns:
-        A JSON-serializable dict covering identity, description, dates,
-        security, coordinates, boundary, aliases, links, community stats and
-        counts, the article summary, and the comment count.
-    """
+        A JSON-serializable dict covering identity, description, dates, security, coordinates, boundary, aliases, links, community stats and counts, the article summary, and the comment count."""
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary, concealment_active
+    from urbanlens.dashboard.services.wiki.wiki_edits import wiki_revision_marker
 
     conceal = concealment_active(wiki, profile)
     # Field values come from `shown`; row sets are filtered separately. Reading
@@ -167,7 +137,11 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
     aliases = conceal_rows(wiki.aliases.all(), profile) if conceal else wiki.aliases.all()
     links = wiki.links.order_by("order", "pk")
     links = conceal_rows(links, profile) if conceal else links
-    comments = conceal_rows(wiki.comments.all(), profile) if conceal else wiki.comments.all()
+    from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.services.comments.comments import visible_comment_count
+
+    wiki_comments = Comment.objects.filter(wiki=wiki)
+    comments = conceal_rows(wiki_comments, profile) if conceal else wiki_comments
 
     payload: dict[str, Any] = {
         # The navigable identifier: wiki routes resolve a Location, so this is
@@ -175,6 +149,8 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "location_slug": location.ensure_slug(),
         "wiki_slug": wiki.slug or None,
         "uuid": str(wiki.uuid),
+        # Sent back as a PATCH's base_revision_id, so an edit over a newer write is refused rather than applied.
+        "revision": wiki_revision_marker(wiki),
         "name": shown.name,
         "description": shown.description or None,
         "pin_type": shown.pin_type,
@@ -185,7 +161,7 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "latitude": float(latitude) if latitude is not None else None,
         "longitude": float(longitude) if longitude is not None else None,
         "address": wiki.address or None,
-        "cover_photo_url": cover_photo.image.url if cover_photo is not None and cover_photo.image else None,
+        "cover_photo_url": cover_photo.file_url if cover_photo is not None else None,
         "boundary": _boundary_geojson(wiki),
         # is_current comes from the shared helper rather than a local comparison
         # so this payload cannot drift from WikiAliasSerializer, which documents
@@ -194,7 +170,9 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "links": [{"id": link.pk, "name": link.name, "url": link.url, "wayback_url": link.wayback_url or None, "order": link.order} for link in links],
         "stats": _stats(wiki, profile, conceal=conceal),
         "article": _article_summary(wiki, profile),
-        "comment_count": comments.count(),
+        # Gated, so the number cannot disagree with the thread the viewer is
+        # shown - see services.comments.comments.visible_comment_count.
+        "comment_count": visible_comment_count(comments, profile),
         "created": _isoformat_or_none(wiki.created),
         "updated": _isoformat_or_none(wiki.updated),
     }

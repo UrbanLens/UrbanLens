@@ -1,51 +1,5 @@
 """Creating a pin share, and answering one you received.
-
-Two halves of one lifecycle:
-
-**Creation.** The standalone share dialog
-(``controllers.pin_sharing.PinShareCreateView``) has its own richer flow
-(custom names, bundled child pins, photo selection) and is left as-is;
-:func:`create_pin_share` holds just the create-and-notify core so a second,
-simpler caller (chat) doesn't have to duplicate the friends-only rule or the
-notification wiring.
-
-**Response.** :func:`apply_pin_share_response` was extracted from
-``controllers.pin_sharing`` so the surfaces that let a recipient answer a share
-- the standalone share page and notification dropdown
-(``controllers.pin_sharing.PinShareRespondView``), the DM share card
-(``controllers.direct_message_shares``), the group-chat share card
-(``controllers.group_chats``) and the external API - all mutate the share
-through one implementation. The decision is not a formality: accepting
-materialises a real Pin on the recipient's map, re-creates the sharer's whole
-child hierarchy underneath it, and stamps the provenance link that every future
-reshare of that place chains under. Four copies of that would drift, and the
-first symptom would be a broken exposure chain nobody can reconstruct after the
-fact.
-
-**The provenance rule, stated here because getting it wrong is silent.**
-
-The project-wide instruction is that any new pin/location share path calls
-``resolve_origin_share`` + ``record_share_exposure``. That rule is about *share
-creation* - the moment a place is revealed to someone who could not previously
-see it - and :func:`create_pin_share` duly obeys it. Accepting is **not** that
-moment: the exposure already fired when the ``PinShare`` row was created,
-because the recipient learned the location existed as soon as the share landed
-in their inbox, whether or not they ever pressed Accept.
-
-Calling it again on accept would write a *second* ``LocationExposure`` row for
-the same (profile, location) pair, and
-``services.sharing.share_provenance.resolve_origin_share`` resolves lineage by picking
-the **earliest** exposure. A duplicate is therefore not merely redundant
-book-keeping: it inflates exposure counts and, once the original is ever
-removed or the ordering ties, it can re-parent a reshare chain onto the wrong
-ancestor - corrupting exactly the audit trail the rule exists to protect.
-
-Acceptance records lineage the other way instead: the new Pin carries
-``source_share`` (set in :func:`create_pin_from_share`), which is the first
-thing ``resolve_origin_share`` consults. The chain is complete without a second
-exposure row, and any future change here must keep the number of
-``LocationExposure`` rows unchanged across an accept.
-"""
+Exposure fires once at creation; acceptance records lineage via ``source_share``, never a second ``LocationExposure`` row."""
 
 from __future__ import annotations
 
@@ -53,30 +7,37 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.urls import reverse
+from django.utils import timezone
 
 from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
-from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
+from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.sharing.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 from urbanlens.dashboard.services.social.connections import are_connections
 
 
 class PinSharePermissionError(PermissionError):
-    """A pin share was refused because sender and recipient aren't connected.
-
-    ``safe_message`` is safe to surface directly to the caller.
-    """
-
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+    """A pin share was refused: not connected, or not the sender's to share."""
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from urbanlens.dashboard.models.markup.model import MarkupMap
     from urbanlens.dashboard.models.profile.model import Profile
+
+
+def require_pin_owner(sender: Profile, pin: Pin) -> None:
+    """Refuse a share of a pin ``sender`` does not own.
+
+    Raises:
+        PinSharePermissionError: ``pin`` belongs to someone else.
+    """
+    if pin.profile_id != sender.pk:
+        raise PinSharePermissionError(f"profile {sender.pk} attempted to share pin {pin.pk}, which it does not own")
 
 
 def recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
@@ -94,80 +55,131 @@ def recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
     return find_profile_pin_near_location(profile.pk, source.location)
 
 
-def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: str | None = None, shared_name: str | None = None) -> PinShare:
-    """Create a PinShare (and its notification), enforcing the friends-only sharing rule.
-
-    Args:
-        sender: The profile sharing the pin (must own it).
-        recipient: The profile the pin is being shared with.
-        pin: The pin being shared.
-        message: Optional note to attach.
-        shared_name: Optional override name for the shared pin.
+def _bundle_children(sender: Profile, recipient: Profile, root_share: PinShare, children: list[Pin]) -> int:
+    """Create one bundled child share per pin in ``children``, tied to ``root_share``, skipping any already pending.
 
     Returns:
-        The newly created PinShare.
+        How many bundled shares were created.
+    """
+    already_pending = set(PinShare.objects.pending_pin_ids_for(recipient, children))
+    bundled_count = 0
+    for child in children:
+        if child.pk in already_pending:
+            continue
+        child_share = PinShare.objects.create(
+            pin=child,
+            location=child.location,
+            from_profile=sender,
+            to_profile=recipient,
+            parent_share=resolve_and_stamp_origin_share(child),
+            bundled_with=root_share,
+            status=PinShareStatus.PENDING,
+        )
+        record_share_exposure(child_share)
+        bundled_count += 1
+    return bundled_count
+
+
+def create_pin_share(
+    sender: Profile,
+    recipient: Profile,
+    pin: Pin,
+    *,
+    message: str | None = None,
+    shared_name: str | None = None,
+    image_ids: Iterable[int] = (),
+    markup_map: MarkupMap | None = None,
+    children: Iterable[Pin] = (),
+) -> PinShare:
+    """Create a PinShare, its bundled child shares, and its notification.
+
+    Every rule about what may be offered is checked here rather than trusted from the caller: the pin must be the
+    sender's, only the pin's own photos and descendants travel with it, and an attached map must be the sender's.
+
+    Args:
+        sender: The profile sharing the pin; must own it.
+        recipient: The profile the pin is being shared with; must be a connection of ``sender``.
+        pin: The pin being shared.
+        message: Optional note to attach.
+        shared_name: Optional override name for the shared pin; also kept as an alias on the sender's pin.
+        image_ids: Photos to include; any that are not ``pin``'s own are dropped.
+        markup_map: A map of the sender's to attach.
+        children: Descendant pins to bundle; any that are not under ``pin`` are dropped.
+
+    Returns:
+        The newly created root PinShare.
 
     Raises:
-        PermissionError: If `sender` and `recipient` aren't connected friends.
-    """
-    if recipient.pk == sender.pk or not are_connections(sender, recipient):
-        raise PinSharePermissionError("Pins can only be shared with connected friends.")
+        PinSharePermissionError: Self-share, no connection, a pin or map the sender does not own."""
+    if recipient.pk == sender.pk:
+        raise PinSharePermissionError(f"profile {sender.pk} attempted to share a pin with themselves")
+    require_pin_owner(sender, pin)
+    if markup_map is not None and markup_map.profile_id != sender.pk:
+        raise PinSharePermissionError(f"profile {sender.pk} attempted to attach map {markup_map.pk}, which it does not own")
+    if not are_connections(sender, recipient):
+        raise PinSharePermissionError(f"profile {sender.pk} and profile {recipient.pk} are not connected friends")
 
+    from urbanlens.dashboard.models.aliases.model import PinAlias
+    from urbanlens.dashboard.services.sharing.map_sharing import share_markup_map_with_profile
+
+    child_pks = {child.pk for child in children}
+    bundled = list(pin.descendants().filter(pk__in=child_pks).select_related("location")) if child_pks else []
     already_pinned = recipient_existing_pin(recipient, pin) is not None
-    share = PinShare.objects.create(
-        pin=pin,
-        location=pin.location,
-        from_profile=sender,
-        to_profile=recipient,
-        parent_share=resolve_and_stamp_origin_share(pin),
-        status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
-        message=message,
-        shared_name=shared_name,
-    )
-    record_share_exposure(share)
-    try:
-        pref = recipient.notification_preferences.pin_shared
-    except AttributeError:
-        pref = DeliveryPreference.SITE
+    with transaction.atomic():
+        if shared_name:
+            PinAlias.objects.resolve_or_create(pin, shared_name)
+        share = PinShare.objects.create(
+            pin=pin,
+            location=pin.location,
+            from_profile=sender,
+            to_profile=recipient,
+            parent_share=resolve_and_stamp_origin_share(pin),
+            status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
+            message=message,
+            shared_name=shared_name,
+            markup_map=markup_map,
+        )
+        wanted_images = list(image_ids)
+        if wanted_images:
+            share.images.set(pin.images.filter(pk__in=wanted_images))
+        record_share_exposure(share)
+        if markup_map is not None:
+            share_markup_map_with_profile(sender, recipient, markup_map)
+        bundled_count = _bundle_children(sender, recipient, share, bundled) if bundled else 0
 
+    pref = delivery_preference(recipient, "pin_shared")
     if pref != DeliveryPreference.NONE:
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
         base_message = f"{sender_name} shared {pin.display_label} with you."
+        if bundled_count:
+            base_message += f" It comes with {bundled_count} child pin{'s' if bundled_count != 1 else ''}."
         if already_pinned:
             base_message += " You already have this location pinned."
-        notification = NotificationLog.objects.notify(
-            profile=recipient,
+        notification = deliver_notification(
+            recipient,
+            pref,
+            title="Pin shared with you",
+            message=base_message,
+            url=reverse("pin.share.detail", kwargs={"share_id": share.pk}),
             source_profile=sender,
             status=Status.UNREAD,
             importance=Importance.MEDIUM,
             notification_type=NotificationType.PIN_SHARED,
-            title="Pin shared with you",
-            message=base_message,
-            url=reverse("pin.share.detail", kwargs={"share_id": share.pk}),
         )
-        share.notification = notification
-        share.save(update_fields=["notification", "updated"])
+        if notification is not None:
+            share.notification = notification
+            share.save(update_fields=["notification", "updated"])
     return share
 
 
 def _official_name_for(location) -> str | None:
     """A name for a shared pin that does not come from the person sharing it.
 
-    What somebody called their own pin is their business - "my old school" says
-    more about them than about the building. So the sharer either names the share
-    deliberately (``PinShare.shared_name``) or the copy falls back to what the
-    outside world calls the place: the location's externally-sourced
-    ``official_name``, else an alias on its wiki that came from a provider rather
-    than from a person.
-
-    User-authored aliases are excluded for the same reason the pin's own name is.
-
     Args:
         location: The location the shared pin sits at, or None.
 
     Returns:
-        An official name, or None to let the pin fall back to its location.
-    """
+        An official name, or None to let the pin fall back to its location."""
     if location is None:
         return None
     if location.official_name:
@@ -182,22 +194,12 @@ def _official_name_for(location) -> str | None:
 def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin:
     """Materialise a recipient-side Pin from an accepted share.
 
-    ``source_share`` is set on the new pin, and that is what makes the
-    recipient's own future shares of this place chain under the share they
-    received it through - see this module's docstring for why that, rather than
-    a second ``LocationExposure`` row, is how acceptance records lineage.
-
     Args:
-        share: The accepted share to copy the pin from. Location-only shares
-            (no sender pin, e.g. coordinates detected in a DM) produce a bare
-            pin at the shared location instead of a property copy.
-        parent_pin: When the share is part of a "pin + child pins" bundle, the
-            recipient-side pin the new pin should nest under.
+        share: The accepted share to copy the pin from.
+        parent_pin: When the share is part of a "pin + child pins" bundle, the recipient-side pin the new pin should nest under.
 
     Returns:
-        The newly created Pin, carrying over every user-visible property
-        (name, icon, labels, notes, scores, security indicators, photos).
-    """
+        The newly created Pin, carrying the site's facts (name, type, dates, security indicators, shared photos) but none of the sender's own relationship to it (icon, colour, labels, notes, ratings)."""
     source = share.pin
     if source is None:
         return Pin.objects.create(
@@ -220,8 +222,6 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         # copied alongside name: it is the only thing stopping the automatic
         # building/parcel classifier from overwriting a type the sender chose.
         pin_type_is_user_provided=source.pin_type_is_user_provided,
-        # effective_icon checks custom_icon before icon, so omitting it silently
-        # changed what the shared pin looked like.
         indoor_outdoor=source.indoor_outdoor,
         date_built=source.date_built,
         date_abandoned=source.date_abandoned,
@@ -235,45 +235,11 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         plywood=source.plywood,
         locked=source.locked,
     )
-    # vulnerability and danger are not copied either: they read like properties of
-    # the place but they are one person's rating of it, which is the owner's side
-    # of the line below.
-    #
-    # The line this whole function is drawn along: facts about the *site* travel,
-    # and the owner's relationship to it does not. Its dates and what was observed
-    # there (fences, alarms, cameras, security, signs, vps, plywood, locked)
-    # describe the place and are what a share is for. Notes, styling, icon,
-    # colour, priority and labels are one person's account of it, and stay with
-    # them.
-    #
-    # The description never travels. It is the owner's personal notes about the
-    # place - what they thought, what they saw, what they mean to do about it -
-    # and there is no way in the product for somebody to consent to passing that
-    # on. Absent a way to ask, the answer is no.
-    #
-    # Not the sharer's labels. A Label belongs to one profile, so setting them
-    # here hung the *sharer's* rows off the *recipient's* pin - which shows one
-    # person's private organising scheme to another and leaves the recipient
-    # holding references they cannot manage. Labels are per-user by design;
-    # copying them is not a privacy question so much as a category error.
-    #
-    # The pin's own styling is not copied either: how somebody chose to colour
-    # their pin is theirs, not part of the place. What travels is what is true
-    # about the site - its dates, and what was observed there (fences, alarms,
-    # cameras, security, signs, vps, plywood, locked).
-    # What travels with a photo, and what does not.
-    #
-    # Not the caption, and not exif_data: the sharer chose to show somebody a
-    # picture, which is not the same as handing over what they wrote about it or
-    # the block behind it - camera serial, timestamps, and the coordinates the
-    # shot was taken from. Consent to the image is not consent to its file.
-    #
-    # Dates, lat/lng and direction do travel, because they are what let the copy
-    # be placed on a map and set in time - the reasons a photo is worth sharing.
-    #
-    # An unattributed photo gets the sharer's name, so the recipient can see where
-    # it came from; one that already credits somebody keeps that credit.
-    shared_images = list(share.images.all())
+    # vulnerability and danger are not copied either: they read like properties of the place but
+    # they are one person's rating of it, which is the owner's side of the line below.
+    # The line this whole function is drawn along: facts about the *site* travel, and the owner's
+    # relationship to it does not.
+    shared_images = list(share.images.exclude(pending_scan=True))
     copied_images = Image.objects.bulk_create(
         [
             Image(
@@ -285,10 +251,10 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
                 # the bytes (see this block's comment above), so it costs the recipient
                 # no storage of their own to charge quota for.
                 quota_exempt_reason=QuotaExemption.SHARED_COPY,
-                # Both of these carry a default that quietly misdescribes the copy when
-                # omitted: source would file a shared Wikimedia photo under the
-                # recipient's own uploads (and into the wrong Media tab), and media_type
-                # would turn a shared video into a photo, which renders as a broken image.
+                # Both of these carry a default that quietly misdescribes the copy when omitted:
+                # source would file a shared Wikimedia photo under the recipient's own uploads (and
+                # into the wrong Media tab), and media_type would turn a shared video into a photo,
+                # which renders as a broken image.
                 source=image.source,
                 media_type=image.media_type,
                 media_source_key=image.media_source_key,
@@ -301,6 +267,10 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
                 direction=image.direction,
                 checksum=image.checksum,
                 taken_at=image.taken_at,
+                # A date, like taken_at above - not the filename it was parsed from
+                # (original_filename is deliberately absent from this list; see this function's
+                # docstring comment on what does and does not travel with a shared photo).
+                filename_taken_at=image.filename_taken_at,
                 file_size=image.file_size,
             )
             for image in shared_images
@@ -312,17 +282,13 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
 
 def _carry_cover_photo(source: Pin, new_pin: Pin, shared_images: list[Image], copied_images: list[Image]) -> None:
     """Point the new pin's cover photo at the recipient's copy of that photo.
-
-    The cover must never reference the sender's row, and a sender who shared only
-    part of their gallery may not have shared the cover at all - in which case the
-    copy correctly has none.
+    The cover must never reference the sender's row, and a sender who shared only part of their gallery may not have shared the cover at all - in which case the copy correctly has none.
 
     Args:
         source: The sender's pin.
         new_pin: The recipient-side pin, already saved.
         shared_images: The sender's image rows, in the order they were copied.
-        copied_images: The recipient's new rows, in the same order.
-    """
+        copied_images: The recipient's new rows, in the same order."""
     if source.cover_photo_id is None:
         return
     for original, copy in zip(shared_images, copied_images, strict=False):
@@ -335,18 +301,12 @@ def _carry_cover_photo(source: Pin, new_pin: Pin, shared_images: list[Image], co
 def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
     """Materialise every pending bundled child share under the accepted root.
 
-    Recreates the sharer's parent/child hierarchy on the recipient's side:
-    each bundled share's new pin nests under the recipient pin created for its
-    source parent (or directly under the accepted root when the parent was the
-    shared pin itself, or wasn't part of the bundle).
-
     Args:
         root_share: The accepted root share of the bundle.
         target_root: The recipient-side pin the root share produced.
 
     Returns:
-        Number of child pins created.
-    """
+        Number of child pins created."""
     # Bundled child shares always carry a pin (see PinShareCreateView's
     # bundle loop) - the pin__isnull filter just makes that invariant local.
     bundled = list(root_share.bundled_shares.filter(status=PinShareStatus.PENDING, pin__isnull=False).select_related("pin", "pin__location"))
@@ -390,66 +350,47 @@ def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
     return len(created)
 
 
+_ALREADY_ANSWERED: dict[str, str] = {
+    PinShareStatus.REJECTED: "You already declined this shared pin.",
+}
+
+
+def _already_answered(share: PinShare) -> tuple[Pin | None, str]:
+    """What an accept or reject that lost to an earlier answer reports: the real outcome."""
+    share.refresh_from_db(fields=["status"])
+    if share.status == PinShareStatus.ACCEPTED:
+        # A retried accept reads exactly like the original success.
+        return find_profile_pin_near_location(share.to_profile_id, share.shared_location), "Pin added to your map."
+    return None, _ALREADY_ANSWERED.get(share.status, "This shared pin has already been handled.")
+
+
 def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, str]:
     """Apply an accept/reject decision to a pending ``share`` and return a status message.
 
-    The single mutation path for every surface that lets a recipient answer a
-    share (see this module's docstring for the list).
-
-    It performs **no** authorization of its own: callers must have already
-    established that the responding profile is ``share.to_profile``, and should
-    do so by scoping the lookup itself
-    (``get_object_or_404(PinShare, pk=..., to_profile=...)``) rather than with a
-    separate permission branch - both because an id belonging to someone else
-    must be indistinguishable from one that does not exist, and because
-    ``PinShare`` ids are sequential integers, so an unscoped caller here is a
-    cross-tenant *write* reachable by counting.
-
-    Deliberately does not call ``record_share_exposure``: that already fired at
-    share creation, and a second call would duplicate the ``LocationExposure``
-    row ``resolve_origin_share`` uses to pick a chain's ancestor. See this
-    module's docstring - it is the most tempting wrong change in this file, and
-    ``test_external_api_pin_shares`` asserts the row count is unchanged across
-    an accept specifically to catch it.
+    Both answers are one guarded transition out of PENDING, so an accept and a reject racing
+    each other settle on whichever committed first, and the other reports that outcome.
 
     Args:
-        share: The share to respond to. Callers still check
-            ``share.status == PinShareStatus.PENDING`` first for the error
-            message, but that check is advisory - accept re-reads the status
-            under a row lock, so a share answered concurrently replays rather
-            than double-applying.
-        action: ``"accept"`` or ``"reject"``. Anything else is a no-op reported
-            as "Unknown action." rather than an exception, because the internal
-            HTMX callers post a raw form field and a typo there must not 500.
+        share: The share to respond to.
+        action: ``"accept"`` or ``"reject"``.
 
     Returns:
-        A ``(target_pin, message)`` tuple. ``target_pin`` is the recipient-side
-        Pin on accept (None otherwise); ``message`` is a human-readable summary
-        suitable for a toast/Django message.
-    """
+        A ``(target_pin, message)`` tuple."""
+    target_pin, message = _respond(share, action)
+    if share.notification_id:
+        from urbanlens.dashboard.services.notifications.notification_center import dismiss_notification
+
+        dismiss_notification(share.to_profile, share.notification_id)
+    return target_pin, message
+
+
+def _respond(share: PinShare, action: str) -> tuple[Pin | None, str]:
     target_pin = None
     if action == "accept":
         with transaction.atomic():
-            # The row is locked and its status re-read *inside* the
-            # transaction. The caller's PENDING check happened before this
-            # call, so two retries of the same accept could both pass it and
-            # both get here: each would find no recipient pin, both would
-            # create one, and the (location, profile) uniqueness constraint
-            # turned the loser into an uncaught IntegrityError - while bundled
-            # children could be materialized twice when a target pin already
-            # existed. Re-reading under the lock makes the second accept a
-            # no-op replay instead.
-            # Only the *status* is read back, and `share` is deliberately not
-            # rebound to the locked instance: callers hold this object and read
-            # `share.status` from it after this returns, so the accepted state
-            # has to land on the instance they already have.
             locked_status = PinShare.objects.select_for_update().filter(pk=share.pk).values_list("status", flat=True).first()
             if locked_status != PinShareStatus.PENDING:
-                # Already answered - report the pin the winner produced, so a
-                # retry is indistinguishable from the original success.
-                share.refresh_from_db(fields=["status"])
-                existing_pin = find_profile_pin_near_location(share.to_profile_id, share.shared_location)
-                return existing_pin, "Pin added to your map."
+                return _already_answered(share)
             target_pin = find_profile_pin_near_location(share.to_profile_id, share.shared_location)
             if target_pin is None:
                 target_pin = create_pin_from_share(share)
@@ -458,12 +399,13 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
             share.save(update_fields=["status", "updated"])
         message = f"Pin added to your map with {bundled_count} child pin{'s' if bundled_count != 1 else ''}." if bundled_count else "Pin added to your map."
     elif action == "reject":
-        share.status = PinShareStatus.REJECTED
-        share.save(update_fields=["status", "updated"])
-        share.bundled_shares.filter(status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED)
+        with transaction.atomic():
+            rejected = PinShare.objects.filter(pk=share.pk, status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED, updated=timezone.now())
+            if not rejected:
+                return _already_answered(share)
+            share.status = PinShareStatus.REJECTED
+            share.bundled_shares.filter(status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED, updated=timezone.now())
         message = "Shared pin rejected."
     else:
         message = "Unknown action."
-    if share.notification_id:
-        NotificationLog.objects.filter(pk=share.notification_id).update(status=Status.READ)
     return target_pin, message

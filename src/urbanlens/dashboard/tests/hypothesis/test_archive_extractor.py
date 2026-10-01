@@ -1,24 +1,15 @@
-"""Tests for archive_extractor service - ZIP/TGZ extraction with security checks.
+"""Tests for archive_extractor service - ZIP/TGZ extraction with security checks."""
 
-Covers:
-- is_archive() magic-byte detection
-- validate_content_type() for JSON, location_history, KML, CSV, My Activity HTML formats
-- extract_archive() for well-formed ZIP and TGZ archives
-- Security: path traversal, symlink skipping, per-file size limit, total size limit,
-  file count limit, compression-ratio (zip bomb) detection
-- _safe_basename() and _extension() helpers
-"""
 from __future__ import annotations
 
-import gzip
 import io
 import json
 import struct
 import tarfile
+from unittest import mock
 import zipfile
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_export.archive_extractor import (
     ExtractionBudget,
@@ -35,6 +26,7 @@ _hyp = hyp_settings(max_examples=40, deadline=None)
 # ---------------------------------------------------------------------------
 # Helpers for building in-memory archives
 # ---------------------------------------------------------------------------
+
 
 def _make_zip(files: dict[str, bytes]) -> bytes:
     """Return a ZIP archive containing *files* (name → content)."""
@@ -60,6 +52,7 @@ def _make_tgz(files: dict[str, bytes]) -> bytes:
 # is_archive
 # ---------------------------------------------------------------------------
 
+
 class IsArchiveTests(SimpleTestCase):
     """is_archive() identifies ZIP and GZIP magic bytes."""
 
@@ -83,9 +76,7 @@ class IsArchiveTests(SimpleTestCase):
     def test_xml_not_archive(self):
         self.assertFalse(is_archive(b"<?xml version"))
 
-    @given(st.binary(min_size=4, max_size=16).filter(
-        lambda b: b[:4] != b"PK\x03\x04" and b[:2] != b"\x1f\x8b"
-    ))
+    @given(st.binary(min_size=4, max_size=16).filter(lambda b: b[:4] != b"PK\x03\x04" and b[:2] != b"\x1f\x8b"))
     @_hyp
     def test_random_non_archive_bytes_return_false(self, data: bytes):
         self.assertFalse(is_archive(data))
@@ -94,6 +85,7 @@ class IsArchiveTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # _safe_basename
 # ---------------------------------------------------------------------------
+
 
 class SafeBasenameTests(SimpleTestCase):
     """_safe_basename rejects path-traversal and absolute paths."""
@@ -122,6 +114,7 @@ class SafeBasenameTests(SimpleTestCase):
 # _extension
 # ---------------------------------------------------------------------------
 
+
 class ExtensionTests(SimpleTestCase):
     """_extension returns lowercase extension without leading dot."""
 
@@ -144,6 +137,7 @@ class ExtensionTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # validate_content_type
 # ---------------------------------------------------------------------------
+
 
 class ValidateContentTypeTests(SimpleTestCase):
     """validate_content_type identifies format from file content."""
@@ -204,17 +198,19 @@ class ValidateContentTypeTests(SimpleTestCase):
     def test_csv_with_utf8_bom_and_only_latitude_longitude_columns(self):
         """Excel's UTF-8 CSV export prefixes a BOM on the first header cell.
 
-        When that first cell is ``latitude``, the BOM used to glue itself to the
-        column name (``\\ufefflatitude``), so format sniffing missed both
-        coordinate columns and rejected the whole file. Wider CSVs that put
-        ``name`` (or anything else) before the coordinate columns still worked,
-        which made the failure look like "lat/lng-only CSVs aren't supported".
-        """
+        Wider CSVs that put ``name`` (or anything else) before the coordinate columns still worked, which made
+        the failure look like "lat/lng-only CSVs aren't supported"."""
         data = "\ufefflatitude,longitude\n42.3601,-71.0589".encode("utf-8")
         self.assertEqual(validate_content_type("export.csv", data), "csv")
 
     def test_csv_with_only_latitude_column_returns_none(self):
         data = b"name,latitude\nMy Place,42.3601"
+        self.assertIsNone(validate_content_type("export.csv", data))
+
+    def test_csv_with_only_longitude_column_returns_none(self):
+        # Symmetric to the latitude-only case above: both columns are required,
+        # not just one or the other.
+        data = b"name,longitude\nMy Place,-71.0589"
         self.assertIsNone(validate_content_type("export.csv", data))
 
     def test_too_small_file_returns_none(self):
@@ -265,7 +261,7 @@ class ValidateContentTypeTests(SimpleTestCase):
 
     def test_my_activity_html_identified(self):
         data = (
-            b'<!DOCTYPE html><html><head><title>My Activity</title></head><body>'
+            b"<!DOCTYPE html><html><head><title>My Activity</title></head><body>"
             b'<div class="outer-cell"><div class="mdl-grid">'
             b'<div class="header-cell"><p class="mdl-typography--title">Maps<br></p></div>'
             b'<div class="content-cell mdl-typography--body-1">Directions to '
@@ -290,9 +286,9 @@ class ValidateContentTypeTests(SimpleTestCase):
         # would trip the CSV header heuristic (url/title/note) if the HTML check didn't
         # run first - this guards that ordering.
         data = (
-            b'<!DOCTYPE html><html><head><title>My Activity</title></head><body>'
+            b"<!DOCTYPE html><html><head><title>My Activity</title></head><body>"
             b'<div class="outer-cell"><p class="mdl-typography--title">Maps<br></p>'
-            b'<div>not a directions entry</div></div></body></html>'
+            b"<div>not a directions entry</div></div></body></html>"
         )
         result = validate_content_type("MyActivity.html", data)
         self.assertNotEqual(result, "csv")
@@ -301,6 +297,7 @@ class ValidateContentTypeTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # extract_archive - ZIP
 # ---------------------------------------------------------------------------
+
 
 class ExtractZipTests(SimpleTestCase):
     """extract_archive handles ZIP archives correctly."""
@@ -333,11 +330,13 @@ class ExtractZipTests(SimpleTestCase):
         self.assertEqual(result, [])
 
     def test_multiple_files_all_extracted(self):
-        data = _make_zip({
-            "a.json": json.dumps({"features": []}).encode(),
-            "b.kml": b"<kml><Placemark/></kml>",
-            "c.csv": b"URL,Title\nhttps://example.com,test",
-        })
+        data = _make_zip(
+            {
+                "a.json": json.dumps({"features": []}).encode(),
+                "b.kml": b"<kml><Placemark/></kml>",
+                "c.csv": b"URL,Title\nhttps://example.com,test",
+            }
+        )
         result = extract_archive(data)
         self.assertEqual(len(result), 3)
 
@@ -345,11 +344,26 @@ class ExtractZipTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             extract_archive(b"PK\x03\x04this is not a valid zip file")
 
+    def test_entry_over_the_per_file_cap_is_skipped_but_a_small_one_still_extracts(self):
+        # _MAX_SINGLE_FILE_BYTES is 1 GB in production; patch it down so the
+        # cap can actually be exercised in a test.
+        data = _make_zip({"small.csv": b"x" * 5, "big.csv": b"y" * 20})
+        with mock.patch(
+            "urbanlens.dashboard.services.import_export.archive_extractor._MAX_SINGLE_FILE_BYTES",
+            10,
+        ):
+            result = extract_archive(data)
+        names = [r.name for r in result]
+        self.assertIn("small.csv", names)
+        self.assertNotIn("big.csv", names)
+
     def test_mixed_supported_and_unsupported_skips_unsupported(self):
-        data = _make_zip({
-            "places.json": json.dumps({"features": []}).encode(),
-            "image.png": b"\x89PNG\r\n",
-        })
+        data = _make_zip(
+            {
+                "places.json": json.dumps({"features": []}).encode(),
+                "image.png": b"\x89PNG\r\n",
+            }
+        )
         result = extract_archive(data)
         names = [r.name for r in result]
         self.assertIn("places.json", names)
@@ -388,6 +402,17 @@ class ExtractZipTests(SimpleTestCase):
         names = {r.name for r in result}
         self.assertEqual(names, {"track.gpx", "geom.wkt", "export.osm"})
 
+    def test_symlink_entries_skipped_in_zip(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("real.json", '{"features":[]}')
+            link_info = zipfile.ZipInfo("link.json")
+            link_info.external_attr = 0o120777 << 16  # S_IFLNK mode bits
+            zf.writestr(link_info, "/etc/passwd")
+        result = extract_archive(buf.getvalue())
+        names = [r.name for r in result]
+        self.assertEqual(names, ["real.json"])
+
     def test_extracts_nested_my_activity_html_from_takeout_zip(self):
         # Real Takeout exports nest MyActivity.html several folders deep -
         # _safe_basename should flatten the path, same as any other format.
@@ -400,6 +425,7 @@ class ExtractZipTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # extract_archive - TGZ
 # ---------------------------------------------------------------------------
+
 
 class ExtractTgzTests(SimpleTestCase):
     """extract_archive handles TGZ archives correctly."""
@@ -434,6 +460,17 @@ class ExtractTgzTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             extract_archive(b"\x1f\x8bthis is not a valid gzip")
 
+    def test_member_over_the_per_file_cap_is_skipped_but_a_small_one_still_extracts(self):
+        data = _make_tgz({"small.csv": b"x" * 5, "big.csv": b"y" * 20})
+        with mock.patch(
+            "urbanlens.dashboard.services.import_export.archive_extractor._MAX_SINGLE_FILE_BYTES",
+            10,
+        ):
+            result = extract_archive(data)
+        names = [r.name for r in result]
+        self.assertIn("small.csv", names)
+        self.assertNotIn("big.csv", names)
+
     def test_symlink_members_skipped(self):
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w:gz") as tf:
@@ -456,6 +493,7 @@ class ExtractTgzTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # extract_archive - format dispatch
 # ---------------------------------------------------------------------------
+
 
 class ExtractArchiveDispatchTests(SimpleTestCase):
     """extract_archive raises ValueError for unrecognised format."""
@@ -482,16 +520,8 @@ class ExtractArchiveDispatchTests(SimpleTestCase):
 class SharedExtractionBudgetTests(SimpleTestCase):
     """One upload gets one allowance, however many archives it nests.
 
-    `_MAX_UNCOMPRESSED_BYTES` / `_MAX_FILE_COUNT` are per *archive*, and the
-    upload-preview controller calls `extract_archive` again for every nested
-    archive it finds. Each call therefore started a fresh allowance, so an
-    outer ZIP holding N nested bombs bought N times the cap - the limit bound
-    each call and nothing bound the total, all inside one request.
-
-    These use tiny explicit budgets rather than the 2 GB default: the property
-    under test is that the allowance is *shared and consumed*, which a small
-    budget demonstrates exactly as well and in milliseconds.
-    """
+    `_MAX_UNCOMPRESSED_BYTES` / `_MAX_FILE_COUNT` are per *archive*, and the upload-preview controller calls
+    `extract_archive` again for every nested archive it finds."""
 
     def _zip(self, entries: dict[str, bytes]) -> bytes:
         buf = io.BytesIO()
@@ -549,13 +579,8 @@ class SharedExtractionBudgetTests(SimpleTestCase):
 class DeclaredSizeIsNotAnAttackVectorTests(SimpleTestCase):
     """Checked, and false: an understated `file_size` truncates, it does not overrun.
 
-    Charging the cumulative budget against the *declared* size looks like it
-    should be forgeable - the declaration is attacker-supplied. It is not:
-    CPython's `zipfile` bounds a read by `file_size` and then verifies the
-    CRC, so a lying header yields a short read and a `BadZipFile`, never more
-    bytes than declared. This is recorded as a test rather than a note because
-    the reasoning depends on CPython internals that could change.
-    """
+    Charging the cumulative budget against the *declared* size looks like it should be forgeable - the
+    declaration is attacker-supplied."""
 
     def test_understating_the_declared_size_cannot_smuggle_bytes_past_the_cap(self) -> None:
         payload = b"A" * (5 * 1024 * 1024)

@@ -188,10 +188,7 @@
     //color: $color-red-100;
 }
 
-// .dm-bubble is a column flex container, so a plain inline sibling after the
-// body span would land on its own row below the text instead of beside it -
-// float it over the bubble's own corner instead (.dm-bubble is already
-// position: relative).
+// .dm-bubble is a column flex container, so a plain inline sibling after the body span would land on its own row below the text instead.
 .dm-lock-icon {
     position: absolute;
     top: .4rem;
@@ -252,21 +249,25 @@
 
 // -- Reset-keys dialog (merged confirm + password, with a progress state) ----
 
-.e2ee-reset-progress {
+.e2ee-progress {
     display: flex;
     align-items: center;
     gap: .4rem;
     color: var(--ul-grey-6, #6b7280);
     font-size: .85rem;
     margin: 0 0 .75rem;
+
+    &[hidden] {
+        display: none;
+    }
 }
 
-.e2ee-reset-spinner {
+.e2ee-spinner {
     font-size: 1rem;
-    animation: e2ee-reset-spin 1s linear infinite;
+    animation: e2ee-spin 1s linear infinite;
 }
 
-@keyframes e2ee-reset-spin {
+@keyframes e2ee-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }

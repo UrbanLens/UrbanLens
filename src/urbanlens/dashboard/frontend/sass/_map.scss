@@ -41,11 +41,7 @@ body.page-map-view {
 }
 
 // -- Temporary place marker (search jump + right-click context menu) --------
-// The wrap class is shared with the Places-layer markers (which size and
-// colour their own icons), so everything temp-marker-specific lives under the
-// --temp modifier: a big glyph with a white keyline plus a pulsing halo at the
-// anchor point, keeping the marker obvious at every zoom level and on any tile
-// style (the fixed white outline guarantees contrast on dark and light tiles).
+// The wrap class is shared with the Places-layer markers (which size and colour their own icons), so everything temp-marker-specific.
 .search-result-marker-wrap {
     background: none !important;
     border: none !important;
@@ -143,10 +139,7 @@ body.page-map-view {
 }
 
 // -- "You are here" marker --------------------------------------------------
-// Unlike the temp place marker above (a bottom-anchored pin glyph for a
-// specific result), this represents an exact point, so it's a centred dot -
-// plus a slow ambient halo (vs. the one-shot drop pulse) since it sits on the
-// map indefinitely rather than announcing a single fresh jump.
+// Unlike the temp place marker above (a bottom-anchored pin glyph for a specific result), this represents an exact point, so it's.
 .user-location-marker-wrap {
     background: none !important;
     border: none !important;
@@ -210,10 +203,7 @@ body.page-map-view {
     }
 }
 
-// Multi-select tool: selected-marker ring + select-mode cursor + a persistent
-// inset outline around the whole map, so the mode reads as active even before
-// the user hovers or selects anything (the crosshair cursor and the bottom
-// bulk-select-toolbar are both easy to miss on first glance).
+// Multi-select tool: selected-marker ring + select-mode cursor + a persistent inset outline around the whole map, so the mode reads.
 #map.select-mode {
     cursor: crosshair;
     box-shadow: inset 0 0 0 3px rgba($color-blue-500, .55);
@@ -256,14 +246,7 @@ img.leaflet-marker-icon.is-selected {
     border-radius: 40% !important;
 }
 
-// Merge dialog map<->list sync (see map/index.html's "Merge" section) - same
-// UX as the trip page's map<->list hover-sync (.trip-map-marker--highlighted
-// in _trips.scss): the pin everything merges into is enlarged with a green
-// halo (matches .cat-merge-mini-card--target's green in the dialog list, see
-// _tags.scss) so it's unmistakable on the map; hovering either the marker or
-// its mini-card in the dialog highlights the other in amber. Both classes
-// coexist with .is-selected (every merge participant is also selected) -
-// declared after it so they win the cascade on the same element.
+// Merge dialog map<->list sync - same UX as the trip page's map<->list hover-sync (trip-map-marker--highlighted in _trips.scss).
 .map-pin-icon-wrap.is-merge-target,
 .leaflet-marker-icon.is-merge-target {
     transform: scale(1.35);
@@ -298,6 +281,13 @@ img.leaflet-marker-icon.is-selected {
     border-radius: 50%;
     display: block;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+// Detail-pin marker equivalent of.map-pin-custom-img above.
+.detail-map-icon-img {
+    object-fit: contain;
+    border-radius: 50%;
+    display: block;
 }
 
 .map-pin-with-circle {
@@ -374,15 +364,9 @@ img.leaflet-marker-icon.is-selected {
 }
 
 // -- Beta time slider (OpenHistoricalMap overlay) --------------------------
-// Sits below .map-wrapper in normal document flow (a sibling, not part of
-// .map-bottom-controls, which is absolutely positioned over the tiles) - see
-// _temporal_imagery_slider.html and shared/temporal-imagery.ts. Server-side
-// gated to beta users with dated OHM coverage nearby, so this never renders
-// for anyone else.
+// Sits below.map-wrapper in normal document flow.
 .temporal-imagery-slider {
-    // Rung 2: one step raised above the rung-1 .location-map card it sits
-    // in, so the pill reads as its own control rather than blending into
-    // the card background (see _surfaces.scss's elevation-ladder docs).
+    // Rung 2: one step raised above the rung-1.location-map card it sits in, so the pill reads as its own control rather than blending into.
     @include surface($radius: $radius-full, $rung: 2);
     display: flex;
     align-items: center;
@@ -416,9 +400,7 @@ img.leaflet-marker-icon.is-selected {
         font-variant-numeric: tabular-nums;
     }
 
-    // A fetch is in flight - dims the input and spins the icon (reusing
-    // _layout.scss's shared @keyframes spin) rather than resizing or
-    // reflowing anything, so scrubbing never causes a layout jump.
+    // A fetch is in flight - dims the input and spins the icon (reusing _layout.scss's shared @keyframes spin) rather than resizing.
     &--loading {
         .temporal-imagery-slider__icon {
             color: var(--ul-accent-amber);
@@ -451,10 +433,7 @@ img.leaflet-marker-icon.is-selected {
         overflow: hidden;
     }
 
-    // One consistent create/edit panel (markup annotations, detail pins): docked
-    // to the right edge so it never competes with the left-side details drawer
-    // or the bottom-left map controls, and scrolls internally so its (larger)
-    // field set never overflows the map regardless of viewport height.
+    // One consistent create/edit panel (markup annotations, detail pins).
     &--side {
         position: absolute;
         top: 10px;
@@ -477,10 +456,7 @@ img.leaflet-marker-icon.is-selected {
 }
 
 // -- Detail pin list panel (left-docked sidebar) -----------------------------
-// Same collapsible-sidebar UX as the main map's #pin-list-panel/.pin-list-handle
-// above, scoped to this page's smaller embedded map instead of the full
-// viewport: collapses to an edge handle button, expands into a full-height
-// dark sidebar that always sits above the map regardless of site theme.
+// Same collapsible-sidebar UX as the main map's #pin-list-panel/.pin-list-handle above, scoped to this page's smaller embedded map.
 .detail-pin-list-panel {
     position: absolute;
     top: 0;
@@ -562,9 +538,7 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-// Shifts the bottom-left layers panel + boundary controls, and the Leaflet
-// zoom control, out of the way while the sidebar is open - mirroring
-// #map.pin-list-open on the main map so the drawer never sits on top of them.
+// Shifts the bottom-left layers panel + boundary controls, and the Leaflet zoom control, out of the way while the sidebar is open.
 .map-wrapper:has(> .detail-pin-list-panel.open) {
     .map-bottom-controls {
         left: calc(300px + 20px);
@@ -804,6 +778,26 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
+// Shown only when the photo map layer was capped, so the count in the tab badge
+// is not mistaken for the whole gallery.
+.photo-panel-note {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .5rem .6rem;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: .72rem;
+    line-height: 1.3;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+        opacity: .6;
+        flex-shrink: 0;
+    }
+}
+
 // Drop-target highlight when dragging a photo over the map
 .photo-drop-target::after {
     content: 'Drop to set location';
@@ -917,9 +911,7 @@ img.leaflet-marker-icon.is-selected {
 }
 
 // -- One-time "click the last point again to finish" tip --------------------
-// Floats top-center of the map, never blocking clicks (pointer-events: none on
-// the pill itself - only its close button is clickable) so it can't get in the
-// way of the click-to-place-points gesture it's explaining.
+// Floats top-center of the map, never blocking clicks.
 @keyframes markup-tip-in {
     from {
         opacity: 0;
@@ -941,6 +933,32 @@ img.leaflet-marker-icon.is-selected {
 
     50% {
         box-shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 0 0 8px rgba(99, 102, 241, 0);
+    }
+}
+
+// Shown only when a markup listing was capped, so a cut map is not read as a
+// complete one. Below the line-finish tip's slot, so the two never overlap.
+.markup-truncation-note {
+    position: absolute;
+    top: 58px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1040;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    max-width: min(90%, 420px);
+    padding: .4rem .75rem;
+    border-radius: 999px;
+    background: rgba(17, 24, 39, .82);
+    color: rgba(255, 255, 255, .88);
+    font-size: .8rem;
+    line-height: 1.25;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        flex-shrink: 0;
     }
 }
 
@@ -1008,9 +1026,7 @@ img.leaflet-marker-icon.is-selected {
 // -- Map text labels and arrow decorations ----------------------------------
 
 .map-text-label {
-    // Default caption style for shape/arrow/line names - always black-on-white
-    // regardless of the shape's own color, so it stays legible against any map
-    // background. A dedicated Text markup item overrides color/background inline.
+    // Default caption style for shape/arrow/line names.
     color: #000;
     font-weight: 600;
     white-space: nowrap;
@@ -1027,9 +1043,7 @@ img.leaflet-marker-icon.is-selected {
         font-size: .75rem;
     }
 
-    // Drag-created text: sized to the exact box the user dragged out (see
-    // _textBoxPixelRect in index.html) - wraps and centers instead of the
-    // single-line, shrink-to-fit rendering used for a plain click-placed label.
+    // Drag-created text: sized to the exact box the user dragged out.
     &--box {
         display: flex;
         align-items: center;
@@ -1525,10 +1539,7 @@ img.leaflet-marker-icon.is-selected {
     padding: .85rem 1.25rem;
     border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
-    // In edit mode this row holds four nowrap buttons (Delete, View details,
-    // Cancel, Save) that outgrow a phone-width dialog. Without wrapping, the
-    // overflow runs past the *start* edge - and the dialog clips it with no
-    // scroll, so Delete became unreachable rather than merely cramped.
+    // In edit mode this row holds four nowrap buttons (Delete, View details, Cancel, Save) that outgrow a phone-width dialog.
     flex-wrap: wrap;
     row-gap: .5rem;
 
@@ -1575,6 +1586,25 @@ img.leaflet-marker-icon.is-selected {
 
         &--link {
             text-decoration: none;
+        }
+
+        &--danger {
+            color: rgba(255, 100, 100, .85);
+
+            .material-symbols-outlined,
+            .material-icons {
+                color: rgba(255, 100, 100, .7);
+            }
+
+            &:hover {
+                background: rgba(255, 70, 70, .12);
+                color: $color-red-500;
+
+                .material-symbols-outlined,
+                .material-icons {
+                    color: $color-red-500;
+                }
+            }
         }
     }
 
@@ -1908,7 +1938,6 @@ img.leaflet-marker-icon.is-selected {
     height: 56px;
     background: var(--ul-surface-1);
     border: 1px solid var(--ul-surface-1-border);
-    border-right: none;
     border-radius: 10px 0 0 10px;
     box-shadow: -2px 0 8px rgba(0, 0, 0, .12);
     color: var(--ul-grey-6);
@@ -1925,13 +1954,7 @@ img.leaflet-marker-icon.is-selected {
         color: var(--ul-grey-9);
     }
 
-    // Desktop-only: these handles dock to the map's left/right edge and slide
-    // by the panel's side width when open, which only makes sense while the
-    // panels are side-docked. Below $breakpoint-sm both panels become
-    // full-width bottom sheets, so the toolbar's own #pin-list-button /
-    // #search-pins-button are the entry points there (see map_components.py's
-    // MAP_TOOL_REGISTRY) - the handle is a desktop convenience, not the only
-    // way in.
+    // Desktop-only: these handles dock to the map's left/right edge and slide by the panel's side width when open, which only makes sense.
     @include up($breakpoint-sm) {
         display: flex;
     }
@@ -1942,6 +1965,7 @@ img.leaflet-marker-icon.is-selected {
     left: 0;
     transform: translateY(-50%);
     transition: left 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
+    border-radius: 0 10px 10px 0;
 
     &.open {
         left: 300px;
@@ -2300,10 +2324,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.09);
 }
 
-// Set by applySavedFilter() once a chip's criteria has been merged into the
-// filter form - the merge itself can't be cleanly un-applied (values just
-// get written into shared form fields), so this stays on until resetFilters()
-// clears the whole panel, rather than trying to toggle per-chip.
+// Set by applySavedFilter() once a chip's criteria has been merged into the filter form.
 .fp-saved-filter-apply--active {
     border-color: rgba(90, 150, 255, 0.7);
     background: rgba(90, 150, 255, 0.16);
@@ -2506,10 +2527,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 #fp-acc-labels {
     @include tad-tabs;
 
-    // This filter sidebar is a fixed dark glass panel regardless of site theme
-    // (see the hardcoded rgba(255,255,255,x) tones throughout this section),
-    // so the tab bar gets the same treatment instead of the theme-aware
-    // dialog default `tad-tabs` otherwise reads.
+    // This filter sidebar is a fixed dark glass panel regardless of site theme tones throughout this section), so the tab bar gets the same.
     .tad-tabs {
         background: rgba(255, 255, 255, .04);
         border-bottom-color: rgba(255, 255, 255, .11);
@@ -2557,10 +2575,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
     overscroll-behavior: contain;
 
-    // On mobile this sits inside #filter-form's scroller, inside the filter
-    // bottom sheet - three nested scroll contexts, so a drag starting on a chip
-    // chained unpredictably between them. Let the list flow in the sheet's own
-    // scroller instead of owning a fourth 140px viewport.
+    // On mobile this sits inside #filter-form's scroller, inside the filter bottom sheet.
     @include down($breakpoint-sm) {
         max-height: none;
         overflow-y: visible;
@@ -2568,9 +2583,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 /* -- Floating address search bar (mobile-first) --------------------- */
-/* Shared "jump to" search bar component - see window.LocationSearchEngine.
-   Used floating over the main map by default; pages that embed it inline
-   (e.g. the safety check-in destination picker) add .addr-search-bar--inline. */
+/* Shared "jump to" search bar component - see window.LocationSearchEngine. */
 .addr-search-bar {
     position: absolute;
     top: 10px;
@@ -2638,10 +2651,7 @@ div.container .addr-search-bar {
         border: none;
         outline: none;
         color: var(--ul-grey-8);
-        // 16px is iOS Safari's focus-zoom threshold: anything smaller makes
-        // focusing this field zoom the whole map page, and the viewport meta
-        // sets no maximum-scale to prevent it. The desktop step-down below is
-        // safe because a pointer device never triggers that zoom.
+        // 16px is iOS Safari's focus-zoom threshold.
         font-size: 16px;
         padding: 10px 0;
 
@@ -2728,9 +2738,7 @@ div.container .addr-search-bar {
     overflow: hidden;
     max-height: 320px;
     overflow-y: auto;
-    // Leaflet sets `touch-action: none` on its container to own touch drags,
-    // which also suppresses native scrolling of nested overflow regions like
-    // this one. Re-enable vertical panning for the list itself.
+    // Leaflet sets `touch-action: none` on its container to own touch drags, which also suppresses native scrolling of nested overflow.
     touch-action: pan-y;
     overscroll-behavior: contain;
 
@@ -3086,8 +3094,27 @@ div.container .addr-search-bar {
 }
 
 .pin-popup {
-    padding: 12px 14px 10px;
+    // Right padding is wider than the other sides so the title (and any other first-line content) never runs under Leaflet's own close.
+    padding: 12px 26px 10px 14px;
     font-size: .82rem;
+    position: relative;
+
+    // The kebab menu (see .popup-actions:has(.popup-menu) below) floats into
+    // this corner instead of reserving its own row - the extra bottom padding
+    // keeps the last content row (tags, or stars when there are none) clear of it.
+    &:has(.popup-menu) {
+        padding-bottom: 34px;
+    }
+}
+
+.popup-thumb {
+    display: block;
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    // Bleeds out to the wrapper's own edges/corners rather than sitting inset inside.pin-popup's padding.
+    margin: -12px -26px 8px -14px;
+    border-radius: 10px 10px 0 0;
 }
 
 .popup-title {
@@ -3203,22 +3230,22 @@ div.container .addr-search-bar {
 .popup-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 4px;
     margin-top: 6px;
     padding-top: 7px;
     border-top: 1px solid rgba(255, 255, 255, .08);
-}
 
-.view-full-pin {
-    font-size: .75rem;
-    color: $ui-link-on-dark;
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.view-full-pin:hover {
-    text-decoration: underline;
-    color: $ui-link-on-dark-hover;
+    // The main marker popup's kebab menu: a corner overlay reads more
+    // naturally than a whole bordered row for a single icon button.
+    &:has(.popup-menu) {
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
+    }
 }
 
 .popup-actions .add-to-list-button {
@@ -3232,10 +3259,7 @@ div.container .addr-search-bar {
     }
 }
 
-// Child pin popup only (see map-annotations.ts's detailPinPopupContent) -
-// margin-left:auto here (rather than on .edit-pin-button, which this popup
-// also has) pushes both it and the edit button after it to the popup's
-// bottom-right corner as a pair, matching .add-to-list-button's pattern above.
+// Child pin popup only - margin-left:auto here (rather than on.edit-pin-button, which this popup also has) pushes both it and the edit.
 .popup-actions .promote-pin-button {
     @include icon-btn(24px);
     color: rgba(255, 255, 255, .45);
@@ -3352,39 +3376,9 @@ div.container .addr-search-bar {
     }
 }
 
-// Multi-select tool: floating bottom-center action bar.
-.bulk-select-toolbar {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+// Multi-select tool: shares the generic.ul-bulk-bar markup/JS.
+#map .ul-bulk-bar {
     z-index: 1200;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: $space-sm;
-    align-items: center;
-    background: rgba(18, 22, 30, .96);
-    border: 1px solid rgba(255, 255, 255, .12);
-    border-radius: $radius-md;
-    padding: $space-sm $space-md;
-    box-shadow: 0 6px 28px rgba(0, 0, 0, .55);
-    max-width: min(560px, 92vw);
-
-    &[hidden] {
-        display: none;
-    }
-
-    .bulk-select-count {
-        color: rgba(255, 255, 255, .7);
-        font-size: .82rem;
-        margin-right: $space-sm;
-        white-space: nowrap;
-    }
-
-    .bulk-select-close {
-        margin-left: $space-sm;
-    }
 }
 
 // -- Child pins (child pins) layer on the main map -----------------------------
@@ -3630,17 +3624,7 @@ div.container .addr-search-bar {
     }
 }
 
-/* Boundary editing (map-annotations.ts, mounted on #map) auto-saves in the
-   background and uses its own right-click-to-delete-a-vertex handler
-   (edit: { remove: false }), so the Leaflet.draw Save/Cancel action list
-   next to "Edit Layers" is redundant there - hidden, but scoped to #map
-   only. Every other Leaflet-Draw usage on the site (e.g. the saved-filter
-   region map, _saved_filter_dialog_scripts.html) uses the vanilla
-   edit: { remove: true } flow, which *requires* that action bar to confirm
-   a pending delete - hiding it globally silently broke deleting a region:
-   Leaflet-Draw reverts an unconfirmed deletion back onto the map the
-   moment another tool is selected, since DELETED never fires without a
-   click on the (invisible) Save action. */
+/* Boundary editing (map-annotations.ts, mounted on #map) auto-saves in the background and uses its own right-click-to-delete-a-vertex. */
 #map .leaflet-draw-actions {
     display: none !important;
 }
@@ -3717,13 +3701,21 @@ div.container .addr-search-bar {
     }
 }
 
-/* -- Map tile loading - dim tile pane while images download ------- */
-#map .leaflet-tile-pane {
-    transition: opacity 0.35s ease;
-}
-
-#map.tiles-loading .leaflet-tile-pane {
-    opacity: 0.72;
+/* -- Map tile loading ---------------------------------------------
+   Leaflet already fades each tile in over whatever is behind it, and what is behind it is the
+   underlay `map-layers.ts` adds - so the gap between "loading" and "loaded" is a blurred version
+   of the same place sharpening, rather than a hole. Dimming the tiles that *had* loaded used to
+   stand in for that, which made every arrival more visible instead of less. */
+.leaflet-ul-underlay-pane {
+    /* Whatever the base above needs doing to it to read correctly, set by map-layers.ts. The
+       topographic map is only dark because a filter inverts it, and an underlay cut from the
+       uninverted tiles would put a bright background behind a dark map. */
+    --ul-underlay-tone: brightness(1);
+    /* Heavy enough that a world-zoom tile reads as the colours of a place rather than as a wrong
+       map of it - the fine detail is neither available at this depth nor wanted. */
+    filter: blur(12px) saturate(0.9) var(--ul-underlay-tone);
+    /* Blurring a pane of images is a compositor job; saying so keeps it off the main thread. */
+    will-change: filter;
 }
 
 /* Shift map-buttons left when filter panel is open so they don't overlap */
@@ -3737,12 +3729,7 @@ div.container .addr-search-bar {
     }
 }
 
-/* Same shift for the bottom-right saved-filters toolbar - needs !important since
-   .map-saved-filters-toolbar (_layout.scss) already pins `right` with !important
-   to stay bottom-right at every breakpoint (unlike .map-buttons, which flips to
-   top-right on desktop) - without matching !important here, that unconditional
-   pin always won regardless of source order/specificity, so the toolbar never
-   moved out from under the filter panel when it opened. */
+/* Same shift for the bottom-right saved-filters toolbar. */
 #map.filter-open .map-saved-filters-toolbar {
     @include up($breakpoint-sm) {
         right: calc(272px + 12px) !important;
@@ -3819,11 +3806,7 @@ div.container .addr-search-bar {
         }
     }
 
-    // The markup/detail-pin draw panel is a 300px full-height side dock, which
-    // covers most of a phone screen - and it is force-shown the moment a
-    // drawing tool is armed, so it hides the map you have to draw on. Same
-    // bottom-sheet treatment as the two panels above, but short enough to
-    // leave the map workable while a tool is active.
+    // The markup/detail-pin draw panel is a 300px full-height side dock, which covers most of a phone screen.
     .map-dialog--side {
         top: auto;
         right: 0;
@@ -3836,11 +3819,7 @@ div.container .addr-search-bar {
         border-radius: 16px 16px 0 0;
     }
 
-    // Desktop shifts every bottom-docked control sideways when a panel opens
-    // (see the #map.filter-open / #map.pin-list-open rules above, all of which
-    // are up($breakpoint-sm)-only). Here the panels are 70-80dvh sheets that
-    // cover the whole dock band instead, so the dock drops away entirely
-    // rather than trying to dodge - one rule replacing five per-element shifts.
+    // Desktop shifts every bottom-docked control sideways when a panel opens-only).
     #map.filter-open,
     #map.pin-list-open {
 
@@ -3858,12 +3837,18 @@ div.container .addr-search-bar {
         pointer-events: none;
     }
 
-    .bulk-select-toolbar {
+    // Scoped to #map - .ul-bulk-bar is shared site-wide and every other page
+    // keeps the default centered pill at this breakpoint.
+    #map .ul-bulk-bar {
         left: 10px;
         right: 10px;
         bottom: 10px;
         transform: none;
         max-width: none;
+
+        &.visible {
+            transform: none;
+        }
     }
 }
 
@@ -4150,9 +4135,7 @@ div.container .addr-search-bar {
     }
 }
 
-// Switches on the same token as every other map override. A raw 640px here
-// left a 641-767px band where this card kept its desktop top-right anchoring
-// while the control it points at had already moved to the opposite corner.
+// Switches on the same token as every other map override.
 @include down($breakpoint-sm) {
     .map-onboarding {
         top: auto;
@@ -4418,19 +4401,14 @@ div.container .addr-search-bar {
     cursor: pointer;
 }
 
-// Inline variant: docks the panel inside a .map-bottom-controls flex row
-// (pin detail, wiki, safety maps) instead of floating it over the map itself.
-// The flyout menu still positions against the panel, opening up/right.
+// Inline variant: docks the panel inside a.map-bottom-controls flex row (pin detail, wiki, safety maps) instead of floating it over.
 .map-layers-panel--inline {
     position: relative;
     bottom: auto;
     left: auto;
 }
 
-// Compact strip variant of the shared layers component
-// ({% map_layers_panel variant="strip" %}): a small icon-button row used
-// inside dialogs. Inside the comment-map toolbars it dissolves into the
-// toolbar row so the layer buttons align with the drawing tools.
+// Compact strip variant of the shared layers component ({% map_layers_panel variant="strip" %}).
 .map-layers-strip {
     display: inline-flex;
     align-items: center;
@@ -4459,19 +4437,13 @@ div.container .addr-search-bar {
     opacity: 0.85;
     box-sizing: border-box;
     overflow: hidden;
-    // Caps to whichever of the map's own width/height is smaller (via
-    // @include map-query-container on the map wrapper), so the toggle keeps
-    // shrinking when the MAP - not the browser viewport - is squeezed into
-    // a short OR narrow container.
+    // Caps to whichever of the map's own width/height is smaller (via @include map-query-container on the map wrapper), so the toggle keeps.
     max-width: clamp(40px, 22cqmin, 90px);
     max-height: clamp(34px, 22cqmin, 74px);
     transition: opacity .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
     white-space: nowrap;
 
-    // Below $breakpoint-xs this is a horizontal icon+label row, and the shared
-    // cap above resolves to ~79px on a 360px screen against ~89px of content -
-    // clipping "Layers" mid-word. The row form is bounded by its own content,
-    // so let it size naturally there.
+    // Below $breakpoint-xs this is a horizontal icon+label row, and the shared cap above resolves to ~79px on a 360px screen against ~89px.
     @include down($breakpoint-xs) {
         max-width: none;
     }
@@ -4492,9 +4464,7 @@ div.container .addr-search-bar {
         padding: 6px 4px 5px;
         min-width: 0;
         font-size: clamp(.55rem, 3cqmin, .67rem);
-        // Room for the (now-visible) thumb plus its label below - the base
-        // max-height above is sized for the icon+label row layout only and
-        // is too short once the thumb (up to 54px here) takes its place.
+        // Room for the (now-visible) thumb plus its label below.
         max-height: clamp(58px, 26cqmin, 96px);
 
         .map-layers-toggle-thumb {
@@ -4511,11 +4481,7 @@ div.container .addr-search-bar {
         max-height: clamp(70px, 28cqmin, 104px);
     }
 
-    // The md+ ceiling above was also the ceiling for every larger screen too -
-    // on a genuinely wide desktop the map container itself is well past the
-    // point these clamp() maxes ever mattered, so the toggle plateaued at a
-    // size sized for a "standard laptop", never actually growing any larger
-    // no matter how much room the map had. Let it keep scaling up through lg/xl.
+    // The md+ ceiling above was also the ceiling for every larger screen too.
     @include up($breakpoint-lg) {
         max-width: clamp(90px, 22cqmin, 112px);
         max-height: clamp(104px, 28cqmin, 130px);
@@ -5259,10 +5225,7 @@ div.container .addr-search-bar {
     }
 }
 
-// Pinch-to-zoom exists on phones, but there is no discrete zoom-*out* gesture
-// (double-tap only zooms in), so one-handed use had no way back out. Keep the
-// +/- controls at every width; on mobile they just need to clear the
-// full-width search bar that owns the top edge there.
+// Pinch-to-zoom exists on phones, but there is no discrete zoom-*out* gesture (double-tap only zooms in), so one-handed use had no way.
 #map .leaflet-control-zoom {
     display: block;
 }
@@ -5321,6 +5284,15 @@ div.container .addr-search-bar {
 }
 
 .leaflet-container {
+    /* What shows through a tile grid with a hole in it. Leaflet's own default is #ddd, which is
+       near-white: against dark imagery, or a dark page with nothing else bright on it, a gap reads
+       as a flash. The underlay covers this within a tile or two; this is the moment before. */
+    background-color: $color-grey-3;
+
+    &[data-map-style="dark"] {
+        background-color: $color-grey-7;
+    }
+
     .leaflet-control-attribution {
         background-color: rgba(255, 255, 255, 0.5);
         color: var(--ul-grey-4);
@@ -5339,6 +5311,10 @@ div.container .addr-search-bar {
 // - Dark Mode
 [data-theme="dark"] {
     .leaflet-container {
+        /* A page with nothing bright on it is where a near-white gap is worst, so the gap follows
+           the page as well as the map's own style. */
+        background-color: $color-grey-8;
+
         .leaflet-control-attribution {
             background-color: rgba(0, 0, 0, 0.5);
         }
@@ -5348,10 +5324,7 @@ div.container .addr-search-bar {
 // - Map Dark Mode
 [data-map-style="dark"] {
 
-    // Places-layer markers only. Temporary search/context markers
-    // (.search-result-marker-wrap--temp) keep their own blue/amber colours -
-    // this used to recolour them near-white on dark tiles, which made the
-    // search-jump marker practically invisible.
+    // Places-layer markers only.
     .search-result-marker-wrap:not(.search-result-marker-wrap--temp) .search-result-marker-icon {
         color: var(--ul-grey-8);
 
@@ -5386,10 +5359,9 @@ div.container .addr-search-bar {
         }
     }
 }
+
 // -- Pin popup: clickable title and overflow menu -----------------------------
-// The popup's secondary actions sit behind one button (see
-// togglePinPopupMenu in pages/map/index.html) so the popup reads as
-// information rather than a row of icons.
+// The popup's secondary actions sit behind one button so the popup reads as information rather than a row of icons.
 a.popup-title {
     display: block;
     color: inherit;
@@ -5429,30 +5401,31 @@ a.popup-title {
     display: flex;
     flex-direction: column;
 
-    // A class selector beats the UA stylesheet's `[hidden] { display: none }`,
-    // so the attribute Leaflet's togglePinPopupMenu() toggles did nothing on
-    // its own - the menu rendered open, permanently, overlapping the rest of
-    // the popup.
+    // A class selector beats the UA stylesheet's `[hidden] { display.
     &[hidden] {
         display: none;
     }
-    min-width: 11rem;
+
+    // Fixed (not min-) width: a long label ("Promote child pins") combined with each button's own nowrap text used to stretch this wider.
+    width: 12.5rem;
+    max-width: calc(100vw - 24px);
     padding: 0.25rem;
-    border: 1px solid var(--border-color, #ccc);
+    border: 1px solid var(--ul-border, #ccc);
     border-radius: 6px;
     background: var(--card-bg, #fff);
     box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
 
     button {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.4rem;
+        width: 100%;
         padding: 0.35rem 0.5rem;
         border: 0;
         background: none;
         cursor: pointer;
         text-align: left;
-        white-space: nowrap;
+        white-space: normal;
         color: inherit;
         border-radius: 4px;
 
@@ -5464,6 +5437,23 @@ a.popup-title {
         &.delete-button {
             color: #c62828;
         }
+
+        .material-symbols-outlined {
+            // Keeps the icon aligned with the first line when a long label wraps.
+            flex-shrink: 0;
+        }
+    }
+
+    // .add-to-list-button/.edit-pin-button/.delete-button are also each a bare 24px icon button elsewhere.
+    .add-to-list-button,
+    .edit-pin-button,
+    .delete-button {
+        width: 100%;
+        height: auto;
+        justify-content: flex-start;
+        padding: 0.35rem 0.5rem;
+        border-radius: 4px;
+        margin-left: 0;
     }
 
     .material-symbols-outlined {

@@ -66,14 +66,8 @@ class BonusPointsForGuessTests(SimpleTestCase):
     def setUp(self) -> None:
         """Reset shared state before each guess so the tests stay order-independent.
 
-        ``_reverse_geocode_admin_cached`` memoizes into the Django cache keyed by
-        rounded coordinates, and the cache is process-wide rather than per-test.
-        Several tests below reuse the same guess point with different mocked
-        Nominatim answers, so without this a value cached by an earlier test is
-        returned and the patched gateway is never consulted - which made the
-        outcome depend on which tests ran first (the file passing under a full
-        run and failing when run alone).
-        """
+        ``_reverse_geocode_admin_cached`` memoizes into the Django cache keyed by rounded coordinates, and the
+        cache is process-wide rather than per-test."""
         cache.clear()
         self.location = Location(country="USA", administrative_area_level_1="New York", locality="Albany")
 
@@ -88,7 +82,11 @@ class BonusPointsForGuessTests(SimpleTestCase):
         guess_point = Point(-73.75, 42.65, srid=4326)
         scope = BonusScope(country=True, state=True, city=True)
         with patch("urbanlens.dashboard.services.spotguessr.geo_bonus.NominatimGateway") as mock_gateway:
-            mock_gateway.return_value.reverse_geocode_admin.return_value = {"country": "USA", "state": "New York", "city": "Albany"}
+            mock_gateway.return_value.reverse_geocode_admin.return_value = {
+                "country": "USA",
+                "state": "New York",
+                "city": "Albany",
+            }
             result = bonus_points_for_guess(guess_point, self.location, scope)
         self.assertEqual(result.total, COUNTRY_BONUS + STATE_BONUS + CITY_BONUS)
         self.assertEqual(set(result.matched_tiers), {"country", "state", "city"})
@@ -97,7 +95,11 @@ class BonusPointsForGuessTests(SimpleTestCase):
         guess_point = Point(-73.75, 42.65, srid=4326)
         scope = BonusScope(country=False, state=True, city=True)
         with patch("urbanlens.dashboard.services.spotguessr.geo_bonus.NominatimGateway") as mock_gateway:
-            mock_gateway.return_value.reverse_geocode_admin.return_value = {"country": "USA", "state": "New York", "city": "Albany"}
+            mock_gateway.return_value.reverse_geocode_admin.return_value = {
+                "country": "USA",
+                "state": "New York",
+                "city": "Albany",
+            }
             result = bonus_points_for_guess(guess_point, self.location, scope)
         self.assertEqual(result.total, STATE_BONUS + CITY_BONUS)
         self.assertNotIn("country", result.matched_tiers)
@@ -106,7 +108,11 @@ class BonusPointsForGuessTests(SimpleTestCase):
         guess_point = Point(2.35, 48.85, srid=4326)
         scope = BonusScope(country=True, state=True, city=True)
         with patch("urbanlens.dashboard.services.spotguessr.geo_bonus.NominatimGateway") as mock_gateway:
-            mock_gateway.return_value.reverse_geocode_admin.return_value = {"country": "France", "state": "Ile-de-France", "city": "Paris"}
+            mock_gateway.return_value.reverse_geocode_admin.return_value = {
+                "country": "France",
+                "state": "Ile-de-France",
+                "city": "Paris",
+            }
             result = bonus_points_for_guess(guess_point, self.location, scope)
         self.assertEqual(result.total, 0)
         self.assertEqual(result.matched_tiers, [])
@@ -118,3 +124,75 @@ class BonusPointsForGuessTests(SimpleTestCase):
             mock_gateway.return_value.reverse_geocode_admin.return_value = None
             result = bonus_points_for_guess(guess_point, self.location, scope)
         self.assertEqual(result.total, 0)
+
+
+class CanonicalSpellingTests(SimpleTestCase):
+    """Google stores a US state as "NY" and the country as "United States"; Nominatim answers "New York"."""
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.scope = BonusScope(country=True, state=True, city=True)
+
+    def _score(self, location: Location, admin: dict[str, str]):
+        with patch("urbanlens.dashboard.services.spotguessr.geo_bonus.NominatimGateway") as mock_gateway:
+            mock_gateway.return_value.reverse_geocode_admin.return_value = admin
+            return bonus_points_for_guess(Point(-73.75, 42.65, srid=4326), location, self.scope)
+
+    def test_a_state_abbreviation_matches_its_full_name(self) -> None:
+        location = Location(country="United States", administrative_area_level_1="NY", locality="Albany")
+        result = self._score(location, {"country": "United States", "state": "New York", "city": "Albany"})
+        self.assertEqual(set(result.matched_tiers), {"country", "state", "city"})
+
+    def test_usa_spellings_match_each_other(self) -> None:
+        location = Location(country="USA", administrative_area_level_1="NY", locality="Albany")
+        result = self._score(location, {"country": "United States of America", "state": "New York", "city": "Albany"})
+        self.assertIn("country", result.matched_tiers)
+
+    def test_a_different_state_still_does_not_match(self) -> None:
+        location = Location(country="United States", administrative_area_level_1="NY", locality="Albany")
+        result = self._score(location, {"country": "United States", "state": "New Jersey", "city": "Newark"})
+        self.assertEqual(result.matched_tiers, ["country"])
+
+    def test_two_unknown_states_are_not_a_match(self) -> None:
+        location = Location(country="United States", administrative_area_level_1="", locality="")
+        result = self._score(location, {"country": "", "state": "", "city": ""})
+        self.assertEqual(result.matched_tiers, [])
+
+
+class CanonicalStateTextTests(SimpleTestCase):
+    def test_accents_and_punctuation_do_not_split_one_region(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import canonical_state
+
+        self.assertEqual(canonical_state("Île-de-France"), canonical_state("Ile de France"))
+
+    def test_dotted_abbreviations_match_their_plain_form(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import canonical_state
+
+        self.assertEqual(canonical_state("D.C."), canonical_state("DC"))
+        self.assertEqual(canonical_state("N.Y."), canonical_state("New York"))
+
+    def test_a_non_latin_name_keeps_its_letters(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import canonical_state
+
+        self.assertNotEqual(canonical_state("東京都"), canonical_state("大阪府"))
+
+
+class CanonicalScopeTests(TestCase):
+    def test_two_spellings_of_one_state_are_one_state(self) -> None:
+        _make_location(country="United States", administrative_area_level_1="NY", locality="Albany")
+        _make_location(country="USA", administrative_area_level_1="New York", locality="Buffalo")
+        scope = bonus_scope_for(Location.objects.all())
+        self.assertFalse(scope.country)
+        self.assertFalse(scope.state)
+
+
+class NominatimLanguageTests(SimpleTestCase):
+    def test_the_admin_lookup_asks_for_english_names(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+
+        gateway = NominatimGateway.__new__(NominatimGateway)
+        gateway.base_url = "https://nominatim.example"
+        with patch.object(NominatimGateway, "session", create=True) as session:
+            session.get.return_value.json.return_value = {"address": {"country": "Deutschland"}}
+            gateway.reverse_geocode_admin(52.5, 13.4)
+        self.assertEqual(session.get.call_args.kwargs["params"]["accept-language"], "en")

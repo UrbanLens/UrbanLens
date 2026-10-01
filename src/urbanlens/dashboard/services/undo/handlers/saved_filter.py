@@ -5,17 +5,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+from urbanlens.dashboard.services.core.capacity import SAVED_FILTERS
+from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register, restore_capacity
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 _RESTORABLE_FIELDS = ("name", "icon", "criteria", "order", "color", "opacity")
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.saved_filter import MODEL_LABEL``)
-#: instead of hand-typing ``"saved_filter"`` - a typo in a hand-typed string
-#: only fails at runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "saved_filter"
 
 
@@ -24,6 +22,7 @@ class SavedFilterUndoHandler(UndoHandler):
     """Restores a saved filter's name, icon, criteria, and sidebar order."""
 
     model_label = MODEL_LABEL
+    model = SavedFilter
 
     @classmethod
     def serialize(cls, instances: Sequence[SavedFilter]) -> list[dict[str, Any]]:
@@ -43,12 +42,7 @@ class SavedFilterUndoHandler(UndoHandler):
         """Recreate the saved filters.
 
         Raises:
-            UndoExpiredError: If the owning profile was deleted during the retention
-                window, or the filter's name has since been used for another of that
-                profile's filters - ``uq_saved_filter_profile_name`` would otherwise
-                surface as an uncaught IntegrityError, the same contract
-                ``PinUndoHandler.restore`` follows.
-        """
+            UndoExpiredError: If the owning profile was deleted during the retention window, or the filter's name has since been used for another of that profile's filters - ``uq_saved_filter_profile_name`` would otherwise surface as an uncaught..."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.models.profile.model import Profile
@@ -61,4 +55,5 @@ class SavedFilterUndoHandler(UndoHandler):
             if name and SavedFilter.objects.filter(profile_id=entry["profile_id"], name=name).exists():
                 raise UndoExpiredError(f"You already have a saved filter called \u201c{name}\u201d, so this one can't be restored alongside it.")
 
-        return [SavedFilter.objects.create(profile_id=entry["profile_id"], **entry["fields"]) for entry in payload]
+        with restore_capacity(SAVED_FILTERS, payload):
+            return [SavedFilter.objects.create(profile_id=entry["profile_id"], **entry["fields"]) for entry in payload]

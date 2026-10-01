@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 import json
 import logging
+from math import cos, radians
 import random
 import re
 import time
-from typing import Any, ClassVar, Literal, Protocol
+from typing import Any, ClassVar, Literal
 
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
 from django.core.cache import cache
@@ -22,43 +23,23 @@ from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededErro
 
 logger = logging.getLogger(__name__)
 
-# The self-hosted Overpass instance: fastest and most reliable endpoint in the
-# 2026-07-22 benchmark (docs/reports/overpass-mirror-test.md - sub-second medians, no
-# per-IP slot limit, verified globally complete against the public instances),
-# and the only one under our control. It is the primary; the public instances
-# below are ordered fallbacks, not equal peers (`_available_endpoints` keeps
-# the primary first and only shuffles the fallbacks).
+# It is the primary; the public instances below are ordered fallbacks, not equal peers
+# (`_available_endpoints` keeps the primary first and only shuffles the fallbacks).
 _API_URL = "https://overpass.osm.urbanlens.org/api/interpreter"
-# Public fallbacks, used when the primary is down or overloaded. Every
-# instance runs the same OSM3S/Overpass API software, so an identical query
-# works against any of them.
-# See https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances
-#
-# Pool membership rules, learned the hard way (benchmark: docs/reports/overpass-mirror-test.md):
-#
-# * Only GLOBALLY COMPLETE instances may be listed. A regional extract (e.g.
-#   overpass.osm.ch, Switzerland-only) answers 200 OK with an empty `elements`
-#   list for out-of-region queries - the empty result reads as an authoritative
-#   "OSM has nothing here", silently poisoning lookups. `query()` now
-#   cross-checks empty fallback responses against the next endpoint as a
-#   backstop, but that safety net is no reason to list a known extract.
-# * Chronically dead mirrors cost real latency, not just noise: they fail by
-#   socket timeout (up to `self.timeout` seconds) before failover moves on, so
-#   each dead entry selected first stalls a boundary lookup by ~30s. The
-#   2026-07-22 benchmark measured overpass.private.coffee at 20/20 failures and
-#   overpass.kumi.systems at 19/20; both were removed alongside osm.ch.
+# Public fallbacks, used when the primary is down or overloaded.
+# Every instance runs the same OSM3S/Overpass API software, so an identical query works against any
+# of them.
 _API_MIRRORS: tuple[str, ...] = (
     "https://overpass-api.de/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 )
-# HTTP statuses that mean "this instance is overloaded/unhealthy right now"
-# rather than "your query is wrong". 429 is the per-IP slot/quota limit;
-# 502/503/504 are the dispatcher-busy family. These, plus network timeouts,
-# take an instance out of rotation until the next day (see `_mark_endpoint_down`).
+# HTTP statuses that mean "this instance is overloaded/unhealthy right now" rather than "your query
+# is wrong".
+# 429 is the per-IP slot/quota limit; 502/503/504 are the dispatcher-busy family.
 _RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 _RETRY_BACKOFF_SECONDS = 0.5
 # Cache key namespace for the "this endpoint is down" flags. Backed by the
-# shared Django cache (Valkey/Redis in deployed environments) so a down mark set
+# shared Django cache (Dragonfly/Redis in deployed environments) so a down mark set
 # by one worker keeps every other worker off that instance too.
 _DOWN_CACHE_KEY = "overpass:endpoint_down:{}"
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
@@ -66,11 +47,7 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urba
 
 def _seconds_until_next_day() -> int:
     """Seconds from now until the next UTC midnight.
-
-    Used as the TTL for a downed-endpoint flag so a failed instance is retried
-    at the start of the next day. The project runs in UTC (``TIME_ZONE``), so
-    "the next day" is the next UTC calendar day.
-    """
+    Used as the TTL for a downed-endpoint flag so a failed instance is retried at the start of the next day."""
     now = timezone.now()
     next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, int((next_midnight - now).total_seconds()))
@@ -78,11 +55,7 @@ def _seconds_until_next_day() -> int:
 
 def _mark_endpoint_down(url: str) -> None:
     """Take an Overpass endpoint out of rotation until the next day.
-
-    Cache failures are swallowed: if the shared cache is unavailable we simply
-    can't remember the outage, which is safe (the endpoint just gets tried
-    again) and must never break a boundary lookup.
-    """
+    Cache failures are swallowed: if the shared cache is unavailable we simply can't remember the outage, which is safe (the endpoint just gets tried again) and must never break a boundary lookup."""
     try:
         cache.set(_DOWN_CACHE_KEY.format(url), 1, timeout=_seconds_until_next_day())
     except Exception:
@@ -97,13 +70,24 @@ def _endpoint_is_down(url: str) -> bool:
         return False
 
 
-# Overpass QL has no OR operator to chain bracket filters within one statement, so
-# each top-level `|`-separated clause here becomes its own unioned statement per
-# element type (see `_TAG_FILTER_CLAUSE_SPLIT` / `_nearby_features_query`). The
-# split only breaks on a `|` between a `]` and a `[`, so the `|` inside the regex
-# alternation below is left intact.
+# Overpass QL has no OR operator to chain bracket filters within one statement, so each top-level
+# `|`-separated clause here becomes its own unioned statement per element type (see
+# `_TAG_FILTER_CLAUSE_SPLIT` / `_nearby_features_query`).
+# The split only breaks on a `|` between a `]` and a `[`, so the `|` inside the regex alternation
 _DEFAULT_FEATURE_TAG_FILTER = '[~"^(building|amenity|tourism|historic|leisure|landuse|industrial|man_made|shop|office)$"~"."]|["railway"="station"]'
 _TAG_FILTER_CLAUSE_SPLIT = re.compile(r"(?<=\])\|(?=\[)")
+
+#: Tags that make a named area containing the point a candidate site, asked through ``is_in`` because
+#: ``around`` matches a way by its edges and misses a campus whose edges are all out of radius.
+_CONTAINING_SITE_TAG_FILTER = '[~"^(amenity|landuse|leisure|historic|tourism|healthcare|military|man_made|industrial)$"~"."]["name"]'
+#: Landuse values that zone a district rather than bound one property; adopting one as a parcel would merge
+#: every property inside it into one access domain.
+_ZONING_LANDUSE: frozenset[str] = frozenset(
+    {"residential", "commercial", "retail", "farmland", "farmyard", "forest", "meadow", "grass", "orchard", "vineyard", "greenfield", "allotments", "basin", "reservoir", "plant_nursery"},
+)
+#: Largest named site accepted only because it contains the point.
+MAX_CONTAINING_SITE_AREA_SQM = 5_000_000.0
+_METERS_PER_DEGREE = 111_320.0
 OsmElementType = Literal["node", "way", "relation"]
 
 
@@ -151,11 +135,30 @@ def _outer_rings_from_element(element: dict) -> list[list[tuple[float, float]]]:
     return rings
 
 
+def _stitched_polygons(segments: list[list[tuple[float, float]]]) -> list[Polygon]:
+    """Polygons formed by joining a relation's outer ways end to end, as OSM allows a ring to be split."""
+    from shapely.geometry import LineString
+    from shapely.ops import polygonize, unary_union
+
+    lines = [LineString(segment) for segment in segments if len(segment) >= 2]
+    if not lines:
+        return []
+    polygons: list[Polygon] = []
+    for shape in polygonize(unary_union(lines)):
+        polygon = _polygon_from_ring(list(shape.exterior.coords))
+        if polygon is not None:
+            polygons.append(polygon)
+    return polygons
+
+
 def _polygon_from_element(element: dict) -> Polygon | None:
     """Extract the best polygon from an Overpass way or multipolygon relation."""
     rings = _outer_rings_from_element(element)
-    raw_polygons = [_polygon_from_ring(ring) for ring in rings]
-    polygons: list[Polygon] = [polygon for polygon in raw_polygons if polygon is not None]
+    # Only a closed ring is a polygon on its own; closing an open segment onto itself invents a shape.
+    closed = [ring for ring in rings if len(ring) >= 4 and ring[0] == ring[-1]]
+    polygons: list[Polygon] = [polygon for ring in closed if (polygon := _polygon_from_ring(ring)) is not None]
+    if not polygons and len(rings) > len(closed):
+        polygons = _stitched_polygons(rings)
     if not polygons:
         return None
     return max(polygons, key=lambda polygon: polygon.area)
@@ -170,11 +173,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
     base_url: str = _API_URL
     mirrors: tuple[str, ...] = _API_MIRRORS
-    #: Server-side Overpass QL ``[timeout:N]``. Overpass charges the time spent
-    #: waiting for a free dispatcher slot against this budget, so a low value
-    #: makes the busy public instances 504 ("Dispatcher_Client ... timeout")
-    #: before the (usually sub-second) query even starts. Keep it generous; the
-    #: HTTP ``timeout`` below must stay strictly larger so the socket does not
+    #: Server-side Overpass QL ``[timeout:N]``.
+    #: Keep it generous; the HTTP ``timeout`` below must stay strictly larger so the socket does not
     #: abort a query the server is still willing to run.
     ql_timeout: int = 25
     timeout: int = 30
@@ -193,13 +193,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return endpoints
 
     def _available_endpoints(self) -> list[str]:
-        """Healthy endpoints: the primary first, then fallbacks in randomised order.
-
-        The self-hosted primary is preferred deliberately (fastest, no per-IP
-        limits, under our control - see the module comment); shuffling only the
-        fallbacks spreads whatever load does spill over evenly across the
-        public instances instead of always hammering the same one.
-        """
+        """Healthy endpoints: the primary first, then fallbacks in randomised order."""
         available = [url for url in self._endpoints() if not _endpoint_is_down(url)]
         if available and available[0] == self.base_url:
             fallbacks = available[1:]
@@ -210,29 +204,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
     def query(self, query: str, *, timeout: int | None = None) -> dict[str, Any]:
         """Run a raw Overpass QL query and return the decoded JSON payload.
-
-        The self-hosted primary is tried first, failing over to the public
-        fallbacks on the transient overload responses (429/502/503/504) and
-        connection timeouts the free instances routinely return. Any endpoint
-        that fails that way is taken out of rotation until the next day
-        (:func:`_mark_endpoint_down`), so a chronically overloaded instance
-        stops being tried at all.
-
-        An **empty** ``elements`` list from a *fallback* endpoint is treated as
-        suspect rather than authoritative: a pool member can lie by omission
-        (the osm.ch regional-extract incident - 200 OK, zero elements,
-        worldwide), so the query is cross-checked once against the next
-        endpoint. If the cross-check finds elements, the empty-answering
-        endpoint is marked down and the non-empty payload wins; if it also
-        comes back empty, the empty result is accepted as genuine. The primary
-        is trusted without a cross-check - it is benchmarked complete and under
-        our control, and most genuinely-empty queries (rural coordinates etc.)
-        would otherwise pay a doubled request for nothing.
-
-        A non-retryable HTTP error (e.g. 400 for a malformed query) is raised
-        immediately without downing the endpoint - that is our bug, not the
-        instance's, and every mirror would reject it identically. Our own
-        :class:`RateLimitExceededError` likewise propagates untouched.
+        Any endpoint that fails that way is taken out of rotation until the next day (:func:`_mark_endpoint_down`), so a chronically overloaded instance stops being tried at all.
 
         Args:
             query: The Overpass QL program to execute.
@@ -240,13 +212,10 @@ class OverpassGateway(Gateway, BoundaryProvider):
                 ``self.timeout``.
 
         Returns:
-            The decoded JSON payload, or an empty dict if the response was not a
-            JSON object or every endpoint is currently down.
+            The decoded JSON payload, or an empty dict if the response was not a JSON object or every endpoint is currently down.
 
         Raises:
-            requests.RequestException: If every available endpoint fails
-                transiently, or on the first non-retryable HTTP error.
-            RateLimitExceededError: If our own rate limiter blocks the call.
+            requests.RequestException: If every available endpoint fails transiently, or on the first non-retryable HTTP error.
         """
         http_timeout = timeout or self.timeout
         candidates = self._available_endpoints()
@@ -307,13 +276,10 @@ class OverpassGateway(Gateway, BoundaryProvider):
         try:
             payload = self.query(query, timeout=timeout)
         except (requests.RequestException, ValueError):
-            # Reached only after `query` has already failed over across every
-            # configured mirror (see `OverpassGateway.query`), so this is a genuine
-            # all-instances-unavailable event, not the routine single-instance 504
-            # it used to swallow. Still non-fatal - callers treat an empty result
-            # as "no boundary data" - but a sustained run of these now warrants a
-            # look. logger.warning (not .exception) so it doesn't read as a crash,
-            # matching GDELT's gateway, which handles its external failures the same.
+            # Still non-fatal - callers treat an empty result as "no boundary data" - but a
+            # sustained run of these now warrants a look. logger.warning (not .exception) so it
+            # doesn't read as a crash, matching GDELT's gateway, which handles its external failures
+            # the same.
             logger.warning("Overpass query failed on all endpoints", exc_info=True)
             return []
         elements = payload.get("elements")
@@ -342,31 +308,30 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return self.elements_for_query(query)
 
     def nearby_boundary_candidates(self, latitude: float, longitude: float, radius_meters: int = 100) -> list[dict[str, Any]]:
-        """Return OSM ways/relations likely to describe a real place boundary near a coordinate."""
-        return self.nearby_features(latitude, longitude, radius_meters=radius_meters, include_nodes=False, include_geometry=True)
+        """Return OSM ways/relations likely to describe a real place boundary near, or around, a coordinate."""
+        query = self._nearby_features_query(
+            latitude,
+            longitude,
+            radius_meters=radius_meters,
+            tag_filter=_DEFAULT_FEATURE_TAG_FILTER,
+            include_nodes=False,
+            include_geometry=True,
+            ql_timeout=self.ql_timeout,
+            containing_filter=_CONTAINING_SITE_TAG_FILTER,
+        )
+        return self.elements_for_query(query)
 
     def buildings_within(self, polygon: Polygon | MultiPolygon) -> list[dict[str, Any]]:
         """Return every OSM building whose footprint falls inside a polygon.
-
-        The open-data counterpart to REData's per-parcel building list: given a
-        property/parcel boundary, this answers "what structures stand on it?"
-        for jurisdictions REData has no county GIS coverage for.
-
-        Not routed through :meth:`nearby_features` on purpose - that helper
-        clamps its search radius to 250 m (see ``_nearby_features_query``),
-        which is smaller than the sites this is for. Overpass's own ``poly:``
-        filter takes the real boundary instead, so a 40-acre campus is queried
-        exactly, in one request.
+        Overpass's own ``poly:`` filter takes the real boundary instead, so a 40-acre campus is queried exactly, in one request.
 
         Args:
             polygon: The property boundary to search inside (WGS-84). A
                 MultiPolygon is queried by its largest ring.
 
         Returns:
-            One dict per building - ``{"name", "latitude", "longitude",
-            "osm_id", "source"}`` - matching the record shape
-            ``plugins.builtin.parcel_buildings`` caches. Empty when the
-            polygon is unusable or Overpass found nothing.
+            One dict per building - ``{"name", "latitude", "longitude", "osm_id", "osm_type", "source"}`` plus a GeoJSON
+            ``geometry`` footprint when OSM has one - matching the record shape ``plugins.builtin.parcel_buildings`` caches.
         """
         ring = self._largest_exterior_ring(polygon)
         if ring is None:
@@ -380,37 +345,41 @@ class OverpassGateway(Gateway, BoundaryProvider):
   way(poly:"{poly_clause}")["building"];
   relation(poly:"{poly_clause}")["type"="multipolygon"]["building"];
 );
-out center tags;
+out body geom;
 """.strip()
 
         buildings: list[dict[str, Any]] = []
         for element in self.elements_for_query(query):
-            center = element.get("center") or {}
-            lat, lon = center.get("lat"), center.get("lon")
-            if lat is None or lon is None:
+            footprint = _polygon_from_element(element)
+            # The whole element's bounding-box centre, which is what `out center` reported, so markers stay
+            # put - a multi-part relation's footprint is only its largest part.
+            bounds = element.get("bounds") or {}
+            if all(key in bounds for key in ("minlat", "minlon", "maxlat", "maxlon")):
+                west, south, east, north = bounds["minlon"], bounds["minlat"], bounds["maxlon"], bounds["maxlat"]
+            elif footprint is not None:
+                west, south, east, north = footprint.extent
+            else:
                 continue
             raw_tags = element.get("tags")
             tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
-            buildings.append(
-                {
-                    "name": tags.get("name") or "",
-                    "building_number": tags.get("ref") or tags.get("addr:housenumber") or "",
-                    "latitude": float(lat),
-                    "longitude": float(lon),
-                    "osm_id": element.get("id"),
-                    "source": "osm",
-                },
-            )
+            building: dict[str, Any] = {
+                "name": tags.get("name") or "",
+                "building_number": tags.get("ref") or tags.get("addr:housenumber") or "",
+                "latitude": (float(south) + float(north)) / 2,
+                "longitude": (float(west) + float(east)) / 2,
+                "osm_id": element.get("id"),
+                "osm_type": element.get("type") or "way",
+                "source": "osm",
+            }
+            if footprint is not None:
+                building["geometry"] = json.loads(footprint.geojson)
+            buildings.append(building)
         return buildings
 
     @staticmethod
     def _largest_exterior_ring(polygon: Polygon | MultiPolygon | None) -> list[tuple[float, float]] | None:
         """The exterior ring of the largest part of a polygonal geometry, as (lon, lat) pairs.
-
-        Overpass's ``poly:`` filter accepts a single ring, so a MultiPolygon
-        (the shape every stored ``Boundary`` uses) has to be reduced to one -
-        its largest part is the parcel proper, any others being outbuildings
-        or slivers.
+        Overpass's ``poly:`` filter accepts a single ring, so a MultiPolygon (the shape every stored ``Boundary`` uses) has to be reduced to one - its largest part is the parcel proper, any others being outbuildings or slivers.
 
         Args:
             polygon: The geometry to reduce; None is tolerated.
@@ -448,16 +417,9 @@ out center tags;
         include_nodes: bool,
         include_geometry: bool,
         ql_timeout: int = 25,
+        containing_filter: str | None = None,
     ) -> str:
-        """Build an Overpass QL query constrained to useful place tags.
-
-        ``tag_filter`` may contain multiple ``|``-separated Overpass filter clauses;
-        each becomes its own unioned statement per element type, since Overpass QL
-        has no OR operator for chaining bracket filters within a single statement.
-
-        ``ql_timeout`` sets the server-side ``[timeout:N]``; see the
-        :class:`OverpassGateway.ql_timeout` field for why it must be generous.
-        """
+        """Build an Overpass QL query constrained to useful place tags, optionally also asking which tagged areas contain the point."""
         radius = max(10, min(int(radius_meters), 250))
         lat = float(latitude)
         lon = float(longitude)
@@ -472,10 +434,19 @@ out center tags;
                     f'  relation(around:{radius},{lat:.7f},{lon:.7f})["type"="multipolygon"]{clause};',
                 ],
             )
+        prelude = ""
+        if containing_filter:
+            prelude = f"is_in({lat:.7f},{lon:.7f})->.containing;\n"
+            selectors.extend(
+                [
+                    f"  way(pivot.containing){containing_filter};",
+                    f'  relation(pivot.containing)["type"="multipolygon"]{containing_filter};',
+                ],
+            )
         out_clause = "out tags geom qt;" if include_geometry else "out center tags qt;"
         return f"""
 [out:json][timeout:{ql_timeout}];
-(
+{prelude}(
 {chr(10).join(selectors)}
 );
 {out_clause}
@@ -483,12 +454,7 @@ out center tags;
 
     @staticmethod
     def _is_building_element(element: dict) -> bool:
-        """True when an OSM element's tags describe a building footprint.
-
-        Anything else (landuse, amenity perimeter, leisure grounds, industrial
-        sites...) is treated as a property boundary - ambiguity resolves to
-        property.
-        """
+        """True when an OSM element's tags describe a building footprint."""
         tags = element.get("tags")
         if not isinstance(tags, dict):
             return False
@@ -502,18 +468,31 @@ out center tags;
             polygon = _polygon_from_element(element)
             if polygon is None or not _is_reasonable_default(polygon):
                 continue
-            if polygon.contains(point) or polygon.touches(point):
-                kind = "building" if self._is_building_element(element) else "property"
-                candidates[kind].append(polygon)
+            if not (polygon.contains(point) or polygon.touches(point)):
+                continue
+            if self._is_building_element(element):
+                candidates["building"].append(polygon)
+            elif self._is_property_area(element, polygon, point):
+                candidates["property"].append(polygon)
         return candidates
+
+    def _is_property_area(self, element: dict, polygon: Polygon, point: Point) -> bool:
+        """Whether a non-building polygon containing the point can stand for its property.
+
+        A zoning landuse never can. An area reached only by containment (every edge beyond the search
+        radius) must be a named site no larger than :data:`MAX_CONTAINING_SITE_AREA_SQM`.
+        """
+        raw_tags = element.get("tags")
+        tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
+        if tags.get("landuse") in _ZONING_LANDUSE:
+            return False
+        scale = _METERS_PER_DEGREE * max(0.1, cos(radians(point.y)))
+        if polygon.boundary.distance(point) * scale <= self.radius_meters:
+            return True
+        return bool(tags.get("name")) and polygon.area * _METERS_PER_DEGREE * scale <= MAX_CONTAINING_SITE_AREA_SQM
 
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
         """Return the smallest containing building footprint and property perimeter.
-
-        One Overpass query yields both kinds: elements tagged ``building`` (or
-        ``building:part``) become the building boundary; every other matching
-        feature (landuse, amenity, leisure, industrial...) competes for the
-        property boundary.
 
         Args:
             latitude: WGS-84 latitude.

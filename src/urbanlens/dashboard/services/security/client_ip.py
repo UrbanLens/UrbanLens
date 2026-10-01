@@ -1,0 +1,94 @@
+"""Resolving the address a request actually came from.
+One implementation, because every caller is making a security decision with the answer - per-IP rate limiting on login and passphrase suggestions, and the network allowlist on ``/metrics``."""
+
+from __future__ import annotations
+
+from functools import lru_cache
+import ipaddress
+import logging
+from typing import TYPE_CHECKING
+
+from django.conf import settings
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
+    from django.http import HttpRequest
+
+logger = logging.getLogger(__name__)
+
+
+def client_ip(request: HttpRequest) -> str:
+    """Return the client address, trusting only the proxies we put in front.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        A string address, or ``"unknown"`` when the socket address is missing."""
+    remote_addr = request.META.get("REMOTE_ADDR") or "unknown"
+    hops = settings.TRUSTED_PROXY_COUNT
+    if hops <= 0:
+        return remote_addr
+    chain = [entry.strip() for entry in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",") if entry.strip()]
+    if len(chain) < hops:
+        return remote_addr
+    return chain[-hops]
+
+
+def parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Parse an address that :func:`client_ip` returned.
+
+    Args:
+        value: The address string to parse.
+
+    Returns:
+        The parsed address, or ``None`` when it is not one - ``"unknown"``, or an ``X-Forwarded-For`` entry a client filled with arbitrary text."""
+    # A port suffix is not part of the XFF grammar but appears in the wild from
+    # proxies that append one; IPv6 arrives bracketed when it does.
+    candidate = value.strip()
+    if candidate.startswith("["):
+        candidate = candidate.partition("]")[0].removeprefix("[")
+    elif candidate.count(":") == 1:
+        candidate = candidate.partition(":")[0]
+    try:
+        return ipaddress.ip_address(candidate)
+    except ValueError:
+        return None
+
+
+@lru_cache(maxsize=8)
+def parse_networks(raw: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    """Parse a comma-separated CIDR list into networks.
+    Cached on the raw string, because callers re-derive this from a setting on every request and the result only changes when the setting does.
+
+    Args:
+        raw: Comma-separated CIDRs, e.g. ``"10.2.0.0/24, 127.0.0.1/32"``.
+
+    Returns:
+        The networks that parsed, as a tuple - immutable because it is shared between every caller that passes the same string."""
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for entry in raw.split(","):
+        candidate = entry.strip()
+        if not candidate:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(candidate, strict=False))
+        except ValueError:
+            logger.warning("Ignoring unparseable CIDR %r in an address allowlist", candidate)
+    return tuple(networks)
+
+
+def address_in_networks(address: str, networks: Sequence[ipaddress.IPv4Network | ipaddress.IPv6Network] | Iterable[ipaddress.IPv4Network | ipaddress.IPv6Network]) -> bool:
+    """Report whether an address falls inside any of the given networks.
+
+    Args:
+        address: An address string as returned by :func:`client_ip`.
+        networks: Networks to test against.
+
+    Returns:
+        ``True`` only when the address parses *and* falls inside one of the networks."""
+    parsed = parse_ip(address)
+    if parsed is None:
+        return False
+    return any(parsed in network for network in networks)

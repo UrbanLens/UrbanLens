@@ -1,14 +1,5 @@
 """Shared JSON-over-HTTP base for REData's non-location-context endpoints.
-
-``RedataLabelsGateway`` and ``RedataPhotosGateway`` had byte-identical
-configuration, headers and request helpers - roughly ninety lines duplicated
-between them, which drifts the moment one is fixed and the other is not. They
-now differ only in the endpoints they expose.
-
-Separate from ``RedataLocationContextGateway``: that one models the
-"near-a-coordinate" envelope every location endpoint shares, which the label
-and photo APIs do not use.
-"""
+They now differ only in the endpoints they expose."""
 
 from __future__ import annotations
 
@@ -61,8 +52,7 @@ class RedataJsonGateway(Gateway):
             The absolute URL.
 
         Raises:
-            GatewayRequestError: The base URL is unset - ``__post_init__``
-                already rejects that, so this only narrows the type.
+            GatewayRequestError: The base URL is unset - ``__post_init__`` already rejects that, so this only narrows the type.
         """
         if self.base_url is None:
             raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
@@ -79,10 +69,7 @@ class RedataJsonGateway(Gateway):
             The decoded body.
 
         Raises:
-            GatewayRequestError: Non-2xx status, or a body that is not a JSON
-                object. ``dict()`` is not enough on its own - a 200 carrying a
-                JSON list raises ``TypeError``, which callers do not expect
-                from a gateway.
+            GatewayRequestError: Non-2xx status, or a body that is not a JSON object.
         """
         if response.status_code in (200, 201):
             try:
@@ -110,8 +97,7 @@ class RedataJsonGateway(Gateway):
             The decoded JSON body.
 
         Raises:
-            GatewayRequestError: The request could not be made, or the response
-                was not a usable JSON object.
+            GatewayRequestError: The request could not be made, or the response was not a usable JSON object.
         """
         try:
             response = self.session.get(self._url(path), params=params or {}, headers=self._headers, timeout=timeout)
@@ -130,8 +116,7 @@ class RedataJsonGateway(Gateway):
             The decoded JSON body.
 
         Raises:
-            GatewayRequestError: The request could not be made, or the response
-                was not a usable JSON object.
+            GatewayRequestError: The request could not be made, or the response was not a usable JSON object.
         """
         try:
             response = self.session.post(self._url(path), json=body, headers=self._headers, timeout=_REQUEST_TIMEOUT)

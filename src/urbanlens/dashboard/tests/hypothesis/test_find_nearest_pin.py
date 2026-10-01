@@ -1,19 +1,4 @@
-"""``find_nearest_pin`` must return the nearest pin, not any pin in range.
-
-It ordered by ``location__point`` - the geometry column itself. That sorts by
-PostGIS's internal representation, which has nothing to do with distance from the
-query point, so the function returned an arbitrary pin inside the radius while
-its name and docstring both promised the closest one.
-
-Measured before the fix: with pins 11m and 75m from the query point, it returned
-the one at 75m.
-
-It matters because of where it is used - matching Google Location History and My
-Activity coordinates against a user's existing pins, at
-``VISIT_MATCH_RADIUS_M`` = 100m. Any profile with two pins inside that radius (a
-building and its neighbour, or a pin and a nearby one on the same block) could
-have an imported visit attributed to the wrong place, silently and permanently.
-"""
+"""``find_nearest_pin`` must return the nearest pin, not any pin in range."""
 
 from __future__ import annotations
 

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 
-from hypothesis import given, settings, strategies as st
+from django.utils import timezone
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.global_search.parser import parse_query
 
@@ -21,7 +22,7 @@ class ParseQueryStructureTests(SimpleTestCase):
         # A summer range: starts in June, ends in August, already over.
         self.assertEqual(parsed.date_start.month, 6)
         self.assertEqual(parsed.date_end.month, 8)
-        self.assertLess(parsed.date_end, date.today())
+        self.assertLess(parsed.date_end, timezone.localdate())
         self.assertEqual(parsed.terms, [])
 
     def test_pins_in_cincinnati(self):
@@ -84,8 +85,9 @@ class ParseQueryStructureTests(SimpleTestCase):
 
     def test_this_year_ends_today(self):
         parsed = parse_query("photos this year")
-        self.assertEqual(parsed.date_start, date(date.today().year, 1, 1))
-        self.assertEqual(parsed.date_end, date.today())
+        today = timezone.localdate()
+        self.assertEqual(parsed.date_start, date(today.year, 1, 1))
+        self.assertEqual(parsed.date_end, today)
 
     def test_bare_season_without_preposition_stays_text(self):
         # "Summer Street Mill" must remain a literal text search.

@@ -1,31 +1,6 @@
 /**
- * The enrichment panels a real place is supposed to offer, and whether they fill.
- *
- * A census rather than a set of individual assertions. `GET pins/{slug}/panels/`
- * lists every API-exposed panel the caller may see, each with a `ready` flag, so
- * one request covers a dozen integrations at once - and covers them the way they
- * actually fail, which is not "the endpoint 500s" but "it is listed, it never
- * becomes ready, and nothing says why".
- *
- * ## What "listed" and "ready" each mean
- *
- * The list is already filtered twice, and the distinction matters when reading a
- * failure:
- *
- * - A panel whose `gate(pin)` refuses - no coordinates, outside the USA - is
- *   **omitted entirely**, not listed as unready.
- * - A panel gated on a subscription feature the account lacks is also omitted,
- *   and its detail route answers **404 rather than 403**, deliberately, so the
- *   list cannot be used to enumerate what a subscription would buy.
- *
- * So "absent" is ambiguous between "not applicable here" and "you may not see
- * it", and only "listed but never ready" is unambiguously a pipeline that is not
- * running. These tests are written around that: the census is reported rather
- * than asserted against a fixed list, and the sharp assertion is on readiness.
- *
- * The one hard expectation is that a real place in New York offers *several*
- * panels. A campus with a Wikipedia article, a CRIS inventory record and EPA
- * regulated facilities that offers one or two has lost its providers.
+ * The enrichment panels a real place is supposed to offer, and whether they fill. A census rather
+ * than a set of individual assertions.
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

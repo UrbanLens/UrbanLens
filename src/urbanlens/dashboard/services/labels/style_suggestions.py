@@ -5,17 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import re
-from typing import TYPE_CHECKING, Any, cast
-
-from django.contrib.auth.models import AnonymousUser
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from django.contrib.auth.base_user import AbstractBaseUser
-
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.profile.model import Profile
 
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
-from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.ai.access import ai_features_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +28,8 @@ class LabelStyleSuggestion:
 
 
 def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
-    """Ask AI to choose an emoji and color for a label when the user may use AI.
-
-    The suggestion is best-effort: callers can safely fall back to the default label
-    appearance when subscription, profile preference, site settings, or the AI gateway
-    prevents a suggestion.
-    """
-    if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled or not profile.external_apis_enabled:
+    """Ask AI to choose an emoji and color for a label when the user may use AI."""
+    if not ai_features_enabled(profile):
         return LabelStyleSuggestion()
 
     prompt = _build_prompt(name)
@@ -61,6 +53,32 @@ def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
         return LabelStyleSuggestion()
 
     return _parse_answers(answers)
+
+
+def resolve_or_create_styled_label(profile: Profile, name: str, kind: str) -> tuple[Label, bool]:
+    """Resolve *name* as ``Label.objects.resolve_or_create`` does, giving a label it creates an AI-suggested icon and colour.
+
+    The suggestion is a model call, so only for callers off the request path.
+
+    Args:
+        profile: The owner of a created label.
+        name: The label name.
+        kind: The label kind.
+
+    Returns:
+        ``(label, created)``.
+
+    Raises:
+        ValueError: *name* is blank.
+        CapacityExceededError: A label would be created, and the profile is at its limit.
+    """
+    from urbanlens.dashboard.models.labels.model import Label
+
+    if (existing := Label.objects.named(profile, name, kind).first()) is not None:
+        return existing, False
+    style = suggest_label_style(name, profile)
+    defaults = {field: value for field, value in (("icon", style.icon), ("color", style.color)) if value}
+    return Label.objects.resolve_or_create(profile, name, kind, defaults=defaults)
 
 
 def _build_prompt(name: str) -> str:

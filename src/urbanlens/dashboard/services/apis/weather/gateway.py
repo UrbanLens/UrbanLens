@@ -19,7 +19,8 @@ class OpenWeatherMapGateway(Gateway):
     service_key: ClassVar[str] = "openweathermap"
     paid_service: ClassVar[bool] = False
 
-    api_key: str | None = settings.openweathermap_api_key
+    # default_factory so settings changes apply per instance; a bare default freezes at import.
+    api_key: str | None = field(default_factory=lambda: settings.openweathermap_api_key)
     base_url: str = "http://api.openweathermap.org/data/2.5/forecast"
 
     def __post_init__(self):
@@ -84,7 +85,7 @@ class OpenWeatherMapGateway(Gateway):
         for item in forecast:
             dt_txt = item.get("dt_txt", "")
             if dt_txt:
-                item["date"] = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")
+                item["date"] = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007  # OpenWeatherMap...
         return forecast
 
     def filter_forecast(self, forecast: list[dict]) -> list[dict]:

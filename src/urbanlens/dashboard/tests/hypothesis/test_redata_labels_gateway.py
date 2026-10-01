@@ -14,7 +14,9 @@ from urbanlens.dashboard.services.apis.labels.redata_labels_gateway import Redat
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
-def _response(status_code: int, *, json_body: dict | None = None, text: str = "", raise_on_json: bool = False) -> MagicMock:
+def _response(
+    status_code: int, *, json_body: dict | None = None, text: str = "", raise_on_json: bool = False
+) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status_code
     resp.text = text
@@ -26,7 +28,9 @@ def _response(status_code: int, *, json_body: dict | None = None, text: str = ""
 
 
 def _gateway(session: MagicMock | None = None) -> RedataLabelsGateway:
-    return RedataLabelsGateway(base_url="https://redata.example.test", api_key="test-key", session=session or MagicMock())
+    return RedataLabelsGateway(
+        base_url="https://redata.example.test", api_key="test-key", session=session or MagicMock()
+    )
 
 
 class ConstructionTests(SimpleTestCase):
@@ -58,7 +62,18 @@ class DefineLabelsTests(SimpleTestCase):
 
     def test_posts_to_the_labels_endpoint_with_bearer_auth(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"created": 1, "updated": 0, "unknown_parents": {}, "rejected_edges": [], "implied_created": 0, "implied_removed": 0, "statistics_deferred": False})
+        session.post.return_value = _response(
+            200,
+            json_body={
+                "created": 1,
+                "updated": 0,
+                "unknown_parents": {},
+                "rejected_edges": [],
+                "implied_created": 0,
+                "implied_removed": 0,
+                "statistics_deferred": False,
+            },
+        )
         gateway = _gateway(session)
         gateway.define_labels("user-1", [{"external_id": "abc", "name": "Church"}])
         args, kwargs = session.post.call_args
@@ -103,9 +118,24 @@ class SyncAssignmentsTests(SimpleTestCase):
 
     def test_posts_to_the_assignments_endpoint(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"locations_created": 1, "locations_updated": 0, "assignments_added": 2, "assignments_removed": 0, "implied_created": 0, "implied_removed": 0, "unknown_label_ids": [], "statistics_deferred": False})
+        session.post.return_value = _response(
+            200,
+            json_body={
+                "locations_created": 1,
+                "locations_updated": 0,
+                "assignments_added": 2,
+                "assignments_removed": 0,
+                "implied_created": 0,
+                "implied_removed": 0,
+                "unknown_label_ids": [],
+                "statistics_deferred": False,
+            },
+        )
         gateway = _gateway(session)
-        result = gateway.sync_assignments("user-1", [{"external_id": "pin-1", "latitude": 1.0, "longitude": 2.0, "label_ids": ["abc"], "replace": True}])
+        result = gateway.sync_assignments(
+            "user-1",
+            [{"external_id": "pin-1", "latitude": 1.0, "longitude": 2.0, "label_ids": ["abc"], "replace": True}],
+        )
         args, kwargs = session.post.call_args
         self.assertEqual(args[0], "https://redata.example.test/api/v1/labels/assignments/")
         self.assertEqual(kwargs["json"]["locations"][0]["external_id"], "pin-1")
@@ -113,16 +143,43 @@ class SyncAssignmentsTests(SimpleTestCase):
 
     def test_reports_unknown_label_ids(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"locations_created": 0, "locations_updated": 1, "assignments_added": 0, "assignments_removed": 0, "implied_created": 0, "implied_removed": 0, "unknown_label_ids": ["ghost"], "statistics_deferred": False})
+        session.post.return_value = _response(
+            200,
+            json_body={
+                "locations_created": 0,
+                "locations_updated": 1,
+                "assignments_added": 0,
+                "assignments_removed": 0,
+                "implied_created": 0,
+                "implied_removed": 0,
+                "unknown_label_ids": ["ghost"],
+                "statistics_deferred": False,
+            },
+        )
         gateway = _gateway(session)
-        result = gateway.sync_assignments("user-1", [{"external_id": "pin-1", "latitude": 1.0, "longitude": 2.0, "label_ids": ["ghost"], "replace": True}])
+        result = gateway.sync_assignments(
+            "user-1",
+            [{"external_id": "pin-1", "latitude": 1.0, "longitude": 2.0, "label_ids": ["ghost"], "replace": True}],
+        )
         self.assertEqual(result["unknown_label_ids"], ["ghost"])
 
 
 class SuggestLabelsTests(SimpleTestCase):
     def test_posts_to_the_suggest_endpoint_with_required_fields_only(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"count": 0, "results": [], "implied": [], "ranker": "heuristic", "model_version": None, "scored_candidates": 0, "total_candidates": 0, "statistics_stale": False})
+        session.post.return_value = _response(
+            200,
+            json_body={
+                "count": 0,
+                "results": [],
+                "implied": [],
+                "ranker": "heuristic",
+                "model_version": None,
+                "scored_candidates": 0,
+                "total_candidates": 0,
+                "statistics_stale": False,
+            },
+        )
         gateway = _gateway(session)
         gateway.suggest_labels("user-1", 1.0, 2.0)
         args, kwargs = session.post.call_args
@@ -132,9 +189,23 @@ class SuggestLabelsTests(SimpleTestCase):
 
     def test_includes_optional_fields_when_given(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"count": 0, "results": [], "implied": [], "ranker": "heuristic", "model_version": None, "scored_candidates": 0, "total_candidates": 0, "statistics_stale": False})
+        session.post.return_value = _response(
+            200,
+            json_body={
+                "count": 0,
+                "results": [],
+                "implied": [],
+                "ranker": "heuristic",
+                "model_version": None,
+                "scored_candidates": 0,
+                "total_candidates": 0,
+                "statistics_stale": False,
+            },
+        )
         gateway = _gateway(session)
-        gateway.suggest_labels("user-1", 1.0, 2.0, names=["Old Mill"], applied_label_ids=["abc"], limit=5, min_confidence=0.3)
+        gateway.suggest_labels(
+            "user-1", 1.0, 2.0, names=["Old Mill"], applied_label_ids=["abc"], limit=5, min_confidence=0.3
+        )
         body = session.post.call_args.kwargs["json"]
         self.assertEqual(body["names"], ["Old Mill"])
         self.assertEqual(body["applied_label_ids"], ["abc"])
@@ -143,7 +214,21 @@ class SuggestLabelsTests(SimpleTestCase):
 
     def test_parses_results(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"count": 1, "results": [{"label_id": "abc", "name": "Lighthouse", "confidence": 0.82, "canonical_key": "lighthouse"}], "implied": [], "ranker": "heuristic", "model_version": None, "scored_candidates": 1, "total_candidates": 1, "statistics_stale": False})
+        session.post.return_value = _response(
+            200,
+            json_body={
+                "count": 1,
+                "results": [
+                    {"label_id": "abc", "name": "Lighthouse", "confidence": 0.82, "canonical_key": "lighthouse"}
+                ],
+                "implied": [],
+                "ranker": "heuristic",
+                "model_version": None,
+                "scored_candidates": 1,
+                "total_candidates": 1,
+                "statistics_stale": False,
+            },
+        )
         gateway = _gateway(session)
         result = gateway.suggest_labels("user-1", 1.0, 2.0)
         self.assertEqual(result["results"][0]["confidence"], 0.82)

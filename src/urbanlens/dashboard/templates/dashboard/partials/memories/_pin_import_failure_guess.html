@@ -1,18 +1,4 @@
-{% comment %}
-A suggested location for a pin whose Google Maps CID never resolved, derived
-from the pin's own name (see services.pins.import_failure_guess).
-
-Fetched lazily per card, so this template renders only when there is a guess
-worth showing - the "no guess" case is an empty response, not an empty state.
-
-The button fills the Place Pin dialog's coordinate fields rather than submitting:
-the guess comes from a name, and a name can be wrong, so the user sees what is
-being proposed and confirms it. Nothing here places a pin on its own.
-
-Context:
-  failure - the pending PinImportFailure
-  guess   - a LocationGuess
-{% endcomment %}
+{% comment %}A suggested location for a pin whose Google Maps CID never resolved, derived from the pin's own name.{% endcomment %}
 <div class="pin-import-failure-guess">
     <p class="pin-import-failure-guess-label">
         <i class="material-symbols-outlined">lightbulb</i>

@@ -1,32 +1,54 @@
-"""Base class and registry for per-model undo-delete handlers.
-
-See the modules under ``services.undo.handlers`` for the concrete, per-model
-serialize/restore logic. Importing ``services.undo.handlers`` (done once by
-``services.undo.service``) populates the registry below.
-"""
+"""Base class and registry for per-model undo handlers."""
 
 from __future__ import annotations
 
 import abc
+from collections import Counter
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
+
+    from django.db.models import Model
+
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.core.capacity import Capacity
+
+
+@contextmanager
+def restore_capacity(capacity: Capacity, payload: Sequence[dict[str, Any]]) -> Iterator[None]:
+    """Reserve room for a restore's rows under each owning profile, refusing the undo when there is none.
+
+    Args:
+        capacity: The limit the restored rows count against.
+        payload: The handler's entries, each carrying ``profile_id``.
+
+    Yields:
+        Nothing; the body recreates the rows inside the reservation.
+
+    Raises:
+        UndoExpiredError: An owner has since filled the room the deleted rows left.
+    """
+    from urbanlens.dashboard.services.core.capacity import CapacityExceededError, reserve_each
+    from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+    try:
+        with reserve_each(capacity, Counter(entry["profile_id"] for entry in payload)):
+            yield
+    except CapacityExceededError as exc:
+        raise UndoExpiredError(exc.user_message) from exc
 
 
 class UndoHandler(abc.ABC):
-    """Serializes/restores instances of one model for the undo-delete framework.
-
-    Cascade-deleted children (comments, notes, contacts, markup annotations,
-    etc.) are gone the instant the parent is deleted - before ``serialize``
-    gets a chance to capture them - so ``restore`` only brings back each
-    instance's own core fields plus whichever relations are cheap and safe
-    to relink (self-referential hierarchy, labels, membership rosters).
-    Callers must surface this scope limit to the user before they confirm
-    the delete.
-    """
+    """Serializes/restores instances of one model for the undo framework.
+    Mutation handlers (``MutationUndoHandler``) record a reversible change instead."""
 
     model_label: ClassVar[str]
+    #: The Django model this delete handler recreates. Used to re-delete the
+    #: restored rows on redo. Mutation handlers leave this None.
+    model: ClassVar[type[Model] | None] = None
+    supports_delete: ClassVar[bool] = True
 
     @classmethod
     @abc.abstractmethod
@@ -42,6 +64,61 @@ class UndoHandler(abc.ABC):
     @abc.abstractmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Any]:
         """Recreate instances from a payload previously returned by ``serialize``."""
+
+    @classmethod
+    def redo_delete(cls, payload: dict[str, Any]) -> None:
+        """Re-delete rows that ``restore`` just recreated (the redo of a delete-undo).
+
+        Args:
+            payload: Wrapped stash of the form ``{"entries": ..., "restored_pks": [...]}``.
+        """
+        pks = payload.get("restored_pks") or []
+        if cls.model is None or not pks:
+            return
+        # _default_manager, not objects: django-stubs only types `objects` on a concrete model
+        # subclass (via its mypy plugin), not on a `type[Model]` classvar like this one -
+        # `_default_manager` is the same manager, typed directly on the base class for exactly this
+        # situation.
+        cls.model._default_manager.filter(pk__in=pks).delete()  # noqa: SLF001
+
+    @classmethod
+    def undo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:  # noqa: ARG003 - interface; overrides use both
+        """Apply the inverse of a stashed mutation, as ``profile``.
+
+        Args:
+            payload: The dict previously given to ``stash_mutation``.
+            profile: Who is undoing. The handler re-checks that they may still touch the object rather than
+                trusting the stashed primary key.
+        """
+        raise TypeError(f"{cls.model_label} does not support mutations.")
+
+    @classmethod
+    def redo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:  # noqa: ARG003 - interface; overrides use both
+        """Re-apply a stashed mutation after it was undone, as ``profile``.
+
+        Args:
+            payload: The dict previously given to ``stash_mutation``.
+            profile: Who is redoing; re-checked as for ``undo_mutation``.
+        """
+        raise TypeError(f"{cls.model_label} does not support mutations.")
+
+
+class MutationUndoHandler(UndoHandler):
+    """Undo handler for a reversible change rather than a deletion."""
+
+    supports_delete = False
+
+    @classmethod
+    def serialize(cls, instances: Sequence[Any]) -> list[dict[str, Any]]:  # noqa: ARG003 - mutations are not serialized
+        raise TypeError(f"{cls.model_label} records mutations, not deletions.")
+
+    @classmethod
+    def describe(cls, instances: Sequence[Any]) -> str:  # noqa: ARG003 - mutations are not serialized
+        raise TypeError(f"{cls.model_label} records mutations, not deletions.")
+
+    @classmethod
+    def restore(cls, payload: list[dict[str, Any]]) -> list[Any]:  # noqa: ARG003 - mutations are not serialized
+        raise TypeError(f"{cls.model_label} records mutations, not deletions.")
 
 
 _HANDLERS: dict[str, type[UndoHandler]] = {}
@@ -72,8 +149,7 @@ def describe_batch(singular_label: str, plural_label: str, names: list[str], max
         singular_label: Label for a single instance, e.g. ``"Pin"``.
         plural_label: Label for the plural count, e.g. ``"pins"``.
         names: Display name of every instance in the batch, in order.
-        max_shown: Maximum number of names to list before collapsing the rest
-            into a "(+N more)" suffix.
+        max_shown: Maximum number of names to list before collapsing the rest into a "(+N more)" suffix.
 
     Returns:
         e.g. ``"Pin: Old Mill"``, or ``"5 pins: Old Mill, Grain Silo, Water Tower (+2 more)"``.

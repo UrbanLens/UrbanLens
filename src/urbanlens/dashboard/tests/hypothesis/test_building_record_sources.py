@@ -1,20 +1,4 @@
-"""Building provenance survives REData's move to a reconciled response.
-
-REData now reconciles `/parcels/{uuid}/buildings/` into one record per physical
-building (its `docs/buildings-dedup-spec.md`), which removed the top-level
-`source` string a per-observation record used to carry and replaced it with a
-`sources[]` array - one entry per source referencing that building, ordered by
-`BUILDING_SOURCES` precedence.
-
-Both UrbanLens consumers still read the removed key, and neither fails loudly:
-the buildings table's source chip and the building-attributes card's chip just
-go blank, which reads as "we don't know where this came from" rather than as a
-version skew.
-
-Both shapes have to work at once. The flat one is not legacy - Overpass answers
-in it (`parcel_buildings` falls back to Overpass whenever REData has no
-buildings for a parcel, which is the path the reported HRSH pin was on).
-"""
+"""Building provenance survives REData's move to a reconciled response."""
 
 from __future__ import annotations
 
@@ -30,10 +14,14 @@ class RecordSourcesTests(SimpleTestCase):
         self.assertEqual(record_sources(record), ["cris", "osm"])
 
     def test_precedence_order_is_preserved(self) -> None:
-        """REData orders `sources[]` richest-first; re-sorting would lose that."""
-        record = {"sources": [{"source": "county_gis"}, {"source": "cris"}, {"source": "osm"}]}
+        """REData orders `sources[]` richest-first; re-sorting would lose that.
 
-        self.assertEqual(record_sources(record), ["county_gis", "cris", "osm"])
+        Keys are chosen so the expected result is neither the alphabetical nor the reverse-alphabetical ordering
+        of themselves - `county_gis, cris, osm` (the previous data here) is already alphabetical, so a
+        regression that silently sorted the list would have passed it."""
+        record = {"sources": [{"source": "cris"}, {"source": "assessor"}, {"source": "osm"}, {"source": "county_gis"}]}
+
+        self.assertEqual(record_sources(record), ["cris", "assessor", "osm", "county_gis"])
 
     def test_a_flat_record_still_works(self) -> None:
         """Overpass-shaped rows never had `sources[]`."""
@@ -44,8 +32,8 @@ class RecordSourcesTests(SimpleTestCase):
         self.assertEqual(record_sources({"source": ""}), [])
 
     def test_malformed_entries_are_skipped(self) -> None:
-        """A source entry without a `source` key must not become an empty chip."""
-        self.assertEqual(record_sources({"sources": [{"name": "x"}, {"source": "cris"}]}), ["cris"])
+        """A source entry without a `source` key, or that isn't even a dict, must not become an empty chip."""
+        self.assertEqual(record_sources({"sources": [{"name": "x"}, "not-a-dict", {"source": "cris"}]}), ["cris"])
 
     def test_an_empty_sources_array_falls_back(self) -> None:
         """`sources: []` alongside a flat key must not lose the flat key."""
@@ -63,7 +51,9 @@ class BuildingRowSourceLabelTests(SimpleTestCase):
     def test_a_reconciled_building_is_labelled_for_both_sources(self) -> None:
         row = self._row({"name": "Main Building", "sources": [{"source": "cris"}, {"source": "osm"}]})
 
-        self.assertEqual(row["source"], "cris", "the richest source stays the row's primary, which is what sorting and the API use")
+        self.assertEqual(
+            row["source"], "cris", "the richest source stays the row's primary, which is what sorting and the API use"
+        )
         self.assertEqual(row["source_label"], "NY SHPO (CRIS) + OpenStreetMap")
 
     def test_a_flat_building_is_labelled_as_before(self) -> None:
@@ -81,11 +71,9 @@ class BuildingRowSourceLabelTests(SimpleTestCase):
     def test_every_source_redata_can_return_is_labelled(self) -> None:
         """A missing label is silent: the chip just does not render.
 
-        REData's `BUILDING_SOURCES` has six entries and four of them had no
-        label here, including `overpass` - which is in its *default* set, so
-        the most common REData-sourced building on any parcel outside NY
-        rendered with no provenance at all.
-        """
+        REData's `BUILDING_SOURCES` has six entries and four of them had no label here, including `overpass` -
+        which is in its *default* set, so the most common REData-sourced building on any parcel outside NY
+        rendered with no provenance at all."""
         for key in ("county_gis", "assessor", "cris", "overpass", "microsoft_buildings", "google_open_buildings"):
             with self.subTest(source=key):
                 row = self._row({"name": "Shed", "sources": [{"source": key}]})
@@ -102,10 +90,8 @@ class BuildingRowSourceLabelTests(SimpleTestCase):
 class BuildingsOnPropertyTests(SimpleTestCase):
     """REData labels what it over-returns; ignoring the label is how 2604 happened.
 
-    A parcel inside a broad CRIS archaeological sensitivity zone gets every
-    surveyed building in that zone, each flagged ``is_on_property: false``. The
-    campus's own survey roster is 124.
-    """
+    A parcel inside a broad CRIS archaeological sensitivity zone gets every surveyed building in that zone, each
+    flagged ``is_on_property: false``."""
 
     def test_off_property_records_are_dropped(self) -> None:
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
@@ -123,10 +109,8 @@ class BuildingsOnPropertyTests(SimpleTestCase):
     def test_a_parent_is_kept_in_the_list(self) -> None:
         """A building containing others is still a building.
 
-        The Kirkbride case: a large building whose wings are separately mapped
-        parents them, while remaining the structure the site is named after.
-        Filtering it out would delete the most significant building on a campus.
-        """
+        The Kirkbride case: a large building whose wings are separately mapped parents them, while remaining the
+        structure the site is named after."""
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
 
         kept = buildings_on_property(_NESTED)
@@ -162,10 +146,8 @@ _NESTED = [
 class BuildingNestingTests(SimpleTestCase):
     """Nesting is reported by REData, not inferred from geometry here.
 
-    It is a tree of arbitrary depth (a campus block parenting a wing parenting
-    an annex), and it is not always cross-source - OSM models a `building`
-    outline over its own `building:part` segments.
-    """
+    It is a tree of arbitrary depth (a campus block parenting a wing parenting an annex), and it is not always
+    cross-source - OSM models a `building` outline over its own `building:part` segments."""
 
     def test_children_follow_their_parent(self) -> None:
         rows = building_rows(_NESTED, [])
@@ -176,6 +158,20 @@ class BuildingNestingTests(SimpleTestCase):
         rows = building_rows(_NESTED, [])
 
         self.assertEqual([r["depth"] for r in rows], [0, 1, 1])
+
+    def test_siblings_are_sorted_within_their_parent_too(self) -> None:
+        """Sorting isn't only applied at the root: `_NESTED`'s two children happen to
+        already be given in alphabetical order, so that test alone wouldn't catch a
+        `sorted()` dropped from the recursive per-parent walk."""
+        records = [
+            {"ref": "block", "name": "Block", "child_refs": ["b", "a"]},
+            {"ref": "b", "name": "Building B", "parent_ref": "block", "building_number": "20"},
+            {"ref": "a", "name": "Building A", "parent_ref": "block", "building_number": "5"},
+        ]
+
+        rows = building_rows(records, [])
+
+        self.assertEqual([r["name"] for r in rows], ["Block", "Building A", "Building B"])
 
     def test_nesting_can_be_more_than_one_level_deep(self) -> None:
         """A child links to its most specific parent, which may itself be a child."""

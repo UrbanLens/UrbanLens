@@ -36,11 +36,7 @@ def _wiki_loss_confirmed(data) -> bool:
 
 class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
     """PATCH/DELETE only - see the "deliberately minimal" note in dashboard/urls.py.
-
-    Only ``mixins.DestroyModelMixin`` is mixed in, and ``update`` is never
-    defined (only ``partial_update``), so the router never binds GET, PUT, or
-    POST/list at all - creating a pin goes through ``MapController.post_add_pin``
-    instead, matching the map's own add-pin flow.
+    Only ``mixins.DestroyModelMixin`` is mixed in, and ``update`` is never defined (only ``partial_update``), so the router never binds GET, PUT, or POST/list at all - creating a pin goes through ``MapController.post_add_pin`` instead, matching the map's own add-pin flow.
     """
 
     serializer_class = PinSerializer
@@ -58,6 +54,10 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
         logger.info("Update request initiated by user %s", request.user.id)
+        # Unreachable while `get_queryset` scopes to `profile__user`: a stranger's pin 404s before
+        # this runs.
+        # Kept as the backstop for the day that filter widens (shared pins, an admin view), which is
+        # when a write path with no check of its own becomes the bug.
         if instance.profile.user != request.user:
             logger.error(
                 "User %s attempted to update pin %s, but does not have permission",
@@ -71,6 +71,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
             # confirmed move can't then be rejected for an unrelated bad field.
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
+            before_fields = {"name": instance.name, "description": instance.description}
 
             if "latitude" in request.data or "longitude" in request.data:
                 parsed = self._parse_coordinates(request.data)
@@ -78,12 +79,10 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
                     return Response({"detail": parsed}, status=status.HTTP_400_BAD_REQUEST)
                 latitude, longitude = parsed
 
-                # Moving a pin off a place's grounds silently drops the owner's
-                # access to that place's community wiki (visibility is derived
-                # from where their pins are, not stored). Refuse once with 409
-                # and say which wikis are at stake, so the UI can ask rather
-                # than let it happen invisibly; the client re-sends with
-                # confirm_wiki_loss to go ahead.
+                # Moving a pin off a place's grounds silently drops the owner's access to that
+                # place's community wiki (visibility is derived from where their pins are, not
+                # stored).
+                # Refuse once with 409 and say which wikis are at stake, so the UI can ask rather
                 if not _wiki_loss_confirmed(request.data):
                     lost = wikis_hidden_by_pin_move(instance, latitude, longitude)
                     if lost:
@@ -98,9 +97,18 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
                 try:
                     move_pin_to_coordinates(instance, latitude, longitude)
                 except PinMoveError as exc:
-                    return Response({"detail": exc.safe_message}, status=status.HTTP_400_BAD_REQUEST)
+                    logger.info("Pin move rejected for pin %s: %s", instance.id, exc)
+                    return Response({"detail": "You already have a pin at these exact coordinates."}, status=status.HTTP_400_BAD_REQUEST)
 
             self.perform_update(serializer)
+            instance.refresh_from_db()
+            from urbanlens.dashboard.services.undo.mutations import stash_pin_fields
+
+            stash_pin_fields(
+                instance,
+                before=before_fields,
+                after={"name": instance.name, "description": instance.description},
+            )
         logger.info("Pin with id %s updated", instance.id)
         return Response(serializer.data)
 
@@ -131,18 +139,11 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """Delete a pin, asking the client what to do with its child pins first.
-
-        A pin with descendants requires an explicit ``children`` query param:
-        without one the request is refused with 409 and a payload describing
-        how many child pins exist, so the UI can ask the user. ``children=delete``
-        removes the whole subtree (the pins and their photos restorable from
-        Undo History; CASCADEd content - comments, albums, links - is not, see
-        ``PinUndoHandler``);
-        ``children=keep`` promotes the direct children to the deleted pin's own
-        parent (or to top-level pins) and deletes only the pin itself.
+        A pin with descendants requires an explicit ``children`` query param: without one the request is refused with 409 and a payload describing how many child pins exist, so the UI can ask the user.
         """
         logger.info("Delete request initiated by user %s", request.user.id)
         instance = self.get_object()
+        # The same backstop as in `partial_update` above, for the same reason.
         if instance.profile.user != request.user:
             logger.error(
                 "User %s attempted to delete pin %s, but does not have permission",
@@ -155,6 +156,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         try:
             delete_pin(instance, children_mode=children_mode)
         except PinHasChildrenError as exc:
+            logger.info("Pin delete rejected for pin %s: %s", instance.id, exc)
             return Response(
                 {"requires_children_decision": True, "children": exc.descendant_count},
                 status=status.HTTP_409_CONFLICT,

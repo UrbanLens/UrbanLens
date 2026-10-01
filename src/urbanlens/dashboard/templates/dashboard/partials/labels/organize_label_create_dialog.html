@@ -2,7 +2,7 @@
 <dialog class="tag-create-card ul-dialog" id="{{ form_id }}" aria-label="Create label">
     <form hx-post="{% url 'label.create' label_kind=label_url_kind %}" hx-target="{{ rows_target }}" hx-swap="innerHTML"
           enctype="multipart/form-data" class="tag-form"
-          hx-on::after-request="if(event.detail.successful){ document.getElementById('{{ form_id }}').close(); toastr.success('{{ singular_title }} created.'); }">
+          data-ul-on-success="close:{{ form_id }}" data-ul-success-toast="{{ singular_title }} created.">
         {% csrf_token %}
         <div class="tag-form-grid">
             <div class="form-field">
@@ -33,8 +33,8 @@
             </div>
         </div>
         <div class="form-field">
-            {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id='new-'|add:ns mode='replace' ns=ns candidates=parent_items %}
+            {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id='new-'|add:ns mode='replace' ns=ns candidates_from=candidates_from %}
         </div>
-        <div class="tag-form-actions"><button type="submit" class="btn btn--primary">Create</button><button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button></div>
+        <div class="tag-form-actions"><button type="submit" class="btn btn--primary">Create</button><button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button></div>
     </form>
 </dialog>

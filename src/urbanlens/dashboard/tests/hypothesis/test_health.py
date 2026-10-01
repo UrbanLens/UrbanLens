@@ -2,17 +2,31 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from unittest import mock
 
-from django.db import DatabaseError
+from django.db import DatabaseError, connection
+from django.db.migrations.executor import MigrationExecutor
 from django.test import Client, override_settings
+from django.test.utils import CaptureQueriesContext
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.controllers import health
 from urbanlens.UrbanLens.settings.app import _default_allowed_hosts
 
 _CONTROLLER = "urbanlens.dashboard.controllers.health.HealthController"
+
+
+class _FreshProbesTestCase(TestCase):
+    """The probe memos are per process, so one test's answer would otherwise be the next test's."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        for memo in (health.MIGRATION_STATE, health.CONNECTION_USAGE):
+            memo.clear()
+            self.addCleanup(memo.clear)
 
 
 class HealthEndpointTests(TestCase):
@@ -41,7 +55,7 @@ class LivenessProbeTests(TestCase):
         self.assertEqual(response.content, b"Okay!")
 
 
-class ReadinessProbeTests(TestCase):
+class ReadinessProbeTests(_FreshProbesTestCase):
     """/health/ready reports dependency reachability."""
 
     def test_healthy_dependencies_return_200(self) -> None:
@@ -80,7 +94,7 @@ class ReadinessProbeTests(TestCase):
         self.assertEqual(json.loads(response.content)["migrations"], "behind")
 
 
-class PrimaryProbeTests(TestCase):
+class PrimaryProbeTests(_FreshProbesTestCase):
     """/health/primary is what makes a replica site un-routable for writes."""
 
     def test_primary_database_returns_200(self) -> None:
@@ -105,7 +119,7 @@ class PrimaryProbeTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class ProbeAuthenticationTests(TestCase):
+class ProbeAuthenticationTests(_FreshProbesTestCase):
     """Probes arrive without credentials from compose, Kubernetes and Cloudflare."""
 
     def test_all_probes_are_unauthenticated(self) -> None:
@@ -129,3 +143,174 @@ class DefaultAllowedHostsTests(SimpleTestCase):
             hosts = _default_allowed_hosts()
         self.assertIn("localhost", hosts)
         self.assertIn("127.0.0.1", hosts)
+
+
+class ConnectionHeadroomTests(_FreshProbesTestCase):
+    """Readiness must report how much of the connection pool is left."""
+
+    url = "/health/ready"
+
+    def test_it_reports_backends_in_use_and_the_ceiling(self) -> None:
+        """The number P104's postmortem needed and nothing exposed.
+
+        The outage read 97 of 100 connections in use, and the first anyone knew of it was the site being down; a
+        count turns that into something a scrape can watch climb."""
+        report = json.loads(Client().get(self.url).content)
+
+        connections = report["connections"]
+        self.assertIsNotNone(connections, "readiness reported no connection usage against PostgreSQL")
+        self.assertGreater(connections["used"], 0, "this very request holds a connection")
+        self.assertGreater(connections["max"], 0)
+        self.assertLessEqual(connections["used"], connections["max"])
+
+    def test_pressure_is_reported_as_a_field_not_a_status_code(self) -> None:
+        """A readiness probe that 503s under connection pressure causes an outage.
+
+        It removes the instances that are still serving, which is the opposite of what it is for - and this
+        deployment has done it before."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        with mock.patch.object(HealthController, "_probe_connections", return_value={"used": 99, "max": 100}):
+            response = Client().get(self.url)
+
+        self.assertEqual(response.status_code, 200, "readiness went unhealthy on connection pressure alone")
+        self.assertTrue(json.loads(response.content)["degraded"], "99 of 100 connections was not called degraded")
+
+    def test_a_healthy_pool_is_not_degraded(self) -> None:
+        """The negative control: if everything is degraded, nothing is."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        with mock.patch.object(HealthController, "_probe_connections", return_value={"used": 5, "max": 100}):
+            report = json.loads(Client().get(self.url).content)
+
+        self.assertFalse(report["degraded"])
+
+    def test_a_cache_outage_is_degraded_but_not_a_readiness_failure_of_its_own(self) -> None:
+        """`degraded` is the field that distinguishes serving-badly from down.
+
+        Whether an unreachable cache should fail readiness outright is a separate question this does not change
+        - the existing test asserting 503 still holds."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        self.assertTrue(
+            HealthController._is_degraded(cache_status="error", db_status="ok", connections={"used": 1, "max": 100}),
+        )
+
+    def test_unreadable_connection_stats_are_not_a_failure(self) -> None:
+        """`pg_stat_activity` needs a privilege a hardened deployment may not grant.
+
+        Reporting None there has to mean "not measured", never "degraded" - a probe that fails closed on a
+        missing read privilege takes the site down for a permissions choice."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        self.assertFalse(HealthController._is_degraded(cache_status="ok", db_status="ok", connections=None))
+
+        with mock.patch.object(HealthController, "_probe_connections", return_value=None):
+            response = Client().get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(json.loads(response.content)["connections"])
+
+    def test_the_probe_survives_a_database_error(self) -> None:
+        """It runs its own query, so it needs its own failure path."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        with mock.patch("urbanlens.dashboard.controllers.health.connection") as fake:
+            fake.vendor = "postgresql"
+            fake.cursor.side_effect = DatabaseError("gone")
+            self.assertIsNone(HealthController._probe_connections())
+
+
+class TheProbeDeadlineTests(TestCase):
+    """The probes cap their own queries so a slow database cannot hold a worker until nginx gives up.
+    Nothing asserted that the cap was applied, which made it free to drop: a ``SET LOCAL`` with a
+    bound parameter is a syntax error under psycopg3's server-side binding (X27), and the probes
+    catch ``DatabaseError``, so the whole thing degrades to "database unreachable" rather than
+    raising. The five tests above do fail on that, but on the symptom, and none of them would notice
+    a deadline that was quietly removed or left session-wide."""
+
+    def test_the_readiness_probe_reaches_the_database(self) -> None:
+        """Names the probe the symptom above is three layers of HTTP away from."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        self.assertEqual(HealthController()._probe_database(), ("ok", "primary"))
+
+    def test_the_deadline_is_applied_and_is_scoped_to_the_transaction(self) -> None:
+        """A session-level deadline survives on a ``CONN_MAX_AGE`` connection and caps every real
+        query after it, so transaction scope is half of what makes this safe. Read back through a
+        rolled-back savepoint, because the test is itself inside the transaction Django wraps it in:
+        a transaction-scoped setting outlives that savepoint only if it was never scoped at all."""
+        from django.db import connection, transaction
+
+        from urbanlens.dashboard.controllers.health import _PROBE_TIMEOUT_SECONDS, _limit_probe_runtime
+
+        # pg_settings reports statement_timeout in milliseconds; SHOW normalises 2000ms to "2s".
+        reads_the_deadline = "SELECT setting::int FROM pg_settings WHERE name = 'statement_timeout'"
+
+        class RollbackError(Exception):
+            pass
+
+        with connection.cursor() as cursor:
+            cursor.execute(reads_the_deadline)
+            before = cursor.fetchone()[0]
+            inside = None
+            with contextlib.suppress(RollbackError), transaction.atomic():
+                _limit_probe_runtime(cursor)
+                cursor.execute(reads_the_deadline)
+                inside = cursor.fetchone()[0]
+                raise RollbackError
+            cursor.execute(reads_the_deadline)
+            after = cursor.fetchone()[0]
+
+        self.assertEqual(inside, _PROBE_TIMEOUT_SECONDS * 1000)
+        self.assertEqual(after, before, "the probe's deadline outlived the transaction that set it")
+
+
+class TheProbesReuseTheirCostlyAnswersTests(_FreshProbesTestCase):
+    """G4-9: an unauthenticated poll built the migration graph and counted pg_stat_activity every time."""
+
+    url = "/health/ready"
+
+    def test_the_migration_graph_is_built_once_per_interval(self) -> None:
+        with mock.patch.object(health, "MigrationExecutor", wraps=MigrationExecutor) as executor:
+            for _ in range(3):
+                self.assertEqual(Client().get(self.url).status_code, 200)
+
+        self.assertEqual(executor.call_count, 1)
+
+    def test_the_connection_count_is_read_once_per_interval(self) -> None:
+        def pg_stat_reads(context: CaptureQueriesContext) -> int:
+            return sum("pg_stat_activity" in query["sql"] for query in context.captured_queries)
+
+        with CaptureQueriesContext(connection) as first:
+            Client().get(self.url)
+        with CaptureQueriesContext(connection) as second:
+            report = json.loads(Client().get(self.url).content)
+
+        self.assertEqual(pg_stat_reads(first), 1)
+        self.assertEqual(pg_stat_reads(second), 0)
+        self.assertIsNotNone(report["connections"], "the reused answer was dropped from the report")
+
+    def test_the_answers_are_recomputed_once_the_interval_passes(self) -> None:
+        with mock.patch.object(health, "MigrationExecutor", wraps=MigrationExecutor) as executor:
+            Client().get(self.url)
+            with mock.patch("urbanlens.dashboard.services.core.process_memo.time.monotonic", return_value=10**9):
+                Client().get(self.url)
+
+        self.assertEqual(executor.call_count, 2)
+
+    def test_a_failed_read_is_retried_rather_than_reused(self) -> None:
+        """An unreadable state held for the interval would hide the recovery the operator is waiting for."""
+        with mock.patch(f"{_CONTROLLER}._probe_migrations", side_effect=["unknown", "current"]):
+            first = json.loads(Client().get(self.url).content)["migrations"]
+            second = json.loads(Client().get(self.url).content)["migrations"]
+
+        self.assertEqual((first, second), ("unknown", "current"))
+
+    def test_the_database_and_cache_are_still_probed_every_time(self) -> None:
+        """Only the costly answers are reused; reachability is what the probe is for."""
+        Client().get(self.url)
+        with mock.patch(f"{_CONTROLLER}._probe_database", return_value=("error", "unknown")):
+            response = Client().get(self.url)
+
+        self.assertEqual(response.status_code, 503)

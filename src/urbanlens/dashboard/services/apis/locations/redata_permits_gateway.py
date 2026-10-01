@@ -1,15 +1,4 @@
-"""Gateway for REData's ``/permits/`` near-a-coordinate endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /permits/ - building permits
-and code violations". Providers are *cities* (Chicago, New York, San
-Francisco, Austin, Seattle), each covering only its own bounding box, radius
-pinned at 150 m: outside every registered city the answer is
-``not_applicable``, which is a different answer from "no filings here".
-
-``attributes.result_capped`` is set on the rows of a capped search - a dense
-block fills a portal's page size, so a count of returned filings is a floor,
-not a total.
-"""
+"""Gateway for REData's ``/permits/`` near-a-coordinate endpoint."""
 
 from __future__ import annotations
 
@@ -54,19 +43,10 @@ class RedataPermitsGateway(RedataLocationContextGateway):
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope, ordered by ``issued_at`` (issued for a
-            permit, cited for a violation). Entries carry ``kind``,
-            ``filed_at`` (null for violations and for feeds publishing one
-            date), ``estimated_cost`` (the applicant's own *declared* value -
-            a scale indicator, never an appraisal), ``work_type``/``status``
-            (each city's own wording, deliberately unflattened), ``address``
-            as filed, and ``url`` - a deep link to the city's own record and
-            the route to its plan drawings (published by Austin and Seattle;
-            blank for Chicago and New York).
+            The parsed envelope, ordered by ``issued_at`` (issued for a permit, cited for a violation).
 
         Raises:
-            LocationContextUnavailableError: The covering source failed to
-                answer, or the request itself failed.
+            LocationContextUnavailableError: The covering source failed to answer, or the request itself failed.
         """
         extra_params: dict[str, Any] = {}
         if kinds:

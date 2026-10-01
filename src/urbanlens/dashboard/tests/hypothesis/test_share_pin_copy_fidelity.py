@@ -1,10 +1,4 @@
-"""Accepting a share must copy the pin faithfully, not rebuild it from defaults.
-
-``create_pin_from_share`` lists ~28 fields by hand and promises, in its own docstring,
-to carry over "every user-visible property (name, icon, labels, notes, scores, security
-indicators, photos)". Anything it forgets takes the model default instead, and nothing
-about adding a new field to ``Pin`` updates this list.
-"""
+"""Accepting a share must copy the pin faithfully, not rebuild it from defaults."""
 
 from __future__ import annotations
 
@@ -36,7 +30,11 @@ class SharedPinCopyFidelityTests(TestCase):
 
     def _accept(self, pin: Pin, images: list[Image] | None = None) -> Pin:
         share = PinShare.objects.create(
-            pin=pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING,
+            pin=pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
         )
         if images:
             share.images.set(images)
@@ -49,7 +47,11 @@ class SharedPinCopyFidelityTests(TestCase):
         # exactly what the flag exists to prevent. name_is_user_provided, the same
         # pattern for the same reason, is copied.
         pin = Pin.objects.create(
-            profile=self.sender, location=self.location, name="Chosen type", pin_type="building", pin_type_is_user_provided=True,
+            profile=self.sender,
+            location=self.location,
+            name="Chosen type",
+            pin_type="building",
+            pin_type_is_user_provided=True,
         )
 
         copied = self._accept(pin)
@@ -67,11 +69,10 @@ class SharedPinCopyFidelityTests(TestCase):
     def test_a_custom_uploaded_icon_does_not_survive_the_share(self):
         """An icon is how one person marked a place for themselves.
 
-        This used to assert the opposite, on the reasoning that losing it "changes
-        what the pin looks like". It does, and that is the intent: the recipient
-        gets the place, not the sender's presentation of it.
-        """
-        pin = Pin.objects.create(profile=self.sender, location=self.location, name="Custom icon", custom_icon="icons/skull.png", icon="place")
+        It does, and that is the intent: the recipient gets the place, not the sender's presentation of it."""
+        pin = Pin.objects.create(
+            profile=self.sender, location=self.location, name="Custom icon", custom_icon="icons/skull.png", icon="place"
+        )
 
         copied = self._accept(pin)
 
@@ -131,7 +132,11 @@ class SharedPinCopyFidelityTests(TestCase):
 
     def test_the_senders_pin_is_left_alone(self):
         pin = Pin.objects.create(
-            profile=self.sender, location=self.location, name="Untouched", pin_type="building", pin_type_is_user_provided=True,
+            profile=self.sender,
+            location=self.location,
+            name="Untouched",
+            pin_type="building",
+            pin_type_is_user_provided=True,
         )
 
         self._accept(pin)
@@ -171,11 +176,8 @@ def _copied_field_names() -> set[str]:
 class SharedPinCopyCoversEveryFieldTests(TestCase):
     """Adding a field to ``Pin`` must not silently skip the share copy.
 
-    Every bug in the class above came from the same place: the copy names its fields
-    by hand, so a field added later is simply absent and takes the model default.
-    Nothing in review connects "add a column to Pin" with "update a function in the
-    sharing service". This is what connects them.
-    """
+    Every bug in the class above came from the same place: the copy names its fields by hand, so a field added
+    later is simply absent and takes the model default."""
 
     #: Fields the copy deliberately leaves off, and why. A new Pin field must be
     #: added here (with a reason) or to the copy itself - the test names it either way.
@@ -190,12 +192,12 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "unlogged_visit_dismissed": "recipient's own dismissal state",
         "restructure_offer_dismissed": "recipient's own dismissal state",
         "buildings_auto_nested_at": "the sweep is per-pin state; the recipient's copy gets its own",
+        "auto_nested_buildings": "the sweep is per-pin state; the recipient's copy gets its own",
         "wiki": "a cache of an explicit link; the new pin resolves its own",
         "inferred_source_share": "provenance is recorded via source_share on the new pin",
         "cover_photo": "set afterwards by _carry_cover_photo, pointing at the recipient's copy",
         # The owner's side of the line. A share carries what is true about the
         # *site*; how one person recorded, rated or decorated it stays with them.
-        # Ruled by Jess 2026-08-23, field by field, after each was found travelling.
         "description": "the owner's personal notes - and nothing in the product lets somebody consent to passing them on",
         "vulnerability": "the owner's rating of the place, not a property of it",
         "danger": "the owner's rating of the place, not a property of it",
@@ -203,6 +205,7 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "icon": "how the owner marked the place for themselves",
         "color": "how the owner marked the place for themselves",
         "custom_icon": "how the owner marked the place for themselves",
+        "custom_icon_upload": "the owner's icon still waiting to be re-encoded",
         "detail_bg_color": "the owner's styling of their own pin",
         "detail_bg_opacity": "the owner's styling of their own pin",
         "detail_border_color": "the owner's styling of their own pin",
@@ -214,7 +217,9 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         # A floor, not a target: the guard exists to notice the copy being
         # restructured out from under this test, and the count legitimately fell
         # when the owner-side fields below stopped travelling.
-        self.assertGreater(len(passed), 12, "could not find the property copy - has create_pin_from_share been restructured?")
+        self.assertGreater(
+            len(passed), 12, "could not find the property copy - has create_pin_from_share been restructured?"
+        )
 
         concrete = {field.name for field in Pin._meta.get_fields() if getattr(field, "concrete", False)}
         unaccounted = sorted(concrete - passed - set(self.NOT_COPIED))
@@ -240,4 +245,6 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         passed = _copied_field_names()
         contradicted = sorted(set(self.NOT_COPIED) & passed)
 
-        self.assertEqual(contradicted, [], f"NOT_COPIED claims these are skipped, but the copy passes them: {contradicted}")
+        self.assertEqual(
+            contradicted, [], f"NOT_COPIED claims these are skipped, but the copy passes them: {contradicted}"
+        )

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from urbanlens.dashboard.models import abstract
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.visits.model import PinVisit  # noqa: F401 - mypy needs these; ruff does not
 
-class VisitQuerySet(abstract.FrontendDashboardQuerySet):
+
+class VisitQuerySet(abstract.FrontendDashboardQuerySet["PinVisit"]):
     """QuerySet for PinVisit records."""
 
     def for_pin(self, pin_id: int) -> Self:
@@ -21,26 +25,27 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet):
         """
         return self.filter(pin_id=pin_id)
 
-    def manual(self) -> Self:
-        """Filter to manually-recorded visits.
+    def owned_by(self, profile: Profile) -> Self:
+        """Visits logged against *profile*'s own pins.
+
+        The bound is the pin ids rather than ``pin__profile=profile``, because the latter is a
+        join and Postgres is free to start it from the visit table: at capacity scale it does, a
+        sequential scan of all 16,208 visits hash-joined back to the viewer's pins, so one
+        account's visit search costs the site's visit count. See :mod:`urbanlens.core.semijoin`.
+
+        Args:
+            profile: The owning profile.
 
         Returns:
-            Filtered queryset.
+            Their visits.
         """
-        from urbanlens.dashboard.models.visits.model import VisitSource
+        from urbanlens.dashboard.models.pin.model import Pin
 
-        return self.filter(source=VisitSource.MANUAL)
-
-    def from_takeout(self) -> Self:
-        """Filter to visits imported from the user's location history (e.g. Google Takeout).
-
-        Returns:
-            Filtered queryset.
-        """
-        from urbanlens.dashboard.models.visits.model import VisitSource
-
-        return self.filter(source=VisitSource.HISTORY)
+        return self.bounded_by("pin", Pin.objects.filter(profile=profile))
 
 
-class VisitManager(abstract.FrontendDashboardManager.from_queryset(VisitQuerySet)):
+_VisitManagerBase = abstract.FrontendDashboardManager.from_queryset(VisitQuerySet)
+
+
+class VisitManager(_VisitManagerBase):
     """Manager for PinVisit."""

@@ -291,7 +291,7 @@ environment (`~/dev/s1..s3`) against a production-shaped dataset before merging 
 ## Amendments as built (2026-08-04)
 
 Three changes to the design above, made while implementing it against the multi-building campus
-bugs (`docs/notes/ai/todo.md`'s parcel/building prompt). Where these conflict with the text above,
+bugs. Where these conflict with the text above,
 these win.
 
 ### 1. `parent_relation` carries the access semantics, not `status`

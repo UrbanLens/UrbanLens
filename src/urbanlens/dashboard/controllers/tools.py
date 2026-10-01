@@ -9,6 +9,7 @@ import os
 from typing import Any
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -20,23 +21,19 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.import_export.export import (
-    EXPORT_TTL_SECONDS as _EXPORT_TTL_SECONDS,
     REGISTERED_EXPORT_TYPES,
     VALID_EXPORT_TYPES,
     ExportJobStatus,
-    cleanup_export_artifacts,
     export_dir as _export_dir_fn,
-    schedule_export_cleanup,
 )
 from urbanlens.dashboard.services.import_export.import_data import (
-    IMPORT_TTL_SECONDS as _IMPORT_TTL_SECONDS,
     ImportJobStatus,
-    cleanup_import_artifacts,
     import_dir as _import_dir_fn,
-    schedule_import_cleanup,
 )
 from urbanlens.dashboard.services.media.images import compute_checksum
+from urbanlens.dashboard.services.media.storage import cap_to_ingress
 from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, ingest_location_hits
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
@@ -122,6 +119,33 @@ class ToolsIndexView(LoginRequiredMixin, View):
         )
 
 
+#: Must outlive the export task's own hard limit (CELERY_TASK_TIME_LIMIT, 3600s),
+#: or a second export could start while the first is still copying photos.
+_EXPORT_GUARD_TTL = 60 * 75
+
+#: Statuses that mean the job is over, whichever way it went. Read off the writers in
+#: `services/import_export/export.py` and `tasks.py`, which use exactly "running", "done" and "error" - a
+#: guessed vocabulary here would leave the guard held for the whole TTL after a successful export.
+_EXPORT_TERMINAL_STATES = frozenset({"done", "error"})
+
+
+def _export_guard_key(user_id: int | None) -> str:
+    """One in-flight export per account.
+
+    Args:
+        user_id: The exporting account.
+
+    Returns:
+        The cache key holding that account's in-flight export.
+
+    Raises:
+        ValueError: There is no authenticated user.
+    """
+    if user_id is None:
+        raise ValueError("an export guard needs an authenticated user")
+    return f"ul:single-flight:export:{user_id}"
+
+
 class ExportStartView(LoginRequiredMixin, View):
     """Start a data export job in Celery."""
 
@@ -129,9 +153,8 @@ class ExportStartView(LoginRequiredMixin, View):
         """Accept export parameters, enqueue a Celery task, return progress fragment.
 
         Args:
-            request: POST with ``export_types`` list, optional ``google_takeout``
-                flag, and optional ``email_export`` flag (email the finished
-                archive to the account address, UL-373).
+            request: POST with ``export_types`` list, optional ``google_takeout`` flag, and optional
+            ``email_export`` flag (email the finished archive to the...
 
         Returns:
             Rendered export progress partial so HTMX can swap it in.
@@ -148,6 +171,16 @@ class ExportStartView(LoginRequiredMixin, View):
 
         email_to_user = bool(request.POST.get("email_export"))
 
+        # Claimed before anything is created, so a double-click cannot get two exports past a read-then-write
+        # check. An export copies every photo the account owns, twice, onto the shared media volume.
+        guard = _export_guard_key(request.user.pk)
+        if not single_flight.claim(guard, _EXPORT_GUARD_TTL):
+            return render(
+                request,
+                "dashboard/partials/tools/export_progress.html",
+                {"job_id": single_flight.holder(guard), "status": "pending", "progress": 0, "message": "An export is already running."},
+            )
+
         job_id = str(uuid.uuid4())
         exp_dir = _export_dir(job_id)
         os.makedirs(exp_dir, exist_ok=True)
@@ -157,8 +190,9 @@ class ExportStartView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_export
 
-        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id, email_to_user)
+        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id, email_to_user, durable=False)
         if result is None:
+            single_flight.release(guard)
             ExportJobStatus(job_id).write("error", 0, "Export queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
                 request,
@@ -167,6 +201,7 @@ class ExportStartView(LoginRequiredMixin, View):
                 status=503,
             )
 
+        single_flight.adopt(guard, job_id, _EXPORT_GUARD_TTL)
         logger.info("Export task %s started for user %s", result.id, request.user.pk)
 
         return render(
@@ -210,11 +245,16 @@ class ExportStatusView(LoginRequiredMixin, View):
                     "Could not verify export ownership. Please start a new export.",
                 )
 
+            # The guard is released the moment the job stops, so the next export
+            # does not wait out the TTL. A user who never polls waits it out.
+            if data.get("status") in _EXPORT_TERMINAL_STATES:
+                single_flight.release(_export_guard_key(request.user.pk))
+
             return render(request, "dashboard/partials/tools/export_progress.html", {"job_id": job_id, **data})
         except Exception:
-            # Surface a friendly, non-polling error state instead of letting HTMX's poller
-            # hang on a raw 500 with no feedback to the user (see ImportStatusView for the
-            # same pattern - the fragment's "error" state removes the hx-get polling attrs).
+            # Surface a friendly, non-polling error state instead of letting HTMX's poller hang on a raw 500
+            # with no feedback to the user (see ImportStatusView for the same pattern - the fragment's "error"
+            # state removes the hx-get polling attrs).
             logger.exception("Unexpected error rendering export status: job %s, user %s", job_id, request.user.pk)
             return _export_error_partial(request, job_id, "Something went wrong checking export status. Please try again.")
 
@@ -257,20 +297,38 @@ class ExportDownloadView(LoginRequiredMixin, View):
         logger.info("Export complete, serving file: job %s, user %s", job_id, request.user.pk)
 
         today = timezone.localdate().isoformat()
+        disposition = f'attachment; filename="urbanlens_export_{today}.zip"'
+
+        if getattr(settings, "MEDIA_X_ACCEL", False):
+            # An export is every photo the account owns, and nginx only absorbs
+            # a response up to proxy_max_temp_file_size before matching the
+            # client's pace - so streaming it through here holds a worker for
+            # the length of somebody's download. Hand nginx the path instead,
+            # exactly as the media gate does. Content-Disposition is on the set
+            # nginx forwards through an X-Accel-Redirect (measured; see
+            # config/nginx/media.conf.template), so the filename survives.
+            #
+            # job_id is a parsed uuid by this point, so the path cannot escape
+            # the internal location.
+            handoff = HttpResponse()
+            del handoff["Content-Type"]
+            handoff["X-Accel-Redirect"] = f"{settings.MEDIA_X_ACCEL_PREFIX}exports/{job_id}/export.zip"
+            handoff["Content-Disposition"] = disposition
+            return handoff
+
         fh = open(zip_path, "rb")  # noqa: SIM115 - FileResponse takes ownership and closes the handle
-        response = FileResponse(fh, content_type="application/zip")
-        response["Content-Disposition"] = f'attachment; filename="urbanlens_export_{today}.zip"'
-        return response
+        streamed = FileResponse(fh, content_type="application/zip")
+        streamed["Content-Disposition"] = disposition
+        return streamed
 
 
 class ExportFormatDownloadView(LoginRequiredMixin, View):
     """Download ALL of the requester's root pins as a single GeoJSON/KML/GPX/CSV file (UL-382).
 
-    The quick, synchronous counterpart to the full ZIP export above: no Celery
-    job, no polling - one GET straight to a file download, using the same
-    per-format writers the targeted bulk export uses
-    (``controllers.pin_bulk.PinBulkExportView``). Root pins only: detail (sub)
-    pins share their parent's site and would just duplicate coordinates in
+    The quick, synchronous counterpart to the full ZIP export above: no Celery job, no polling - one GET
+    straight to a file download, using the same per-format writers the targeted bulk export uses
+    (``controllers.pin_bulk.PinBulkExportView``).
+    Root pins only: detail (sub) pins share their parent's site and would just duplicate coordinates in
     formats that carry nothing but name/coords/description.
     """
 
@@ -330,9 +388,12 @@ class ImportStartView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        if upload.size and upload.size > _MAX_IMPORT_SIZE_BYTES:
+        # Lowered to the ingress cap, if there is one: a body the proxy rejects never reaches this view, so the
+        # uploader would see the proxy's error rather than this one.
+        max_import_bytes = cap_to_ingress(_MAX_IMPORT_SIZE_BYTES)
+        if upload.size and upload.size > max_import_bytes:
             return HttpResponse(
-                '<p class="import-error"><i class="material-symbols-outlined">error</i> File is too large (max 500 MB).</p>',
+                f'<p class="import-error"><i class="material-symbols-outlined">error</i> File is too large (max {max_import_bytes // (1024 * 1024)} MB).</p>',
                 status=400,
             )
 
@@ -353,7 +414,7 @@ class ImportStartView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_import
 
-        result = safely_enqueue_task(run_user_data_import, request.user.pk, zip_path, job_id)
+        result = safely_enqueue_task(run_user_data_import, request.user.pk, zip_path, job_id, durable=False)
         if result is None:
             ImportJobStatus(job_id).write("error", 0, "Import queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
@@ -402,10 +463,9 @@ class ImportStatusView(LoginRequiredMixin, View):
 
             return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
         except Exception:
-            # Never let an unexpected error surface as a raw 500 to the HTMX poller - it has
-            # no error handling and will just silently stop, leaving the progress bar spinning
-            # forever with no feedback to the user. Render the error state instead, which
-            # drops the hx-get polling attributes and shows a message.
+            # Never let an unexpected error surface as a raw 500 to the HTMX poller - it has no error handling
+            # and will just silently stop, leaving the progress bar spinning forever with no feedback to the
+            # user.
             logger.exception("Unexpected error rendering import status: job %s, user %s", job_id, request.user.pk)
             return _import_error_partial(request, job_id, "Something went wrong checking import status. Please try again.")
 
@@ -446,7 +506,7 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_database_backup
 
-        result = safely_enqueue_task(run_database_backup)
+        result = safely_enqueue_task(run_database_backup, durable=False)
         if result is None:
             return JsonResponse({"ok": False, "message": "Unable to enqueue backup task."}, status=503)
         return JsonResponse(
@@ -463,26 +523,12 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
 def _parse_cluster(cluster: Any) -> list[LocationHit]:
     """Parse and validate one cluster row from the local-scan upload payload.
 
-    Each cluster becomes exactly *one* synthetic hit, carrying the cluster's
-    full ``count`` as its ``weight`` and every one of its ``dates`` (see
-    ``LocationHit.weight``/``extra_dates``) - matching/clustering only ever
-    need one representative point per distinct location, since every hit a
-    single cluster used to expand into shared the exact same coordinates.
-    This used to create ``count`` separate synthetic hits (one per date,
-    cycling through ``dates``) so the shape matched individually-scanned
-    hits exactly; with up to 500 clusters allowed per request and up to 2000
-    photos per cluster, that could balloon into hundreds of thousands of
-    hits, each checked against every one of the profile's pin boundaries in
-    ``_match_hits_to_pins`` - easily enough synchronous work to trip a
-    reverse proxy's read timeout (504) on submit for a large scan.
-
     Args:
         cluster: One raw JSON object from the ``clusters`` array.
 
     Returns:
-        A single-item list with the synthetic LocationHit for this cluster,
-        or an empty list if the row is malformed (missing/invalid
-        coordinates or no valid dates).
+        A single-item list with the synthetic LocationHit for this cluster, or an empty list if the row
+        is malformed (missing/invalid...
     """
     if not isinstance(cluster, dict):
         return []
@@ -538,19 +584,20 @@ def _parse_cluster(cluster: Any) -> list[LocationHit]:
 class PhotoLocationScanUploadView(LoginRequiredMixin, View):
     """POST /tools/photo-scan/upload/ - ingest results from the local folder scanner.
 
-    The scanner (``frontend/ts/entries/photo-location-scan.ts``) clusters and
-    de-dupes matches entirely client-side before uploading, so this payload is
-    small - one row per cluster, not per photo - and the photo/video files
-    themselves never reach the server, only the extracted lat/lng/date/label
-    metadata. Feeds the same ``ingest_location_hits`` pipeline the Immich
-    sweep uses, so results merge/dedupe against any existing suggestions.
+    The scanner (``frontend/ts/entries/photo-location-scan.ts``) clusters and de-dupes matches entirely
+    client-side before uploading, so this payload is small - one row per cluster, not per photo - and
+    the photo/video files themselves never reach the server, only the extracted lat/lng/date/label
+    metadata.
+    Feeds the same ``ingest_location_hits`` pipeline the Immich sweep uses, so results merge/dedupe
+    against any existing suggestions.
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
         """Ingest a batch of pre-clustered location results.
 
         Args:
-            request: POST with a JSON body ``{"clusters": [{"latitude", "longitude", "dates", "count", "label"}, ...]}``.
+            request: POST with a JSON body ``{"clusters": [{"latitude", "longitude", "dates", "count",
+            "label"}, ...]}``.
 
         Returns:
             JSON summary of suggestions created/updated, or a 400 error.
@@ -591,13 +638,10 @@ class PhotoLocationScanUploadView(LoginRequiredMixin, View):
 class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
     """POST /tools/photo-scan/upload-photo/ - upload one opt-in candidate photo.
 
-    The local-folder scanner never uploads photo files by default (see
-    ``PhotoLocationScanUploadView``) - this endpoint exists only for photos the
-    user explicitly checked in the scanner's opt-in picker, immediately after
-    the cluster metadata upload has told the client which ``PinSuggestion``
-    each cluster became. The image is staged unattached (candidate only) until
-    the suggestion is accepted or rejected - see ``services.pins.pin_suggestions.accept_pin_suggestion``
-    and ``reject_pin_suggestion``.
+    The local-folder scanner never uploads photo files by default (see ``PhotoLocationScanUploadView``)
+
+    - this endpoint exists only for photos the user explicitly checked in the scanner's opt-in picker,
+      immediately after the cluster metadata upload has told the c...
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
@@ -630,29 +674,32 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
         if not content_type.startswith("image/"):
             return JsonResponse({"error": "That file is not an image."}, status=400)
 
-        if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
-            return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
-
         from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.media.images import image_upload_error
+        from urbanlens.dashboard.services.media.images import image_upload_error, prepare_photo_upload
 
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        # Scanned asynchronously instead: prepare_photo_upload below marks the row
+        # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
         if upload_error:
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
-        if Image.objects.filter(profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this photo."}, status=409)
 
-        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, pin_suggestion=suggestion)
+        try:
+            with reserve_upload(profile, None) as reservation:
+                if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
+                    return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
+                if Image.objects.filter(profile=profile, checksum=checksum).exists():
+                    return JsonResponse({"error": "You already uploaded this photo."}, status=409)
+                reservation.reserve(image_file.size or 0)
+                # Stored already stripped - see services.media.images.prepare_photo_upload.
+                prepared = prepare_photo_upload(image_file, profile)
+                img = Image.objects.create(image=prepared.file, profile=profile, checksum=checksum, file_size=prepared.size, pin_suggestion=suggestion, **prepared.metadata)
+        except UploadRefusedError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

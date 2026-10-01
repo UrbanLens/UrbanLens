@@ -1,10 +1,4 @@
-"""Tests for RedataHazardsGateway against REData's ``/hazards/`` contract
-(``../REData/docs/api-reference.md``, "GET /hazards/ - recorded natural-hazard events").
-
-Constructs the gateway with a mock ``session`` (Gateway.__post_init__ leaves a
-non-default session untouched, skipping the DB-backed rate-limiting wrapper -
-see gateway.py) so these stay pure unit tests with no database access.
-"""
+"""Tests for RedataHazardsGateway against REData's ``/hazards/`` contract (``../REData/docs/api-reference.md``, "GET /hazards/ - recorded natural-hazard events")."""
 
 from __future__ import annotations
 
@@ -33,8 +27,25 @@ class GetHazardEventsTests(SimpleTestCase):
             {
                 "count": 1,
                 "complete": True,
-                "results": [{"event_type": "earthquake", "magnitude": 3.2, "magnitude_scale": "Mw", "occurred_at": "2026-01-01T00:00:00Z", "title": "10km N of Nowhere", "url": "https://x"}],
-                "providers": [{"provider": "usgs_earthquakes", "status": "ok", "count": 1, "message": None, "radius_meters": 100_000.0}],
+                "results": [
+                    {
+                        "event_type": "earthquake",
+                        "magnitude": 3.2,
+                        "magnitude_scale": "Mw",
+                        "occurred_at": "2026-01-01T00:00:00Z",
+                        "title": "10km N of Nowhere",
+                        "url": "https://x",
+                    }
+                ],
+                "providers": [
+                    {
+                        "provider": "usgs_earthquakes",
+                        "status": "ok",
+                        "count": 1,
+                        "message": None,
+                        "radius_meters": 100_000.0,
+                    }
+                ],
             },
         )
 

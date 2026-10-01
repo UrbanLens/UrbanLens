@@ -1,13 +1,4 @@
-/**
- * The map, and the HTMX exchange behind its filter.
- *
- * Two distinct things are checked and they fail for different reasons. That
- * Leaflet initialised is a *bundle* assertion: `#map` is in the HTML whether or
- * not any script ran, so a grey rectangle where the map should be is invisible
- * to any check that only looks for the element. That the filter round-trips is
- * an *HTMX* assertion, and HTMX is how most of this application updates itself
- * - if its exchange is broken here it is broken everywhere.
- */
+/** The map, and the HTMX exchange behind its filter. Two distinct things are checked and they fail for different reasons. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { withHtmxSwap } from "../../lib/htmx.js";
@@ -56,6 +47,10 @@ test.describe("map", () => {
         // the absence of a DOM change.
         await expectNoErrorToast(page);
         await map.expectMapReady();
+
+        // The page, not the swapped partial, applies the result set; the filter
+        // reaching the URL shows it ran.
+        await expect.poll(() => new URL(page.url()).searchParams.get("name")).toBe(pin.name);
     });
 
     test("the pin list panel opens and lists pins", async ({ page, api }) => {

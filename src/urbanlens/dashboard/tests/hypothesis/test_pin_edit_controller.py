@@ -6,17 +6,18 @@ from datetime import date
 import json
 from typing import TYPE_CHECKING
 from unittest.mock import patch
+import warnings
 
 from django.contrib.auth.models import User
 from django.test import RequestFactory
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_edit import PinEditView, PinOverviewView
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
 if TYPE_CHECKING:
     from django.http import HttpResponseBase
@@ -31,7 +32,10 @@ class PinEditCategoryUpdateTests(TestCase):
         self.user = self.profile.user
         self.pin = baker.make(Pin, profile=self.profile)
         self.existing_cat = baker.make(
-            Label, name="existing", kind="category", profile=self.profile,
+            Label,
+            name="existing",
+            kind="category",
+            profile=self.profile,
         )
         self.pin.labels.add(self.existing_cat)
 
@@ -46,7 +50,10 @@ class PinEditCategoryUpdateTests(TestCase):
         # resolves an uncached Location's place name from Google - mock it
         # so the response render doesn't make an outbound API call.
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
@@ -112,7 +119,10 @@ class PinEditNameAliasTests(TestCase):
         # resolves an uncached Location's place name from Google - mock it
         # so the response render doesn't make an outbound API call.
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
@@ -155,9 +165,40 @@ class PinEditDateFieldsTests(TestCase):
         )
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
+
+    def _assert_no_naive_datetime_warning(self, body: dict) -> None:
+        """Post `body` and fail if Django had to guess a zone for last_visited.
+
+        A round-trip through the database always comes back aware, so asserting on the stored value proves
+        nothing."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            response = self._post(body)
+        self.assertEqual(response.status_code, 200)
+        naive = [
+            str(w.message)
+            for w in caught
+            if issubclass(w.category, RuntimeWarning) and "naive datetime" in str(w.message)
+        ]
+        self.assertEqual(naive, [], f"last_visited was assigned a naive datetime: {naive}")
+
+    def test_last_visited_datetime_input_is_made_aware(self) -> None:
+        """`last_visited` is a DateTimeField and USE_TZ is on."""
+        self._assert_no_naive_datetime_warning({"last_visited": "2026-06-01T13:30"})
+        self.pin.refresh_from_db()
+        self.assertEqual(timezone.localtime(self.pin.last_visited).hour, 13)
+
+    def test_last_visited_date_only_input_is_made_aware(self) -> None:
+        """The date-only format takes the same assignment path."""
+        self._assert_no_naive_datetime_warning({"last_visited": "2026-06-01"})
+        self.pin.refresh_from_db()
+        self.assertEqual(timezone.localdate(self.pin.last_visited), date(2026, 6, 1))
 
     def test_date_built_saves_and_clears(self) -> None:
         response = self._post({"date_built": "1912-05-01"})
@@ -182,15 +223,8 @@ class PinEditDateFieldsTests(TestCase):
 class PinOverviewAddressBackfillDispatchTests(TestCase):
     """A route-less location's address backfill is dispatched to Celery, never geocoded inline.
 
-    Successor to the old inline-geocoding failure regression test: the view
-    used to call ensure_location_address (a live Google Geocoding call)
-    synchronously on every /overview/ visit for a route-less location - first
-    500ing on rate-limit errors, then (after that was fixed) still blocking
-    the render on the API round-trip. It now enqueues
-    tasks.backfill_location_address instead, mirroring the place-name lazy
-    dispatch - so a rate-limited/slow/down geocoding API can no longer affect
-    this page's render at all.
-    """
+    It now enqueues tasks.backfill_location_address instead, mirroring the place-name lazy dispatch - so a
+    rate-limited/slow/down geocoding API can no longer affect this page's render at all."""
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
@@ -207,7 +241,10 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
         req.user = self.user
         with (
             patch(mock_enqueue_target) as mock_enqueue,
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
         return response, mock_enqueue
@@ -215,7 +252,11 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
     def _address_dispatches(self, mock_enqueue) -> list[int]:
         from urbanlens.dashboard.tasks import backfill_location_address
 
-        return [call.args[1] for call in mock_enqueue.call_args_list if call.args and call.args[0] is backfill_location_address]
+        return [
+            call.args[1]
+            for call in mock_enqueue.call_args_list
+            if call.args and call.args[0] is backfill_location_address
+        ]
 
     def test_route_less_location_dispatches_the_backfill_task(self) -> None:
         response, mock_enqueue = self._get()
@@ -234,8 +275,13 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
         req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway.geocode_coordinates") as mock_geocode,
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway.geocode_coordinates"
+            ) as mock_geocode,
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
@@ -246,15 +292,8 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
 class PinOverviewEditableDescriptionTests(TestCase):
     """The pin description renders as a click-to-edit-in-place element.
 
-    Only the markup itself (data-raw-description, the editable marker class)
-    lives in pin_overview_partial.html - the actual wiring (the pin.edit POST
-    URL, the click-to-edit JS) lives in the FULL page's own inline <script>
-    (pages/location/index.html, mirroring the hero title's identical pattern),
-    not in this bare partial. See PinDescriptionEditableTests below for that
-    - this class covers only what PinOverviewView's own partial response
-    actually contains (matches the correction applied to the equivalent,
-    now-deleted PinOverviewEditableTitleTests class -.
-    """
+    Only the markup (data-raw-description, the editable marker class) lives in pin_overview_partial.html; the
+    editing is entries/pin-detail.ts."""
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
@@ -267,7 +306,10 @@ class PinOverviewEditableDescriptionTests(TestCase):
         req = self.factory.get(f"/map/pin/{pin.slug}/overview/")
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             return PinOverviewView.as_view()(req, pin_slug=pin.slug)
@@ -288,23 +330,13 @@ class PinOverviewEditableDescriptionTests(TestCase):
         self.assertIn('data-raw-description=""', content)
 
     def test_populated_description_does_not_carry_the_empty_modifier(self) -> None:
-        """Asserted against the partial, not the full page: the full page's
-        inline click-to-edit script mentions ``pin-description--empty`` as a
-        string literal (it toggles the class), so a whole-page ``assertNotIn``
-        can never pass regardless of the pin's description."""
+        """Asserted against the partial: the full page may mention the class elsewhere."""
         content = self._get().content.decode()
         self.assertNotIn("pin-description--empty", content)
 
 
 class PinDescriptionEditableTests(TestCase):
-    """Full-page coverage: the description's click-to-edit JS and pin.edit wiring.
-
-    Mirrors PinHeroEditableNameTests (test_pin_hero_editable_name.py) for the
-    title - the pin.edit POST URL is only ever present in the full page's own
-    inline <script> (pages/location/index.html), never in the bare
-    PinOverviewView partial response (see PinOverviewEditableDescriptionTests
-    above), so this has to render via the real pin.details view.
-    """
+    """Full-page coverage: the page hands entries/pin-detail.ts the pin.edit URL the editor posts to."""
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile
@@ -318,18 +350,13 @@ class PinDescriptionEditableTests(TestCase):
 
     def test_description_wiring_posts_to_pin_edit(self) -> None:
         response = self._get()
-        self.assertContains(response, reverse("pin.edit", args=[self.pin.slug]))
+        self.assertContains(response, f'data-edit-url="{reverse("pin.edit", args=[self.pin.slug])}"')
 
-    def test_description_click_handler_is_present(self) -> None:
-        response = self._get()
-        self.assertContains(response, "pin-description--editable")
-        self.assertContains(response, "pin-description-input")
+    def test_description_editor_is_loaded(self) -> None:
+        self.assertContains(self._get(), "dashboard/js/pin-detail.js")
 
     def test_renaming_description_via_pin_edit_updates_the_displayed_value(self) -> None:
-        """End-to-end: the endpoint the description's inline editor posts to
-        actually updates the pin (already covered in depth elsewhere for the
-        edit dialog - this just confirms the click-to-edit markup/endpoint
-        pairing is real, matching PinHeroEditableNameTests's equivalent test)."""
+        """End-to-end: the endpoint the description's inline editor posts to actually updates the pin (already covered in depth elsewhere for the edit dialog - this just confirms the click-to-edit markup/endpoint pairing is real, matching PinHeroEditableNameTests's equivalent test)."""
         response = self.client.post(reverse("pin.edit", args=[self.pin.slug]), {"description": "Now fully collapsed."})
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
@@ -337,14 +364,11 @@ class PinDescriptionEditableTests(TestCase):
 
 
 class PinEditRatingClearTests(TestCase):
-    """Rating lives on Review, not Pin - regression coverage for the "clear
-    rating" (x) button, which submits rating=0.
+    """Rating lives on Review, not Pin - regression coverage for the "clear rating" (x) button, which submits rating=0.
 
-    A prior reassignment (rating=0 -> rating=None) meant the downstream
-    `elif rating == 0` delete branch could never actually match, so clicking
-    "clear" silently left the underlying Review row (and thus the displayed
-    rating) untouched.
-    """
+    A prior reassignment (rating=0 -> rating=None) meant the downstream `elif rating == 0` delete branch could
+    never actually match, so clicking "clear" silently left the underlying Review row (and thus the displayed
+    rating) untouched."""
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
@@ -359,7 +383,10 @@ class PinEditRatingClearTests(TestCase):
             content_type="application/json",
         )
         req.user = self.user
-        with patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
     def test_setting_a_rating_creates_a_review(self) -> None:

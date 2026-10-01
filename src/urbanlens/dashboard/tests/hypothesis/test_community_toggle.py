@@ -1,10 +1,5 @@
-"""Tests for the Community toggle (Profile.community_enabled).
+"""Tests for the Community toggle (Profile.community_enabled)."""
 
-Covers the two enforcement points: Profile.save() forcing the seven
-VisibilityChoice fields to NO_ONE, and Friendship.request()/.accept() refusing
-to create or accept requests for a disabled profile. (Pin.is_private is gone:
-wikis are user-created only, so pins carry no privacy flag any more.)
-"""
 from __future__ import annotations
 
 from model_bakery import baker

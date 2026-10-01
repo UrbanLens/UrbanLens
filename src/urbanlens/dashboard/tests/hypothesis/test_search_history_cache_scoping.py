@@ -1,29 +1,24 @@
-"""Regression tests for UL-239: localStorage search-history keys must be per-user.
-
-Three of window.LocationSearchEngine.attach()'s historyKey values were
-hardcoded, unscoped literals ('ul_addr_history_v1', 'ul_composer_search_history_v1',
-'ul_safety_dest_history_v1') - on a shared browser, logging out and back in as a
-different user reused the SAME localStorage entry, so one user's typed search
-queries (which for this app routinely are place names, addresses, or - on the
-safety check-in destination search - the exact place someone is about to
-explore) leaked to whoever logged in next. recentPinsKey right next to
-'ul_addr_history_v1' was already correctly profile-scoped, which is what made
-the inconsistency obvious.
-
-Each fixed site must render its key with the current profile's identifier
-baked in, so two different users never resolve to the same key, and must also
-emit a one-time cleanup of the old unscoped key so already-leaked history
-sitting in a shared browser's localStorage doesn't persist forever after the
-fix ships.
-"""
+"""Regression tests for UL-239: localStorage search-history keys must be per-user."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.inline_scripts import rendered_config
 from urbanlens.core.tests.testcase import TestCase
+
+#: P92 moved this from an inline <script> into a bundled TS entry (P124) - the key-scoping
+#: code itself is static now, so it is checked against the source file, not a response body.
+_MAP_SCRIPT_SOURCE = (Path(__file__).resolve().parents[3] / "dashboard/frontend/ts/entries/map-page.ts").read_text()
+
+#: Never migrated off a classic <script src> - still checkable as a plain static file.
+_COMPOSER_SCRIPT_SOURCE = (
+    Path(__file__).resolve().parents[3] / "dashboard/frontend/static/js/comment-map.js"
+).read_text()
 
 
 class MapAddressSearchHistoryScopingTests(TestCase):
@@ -36,20 +31,26 @@ class MapAddressSearchHistoryScopingTests(TestCase):
         self.client.force_login(self.user)
 
     def test_history_key_is_scoped_to_the_viewing_profile(self) -> None:
-        body = self.client.get(reverse("map.view")).content.decode()
-        self.assertIn(f"ul_addr_history_v1_{self.profile.id}", body)
+        # The script builds the key from a variable, not a literal - the actual per-viewer
+        # value only exists in the page's own config element.
+        self.assertIn('historyKey: "ul_addr_history_v1_" + _PROFILE_UUID', _MAP_SCRIPT_SOURCE)
+        config = rendered_config(self.client.get(reverse("map.view")).content, "map-page-config")
+        assert config is not None, "map-page-config json_script element not found in response"
+        self.assertEqual(config["profileUuid"], str(self.profile.uuid))
 
     def test_stale_unscoped_key_is_cleaned_up(self) -> None:
-        body = self.client.get(reverse("map.view")).content.decode()
-        self.assertIn("localStorage.removeItem('ul_addr_history_v1')", body)
+        self.assertIn('localStorage.removeItem("ul_addr_history_v1")', _MAP_SCRIPT_SOURCE)
 
     def test_two_profiles_render_different_keys(self) -> None:
         other = baker.make(User)
-        first_body = self.client.get(reverse("map.view")).content.decode()
+        first_config = rendered_config(self.client.get(reverse("map.view")).content, "map-page-config")
         self.client.force_login(other)
-        second_body = self.client.get(reverse("map.view")).content.decode()
-        self.assertNotIn(f"ul_addr_history_v1_{other.profile.id}", first_body)
-        self.assertNotIn(f"ul_addr_history_v1_{self.profile.id}", second_body)
+        second_config = rendered_config(self.client.get(reverse("map.view")).content, "map-page-config")
+        assert first_config is not None, "map-page-config json_script element not found in response"
+        assert second_config is not None, "map-page-config json_script element not found in response"
+        self.assertEqual(first_config["profileUuid"], str(self.profile.uuid))
+        self.assertEqual(second_config["profileUuid"], str(other.profile.uuid))
+        self.assertNotEqual(first_config["profileUuid"], second_config["profileUuid"])
 
 
 class ComposerSearchHistoryScopingTests(TestCase):
@@ -62,16 +63,19 @@ class ComposerSearchHistoryScopingTests(TestCase):
         self.client.force_login(self.user)
 
     def test_history_key_is_scoped_to_the_viewing_profile(self) -> None:
-        body = self.client.get(reverse("settings.view")).content.decode()
-        self.assertIn(f"ul_composer_search_history_v1_{self.profile.uuid}", body)
+        self.assertIn(
+            "historyKey: 'ul_composer_search_history_v1_' + COMMENT_MAP_CFG.profileUuid", _COMPOSER_SCRIPT_SOURCE
+        )
+        config = rendered_config(self.client.get(reverse("settings.view")).content, "comment-map-config")
+        assert config is not None, "comment-map-config json_script element not found in response"
+        self.assertEqual(config["profileUuid"], str(self.profile.uuid))
 
     def test_stale_unscoped_key_is_cleaned_up(self) -> None:
-        body = self.client.get(reverse("settings.view")).content.decode()
-        self.assertIn("localStorage.removeItem('ul_composer_search_history_v1')", body)
+        self.assertIn("localStorage.removeItem('ul_composer_search_history_v1')", _COMPOSER_SCRIPT_SOURCE)
 
 
 class SafetyDestinationSearchHistoryScopingTests(TestCase):
-    """The safety check-in destination search history key (_safety_map_script.html) -
+    """The safety check-in destination search history key (_safety_map.html, safety-map.ts) -
     the most sensitive of the three, since it records exactly which places a user
     was about to explore."""
 
@@ -105,9 +109,6 @@ class SafetyDestinationSearchHistoryScopingTests(TestCase):
         return self.client.get(url).content.decode()
 
     def test_history_key_is_scoped_to_the_viewing_profile(self) -> None:
+        """safety-map.test.ts covers the key built from it and the cleanup of the unscoped one."""
         body = self._create_checkin_response_body()
-        self.assertIn(f"ul_safety_dest_history_v1_{self.profile.uuid}", body)
-
-    def test_stale_unscoped_key_is_cleaned_up(self) -> None:
-        body = self._create_checkin_response_body()
-        self.assertIn("localStorage.removeItem('ul_safety_dest_history_v1')", body)
+        self.assertIn(f'data-profile-uuid="{self.profile.uuid}"', body)

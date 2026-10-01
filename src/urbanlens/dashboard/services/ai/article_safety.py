@@ -1,23 +1,14 @@
 """Fail-closed safety classifier for AI-drafted article text.
-
-Every paragraph produced by the link-extraction writing assistant must pass
-through this judge before it is appended to a pin or wiki article. Unavailable
-gateways, empty responses, and unrecognized tokens are all treated as REJECT —
-moderation is never bypassed by turning the feature off (the caller skips
-expansion entirely when this feature's SiteSettings toggle is disabled).
-
-Follows ``services.trivia.classifier``'s allowlisted-``<ANSWER>`` token pattern.
-"""
+Unavailable gateways, empty responses, and unrecognized tokens are all treated as REJECT — moderation is never bypassed by turning the feature off (the caller skips expansion entirely when this feature's SiteSettings toggle is disabled)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import time
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-from urbanlens.dashboard.services.core.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -62,10 +53,7 @@ class ArticleSafetyVerdict:
 
     Attributes:
         approved: True only when the model returned the APPROVE token.
-        reason: None on approval; otherwise a short machine reason
-            (``safety``, ``inappropriate``, ``off_topic``, ``ai_unavailable``,
-            or ``unparseable``).
-    """
+        reason: None on approval; otherwise a short machine reason (``safety``, ``inappropriate``, ``off_topic``, ``ai_unavailable``, or ``unparseable``)."""
 
     approved: bool
     reason: str | None = None
@@ -80,8 +68,7 @@ def classify_article_text(text: str, *, place_name: str, profile: Profile | None
         profile: The requesting profile, used only for the AI-availability gate.
 
     Returns:
-        APPROVE, or REJECT with a reason. Fail-closed on every error path.
-    """
+        APPROVE, or REJECT with a reason."""
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
     gateway = get_gateway("article_safety", profile=profile, instructions=_INSTRUCTIONS)
@@ -91,21 +78,17 @@ def classify_article_text(text: str, *, place_name: str, profile: Profile | None
 
     user_prompt = f"Location: {place_name or 'Unknown location'}\nProposed article text:\n{wrap_user_data(text)}"
 
-    started = time.monotonic()
     try:
-        raw = gateway.send_prompt(user_prompt)
-    except Exception:
-        logger.exception("Article safety classifier call failed unexpectedly; rejecting fail-closed")
-        log_api_call("article_safety", success=False)
+        with api_call_slot("article_safety", endpoint=gateway.model) as slot:
+            try:
+                raw = gateway.send_prompt(user_prompt)
+            except Exception:
+                logger.exception("Article safety classifier call failed unexpectedly; rejecting fail-closed")
+                return ArticleSafetyVerdict(approved=False, reason="ai_unavailable")
+            slot.success, slot.cost_estimate = raw is not None, gateway.cost
+    except RequestCancelledError:
+        logger.info("article_safety refused by its rate limit or switch")
         return ArticleSafetyVerdict(approved=False, reason="ai_unavailable")
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-    log_api_call(
-        "article_safety",
-        success=raw is not None,
-        response_ms=elapsed_ms,
-        endpoint=gateway.model,
-        cost_estimate=gateway.cost,
-    )
 
     if raw is None:
         logger.warning("Article safety classifier got no response from the AI gateway; rejecting fail-closed")

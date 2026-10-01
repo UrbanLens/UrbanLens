@@ -1,10 +1,4 @@
-"""Accepting a share must copy an image faithfully, not reinvent it from defaults.
-
-``create_pin_from_share`` builds the recipient's ``Image`` rows field by field. Any
-field it forgets silently takes the model default rather than the source row's value,
-and two of those defaults are wrong in a way nobody would see in review: ``source``
-defaults to ``UPLOAD`` and ``media_type`` defaults to ``PHOTO``.
-"""
+"""Accepting a share must copy an image faithfully, not reinvent it from defaults."""
 
 from __future__ import annotations
 
@@ -39,9 +33,15 @@ class SharedImageCopyFidelityTests(TestCase):
 
     def _share_image(self, **image_kwargs) -> Image:
         """Share the pin with one image attached, accept it, and return the copy."""
-        image = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, image="photos/original.jpg", **image_kwargs)
+        image = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.sender, image="photos/original.jpg", **image_kwargs
+        )
         share = PinShare.objects.create(
-            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING,
+            pin=self.pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
         )
         share.images.set([image])
 
@@ -96,13 +96,7 @@ class SharedImageCopyFidelityTests(TestCase):
 class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
     """Accepting a share gives you the place, not the person's account of it.
 
-    A share carries what is true about the site - its dates, and what was
-    observed there. It does not carry how somebody chose to decorate their own
-    pin, and it does not carry their labels: a Label belongs to one profile, so
-    copying them hung the sharer's rows off the recipient's pin, showing one
-    person's private organising scheme to another and leaving the recipient
-    holding references they cannot manage.
-    """
+    A share carries what is true about the site - its dates, and what was observed there."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -125,7 +119,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         from urbanlens.dashboard.models.pin_share.model import PinShare
         from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
-        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient)
+        share = PinShare.objects.create(
+            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient
+        )
         return create_pin_from_share(share)
 
     def test_what_was_observed_at_the_site_travels(self) -> None:
@@ -144,7 +140,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 
         new_pin = self._accept()
 
-        self.assertNotIn("zzq-my-private-notes", new_pin.description or "", "the recipient received the sender's personal notes")
+        self.assertNotIn(
+            "zzq-my-private-notes", new_pin.description or "", "the recipient received the sender's personal notes"
+        )
 
     def test_the_senders_styling_does_not_travel(self) -> None:
         new_pin = self._accept()
@@ -174,7 +172,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 
         new_pin = self._accept()
 
-        self.assertNotIn("zzq-my-old-school", new_pin.name or "", "the recipient inherited the sender's name for the pin")
+        self.assertNotIn(
+            "zzq-my-old-school", new_pin.name or "", "the recipient inherited the sender's name for the pin"
+        )
         self.assertEqual(new_pin.name, "Hudson River State Hospital")
 
     def test_a_deliberate_shared_name_is_used(self) -> None:
@@ -182,15 +182,21 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         from urbanlens.dashboard.models.pin_share.model import PinShare
         from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
-        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, shared_name="The old hospital")
+        share = PinShare.objects.create(
+            pin=self.pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            shared_name="The old hospital",
+        )
 
         self.assertEqual(create_pin_from_share(share).name, "The old hospital")
 
     def test_a_shared_photo_keeps_where_and_when_but_not_the_caption(self) -> None:
         """Dates and coordinates place the photo; the caption is what the sharer
-        wrote about it, and exif_data is the file behind it."""
+        wrote about it, and exif_data/original_filename are the file behind it."""
         photo = Image.objects.create(
-            image=SimpleUploadedFile("shot.jpg", b"not-a-real-jpeg", content_type="image/jpeg"),
+            image=SimpleUploadedFile("PXL_20260709_123456.jpg", b"not-a-real-jpeg", content_type="image/jpeg"),
             profile=self.sender,
             pin=self.pin,
             location=self.location,
@@ -203,7 +209,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         from urbanlens.dashboard.models.pin_share.model import PinShare
         from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
-        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient)
+        share = PinShare.objects.create(
+            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient
+        )
         share.images.set([photo])
 
         new_pin = create_pin_from_share(share)
@@ -211,8 +219,13 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 
         self.assertNotIn("zzq-what-i-thought-of-it", copy.caption or "")
         self.assertFalse(copy.exif_data, "the recipient received the sender's photo metadata")
+        self.assertFalse(copy.original_filename, "the recipient received the sender's original filename")
         self.assertEqual(float(copy.latitude), 41.7361)
         self.assertEqual(copy.direction, 270)
+        # filename_taken_at is a date, like taken_at/latitude/longitude above -
+        # it travels even though the filename it was parsed from does not.
+        self.assertEqual(copy.filename_taken_at, photo.filename_taken_at)
+        self.assertIsNotNone(copy.filename_taken_at)
         self.assertIn(self.sender.username, copy.author or "", "an unattributed photo should say who shared it")
 
     def test_the_senders_ratings_of_the_place_do_not_travel(self) -> None:
@@ -238,3 +251,43 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         new_pin = self._accept()
 
         self.assertEqual(list(new_pin.labels.all()), [], "the sender's labels were attached to the recipient's pin")
+
+
+class PendingScanImagesAreNotSharedTests(TestCase):
+    """A still-pending photo must not be copied into an accepted share.
+
+    ``create_pin_from_share`` points the copy at the *same stored file* the sender's row uses and never runs
+    ``process_image_upload`` on it - so a copy of a still-``pending_scan`` original would be immediately visible
+    in the recipient's own pin, pointing at the sender's raw, unstripped-GPS bytes, with nothing ever going to
+    clear it (unlike a same-profile dedup sibling, there is no ``_sync_deduped_siblings`` for a cross-profile
+    share copy)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = User.objects.create_user(username="pending-share-sender").profile
+        self.recipient = User.objects.create_user(username="pending-share-recipient").profile
+        self.location = Location.objects.create(latitude=42.0, longitude=-71.0)
+        self.pin = Pin.objects.create(profile=self.sender, location=self.location, name="Shared place")
+
+    def test_a_pending_photo_is_not_copied_into_the_accepted_share(self) -> None:
+        pending = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.sender, image="photos/raw.jpg", pending_scan=True
+        )
+        ready = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.sender, image="photos/processed.jpg", pending_scan=False
+        )
+        share = PinShare.objects.create(
+            pin=self.pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
+        )
+        share.images.set([pending, ready])
+
+        new_pin = create_pin_from_share(share)
+        copied_sources = set(Image.objects.filter(pin=new_pin, profile=self.recipient).values_list("image", flat=True))
+
+        self.assertEqual(
+            copied_sources, {"photos/processed.jpg"}, "a pending photo's raw bytes reached the recipient's pin"
+        )

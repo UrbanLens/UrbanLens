@@ -1,22 +1,10 @@
 /**
  * Georeferenced image overlays on a pin's or wiki's map.
- *
- * A user drops a historical map image - a Sanborn fire-insurance sheet, a site
- * plan, an old survey - onto the live map and drags its four corners until the
- * old streets sit on the real ones. Leaflet's own `L.ImageOverlay` only takes
- * axis-aligned bounds, which can't express a scan that is rotated, sheared, or
- * (as most flatbed scans of century-old paper are) slightly trapezoidal.
- *
- * So the image is drawn in a plain `<img>` positioned by a CSS `matrix3d`
- * computed from the four corner points: a full projective transform, i.e. the
- * homography mapping the image's own unit rectangle onto the four corners'
- * current pixel positions. Recomputed on every map move/zoom, since the pixel
- * positions change but the stored WGS-84 corners do not. This is the same
- * technique leaflet-distortableimage uses; it is ~70 lines of linear algebra
- * here rather than a dependency, and keeps the corner semantics ours.
  */
 
 import type * as L from "leaflet";
+import { templateTileLayer } from "./map-layers";
+import { processingPlaceholder, settleProcessingThumb, watchProcessingTiles } from "./photo-processing";
 
 /** One overlay as served by `MapImageOverlay.to_json`. */
 export interface MapOverlayEntry {
@@ -24,11 +12,8 @@ export interface MapOverlayEntry {
     name: string;
     url: string;
     /**
-     * XYZ tile template (`.../{z}/{x}/{y}.png`) instead of an image, for
-     * already-georeferenced historical maps served as warped tile pyramids.
-     * A tile overlay is pre-placed by its georeference: no corner dragging,
-     * and `corners` only records its bounds.
-     */
+ * XYZ tile template (`.../{z}/{x}/{y}.png`) instead of an image, for already-georeferenced historical maps served as warped tile.
+ */
     tile_url_template: string;
     /** `[[lat, lng], ...]` for NW, NE, SE, SW - clockwise from the image's top-left. */
     corners: [number, number][];
@@ -37,6 +22,8 @@ export interface MapOverlayEntry {
     default_visible: boolean;
     locked: boolean;
     layer_uuid: string | null;
+    /** The backing photo's stable link (`/media/image/<uuid>/`), or null for an external overlay. */
+    image_link?: string | null;
 }
 
 export interface MapOverlayOptions {
@@ -50,19 +37,12 @@ export interface MapOverlayOptions {
     onError?: (message: string) => void;
 }
 
-/** Solve an 8x8 linear system by Gaussian elimination with partial pivoting.
- *
- * Returns null for a singular system, which happens when the user drags
- * corners into a degenerate shape (three of them collinear, or two coincident)
- * - the caller then leaves the previous transform in place rather than
- * applying a matrix full of NaN, which would make the overlay vanish with no
- * way to drag it back.
+/**
+ * Solve an 8x8 linear system by Gaussian elimination with partial pivoting.
  */
 function solve8(matrix: number[][], rhs: number[]): number[] | null {
     const size = 8;
-    // Flat row-major storage of the augmented matrix: 8 unknowns plus the
-    // constant column. A flat array keeps every access a plain number under
-    // the project's strict index checks, rather than an array-of-maybe-arrays.
+    // Flat row-major storage of the augmented matrix: 8 unknowns plus the constant column.
     const width = size + 1;
     const cells = new Float64Array(size * width);
     for (let row = 0; row < size; row++) {
@@ -102,11 +82,6 @@ function solve8(matrix: number[][], rhs: number[]): number[] | null {
 
 /**
  * The CSS `matrix3d(...)` mapping the unit square (0,0)-(1,1) onto four points.
- *
- * `points` are the destination pixel positions of the image's NW, NE, SE, SW
- * corners, relative to the element's own origin. Standard 8-unknown homography
- * solve: with the source corners fixed at the unit square, each destination
- * corner contributes two rows.
  */
 export function matrix3dForCorners(points: { x: number; y: number }[], width: number, height: number): string | null {
     const src = [
@@ -147,25 +122,39 @@ interface LiveOverlay {
 }
 
 /**
+ * Retry an overlay image once through its photo's stable link. A just-uploaded photo is named by its raw file,
+ * which its re-encode deletes; a load that lands after that fails, and the link redirects to the new file.
+ */
+export function followRenamedOverlayImage(img: HTMLImageElement, link: string): void {
+    img.addEventListener(
+        "error",
+        () => {
+            img.src = link;
+        },
+        { once: true },
+    );
+}
+
+// Idle z-index matches Leaflet's default `overlayPane` (the pane this used to share) so ordinary stacking is unchanged.
+export const OVERLAY_PANE_IDLE_ZINDEX = "400";
+export const OVERLAY_PANE_ALIGNING_ZINDEX = "700";
+
+/**
  * Attach the image-overlay renderer to a map.
- *
  * @param leaflet The Leaflet namespace (passed in rather than imported so this
- *   shares the single instance the host entry already created).
  * @param map The Leaflet map to draw on.
  * @param options Endpoints and callbacks - see {@link MapOverlayOptions}.
  */
 export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: MapOverlayOptions) {
-    const pane = map.getPane("overlayPane");
+    // Own pane rather than Leaflet's shared default `overlayPane`, so raising
+    // it while aligning can't affect anything else that pane might hold.
+    const pane = map.createPane("imageOverlayPane");
+    pane.style.zIndex = OVERLAY_PANE_IDLE_ZINDEX;
     const live = new Map<string, LiveOverlay>();
     const container = document.createElement("div");
-    // leaflet-zoom-hide makes Leaflet hide the whole container for the duration
-    // of a zoom animation. Without it the overlay is positioned in layer-point
-    // space while the pane is simultaneously being CSS-transformed by the
-    // animation, so it visibly drifts away from the map and snaps back at the
-    // end. Hiding through the animation and redrawing on zoomend is what
-    // Leaflet's own vector renderer does short of implementing _animateZoom.
+    // leaflet-zoom-hide makes Leaflet hide the whole container for the duration of a zoom animation.
     container.className = "ul-map-overlay-container leaflet-zoom-hide";
-    pane?.appendChild(container);
+    pane.appendChild(container);
 
     function pixelFor(corner: [number, number]) {
         const point = map.latLngToLayerPoint(leaflet.latLng(corner[0], corner[1]));
@@ -178,10 +167,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         if (!img) return;
         if (!img.naturalWidth || !img.naturalHeight) return;
         const points = entry.corners.map(pixelFor);
-        // Everything is positioned in layer-point space, the same coordinates
-        // Leaflet's own overlay pane uses - so the element's origin is the map
-        // origin and there's no per-element offset bookkeeping. (This holds
-        // only between zoom animations; see leaflet-zoom-hide above.)
+        // Everything is positioned in layer-point space, the same coordinates Leaflet's own overlay pane uses.
         const matrix = matrix3dForCorners(points, img.naturalWidth, img.naturalHeight);
         if (!matrix) return;
         img.style.transform = matrix;
@@ -227,19 +213,11 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
             // while the user is trying to move one corner.
             map.dragging.disable();
             const move = (moveEvent: PointerEvent) => {
-                const rect = map.getContainer().getBoundingClientRect();
-                const containerPoint = leaflet.point(moveEvent.clientX - rect.left, moveEvent.clientY - rect.top);
-                const latLng = map.containerPointToLatLng(containerPoint);
+                const latLng = map.mouseEventToLatLng(moveEvent);
                 item.entry.corners[index] = [latLng.lat, latLng.lng];
                 redraw(item);
             };
-            // `pointercancel`/`lostpointercapture` as well as `pointerup`: a touch
-            // drag interrupted by the browser (an incoming call, a scroll gesture
-            // the OS claims, the pointer capture being lost) fires no `pointerup`
-            // at all. With only that listener the map stayed `dragging.disable()`d
-            // and the whole map was unpannable until the page was reloaded.
-            // `up` is written to be safe to run more than once, since a cancel is
-            // sometimes followed by a capture-loss event for the same gesture.
+            // `pointercancel`/`lostpointercapture` as well as `pointerup`.
             let released = false;
             const up = () => {
                 if (released) return;
@@ -264,15 +242,8 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
     }
 
     /**
-     * An overlay URL that is safe to hand to the DOM, or "" if it is not.
-     *
-     * Overlay URLs are supplied by whoever created the overlay, and on a wiki
-     * that is not necessarily the person viewing it. The server already
-     * validates them, but this is the sink, so it decides on its own terms
-     * rather than trusting that: anything that is not an http(s) URL or a
-     * same-origin path - `javascript:`, `data:`, a protocol-relative `//host`
-     * - is dropped rather than assigned.
-     */
+ * An overlay URL that is safe to hand to the DOM, or "" if it is not.
+ */
     function safeOverlayUrl(raw: string): string {
         if (!raw) return "";
         try {
@@ -286,11 +257,9 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
 
     function add(entry: MapOverlayEntry): void {
         if (entry.tile_url_template) {
-            // Pre-georeferenced tile pyramid: Leaflet's own tile layer does
-            // the drawing, and `bounds` stops it requesting tiles outside
-            // the sheet's footprint (the proxy would 404 them anyway).
+            // Pre-georeferenced tile pyramid: Leaflet's own tile layer does the drawing, and `bounds` stops it requesting tiles outside the sheet's.
             if (!safeOverlayUrl(entry.tile_url_template.replace(/\{[zxys]\}/g, "0"))) return;
-            const tileLayer = leaflet.tileLayer(entry.tile_url_template, {
+            const tileLayer = templateTileLayer(entry.tile_url_template, {
                 opacity: entry.opacity / 100,
                 bounds: boundsFor(entry),
                 maxZoom: 21,
@@ -308,6 +277,8 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         img.draggable = false;
         const src = safeOverlayUrl(entry.url);
         if (!src) return;
+        const link = safeOverlayUrl(entry.image_link ?? "");
+        if (link && link !== src) followRenamedOverlayImage(img, link);
         img.src = src;
 
         const item: LiveOverlay = { entry, img, tileLayer: null, handles: [], aligning: false, visible: false };
@@ -345,9 +316,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         });
     }
 
-    // `zoom` deliberately not included: it fires continuously *during* the
-    // animation, when layer points are momentarily inconsistent with the pane's
-    // own transform (see leaflet-zoom-hide above).
+    // `zoom` deliberately not included: it fires continuously *during* the animation, when layer points are momentarily inconsistent.
     map.on("move moveend viewreset zoomend", redrawAll);
 
     return {
@@ -361,9 +330,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
                     add(entry);
                     return;
                 }
-                // An overlay changing representation (image <-> tiles) or
-                // tile template is rebuilt outright - rare, and simpler than
-                // teaching every code path both shapes at once.
+                // An overlay changing representation (image <-> tiles) or tile template is rebuilt outright.
                 if (!!existing.tileLayer !== !!entry.tile_url_template || (existing.tileLayer && existing.entry.tile_url_template !== entry.tile_url_template)) {
                     const wasShown = existing.visible;
                     remove(entry.uuid);
@@ -380,15 +347,18 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
                 redraw(existing);
             });
         },
-        /** Show the drag handles for one overlay, hiding every other set. */
+        /** Show the drag handles for one overlay, hiding every other set, and raise the
+         * overlay pane above any boundary/markup drawn on top so it can be dragged. */
         startAlign(uuid: string): void {
+            pane.style.zIndex = OVERLAY_PANE_ALIGNING_ZINDEX;
             live.forEach((item, key) => {
                 item.aligning = key === uuid;
                 redraw(item);
             });
         },
-        /** Hide every overlay's drag handles. */
+        /** Hide every overlay's drag handles and restore normal stacking. */
         stopAlign(): void {
+            pane.style.zIndex = OVERLAY_PANE_IDLE_ZINDEX;
             live.forEach((item) => {
                 item.aligning = false;
                 redraw(item);
@@ -421,8 +391,37 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
 /** One of this pin's/wiki's own already-uploaded photos, as `pin.gallery.json`/`location.wiki.gallery.json` serve it. */
 export interface GalleryImage {
     id: number;
-    url: string;
+    /** Null while the photo is still being processed. */
+    url: string | null;
     caption: string;
+    processing?: boolean;
+    processing_failed?: boolean;
+}
+
+/** One picker tile. A photo still being processed is a disabled placeholder until its file is ready. */
+export function renderPickerThumb(image: GalleryImage, selectedId: string, onChoose: (id: number, caption: string) => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "map-overlay-media-picker-thumb";
+    button.dataset.imageId = String(image.id);
+    button.title = image.caption || "Untitled photo";
+    if (selectedId === String(image.id)) button.classList.add("is-selected");
+    if (image.url && !image.processing) {
+        const img = document.createElement("img");
+        img.src = image.url;
+        img.alt = "";
+        img.loading = "lazy";
+        button.appendChild(img);
+    } else {
+        const failed = !!image.processing_failed;
+        button.disabled = true;
+        button.dataset.id = String(image.id);
+        button.dataset.processing = failed ? "failed" : "pending";
+        button.dataset.processingOpen = "";
+        button.appendChild(processingPlaceholder("map-overlay-media-picker-thumb-fallback", failed));
+    }
+    button.addEventListener("click", () => onChoose(image.id, image.caption));
+    return button;
 }
 
 /** The manage-overlays "Add overlay" fields that decide whether there is anything to submit. */
@@ -447,22 +446,38 @@ export interface ManageOverlaysDialogOptions {
 
 /**
  * Wire the manage-overlays dialog's window-level hooks.
- *
- * The dialog is server-rendered HTML that HTMX swaps in and out wholesale on
- * every add/edit/delete, so it cannot import this module - it calls these by
- * name instead (see `_map_overlays_list.html`). Shared by the pin/wiki map
- * entry and the floorplan editor so both get the same behavior: the
- * pick-from-media picker used to be duplicated, inline, directly in two page
- * templates - and never wired up at all on the floorplan editor, where
- * `window.ulMapOverlaySeedCorners` was also missing, silently breaking every
- * attempt to add an overlay there (the corners field stayed empty, so the
- * server had nowhere to place it).
  */
 export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): void {
     const { map, control, onAlignStart } = options;
 
+    function showAlignBanner(): void {
+        const host = map.getContainer();
+        if (!host) return;
+        let banner = document.getElementById("map-overlay-align-banner");
+        if (!banner) {
+            banner = document.createElement("div");
+            banner.id = "map-overlay-align-banner";
+            banner.className = "map-overlay-align-banner";
+            const text = document.createElement("span");
+            text.textContent = "Drag the four corners until the overlay lines up.";
+            const done = document.createElement("button");
+            done.type = "button";
+            done.className = "btn btn--sm btn--primary";
+            done.textContent = "Done";
+            done.addEventListener("click", () => {
+                control.stopAlign();
+                banner?.setAttribute("hidden", "");
+            });
+            banner.append(text, done);
+            host.appendChild(banner);
+        }
+        banner.removeAttribute("hidden");
+    }
+
     window.ulMapOverlayStartAlign = (uuid: string) => {
+        control.setVisible(uuid, true);
         control.startAlign(uuid);
+        showAlignBanner();
         onAlignStart?.();
     };
     window.ulMapOverlayPreviewOpacity = (uuid: string, value: string) => control.previewOpacity(uuid, Number(value));
@@ -484,17 +499,43 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         ]);
     };
 
-    // Re-derives the Add-overlay button's disabled state from the form's
-    // current fields - called on every input/drop/pick so it never stays
-    // clickable with nothing chosen, and turns on the instant something is.
+    function clearFileInput(): void {
+        const input = document.querySelector<HTMLInputElement>("#map-overlay-add-form input[type='file']");
+        if (input) input.value = "";
+        const dropText = document.getElementById("map-overlay-dropzone-text");
+        if (dropText) dropText.textContent = "Drop an image here, or choose a file";
+    }
+
+    function clearPickedMedia(): void {
+        const idField = document.getElementById("map-overlay-image-id") as HTMLInputElement | null;
+        const picked = document.getElementById("map-overlay-picked-media");
+        if (idField) idField.value = "";
+        if (picked) {
+            picked.textContent = "";
+            picked.hidden = true;
+        }
+        document.querySelectorAll(".map-overlay-media-picker-thumb.is-selected").forEach((el) => el.classList.remove("is-selected"));
+    }
+
+    function clearUrlInput(): void {
+        const urlInput = document.querySelector<HTMLInputElement>('#map-overlay-add-form input[name="image_url"]');
+        if (urlInput) urlInput.value = "";
+    }
+
+    // Re-derives the Add-overlay button's disabled state from the form's current fields.
     window.ulMapOverlaySyncSubmitState = () => {
         const form = document.getElementById("map-overlay-add-form") as HTMLFormElement | null;
         const submit = document.getElementById("map-overlay-add-submit") as HTMLButtonElement | null;
         if (!form || !submit) return;
-        const hasFile = !!form.querySelector<HTMLInputElement>('input[type="file"]')?.files?.length;
+        const fileInput = form.querySelector<HTMLInputElement>('input[type="file"]');
+        const hasFile = !!fileInput?.files?.length;
         const urlValue = form.querySelector<HTMLInputElement>('input[name="image_url"]')?.value ?? "";
         const imageIdValue = (document.getElementById("map-overlay-image-id") as HTMLInputElement | null)?.value ?? "";
         submit.disabled = !overlaySubmitEnabled({ hasFile, urlValue, imageIdValue });
+        const dropText = document.getElementById("map-overlay-dropzone-text");
+        if (dropText) {
+            dropText.textContent = fileInput?.files?.[0]?.name || "Drop an image here, or choose a file";
+        }
     };
 
     window.ulMapOverlayHandleDrop = (event: DragEvent, zone: HTMLElement) => {
@@ -504,6 +545,8 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         const input = zone.querySelector<HTMLInputElement>('input[type="file"]');
         if (!files?.length || !input) return;
         input.files = files;
+        clearPickedMedia();
+        clearUrlInput();
         window.ulMapOverlaySyncSubmitState?.();
     };
 
@@ -516,17 +559,29 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
             picked.textContent = `Using: ${caption || "this photo"}`;
             picked.hidden = false;
         }
-        if (picker) picker.hidden = true;
+        picker?.querySelectorAll(".map-overlay-media-picker-thumb").forEach((btn) => {
+            btn.classList.toggle("is-selected", btn.getAttribute("data-image-id") === String(id));
+        });
+        clearFileInput();
+        clearUrlInput();
         window.ulMapOverlaySyncSubmitState?.();
     };
 
-    // Replaces the previous "grab whatever tile happens to be selected or
-    // relevant in the page's separate Media section, or just the first one if
-    // not" hack (duplicated inline in two page templates) - which had no
-    // affordance to actually choose a photo, and had nothing to grab at all on
-    // the floorplan editor page, which has no Media section. This fetches the
-    // pin's/wiki's own already-uploaded photos directly and shows them to pick
-    // from right here.
+    window.ulMapOverlayChooseUrl = () => {
+        const urlInput = document.querySelector<HTMLInputElement>('#map-overlay-add-form input[name="image_url"]');
+        if (urlInput?.value.trim()) {
+            clearFileInput();
+            clearPickedMedia();
+        }
+        window.ulMapOverlaySyncSubmitState?.();
+    };
+
+    window.ulMapOverlayChooseFile = () => {
+        clearPickedMedia();
+        clearUrlInput();
+        window.ulMapOverlaySyncSubmitState?.();
+    };
+
     window.ulMapOverlayPickFromMedia = (galleryJsonUrl?: string) => {
         const picker = document.getElementById("map-overlay-media-picker");
         if (!picker) return;
@@ -535,7 +590,7 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
             return;
         }
         picker.hidden = false;
-        if (picker.dataset.loaded === "1" || !galleryJsonUrl) return;
+        if (!galleryJsonUrl) return;
 
         const setMessage = (text: string): void => {
             picker.textContent = "";
@@ -549,7 +604,6 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         fetch(galleryJsonUrl, { credentials: "same-origin" })
             .then((response) => response.json())
             .then((data: { images?: GalleryImage[] }) => {
-                picker.dataset.loaded = "1";
                 const images = data.images || [];
                 if (!images.length) {
                     setMessage("No photos uploaded here yet.");
@@ -558,21 +612,31 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
                 picker.textContent = "";
                 const grid = document.createElement("div");
                 grid.className = "map-overlay-media-picker-grid";
+                const selectedId = (document.getElementById("map-overlay-image-id") as HTMLInputElement | null)?.value ?? "";
                 for (const image of images) {
-                    const thumbButton = document.createElement("button");
-                    thumbButton.type = "button";
-                    thumbButton.className = "map-overlay-media-picker-thumb";
-                    thumbButton.title = image.caption || "Untitled photo";
-                    const thumbImg = document.createElement("img");
-                    thumbImg.src = image.url;
-                    thumbImg.alt = "";
-                    thumbImg.loading = "lazy";
-                    thumbButton.appendChild(thumbImg);
-                    thumbButton.addEventListener("click", () => window.ulMapOverlayChooseImage?.(image.id, image.caption));
-                    grid.appendChild(thumbButton);
+                    grid.appendChild(renderPickerThumb(image, selectedId, (id, caption) => window.ulMapOverlayChooseImage?.(id, caption)));
                 }
                 picker.appendChild(grid);
+                watchProcessingTiles(grid, (el, item) => settleProcessingThumb(el, item, "", "full"));
             })
             .catch(() => setMessage("Couldn't load this page's photos."));
     };
+
+    // Keyboard submit (Enter in the name field) skips the button's onclick, which used to leave the corners field empty.
+    document.body.addEventListener("htmx:configRequest", (event: Event) => {
+        const detail = (event as CustomEvent).detail as { elt?: Element; parameters?: Record<string, string> } | undefined;
+        const elt = detail?.elt;
+        if (!elt) return;
+        const form = elt.id === "map-overlay-add-form" ? elt : elt.closest?.("#map-overlay-add-form");
+        if (!form) return;
+        window.ulMapOverlaySeedCorners?.();
+        const corners = document.getElementById("map-overlay-initial-corners") as HTMLInputElement | null;
+        if (corners && detail.parameters) detail.parameters.corners = corners.value;
+    });
+
+    document.body.addEventListener("ul:map-overlays-changed", (event: Event) => {
+        const align = (event as CustomEvent).detail?.align as string | undefined;
+        if (!align) return;
+        window.ulMapOverlayStartAlign?.(align);
+    });
 }

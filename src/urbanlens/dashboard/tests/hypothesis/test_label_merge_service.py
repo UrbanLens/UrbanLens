@@ -1,13 +1,4 @@
-"""Tests for ``services.labels.merge`` - the shared label-merge implementation.
-
-These cover the three bugs the extraction fixed, which the controller versions
-had no coverage for at all:
-
-- the merge is now atomic, so a failure partway through rolls the whole thing
-  back instead of leaving attachments split across a half-deleted label;
-- children are reparented onto the target instead of being silently orphaned;
-- wiki attachments move for every pin-style kind, not just categories.
-"""
+"""Tests for ``services.labels.merge`` - the shared label-merge implementation."""
 
 from __future__ import annotations
 
@@ -21,7 +12,14 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
+from urbanlens.dashboard.services.labels.merge import (
+    LabelKindMismatchError,
+    NoSourceLabelsError,
+    ProtectedSourceLabelError,
+    SelfMergeError,
+    UnownedSourceLabelError,
+    merge_labels,
+)
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 
@@ -110,7 +108,10 @@ class LabelMergeServiceTests(TestCase):
         pin.labels.add(source)
 
         # Fail after the attachments have moved but before the delete commits.
-        with patch("urbanlens.dashboard.services.labels.merge._reparent_children", side_effect=RuntimeError("boom")), self.assertRaises(RuntimeError):
+        with (
+            patch("urbanlens.dashboard.services.labels.merge._reparent_children", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
             merge_labels(target=target, sources=[source], profile=self.profile)
 
         # Everything rolled back: the source still exists and still owns its pin.
@@ -131,14 +132,14 @@ class LabelMergeServiceTests(TestCase):
     def test_cross_kind_merge_is_refused(self) -> None:
         target = self._label("Tag", kind=KIND_TAG)
         source = self._label("Status", kind=KIND_STATUS)
-        with self.assertRaises(LabelMergeError):
+        with self.assertRaises(LabelKindMismatchError):
             merge_labels(target=target, sources=[source], profile=self.profile)
         self.assertTrue(Label.objects.filter(pk=source.pk).exists())
 
     def test_global_source_is_refused(self) -> None:
         target = self._label("Mine", kind=KIND_CATEGORY)
         shared = ensure_label(profile=None, name="Shared", kind=KIND_CATEGORY)
-        with self.assertRaises(LabelMergeError):
+        with self.assertRaises(UnownedSourceLabelError):
             merge_labels(target=target, sources=[shared], profile=self.profile)
         self.assertTrue(Label.objects.filter(pk=shared.pk).exists())
 
@@ -146,23 +147,23 @@ class LabelMergeServiceTests(TestCase):
         target = self._label("Mine")
         other = baker.make(User)
         theirs = ensure_label(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
-        with self.assertRaises(LabelMergeError):
+        with self.assertRaises(UnownedSourceLabelError):
             merge_labels(target=target, sources=[theirs], profile=self.profile)
 
     def test_protected_source_is_refused(self) -> None:
         target = self._label("Keep")
         protected = self._label("Visited", is_protected=True)
-        with self.assertRaises(LabelMergeError):
+        with self.assertRaises(ProtectedSourceLabelError):
             merge_labels(target=target, sources=[protected], profile=self.profile)
 
     def test_self_merge_is_refused(self) -> None:
         label = self._label("Solo")
-        with self.assertRaises(LabelMergeError):
+        with self.assertRaises(SelfMergeError):
             merge_labels(target=label, sources=[label], profile=self.profile)
 
     def test_empty_sources_is_refused(self) -> None:
         target = self._label("Keep")
-        with self.assertRaises(LabelMergeError):
+        with self.assertRaises(NoSourceLabelsError):
             merge_labels(target=target, sources=[], profile=self.profile)
 
     def test_a_global_label_may_be_the_target(self) -> None:

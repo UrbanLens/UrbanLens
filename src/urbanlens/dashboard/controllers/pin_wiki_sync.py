@@ -1,9 +1,4 @@
-"""Manual sync between a pin's child pins and its wiki's child wikis.
-
-Two endpoints, both pin-scoped and both no-ops (with a toast explaining why)
-when the pin's location has no community wiki yet - see
-``services.pins.pin_wiki_sync`` for why neither ever creates one.
-"""
+"""Manual sync between a pin's child pins and its wiki's child wikis."""
 
 from __future__ import annotations
 
@@ -39,11 +34,7 @@ def _no_wiki_or_up_to_date_message(pin: Pin, *, up_to_date_text: str) -> str:
 
 
 class PinSendToWikiView(LoginRequiredMixin, View):
-    """POST: create a matching child wiki for each selected child pin.
-
-    Body: repeated ``child_pin_uuids`` - the detail page's multi-select bulk
-    toolbar's "Send to wiki" action.
-    """
+    """POST: create a matching child wiki for each selected child pin."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
@@ -63,7 +54,7 @@ class PinSendToWikiView(LoginRequiredMixin, View):
 
 
 class PinPullFromWikiView(LoginRequiredMixin, View):
-    """POST: create a personal child pin for each of the wiki's child wikis not already covered."""
+    """POST: create a personal child pin for each wiki child not already covered."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)

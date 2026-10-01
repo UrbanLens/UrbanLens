@@ -1,18 +1,5 @@
-"""Nominatim plugin: OpenStreetMap place metadata panel on the pin detail page.
-
-Deliberately kept direct-only (no REData resolution-module wrapper), unlike
-most other single-provider integrations migrated to REData: this panel's
-value is Nominatim's own rich OSM extratags (wikidata/wikipedia tags,
-old-name aliases, opening hours, kind classification, ...), which REData's
-cross-provider ``/geocode/reverse/`` contract deliberately does not promote
-to normalized top-level fields (see ``../REData/docs/api-reference.md``:
-"Vendor-shaped extras ... stay in attributes"). Reconstructing this panel's
-shape from an unspecified per-provider ``attributes`` blob would be guesswork
-rather than a documented contract, so this stays a direct OpenStreetMap
-Nominatim integration. Forward geocoding (address -> coordinates, used by pin
-creation) is a much thinner contract and *is* REData-first - see
-``services.apis.locations.geocode_resolution``.
-"""
+"""Nominatim plugin: OpenStreetMap place metadata panel on the Private Pin page.
+Reconstructing this panel's shape from an unspecified per-provider ``attributes`` blob would be guesswork rather than a documented contract, so this stays a direct OpenStreetMap Nominatim integration."""
 
 from __future__ import annotations
 
@@ -22,7 +9,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
-from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
+from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, OverviewSummary, PanelApiKind, info_card
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -31,29 +18,22 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
-#: Cached keys that make the panel worth showing at all. A reverse-geocode that
-#: matched only an address (no name, no tags) tells a viewer nothing they can't
-#: already see on the pin itself, so both surfaces suppress it entirely rather
-#: than render an empty card. Kept in step with ``PinController.nominatim_info``'s
-#: own list - see this module's ``api_payload``.
+#: Cached keys that make the panel worth showing at all.
+#: A reverse-geocode that matched only an address (no name, no tags) tells a viewer nothing they
+#: can't already see on the pin itself, so both surfaces suppress it entirely rather than render an
+#: empty card.
 _USEFUL_FIELDS = ("website", "phone", "email", "opening_hours", "operator", "wikipedia", "wikidata", "image", "extra_details", "kind_label")
 
 
 def wikipedia_url(tag_value: str) -> str:
     """Turn OSM's ``wikipedia`` tag into a real article URL.
-
-    The tag is conventionally ``"<lang>:<Article Title>"`` (``"de:Kölner Dom"``),
-    but plenty of entries carry a bare title with no language prefix; those are
-    English by convention. Returning the wrong host for either form produces a
-    dead link, which is worse than no link at all - hence the explicit split
-    rather than blind concatenation.
+    Returning the wrong host for either form produces a dead link, which is worse than no link at all - hence the explicit split rather than blind concatenation.
 
     Args:
         tag_value: The raw OSM ``wikipedia`` tag value.
 
     Returns:
-        The article URL, or ``""`` when the tag is empty.
-    """
+        The article URL, or ``""`` when the tag is empty."""
     if not tag_value:
         return ""
     language, separator, title = tag_value.partition(":")
@@ -64,13 +44,7 @@ def wikipedia_url(tag_value: str) -> str:
 
 class _SemicolonSplitNameProvider(LocationCacheNameProvider):
     """Splits a semicolon-separated multi-value tag into separate candidates.
-
-    OSM's ``old_name`` tag is often two-or-more former names in one field
-    (e.g. ``"Pauline Warfield Lewis Center;Cincinnati State Hospital"``).
-    Left as one string, ``sanitize_name`` would strip the semicolon - not
-    split on it - running the two names together into one garbled string
-    instead of producing two real aliases.
-    """
+    Left as one string, ``sanitize_name`` would strip the semicolon - not split on it - running the two names together into one garbled string instead of producing two real aliases."""
 
     def candidates(self, location: Location) -> list[str | None]:
         split: list[str | None] = []
@@ -89,31 +63,23 @@ class NominatimPanelSource(LocationCachePanelSource):
     cache_source = "nominatim"
     section_id = "nominatim-section"
     icon = "map"
-    # Distinguishes this panel from the separate "Photon (OpenStreetMap)"
-    # panel (plugins.builtin.photon) - both reverse-geocode the same
-    # underlying OpenStreetMap data through different, independent hosted
-    # services (Nominatim vs. Komoot's Photon), by design, for cross-checking
-    # - not a duplicate query against one provider. A bare "OpenStreetMap"
-    # title here was ambiguous next to Photon's own title.
+    # Distinguishes this panel from the separate "Photon (OpenStreetMap)" panel
+    # (plugins.builtin.photon) - both reverse-geocode the same underlying OpenStreetMap data through
+    # different, independent hosted services (Nominatim vs. Komoot's Photon), by design, for
+    # cross-checking - not a duplicate query against one provider.
     title = "Nominatim"
-    # Bespoke markup on the web (its own quick-facts row, wiki chips, hero
-    # image), but the underlying data is a plain information card - so the API
-    # serves it through the shared INFO contract instead of a Nominatim-shaped
-    # response every client would have to special-case.
+    # Bespoke markup on the web (its own quick-facts row, wiki chips, hero image), but the
+    # underlying data is a plain information card - so the API serves it through the shared INFO
+    # contract instead of a Nominatim-shaped response every client would have to special-case.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the place metadata.
-
-        Nominatim's panel data lands lazily (only once the pin detail page is
-        viewed), well after a Location's ``official_name`` is first resolved
-        at creation time. When that first resolution never found a real name
-        - or, worse, fell back to a bare city/administrative name - this is
-        the first opportunity to retry with OpenStreetMap's name in the mix,
-        so the name is refreshed here rather than left stuck on a placeholder.
-        """
+        Nominatim's panel data lands lazily (only once the Private Pin page is viewed), well after a Location's ``official_name`` is first resolved at creation time."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, PlaceExternalTag
         from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+        from urbanlens.dashboard.services.locations.external_tags import extract_nominatim_tags
         from urbanlens.dashboard.services.locations.naming import (
             is_address_derived_name,
             is_meaningful_name,
@@ -125,6 +91,10 @@ class NominatimPanelSource(LocationCachePanelSource):
         place = NominatimGateway().reverse_geocode(lat, lng)
         LocationCache.set(pin.location, self.cache_source, place or {}, query_key=f"{lat},{lng}")
 
+        target_place = pin.location.place
+        if target_place is not None and not PlaceExternalTag.is_fresh_for(target_place, ExternalTagSource.OSM):
+            PlaceExternalTag.sync_for_source(target_place, ExternalTagSource.OSM, extract_nominatim_tags(place or {}))
+
         location = pin.location
         current_name = location.official_name
         name_needs_improvement = not is_meaningful_name(current_name) or bool(current_name and is_address_derived_name(current_name, location))
@@ -134,20 +104,35 @@ class NominatimPanelSource(LocationCachePanelSource):
         if place and place.get("osm_url"):
             self._add_osm_link(pin, location, place["osm_url"])
 
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """The place's OSM name and kind, with its contact details."""
+        data = data or {}
+        if not data.get("name"):
+            return None
+        fields = []
+        if data.get("website"):
+            fields.append({"label": "Website", "value": data["website"], "href": data["website"]})
+        if data.get("phone"):
+            fields.append({"label": "Phone", "value": data["phone"], "href": f"tel:{data['phone']}"})
+        if data.get("opening_hours"):
+            fields.append({"label": "Hours", "value": data["opening_hours"]})
+        if data.get("operator"):
+            fields.append({"label": "Operator", "value": data["operator"]})
+        return OverviewSummary(
+            heading_name=data["name"],
+            chips=[data["kind_label"]] if data.get("kind_label") else [],
+            fields=fields,
+            footer_link={"url": data["osm_url"], "label": "View on OpenStreetMap"} if data.get("osm_url") else None,
+        )
+
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The reverse-geocoded OSM place metadata as an information card, or None.
-
-        Applies the same emptiness rule as ``PinController.nominatim_info``
-        (see :data:`_USEFUL_FIELDS`): a coordinate-only result is suppressed on
-        both surfaces, so a client never has to decide for itself whether a
-        card carrying nothing but an address is worth drawing.
 
         Args:
             pin: The pin whose panel is being read.
 
         Returns:
-            ``{"info": {...}}``, or None when nothing has landed yet or the
-            geocode found no metadata worth showing.
+            ``{"info": {...}}``, or None when nothing has landed yet or the geocode found no metadata worth showing.
         """
         data = self.cached_data(pin)
         if not data or not any(data.get(field) for field in _USEFUL_FIELDS):
@@ -224,13 +209,28 @@ class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
         place = NominatimGateway().reverse_geocode(lat, lng)
         return place, f"{lat},{lng}"
 
+    def enrich(self, location: Location) -> bool:
+        """Reverse-geocode via the base implementation, then sync OSM tags onto the Location's Place.
+        A separate step from :meth:`fetch` because tag storage needs ``location.place`` (unavailable from ``fetch``'s location-in/payload-out contract) and reads back the row :meth:`fetch` just wrote rather than re-deriving it."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, PlaceExternalTag
+        from urbanlens.dashboard.services.locations.external_tags import extract_nominatim_tags
+
+        result = super().enrich(location)
+        target_place = location.place
+        if target_place is not None and not PlaceExternalTag.is_fresh_for(target_place, ExternalTagSource.OSM):
+            cached = LocationCache.get_fresh(location, self.cache_source)
+            if cached and cached.data:
+                PlaceExternalTag.sync_for_source(target_place, ExternalTagSource.OSM, extract_nominatim_tags(cached.data))
+        return result
+
 
 class NominatimPlugin(UrbanLensPlugin):
     """OpenStreetMap place metadata for pinned locations."""
 
     name: ClassVar[str] = "nominatim"
     verbose_name: ClassVar[str] = "Nominatim"
-    description: ClassVar[str] = "Reverse-geocodes pins via Nominatim and shows OpenStreetMap place metadata on the pin detail page."
+    description: ClassVar[str] = "Reverse-geocodes pins via Nominatim and shows OpenStreetMap place metadata on the Private Pin page."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

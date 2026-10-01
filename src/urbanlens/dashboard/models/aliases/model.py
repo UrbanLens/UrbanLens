@@ -10,19 +10,14 @@ from django.db.models.fields import CharField
 from django.db.models.functions import Lower
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.aliases.queryset import PinAliasManager, WikiAliasManager
 
 logger = logging.getLogger(__name__)
 
 
 class AliasType(TextChoices):
-    """
-    The type of alias.
-    * NICKNAME: A user-defined nickname for the pin or wiki.
-                Created by checking the "nickname" checkbox when adding an alias.
-    * OFFICIAL: An official name for the pin or location.
-                Created by the system when the pin or location is created, or queried from an external API source.
-    * ALTERNATE: An alternate name for the pin or location.
-                Created by the user when adding an alias. (without the "nickname" checkbox)
+    """The type of alias. * NICKNAME: A user-defined nickname for the pin or wiki.
+    Created by checking the "nickname" checkbox when adding an alias. * OFFICIAL: An official name for the pin or location.
     """
 
     NICKNAME = "nickname", "Nickname"
@@ -32,14 +27,7 @@ class AliasType(TextChoices):
 
 class AliasSource:
     """Well-known alias ``source`` values.
-
-    ``source`` is a free-text slug so plugin name providers can attribute
-    aliases to themselves (e.g. ``"google_places"``, ``"wikipedia"``) without
-    the model enumerating every provider. These constants cover the two
-    non-plugin origins.
-
-    * USER: A user-defined alias for the pin or location.
-    * OTHER: An alias whose external origin is unknown (e.g. backfilled data).
+    ``source`` is a free-text slug so plugin name providers can attribute aliases to themselves (e.g.
     """
 
     USER = "user"
@@ -59,12 +47,7 @@ class _AliasBase(abstract.DashboardModel):
         ordering = ["name"]
 
     def save(self, *args, **kwargs) -> None:
-        """Sanitize ``name`` to a strict character set before persisting it.
-
-        Single enforcement point for every alias creation path: the manual
-        add-alias controller, ``Pin``/``Wiki.save()``'s own alias sync, and
-        external name-provider syncs.
-        """
+        """Sanitize ``name`` to a strict character set before persisting it."""
         from urbanlens.dashboard.services.locations.naming import sanitize_name
 
         update_fields = kwargs.get("update_fields")
@@ -104,6 +87,8 @@ class PinAlias(_AliasBase):
     if TYPE_CHECKING:
         pin_id: int
 
+    objects = PinAliasManager()
+
     def __str__(self) -> str:
         return f"{self.name} (pin alias)"
 
@@ -142,6 +127,8 @@ class WikiAlias(_AliasBase):
     if TYPE_CHECKING:
         wiki_id: int
         created_by_id: int | None
+
+    objects = WikiAliasManager()
 
     def __str__(self) -> str:
         return f"{self.name} (wiki alias)"

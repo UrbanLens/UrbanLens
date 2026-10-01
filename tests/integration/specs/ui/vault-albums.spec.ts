@@ -1,0 +1,151 @@
+/**
+ * Vault > Photos albums: the Vault's own album panel (lazily loaded), and the
+ * "Show your pin albums" toggle - a cross-pin, read-only discovery listing.
+ */
+
+import { expect, test } from "../../lib/fixtures.js";
+import { resourceName } from "../../lib/env.js";
+import { PinDetailPage } from "../../lib/pages/pin-detail-page.js";
+import { appRoutes } from "../../lib/routes.js";
+
+test.describe.configure({ mode: "serial" });
+
+// Unique per run (see lib/env.js's resourceName) - this dev environment's
+// database persists across runs, so a fixed name would collide with an
+// earlier run's leftover album and break the later tests' single-match
+// locators instead of testing anything.
+const ALBUM_NAME = resourceName("E2E vault album");
+
+test.describe("vault albums", () => {
+    test("the vault's own album panel loads and a new album can be created", async ({ page }) => {
+        await page.goto(appRoutes.vaultPhotos);
+
+        const panel = page.locator("#vault-albums-panel");
+        await expect(panel.locator("#albums-panel")).toBeVisible();
+
+        await panel.locator('[data-album-create-toggle]').click();
+        const nameInput = panel.locator(".album-create-name");
+        await expect(nameInput).toBeVisible();
+        await nameInput.fill(ALBUM_NAME);
+        await panel.locator('.album-create-form button[type="submit"]').click();
+
+        await expect(page.locator(".album-card-name", { hasText: ALBUM_NAME })).toBeVisible();
+    });
+
+    test("the pin-albums toggle lazily reveals albums from across the profile's pins", async ({ page, api }) => {
+        // Created fresh here, not assumed to pre-exist (a fixed fixture would only pass where it was made).
+        const pinName = resourceName("E2E test place");
+        const pinAlbumName = resourceName("E2E pin album");
+        const pin = await api.createPin({ name: pinName });
+
+        const detail = new PinDetailPage(page);
+        await detail.goto(pin.slug);
+        await detail.openTab("photos");
+
+        const pinAlbumsSection = page.locator("#albums-panel");
+        await expect(pinAlbumsSection).toBeVisible();
+        await pinAlbumsSection.locator("[data-album-create-toggle]").click();
+        await pinAlbumsSection.locator(".album-create-name").fill(pinAlbumName);
+        await pinAlbumsSection.locator('.album-create-form button[type="submit"]').click();
+        await expect(page.locator(".album-card-name", { hasText: pinAlbumName })).toBeVisible();
+
+        await page.goto(appRoutes.vaultPhotos);
+
+        // "Show your pin albums" now lives in the Albums section's overflow
+        // menu (f974b6ded), not a <details> toggle - a button that reveals a
+        // plain hidden panel and lazy-loads it once.
+        const moreBtn = page.locator("#vault-albums-more-btn");
+        const toggleBtn = page.locator("#vault-pin-albums-toggle-btn");
+        const pinAlbumsPanel = page.locator("#vault-pin-albums-panel");
+
+        // Closed by default - no fetch has happened yet.
+        await expect(pinAlbumsPanel).toHaveAttribute("hidden", "");
+
+        await moreBtn.click();
+        await toggleBtn.click();
+        await expect(pinAlbumsPanel).not.toHaveAttribute("hidden", "");
+        // Scoped to this test's own card - this dev DB persists across runs
+        // and other tests here, so an unscoped .album-card-pin lookup can
+        // resolve to more than one card and fail on Playwright's strict mode.
+        const card = pinAlbumsPanel.locator(".album-card", { has: page.locator(".album-card-name", { hasText: pinAlbumName }) });
+        await expect(card).toBeVisible({ timeout: 10000 });
+        await expect(card.locator(".album-card-pin")).toContainText(pinName);
+
+        // Activating "Show your pin albums" again doesn't refetch - it's a
+        // one-shot lazy load (an in-memory loaded flag), not a re-openable
+        // toggle - assert on the actual request count, not just on DOM state
+        // that a refetch of identical fixture data would reproduce
+        // indistinguishably.
+        let fetchCount = 0;
+        await page.route("**/vault/photos/pin-albums/**", async (route) => {
+            fetchCount += 1;
+            await route.continue();
+        });
+        await moreBtn.click();
+        await toggleBtn.click();
+        await expect(pinAlbumsPanel.locator(".album-card-name", { hasText: pinAlbumName })).toBeVisible();
+        expect(fetchCount).toBe(0);
+    });
+
+    test("clicking a pin album card in the toggle lands on that pin's own Photos tab", async ({ page, api }) => {
+        const pinName = resourceName("E2E pin album link target");
+        const pinAlbumName = resourceName("E2E pin album link");
+        const pin = await api.createPin({ name: pinName });
+
+        const detail = new PinDetailPage(page);
+        await detail.goto(pin.slug);
+        await detail.openTab("photos");
+        const pinAlbumsSection = page.locator("#albums-panel");
+        await pinAlbumsSection.locator("[data-album-create-toggle]").click();
+        await pinAlbumsSection.locator(".album-create-name").fill(pinAlbumName);
+        await pinAlbumsSection.locator('.album-create-form button[type="submit"]').click();
+        await expect(page.locator(".album-card-name", { hasText: pinAlbumName })).toBeVisible();
+
+        await page.goto(appRoutes.vaultPhotos);
+        const pinAlbumsPanel = page.locator("#vault-pin-albums-panel");
+        await page.locator("#vault-albums-more-btn").click();
+        await page.locator("#vault-pin-albums-toggle-btn").click();
+        const card = pinAlbumsPanel.locator(".album-card-name", { hasText: pinAlbumName });
+        await expect(card).toBeVisible({ timeout: 10000 });
+
+        // A real, chrome-having navigation - not the bare AJAX detail partial.
+        await card.click();
+        await detail.expectLoaded();
+        await expect(detail.tab("photos")).toHaveClass(/is-active/);
+        await expect(page.locator("#albums-panel .album-detail-title", { hasText: pinAlbumName })).toBeVisible();
+    });
+
+    test("opening a vault album swaps in its own detail view with add/upload controls", async ({ page }) => {
+        await page.goto(appRoutes.vaultPhotos);
+
+        const panel = page.locator("#vault-albums-panel");
+        await expect(panel.locator(".album-card-name", { hasText: ALBUM_NAME })).toBeVisible();
+        await panel.locator(".album-card-name", { hasText: ALBUM_NAME }).click();
+
+        // #albums-panel is swapped wholesale into its single-album form -
+        // data-album-slug and the "All albums" back button only exist there.
+        const detail = page.locator("#albums-panel.album-detail");
+        await expect(detail).toHaveAttribute("data-album-slug", /.+/);
+        await expect(detail).toHaveAttribute("data-add-url", /.+/);
+        await expect(detail).toHaveAttribute("data-upload-url", /.+/);
+        await expect(detail.locator("[data-album-back]")).toBeVisible();
+    });
+
+    // A stray `display: flex` kept the closed picker laid out; assert computed style since it hid behind other content.
+    test("the add-to-album picker stays collapsed until it is opened", async ({ page }) => {
+        await page.goto(appRoutes.vaultPhotos);
+
+        // Injected with the lazily-loaded albums panel, so wait for it to exist.
+        const dialog = page.locator("#album-target-dialog");
+        await expect(dialog).toHaveCount(1, { timeout: 10000 });
+
+        const closed = await dialog.evaluate((el) => ({
+            open: (el as HTMLDialogElement).open,
+            display: getComputedStyle(el).display,
+            height: el.getBoundingClientRect().height,
+        }));
+        expect(closed.open, "the picker should start closed").toBe(false);
+        expect(closed.display, "a closed <dialog> must not be laid out").toBe("none");
+        expect(closed.height).toBe(0);
+    });
+});

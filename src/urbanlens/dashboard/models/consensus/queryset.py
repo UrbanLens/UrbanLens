@@ -1,10 +1,4 @@
-"""QuerySets/Managers for Consensus models.
-
-Points/leveling math lives in ``services.consensus.points``; trust scoring in
-``services.consensus.trust``; eligibility and field-kind selection in
-``services.consensus.eligibility``/``selection``. These classes only scope
-and fetch rows.
-"""
+"""QuerySets/Managers for Consensus models (only scope/fetch rows; math lives in services.consensus)."""
 
 from __future__ import annotations
 
@@ -15,16 +9,28 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from urbanlens.dashboard.models.consensus.model import ConsensusProfile, ConsensusRound, ConsensusSession
+    from urbanlens.dashboard.models.consensus.model import (  # noqa: F401 - mypy needs these; ruff does not
+        ConsensusAnswer,
+        ConsensusProfile,
+        ConsensusRound,
+        ConsensusRoundPhoto,
+        ConsensusSession,
+        ConsensusSessionChatMessage,
+        ConsensusSessionParticipant,
+        ConsensusTentativeAnswer,
+        ConsensusVote,
+    )
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class ConsensusProfileQuerySet(abstract.DashboardQuerySet):
+class ConsensusProfileQuerySet(abstract.DashboardQuerySet["ConsensusProfile"]):
     """QuerySet for ConsensusProfile."""
 
 
-class ConsensusProfileManager(abstract.DashboardManager.from_queryset(ConsensusProfileQuerySet)):
+_ConsensusProfileManagerBase = abstract.DashboardManager.from_queryset(ConsensusProfileQuerySet)
+
+
+class ConsensusProfileManager(_ConsensusProfileManagerBase["ConsensusProfile"]):
     """Manager for ConsensusProfile."""
 
     def get_or_create_for(self, profile: Profile) -> ConsensusProfile:
@@ -33,26 +39,11 @@ class ConsensusProfileManager(abstract.DashboardManager.from_queryset(ConsensusP
         return consensus_profile
 
 
-class ConsensusSessionQuerySet(abstract.DashboardQuerySet):
+class ConsensusSessionQuerySet(abstract.DashboardQuerySet["ConsensusSession"]):
     """QuerySet for ConsensusSession."""
 
-    def active(self) -> Self:
-        """Restrict to sessions still in progress (lobby or active)."""
-        from urbanlens.dashboard.models.consensus.model import ConsensusSessionStatus
-
-        return self.filter(status__in=[ConsensusSessionStatus.LOBBY, ConsensusSessionStatus.ACTIVE])
-
-    def for_profile(self, profile: Profile) -> Self:
-        """Restrict to sessions ``profile`` is (or was) a participant in, any status."""
-        return self.filter(participants__profile=profile).distinct()
-
     def answer_stalled(self, *, cutoff: datetime) -> Self:
-        """ACTIVE sessions whose current round is still collecting answers past ``cutoff``.
-
-        Used by the stall-sweep Celery task (``tasks.sweep_stalled_consensus_sessions``)
-        to find sessions a participant walked away from mid-round - mirrors
-        ``GameSessionQuerySet.stalled``.
-        """
+        """ACTIVE sessions past ``cutoff`` with answers still pending."""
         from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSessionStatus
 
         return self.filter(
@@ -62,7 +53,7 @@ class ConsensusSessionQuerySet(abstract.DashboardQuerySet):
         ).distinct()
 
     def vote_stalled(self, *, cutoff: datetime) -> Self:
-        """ACTIVE sessions whose current round has an open vote stuck past ``cutoff``."""
+        """ACTIVE sessions past ``cutoff`` with votes still open."""
         from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSessionStatus
 
         return self.filter(
@@ -72,25 +63,35 @@ class ConsensusSessionQuerySet(abstract.DashboardQuerySet):
         ).distinct()
 
 
-class ConsensusSessionManager(abstract.DashboardManager.from_queryset(ConsensusSessionQuerySet)):
+_ConsensusSessionManagerBase = abstract.DashboardManager.from_queryset(ConsensusSessionQuerySet)
+
+
+class ConsensusSessionManager(_ConsensusSessionManagerBase):
     """Manager for ConsensusSession."""
 
 
-class ConsensusSessionParticipantQuerySet(abstract.DashboardQuerySet):
+class ConsensusSessionParticipantQuerySet(abstract.DashboardQuerySet["ConsensusSessionParticipant"]):
     """QuerySet for ConsensusSessionParticipant."""
 
     def joined(self) -> Self:
-        """Restrict to participants who have actually accepted (not just invited)."""
+        """Restrict to participants who accepted."""
         from urbanlens.dashboard.models.consensus.model import ConsensusSessionParticipantStatus
 
         return self.filter(status=ConsensusSessionParticipantStatus.JOINED)
 
+    def active(self) -> Self:
+        """Participants who still have access to their session. Every status qualifies: none marks a departure."""
+        return self.all()
 
-class ConsensusSessionParticipantManager(abstract.DashboardManager.from_queryset(ConsensusSessionParticipantQuerySet)):
+
+_ConsensusSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(ConsensusSessionParticipantQuerySet)
+
+
+class ConsensusSessionParticipantManager(_ConsensusSessionParticipantManagerBase):
     """Manager for ConsensusSessionParticipant."""
 
 
-class ConsensusRoundQuerySet(abstract.DashboardQuerySet):
+class ConsensusRoundQuerySet(abstract.DashboardQuerySet["ConsensusRound"]):
     """QuerySet for ConsensusRound."""
 
     def for_session(self, session: ConsensusSession) -> Self:
@@ -98,11 +99,14 @@ class ConsensusRoundQuerySet(abstract.DashboardQuerySet):
         return self.filter(session=session).order_by("sequence_index")
 
 
-class ConsensusRoundManager(abstract.DashboardManager.from_queryset(ConsensusRoundQuerySet)):
+_ConsensusRoundManagerBase = abstract.DashboardManager.from_queryset(ConsensusRoundQuerySet)
+
+
+class ConsensusRoundManager(_ConsensusRoundManagerBase):
     """Manager for ConsensusRound."""
 
 
-class ConsensusAnswerQuerySet(abstract.DashboardQuerySet):
+class ConsensusAnswerQuerySet(abstract.DashboardQuerySet["ConsensusAnswer"]):
     """QuerySet for ConsensusAnswer."""
 
     def for_round(self, round_: ConsensusRound) -> Self:
@@ -110,11 +114,14 @@ class ConsensusAnswerQuerySet(abstract.DashboardQuerySet):
         return self.filter(round=round_)
 
 
-class ConsensusAnswerManager(abstract.DashboardManager.from_queryset(ConsensusAnswerQuerySet)):
+_ConsensusAnswerManagerBase = abstract.DashboardManager.from_queryset(ConsensusAnswerQuerySet)
+
+
+class ConsensusAnswerManager(_ConsensusAnswerManagerBase):
     """Manager for ConsensusAnswer."""
 
 
-class ConsensusVoteQuerySet(abstract.DashboardQuerySet):
+class ConsensusVoteQuerySet(abstract.DashboardQuerySet["ConsensusVote"]):
     """QuerySet for ConsensusVote."""
 
     def for_round(self, round_: ConsensusRound) -> Self:
@@ -122,41 +129,36 @@ class ConsensusVoteQuerySet(abstract.DashboardQuerySet):
         return self.filter(round=round_)
 
 
-class ConsensusVoteManager(abstract.DashboardManager.from_queryset(ConsensusVoteQuerySet)):
+_ConsensusVoteManagerBase = abstract.DashboardManager.from_queryset(ConsensusVoteQuerySet)
+
+
+class ConsensusVoteManager(_ConsensusVoteManagerBase):
     """Manager for ConsensusVote."""
 
 
-class ConsensusTentativeAnswerQuerySet(abstract.DashboardQuerySet):
+class ConsensusTentativeAnswerQuerySet(abstract.DashboardQuerySet["ConsensusTentativeAnswer"]):
     """QuerySet for ConsensusTentativeAnswer."""
 
-    def for_wiki(self, wiki: Wiki) -> Self:
-        """Every tentative answer proposed for ``wiki``, any status."""
-        return self.filter(wiki=wiki)
 
-    def pending(self) -> Self:
-        """Tentative answers not yet applied or dismissed - still building consensus."""
-        from urbanlens.dashboard.models.consensus.model import ConsensusTentativeStatus
-
-        return self.filter(status=ConsensusTentativeStatus.PENDING)
+_ConsensusTentativeAnswerManagerBase = abstract.DashboardManager.from_queryset(ConsensusTentativeAnswerQuerySet)
 
 
-class ConsensusTentativeAnswerManager(abstract.DashboardManager.from_queryset(ConsensusTentativeAnswerQuerySet)):
+class ConsensusTentativeAnswerManager(_ConsensusTentativeAnswerManagerBase):
     """Manager for ConsensusTentativeAnswer."""
 
 
-class ConsensusRoundPhotoQuerySet(abstract.DashboardQuerySet):
+class ConsensusRoundPhotoQuerySet(abstract.DashboardQuerySet["ConsensusRoundPhoto"]):
     """QuerySet for ConsensusRoundPhoto."""
 
-    def for_round(self, round_: ConsensusRound) -> Self:
-        """Every photo captured during ``round_``."""
-        return self.filter(round=round_)
+
+_ConsensusRoundPhotoManagerBase = abstract.DashboardManager.from_queryset(ConsensusRoundPhotoQuerySet)
 
 
-class ConsensusRoundPhotoManager(abstract.DashboardManager.from_queryset(ConsensusRoundPhotoQuerySet)):
+class ConsensusRoundPhotoManager(_ConsensusRoundPhotoManagerBase):
     """Manager for ConsensusRoundPhoto."""
 
 
-class ConsensusSessionChatMessageQuerySet(abstract.DashboardQuerySet):
+class ConsensusSessionChatMessageQuerySet(abstract.DashboardQuerySet["ConsensusSessionChatMessage"]):
     """QuerySet for ConsensusSessionChatMessage."""
 
     def for_session(self, session: ConsensusSession) -> Self:
@@ -164,5 +166,8 @@ class ConsensusSessionChatMessageQuerySet(abstract.DashboardQuerySet):
         return self.filter(session=session).order_by("created")
 
 
-class ConsensusSessionChatMessageManager(abstract.DashboardManager.from_queryset(ConsensusSessionChatMessageQuerySet)):
+_ConsensusSessionChatMessageManagerBase = abstract.DashboardManager.from_queryset(ConsensusSessionChatMessageQuerySet)
+
+
+class ConsensusSessionChatMessageManager(_ConsensusSessionChatMessageManagerBase):
     """Manager for ConsensusSessionChatMessage."""

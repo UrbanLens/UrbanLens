@@ -1,17 +1,11 @@
-"""Tests for contact information fields and their visibility control.
+"""Tests for contact information fields and their visibility control."""
 
-Covers:
-- Profile contact field defaults
-- ContactMethodsForm validation and DB persistence
-- PrivacySettingsForm contact_visibility persistence
-- Profile.can_view_contact_info() for each VisibilityChoice
-"""
 from __future__ import annotations
 
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.settings_form import ContactMethodsForm, PrivacySettingsForm
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission

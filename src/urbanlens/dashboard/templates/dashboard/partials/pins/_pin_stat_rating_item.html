@@ -1,11 +1,4 @@
-{% comment %}
-Single 1-5 star-rating stat item (priority / danger / vulnerability / rating) with quick-edit
-buttons. Rendered both inline as part of pin_overview_partial.html and standalone as the
-minimal response to a single star click (see PinEditView.post).
-
-Usage:
-  {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="..." modifier="priority" wide=False client_version=client_version %}
-{% endcomment %}
+{% comment %}Single 1-5 star-rating stat item (priority / danger / vulnerability / rating) with quick-edit buttons.{% endcomment %}
 {% load dashboard_tags %}
 <div class="pin-stat-item" id="pin-stat-{{ field }}">
     <span class="field-label">

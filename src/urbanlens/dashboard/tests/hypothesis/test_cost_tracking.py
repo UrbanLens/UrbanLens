@@ -41,11 +41,15 @@ class CostComponentModelTests(TestCase):
     """Amortization math and retirement semantics."""
 
     def test_monthly_amortized_cost_divides_evenly(self) -> None:
-        component = CostComponent.objects.create(name="Hard Drives", replacement_cost=Decimal("1200.00"), deprecation_years=Decimal(10))
+        component = CostComponent.objects.create(
+            name="Hard Drives", replacement_cost=Decimal("1200.00"), deprecation_years=Decimal(10)
+        )
         self.assertEqual(component.monthly_amortized_cost, Decimal("10.00"))
 
     def test_no_retired_at_means_active(self) -> None:
-        component = CostComponent.objects.create(name="Server", replacement_cost=Decimal(500), deprecation_years=Decimal(5))
+        component = CostComponent.objects.create(
+            name="Server", replacement_cost=Decimal(500), deprecation_years=Decimal(5)
+        )
         self.assertTrue(component.is_active)
 
     def test_retired_at_means_inactive(self) -> None:
@@ -58,7 +62,9 @@ class CostComponentModelTests(TestCase):
         self.assertFalse(component.is_active)
 
     def test_elapsed_months_uses_30_day_approximation(self) -> None:
-        component = CostComponent.objects.create(name="NAS", replacement_cost=Decimal(600), deprecation_years=Decimal(5))
+        component = CostComponent.objects.create(
+            name="NAS", replacement_cost=Decimal(600), deprecation_years=Decimal(5)
+        )
         CostComponent.objects.filter(pk=component.pk).update(created=timezone.now() - timedelta(days=60))
         component.refresh_from_db()
         self.assertEqual(component.elapsed_months(timezone.now()), Decimal(2))
@@ -93,7 +99,9 @@ class CostTrackingServiceTests(TestCase):
     """The pure calculation functions in services/admin/cost_tracking.py."""
 
     def test_effective_monthly_cost_sums_active_items_only(self) -> None:
-        CostComponent.objects.create(name="Hard Drives", replacement_cost=Decimal(1200), deprecation_years=Decimal(10))  # $10/mo
+        CostComponent.objects.create(
+            name="Hard Drives", replacement_cost=Decimal(1200), deprecation_years=Decimal(10)
+        )  # $10/mo
         CostComponent.objects.create(
             name="Retired Drive",
             replacement_cost=Decimal(1200),
@@ -101,7 +109,9 @@ class CostTrackingServiceTests(TestCase):
             retired_at=timezone.now() - timedelta(days=1),
         )
         OperatingCost.objects.create(name="Electricity", monthly_cost=Decimal(100))
-        OperatingCost.objects.create(name="Old Hosting", monthly_cost=Decimal(50), retired_at=timezone.now() - timedelta(days=1))
+        OperatingCost.objects.create(
+            name="Old Hosting", monthly_cost=Decimal(50), retired_at=timezone.now() - timedelta(days=1)
+        )
 
         breakdown = effective_monthly_cost()
         self.assertEqual(breakdown.hardware, Decimal("10.00"))
@@ -121,7 +131,9 @@ class CostTrackingServiceTests(TestCase):
 
     def test_total_recorded_expenses_counts_replacement_cost_once(self) -> None:
         now = timezone.now()
-        component = CostComponent.objects.create(name="Hard Drives", replacement_cost=Decimal(1200), deprecation_years=Decimal(10), retired_at=now)
+        component = CostComponent.objects.create(
+            name="Hard Drives", replacement_cost=Decimal(1200), deprecation_years=Decimal(10), retired_at=now
+        )
         CostComponent.objects.filter(pk=component.pk).update(created=now - timedelta(days=365))
 
         total = total_recorded_expenses(now)
@@ -197,14 +209,18 @@ class CostTrackingServiceTests(TestCase):
     def test_active_supporter_count_excludes_canceled(self) -> None:
         role = baker.make(SubscriptionRole)
         user = baker.make(User)
-        baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.CANCELED, threshold_met=True)
+        baker.make(
+            RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.CANCELED, threshold_met=True
+        )
         self.assertEqual(active_supporter_count(), 0)
 
     def test_active_supporter_count_deduplicates_a_user_with_multiple_roles(self) -> None:
         user = baker.make(User)
         for _ in range(2):
             role = baker.make(SubscriptionRole)
-            baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+            baker.make(
+                RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True
+            )
         self.assertEqual(active_supporter_count(), 1)
 
     def test_cost_per_supporter_is_none_with_no_supporters(self) -> None:
@@ -224,7 +240,9 @@ class CostTrackingServiceTests(TestCase):
         _make_active_user()
         paying_user = _make_active_user()
         role = baker.make(SubscriptionRole)
-        baker.make(RoleSubscription, user=paying_user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        baker.make(
+            RoleSubscription, user=paying_user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True
+        )
         OperatingCost.objects.create(name="Electricity", monthly_cost=Decimal(100))
 
         self.assertGreater(cost_per_supporter(), cost_per_user())
@@ -283,7 +301,13 @@ class SiteAdminCostsViewTests(TestCase):
         self.client.force_login(self.admin_user)
         response = self.client.post(
             reverse("site_admin_cost_component_create"),
-            {"name": "Hard Drives", "replacement_cost": "1000", "deprecation_years": "10", "order": "0", "is_active": "on"},
+            {
+                "name": "Hard Drives",
+                "replacement_cost": "1000",
+                "deprecation_years": "10",
+                "order": "0",
+                "is_active": "on",
+            },
         )
         self.assertEqual(response.status_code, 200)
         component = CostComponent.objects.get(name="Hard Drives")
@@ -301,7 +325,9 @@ class SiteAdminCostsViewTests(TestCase):
 
     def test_admin_can_edit_and_retire_a_component(self) -> None:
         self.client.force_login(self.admin_user)
-        component = CostComponent.objects.create(name="Original", replacement_cost=Decimal(1000), deprecation_years=Decimal(10))
+        component = CostComponent.objects.create(
+            name="Original", replacement_cost=Decimal(1000), deprecation_years=Decimal(10)
+        )
 
         self.client.post(
             reverse("site_admin_cost_component_edit", kwargs={"component_id": component.pk}),
@@ -313,7 +339,9 @@ class SiteAdminCostsViewTests(TestCase):
 
     def test_admin_can_delete_a_component(self) -> None:
         self.client.force_login(self.admin_user)
-        component = CostComponent.objects.create(name="To Delete", replacement_cost=Decimal(1000), deprecation_years=Decimal(10))
+        component = CostComponent.objects.create(
+            name="To Delete", replacement_cost=Decimal(1000), deprecation_years=Decimal(10)
+        )
 
         self.client.delete(reverse("site_admin_cost_component_edit", kwargs={"component_id": component.pk}))
         self.assertFalse(CostComponent.objects.filter(pk=component.pk).exists())

@@ -30,7 +30,9 @@ def _make_image(location: Location) -> Image:
 
 
 def _guess(image: Image, lat: float, lng: float, *, is_correct: bool = True) -> PhotoCoordinateGuess:
-    return PhotoCoordinateGuess.objects.create(image=image, guess_point=Point(lng, lat, srid=4326), is_correct=is_correct)
+    return PhotoCoordinateGuess.objects.create(
+        image=image, guess_point=Point(lng, lat, srid=4326), is_correct=is_correct
+    )
 
 
 class RecomputeEstimatedCoordinatesTests(TestCase):
@@ -81,7 +83,9 @@ class RecomputeEstimatedCoordinatesTests(TestCase):
         for lat in clustered:
             _guess(image, lat, -73.5)
         _guess(image, 60.0, -73.5)  # 10th guess, way off - should be trimmed as the outlier
-        self.assertEqual(PhotoCoordinateGuess.objects.filter(image=image, is_correct=True).count(), MIN_GUESSES_FOR_OUTLIER_TRIM)
+        self.assertEqual(
+            PhotoCoordinateGuess.objects.filter(image=image, is_correct=True).count(), MIN_GUESSES_FOR_OUTLIER_TRIM
+        )
 
         recompute_estimated_coordinates(image.pk)
         image.refresh_from_db()

@@ -1,17 +1,4 @@
-"""Tests for the DM `@pin`/`@friend` share fixes: deferred broadcast ordering,
-`PinShare.resulting_pin`, and the in-thread (non-redirecting) respond views.
-
-Covers:
-- create_direct_message(defer_broadcast=True) doesn't broadcast until
-  broadcast_direct_message is called explicitly
-- share_pin_in_message / recommend_friend_in_message only broadcast once the
-  DirectMessageShare row already exists, so serialize_direct_message's
-  has_share flag is correct on the wire (the live share-card/blurred-image bug)
-- PinShare.resulting_pin for both the "brand new pin" and "already pinned"
-  accept paths
-- MessageShareRespondPinView / MessageShareRespondFriendView respond in place
-  (200 + re-rendered card), never redirect the recipient out of the thread
-"""
+"""Tests for the DM `@pin`/`@friend` share fixes: deferred broadcast ordering, `PinShare.resulting_pin`, and the in-thread (non-redirecting) respond views."""
 
 from __future__ import annotations
 
@@ -28,7 +15,10 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message, share_pin_in_message
+from urbanlens.dashboard.services.messaging.direct_message_shares import (
+    recommend_friend_in_message,
+    share_pin_in_message,
+)
 from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message, serialize_direct_message
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
@@ -75,10 +65,8 @@ class DeferBroadcastTests(TestCase):
 class SharePinBroadcastOrderingTests(TestCase):
     """share_pin_in_message only broadcasts after the DirectMessageShare exists.
 
-    Broadcasting the plain message first (as the code did before this fix)
-    means the WS payload's `has_share` flag is always False - the live
-    share card never renders for the recipient without a manual refresh.
-    """
+    Broadcasting the plain message first (as the code did before this fix) means the WS payload's `has_share`
+    flag is always False - the live share card never renders for the recipient without a manual refresh."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -203,7 +191,9 @@ class MessageShareRespondViewTests(TestCase):
         message = share_pin_in_message(self.sender, self.recipient, self.pin, "hi")
         self.client.force_login(self.sender.user)
         response = self.client.post(
-            reverse("messages.share.pin.respond", kwargs={"profile_slug": self.recipient.slug, "message_id": message.pk}),
+            reverse(
+                "messages.share.pin.respond", kwargs={"profile_slug": self.recipient.slug, "message_id": message.pk}
+            ),
             {"action": "accept"},
         )
         self.assertEqual(response.status_code, 404)
@@ -214,7 +204,9 @@ class MessageShareRespondViewTests(TestCase):
         message = recommend_friend_in_message(self.sender, self.recipient, recommended, "meet them")
         self.client.force_login(self.recipient.user)
         response = self.client.post(
-            reverse("messages.share.friend.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}),
+            reverse(
+                "messages.share.friend.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}
+            ),
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(
@@ -226,12 +218,7 @@ class MessageShareRespondViewTests(TestCase):
 class MessageShareTripScopingTests(TestCase):
     """The trip-invite POST resolves the trip through the caller's own memberships.
 
-    The service layer already refuses to invite anyone to a trip the sender
-    isn't a member of (403), but the view used to look the trip up unscoped
-    first - so a non-member could distinguish "trip slug exists" (403) from
-    "doesn't exist" (404), a slug-probing existence oracle. Both cases must
-    be an identical 404 now.
-    """
+    Both cases must be an identical 404 now."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -259,7 +246,11 @@ class MessageShareTripScopingTests(TestCase):
         response = self._invite(trip.slug)
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(TripMembership.objects.filter(trip=trip, profile=self.recipient, status=TripMembership.STATUS_INVITED).exists())
+        self.assertTrue(
+            TripMembership.objects.filter(
+                trip=trip, profile=self.recipient, status=TripMembership.STATUS_INVITED
+            ).exists()
+        )
 
     def test_someone_elses_trip_and_a_nonexistent_trip_are_indistinguishable(self) -> None:
         from urbanlens.dashboard.models.trips.model import Trip, TripMembership
@@ -277,10 +268,7 @@ class MessageShareTripScopingTests(TestCase):
 
 
 class ShareStatusNotLeakedToSharerTests(TestCase):
-    """The sharer must never see the recipient's accept/reject decision in the
-    DM thread itself - that's the recipient's own choice to disclose or not.
-    _message_share_card.html already gates this on viewer_id == recipient_id;
-    this locks the guarantee in with a regression test (there wasn't one)."""
+    """The sharer must never see the recipient's accept/reject decision in the DM thread itself - that's the recipient's own choice to disclose or not. _message_share_card.html already gates this on viewer_id == recipient_id; this locks the guarantee in with a regression test (there wasn't one)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -333,7 +321,10 @@ class ShareStatusNotLeakedToSharerTests(TestCase):
         self.client.force_login(self.sender.user)
         response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.recipient.slug}))
         content = response.content.decode()
-        self.assertNotContains(response, reverse("messages.share.pin.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}))
+        self.assertNotContains(
+            response,
+            reverse("messages.share.pin.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}),
+        )
         self.assertIn("Pin shared.", content)
 
     def test_recipient_does_see_their_own_status(self) -> None:
@@ -367,13 +358,8 @@ class ThreadImagePermissionSerializationTests(TestCase):
 class ShareCompositeAtomicityTests(TestCase):
     """A refused message rolls back the whole share composite.
 
-    Regression: share_pin_in_message created the PinShare (with its exposure
-    record) and invite_to_trip_in_message created the TripMembership BEFORE
-    calling create_direct_message. A recipient whose DM visibility rejects
-    the sender despite the friendship (e.g. "No one") made the message raise
-    PermissionError - leaving an orphaned share offer / trip membership the
-    recipient never consented to and no message ever carried.
-    """
+    Regression: share_pin_in_message created the PinShare (with its exposure record) and
+    invite_to_trip_in_message created the TripMembership BEFORE calling create_direct_message."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -413,16 +399,17 @@ class ShareCompositeAtomicityTests(TestCase):
         _make_accepted_friendship(self.sender, recommended)
         with self.assertRaises(PermissionError):
             recommend_friend_in_message(self.sender, self.recipient, recommended, "meet my friend")
-        self.assertFalse(DirectMessageTemporaryAccess.objects.filter(profile=recommended, granted_to=self.recipient).exists())
+        self.assertFalse(
+            DirectMessageTemporaryAccess.objects.filter(profile=recommended, granted_to=self.recipient).exists()
+        )
 
 
 class RecommendationBlockTests(TestCase):
     """A block between the recommended profile and the recipient vetoes the recommendation.
 
-    Regression: recommending X to R when X had blocked R (or vice versa)
-    still created the DirectMessageTemporaryAccess grant - handing R a
-    24-hour window of profile access the block exists to prevent.
-    """
+    Regression: recommending X to R when X had blocked R (or vice versa) still created the
+    DirectMessageTemporaryAccess grant - handing R a 24-hour window of profile access the block exists to
+    prevent."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -449,7 +436,9 @@ class RecommendationBlockTests(TestCase):
         self._block(self.recommended, self.recipient)
         with self.assertRaises(PermissionError):
             recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
-        self.assertFalse(DirectMessageTemporaryAccess.objects.filter(profile=self.recommended, granted_to=self.recipient).exists())
+        self.assertFalse(
+            DirectMessageTemporaryAccess.objects.filter(profile=self.recommended, granted_to=self.recipient).exists()
+        )
         self.assertFalse(DirectMessage.objects.between(self.sender, self.recipient).exists())
 
     def test_block_in_the_other_direction_is_also_refused(self) -> None:
@@ -460,26 +449,26 @@ class RecommendationBlockTests(TestCase):
             recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
 
     def test_block_refusal_is_indistinguishable_from_recommendations_disabled(self) -> None:
-        """The sender must not be able to tell "blocked" apart from "opted out"."""
-        from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message
+        """The sender must not be able to tell "blocked" apart from "opted out".
+
+        Both routes raise the exact same exception type (``FriendRecommendationUnavailableError``) rather than
+        merely the same message text - a catch site dispatches on type now, so that's what actually determines
+        the response the sender sees."""
+        from urbanlens.dashboard.services.messaging.direct_message_shares import (
+            FriendRecommendationUnavailableError,
+            recommend_friend_in_message,
+        )
 
         other = _profile()
         _make_accepted_friendship(self.sender, other)
         Profile.objects.filter(pk=other.pk).update(allow_friend_recommendations=False)
         other.refresh_from_db()
-        try:
+        with self.assertRaises(FriendRecommendationUnavailableError):
             recommend_friend_in_message(self.sender, self.recipient, other, "meet them")
-            self.fail("expected PermissionError")
-        except PermissionError as exc:
-            opt_out_text = str(exc).replace(other.username, "{name}")
 
         self._block(self.recommended, self.recipient)
-        try:
+        with self.assertRaises(FriendRecommendationUnavailableError):
             recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
-            self.fail("expected PermissionError")
-        except PermissionError as exc:
-            blocked_text = str(exc).replace(self.recommended.username, "{name}")
-        self.assertEqual(opt_out_text, blocked_text)
 
     def test_block_placed_after_the_grant_kills_access_immediately(self) -> None:
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess

@@ -1,24 +1,20 @@
-"""Tests for self-service account deletion.
-
-Covers:
-- ProfileQuerySet.due_for_deletion_reminder / due_for_hard_delete boundary conditions.
-- services.profile.account_deletion: request/cancel/reminder/hard-delete, notifications, emails, idempotency.
-- RequestAccountDeletionView / CancelAccountDeletionView controllers.
-- The site-wide deletion banner rendering.
-"""
+"""Tests for self-service account deletion."""
 
 from __future__ import annotations
 
 import datetime
+import smtplib
+from unittest import mock
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
+from urbanlens.core.tests.celery_inline import notification_emails_sent
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
@@ -26,7 +22,11 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import ACCOUNT_DELETION_GRACE_PERIOD, ACCOUNT_DELETION_REMINDER_LEAD, Profile
+from urbanlens.dashboard.models.profile.model import (
+    ACCOUNT_DELETION_GRACE_PERIOD,
+    ACCOUNT_DELETION_REMINDER_LEAD,
+    Profile,
+)
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
 from urbanlens.dashboard.services.profile.account_deletion import (
     cancel_deletion,
@@ -41,7 +41,9 @@ def _fake_image(name: str) -> SimpleUploadedFile:
 
 
 def _backdate_request(profile: Profile, ago: datetime.timedelta) -> Profile:
-    Profile.objects.filter(pk=profile.pk).update(deletion_requested_at=timezone.now() - ago, deletion_reminder_sent_at=None)
+    Profile.objects.filter(pk=profile.pk).update(
+        deletion_requested_at=timezone.now() - ago, deletion_reminder_sent_at=None
+    )
     profile.refresh_from_db()
     return profile
 
@@ -128,10 +130,15 @@ class RequestDeletionTests(TestCase):
 
     def test_creates_onsite_notification(self):
         request_deletion(self.profile)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists()
+        )
 
     def test_sends_email(self):
-        request_deletion(self.profile)
+        with notification_emails_sent():
+            request_deletion(self.profile)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["owner@example.com"])
 
@@ -140,6 +147,51 @@ class RequestDeletionTests(TestCase):
         self.profile.refresh_from_db()
         request_deletion(self.profile)
         self.assertIsNone(self.profile.deletion_reminder_sent_at)
+
+    def test_no_email_sent_when_profile_has_no_email(self):
+        self.profile.user.email = ""
+        self.profile.user.save(update_fields=["email"])
+        # Assert test assumptions
+        self.assertEqual(len(mail.outbox), 0, "Outbox is 0 before test run")
+        self.assertFalse(
+            self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db"
+        )
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists(),
+            "Possible unsanitary test db",
+        )
+
+        request_deletion(self.profile)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertTrue(self.profile.is_pending_deletion)
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists()
+        )
+
+    def test_deletion_still_recorded_when_email_send_fails(self):
+        """`_send_email` logs and swallows delivery failures - a raised SMTPException must not abort the request."""
+        self.assertFalse(
+            self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db"
+        )
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists(),
+            "Possible unsanitary test db",
+        )
+
+        with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
+            request_deletion(self.profile)
+        self.assertTrue(self.profile.is_pending_deletion)
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists()
+        )
 
 
 class CancelDeletionTests(TestCase):
@@ -167,7 +219,11 @@ class SendDeletionReminderTests(TestCase):
 
     def test_creates_onsite_notification(self):
         send_deletion_reminder(self.profile)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REMINDER).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REMINDER
+            ).exists()
+        )
 
     def test_sends_email(self):
         send_deletion_reminder(self.profile)
@@ -181,9 +237,27 @@ class SendDeletionReminderTests(TestCase):
         send_deletion_reminder(self.profile)
         self.assertNotIn(self.profile, Profile.objects.due_for_deletion_reminder())
 
+    def test_no_email_sent_when_profile_has_no_email(self):
+        self.profile.user.email = ""
+        self.profile.user.save(update_fields=["email"])
+        self.assertEqual(len(mail.outbox), 0, "Test assumptions fail")
+        self.assertIsNone(self.profile.deletion_reminder_sent_at, "Test assumptions fail")
+
+        send_deletion_reminder(self.profile)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertIsNotNone(self.profile.deletion_reminder_sent_at)
+
+    def test_reminder_still_stamped_when_email_send_fails(self):
+        """A raised SMTPException must not stop the idempotency marker from being set,
+        or the sweep would resend this reminder forever."""
+        self.assertIsNone(self.profile.deletion_reminder_sent_at, "Test assumptions fail")
+        with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
+            send_deletion_reminder(self.profile)
+        self.assertIsNotNone(self.profile.deletion_reminder_sent_at)
+
 
 class HardDeleteProfileTests(TestCase):
-    """hard_delete_profile() emails, then permanently removes the account and its data."""
+    """hard_delete_profile() permanently removes the account and its data, then emails."""
 
     def setUp(self):
         self.user = baker.make(User, email="owner@example.com", username="doomed")
@@ -209,6 +283,34 @@ class HardDeleteProfileTests(TestCase):
         pin_pk = self.pin.pk
         hard_delete_profile(self.profile)
         self.assertFalse(Pin.objects.filter(pk=pin_pk).exists())
+
+    def test_cascades_to_owned_trip_comments(self):
+        """P25: TripComment.author is CASCADE, matching Comment.profile."""
+        other = baker.make(User)
+        trip = baker.make(Trip, creator=other.profile)
+        comment = baker.make(TripComment, trip=trip, author=self.profile)
+        comment_pk = comment.pk
+        hard_delete_profile(self.profile)
+        self.assertFalse(TripComment.objects.filter(pk=comment_pk).exists())
+
+    def test_no_final_email_when_user_has_no_email(self):
+        self.profile.user.email = ""
+        self.profile.user.save(update_fields=["email"])
+        user_pk = self.user.pk
+        self.assertEqual(len(mail.outbox), 0, "Test assumptions fail")
+        self.assertTrue(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
+        hard_delete_profile(self.profile)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
+
+    def test_account_still_deleted_when_final_email_fails(self):
+        """A raised SMTPException while sending the "account deleted" email must not
+        abort the hard delete - a broken mail relay must never leave the account undeleted."""
+        user_pk = self.user.pk
+        self.assertTrue(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
+        with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
+            hard_delete_profile(self.profile)
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
 
 
 class HardDeleteProfileFileCleanupTests(TestCase):
@@ -254,18 +356,18 @@ class HardDeleteProfileFileCleanupTests(TestCase):
         hard_delete_profile(self.profile)
         self.assertFalse(storage.exists(name))
 
-    def test_trip_comment_survives_with_its_image_intact(self):
-        """TripComment.author is SET_NULL by design - the row and its image
-        outlive account deletion so other trip members keep the thread; only
-        the author reference is cleared."""
+    def test_trip_comment_is_deleted_with_its_image(self):
+        """TripComment.author is CASCADE, matching Comment.profile (P25) - a
+        trip comment with no replies is erased along with the account, and
+        its image file does not outlive the row."""
         other = baker.make(User)
         trip = baker.make(Trip, creator=other.profile)
         comment = baker.make(TripComment, trip=trip, author=self.profile, image=_fake_image("trip.png"))
+        comment_pk = comment.pk
         storage, name = comment.image.storage, comment.image.name
         hard_delete_profile(self.profile)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.author_id)
-        self.assertTrue(storage.exists(name))
+        self.assertFalse(TripComment.objects.filter(pk=comment_pk).exists())
+        self.assertFalse(storage.exists(name))
 
     def test_missing_file_on_disk_does_not_block_deletion(self):
         """A DB row pointing at an already-missing file must not crash the sweep."""
@@ -273,6 +375,63 @@ class HardDeleteProfileFileCleanupTests(TestCase):
         pin.custom_icon.storage.delete(pin.custom_icon.name)
         hard_delete_profile(self.profile)  # must not raise
         self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+
+
+class HardDeleteProfileCommentTombstoneTests(TestCase):
+    """P25: deleting an account erases its own comments, but a reply another
+    member wrote is never deleted or emptied - the CASCADE reaches exactly as
+    far as the departing profile's own rows, and the existing UL-219
+    parent_deleted signal tombstones the reply the same way a direct
+    comment-delete already does."""
+
+    def setUp(self):
+        self.user = baker.make(User, email="owner@example.com", username="doomed")
+        self.profile = _backdate_request(self.user.profile, ACCOUNT_DELETION_GRACE_PERIOD)
+        self.other = _new_profile()
+
+    def test_own_pin_comment_reply_from_another_user_survives_tombstoned(self):
+        pin = baker.make(Pin, profile=self.other)
+        parent = baker.make(Comment, pin=pin, wiki=None, profile=self.profile, text="original")
+        reply = baker.make(Comment, pin=pin, wiki=None, profile=self.other, parent=parent, text="a reply")
+
+        hard_delete_profile(self.profile)
+
+        reply.refresh_from_db()
+        self.assertEqual(reply.text, "a reply")
+        self.assertIsNone(reply.parent_id)
+        self.assertTrue(reply.parent_deleted)
+
+    def test_own_trip_comment_reply_from_another_user_survives_tombstoned(self):
+        trip = baker.make(Trip, creator=self.other)
+        parent = baker.make(TripComment, trip=trip, author=self.profile, text="original")
+        reply = baker.make(TripComment, trip=trip, author=self.other, parent=parent, text="a reply")
+
+        hard_delete_profile(self.profile)
+
+        reply.refresh_from_db()
+        self.assertEqual(reply.text, "a reply")
+        self.assertIsNone(reply.parent_id)
+        self.assertTrue(reply.parent_deleted)
+
+    def test_other_users_comment_is_left_completely_alone(self):
+        pin = baker.make(Pin, profile=self.other)
+        untouched = baker.make(Comment, pin=pin, wiki=None, profile=self.other, text="not mine")
+
+        hard_delete_profile(self.profile)
+
+        untouched.refresh_from_db()
+        self.assertEqual(untouched.text, "not mine")
+        self.assertEqual(untouched.profile_id, self.other.pk)
+
+    def test_other_users_trip_comment_is_left_completely_alone(self):
+        trip = baker.make(Trip, creator=self.other)
+        untouched = baker.make(TripComment, trip=trip, author=self.other, text="not mine")
+
+        hard_delete_profile(self.profile)
+
+        untouched.refresh_from_db()
+        self.assertEqual(untouched.text, "not mine")
+        self.assertEqual(untouched.author_id, self.other.pk)
 
 
 class RequestAccountDeletionViewTests(TestCase):
@@ -291,28 +450,50 @@ class RequestAccountDeletionViewTests(TestCase):
         self.assertFalse(self.user.profile.is_pending_deletion)
 
     def test_wrong_confirm_text_does_not_schedule_deletion(self):
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete somebody-else"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete somebody-else"}
+        )
         self.user.profile.refresh_from_db()
         self.assertFalse(self.user.profile.is_pending_deletion)
 
     def test_correct_password_and_confirmation_schedules_deletion(self):
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"}
+        )
         self.user.profile.refresh_from_db()
         self.assertTrue(self.user.profile.is_pending_deletion)
 
     def test_user_stays_logged_in_after_request(self):
-        response = self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"}, follow=True)
+        response = self.client.post(
+            reverse("account.delete.request"),
+            {"password": "correct-horse", "confirm_text": "delete alice"},
+            follow=True,
+        )
         self.assertTrue(response.wsgi_request.user.is_authenticated)
 
     def test_confirm_text_is_case_insensitive(self):
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "DELETE ALICE"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "DELETE ALICE"}
+        )
         self.user.profile.refresh_from_db()
         self.assertTrue(self.user.profile.is_pending_deletion)
 
     def test_superuser_cannot_schedule_deletion(self):
         self.user.is_superuser = True
         self.user.save()
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"}
+        )
+        self.user.profile.refresh_from_db()
+        self.assertFalse(self.user.profile.is_pending_deletion)
+
+    def test_view_site_admin_permission_blocks_deletion(self):
+        """The gate is `is_superuser OR has_perm(view_site_admin)` - a staff moderator
+        holding just the permission (not superuser) must be blocked too."""
+        self.user.user_permissions.add(Permission.objects.get(codename="view_site_admin"))
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"}
+        )
         self.user.profile.refresh_from_db()
         self.assertFalse(self.user.profile.is_pending_deletion)
 
@@ -329,6 +510,16 @@ class CancelAccountDeletionViewTests(TestCase):
         self.client.post(reverse("account.delete.cancel"))
         self.profile.refresh_from_db()
         self.assertFalse(self.profile.is_pending_deletion)
+
+    def test_redirect_only_honors_a_same_site_next(self):
+        """`next` is an attacker-controlled POST field, not just the hidden banner
+        input - an off-site value must fall back to the settings page rather than
+        becoming an open redirect."""
+        response = self.client.post(reverse("account.delete.cancel"), {"next": "https://evil.example.com/phish"})
+        self.assertEqual(response.url, reverse("settings.view"))
+
+        response = self.client.post(reverse("account.delete.cancel"), {"next": "/map/"})
+        self.assertEqual(response.url, "/map/")
 
 
 class AccountDeletionBannerTests(TestCase):
@@ -351,24 +542,18 @@ class AccountDeletionBannerTests(TestCase):
 class DeletionReminderOverlapLockTests(TestCase):
     """Two overlapping sweeps must not both email the same account.
 
-    `due_for_deletion_reminder` filters on `deletion_reminder_sent_at__isnull=True`,
-    which guards at *selection* time, and `send_deletion_reminder` emails first
-    and stamps the marker afterwards - so without the overlap lock two runs both
-    select the same profile and both send. Celery delivers at least once, and a
-    slow sweep can outlast its own beat interval, so "two runs at once" is
-    ordinary rather than exotic.
-
-    The three sibling reminder sweeps (`send_due_checkin_reminders`,
-    `send_final_checkin_warnings`, `escalate_overdue_checkins`) already take this
-    lock; this one did not.
-    """
+    `due_for_deletion_reminder` filters on `deletion_reminder_sent_at__isnull=True`, which guards at *selection*
+    time, and `send_deletion_reminder` emails first and stamps the marker afterwards - so without the overlap
+    lock two runs both select the same profile and both send."""
 
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.user = baker.make(User, email="leaving@example.com")
         self.profile = self.user.profile
-        self.profile.deletion_requested_at = timezone.now() - (ACCOUNT_DELETION_GRACE_PERIOD - ACCOUNT_DELETION_REMINDER_LEAD)
+        self.profile.deletion_requested_at = timezone.now() - (
+            ACCOUNT_DELETION_GRACE_PERIOD - ACCOUNT_DELETION_REMINDER_LEAD
+        )
         self.profile.save(update_fields=["deletion_requested_at"])
 
     def test_a_run_holding_the_lock_blocks_a_concurrent_one(self) -> None:
@@ -392,10 +577,8 @@ class DeletionReminderOverlapLockTests(TestCase):
     def test_the_blocked_profile_is_still_sent_on_the_next_tick(self) -> None:
         """The lock must not lose a reminder - only defer it.
 
-        This is why a lock is right here and a claim-before-send is not: a
-        duplicate notice is noise, a missing one means no warning at all before
-        a permanent deletion.
-        """
+        This is why a lock is right here and a claim-before-send is not: a duplicate notice is noise, a missing
+        one means no warning at all before a permanent deletion."""
         from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
         from urbanlens.dashboard.tasks import (
             _DELETION_REMINDER_LOCK_CACHE_KEY,
@@ -424,3 +607,133 @@ class DeletionReminderOverlapLockTests(TestCase):
 
         send_account_deletion_reminders()
         self.assertEqual(send_account_deletion_reminders(), 0)
+
+
+class HardDeleteOverlapLockTests(TestCase):
+    """The hard-delete sweep needs the same overlap lock as its reminder sibling.
+
+    `due_for_hard_delete` selects on `deletion_requested_at`, which `hard_delete_profile` does not clear until
+    it has already sent the final "your account has been deleted" email - so two overlapping runs both select
+    the same profile and both send it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User, email="gone@example.com")
+        self.profile = self.user.profile
+        self.profile.deletion_requested_at = timezone.now() - (
+            ACCOUNT_DELETION_GRACE_PERIOD + datetime.timedelta(hours=1)
+        )
+        self.profile.save(update_fields=["deletion_requested_at"])
+
+    def test_a_run_holding_the_lock_blocks_a_concurrent_one(self) -> None:
+        from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+        from urbanlens.dashboard.tasks import (
+            _HARD_DELETE_LOCK_CACHE_KEY,
+            _HARD_DELETE_LOCK_TIMEOUT_SECONDS,
+            hard_delete_expired_accounts,
+        )
+
+        token = acquire_lock(_HARD_DELETE_LOCK_CACHE_KEY, _HARD_DELETE_LOCK_TIMEOUT_SECONDS)
+        self.addCleanup(release_lock, _HARD_DELETE_LOCK_CACHE_KEY, token)
+        self.assertIsNotNone(token, "precondition: the lock must be free before the test takes it")
+
+        deleted = hard_delete_expired_accounts()
+
+        self.assertEqual(deleted, 0, "the sweep ran while another held the lock")
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists(), "a blocked run must delete nothing")
+
+    def test_the_blocked_profile_is_still_deleted_on_the_next_tick(self) -> None:
+        """The lock defers, it does not lose - the account must still go."""
+        from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+        from urbanlens.dashboard.tasks import (
+            _HARD_DELETE_LOCK_CACHE_KEY,
+            _HARD_DELETE_LOCK_TIMEOUT_SECONDS,
+            hard_delete_expired_accounts,
+        )
+
+        token = acquire_lock(_HARD_DELETE_LOCK_CACHE_KEY, _HARD_DELETE_LOCK_TIMEOUT_SECONDS)
+        hard_delete_expired_accounts()
+        release_lock(_HARD_DELETE_LOCK_CACHE_KEY, token)
+
+        self.assertEqual(hard_delete_expired_accounts(), 1)
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+
+    def test_an_uncontended_sweep_still_deletes(self) -> None:
+        """Anti-vacuity: the lock must not stop the ordinary path."""
+        from urbanlens.dashboard.tasks import hard_delete_expired_accounts
+
+        self.assertEqual(hard_delete_expired_accounts(), 1)
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+
+
+class HardDeleteSweepIdempotencyTests(TestCase):
+    """A deletion that fails sends nothing, blocks no other account, and is emailed once when it finally succeeds."""
+
+    def _due(self, email: str) -> Profile:
+        user = baker.make(User, email=email)
+        return _backdate_request(user.profile, ACCOUNT_DELETION_GRACE_PERIOD + datetime.timedelta(hours=1))
+
+    def test_a_deletion_that_fails_sends_no_email(self):
+        profile = self._due("owner@example.com")
+
+        with (
+            mock.patch("django.contrib.auth.models.User.delete", side_effect=OSError("storage down")),
+            self.assertRaises(OSError),
+        ):
+            hard_delete_profile(profile)
+
+        self.assertEqual(mail.outbox, [])
+
+    def test_a_retried_deletion_emails_once(self):
+        from urbanlens.dashboard.tasks import hard_delete_expired_accounts
+
+        self._due("owner@example.com")
+
+        with mock.patch("django.contrib.auth.models.User.delete", side_effect=OSError("storage down")):
+            self.assertEqual(hard_delete_expired_accounts(), 0)
+        self.assertEqual(hard_delete_expired_accounts(), 1)
+
+        self.assertEqual([message.to for message in mail.outbox], [["owner@example.com"]])
+
+    def test_one_failing_account_does_not_hold_up_the_rest(self):
+        from urbanlens.dashboard.services.profile import account_deletion
+        from urbanlens.dashboard.tasks import hard_delete_expired_accounts
+
+        broken = self._due("broken@example.com")
+        healthy = self._due("healthy@example.com")
+        real = account_deletion.hard_delete_profile
+
+        def fail_for_broken(profile):
+            if profile.pk == broken.pk:
+                raise RuntimeError("cannot delete")
+            real(profile)
+
+        with mock.patch.object(account_deletion, "hard_delete_profile", side_effect=fail_for_broken):
+            self.assertEqual(hard_delete_expired_accounts(), 1)
+
+        self.assertFalse(Profile.objects.filter(pk=healthy.pk).exists())
+        self.assertTrue(Profile.objects.filter(pk=broken.pk).exists())
+
+
+class DeletionReminderClaimTests(TestCase):
+    def setUp(self):
+        self.user = baker.make(User, email="owner@example.com")
+        self.profile = _backdate_request(self.user.profile, ACCOUNT_DELETION_GRACE_PERIOD)
+
+    def test_a_second_call_sends_nothing(self):
+        self.assertTrue(send_deletion_reminder(self.profile))
+        self.assertFalse(send_deletion_reminder(Profile.objects.get(pk=self.profile.pk)))
+
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_a_failure_before_the_email_leaves_the_reminder_owed(self):
+        """The final warning before permanent deletion must not be marked sent when it was not."""
+        from urbanlens.dashboard.tasks import send_account_deletion_reminders
+
+        with mock.patch.object(NotificationLog.objects, "notify", side_effect=RuntimeError("boom")):
+            self.assertEqual(send_account_deletion_reminders(), 0)
+        self.assertEqual(mail.outbox, [])
+
+        self.assertEqual(send_account_deletion_reminders(), 1)
+        self.assertEqual(len(mail.outbox), 1)

@@ -1,22 +1,15 @@
-"""OSRM gateway - free, open-source routing.
-
-http://project-osrm.org/ - self-hostable routing engine over OpenStreetMap
-data. ``base_url`` defaults to the public demo server
-(router.project-osrm.org), which the OSRM project itself documents as
-dev/testing use only; production installs should point ``base_url`` at a
-self-hosted instance (``docker run osrm/osrm-backend`` with a pre-processed
-``.osrm`` extract). No API key is required either way.
-"""
+"""OSRM gateway - free, open-source routing."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import Any, ClassVar, Literal
 
 import requests
 
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +26,10 @@ class OSRMGateway(Gateway):
     service_key: ClassVar[str] = "osrm"
     paid_service: ClassVar[bool] = False
 
-    base_url: str = _DEMO_BASE_URL
+    # default_factory rather than a bare default, for the same reason the weather
+    # gateway's api_key uses one: a bare default is evaluated once at import, so a
+    # settings change or a test patch would never reach later instantiations.
+    base_url: str = field(default_factory=lambda: settings.osrm_base_url or _DEMO_BASE_URL)
 
     def get_route(self, waypoints: list[tuple[float, float]], *, profile: OsrmProfile = "driving") -> dict[str, Any] | None:
         """Return the routed distance/duration between an ordered list of waypoints.
@@ -43,16 +39,13 @@ class OSRMGateway(Gateway):
             profile: Routing profile - ``"driving"``, ``"walking"``, or ``"cycling"``.
 
         Returns:
-            Dict with ``distance_meters``, ``duration_seconds``, and
-            ``geometry`` (``None`` here since overview geometry isn't
-            requested), or None when routing failed (e.g. no road network
-            connects the points, or the request failed).
+            Dict with ``distance_meters``, ``duration_seconds``, and ``geometry`` (``None`` here since overview geometry isn't requested), or None when routing failed (e.g. no road network connects the points, or the request failed).
         """
         if len(waypoints) < 2:
             raise ValueError("get_route requires at least two waypoints")
 
         coordinates = ";".join(f"{longitude},{latitude}" for latitude, longitude in waypoints)
-        url = f"{self.base_url}/route/v1/{profile}/{coordinates}"
+        url = f"{self.base_url.rstrip('/')}/route/v1/{profile}/{coordinates}"
         try:
             response = self.session.get(url, params={"overview": "false", "alternatives": "false", "steps": "false"}, timeout=15)
             response.raise_for_status()

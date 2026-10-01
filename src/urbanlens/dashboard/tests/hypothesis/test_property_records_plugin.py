@@ -1,12 +1,4 @@
-"""Tests for the property_records plugin's panel rendering and OFFICIAL owner/sale writer.
-
-Covers:
-- PropertyRecordsPanelSource.render_context: the found-record card, the
-  manual-only pointer card, and the quiet-204 cases.
-- _write_official_owners_and_sales: creates OwnerSource.OFFICIAL WikiOwner/
-  WikiPropertySale rows, never duplicates them on a repeat fetch, and never
-  overwrites a pre-existing (e.g. user-entered) owner of the same name.
-"""
+"""Tests for the property_records plugin's panel rendering and OFFICIAL owner/sale writer."""
 
 from __future__ import annotations
 
@@ -17,6 +9,10 @@ from urbanlens.dashboard.models.property_owner.meta import OwnerSource
 from urbanlens.dashboard.models.property_owner.model import WikiOwner, WikiPropertySale
 from urbanlens.dashboard.plugins.builtin.property_records import (
     PropertyRecordsPanelSource,
+    _coverage_worth_calling,
+    _demographics_rows,
+    _may_see_nearby_research,
+    _render_available,
     _write_official_owners_and_sales,
 )
 
@@ -42,7 +38,12 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertIsNone(self.source.render_context(self.pin, data))
 
     def test_manual_only_with_links_renders_a_card(self) -> None:
-        data = {"available": False, "reason": "manual_only", "message": "Call the assessor.", "links": {"assessor_url": "https://example.gov/assessor"}}
+        data = {
+            "available": False,
+            "reason": "manual_only",
+            "message": "Call the assessor.",
+            "links": {"assessor_url": "https://example.gov/assessor"},
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["chips"], ["Manual lookup required"])
@@ -53,18 +54,19 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertIsNone(self.source.render_context(self.pin, data))
 
     def test_captcha_blocked_renders_the_manual_lookup_card(self) -> None:
-        data = {"available": False, "reason": "blocked", "message": "CAPTCHA-protected search.", "links": {"assessor_url": "https://example.gov/assessor"}}
+        data = {
+            "available": False,
+            "reason": "blocked",
+            "message": "CAPTCHA-protected search.",
+            "links": {"assessor_url": "https://example.gov/assessor"},
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["chips"], ["Manual lookup required"])
         self.assertTrue(any(entry["href"] == "https://example.gov/assessor" for entry in ctx["meta"]))
 
     def test_an_unresolvable_viewer_never_gets_the_owner_name(self) -> None:
-        """The owner name is subscriber-only county assessor data, so a call
-        with no viewer to check entitlement against withholds it rather than
-        publishing a private individual's name by default. Which viewers *do*
-        see it is covered in ``test_property_owner_access.py``, which has real
-        pins to check against."""
+        """The owner name is subscriber-only county assessor data, so a call with no viewer to check entitlement against withholds it rather than publishing a private individual's name by default. Which viewers *do* see it is covered in ``test_property_owner_access.py``, which has real pins to check against."""
         data = {
             "available": True,
             "situs_address": "123 Main St",
@@ -216,6 +218,168 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertEqual(self.source.debug_count({"available": False, "reason": "no_data_found"}), 0)
         self.assertEqual(self.source.debug_count({}), 0)
 
+    def test_demographics_are_rendered_as_meta_rows_when_the_viewer_may_see_them(self) -> None:
+        """``render_context(self.pin, ...)`` can't exercise show_demographics=True - this class's ``self.pin`` is deliberately None (no viewer to resolve), so this calls ``_render_available`` directly, the same as ``DemographicsRowsTests`` below tests ``_demographics_rows`` directly - see ``RenderContextViewerGatingTests`` below for the full-stack (real pin, real subscription) render-context equivalent."""
+        data = self._base_available_data(
+            demographics={
+                "population": 295911,
+                "median_household_income": "81234.00",
+                "median_home_value": "358900.00",
+                "median_gross_rent": "1345.00",
+                "percent_owner_occupied": "68.20",
+                "percent_renter_occupied": "31.80",
+            },
+        )
+        ctx = _render_available(data, show_owner=False, show_demographics=True)
+        labels_values = {entry["label"]: entry["value"] for entry in ctx["meta"]}
+        self.assertEqual(labels_values["Neighborhood population"], "295,911")
+        self.assertEqual(labels_values["Median household income"], "$81,234")
+        self.assertEqual(labels_values["Median home value"], "$358,900")
+        self.assertEqual(labels_values["Median gross rent"], "$1,345/mo")
+        self.assertEqual(labels_values["Owner/renter occupied"], "68% / 32%")
+
+    def test_demographics_are_hidden_from_the_default_unresolvable_viewer(self) -> None:
+        """``self.pin`` is None in this class, so ``_may_see_nearby_research`` fails closed -
+        the ordinary ``render_context`` path never shows demographics here, matching
+        ``show_owner``'s existing behaviour in this same class."""
+        data = self._base_available_data(demographics={"population": 295911})
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels = {entry["label"] for entry in ctx["meta"]}
+        self.assertNotIn("Neighborhood population", labels)
+
+    def test_no_demographics_adds_no_meta_entries(self) -> None:
+        data = self._base_available_data(demographics=None)
+        ctx = _render_available(data, show_owner=False, show_demographics=True)
+        labels = {entry["label"] for entry in ctx["meta"]}
+        self.assertNotIn("Neighborhood population", labels)
+
+    def test_demographics_missing_key_is_the_same_as_none(self) -> None:
+        """The 503/best-effort case: ``_fetch_payload`` never sets the key at all."""
+        data = self._base_available_data()
+        ctx = _render_available(data, show_owner=False, show_demographics=True)
+        labels = {entry["label"] for entry in ctx["meta"]}
+        self.assertNotIn("Neighborhood population", labels)
+
+    def test_containing_park_adds_a_chip(self) -> None:
+        data = self._base_available_data(
+            containing_park={"park_code": "yell", "full_name": "Yellowstone National Park"}
+        )
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        self.assertIn("Situated within Yellowstone National Park", ctx["chips"])
+
+    def test_no_containing_park_adds_no_chip(self) -> None:
+        data = self._base_available_data(containing_park=None)
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        self.assertFalse(any(chip.startswith("Situated within") for chip in ctx["chips"]))
+
+
+class RenderContextViewerGatingTests(TestCase):
+    """The full stack, with a real pin/profile: ``render_context`` actually resolves the
+    viewer and wires ``_may_see_nearby_research`` through - what
+    ``PanelRenderContextTests`` above can't prove, since its ``self.pin`` is always None."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from django.contrib.auth.models import User
+
+        # The first user in a fresh test DB is auto-promoted to site admin, and a
+        # site admin holds every SiteFeature - a throwaway user absorbs that so
+        # self.pin's owner is an ordinary, unsubscribed user (see test_panel_feature_gate.py).
+        baker.make(User)
+        self.source = PropertyRecordsPanelSource()
+        self.pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile)
+        self.data = {
+            "available": True,
+            "situs_address": "",
+            "apn": "",
+            "owner_name": [],
+            "land_use_code": None,
+            "lot_size_sqft": None,
+            "building_sqft": None,
+            "year_built": None,
+            "assessed_value": None,
+            "market_value": None,
+            "tax_history": [],
+            "demographics": {"population": 295911},
+        }
+
+    def test_demographics_are_hidden_from_an_unsubscribed_owner(self) -> None:
+        ctx = self.source.render_context(self.pin, self.data)
+        assert ctx is not None
+        self.assertNotIn("Neighborhood population", {entry["label"] for entry in ctx["meta"]})
+
+    def test_demographics_show_for_an_owner_holding_nearby_research(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
+        grant_subscription(self.pin.profile.user, role, self.pin.profile.user, None)
+
+        ctx = self.source.render_context(self.pin, self.data)
+
+        assert ctx is not None
+        self.assertEqual(
+            {entry["label"]: entry["value"] for entry in ctx["meta"]}["Neighborhood population"], "295,911"
+        )
+
+    def test_containing_park_chip_is_unaffected_by_the_demographics_gate(self) -> None:
+        """The parcel's own facts (including containing_park) stay free regardless."""
+        data = dict(self.data, containing_park={"park_code": "yell", "full_name": "Yellowstone National Park"})
+
+        ctx = self.source.render_context(self.pin, data)
+
+        assert ctx is not None
+        self.assertIn("Situated within Yellowstone National Park", ctx["chips"])
+
+
+class CoverageWorthCallingTests(SimpleTestCase):
+    """Unit tests for the coverage-precheck gate that ``_fetch_payload`` applies to
+    the assessments/sale_records calls only (see the task's own PART A note that
+    liens/tax_payments have no coverage-registry domain to gate on)."""
+
+    def test_available_false_means_skip(self) -> None:
+        coverage = {"assessments": {"available": False, "reason": "outside every coverage area"}}
+        self.assertFalse(_coverage_worth_calling(coverage, "assessments"))
+
+    def test_available_true_means_call(self) -> None:
+        coverage = {"assessments": {"available": True, "reason": "covered"}}
+        self.assertTrue(_coverage_worth_calling(coverage, "assessments"))
+
+    def test_missing_domain_defaults_to_call(self) -> None:
+        """liens/tax_payments are never coverage keys at all - must default to calling."""
+        self.assertTrue(_coverage_worth_calling({}, "liens"))
+
+    def test_a_failed_precheck_empty_dict_defaults_to_call(self) -> None:
+        self.assertTrue(_coverage_worth_calling({}, "assessments"))
+        self.assertTrue(_coverage_worth_calling({}, "sale_records"))
+
+
+class DemographicsRowsTests(SimpleTestCase):
+    def test_none_yields_no_rows(self) -> None:
+        self.assertEqual(_demographics_rows(None, show_demographics=True), [])
+
+    def test_partial_data_omits_missing_fields(self) -> None:
+        rows = _demographics_rows({"population": 1000}, show_demographics=True)
+        labels = {row["label"] for row in rows}
+        self.assertIn("Neighborhood population", labels)
+        self.assertNotIn("Median household income", labels)
+
+    def test_owner_renter_split_needs_both_percentages(self) -> None:
+        rows = _demographics_rows({"percent_owner_occupied": "68.20"}, show_demographics=True)
+        labels = {row["label"] for row in rows}
+        self.assertNotIn("Owner/renter occupied", labels)
+
+    def test_show_demographics_false_hides_everything_unconditionally(self) -> None:
+        rows = _demographics_rows({"population": 1000, "median_household_income": "81234.00"}, show_demographics=False)
+        self.assertEqual(rows, [])
+
+
+class MaySeeNearbyResearchTests(SimpleTestCase):
+    def test_none_user_fails_closed(self) -> None:
+        self.assertFalse(_may_see_nearby_research(None))
+
 
 class FetchPayloadTransientErrorTests(TestCase):
     """A transient source outage must propagate, never be written to the cache as a durable fact."""
@@ -230,7 +394,10 @@ class FetchPayloadTransientErrorTests(TestCase):
         from unittest import mock
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_SOURCE_ERROR, PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_SOURCE_ERROR,
+            PropertyRecordsUnavailableError,
+        )
 
         error = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
@@ -242,9 +409,14 @@ class FetchPayloadTransientErrorTests(TestCase):
         from unittest import mock
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_MANUAL_ONLY, PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_MANUAL_ONLY,
+            PropertyRecordsUnavailableError,
+        )
 
-        error = PropertyRecordsUnavailableError(REASON_MANUAL_ONLY, "Call the assessor.", links={"assessor_url": "https://example.gov/assessor"})
+        error = PropertyRecordsUnavailableError(
+            REASON_MANUAL_ONLY, "Call the assessor.", links={"assessor_url": "https://example.gov/assessor"}
+        )
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
             mock_gateway_cls.return_value.lookup_parcel.side_effect = error
             payload = _fetch_payload(self.location, 42.65, -73.75)
@@ -258,7 +430,10 @@ class FetchPayloadTransientErrorTests(TestCase):
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
 
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
-            mock_gateway_cls.return_value.lookup_parcel.return_value = {"situs_address": "123 Main St", "owner_name": ["Jane Smith"]}
+            mock_gateway_cls.return_value.lookup_parcel.return_value = {
+                "situs_address": "123 Main St",
+                "owner_name": ["Jane Smith"],
+            }
             payload = _fetch_payload(self.location, 42.65, -73.75)
         self.assertEqual(payload["available"], True)
         self.assertEqual(payload["owner_name"], ["Jane Smith"])
@@ -268,11 +443,8 @@ class FetchPayloadTransientErrorTests(TestCase):
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
 
-        # Location.address is a read-only property composed from the component
-        # fields; assigning to it (as this test used to) raises AttributeError.
-        # Set the components and let it compose, then assert on that value
-        # rather than a hard-coded string, so the test stays about pass-through
-        # instead of pinning the composition format.
+        # Set the components and let it compose, then assert on that value rather than a hard-coded string, so
+        # the test stays about pass-through instead of pinning the composition format.
         self.location.street_number = "123"
         self.location.route = "Main St"
         expected_address = self.location.address
@@ -281,7 +453,216 @@ class FetchPayloadTransientErrorTests(TestCase):
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
             mock_gateway_cls.return_value.lookup_parcel.return_value = {}
             _fetch_payload(self.location, 42.65, -73.75)
-        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(42.65, -73.75, situs_address=expected_address)
+        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(
+            42.65, -73.75, situs_address=expected_address
+        )
+
+
+class FetchPayloadSupplementaryCallsTests(TestCase):
+    """The coverage-gated assessments/sale_records calls, the two ungated
+    liens/tax_payments calls, and the demographics/national-parks best-effort
+    calls - all once ``lookup_parcel`` resolves a uuid."""
+
+    _PATCH_TARGET = "urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make("dashboard.Location")
+
+    def _mock_gateway(self, mock_gateway_cls, **overrides):
+        """Configure the shared gateway mock with sane empty defaults, overridable per-test."""
+        gateway = mock_gateway_cls.return_value
+        gateway.lookup_parcel.return_value = {"uuid": "parcel-1"}
+        gateway.lookup_coverage.return_value = overrides.get("coverage", {})
+        gateway.lookup_assessments.return_value = overrides.get("assessments", [])
+        gateway.lookup_sale_records.return_value = overrides.get("sale_records", [])
+        gateway.lookup_liens.return_value = overrides.get("liens", [])
+        gateway.lookup_tax_payments.return_value = overrides.get("tax_payments", [])
+        gateway.lookup_demographics.return_value = overrides.get("demographics")
+        gateway.lookup_national_parks.return_value = overrides.get("national_parks", {})
+        return gateway
+
+    # -- PART A: coverage gating ------------------------------------------------
+
+    def test_coverage_unavailable_skips_the_assessments_call(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            gateway = self._mock_gateway(
+                mock_gateway_cls, coverage={"assessments": {"available": False, "reason": "no coverage"}}
+            )
+            _fetch_payload(self.location, 42.65, -73.75)
+        gateway.lookup_assessments.assert_not_called()
+
+    def test_coverage_unavailable_skips_the_sale_records_call(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            gateway = self._mock_gateway(
+                mock_gateway_cls, coverage={"sale_records": {"available": False, "reason": "no coverage"}}
+            )
+            _fetch_payload(self.location, 42.65, -73.75)
+        gateway.lookup_sale_records.assert_not_called()
+
+    def test_coverage_available_still_calls_assessments_and_sale_records(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            gateway = self._mock_gateway(
+                mock_gateway_cls,
+                coverage={
+                    "assessments": {"available": True, "reason": "covered"},
+                    "sale_records": {"available": True, "reason": "covered"},
+                },
+            )
+            _fetch_payload(self.location, 42.65, -73.75)
+        gateway.lookup_assessments.assert_called_once_with("parcel-1")
+        gateway.lookup_sale_records.assert_called_once_with("parcel-1")
+
+    def test_a_failed_coverage_precheck_falls_back_to_calling_both(self) -> None:
+        """Coverage is an optimization, not a dependency - a failure must not lose the card's
+        most useful supplementary sections."""
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_SOURCE_ERROR,
+            PropertyRecordsUnavailableError,
+        )
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            gateway = self._mock_gateway(mock_gateway_cls)
+            gateway.lookup_coverage.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
+            _fetch_payload(self.location, 42.65, -73.75)
+        gateway.lookup_assessments.assert_called_once_with("parcel-1")
+        gateway.lookup_sale_records.assert_called_once_with("parcel-1")
+
+    def test_liens_and_tax_payments_are_called_regardless_of_coverage(self) -> None:
+        """liens/tax_payments are not coverage-registry domains, so coverage saying
+        unavailable for everything else must not skip them."""
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            gateway = self._mock_gateway(
+                mock_gateway_cls,
+                coverage={
+                    "assessments": {"available": False, "reason": "no coverage"},
+                    "sale_records": {"available": False, "reason": "no coverage"},
+                },
+            )
+            _fetch_payload(self.location, 42.65, -73.75)
+        gateway.lookup_liens.assert_called_once_with("parcel-1")
+        gateway.lookup_tax_payments.assert_called_once_with("parcel-1")
+
+    # -- PART B: demographics -----------------------------------------------------
+
+    def test_demographics_are_included_when_available(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            self._mock_gateway(mock_gateway_cls, demographics={"population": 1000})
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertEqual(payload["demographics"], {"population": 1000})
+
+    def test_null_demographics_are_not_included(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            self._mock_gateway(mock_gateway_cls, demographics=None)
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertNotIn("demographics", payload)
+
+    def test_a_503_demographics_failure_is_swallowed_not_raised(self) -> None:
+        """The endpoint 503s wholesale without ``RD_US_CENSUS_API_KEY`` configured server-side -
+        a supplementary-source failure like any other, must not blank the card."""
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            gateway = self._mock_gateway(mock_gateway_cls)
+            gateway.lookup_demographics.side_effect = PropertyRecordsUnavailableError(
+                "census_data_api_unavailable", "RD_US_CENSUS_API_KEY is not configured."
+            )
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertEqual(payload["available"], True)
+        self.assertNotIn("demographics", payload)
+
+    def test_a_rate_limited_demographics_failure_is_also_swallowed(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_RATE_LIMITED,
+            PropertyRecordsUnavailableError,
+        )
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            gateway = self._mock_gateway(mock_gateway_cls)
+            gateway.lookup_demographics.side_effect = PropertyRecordsUnavailableError(
+                REASON_RATE_LIMITED, "rate limited"
+            )
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertEqual(payload["available"], True)
+        self.assertNotIn("demographics", payload)
+
+    # -- PART C: national parks -----------------------------------------------------
+
+    def test_containing_park_is_included_when_present(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            self._mock_gateway(
+                mock_gateway_cls,
+                national_parks={
+                    "containing_park": {"full_name": "Yellowstone National Park"},
+                    "nearby_parks": [{"full_name": "Grand Teton National Park"}],
+                },
+            )
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertEqual(payload["containing_park"]["full_name"], "Yellowstone National Park")
+        self.assertNotIn("nearby_parks", payload)
+
+    def test_no_containing_park_is_not_included(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            self._mock_gateway(mock_gateway_cls, national_parks={"containing_park": None, "nearby_parks": []})
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertNotIn("containing_park", payload)
+
+    def test_a_failed_national_parks_lookup_is_swallowed_not_raised(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_SOURCE_ERROR,
+            PropertyRecordsUnavailableError,
+        )
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            gateway = self._mock_gateway(mock_gateway_cls)
+            gateway.lookup_national_parks.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertEqual(payload["available"], True)
+        self.assertNotIn("containing_park", payload)
 
 
 class WriteOfficialOwnersAndSalesTests(TestCase):
@@ -307,7 +688,9 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
         self.assertEqual(owners.first().source, OwnerSource.USER)
 
     def test_mailing_address_only_applied_to_a_newly_created_owner(self) -> None:
-        _write_official_owners_and_sales(self.location, {"owner_name": ["Jane Smith"], "owner_mailing_address": "PO Box 1"})
+        _write_official_owners_and_sales(
+            self.location, {"owner_name": ["Jane Smith"], "owner_mailing_address": "PO Box 1"}
+        )
         owner = WikiOwner.objects.for_location(self.location).get(name="Jane Smith")
         self.assertEqual(owner.address, "PO Box 1")
 
@@ -316,7 +699,14 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
         self.assertEqual(WikiOwner.objects.for_location(self.location).count(), 1)
 
     def test_creates_a_sale_with_price_and_date(self) -> None:
-        _write_official_owners_and_sales(self.location, {"sales_history": [{"date": "2020-06-15", "price": 250000, "grantor": "Old Owner", "grantee": "New Owner"}]})
+        _write_official_owners_and_sales(
+            self.location,
+            {
+                "sales_history": [
+                    {"date": "2020-06-15", "price": 250000, "grantor": "Old Owner", "grantee": "New Owner"}
+                ]
+            },
+        )
         sale = WikiPropertySale.objects.for_location(self.location).get()
         self.assertEqual(str(sale.sale_price), "250000.00")
         self.assertEqual(sale.sale_date.isoformat(), "2020-06-15")
@@ -325,13 +715,17 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
         self.assertEqual(list(sale.new_owners.values_list("name", flat=True)), ["New Owner"])
 
     def test_repeat_fetch_does_not_duplicate_the_sale(self) -> None:
-        payload = {"sales_history": [{"date": "2020-06-15", "price": 250000, "grantor": "Old Owner", "grantee": "New Owner"}]}
+        payload = {
+            "sales_history": [{"date": "2020-06-15", "price": 250000, "grantor": "Old Owner", "grantee": "New Owner"}]
+        }
         _write_official_owners_and_sales(self.location, payload)
         _write_official_owners_and_sales(self.location, payload)
         self.assertEqual(WikiPropertySale.objects.for_location(self.location).count(), 1)
 
     def test_sale_with_no_date_and_no_price_is_skipped(self) -> None:
-        _write_official_owners_and_sales(self.location, {"sales_history": [{"grantor": "Old Owner", "grantee": "New Owner"}]})
+        _write_official_owners_and_sales(
+            self.location, {"sales_history": [{"grantor": "Old Owner", "grantee": "New Owner"}]}
+        )
         self.assertEqual(WikiPropertySale.objects.for_location(self.location).count(), 0)
 
     def test_negative_price_is_dropped_not_saved_negative(self) -> None:

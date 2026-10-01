@@ -14,12 +14,8 @@ from urbanlens.dashboard.models.direct_messages.meta import DirectMessageShareKi
 
 class DirectMessageShare(abstract.DashboardModel):
     """The `@pin`/`@trip`/`@friend` action attached to one direct message.
-
-    Exactly one of `pin_share`, (`trip` + `trip_membership`), or
-    `recommended_profile` is populated, matching `kind`. `revoke()` is called
-    when the message is deleted, and is a no-op once the underlying action has
-    actually been acted on (accepted/rejected/responded) - deleting the
-    message never undoes something the recipient already did.
+    Exactly one of `pin_share`, (`trip` + `trip_membership`), or `recommended_profile` is populated, matching `kind`.
+    `revoke()` is called when the message is deleted, and is a no-op once the underlying action has actually been acted on (accepted/rejected/responded) - deleting the message never undoes something the recipient already did.
     """
 
     kind = CharField(max_length=20, choices=DirectMessageShareKind.choices)
@@ -91,13 +87,7 @@ class DirectMessageShare(abstract.DashboardModel):
     @cached_property
     def _friend_request_exists(self) -> bool:
         """True if a Friendship row already links the recommended profile and the recipient.
-
-        Cached on the instance: this is a hot per-render check (every DM
-        thread render with a pending friend-share calls `is_actionable`, and
-        `revoke()` may check it again for the same instance), and nothing
-        this object does can change the underlying Friendship state, so a
-        second read within the same instance's lifetime would always return
-        the same answer anyway.
+        Cached on the instance: this is a hot per-render check (every DM thread render with a pending friend-share calls `is_actionable`, and `revoke()` may check it again for the same instance), and nothing this object does can change the underlying Friendship state, so a second read within the same instance's lifetime would always return the same answer anyway.
         """
         from django.db.models import Q
 
@@ -111,13 +101,7 @@ class DirectMessageShare(abstract.DashboardModel):
         ).exists()
 
     def revoke(self) -> None:
-        """Undo this share's effect, but only if the recipient hasn't acted on it yet.
-
-        Called when the owning message is deleted. Already-accepted pin shares,
-        already-responded trip invites, and friend recommendations that
-        resulted in a request are left completely alone - there is nothing to
-        revoke once the recipient has acted.
-        """
+        """Undo this share's effect, but only if the recipient hasn't acted on it yet. Called when the owning message is deleted."""
         if self.revoked_at is not None:
             return
 

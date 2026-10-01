@@ -1,15 +1,4 @@
-"""Regression tests for ``location_slug`` in the external pin-detail payload.
-
-The pin-detail payload shipped a ``wiki_slug`` field that reads naturally as
-"the slug to navigate to this pin's wiki with", but
-``services.wiki.wiki_access.resolve_visible_wiki`` - the resolver every wiki route
-goes through - takes a *Location* slug/uuid, not a ``Wiki.slug``. The two are
-independent fields on unrelated models, so a client that fed ``wiki_slug`` to
-``GET /wikis/{location_slug}/`` got a 404 for a wiki it could plainly see.
-
-These tests pin down the fix: the payload also carries ``location_slug``, and
-that value actually resolves the wiki.
-"""
+"""Regression tests for ``location_slug`` in the external pin-detail payload."""
 
 from __future__ import annotations
 
@@ -51,17 +40,17 @@ class PinDetailLocationSlugTests(TestCase):
 
     def test_location_slug_is_exposed_over_the_api(self) -> None:
         """The serializer passes ``location_slug`` through to the response."""
-        response = self.client.get(f"/dashboard/api/external/v1/pins/{self.pin.slug or self.pin.uuid}/", **_bearer(self.raw_key))
+        response = self.client.get(
+            f"/dashboard/api/external/v1/pins/{self.pin.slug or self.pin.uuid}/", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["location_slug"], self.pin.location.ensure_slug())
 
     def test_location_slug_resolves_the_wiki_but_wiki_slug_does_not(self) -> None:
         """The documented defect: only ``location_slug`` routes to the wiki.
 
-        ``Wiki.slug`` is set deliberately different from the Location's here to
-        make the independence explicit - that is exactly the shipped state that
-        made ``wiki_slug`` unusable for navigation.
-        """
+        ``Wiki.slug`` is set deliberately different from the Location's here to make the independence explicit -
+        that is exactly the shipped state that made ``wiki_slug`` unusable for navigation."""
         wiki = Wiki.objects.create(location=self.pin.location, name="Old Mill")
         Wiki.objects.filter(pk=wiki.pk).update(slug="a-totally-different-wiki-slug")
         wiki.refresh_from_db()

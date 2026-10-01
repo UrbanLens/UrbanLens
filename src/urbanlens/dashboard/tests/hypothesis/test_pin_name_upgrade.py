@@ -1,11 +1,4 @@
-"""tasks.upgrade_placeholder_pin_names - the periodic sweep that clears a pin's stored
-placeholder name once its location has resolved to a meaningful one.
-
-Covers the reported gap: legacy pins from earlier ingestion pipelines stored a literal
-placeholder string ("Dropped Pin", raw coordinates, "Unnamed Location") directly on
-Pin.name with name_is_user_provided=False, so Pin.effective_name never picked up a
-better name even after the Location later resolved a meaningful official_name.
-"""
+"""tasks.upgrade_placeholder_pin_names - the periodic sweep that clears a pin's stored placeholder name once its location has resolved to a meaningful one."""
 
 from __future__ import annotations
 
@@ -86,7 +79,9 @@ class UpgradePlaceholderPinNamesTaskTests(TestCase):
         from urbanlens.dashboard.tasks import upgrade_placeholder_pin_names
 
         location = baker.make(Location, official_name="Old Steel Mill", latitude="40.0", longitude="-74.0")
-        pin = baker.make(Pin, profile=self.profile, location=location, name="My Favorite Ruin", name_is_user_provided=False)
+        pin = baker.make(
+            Pin, profile=self.profile, location=location, name="My Favorite Ruin", name_is_user_provided=False
+        )
 
         upgraded = upgrade_placeholder_pin_names()
 

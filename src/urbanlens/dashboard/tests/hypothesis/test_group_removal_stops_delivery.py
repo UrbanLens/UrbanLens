@@ -1,21 +1,4 @@
-"""A removed group member must stop receiving messages over the live channel.
-
-`broadcast_group_message` resolves ``active_memberships()`` at send time and
-addresses each member's own per-profile channel group, rather than pushing one
-payload to a shared per-group channel. That is what makes removal effective
-immediately: a member removed while their socket is open is simply not in the
-recipient list any more, so nothing further is addressed to them.
-
-It is also the expensive option, and the docstring says so - the payload is built
-once per member so a masked display name is resolved through each viewer's own
-visibility. The obvious optimisation is a single shared payload to one group
-channel, which would silently reintroduce delivery to anyone still connected.
-This is exactly the bug found in the safety check-in chat, where a revoked
-emergency contact kept receiving over an already-open socket.
-
-So this pins the recipient set rather than the mechanism: whatever the transport
-becomes, a removed member must not be addressed.
-"""
+"""A removed group member must stop receiving messages over the live channel."""
 
 from __future__ import annotations
 
@@ -51,9 +34,15 @@ class GroupRemovalStopsDeliveryTests(TestCase):
 
     def _recipients(self) -> set[str]:
         """Channel groups addressed when the creator posts a message."""
-        with patch("urbanlens.dashboard.services.messaging.group_chats.send_group_message") as send, self.captureOnCommitCallbacks(execute=True):
+        # One batched call carrying (group, message) pairs - a message to a
+        # fifty-person group used to be fifty separate sends, and so fifty
+        # Celery tasks. Which groups were addressed is still the question.
+        with (
+            patch("urbanlens.dashboard.services.messaging.group_chats.send_group_messages") as send,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             create_group_message(self.creator, self.group, "anyone there?")
-        return {call.args[0] for call in send.call_args_list}
+        return {group for call in send.call_args_list for group, _message in call.args[0]}
 
     def test_every_active_member_is_addressed(self) -> None:
         """Anchors the rest: delivery works before anyone is removed."""

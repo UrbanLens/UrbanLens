@@ -1,9 +1,4 @@
-"""Tests for services.spotguessr.selection's difficulty weighting.
-
-Covers the proxy-seeding fix for the "difficulty slider is mostly a
-placebo" audit finding: an unplayed (or barely-played) location must no
-longer be scored as flatly neutral regardless of how well-documented it is.
-"""
+"""Tests for services.spotguessr.selection's difficulty weighting."""
 
 from __future__ import annotations
 
@@ -15,11 +10,12 @@ from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.abstract.ratings import DEFAULT_RATING, GLICKO2_SCALE
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import DEFAULT_RATING, GLICKO2_SCALE, LocationModeRating, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import LocationModeRating, SpotGuessrMode
 from urbanlens.dashboard.services.spotguessr.selection import (
     DIFFICULTY_BANDWIDTH,
     MAX_LOCATION_RATING,
@@ -73,12 +69,7 @@ class ProxyDifficultyRatingTests(TestCase):
 
 class DifficultyWeightTests(TestCase):
     def test_an_unplayed_popular_location_is_favored_by_the_easy_slider(self) -> None:
-        """Regression guard for the placebo bug: before proxy-seeding, an
-        unplayed location was scored as flatly neutral (DEFAULT_RATING)
-        regardless of the difficulty slider, so easy/medium/hard all
-        weighted it about the same. A well-documented, never-played
-        location must now score meaningfully higher on "easy" than a
-        never-played, undocumented one."""
+        """Regression guard for the placebo bug: before proxy-seeding, an unplayed location was scored as flatly neutral (DEFAULT_RATING) regardless of the difficulty slider, so easy/medium/hard all weighted it about the same. A well-documented, never-played location must now score meaningfully higher on "easy" than a never-played, undocumented one."""
         popular = _make_location()
         for _ in range(25):
             baker.make(Pin, profile=_make_profile(), location=popular)
@@ -107,17 +98,19 @@ class DifficultyWeightTests(TestCase):
         location = _make_location()
         for _ in range(25):
             baker.make(Pin, profile=_make_profile(), location=location)
-        rating = baker.make(LocationModeRating, location=location, mode=SpotGuessrMode.PHOTOS, games_played=MIN_GAMES_FOR_DIFFICULTY_WEIGHTING)
+        rating = baker.make(
+            LocationModeRating,
+            location=location,
+            mode=SpotGuessrMode.PHOTOS,
+            games_played=MIN_GAMES_FOR_DIFFICULTY_WEIGHTING,
+        )
         target = target_rating_for_difficulty(0.5)
 
         expected = math.exp(-((rating.rating - target) ** 2) / (2 * DIFFICULTY_BANDWIDTH**2))
         self.assertAlmostEqual(_difficulty_weight(location, rating, target), expected)
 
     def test_partial_earned_history_blends_proxy_and_earned_ratings(self) -> None:
-        """Below the threshold, location_rating must be the weighted average
-        of the proxy estimate and the earned rating (weighted by how close
-        games_played is to the threshold) - not a discontinuous jump to
-        either extreme the instant any real history exists."""
+        """Below the threshold, location_rating must be the weighted average of the proxy estimate and the earned rating (weighted by how close games_played is to the threshold) - not a discontinuous jump to either extreme the instant any real history exists."""
         location = _make_location()
         for _ in range(25):
             baker.make(Pin, profile=_make_profile(), location=location)
@@ -125,7 +118,9 @@ class DifficultyWeightTests(TestCase):
         # here, since the location is saturated with pins).
         games_played = 2
         earned_mu = (MAX_LOCATION_RATING - DEFAULT_RATING) / GLICKO2_SCALE
-        rating = baker.make(LocationModeRating, location=location, mode=SpotGuessrMode.PHOTOS, games_played=games_played, mu=earned_mu)
+        rating = baker.make(
+            LocationModeRating, location=location, mode=SpotGuessrMode.PHOTOS, games_played=games_played, mu=earned_mu
+        )
 
         target = target_rating_for_difficulty(0.5)
         proxy_rating = _proxy_difficulty_rating(location)
@@ -142,15 +137,8 @@ class DifficultyWeightTests(TestCase):
 class PickNextLocationQueryCountTests(TestCase):
     """Regression guard for the SpotGuessr /start/ slowness/timeouts.
 
-    ``pick_next_location`` used to call ``location.pins.count()`` and
-    ``location.images.count()`` once per candidate while computing difficulty
-    weights - O(pool size) queries, run again on every attempt of
-    ``session.get_or_create_round``'s location-retry loop (up to
-    ``_MAX_LOCATION_ATTEMPTS``). A profile with a large pin pool and few
-    photo-eligible locations could rack up thousands of round trips on a
-    single ``/start/`` request. The fixed version bulk-fetches both counts in
-    two queries regardless of pool size.
-    """
+    A profile with a large pin pool and few photo-eligible locations could rack up thousands of round trips on a
+    single ``/start/`` request."""
 
     def test_query_count_stays_flat_as_the_candidate_pool_grows(self) -> None:
         profile = _make_profile()

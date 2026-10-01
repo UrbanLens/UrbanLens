@@ -1,28 +1,5 @@
 """Signal wiring that feeds the reputation ledger.
-
-Every handler does the same three things - decide whether this save is a
-contribution, write the row, and queue the scoring - so they are generated from
-:data:`_SUBSCRIPTIONS` rather than written out one by one. The shape is lifted
-from ``models.achievements.signals``, with two deliberate divergences.
-
-**The write is not deferred; only the scoring is.** Achievements defer
-everything to Celery because every metric is a count over other tables and the
-nightly sweep can rebuild any of it. The ledger has no such backstop - it *is*
-the source of truth - and ``safely_enqueue_task`` returns None on a broker
-outage without raising. So the row is written inside the contributor's
-transaction (a rolled-back contribution rolls its row back too) and only
-``score_reputation_event`` is queued.
-
-**There are retraction handlers.** Achievements have none by design: awards are
-never revoked. Here a contribution that gets reverted has to stop counting, and
-- because reverting a revert clears ``WikiEdit.reverted`` - has to be able to
-start counting again.
-
-**Not everything belongs in this table.** A transition made by a queryset
-``update()`` emits no signal, so a subscription watching for it is dead and
-looks alive. Three rules here started that way; ``invite_accepted`` and
-``wiki_created`` now record at their transitions instead, and
-``bin/check_signal_reachable.py`` fails the build if another one appears.
+Every handler does the same three things - decide whether this save is a contribution, write the row, and queue the scoring - so they are generated from :data:`_SUBSCRIPTIONS` rather than written out one by one.
 """
 
 from __future__ import annotations
@@ -75,11 +52,7 @@ class _Subscription:
 
 def _is_wiki_upload(image: Any) -> bool:
     """Whether an Image row is a photo its own uploader contributed to a wiki.
-
-    ``profile`` on a materialised external row is whoever up-voted it, not the
-    photographer, and a bulk import attaches other people's photos under the
-    importer - so the source check is what makes the attribution trustworthy,
-    not a refinement of it.
+    ``profile`` on a materialised external row is whoever up-voted it, not the photographer, and a bulk import attaches other people's photos under the importer - so the source check is what makes the attribution trustworthy, not a refinement of it.
     """
     from urbanlens.dashboard.models.images.model import ImageSource, MediaKind
 
@@ -153,12 +126,15 @@ def _make_handler(subscription: _Subscription) -> Callable[..., None]:
         event = record_event(profile_id, subscription.rule_key, target=instance, wiki=subscription.wiki_id(instance))
         if event is None:
             return
+        from urbanlens.dashboard.services.core.celery import follow_on_queue
+
+        queue = follow_on_queue()
 
         def _enqueue() -> None:
-            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-            from urbanlens.dashboard.tasks import score_reputation_event
+            from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
+            from urbanlens.dashboard.tasks import score_reputation_event, score_reputation_events
 
-            safely_enqueue_task(score_reputation_event, event.pk)
+            enqueue_follow_on(score_reputation_event, score_reputation_events, event.pk, queue=queue)
 
         transaction.on_commit(_enqueue)
 
@@ -168,22 +144,33 @@ def _make_handler(subscription: _Subscription) -> Callable[..., None]:
 
 def on_wiki_edit_reverted(sender: type[Model], instance: Any, created: bool, raw: bool = False, **kwargs: Any) -> None:
     """Keep a wiki edit's ledger row in step with its ``reverted`` flag.
-
-    Both directions, because ``revert_wiki_edit`` clears the flag when the
-    revert is itself reverted - so this is current state, not a one-way
-    subtraction.
+    Both directions, because ``revert_wiki_edit`` clears the flag when the revert is itself reverted - so this is current state, not a one-way subtraction.
     """
     if raw or created:
         return
 
+    from decimal import Decimal
+
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
-    from urbanlens.dashboard.services.reputation.scoring import restore_event, retract_event
+    from urbanlens.dashboard.services.reputation.scoring import MODERATED_REMOVAL_WEIGHT, restore_event, retract_event, weight_events_for_target
 
     event = ReputationEvent.objects.filter(rule_key="wiki_field_edit", target_kind=TargetKind.WIKI_EDIT, target_id=instance.pk).first()
     if event is None:
         return
 
-    changed = retract_event(event, reason="edit_reverted") if instance.reverted else restore_event(event)
+    if instance.reverted:
+        reverter_id = instance.reverted_by.editor_id if instance.reverted_by_id else instance.editor_id
+        if reverter_id != instance.editor_id:
+            changed = bool(weight_events_for_target(instance, weight=MODERATED_REMOVAL_WEIGHT, reason="wiki_edit_reverted_by_other"))
+        else:
+            changed = retract_event(event, reason="edit_reverted")
+    else:
+        # Undo whichever of the two adjustments above was applied - both are
+        # no-ops against the other's prior state, so calling both is safe
+        # regardless of which one actually fired.
+        restored = restore_event(event)
+        reweighted = bool(weight_events_for_target(instance, weight=Decimal(1), reason=""))
+        changed = restored or reweighted
     if not changed:
         return
 
@@ -207,11 +194,10 @@ def connect() -> None:
         post_save.connect(
             _make_handler(subscription),
             sender=model,
-            # Keyed on the subscription index as well as the model. Django
-            # dedupes on (dispatch_uid, sender), so a model-only uid would let
-            # a second subscription for a model already listed silently replace
-            # the first - one of the two rules would just stop firing, with
-            # nothing to notice it.
+            # Keyed on the subscription index as well as the model.
+            # Django dedupes on (dispatch_uid, sender), so a model-only uid would let a second
+            # subscription for a model already listed silently replace the first - one of the two
+            # rules would just stop firing, with nothing to notice it.
             dispatch_uid=f"reputation_subscription_{index}_{model._meta.label_lower}",  # noqa: SLF001
             weak=False,
         )

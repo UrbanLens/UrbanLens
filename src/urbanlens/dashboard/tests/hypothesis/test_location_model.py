@@ -3,6 +3,7 @@
 Pure property tests use unsaved Location instances (no DB).
 Queryset and Manager tests use baker and require PostGIS.
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -32,6 +33,7 @@ def _google_place(
 
 # -- __str__ -------------------------------------------------------------------
 
+
 class LocationStrTests(TestCase):
     """__str__ returns the official_name when set, or 'Location(<pk>)' as a fallback."""
 
@@ -45,6 +47,7 @@ class LocationStrTests(TestCase):
 
 
 # -- to_json -------------------------------------------------------------------
+
 
 class LocationToJsonTests(TestCase):
     """to_json() serialises key fields; cached_place_name avoids the Google API."""
@@ -93,6 +96,7 @@ class LocationToJsonTests(TestCase):
 
 # -- has_place_name ------------------------------------------------------------
 
+
 class LocationHasPlaceNameTests(TestCase):
     """has_place_name() is True only when a meaningful place name is available."""
 
@@ -124,11 +128,14 @@ class LocationHasPlaceNameTests(TestCase):
 
 # -- slug generation -----------------------------------------------------------
 
+
 class LocationSlugTests(TestCase):
     """Locations auto-generate a unique URL slug on save."""
 
     def test_save_assigns_slug_from_name(self) -> None:
-        loc: Location = baker.make(Location, official_name="Unnamed Location", latitude="40.0", longitude="-74.0", slug=None)
+        loc: Location = baker.make(
+            Location, official_name="Unnamed Location", latitude="40.0", longitude="-74.0", slug=None
+        )
         self.assertEqual(loc.slug, "unnamed-location")
 
     def test_duplicate_names_get_numeric_suffix(self) -> None:
@@ -153,8 +160,9 @@ class LocationSlugTests(TestCase):
 
 # -- LocationQuerySet ----------------------------------------------------------
 
+
 class LocationQuerySetTests(TestCase):
-    """LocationQuerySet filter methods: by_name, by_cid, within_bounding_box."""
+    """LocationQuerySet filter methods: by_cid, within_bounding_box."""
 
     def setUp(self):
         self.loc_a = baker.make(
@@ -171,15 +179,6 @@ class LocationQuerySetTests(TestCase):
             longitude="-73.000000",
             google_place=_google_place(None, latitude="41.000000", longitude="-73.000000", cid=99999),
         )
-
-    def test_by_official_name_finds_partial_case_insensitive_match(self) -> None:
-        qs = Location.objects.by_official_name("factory")
-        self.assertIn(self.loc_a, qs)
-        self.assertNotIn(self.loc_b, qs)
-
-    def test_by_official_name_uppercase_still_matches(self) -> None:
-        qs = Location.objects.by_official_name("FACTORY")
-        self.assertIn(self.loc_a, qs)
 
     def test_by_cid_finds_exact_match(self) -> None:
         qs = Location.objects.by_cid(12345)
@@ -201,30 +200,16 @@ class LocationQuerySetTests(TestCase):
 
 # -- LocationManager -----------------------------------------------------------
 
-class LocationManagerGetForPointTests(TestCase):
-    """get_for_point() resolves via bounding_box containment, falling back to proximity."""
-
-    def setUp(self):
-        self.loc = baker.make(
-            "dashboard.Location", official_name="Target", latitude="40.000000", longitude="-74.000000",
-        )
-
-    def test_exact_coordinate_is_found(self) -> None:
-        result = Location.objects.get_for_point(40.0, -74.0)
-        self.assertIsNotNone(result)
-        self.assertEqual(result.pk, self.loc.pk)
-
-    def test_far_away_coordinate_returns_none(self) -> None:
-        result = Location.objects.get_for_point(51.5, -0.1)
-        self.assertIsNone(result)
-
 
 class LocationManagerGetAllForPointTests(TestCase):
     """get_all_for_point() returns a queryset of all matching locations."""
 
     def setUp(self):
         self.loc = baker.make(
-            "dashboard.Location", official_name="Target", latitude="40.000000", longitude="-74.000000",
+            "dashboard.Location",
+            official_name="Target",
+            latitude="40.000000",
+            longitude="-74.000000",
         )
 
     def test_returns_location_at_its_own_center(self) -> None:
@@ -241,32 +226,43 @@ class LocationManagerGetNearbyOrCreateTests(TestCase):
 
     def setUp(self):
         self.existing = baker.make(
-            "dashboard.Location", official_name="Nearby", latitude="40.000000", longitude="-74.000000",
+            "dashboard.Location",
+            official_name="Nearby",
+            latitude="40.000000",
+            longitude="-74.000000",
         )
 
     def test_same_point_finds_existing_location(self) -> None:
         loc, created = Location.objects.get_nearby_or_create(
-            40.0, -74.0, defaults={"official_name":"Should Not Be Created"},
+            40.0,
+            -74.0,
+            defaults={"official_name": "Should Not Be Created"},
         )
         self.assertFalse(created)
         self.assertEqual(loc.pk, self.existing.pk)
 
     def test_distant_point_creates_new_location(self) -> None:
         loc, created = Location.objects.get_nearby_or_create(
-            51.5, -0.1, defaults={"official_name":"London Place"},
+            51.5,
+            -0.1,
+            defaults={"official_name": "London Place"},
         )
         self.assertTrue(created)
         self.assertNotEqual(loc.pk, self.existing.pk)
 
     def test_created_location_is_persisted(self) -> None:
         loc, _created = Location.objects.get_nearby_or_create(
-            51.5, -0.1, defaults={"official_name":"London Place"},
+            51.5,
+            -0.1,
+            defaults={"official_name": "London Place"},
         )
         self.assertTrue(Location.objects.filter(pk=loc.pk).exists())
 
     def test_returned_coordinates_match_requested(self) -> None:
         loc, _ = Location.objects.get_nearby_or_create(
-            51.5, -0.1, defaults={"official_name":"London Place"},
+            51.5,
+            -0.1,
+            defaults={"official_name": "London Place"},
         )
         self.assertAlmostEqual(float(loc.latitude), 51.5, places=3)
         self.assertAlmostEqual(float(loc.longitude), -0.1, places=3)
@@ -331,7 +327,9 @@ class LocationExternalNameRefreshTests(TestCase):
         )
         wiki.refresh_from_db()
         self.assertEqual(wiki.name, "Curated Mill")
-        self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["Curated Mill", "Old Mill", "Historic Mill"])
+        self.assertCountEqual(
+            list(wiki.aliases.values_list("name", flat=True)), ["Curated Mill", "Old Mill", "Historic Mill"]
+        )
 
     def test_promoted_external_name_is_recorded_as_wiki_alias(self) -> None:
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
@@ -351,7 +349,7 @@ class LocationExternalNameRefreshTests(TestCase):
         )
         loc.refresh_from_db()
         wiki.refresh_from_db()
-        # Google Places is fallback-only (see naming._FALLBACK_ONLY_SOURCES) and is
+        # Google Places is fallback-only (see naming.FALLBACK_ONLY_NAME_SOURCES) and is
         # dropped outright once another source (wikipedia) has a candidate, so
         # "Grand Hall" never enters the pipeline at all - no tie to break.
         self.assertEqual(loc.official_name, "Grand Hall Museum")

@@ -47,6 +47,23 @@ class HostIsLocalhostTests(TestCase):
     def test_external_hostname_is_not_localhost(self) -> None:
         self.assertFalse(_host_is_localhost("example.com"))
 
+    def test_hostname_containing_localhost_substring_is_not_localhost(self) -> None:
+        # Guards against a substring/prefix/suffix check standing in for exact
+        # matching, which would let an attacker-controlled hostname like
+        # "localhost.evil.com" slip through the guard as if it were local.
+        for name in ("localhost.evil.com", "notlocalhost", "evil-localhost.com"):
+            with self.subTest(name=name):
+                self.assertFalse(_host_is_localhost(name))
+
+    def test_private_non_loopback_ip_is_not_localhost(self) -> None:
+        # RFC1918/link-local/unique-local ranges are private but routable over a
+        # real network - conflating `is_loopback` with `is_private` would let the
+        # guard wave through connections to another machine on the LAN or a
+        # Docker bridge network, not just this process.
+        for host in ("10.0.0.1", "192.168.1.1", "172.16.0.5", "169.254.1.1", "fc00::1", "fe80::1"):
+            with self.subTest(host=host):
+                self.assertFalse(_host_is_localhost(host))
+
 
 class AddressHostTests(TestCase):
     """``_address_host`` extracts hosts from socket address tuples."""
@@ -79,6 +96,55 @@ class LocalhostOnlyNetworkTests(TestCase):
             self.assertIn("External network access is disabled during tests", str(ctx.exception))
         finally:
             sock.close()
+
+    def test_blocks_external_connect_ex(self) -> None:
+        """`connect_ex` is a separate C-level method - it does not route through `connect`.
+
+        A guard that patches only `connect` reports success here and opens a real outbound socket."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                sock.connect_ex(("1.1.1.1", 443))
+            self.assertIn("External network access is disabled during tests", str(ctx.exception))
+        finally:
+            sock.close()
+
+    def test_allows_localhost_connect_ex(self) -> None:
+        """Anti-vacuity: the guard must not break `connect_ex` against loopback."""
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        _host, port = server.getsockname()
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.settimeout(2)
+        try:
+            self.assertEqual(client.connect_ex(("127.0.0.1", port)), 0)
+        finally:
+            client.close()
+            server.close()
+
+    def test_blocks_external_udp_sendto(self) -> None:
+        """A datagram needs no connect at all, so `connect`/`create_connection` never see it."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                sock.sendto(b"probe", ("1.1.1.1", 53))
+            self.assertIn("External network access is disabled during tests", str(ctx.exception))
+        finally:
+            sock.close()
+
+    def test_allows_localhost_udp_sendto(self) -> None:
+        """Anti-vacuity: loopback datagrams still work."""
+        server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server.bind(("127.0.0.1", 0))
+        _host, port = server.getsockname()
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            self.assertEqual(client.sendto(b"probe", ("127.0.0.1", port)), 5)
+        finally:
+            client.close()
+            server.close()
 
     def test_allows_localhost_connection(self) -> None:
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

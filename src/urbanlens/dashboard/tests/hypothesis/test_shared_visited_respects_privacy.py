@@ -1,23 +1,4 @@
-""""Visited Together" must obey the same opt-in as "Places in Common".
-
-``_add_common_context`` gates ``common_pin_count`` behind
-``Profile.can_view_common_pins_with`` - deliberately mutual, because, as that
-method's docstring puts it, "revealing which locations a pair of users have both
-pinned exposes information about *both* of them, not just this profile". The
-comment above the gate in the controller spells out that the *count* had to be
-gated too, not just the link to the detail page.
-
-``shared_visited`` was computed and put in the context unconditionally, and the
-profile template renders it as a "Visited Together" stat whenever it is non-empty.
-So a profile whose ``common_pins_visibility`` forbids this viewer (or a viewer
-whose own setting forbids it - the check is mutual) still discloses how many
-locations the two have both *visited*.
-
-That is strictly more than the thing deliberately protected: a shared pin means
-two people bookmarked a place, while a shared visit means both were physically
-there. There is no separate visits-visibility setting, so the common-pins gate is
-the applicable one - the same class of "what we have in common" disclosure.
-"""
+""" "Visited Together" must obey the same opt-in as "Places in Common"."""
 
 from __future__ import annotations
 
@@ -27,7 +8,6 @@ from model_bakery import baker
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
@@ -45,7 +25,7 @@ class SharedVisitedPrivacyTests(TestCase):
         self.location = baker.make(Location)
         for profile in (self.viewer, self.subject):
             pin = baker.make(Pin, profile=profile, location=self.location)
-            pin.labels.add(ensure_label( profile=profile, kind=KIND_STATUS, name="Visited", is_protected=True))
+            pin.labels.add(ensure_label(profile=profile, kind=KIND_STATUS, name="Visited", is_protected=True))
 
         self.client.force_login(self.viewer_user)
 
@@ -55,7 +35,9 @@ class SharedVisitedPrivacyTests(TestCase):
         return response.context
 
     def _allow_both(self) -> None:
-        Profile.objects.filter(pk__in=[self.viewer.pk, self.subject.pk]).update(common_pins_visibility=VisibilityChoice.ANYONE)
+        Profile.objects.filter(pk__in=[self.viewer.pk, self.subject.pk]).update(
+            common_pins_visibility=VisibilityChoice.ANYONE
+        )
 
     def test_it_is_shown_when_both_sides_permit_it(self) -> None:
         """Anchors the rest: without this, a passing privacy test could be vacuous."""

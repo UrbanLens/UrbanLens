@@ -1,22 +1,9 @@
 /**
  * Bring the URL's target anchor into view once it exists.
- *
- * The browser's own fragment scrolling happens at load, which is too early for
- * anything HTMX fetches afterwards - a link to a specific comment lands on a page
- * where that comment has not been rendered yet. Re-running the scroll after each
- * settle is what makes those links work.
- *
- * Ported out of ``base.html``'s inline script unchanged.
  */
 
 /**
  * Find the element a fragment refers to.
- *
- * ``getElementById`` is tried first because it takes a literal id, where
- * ``querySelector`` takes a selector and throws a ``DOMException`` on anything that
- * is not valid CSS. Plenty of real fragments are not: ids beginning with a digit,
- * and the ``#_=_`` / ``#access_token=...`` that OAuth providers append on the way
- * back from sign-in. Those threw on every HTMX settle for the life of the page.
  */
 function findTarget(hash: string): Element | null {
     const raw = hash.slice(1);
@@ -40,10 +27,24 @@ function findTarget(hash: string): Element | null {
     }
 }
 
-// The hash last successfully scrolled to. Without this, every later
-// htmx:afterSettle on the page - a pagination click, a like, an unrelated
-// form submit - re-ran this and yanked the reader back to the original
-// anchor, since the URL's hash stays set long after it did its job.
+/** Open the collapsed sections hiding the target, and the target itself when it is one; true if any was closed. */
+function reveal(target: Element): boolean {
+    let opened = false;
+    for (let el: Element | null = target; el; el = el.parentElement) {
+        if (el instanceof HTMLDetailsElement && !el.open) {
+            el.open = true;
+            opened = true;
+        }
+    }
+    return opened;
+}
+
+function bringIntoView(target: Element): void {
+    // An answer can be taller than the viewport, so its question goes to the top rather than the middle.
+    target.scrollIntoView({ behavior: "smooth", block: target instanceof HTMLDetailsElement ? "start" : "center" });
+}
+
+// The hash last successfully scrolled to.
 let scrolledToHash = "";
 
 export function scrollToHash(): void {
@@ -51,7 +52,8 @@ export function scrollToHash(): void {
     if (!hash || hash === scrolledToHash) return;
     const target = findTarget(hash);
     if (!target) return; // not rendered yet - a later settle will retry
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    reveal(target);
+    bringIntoView(target);
     scrolledToHash = hash;
 }
 
@@ -63,6 +65,11 @@ export function resetScrollToHashForTests(): void {
 
 export function installGlobalScrollToHash(): void {
     document.addEventListener("htmx:afterSettle", scrollToHash);
+    // An in-page link already jumps natively; it needs help only when its target was collapsed.
+    window.addEventListener("hashchange", () => {
+        const target = findTarget(window.location.hash);
+        if (target && reveal(target)) bringIntoView(target);
+    });
     // The delay covers content that renders shortly after load without an HTMX
     // request behind it.
     document.addEventListener("DOMContentLoaded", () => setTimeout(scrollToHash, 400));

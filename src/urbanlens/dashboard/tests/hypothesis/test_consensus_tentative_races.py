@@ -1,18 +1,4 @@
-"""Concurrency tests for cross-session tentative-answer accumulation.
-
-``record_tentative_answers`` is check-then-act: find a matching tentative answer,
-then either bump its ``support_count`` or create one. Two Consensus rounds
-resolving at once for the same wiki is ordinary - separate sessions play the same
-popular wiki concurrently - and unserialised, both reads miss and both write.
-
-The damage is quiet and it is the whole point of the feature: support for one
-value splits across two rows, so a value the community actually agreed on never
-reaches the promotion threshold.
-
-Uses ``TransactionTestCase`` (not the project's default ``TestCase``) because the
-threads need to see each other's committed rows, which a single wrapping
-transaction would hide.
-"""
+"""Concurrency tests for cross-session tentative-answer accumulation."""
 
 from __future__ import annotations
 
@@ -24,7 +10,12 @@ from django.db import connections
 from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
 
-from urbanlens.dashboard.models.consensus.model import ConsensusAnswer, ConsensusFieldKind, ConsensusRound, ConsensusTentativeAnswer
+from urbanlens.dashboard.models.consensus.model import (
+    ConsensusAnswer,
+    ConsensusFieldKind,
+    ConsensusRound,
+    ConsensusTentativeAnswer,
+)
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.consensus import tentative
@@ -50,7 +41,9 @@ class TentativeAnswerRaceTests(TransactionTestCase):
         answer = baker.make(ConsensusAnswer, round=round_, text_value=text)
         return round_, answer
 
-    def _record_in_thread(self, round_: ConsensusRound, answer: ConsensusAnswer, barrier: threading.Barrier, errors: list) -> threading.Thread:
+    def _record_in_thread(
+        self, round_: ConsensusRound, answer: ConsensusAnswer, barrier: threading.Barrier, errors: list
+    ) -> threading.Thread:
         def run() -> None:
             try:
                 # Both threads are inside the call before either touches the table.
@@ -103,4 +96,6 @@ class TentativeAnswerRaceTests(TransactionTestCase):
         tentative.record_tentative_answers(round_a, [answer_a])
         tentative.record_tentative_answers(round_b, [answer_b])
 
-        self.assertEqual(ConsensusTentativeAnswer.objects.filter(wiki=self.wiki, field_kind=ConsensusFieldKind.WIKI_NAME).count(), 2)
+        self.assertEqual(
+            ConsensusTentativeAnswer.objects.filter(wiki=self.wiki, field_kind=ConsensusFieldKind.WIKI_NAME).count(), 2
+        )

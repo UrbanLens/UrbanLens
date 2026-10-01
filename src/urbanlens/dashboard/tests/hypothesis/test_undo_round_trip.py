@@ -1,17 +1,4 @@
-"""Every undo handler must restore its model's own fields intact.
-
-The framework's contract is deliberately narrow - cascade-deleted children are
-gone before ``serialize`` ever runs, so a handler only promises to bring back the
-instance's *own* fields plus a few cheap relations (see ``UndoHandler``'s
-docstring). This asserts that narrow promise actually holds, for every registered
-handler at once.
-
-The failure this guards against is a handler that quietly omits a field: the undo
-appears to work, the row comes back, and one column silently reverts to its
-default. Per-handler tests don't catch it on the handler nobody wrote one for,
-which is why this iterates the registry instead - and why it fails when a handler
-is registered with no builder here, rather than skipping it.
-"""
+"""Every undo handler must restore its model's own fields intact."""
 
 from __future__ import annotations
 
@@ -55,8 +42,14 @@ class UndoRoundTripTests(TestCase):
         """
         builders = {
             "pin": lambda: baker.make(
-                Pin, profile=self.profile, location=self.location,
-                name="Undo Pin", description="personal notes", priority=3, danger=2, vulnerability=1,
+                Pin,
+                profile=self.profile,
+                location=self.location,
+                name="Undo Pin",
+                description="personal notes",
+                priority=3,
+                danger=2,
+                vulnerability=1,
             ),
             "pin_list": lambda: baker.make(PinList, profile=self.profile, name="Undo List", description="list notes"),
             "trip": lambda: baker.make(Trip, creator=self.profile, name="Undo Trip", description="trip notes"),
@@ -71,7 +64,11 @@ class UndoRoundTripTests(TestCase):
 
     def test_every_registered_handler_has_a_builder_here(self) -> None:
         """A new handler must come with coverage, rather than silently skipping it."""
-        missing = [label for label in sorted(_HANDLERS) if self._build(label) is None]
+        missing = [
+            label
+            for label, handler in sorted(_HANDLERS.items())
+            if handler.supports_delete and self._build(label) is None
+        ]
 
         self.assertEqual(missing, [], f"undo handlers with no round-trip coverage: {missing}")
 
@@ -79,7 +76,9 @@ class UndoRoundTripTests(TestCase):
         losses: list[str] = []
         checked = 0
 
-        for model_label in sorted(_HANDLERS):
+        for model_label, registered in sorted(_HANDLERS.items()):
+            if not registered.supports_delete:
+                continue
             instance = self._build(model_label)
             if instance is None:
                 continue  # reported by the companion test above

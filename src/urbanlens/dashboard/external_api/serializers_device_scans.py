@@ -8,14 +8,17 @@ an internal one grows a field.
 
 from __future__ import annotations
 
+import logging
+
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.device_scan.model import DeviceType
 from urbanlens.dashboard.services.device_scan.mac_address import InvalidMacAddressError, normalize_mac_address
 
-#: Hard ceiling on devices per upload - generous for a single walked route,
-#: but bounded so one malformed/malicious payload can't force an unbounded
-#: number of DB writes inline in the request.
+logger = logging.getLogger(__name__)
+
+#: Hard ceiling on devices per upload - generous for a single walked route, but bounded so one
+#: malformed/malicious payload can't force an unbounded number of DB writes inline in the request.
 MAX_DEVICES_PER_UPLOAD = 200
 
 #: Same reasoning, per device: a walked route's signal-strength trail is
@@ -35,9 +38,8 @@ class DeviceSignalReadingInputSerializer(serializers.Serializer):
 class DeviceScanEntryInputSerializer(serializers.Serializer):
     """One device's data within a scan upload.
 
-    ``detected=False`` reports that an expected device (see
-    ``expected_marker_uuid``, sourced from a prior ``device-scans/nearby/``
-    response) was searched for near (``estimated_latitude``,
+    ``detected=False`` reports that an expected device (see ``expected_marker_uuid``, sourced from a
+    prior ``device-scans/nearby/`` response) was searched for near (``estimated_latitude``,
     ``estimated_longitude``) but not found - it carries no ``readings``.
     """
 
@@ -55,7 +57,8 @@ class DeviceScanEntryInputSerializer(serializers.Serializer):
         try:
             return normalize_mac_address(value)
         except InvalidMacAddressError as exc:
-            raise serializers.ValidationError(exc.safe_message) from exc
+            logger.info("device-scan upload rejected: %s", exc)
+            raise serializers.ValidationError("Not a valid MAC address.") from exc
 
     def validate_readings(self, value: list[dict]) -> list[dict]:
         """Reject an unreasonably long route trail rather than truncating it silently."""

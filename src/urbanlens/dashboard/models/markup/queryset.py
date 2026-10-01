@@ -3,24 +3,22 @@
 from __future__ import annotations
 
 import logging
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from urbanlens.dashboard.models import abstract
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, PinMarkup  # noqa: F401 - mypy needs these; ruff does not
 
 logger = logging.getLogger(__name__)
 
 
-class PinMarkupQuerySet(abstract.FrontendDashboardQuerySet):
+class PinMarkupQuerySet(abstract.FrontendDashboardQuerySet["PinMarkup"]):
     """QuerySet for PinMarkup map annotations (lines, arrows, text labels)."""
 
     def bulk_create(self, objs, *args, **kwargs):
         """Create the items, coercing their colours the way ``save`` would.
-
-        ``bulk_create`` issues raw SQL and never calls ``save``, so the
-        model-level colour validation - the thing standing between a stored
-        string and the client's ``innerHTML`` - does not apply to it. Doing it
-        here rather than in the one caller that exists today means a future
-        bulk writer cannot reopen the hole by not knowing about it.
+        ``bulk_create`` issues raw SQL and never calls ``save``, so the model-level colour validation - the thing standing between a stored string and the client's ``innerHTML`` - does not apply to it.
 
         Args:
             objs: The items to create.
@@ -52,11 +50,14 @@ class PinMarkupQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(profile=profile)
 
 
-class PinMarkupManager(abstract.FrontendDashboardManager.from_queryset(PinMarkupQuerySet)):
+_PinMarkupManagerBase = abstract.FrontendDashboardManager.from_queryset(PinMarkupQuerySet)
+
+
+class PinMarkupManager(_PinMarkupManagerBase):
     """Manager for PinMarkup."""
 
 
-class MarkupMapQuerySet(abstract.FrontendDashboardQuerySet):
+class MarkupMapQuerySet(abstract.FrontendDashboardQuerySet["MarkupMap"]):
     """QuerySet for standalone MarkupMap containers."""
 
     def for_profile(self, profile) -> Self:
@@ -82,11 +83,14 @@ class MarkupMapQuerySet(abstract.FrontendDashboardQuerySet):
         )
 
 
-class MarkupMapManager(abstract.FrontendDashboardManager.from_queryset(MarkupMapQuerySet)):
+_MarkupMapManagerBase = abstract.FrontendDashboardManager.from_queryset(MarkupMapQuerySet)
+
+
+class MarkupMapManager(_MarkupMapManagerBase):
     """Manager for MarkupMap."""
 
 
-class CustomLayerQuerySet(abstract.FrontendDashboardQuerySet):
+class CustomLayerQuerySet(abstract.FrontendDashboardQuerySet["CustomLayer"]):
     """QuerySet for CustomLayer (per-pin/wiki groupings of markup items)."""
 
     def for_pin(self, pin) -> Self:
@@ -98,5 +102,8 @@ class CustomLayerQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(parent_wiki=wiki)
 
 
-class CustomLayerManager(abstract.FrontendDashboardManager.from_queryset(CustomLayerQuerySet)):
+_CustomLayerManagerBase = abstract.FrontendDashboardManager.from_queryset(CustomLayerQuerySet)
+
+
+class CustomLayerManager(_CustomLayerManagerBase):
     """Manager for CustomLayer."""

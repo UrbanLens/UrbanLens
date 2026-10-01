@@ -1,20 +1,4 @@
-"""Two payments crediting the same subscription at once must both be kept.
-
-``test_billing_ledger_concurrency`` covers this with two in-process snapshots,
-which proves the *refresh* in ``_lock_and_refresh`` works. It does not prove the
-**lock** works: ``select_for_update`` does nothing observable on one connection,
-so a mutant that drops it and keeps the refresh passes that whole file.
-
-That mutant is not hypothetical - ``bin/run_mutation_tests.sh`` produced it
-(``from_queryset=RoleSubscription.objects.select_for_update()`` -> ``None``) and
-it survived, which is what prompted this file.
-
-The distinction matters in production. Refreshing alone closes the window only
-within a single transaction; two workers on separate connections can both
-refresh, both read the same committed total, both add their own payment and both
-write - and one customer's money is gone. The lock is what serialises them, and
-only real threads on real connections can show it.
-"""
+"""Two payments crediting the same subscription at once must both be kept."""
 
 from __future__ import annotations
 
@@ -40,7 +24,9 @@ class LedgerLockTests(TransactionTestCase):
         enqueue.start()
         self.addCleanup(enqueue.stop)
         baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.subscription = baker.make(RoleSubscription, user=baker.make(User), role=self.role)
 
     def _pay(self, amount: int):
@@ -56,7 +42,9 @@ class LedgerLockTests(TransactionTestCase):
         run_concurrently([self._pay(1000), self._pay(2000)])
 
         self.subscription.refresh_from_db()
-        self.assertEqual(self.subscription.total_paid_cents, 3000, "a concurrent payment was lost - the ledger row was not locked")
+        self.assertEqual(
+            self.subscription.total_paid_cents, 3000, "a concurrent payment was lost - the ledger row was not locked"
+        )
 
     def test_many_concurrent_payments_all_land(self) -> None:
         """Four writers, because two can pass by luck of scheduling."""

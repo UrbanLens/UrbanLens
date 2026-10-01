@@ -1,16 +1,10 @@
-"""Tests for services.import_formats.osm_xml.osm_xml_to_dict() - OSM XML pin import.
+"""Tests for services.import_formats.osm_xml.osm_xml_to_dict() - OSM XML pin import."""
 
-Only tagged <node>/<way> elements should become pins - most nodes in a real
-Overpass export are untagged geometry vertices belonging to a way, and importing
-those too would flood the map with noise. That's the main regression risk
-covered here, alongside way-centroid resolution.
-"""
 from __future__ import annotations
 
 from pathlib import Path
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
 
@@ -71,8 +65,7 @@ class OsmXmlToDictTests(SimpleTestCase):
 
     def test_way_missing_referenced_node_is_skipped(self):
         body = (
-            '<node id="1" lat="0" lon="0"/>'
-            '<way id="10"><nd ref="1"/><nd ref="999"/><tag k="building" v="yes"/></way>'
+            '<node id="1" lat="0" lon="0"/><way id="10"><nd ref="1"/><nd ref="999"/><tag k="building" v="yes"/></way>'
         )
         data = _osm_bytes(body)
 
@@ -81,7 +74,9 @@ class OsmXmlToDictTests(SimpleTestCase):
         self.assertEqual(pins, [])
 
     def test_untagged_way_ignored(self):
-        body = '<node id="1" lat="0" lon="0"/><node id="2" lat="1" lon="1"/><way id="10"><nd ref="1"/><nd ref="2"/></way>'
+        body = (
+            '<node id="1" lat="0" lon="0"/><node id="2" lat="1" lon="1"/><way id="10"><nd ref="1"/><nd ref="2"/></way>'
+        )
         data = _osm_bytes(body)
 
         pins = osm_xml_to_dict(data, self.profile)

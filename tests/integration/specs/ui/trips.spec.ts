@@ -1,13 +1,4 @@
-/**
- * The trips pages, driven by data the API made.
- *
- * Setting up over the API and asserting on the rendered page is the pattern the
- * rest of the UI suite uses, and it earns its keep here more than anywhere: a
- * trip's page is a join of trip, activities, pins and locations, so "it renders"
- * is a statement about four tables agreeing, not about one template. Building
- * the trip through the UI instead would spend most of the test proving the
- * create form works and would fail for the wrong reason when it changed.
- */
+/** The trips pages, driven by data the API made. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
@@ -76,6 +67,8 @@ test.describe("trips pages", () => {
     test("a deleted trip stops rendering", async ({ page, api }) => {
         const trip = await api.json<Trip>("post", "trips/", { name: resourceName("doomed trip") });
         await page.goto(`/dashboard/trips/${trip.slug}/`);
+        // Leave first: the page's lazy panels would otherwise 404 mid-load once the trip is gone.
+        await page.goto("about:blank");
 
         await api.delete(`trips/${trip.slug}/`);
 

@@ -26,6 +26,11 @@
        title="Written on the child pin {{ comment.pin.effective_name }}">
         <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ comment.pin.effective_name }}
     </a>
+    {% elif include_children and context_type == "wiki" and comment.wiki_id != wiki.id %}
+    <a class="comment-child-chip" href="{% url 'location.wiki' comment.wiki.location.slug %}"
+       title="Written on the child wiki {{ comment.wiki.name }}">
+        <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ comment.wiki.name }}
+    </a>
     {% endif %}
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"
@@ -56,9 +61,10 @@
 
   {% if comment.image %}
   {% if comment.pending_scan %}
-  <p class="comment-image-scanning" title="Only visible to you until this clears - other viewers will see it once it's confirmed clean">
-    <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
-  </p>
+  <a class="comment-image-link" target="_blank" data-id="{{ comment.pk }}" data-processing="pending" data-processing-url="{% url 'comments.images.processing' %}"
+     title="Only visible to you until this clears - other viewers will see it once it's confirmed clean">
+    {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="comment-image comment-image--processing" %}
+  </a>
   {% elif comment.profile.pk in blurred_profiles %}
   <div class="comment-image-blurred" title="Photo hidden by your privacy settings">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image comment-image--blurred">
@@ -91,8 +97,7 @@
     </button>
     {% endfor %}
     <div class="reaction-picker">
-      <button type="button" class="reaction-add-btn" title="Add reaction"
-              onclick="toggleReactionPicker(this)">
+      <button type="button" class="reaction-add-btn" title="Add reaction">
         <i class="material-symbols-outlined">add_reaction</i>
       </button>
       <div class="reaction-picker-popup" hidden>
@@ -119,23 +124,21 @@
   {# -- Reply button (top-level only) -- #}
   {% if not is_reply %}
   <button type="button" class="comment-reply-btn"
-          onclick="toggleReplyForm('reply-form-{{ comment.id }}')">
+          data-reply-form="reply-form-{{ comment.id }}">
     <i class="material-symbols-outlined">reply</i> Reply
     {% if replies %}<span class="reply-count">({{ replies|length }})</span>{% endif %}
   </button>
 
-  {# Reply form #}
   <div id="reply-form-{{ comment.id }}" class="comment-reply-form" hidden>
     {% include "dashboard/partials/comments/_comment_compose.html" with context_type=context_type pin=pin location=location trip=trip profile=profile parent_id=comment.id is_reply=True %}
   </div>
 
-  {# Existing replies #}
   {% if replies %}
   <ul class="comment-replies">
     {% for reply_item in replies %}
     {% with r=reply_item.comment %}
     <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
-      {% include "dashboard/partials/comments/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True %}
+      {% include "dashboard/partials/comments/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin wiki=wiki location=location trip=trip profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True include_children=include_children %}
     </li>
     {% endwith %}
     {% endfor %}

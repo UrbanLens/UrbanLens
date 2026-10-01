@@ -1,4 +1,8 @@
+from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.forms import AdminPasswordChangeForm
+from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponseRedirect
 from django.urls import reverse
 
@@ -10,8 +14,37 @@ from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.facts import Fact, FactEvidence
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.upload_retry import UploadRetry
 from urbanlens.dashboard.models.wiki import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.auth.credential_revocation import PasswordChangeKind, revoke_credentials_on_password_change
+
+
+class RevokingAdminPasswordChangeForm(AdminPasswordChangeForm):
+    """Admin's set/unset-password form, revoking what the password change should end."""
+
+    revoke_api_keys = forms.BooleanField(
+        required=False,
+        label="Also revoke this user's API keys",
+        help_text="OAuth2 app access always ends with the password. API keys only end when this is ticked.",
+    )
+
+    def save(self, commit: bool = True) -> User:
+        user = super().save(commit=commit)
+        if commit:
+            revoke_credentials_on_password_change(user, kind=PasswordChangeKind.ADMIN, revoke_api_keys=bool(self.cleaned_data.get("revoke_api_keys")))
+        return user
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UrbanLensUserAdmin(UserAdmin):
+    """The stock user admin, with a password form that revokes delegated access."""
+
+    change_password_form = RevokingAdminPasswordChangeForm
+    change_user_password_template = "admin/auth/user/change_password_revoking.html"  # noqa: S105  # nosec B105 - a template path, not a credential
 
 
 @admin.register(ApiRateLimit)
@@ -28,10 +61,10 @@ class ApiRateLimitAdmin(admin.ModelAdmin):
 class ApiCallLogAdmin(admin.ModelAdmin):
     """Admin for ApiCallLog - read-only view of API call history."""
 
-    list_display = ["service", "created", "success", "response_ms", "was_rate_limited", "was_geo_filtered"]
-    list_filter = ["service", "success", "was_rate_limited", "was_geo_filtered"]
+    list_display = ["service", "created", "success", "status_code", "response_ms", "was_rate_limited", "was_geo_filtered"]
+    list_filter = ["service", "success", "status_code", "was_rate_limited", "was_geo_filtered"]
     search_fields = ["service", "endpoint"]
-    readonly_fields = ["service", "endpoint", "created", "updated", "success", "response_ms", "was_rate_limited", "was_geo_filtered"]
+    readonly_fields = ["service", "endpoint", "created", "updated", "success", "status_code", "response_ms", "was_rate_limited", "was_geo_filtered"]
     ordering = ["-created"]
 
     def has_add_permission(self, request: HttpRequest) -> bool:
@@ -43,11 +76,7 @@ class ApiCallLogAdmin(admin.ModelAdmin):
 
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
-    """Admin for the SiteSettings singleton.
-
-    Enforces singleton behaviour: the changelist redirects straight to pk=1,
-    and add/delete are disabled so only the one record can ever be edited.
-    """
+    """Admin for the SiteSettings singleton (changelist redirects to pk=1; add/delete disabled)."""
 
     fieldsets = [
         (
@@ -61,6 +90,13 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             "Trip Settings",
             {
                 "fields": ["max_trip_members", "max_bbox_area_km2"],
+            },
+        ),
+        (
+            "Data retention",
+            {
+                "fields": ["notification_retention_days"],
+                "description": "How long rows are kept before the nightly sweeps delete them. 0 keeps them forever.",
             },
         ),
         (
@@ -118,6 +154,8 @@ class SiteSettingsAdmin(admin.ModelAdmin):
                     "notify_pin_import_errors_gotify",
                     "notify_safety_checkin_archival_failed_email",
                     "notify_safety_checkin_archival_failed_gotify",
+                    "notify_stuck_uploads_email",
+                    "notify_stuck_uploads_gotify",
                 ],
                 "description": "Which critical notification types are sent to which channels above.",
             },
@@ -149,16 +187,9 @@ class PinAdmin(admin.ModelAdmin):
 
 
 def _delete_unedited_child_wikis(modeladmin, request: HttpRequest, queryset) -> None:
-    """Delete child wikis that have never been edited after their initial creation.
+    """Delete child wikis never saved after creation (updated - created < 10s).
 
-    A child wiki is a Wiki with ``parent_wiki`` set.  "Unedited" is detected by
-    comparing the ``updated`` and ``created`` timestamps: if they differ by
-    less than 10 seconds, the wiki was never saved again after its initial
-    INSERT, meaning no user has moved, renamed, or changed it.
-
-    NOTE: Child wikis are created manually by users via the wiki page and are
-    NOT auto-recreated by any background process.  Deleting them permanently
-    removes them unless a user re-adds them.
+    Deletion is permanent; users must re-add them manually.
     """
     from datetime import timedelta
 
@@ -255,17 +286,14 @@ class FactEvidenceAdmin(admin.ModelAdmin):
 
 @admin.register(Achievement)
 class AchievementAdmin(admin.ModelAdmin):
-    """Admin for Achievement - define the awards users can earn.
-
-    Saving here queues a backfill (see ``models.achievements.signals``), so an
-    award added today is granted immediately to everyone who already qualifies.
-    """
+    """Admin for Achievement; saving queues a backfill granting existing qualifiers."""
 
     list_display = ["name", "metric_label", "threshold", "is_active", "is_secret", "order", "earned_count"]
     list_editable = ["threshold", "is_active", "is_secret", "order"]
     list_filter = ["is_active", "is_secret", "metric"]
     search_fields = ["name", "description", "metric"]
-    readonly_fields = ["uuid", "slug", "created", "updated", "earned_count"]
+    # Uploaded through the site admin page, which re-encodes it; a file stored here would be served as it came.
+    readonly_fields = ["uuid", "slug", "created", "updated", "earned_count", "custom_icon"]
     ordering = ["order", "metric", "threshold"]
     actions = ["backfill_selected"]
     fieldsets = [
@@ -286,10 +314,45 @@ class AchievementAdmin(admin.ModelAdmin):
 
     @admin.action(description="Re-check selected achievements against every user")
     def backfill_selected(self, request: HttpRequest, queryset) -> None:
-        from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import backfill_achievement
 
-        granted = sum(evaluate_achievement_for_all(achievement) for achievement in queryset)
-        self.message_user(request, f"Granted {granted} award(s).", messages.SUCCESS)
+        pks = list(queryset.values_list("pk", flat=True))
+        for achievement_id in pks:
+            safely_enqueue_task(backfill_achievement, achievement_id)
+        self.message_user(request, f"Queued a re-check of {len(pks)} achievement(s); new awards appear as each batch finishes.", messages.SUCCESS)
+
+
+@admin.register(UploadRetry)
+class UploadRetryAdmin(admin.ModelAdmin):
+    """Uploads storage failed on, waiting to be tried again; giving up drops a held upload or rejects a comment."""
+
+    list_display = ["target", "object_id", "attempts", "created", "updated", "next_attempt_at", "gone_since", "admin_notified_at", "last_error"]
+    list_filter = ["target"]
+    readonly_fields = [field.name for field in UploadRetry._meta.fields]  # noqa: SLF001
+    ordering = ["created"]
+    actions = ["give_up_selected"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    @admin.action(description="Give up on the selected uploads (drops held uploads, rejects comments)", permissions=["view"])
+    def give_up_selected(self, request: HttpRequest, queryset) -> None:
+        from urbanlens.dashboard.services.media.upload_retry import give_up
+
+        if not request.user.is_superuser:
+            self.message_user(request, "Only a superuser can give up on an upload.", messages.ERROR)
+            return
+        waiting = list(queryset)
+        for retry in waiting:
+            give_up(retry)
+        self.message_user(request, f"Gave up on {len(waiting)} upload(s).", messages.SUCCESS)
 
 
 @admin.register(UserAchievement)
@@ -307,11 +370,7 @@ class UserAchievementAdmin(admin.ModelAdmin):
 
 @admin.register(ProfileStreak)
 class ProfileStreakAdmin(admin.ModelAdmin):
-    """Admin for ProfileStreak - cached consecutive-day counters.
-
-    Read-only: these are derived from ``ProfileActivityDay`` and editing them by
-    hand would silently desync the two. Use the rebuild action instead.
-    """
+    """Admin for ProfileStreak; read-only derived counters, rebuild via action."""
 
     list_display = ["profile", "kind", "current_length", "longest_length", "last_day"]
     list_filter = ["kind"]

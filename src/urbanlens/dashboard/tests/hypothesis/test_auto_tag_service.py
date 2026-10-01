@@ -1,13 +1,4 @@
-"""Tests for AutoTagService's independent keyword-based and AI-based gating.
-
-Regression coverage for the keyword-based auto-tagging user setting: previously
-keyword matching (local pattern/substring matching, no external API call) and AI
-matching (LLM call) shared a single set of profile gates (ai_enabled/ai_label_*),
-so a user could not disable the free keyword path independently of the paid AI
-path, or vice versa. Profile gained keyword_tagging_enabled/keyword_label_tags/
-keyword_label_categories/keyword_label_statuses (default True, since keyword
-matching is free and local) alongside the existing ai_* fields (default False).
-"""
+"""Tests for AutoTagService's independent keyword-based and AI-based gating."""
 
 from __future__ import annotations
 
@@ -34,7 +25,9 @@ _COORDS = itertools.count()
 
 def _make_pin(profile: Profile) -> Pin:
     offset = next(_COORDS)
-    location = baker.make("dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}")
+    location = baker.make(
+        "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
+    )
     return baker.make(Pin, profile=profile, location=location)
 
 
@@ -53,6 +46,11 @@ class AiKindEnabledForProfileTests(TestCase):
         self.profile.external_apis_enabled = False
         self.profile.ai_label_categories = True
         self.assertFalse(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
+
+        # Same profile/kind, external APIs re-enabled - an "external_apis_enabled is ignored"
+        # implementation would still pass above.
+        self.profile.external_apis_enabled = True
+        self.assertTrue(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
 
     def test_disabled_when_per_kind_flag_off(self) -> None:
         self.profile.ai_enabled = True
@@ -98,12 +96,8 @@ class KeywordKindEnabledForProfileTests(TestCase):
 class SuggestForPinStageGatingTests(TestCase):
     """suggest_for_pin must only invoke the stages the profile allows.
 
-    The pin path's first stage is REData suggestions rather than keyword
-    matching (a wiki, which has no owner and so no per-user taxonomy, still
-    keyword-matches). The two stages are independently gated: REData on
-    SiteFeature.AUTO_TAGGING plus the user's own switch, AI on SiteFeature.AI
-    plus the per-kind AI preferences.
-    """
+    The pin path's first stage is REData suggestions rather than keyword matching (a wiki, which has no owner
+    and so no per-user taxonomy, still keyword-matches)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -115,7 +109,9 @@ class SuggestForPinStageGatingTests(TestCase):
         with (
             mock.patch.object(AutoTagService, "_redata_match", return_value=[]) as redata_match,
             mock.patch.object(AutoTagService, "_ai_match", return_value=[]) as ai_match,
-            mock.patch.object(AutoTagService, "_eligible_labels", return_value=[baker.prepare(Label, kind=KIND_CATEGORY)]),
+            mock.patch.object(
+                AutoTagService, "_eligible_labels", return_value=[baker.prepare(Label, kind=KIND_CATEGORY)]
+            ),
             mock.patch("urbanlens.dashboard.models.subscriptions.model.user_has_feature", return_value=auto_tagging),
         ):
             AutoTagService(kinds=[KIND_CATEGORY]).suggest_for_pin(self.pin)

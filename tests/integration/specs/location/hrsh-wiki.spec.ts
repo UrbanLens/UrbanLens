@@ -1,41 +1,7 @@
 /**
- * The community wiki for the campus: how it comes into being, and what it knows.
- *
- * ## "The wiki is created automatically" is true in a way nobody can see
- *
- * A pin's `post_save` enqueues `ensure_draft_wiki_for_location`, which really
- * does create a `Wiki` row without anyone asking. But it creates it with
- * `officially_created=False`, and `Wiki.officially_created`'s own comment is
- * explicit that this is not a wiki yet:
- *
- * > Every user- and API-visible surface must treat officially_created=False the
- * > same as "no wiki exists yet".
- *
- * `WikiManager.get_for_location` and `resolve_visible_wiki` both honour that, so
- * `GET /wikis/{location_slug}/` answers **404** for a draft. A test asserting
- * "the wiki appears on its own" would therefore be asserting against the design.
- *
- * What the draft is *for* is enrichment: Google place linking, name resolution,
- * boundary generation and Wikipedia seeding all run against it before anyone
- * clicks. So the observable claim - and the one worth testing - is not that the
- * wiki appears, but that **it is already populated the moment it is created**.
- * That is the only externally visible evidence the background draft did its job.
- *
- * Promotion has exactly one entry point in the whole product, and it is not in
- * the published API: `POST /dashboard/map/pin/<slug>/wiki/create/`, from a
- * browser session. That is why this file needs `page` and cannot be an API spec.
- *
- * ## A caveat on the pinned-user count
- *
- * `wiki_community_summary` counts `location.pins` - pins on that one Location
- * row - while *access* is by `Place.domain_root`. Five people pinning five
- * coordinates on this campus create five Locations, share one wiki, and each
- * contributes 1 to their own Location's count. So on this fixture the masked
- * branch is reached no matter how many accounts pin the place, and the "fewer
- * than 3" assertion below **cannot fail for the right reason**. It is kept
- * because the copy is worth pinning down, and the vacuity is recorded here so
- * nobody later mistakes it for real coverage. Making it non-vacuous needs the
- * count to follow the access domain, which is an application change.
+ * The community wiki for the campus: how it comes into being, and what it knows. A pin's
+ * `post_save` enqueues `ensure_draft_wiki_for_location`, which really does create a `Wiki` row
+ * without anyone asking.
  */
 
 import { ensureCampusWiki, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
@@ -46,10 +12,8 @@ skipUnlessLocationDataEnabled();
 
 test.describe("Hudson River State Hospital - the community wiki", () => {
     test("a draft wiki is not visible until somebody creates it", async ({ campus }) => {
-        // Runs first and is the reason the rest of this file has to promote
-        // explicitly. If this ever starts returning 200 without promotion, the
-        // draft has become visible and `officially_created` has stopped meaning
-        // what its comment says.
+        // TODO: accepts either status, so it asserts nothing. Wikis are now created automatically (the rest of this
+        // file waits for one), so this premise needs restating or the test removing.
         const response = await campus.api.get(`wikis/${campus.pin.location_slug}/`);
 
         expect(
@@ -58,9 +22,9 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
         ).toContain(response.status());
     });
 
-    test("creating the wiki yields one that is already filled in", async ({ campus, page }) => {
-        const promoted = await ensureCampusWiki(campus, page);
-        expect(promoted, "the wiki could not be created through the pin page, so nothing below can be assessed").toBe(true);
+    test("creating the wiki yields one that is already filled in", async ({ campus }) => {
+        const promoted = await ensureCampusWiki(campus);
+        expect(promoted, "GET wikis/<location_slug>/ never answered 200 within the wait in fixtures.ts waitForCampusWiki; wikis are created automatically, so none means creation or enrichment stalled").toBe(true);
 
         const wiki = await campus.api.json<{ name?: string; latitude?: number; longitude?: number; boundary?: unknown }>(
             "get",
@@ -80,7 +44,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("the wiki page reports the pinned-user count in masked form", async ({ campus, page }) => {
-        expect(await ensureCampusWiki(campus, page)).toBe(true);
+        expect(await ensureCampusWiki(campus)).toBe(true);
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
 
         const low = page.locator(".wiki-stat-value--low");
@@ -108,7 +72,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("an exact pinned-user count is never rendered", async ({ campus, page }) => {
-        expect(await ensureCampusWiki(campus, page)).toBe(true);
+        expect(await ensureCampusWiki(campus)).toBe(true);
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
 
         // Asserted on the *value* element rather than on the card's whole text,
@@ -132,8 +96,8 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
         ).toBe(true);
     });
 
-    test("the wiki carries an article seeded from Wikipedia", async ({ campus, page }) => {
-        expect(await ensureCampusWiki(campus, page)).toBe(true);
+    test("the wiki carries an article seeded from Wikipedia", async ({ campus }) => {
+        expect(await ensureCampusWiki(campus)).toBe(true);
 
         const article = await waitForOrNull(
             () => campus.api.get(`wikis/${campus.pin.location_slug}/article/`),
@@ -159,8 +123,8 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
         expect((body.content ?? "").length, "the article exists but is empty").toBeGreaterThan(200);
     });
 
-    test("official aliases reach the wiki", async ({ campus, page }) => {
-        expect(await ensureCampusWiki(campus, page)).toBe(true);
+    test("official aliases reach the wiki", async ({ campus }) => {
+        expect(await ensureCampusWiki(campus)).toBe(true);
 
         const aliases = await waitForOrNull(
             async () => {
@@ -187,8 +151,8 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
         ).not.toBeNull();
     });
 
-    test("the wiki's name is one of its own aliases", async ({ campus, page }) => {
-        expect(await ensureCampusWiki(campus, page)).toBe(true);
+    test("the wiki's name is one of its own aliases", async ({ campus }) => {
+        expect(await ensureCampusWiki(campus)).toBe(true);
 
         const wiki = await campus.api.json<{ name?: string }>("get", `wikis/${campus.pin.location_slug}/`);
         const body = await campus.api.json<Array<{ name?: string }> | { results?: Array<{ name?: string }> }>("get", `wikis/${campus.pin.location_slug}/aliases/`);
@@ -208,8 +172,8 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
         ).toContain((wiki.name ?? "").toLowerCase());
     });
 
-    test("the pin and its wiki agree about what the place is called", async ({ campus, page }) => {
-        expect(await ensureCampusWiki(campus, page)).toBe(true);
+    test("the pin and its wiki agree about what the place is called", async ({ campus }) => {
+        expect(await ensureCampusWiki(campus)).toBe(true);
 
         const pin = await campus.api.json<{ aliases?: Array<{ name?: string }>; official_name?: string | null }>("get", `pins/${campus.pin.slug}/`);
         const pinAliases = (pin.aliases ?? []).map((alias) => (alias.name ?? "").toLowerCase()).filter(Boolean);

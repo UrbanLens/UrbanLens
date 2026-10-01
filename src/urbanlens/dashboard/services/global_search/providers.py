@@ -1,70 +1,102 @@
-"""Per-entity search providers for global search.
-
-Each provider owns one result type: it knows how to scope its queryset to
-content the requesting user actually has access to, which text fields to
-match, how to apply the parsed date/place filters, and how to turn a row into
-a rendered :class:`~urbanlens.dashboard.services.global_search.results.SearchResult`.
-
-Typo tolerance comes from PostgreSQL trigram similarity on each provider's
-primary name field (pg_trgm, installed by migration 0022), OR-ed with plain
-``icontains`` term matching across all searchable fields.
-"""
+"""Per-entity search providers for global search."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
 import logging
 import math
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db.models import BooleanField, Case, Exists, F, OuterRef, Q, Value, When
+from django.db.models import BooleanField, Case, Count, Exists, F, OuterRef, Q, Value, When
 from django.db.models.functions import Concat
 from django.urls import reverse
 
+from urbanlens.core.semijoin import probe_scope
+from urbanlens.dashboard.services.auth.username import username_search_q
 from urbanlens.dashboard.services.global_search.results import SearchResult, excerpt
 
 if TYPE_CHECKING:
-    from django.db.models import QuerySet
+    from collections.abc import Callable, Iterable
 
+    from urbanlens.dashboard.models.abstract.queryset import DashboardQuerySet
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
-from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
 
-#: Preserves the concrete queryset class through the shared helpers. Without it
-#: they hand back a plain QuerySet, and a provider that then calls a custom
-#: manager method - PhotoSearchProvider's visible_to() is the one that matters -
-#: is calling something the type no longer admits exists.
-_QS = TypeVar("_QS", bound="QuerySet[Any, Any]")
+#: Preserves the concrete queryset class through the shared helpers.
+#: Without it they hand back a plain QuerySet, and a provider that then calls a custom manager method
+#: - PhotoSearchProvider's visible_to() is the one that matters - is calling something the type no
+#: longer admits exists. Bounded by the app's own base queryset rather than Django's, because the
+#: helpers call `semijoin()`, which only exists there.
+_QS = TypeVar("_QS", bound="DashboardQuerySet[Any]")
 
 logger = logging.getLogger(__name__)
 
-#: A concealed wiki's field/alias match cannot be expressed as a SQL predicate
-#: - name/description are versioned fields resolved per viewer, and whether a
-#: given wiki is concealed at all depends on the reputation ledger, not on any
-#: column search can filter by. So the SQL query over-fetches candidates and
-#: each is re-verified in Python against exactly what its viewer would be
-#: shown, before the page's own limit is applied - see _concealment_survivors.
-#: 4x keeps the extra cost bounded (a handful of rows, not a table scan) while
-#: giving real headroom against a page mostly filled by wikis that turn out to
-#: be concealed for this viewer; docs/PROBLEMS.md's 2026-08-24 entry has the
-#: full reasoning for why the three cheaper patches were rejected.
+#: A concealed wiki's field/alias match cannot be expressed as a SQL predicate - name/description are
+#: versioned fields resolved per viewer, and whether a given wiki is concealed at all depends on the
+#: reputation ledger, not on any column search can filter by.
+#: So the SQL query over-fetches candidates and each is re-verified in Python against exactly what
 _CONCEALMENT_OVERFETCH = 4
 
 
-def _concealed_wiki_haystacks(wiki: Any, viewer: Profile) -> list[str]:
-    """Lowercased name/description/alias text *viewer* may actually see on *wiki*.
+class ConcealedWikiText:
+    """The alias and place-tag text a concealed viewer may see, read for a whole batch of candidate wikis at once.
 
-    The shared building block behind every concealed-candidate re-check
-    below: what a concealed viewer's own search may match against is exactly
-    what the page would render them, never the live row.
+    Filled by :func:`_concealment_survivors` for every concealed candidate before any is re-checked, so the
+    over-fetched batch costs one alias query and one tag query rather than two per candidate.
     """
-    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealed_field_values
 
-    values = concealed_field_values(wiki, viewer)
-    haystacks = [str(values.get("name") or "").lower(), str(values.get("description") or "").lower()]
-    haystacks += [name.lower() for name in conceal_rows(wiki.aliases.all(), viewer).values_list("name", flat=True)]
-    return haystacks
+    def __init__(self, viewer: Profile) -> None:
+        self.viewer = viewer
+        self._aliases: dict[int, list[str]] = {}
+        self._tags: dict[int, list[str]] = {}
+
+    def load(self, wikis: Iterable[Any]) -> None:
+        """Read the alias and tag text of every wiki in *wikis* not already read.
+
+        Args:
+            wikis: Wiki rows with ``location`` selected.
+        """
+        from urbanlens.dashboard.models.aliases.model import WikiAlias
+        from urbanlens.dashboard.models.place.external_tag import PlaceExternalTag
+        from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        missing = {wiki.pk: wiki for wiki in wikis if wiki.pk not in self._aliases}
+        if not missing:
+            return
+        for pk in missing:
+            self._aliases[pk] = []
+            self._tags[pk] = []
+        for wiki_id, name in conceal_rows(WikiAlias.objects.filter(wiki_id__in=missing), self.viewer).values_list("wiki_id", "name"):
+            self._aliases[wiki_id].append(name.lower())
+        wikis_by_place: dict[int, list[int]] = {}
+        for wiki in missing.values():
+            if wiki.location_id and wiki.location.place_id:
+                wikis_by_place.setdefault(wiki.location.place_id, []).append(wiki.pk)
+        for place_id, value in PlaceExternalTag.objects.filter(place_id__in=wikis_by_place).values_list("place_id", "value"):
+            for pk in wikis_by_place[place_id]:
+                self._tags[pk].append(humanize_tag_value(value).lower())
+
+    def haystacks(self, wiki: Any) -> list[str]:
+        """Lowercased name/description/alias/tag text the viewer may actually see on *wiki*.
+        What a concealed viewer's own search may match against is exactly what the page would render them, never the live row.
+
+        Args:
+            wiki: A Wiki row with ``location`` selected.
+
+        Returns:
+            The texts to match terms against.
+        """
+        from urbanlens.dashboard.services.wiki.concealment import concealed_field_values
+
+        self.load([wiki])
+        values = concealed_field_values(wiki, self.viewer)
+        return [str(values.get("name") or "").lower(), str(values.get("description") or "").lower(), *self._aliases[wiki.pk], *self._tags[wiki.pk]]
 
 
 def _terms_survive(terms: list[str], haystacks: list[str]) -> bool:
@@ -72,116 +104,78 @@ def _terms_survive(terms: list[str], haystacks: list[str]) -> bool:
     return all(any(term in haystack for haystack in haystacks) for term in terms)
 
 
-def _concealed_wiki_survives(wiki: Any, viewer: Profile, terms: list[str]) -> bool:
+def _concealed_wiki_survives(wiki: Any, text: ConcealedWikiText, terms: list[str]) -> bool:
     """Whether *wiki*'s name/description/aliases, as *viewer* would actually see them, still match *terms*.
-
-    Called only once :func:`concealment_active` has already said this wiki is
-    concealed for this viewer. Re-verification is a strict substring check
-    against the resolved values, never trigram/fuzzy similarity - fuzzy
-    matching is what admitted some candidates to the pre-filter set in the
-    first place, and re-deriving it against concealed values would let a
-    query that merely *resembles* a stranger's hidden name keep matching.
+    Called only once :func:`concealment_active` has already said this wiki is concealed for this viewer.
 
     Args:
         wiki: A candidate Wiki row (the live one - resolution happens here).
-        viewer: The searching profile.
+        text: The batch's concealed text, for the searching profile.
         terms: Lowercased AND-ed search terms (``parsed.terms``).
 
     Returns:
-        True when there is nothing to re-verify (no free-text terms - a
-        near-me-only or date-only query carries no textual oracle) or every
-        term appears in what this viewer may see.
-    """
+        True when there is nothing to re-verify (no free-text terms - a near-me-only or date-only query carries no textual oracle) or every term appears in what this viewer may see."""
     if not terms:
         return True
-    return _terms_survive(terms, _concealed_wiki_haystacks(wiki, viewer))
+    return _terms_survive(terms, text.haystacks(wiki))
 
 
-def _concealed_article_survives(article: Any, viewer: Profile, terms: list[str]) -> bool:
+def _concealed_article_survives(article: Any, text: ConcealedWikiText, terms: list[str]) -> bool:
     """Whether an article's viewer-visible content and host still match *terms* once its wiki is concealed.
-
-    Only called for wiki-hosted articles a concealment gate has already
-    fired for. ``visible_article_revision`` is the same function the Article
-    tab itself renders through, so a term must appear in prose this viewer
-    could actually open, not merely in the live (possibly a stranger's)
-    revision the SQL match ran against.
+    Only called for wiki-hosted articles a concealment gate has already fired for.
 
     Args:
         article: A candidate Article row.
-        viewer: The searching profile.
+        text: The batch's concealed text, for the searching profile.
         terms: Lowercased AND-ed search terms.
 
     Returns:
-        True when there is nothing to re-verify, or every term appears in
-        the newest revision this viewer may see (content) or in the host
-        wiki's own concealed name/description/aliases.
-    """
+        True when there is nothing to re-verify, or every term appears in the newest revision this viewer may see (content) or in the host wiki's own concealed name/description/aliases."""
     if not terms:
         return True
     from urbanlens.dashboard.services.wiki.concealment import visible_article_revision
 
-    revision = visible_article_revision(article, viewer)
+    revision = visible_article_revision(article, text.viewer)
     haystacks = [(revision.content or "").lower()] if revision is not None else []
-    haystacks += _concealed_wiki_haystacks(article.wiki, viewer)
+    haystacks += text.haystacks(article.wiki)
     return _terms_survive(terms, haystacks)
 
 
 def _concealed_comment_survives(comment: Any, viewer: Profile) -> bool:
     """Whether *comment* is one of *viewer*'s own or a friend's, per the same rule ``conceal_rows`` applies elsewhere.
 
-    A comment's text doesn't change per viewer - unlike a wiki's merged
-    fields, there's nothing to re-resolve - so the only question concealment
-    raises for search is row-level visibility, answered by the actor id
-    exactly as :func:`conceal_rows` would filter the comment queryset the
-    page itself renders from.
-
     Args:
         comment: A candidate Comment row.
         viewer: The searching profile.
 
     Returns:
-        Whether this comment survives concealment for this viewer.
-    """
+        Whether this comment survives concealment for this viewer."""
     from urbanlens.dashboard.services.wiki.concealment import visible_actor_ids
 
     return comment.profile_id in visible_actor_ids(viewer)
 
 
-def _concealment_survivors(queryset: Any, viewer: Profile, limit: int, wiki_of, survives) -> list:
+def _concealment_survivors(queryset: Any, viewer: Profile, limit: int, wiki_of, survives, text: ConcealedWikiText | None = None) -> list:
     """Fetch up to *limit* SQL-matched candidates, re-fetching with headroom only if concealment needs it.
-
-    Shared by every provider whose text match can land on a concealed wiki's
-    versioned fields, own-authored content, or another viewer's row - see the
-    module-level note on :data:`_CONCEALMENT_OVERFETCH` for why this can't be
-    a queryset filter. Fetches the ordinary ``limit``-sized page first; only
-    when at least one of those candidates' wiki is actually concealed for
-    this viewer does it re-fetch at ``limit * _CONCEALMENT_OVERFETCH`` for
-    headroom to drop non-survivors and still fill the page. While
-    ``concealment_active`` returns False everywhere (today, in production),
-    this never re-fetches and never re-verifies anything - one query, same
-    as before this mechanism existed.
 
     Args:
         queryset: The already SQL-matched, ordered, unsliced queryset.
         viewer: The searching profile.
         limit: The caller's real result limit.
-        wiki_of: ``candidate -> Wiki | None``. None means "not wiki-hosted" -
-            always kept.
-        survives: ``(candidate, viewer) -> bool``, called only when
-            ``wiki_of(candidate)`` is concealed for ``viewer``.
+        wiki_of: ``candidate -> Wiki | None``.
+        survives: ``(candidate, viewer) -> bool``, called only when ``wiki_of(candidate)`` is concealed for ``viewer``.
+        text: When *survives* reads concealed wiki text, the cache it reads from; loaded here for every
+            concealed candidate at once.
 
     Returns:
-        Up to ``limit`` candidates, order preserved. Never silently pads past
-        what was fetched - a page can come back under ``limit`` when
-        concealed drops are a large share of the over-fetched set; that is a
-        disclosed trade-off of over-fetching rather than a full second-pass
-        query, not a bug.
-    """
+        Up to ``limit`` candidates, order preserved."""
     from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
     candidates = list(queryset[:limit])
     if any(concealment_active(wiki, viewer) for wiki in (wiki_of(c) for c in candidates) if wiki is not None):
         candidates = list(queryset[: limit * _CONCEALMENT_OVERFETCH])
+        if text is not None:
+            text.load(wiki for wiki in (wiki_of(c) for c in candidates) if wiki is not None and concealment_active(wiki, viewer))
 
     kept = []
     for candidate in candidates:
@@ -202,11 +196,10 @@ FUZZY_THRESHOLD = 0.25
 #: rather than an exact circle - adequate for "nearby" intent.
 NEAR_ME_RADIUS_KM = 50.0
 
-#: Score bonus for a "near me" hit, well above the 0-1 range of text/fuzzy
-#: scores so nearby results always sort above distant ones with the same
-#: relevance - but a strong text match is never *excluded* for being far away
-#: (a pin literally named "Church Near Me" must still be found even if it
-#: isn't actually nearby).
+#: Score bonus for a "near me" hit, well above the 0-1 range of text/fuzzy scores so nearby results
+#: always sort above distant ones with the same relevance - but a strong text match is never
+#: *excluded* for being far away (a pin literally named "Church Near Me" must still be found even if
+#: it isn't actually nearby).
 NEAR_ME_SCORE_BOOST = 10.0
 
 #: Location sub-fields checked when the query names a place ("in Cincinnati").
@@ -221,22 +214,48 @@ _PLACE_FIELDS = (
 )
 
 
-def term_filter(terms: list[str], fields: list[str]) -> Q:
+def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP047
+    """*condition* as a semi-join when *path* crosses a to-many relation.
+
+    Thin wrapper over
+    :meth:`~urbanlens.dashboard.models.abstract.queryset.DashboardQuerySet.semijoin`, which is
+    where the mechanism and the measurements behind it live: this only spells "no queryset means
+    no access scope to bound by, so leave the predicate alone".
+
+    Args:
+        queryset: The already access-scoped queryset being filtered; None leaves *condition* as it is.
+        path: The ORM path *condition* filters through.
+        condition: The predicate, written against *queryset*'s model.
+
+    Returns:
+        A Q usable in ``filter()`` on *queryset*'s model."""
+    if queryset is None:
+        return condition
+    return queryset.semijoin(path, condition)
+
+
+def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q] | None = None, queryset: _QS | None = None) -> Q:  # noqa: UP047
     """Build the standard text predicate: every term in at least one field.
 
     Args:
         terms: Lowercased search terms (AND-ed together).
         fields: ORM field paths each term may appear in (OR-ed together).
+        extra: Optional per-term Q builder, OR-ed alongside the field matches - e.g. tag-equivalence matching, which isn't expressible as a plain ``field__icontains`` lookup.
+        queryset: The already access-scoped queryset being searched. Given, a field path through a to-many relation matches as a semi-join.
 
     Returns:
-        The combined Q object; empty Q when ``terms`` is empty.
-    """
+        The combined Q object; empty Q when ``terms`` is empty."""
     combined = Q()
-    for term in terms:
-        term_q = Q()
-        for field_path in fields:
-            term_q |= Q(**{f"{field_path}__icontains": term})
-        combined &= term_q
+    # Without a queryset no path below crosses a to-many, so nothing here touches the database and
+    # holding the setting would be two round trips for nothing.
+    with probe_scope() if queryset is not None and terms else nullcontext():
+        for term in terms:
+            term_q = Q()
+            for field_path in fields:
+                term_q |= _semijoin(queryset, field_path, Q(**{f"{field_path}__icontains": term}))
+            if extra is not None:
+                term_q |= extra(term)
+            combined &= term_q
     return combined
 
 
@@ -244,13 +263,11 @@ def place_filter(location_path: str, place: str) -> Q:
     """Build a predicate matching a place name against Location address fields.
 
     Args:
-        location_path: ORM path prefix to the Location relation (e.g.
-            ``"location"`` or ``"pin__location"``).
+        location_path: ORM path prefix to the Location relation (e.g. ``"location"`` or ``"pin__location"``).
         place: The place name parsed from the query.
 
     Returns:
-        Q OR-ing the place over locality/state/county/country/street/name.
-    """
+        Q OR-ing the place over locality/state/county/country/street/name."""
     combined = Q()
     for field_name in _PLACE_FIELDS:
         combined |= Q(**{f"{location_path}__{field_name}__icontains": place})
@@ -265,9 +282,7 @@ def date_range_filter(field_path: str, parsed: ParsedQuery) -> Q:
         parsed: The parsed query carrying date_start/date_end.
 
     Returns:
-        Q constraining the field's date to the parsed range; empty Q when the
-        query has no date range.
-    """
+        Q constraining the field's date to the parsed range; empty Q when the query has no date range."""
     if not (parsed.date_start and parsed.date_end):
         return Q()
     return Q(**{f"{field_path}__date__gte": parsed.date_start, f"{field_path}__date__lte": parsed.date_end})
@@ -275,21 +290,15 @@ def date_range_filter(field_path: str, parsed: ParsedQuery) -> Q:
 
 def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float = NEAR_ME_RADIUS_KM) -> Q:
     """Build a bounding-box predicate for a "near me" query.
-
-    Approximates a circle of ``radius_km`` around the searching user's known
-    location with a lat/lng box, since Location stores plain decimals rather
-    than a PostGIS point field.
+    Approximates a circle of ``radius_km`` around the searching user's known location with a lat/lng box, since Location stores plain decimals rather than a PostGIS point field.
 
     Args:
         location_path: ORM path prefix to the Location relation.
-        parsed: The parsed query carrying ``near_lat``/``near_lng`` (filled in
-            by the engine from the profile's known location).
+        parsed: The parsed query carrying ``near_lat``/``near_lng`` (filled in by the engine from the profile's known location).
         radius_km: Half-width of the box, in kilometres.
 
     Returns:
-        Q constraining the location to the box; empty Q when the query has no
-        near-me coordinates.
-    """
+        Q constraining the location to the box; empty Q when the query has no near-me coordinates."""
     if parsed.near_lat is None or parsed.near_lng is None:
         return Q()
     lat_delta = radius_km / 111.0
@@ -307,24 +316,13 @@ def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float
 def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[str, Concat | Exists], Q]:
     """Build the annotation and predicate to match a person by name.
 
-    At a minimum, matches on username, first name, last name, full name (the
-    concatenation of first and last - not derivable from a single field
-    lookup, hence the annotation), and any private nickname ``viewer`` has
-    assigned that profile. Used for any "from <person>" clause (DM
-    counterparty, pin-share sender, ...).
-
     Args:
-        other_path: ORM path prefix to the Profile being matched (e.g.
-            ``"sender"``, ``"recipient"``, ``"source_share__from_profile"``).
+        other_path: ORM path prefix to the Profile being matched (e.g. ``"sender"``, ``"recipient"``, ``"source_share__from_profile"``).
         person: The name fragment parsed from a "from <person>" clause.
-        viewer: The searching profile - only nicknames *they* privately
-            assigned count, never one assigned by/to someone else.
+        viewer: The searching profile - only nicknames *they* privately assigned count, never one assigned by/to someone else.
 
     Returns:
-        (annotation dict to merge into ``queryset.annotate(**...)``, Q to
-        filter with) - both keyed/scoped to ``other_path`` so multiple calls
-        for different paths can be combined without colliding.
-    """
+        (annotation dict to merge into ``queryset.annotate(**...)``, Q to filter with) - both keyed/scoped to ``other_path`` so multiple calls for different paths can be combined without colliding."""
     from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 
     key = other_path.replace("__", "_")
@@ -335,7 +333,7 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
         nickname_field: Exists(ProfileNickname.objects.filter(author=viewer, subject=OuterRef(other_path), nickname__icontains=person)),
     }
     query = (
-        Q(**{f"{other_path}__user__username__icontains": person})
+        username_search_q(person, profile_path=f"{other_path}__")
         | Q(**{f"{other_path}__user__first_name__icontains": person})
         | Q(**{f"{other_path}__user__last_name__icontains": person})
         | Q(**{f"{full_name_field}__icontains": person})
@@ -344,14 +342,131 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
     return annotation, query
 
 
+def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labels") -> _QS:  # noqa: UP047
+    """Filter *queryset* by `label:`/`-label:` (aliases `tag`, `labels`).
+
+    Args:
+        queryset: The already access-scoped queryset.
+        parsed: The structured query, carrying ``labels``/``exclude_labels``.
+        relation: ORM path to the Label M2M relation (e.g. ``"labels"``).
+
+    Returns:
+        The filtered queryset; unchanged when neither field is set."""
+    if parsed.labels:
+        included = Q()
+        for name in parsed.labels:
+            included |= Q(**{f"{relation}__name__iexact": name})
+        queryset = queryset.filter(_semijoin(queryset, relation, included))
+    if parsed.exclude_labels:
+        excluded = Q()
+        for name in parsed.exclude_labels:
+            excluded |= Q(**{f"{relation}__name__iexact": name})
+        queryset = queryset.exclude(excluded)
+    return queryset
+
+
+def author_clause(path: str, parsed: ParsedQuery, profile: Profile) -> tuple[dict[str, Concat | Exists], Q] | None:
+    """The annotation/Q pair for `by:`/`author:`/`creator:`, or None when unset.
+
+    Args:
+        path: ORM path prefix to the Profile being matched (e.g. ``"profile"``, ``"creator"``, ``"last_edited_by"``, ``"sender"``).
+        parsed: The structured query, carrying ``author``.
+        profile: The searching profile, for the "me" case.
+
+    Returns:
+        None when ``parsed.author`` is unset; otherwise an (annotation dict, Q) pair the caller applies exactly as :func:`person_match`'s result."""
+    if not parsed.author:
+        return None
+    if parsed.author.strip().lower() == "me":
+        return {}, Q(**{path: profile})
+    return person_match(path, parsed.author, profile)
+
+
+def apply_pin_has_clause(queryset: _QS, parsed: ParsedQuery) -> _QS:  # noqa: UP047
+    """Filter a Pin queryset by `has:`/`-has:` (see the operator's choice list).
+    Each recognized choice is applied as its own ``Exists()``/``isnull`` check - mirroring ``PinQuerySet.filter_by_criteria``'s existing ``has_links`` pattern - so choices compose safely regardless of order.
+
+    Args:
+        queryset: The already access-scoped Pin queryset.
+        parsed: The structured query, carrying ``has``.
+
+    Returns:
+        The filtered queryset; unchanged when ``parsed.has`` is empty."""
+    if not parsed.has:
+        return queryset
+
+    from urbanlens.dashboard.models.comments import Comment
+    from urbanlens.dashboard.models.floorplans import Floorplan
+    from urbanlens.dashboard.models.images import Image
+    from urbanlens.dashboard.models.links import PinLink
+    from urbanlens.dashboard.models.markup import PinMarkup
+    from urbanlens.dashboard.models.pin import PinNote
+    from urbanlens.dashboard.models.visits import PinVisit, VisitSource
+
+    fk_relations: dict[str, tuple[type[Any], str]] = {
+        "photos": (Image, "pin"),
+        "comments": (Comment, "pin"),
+        "visits": (PinVisit, "pin"),
+        "notes": (PinNote, "pin"),
+        "links": (PinLink, "pin"),
+        "floorplan": (Floorplan, "pin"),
+        "markup": (PinMarkup, "parent_pin"),
+    }
+
+    for raw in parsed.has:
+        negated = raw.startswith("-")
+        choice = raw[1:] if negated else raw
+        if choice == "labels":
+            labelled = Exists(queryset.model._base_manager.filter(labels__isnull=False, pk=OuterRef("pk")))  # noqa: SLF001
+            queryset = queryset.filter(~labelled if negated else labelled)
+        elif choice == "wiki":
+            queryset = queryset.filter(wiki__isnull=negated)
+        elif choice == "checkins":
+            checkin_exists = Exists(PinVisit.objects.filter(pin=OuterRef("pk"), source=VisitSource.SAFETY_CHECKIN))
+            queryset = queryset.filter(~checkin_exists if negated else checkin_exists)
+        elif choice in fk_relations:
+            model, fk_field = fk_relations[choice]
+            exists = Exists(model.objects.filter(**{fk_field: OuterRef("pk")}))
+            queryset = queryset.filter(~exists if negated else exists)
+        # else: "coords" or an unrecognized value - contributes nothing here.
+    return queryset
+
+
+#: `sort:` choices every provider can honor uniformly - every model has both
+#: `created` and `updated` (`abstract.DashboardModel`). "recent" is an alias
+#: for "updated": the most user-meaningful notion of recency.
+_UNIVERSAL_SORT_FIELDS: dict[str, str] = {"recent": "-updated", "updated": "-updated", "created": "-created"}
+
+
+def apply_sort(queryset: _QS, parsed: ParsedQuery, *, location_path: str | None = None, visited_field: str | None = None) -> tuple[_QS, bool]:  # noqa: UP047
+    """Reorder *queryset* for `sort:`, when this provider understands the requested mode.
+
+    Args:
+        queryset: The already filtered/access-scoped queryset.
+        parsed: The structured query, carrying ``sort``.
+        location_path: ORM path to this row's Location relation, enabling `nearest`; omit for models with no location.
+        visited_field: This model's own "last visited" DateTimeField name, enabling `visited`; omit for models with no such concept.
+
+    Returns:
+        (queryset, whether a sort mode was actually applied)."""
+    mode = parsed.sort or ""
+    if mode == "nearest" and location_path is not None and parsed.near_lat is not None and parsed.near_lng is not None:
+        point = Point(parsed.near_lng, parsed.near_lat, srid=4326)
+        return queryset.annotate(_sort_distance=Distance(f"{location_path}__point", point)).order_by("_sort_distance"), True
+    if mode == "visited" and visited_field is not None:
+        return queryset.order_by(F(visited_field).desc(nulls_last=True)), True
+    order = _UNIVERSAL_SORT_FIELDS.get(mode)
+    if order:
+        return queryset.order_by(order), True
+    return queryset, False
+
+
 class SearchProvider(ABC):
     """One result type's search implementation.
 
     Attributes:
         slug: The RESULT_TYPES slug this provider serves.
-        fuzzy_field: Model field trigram similarity is computed against; when
-            empty the provider matches with ``icontains`` only.
-    """
+        fuzzy_field: Model field trigram similarity is computed against; when empty the provider matches with ``icontains`` only."""
 
     slug: ClassVar[str] = ""
     fuzzy_field: ClassVar[str] = ""
@@ -367,34 +482,13 @@ class SearchProvider(ABC):
             limit: Maximum number of results to return.
 
         Returns:
-            Results ordered most relevant first. Every result must carry
-            ``object_slug``/``object_uuid`` as well as ``url``: the latter is a
-            web path, and the external search endpoint drops it entirely because
-            a JSON client cannot follow it. A provider that populates only
-            ``url`` therefore returns hits that mobile callers can display but
-            never open - a failure that no template test would notice.
+            Results ordered most relevant first.
         """
         raise NotImplementedError
 
-    def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None) -> _QS:
+    def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None, tag_path: str | None = None, extra: Callable[[str], Q] | None = None) -> _QS:
         """Apply term matching plus fuzzy title matching and relevance ordering.
-
-        With no free-text terms (a purely structured query like "photos from
-        last summer") the queryset is left unfiltered, ordered newest-first by
-        ``created`` - except that a "near me" query with nothing else to go
-        on filters to rows that are *either* in the near-me box *or* whose
-        text literally contains the near-me phrase (e.g. "Belnear Medical
-        Center" matches "near me" as a literal substring), since otherwise a
-        result literally named after the phrase could be silently dropped.
-
-        With free-text terms present alongside "near me" (e.g. "church near
-        me"), distance is deliberately *not* a filter: a pin literally named
-        "Church Near Me" must still be found even if it is not actually
-        nearby. Instead, near-me hits are annotated and boosted to the top via
-        :meth:`score_of`, so proximity affects ranking rather than silently
-        dropping results. The near-me phrase itself is not folded into this
-        branch's matching - once there's a real term, only that term (and
-        proximity, for ranking) governs inclusion.
+        "Belnear Medical Center" matches "near me" as a literal substring), since otherwise a result literally named after the phrase could be silently dropped.
 
         Args:
             queryset: The access-scoped queryset.
@@ -402,24 +496,42 @@ class SearchProvider(ABC):
             fields: ORM field paths for exact (icontains) term matching.
             location_path: ORM path to this row's Location relation, enabling
                 near-me handling; omit for models with no location.
+            tag_path: ORM path to this row's ``PlaceExternalTag`` relation
+                (e.g. ``"location__place__external_tags"``), enabling
+                external-tag matching alongside the plain field list - see
+                :func:`~urbanlens.dashboard.services.locations.external_tag_groups.tag_match_q`.
+                Omit for models with no place-tagged location.
+            extra: A further per-term match, OR-ed with the fields - for a relation whose rows must be
+                narrowed before they may match, which a plain field path cannot say.
 
         Returns:
-            Filtered queryset annotated with ``search_sim``/``near_hit`` where
-            applicable, ordered most relevant first.
+            Filtered queryset annotated with ``search_sim``/``near_hit`` where applicable, ordered most relevant first.
         """
-        has_near = location_path is not None and parsed.near_lat is not None and parsed.near_lng is not None
+        # parsed.near_me is required explicitly, not just near_lat/lng being set: `sort:nearest`
+        # alone (no "near me" wording) also needs a resolved point (for apply_sort's Distance()
+        # ordering below), but must NOT also impose the near-me radius filter/boost - sort:nearest
+        # ranks everything by distance, it doesn't exclude anything far away.
+        has_near = location_path is not None and parsed.near_me and parsed.near_lat is not None and parsed.near_lng is not None
         geo_q = distance_filter(location_path, parsed) if has_near and location_path is not None else Q()
+        if tag_path is not None:
+            from urbanlens.dashboard.services.locations.external_tag_groups import tag_match_q
+
+            def tag_semijoin(term: str, path: str = tag_path, also: Callable[[str], Q] | None = extra) -> Q:
+                tagged = _semijoin(queryset, path, tag_match_q(term, path))
+                return tagged if also is None else tagged | also(term)
+
+            extra = tag_semijoin
 
         if not parsed.terms:
             if has_near:
-                phrase_q = term_filter([parsed.near_phrase], fields) if parsed.near_phrase else Q()
+                phrase_q = term_filter([parsed.near_phrase], fields, queryset=queryset) if parsed.near_phrase else Q()
                 queryset = queryset.filter(geo_q | phrase_q)
             return queryset.order_by("-created")
 
         if has_near:
             queryset = queryset.annotate(near_hit=Case(When(geo_q, then=Value(value=True)), default=Value(value=False), output_field=BooleanField()))
 
-        text_q = term_filter(parsed.terms, fields)
+        text_q = term_filter(parsed.terms, fields, extra=extra, queryset=queryset)
         order = (["-near_hit"] if has_near else []) + ["-created"]
         if self.fuzzy_field:
             queryset = queryset.annotate(search_sim=TrigramSimilarity(self.fuzzy_field, parsed.text))
@@ -430,11 +542,7 @@ class SearchProvider(ABC):
     @staticmethod
     def score_of(obj: object) -> float:
         """Relevance score for an ORM row: fuzzy similarity plus a near-me bonus.
-
-        The near-me bonus dominates the 0-1 fuzzy range so a proximity match
-        always outranks a distant one at equal text relevance, without ever
-        excluding the distant one outright.
-        """
+        The near-me bonus dominates the 0-1 fuzzy range so a proximity match always outranks a distant one at equal text relevance, without ever excluding the distant one outright."""
         value = getattr(obj, "search_sim", None)
         try:
             score = float(value) if value is not None else 0.5
@@ -459,14 +567,27 @@ class PinSearchProvider(SearchProvider):
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
         if parsed.person:
-            # Matched via an Exists subquery on PinShare (keyed by location,
-            # not Pin.source_share) so this also finds shares the recipient
-            # already had pinned - accepting those never sets source_share,
-            # since no new Pin was created (see PinShare.resulting_pin).
+            # Matched via an Exists subquery on PinShare (keyed by location, not Pin.source_share)
+            # so this also finds shares the recipient already had pinned - accepting those never
+            # sets source_share, since no new Pin was created (see PinShare.resulting_pin).
             sharer_ann, sharer_q = person_match("from_profile", parsed.person, profile)
             shared_with_me = PinShare.objects.filter(to_profile=profile, status=PinShareStatus.ACCEPTED, pin__location_id=OuterRef("location_id")).annotate(**sharer_ann).filter(sharer_q)
             queryset = queryset.filter(Exists(shared_with_me))
         queryset = queryset.filter(date_range_filter("created", parsed))
+        queryset = apply_label_clause(queryset, parsed)
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        queryset = apply_pin_has_clause(queryset, parsed)
+        for raw_state in parsed.states:
+            negated = raw_state.startswith("-")
+            state = raw_state[1:] if negated else raw_state
+            if state == "visited":
+                queryset = queryset.never_visited() if negated else queryset.visited()
+            elif state == "unvisited":
+                queryset = queryset.visited() if negated else queryset.never_visited()
+            # else: unbacked (shared/private/public/archived/starred) or
+            # unrecognized - already surfaced via parsed.unsupported.
         queryset = self.apply_text(
             queryset,
             parsed,
@@ -481,22 +602,24 @@ class PinSearchProvider(SearchProvider):
                 "location__wiki__aliases__name",
             ],
             location_path="location",
-        ).distinct()
+            tag_path="location__place__external_tags",
+        )
+        if parsed.sort == "most-visited":
+            queryset = queryset.annotate(_visit_count=Count("visit_history", distinct=True)).order_by("-_visit_count")
+        else:
+            queryset, _ = apply_sort(queryset, parsed, location_path="location", visited_field="last_visited")
 
         results = []
         for pin in queryset[:limit]:
             location = pin.location
-            # An address ("123 Main St, Springfield, IL") is what actually
-            # tells same-named pins apart in a result list - location.display_name
-            # is a NAME (wiki/official name), which for a generic tag like
-            # "Hospital" is often identical to the pin's own title, leaving
-            # duplicate-named pins with an equally-duplicate subtitle. Only
-            # fall back to the name when no address is known at all (e.g. a
-            # pin with coordinates but no reverse-geocoded address yet).
+            # An address ("123 Main St, Springfield, IL") is what actually tells same-named pins
+            # apart in a result list - location.display_name is a NAME (wiki/official name), which
+            # for a generic tag like "Hospital" is often identical to the pin's own title, leaving
+            # duplicate-named pins with an equally-duplicate subtitle.
             subtitle = pin.effective_address or (location.display_name if location else "")
             image_url = None
-            if pin.cover_photo is not None and pin.cover_photo.image:
-                image_url = pin.cover_photo.image.url
+            if pin.cover_photo is not None:
+                image_url = pin.cover_photo.file_url
             results.append(
                 SearchResult(
                     type=self.slug,
@@ -515,13 +638,7 @@ class PinSearchProvider(SearchProvider):
 
 
 class PhotoSearchProvider(SearchProvider):
-    """Photos the user can see: own uploads plus images on their pins/pinned places.
-
-    Matches captions, attribution, plugin-generated keywords, user-applied
-    media labels, and the names of the pin/place each photo belongs to. This
-    includes media materialized from external providers (Yelp, Wikimedia, ...)
-    for pins and wikis the user has access to.
-    """
+    """Photos the user can see: own uploads plus images on their pins/pinned places."""
 
     slug = "photos"
     fuzzy_field = "caption"
@@ -529,17 +646,13 @@ class PhotoSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.images import Image
 
-        # visible_wiki_location_ids_cached is a superset of "locations with my own
-        # pin" (it includes those plus domain-earned wiki locations - e.g. a
-        # boundary-mate pin on a different Location row of the same place), so
-        # this only widens what was previously an exact-Location-only match.
         queryset = (
             Image.objects.filter(
-                # The third disjunct deliberately reaches other people's photos:
-                # it is a candidate net, and visible_to() below is the gate. It
-                # follows wiki reach so the candidates match what that gate now
-                # admits - a photo on a wiki reached through the place domain.
-                Q(profile=profile) | Q(pin__profile=profile) | Q(location_id__in=visible_wiki_location_ids_cached(profile)),
+                # The third disjunct deliberately reaches other people's photos: it is a candidate
+                # net, and visible_to() below is the gate.
+                # It follows wiki reach so the candidates match what that gate now admits - a photo
+                # on a wiki reached through the place domain.
+                Q(profile=profile) | Q(pin__profile=profile) | Q(location_id__in=visible_wiki_locations_cached(profile)),
             )
             .select_related("pin", "location__wiki", "profile")
             .exclude(image="")
@@ -551,6 +664,10 @@ class PhotoSearchProvider(SearchProvider):
             queryset = queryset.filter(
                 Q(taken_at__date__gte=parsed.date_start, taken_at__date__lte=parsed.date_end) | (Q(taken_at__isnull=True) & date_range_filter("created", parsed)),
             )
+        queryset = apply_label_clause(queryset, parsed)
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
         queryset = self.apply_text(
             queryset,
             parsed,
@@ -566,20 +683,14 @@ class PhotoSearchProvider(SearchProvider):
                 "location__locality",
             ],
             location_path="location",
-        ).distinct()
+        )
 
-        # Applied here, and applied at all. This queryset reaches other people's
-        # photos deliberately - the third disjunct above is "any image at a location
-        # I have a pin at", which is how you find pictures of a place you follow -
-        # but it returned them whatever the uploader had said about who may see
-        # their photos. A result carries the caption, the owning pin's name and a
-        # link to that pin, so what leaked was not only the picture.
-        #
-        # Last, because visible_to is eager (see ImageQuerySet.visible_to): it
-        # resolves the allowed-uploader set from whatever the queryset already
-        # narrows to, so narrowing first is what stops it inspecting every uploader
-        # on the site.
+        # Applied here, and applied at all.
+        # This queryset reaches other people's photos deliberately - the third disjunct above is
+        # "any image at a location I have a pin at", which is how you find pictures of a place you
+        # follow - but it returned them whatever the uploader had said about who may see their
         queryset = queryset.visible_to(profile)
+        queryset, _ = apply_sort(queryset, parsed, location_path="location")
 
         results = []
         for image in queryset[:limit]:
@@ -589,7 +700,7 @@ class PhotoSearchProvider(SearchProvider):
             elif image.location is not None and image.location.slug:
                 url = reverse("location.wiki", kwargs={"location_slug": image.location.slug})
             else:
-                url = reverse("memories.photos")
+                url = reverse("vault.photos")
             subtitle_bits = []
             if image.location is not None and image.location.locality:
                 subtitle_bits.append(image.location.locality)
@@ -601,13 +712,13 @@ class PhotoSearchProvider(SearchProvider):
                     title=title,
                     url=url,
                     subtitle=" · ".join(subtitle_bits),
-                    image_url=image.image.url if image.image else None,
+                    image_url=image.file_url,
                     date=image.taken_at or image.created,
                     score=self.score_of(image),
                     # Photos are the one type this API addresses by uuid alone
-                    # (``photos/<uuid:image_uuid>/``); there is no photo slug to
-                    # offer, and handing back the *host* pin's slug here would
-                    # quietly turn "open this photo" into "open some pin".
+                    # (``photos/<uuid:image_uuid>/``); there is no photo slug to offer, and handing
+                    # back the *host* pin's slug here would quietly turn "open this photo" into
+                    # "open some pin".
                     object_slug="",
                     object_uuid=str(image.uuid),
                 ),
@@ -627,18 +738,20 @@ class WikiSearchProvider(SearchProvider):
         if not profile.community_enabled:
             return []
         # Asks the access authority rather than restating one of its clauses.
-        # This used to be "a pin on the exact location, or you created it": too
-        # narrow, because a pin sharing the place's domain opens the page; and
-        # too broad, because creating a wiki was not one of the four clauses, so
-        # a creator with no pin was offered a result whose page answers 404.
         queryset = Wiki.objects.filter(
-            location_id__in=visible_wiki_location_ids_cached(profile),
+            location_id__in=visible_wiki_locations_cached(profile),
         ).select_related("location")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
         queryset = queryset.filter(date_range_filter("updated", parsed))
-        queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location").distinct()
-        wikis = _concealment_survivors(queryset, profile, limit, lambda w: w, lambda w, v: _concealed_wiki_survives(w, v, parsed.terms))
+        queryset = apply_label_clause(queryset, parsed)
+        if (author_match := author_clause("created_by", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location", tag_path="location__place__external_tags")
+        queryset, _ = apply_sort(queryset, parsed, location_path="location")
+        text = ConcealedWikiText(profile)
+        wikis = _concealment_survivors(queryset, profile, limit, lambda w: w, lambda w, _v: _concealed_wiki_survives(w, text, parsed.terms), text)
 
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
 
@@ -647,11 +760,10 @@ class WikiSearchProvider(SearchProvider):
             location = wiki.location
             if location is None or not location.slug:
                 continue
-            # Surviving the concealment gate says this candidate is
-            # ALLOWED to appear in the result list; it says nothing about
-            # what its title/snippet should say. conceal_wiki is a no-op
-            # when the viewer isn't concealed for this wiki, so this costs
-            # nothing in the common case.
+            # Surviving the concealment gate says this candidate is ALLOWED to appear in the result
+            # list; it says nothing about what its title/snippet should say. conceal_wiki is a no-op
+            # when the viewer isn't concealed for this wiki, so this costs nothing in the common
+            # case.
             shown = conceal_wiki(wiki, profile)
             results.append(
                 SearchResult(
@@ -683,26 +795,30 @@ class ArticleSearchProvider(SearchProvider):
 
         access = Q(pin__profile=profile)
         if profile.community_enabled:
-            # wiki__location_id__in=visible_wiki_location_ids_cached: same
+            # wiki__location_id__in=visible_wiki_locations_cached: same
             # domain-aware access rule as the wiki page itself, not just an
             # exact-Location pin match.
-            access |= Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile))
-        queryset = Article.objects.filter(access).exclude(content="").select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
+            access |= Q(wiki__location_id__in=visible_wiki_locations_cached(profile))
+        queryset = Article.objects.filter(access).with_content().select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place) | place_filter("wiki__location", parsed.place))
         queryset = queryset.filter(date_range_filter("updated", parsed))
-        queryset = self.apply_text(queryset, parsed, ["content", "pin__name", "pin__aliases__name", "wiki__name", "wiki__aliases__name"]).distinct()
-        articles = _concealment_survivors(queryset, profile, limit, lambda a: a.wiki, lambda a, v: _concealed_article_survives(a, v, parsed.terms))
+        if (author_match := author_clause("last_edited_by", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        queryset = self.apply_text(queryset, parsed, ["content", "pin__name", "pin__aliases__name", "wiki__name", "wiki__aliases__name"])
+        queryset, _ = apply_sort(queryset, parsed)
+        text = ConcealedWikiText(profile)
+        articles = _concealment_survivors(queryset, profile, limit, lambda a: a.wiki, lambda a, _v: _concealed_article_survives(a, text, parsed.terms), text)
 
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki, concealment_active, visible_article_revision
 
         results = []
         for article in articles:
-            # An Article extends the plain DashboardModel, so it carries no uuid
-            # of its own and no route addresses it directly: it is always read
-            # as a sub-resource of its host (``pins/<slug>/article/``,
-            # ``wikis/<location_slug>/article/``). The host's identifiers are
-            # therefore what a client needs, and the only ones that exist.
+            # An Article extends the plain DashboardModel, so it carries no uuid of its own and no
+            # route addresses it directly: it is always read as a sub-resource of its host
+            # (``pins/<slug>/article/``, ``wikis/<location_slug>/article/``).
+            # The host's identifiers are therefore what a client needs, and the only ones that
             content = article.content
             if article.pin is not None:
                 pin = article.pin
@@ -747,19 +863,53 @@ class TripSearchProvider(SearchProvider):
     fuzzy_field = "name"
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
-        from urbanlens.dashboard.models.trips import Trip
+        from django.utils import timezone
 
-        queryset = Trip.objects.filter(Q(profiles=profile) | Q(creator=profile))
+        from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
+        from urbanlens.dashboard.models.trips import Trip
+        from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
+
+        queryset = Trip.objects.filter(Q(pk__in=TripMembership.objects.filter(profile=profile).values("trip_id")) | Q(creator=profile))
         if parsed.date_start and parsed.date_end:
             # A trip matches when its scheduled window overlaps the asked range.
             queryset = queryset.filter(start_date__lte=parsed.date_end).filter(
                 Q(end_date__gte=parsed.date_start) | Q(end_date__isnull=True, start_date__gte=parsed.date_start),
             )
-        queryset = self.apply_text(
-            queryset,
-            parsed,
-            ["name", "description", "activities__title", "activities__notes", "comments__text"],
-        ).distinct()
+        if (author_match := author_clause("creator", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        for raw_state in parsed.states:
+            negated = raw_state.startswith("-")
+            state = raw_state[1:] if negated else raw_state
+            if state in ("upcoming", "past"):
+                # Raw start_date/end_date, not the effective_start/end_date properties (which fall
+                # back to scheduled activities) - those aren't filterable at the DB level.
+                # Neither side matches a trip with no dates at all, so it participates in neither
+                # state rather than defaulting into one.
+                today = timezone.localdate()
+                if state == "upcoming":
+                    state_q = Q(end_date__gte=today) | Q(end_date__isnull=True, start_date__gte=today)
+                else:
+                    state_q = Q(end_date__lt=today) | Q(end_date__isnull=True, start_date__lt=today)
+                queryset = queryset.exclude(state_q) if negated else queryset.filter(state_q)
+            # else: unbacked (shared/private/public/archived/starred) or
+            # unrecognized - already surfaced via parsed.unsupported.
+        fields = ["name", "description", "activities__title", "activities__notes"]
+        blocks = SharedSpaceBlocks.for_viewer(profile)
+        comment_match: Callable[[str], Q] | None = None
+        if blocks.since:
+            # A comment a block hides must not be what matches its trip, or the match says what it holds.
+            trip_ids = list(queryset.values_list("pk", flat=True))
+
+            def visible_comment_match(term: str) -> Q:
+                comments = blocks.exclude_hidden(TripComment.objects.filter(trip_id__in=trip_ids, text__icontains=term), author_field="author_id")
+                return Q(pk__in=list(comments.values_list("trip_id", flat=True)))
+
+            comment_match = visible_comment_match
+        else:
+            fields.append("comments__text")
+        queryset = self.apply_text(queryset, parsed, fields, extra=comment_match)
+        queryset, _ = apply_sort(queryset, parsed)
 
         results = []
         for trip in queryset[:limit]:
@@ -793,19 +943,26 @@ class VisitSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.visits import PinVisit
 
-        queryset = PinVisit.objects.filter(pin__profile=profile).select_related("pin__location")
+        queryset = PinVisit.objects.owned_by(profile).select_related("pin__location")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place))
         queryset = queryset.filter(date_range_filter("visited_at", parsed))
+        # A visit's "author" is definitionally its pin's owner - there's no
+        # separate concept, unlike every other type `by:` applies to.
+        if (author_match := author_clause("pin__profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
         queryset = self.apply_text(
             queryset,
             parsed,
             ["notes", "pin__name", "pin__location__official_name", "pin__location__wiki__name"],
             location_path="pin__location",
-        ).distinct()
+        )
+        queryset, sort_applied = apply_sort(queryset, parsed, location_path="pin__location", visited_field="visited_at")
 
         results = []
-        for visit in queryset.order_by("-visited_at")[:limit] if not parsed.terms else queryset[:limit]:
+        source = queryset[:limit] if (sort_applied or parsed.terms) else queryset.order_by("-visited_at")[:limit]
+        for visit in source:
             pin = visit.pin
             results.append(
                 SearchResult(
@@ -828,25 +985,14 @@ class VisitSearchProvider(SearchProvider):
 
 def _display_names(viewer: Profile, subjects: list) -> dict[int, str]:
     """Map profile pk to the name *viewer* is allowed to see for that person.
-
-    Search results name other people - a conversation partner, a comment's
-    author - and every other surface that does resolves the name first: the
-    messages page and the DM export via ``display_identity_for``, the comment
-    list and trip comments via ``resolve_visible_identities`` (whose
-    ``is_masked``/``display_name`` the comment template branches on). Building a
-    result title straight from ``.username`` put names in the search box that the
-    page rendering the very same row would have withheld.
-
-    Resolved for the whole batch in one call rather than per row: the resolver
-    recomputes the viewer's allowed-subject set each time it is invoked.
+    Resolved for the whole batch in one call rather than per row: the resolver recomputes the viewer's allowed-subject set each time it is invoked.
 
     Args:
         viewer: The searching profile.
         subjects: The people named in this batch of results; duplicates are fine.
 
     Returns:
-        Mapping of profile pk to display name.
-    """
+        Mapping of profile pk to display name."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     unique = {subject.pk: subject for subject in subjects if subject is not None}
@@ -858,10 +1004,7 @@ def _display_names(viewer: Profile, subjects: list) -> dict[int, str]:
 
 class DirectMessageSearchProvider(SearchProvider):
     """The user's direct messages.
-
-    Only plaintext bodies are searchable: end-to-end encrypted messages never
-    reach the server in readable form, so they cannot be matched here.
-    """
+    Only plaintext bodies are searchable: end-to-end encrypted messages never reach the server in readable form, so they cannot be matched here."""
 
     slug = "messages"
     fuzzy_field = ""
@@ -872,14 +1015,18 @@ class DirectMessageSearchProvider(SearchProvider):
         if not parsed.terms and not parsed.person:
             return []
         queryset = message_search_queryset(profile, parsed).select_related("sender__user", "recipient__user")
+        if (author_match := author_clause("sender", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        queryset, _ = apply_sort(queryset, parsed)
 
         from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for
 
         messages = list(queryset[:limit])
-        # display_identity_for rather than the generic resolver: it makes the same
-        # visibility decision but labels a hidden partner "Former contact", which is
-        # what the inbox and the conversation header already call them. Two different
-        # words for the same person across two views is its own small bug.
+        # display_identity_for rather than the generic resolver: it makes the same visibility
+        # decision but labels a hidden partner "Former contact", which is what the inbox and the
+        # conversation header already call them.
+        # Two different words for the same person across two views is its own small bug.
         partners = {(message.recipient if message.sender_id == profile.pk else message.sender).pk: (message.recipient if message.sender_id == profile.pk else message.sender) for message in messages}
         from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
@@ -900,12 +1047,10 @@ class DirectMessageSearchProvider(SearchProvider):
                     snippet=excerpt(message.body, parsed.terms),
                     date=message.created,
                     score=self.score_of(message),
-                    # A conversation is addressed by the counterpart's profile
-                    # slug (``messages/<peer_slug>/``). DirectMessage extends the
-                    # plain DashboardModel and has no uuid of its own - its
-                    # ``client_uuid`` is the sender's offline-outbox idempotency
-                    # key, is null for anything composed on the web, and is not a
-                    # server-side identity, so it must not be passed off as one.
+                    # A conversation is addressed by the counterpart's profile slug
+                    # (``messages/<peer_slug>/``).
+                    # DirectMessage extends the plain DashboardModel and has no uuid of its own -
+                    # its ``client_uuid`` is the sender's offline-outbox idempotency key, is null
                     object_slug=peer_slug,
                     object_uuid=None,
                 ),
@@ -927,7 +1072,12 @@ class MarkupMapSearchProvider(SearchProvider):
         maps_url = reverse("memories.maps")
         results: list[SearchResult] = []
 
-        map_qs = self.apply_text(MarkupMap.objects.for_profile(profile), parsed, ["title"])
+        map_qs = MarkupMap.objects.for_profile(profile)
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            map_qs = map_qs.annotate(**author_ann).filter(author_q)
+        map_qs = self.apply_text(map_qs, parsed, ["title"])
+        map_qs, _ = apply_sort(map_qs, parsed)
         for markup_map in map_qs[:limit]:
             results.append(
                 SearchResult(
@@ -1003,7 +1153,17 @@ class SafetySearchProvider(SearchProvider):
         from urbanlens.dashboard.models.safety import SafetyCheckin
 
         queryset = SafetyCheckin.objects.filter(profile=profile).filter(date_range_filter("checkin_by", parsed))
-        queryset = self.apply_text(queryset, parsed, ["title", "plan_details", "messages__body"]).distinct()
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        for raw_state in parsed.states:
+            negated = raw_state.startswith("-")
+            state = raw_state[1:] if negated else raw_state
+            if state == "archived":
+                queryset = queryset.filter(archive__isnull=negated)
+            # else: unbacked or unrecognized - already surfaced via parsed.unsupported.
+        queryset = self.apply_text(queryset, parsed, ["title", "plan_details", "messages__body"])
+        queryset, _ = apply_sort(queryset, parsed)
 
         results = []
         for checkin in queryset[:limit]:
@@ -1037,75 +1197,76 @@ class CommentSearchProvider(SearchProvider):
             return []
         results: list[SearchResult] = []
 
-        # wiki__location_id__in=visible_wiki_location_ids_cached: same domain-aware
-        # access rule as the wiki page itself, not just an exact-Location pin match.
-        comment_qs = (
-            Comment.objects.filter(
-                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile)),
-            )
-            .filter(term_filter(parsed.terms, ["text"]))
-            .filter(date_range_filter("created", parsed))
-            .select_related("pin", "wiki__location", "profile__user")
-            .distinct()
-            .order_by("-created")
-        )
-        comments = _concealment_survivors(comment_qs, profile, limit, lambda c: c.wiki, _concealed_comment_survives)
-        names = _display_names(profile, [comment.profile for comment in comments])
+        # Held for the whole provider rather than per term_filter call. Both access scopes here
+        # are lists of ids on the comment tables' own columns, and at 8,000 comments Postgres
+        # prefers reading the table to reading three indexes - correct at that size, and the
+        # site's comment count rather than the viewer's. With the hint it is a BitmapOr of the
+        # three: 7.21 ms and 7,980 rows discarded become 0.20 ms and none.
+        with probe_scope():
+            # reachable_by carries the same domain-aware access rule as the wiki page itself, not just
+            # an exact-Location pin match.
+            comment_qs = Comment.objects.reachable_by(profile).visible_to(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("pin", "wiki__location", "profile__user").order_by("-created")
+            if (author_match := author_clause("profile", parsed, profile)) is not None:
+                author_ann, author_q = author_match
+                comment_qs = comment_qs.annotate(**author_ann).filter(author_q)
+            comment_qs, _ = apply_sort(comment_qs, parsed)
+            comments = _concealment_survivors(comment_qs, profile, limit, lambda c: c.wiki, _concealed_comment_survives)
+            names = _display_names(profile, [comment.profile for comment in comments])
 
-        from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
+            from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
 
-        for comment in comments:
-            # Comments are read through their host's collection
-            # (``pins/<slug>/comments/``, ``wikis/<location_slug>/comments/``),
-            # so the host's slug is the addressable half; the comment's own uuid
-            # says which row in that collection matched. The comment's own text
-            # is legitimately visible (it's the viewer's own or a friend's), so
-            # only the host wiki's name needs the concealed value - a
-            # concealed viewer's own comment must not name the wiki's true
-            # (possibly stranger-renamed) title.
-            if comment.pin is not None:
-                url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)})
-                host = comment.pin.effective_name or "a pin"
-                object_slug = comment.pin.slug or ""
-            elif comment.wiki is not None and comment.wiki.location is not None and comment.wiki.location.slug:
-                url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug})
-                host = conceal_wiki(comment.wiki, profile).name or "a wiki"
-                object_slug = comment.wiki.location.slug
-            else:
-                continue
-            results.append(
-                SearchResult(
-                    type=self.slug,
-                    title=f"Comment on {host}",
-                    url=url,
-                    subtitle=f"{names.get(comment.profile.pk, comment.profile.username)} · {comment.created:%b %d, %Y}" if comment.profile else f"{comment.created:%b %d, %Y}",
-                    snippet=excerpt(comment.text, parsed.terms),
-                    date=comment.created,
-                    score=self.score_of(comment),
-                    object_slug=object_slug,
-                    object_uuid=str(comment.uuid),
-                ),
-            )
+            for comment in comments:
+                # Comments are read through their host's collection (``pins/<slug>/comments/``,
+                # ``wikis/<location_slug>/comments/``), so the host's slug is the addressable half; the
+                # comment's own uuid says which row in that collection matched.
+                # The comment's own text is legitimately visible (it's the viewer's own or a friend's),
+                if comment.pin is not None:
+                    url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)})
+                    host = comment.pin.effective_name or "a pin"
+                    object_slug = comment.pin.slug or ""
+                elif comment.wiki is not None and comment.wiki.location is not None and comment.wiki.location.slug:
+                    url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug})
+                    host = conceal_wiki(comment.wiki, profile).name or "a wiki"
+                    object_slug = comment.wiki.location.slug
+                else:
+                    continue
+                results.append(
+                    SearchResult(
+                        type=self.slug,
+                        title=f"Comment on {host}",
+                        url=url,
+                        subtitle=f"{names.get(comment.profile.pk, comment.profile.username)} · {comment.created:%b %d, %Y}" if comment.profile else f"{comment.created:%b %d, %Y}",
+                        snippet=excerpt(comment.text, parsed.terms),
+                        date=comment.created,
+                        score=self.score_of(comment),
+                        object_slug=object_slug,
+                        object_uuid=str(comment.uuid),
+                    ),
+                )
 
-        trip_comment_qs = TripComment.objects.filter(trip__profiles=profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").distinct().order_by("-created")
-        trip_comments = list(trip_comment_qs[: max(limit - len(results), 0)])
-        names = _display_names(profile, [comment.author for comment in trip_comments])
-        for comment in trip_comments:
-            results.append(
-                SearchResult(
-                    type=self.slug,
-                    title=f"Comment on {comment.trip.name}",
-                    url=reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}),
-                    subtitle=f"{names.get(comment.author.pk, comment.author.username)} · {comment.created:%b %d, %Y}" if comment.author else f"{comment.created:%b %d, %Y}",
-                    snippet=excerpt(comment.text, parsed.terms),
-                    date=comment.created,
-                    score=self.score_of(comment),
-                    # TripComment extends the plain DashboardModel: no uuid
-                    # exists to hand back, so only the trip's slug is offered.
-                    object_slug=comment.trip.slug or "",
-                    object_uuid=None,
-                ),
-            )
+            trip_comment_qs = TripComment.objects.for_member(profile).visible_to(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").order_by("-created")
+            if (author_match := author_clause("author", parsed, profile)) is not None:
+                author_ann, author_q = author_match
+                trip_comment_qs = trip_comment_qs.annotate(**author_ann).filter(author_q)
+            trip_comment_qs, _ = apply_sort(trip_comment_qs, parsed)
+            trip_comments = list(trip_comment_qs[: max(limit - len(results), 0)])
+            names = _display_names(profile, [comment.author for comment in trip_comments])
+            for comment in trip_comments:
+                results.append(
+                    SearchResult(
+                        type=self.slug,
+                        title=f"Comment on {comment.trip.name}",
+                        url=reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}),
+                        subtitle=f"{names.get(comment.author.pk, comment.author.username)} · {comment.created:%b %d, %Y}" if comment.author else f"{comment.created:%b %d, %Y}",
+                        snippet=excerpt(comment.text, parsed.terms),
+                        date=comment.created,
+                        score=self.score_of(comment),
+                        # TripComment extends the plain DashboardModel: no uuid
+                        # exists to hand back, so only the trip's slug is offered.
+                        object_slug=comment.trip.slug or "",
+                        object_uuid=None,
+                    ),
+                )
         return results[:limit]
 
 
@@ -1113,9 +1274,7 @@ def default_providers() -> list[SearchProvider]:
     """The full provider chain, in the order sections render.
 
     Returns:
-        Fresh provider instances (they are stateless, but new instances keep
-        the engine trivially thread-safe).
-    """
+        Fresh provider instances (they are stateless, but new instances keep the engine trivially thread-safe)."""
     return [
         PinSearchProvider(),
         PhotoSearchProvider(),

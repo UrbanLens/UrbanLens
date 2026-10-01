@@ -1,10 +1,4 @@
-"""Tests for the distinct-per-list fallback avatar color system.
-
-Covers the pure assignment algorithm (services.profile.avatar_colors) and its two
-wired-in render sites: the group members dialog and the group member search
-results (both listing several people's fallback avatars together, where a
-shared default color made them indistinguishable).
-"""
+"""Tests for the distinct-per-list fallback avatar color system."""
 
 from __future__ import annotations
 
@@ -61,6 +55,15 @@ class AssignAvatarColorsTests(SimpleTestCase):
 
     def test_empty_list_is_a_no_op(self) -> None:
         assign_avatar_colors([], identity=lambda i: i.identity)  # must not raise
+
+    def test_more_items_than_the_palette_still_all_get_valid_classes(self) -> None:
+        """Past PALETTE_SIZE, colors must repeat rather than the collision-avoidance
+        loop crashing, hanging, or producing an out-of-range slot."""
+        items = [_Item(f"person-{n}") for n in range(PALETTE_SIZE + 3)]
+        assign_avatar_colors(items, identity=lambda i: i.identity)
+        valid = {f"avatar-color-{n}" for n in range(PALETTE_SIZE)}
+        for item in items:
+            self.assertIn(item.avatar_color_class, valid)
 
 
 class GroupMembersDialogAvatarColorTests(TestCase):

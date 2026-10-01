@@ -1,23 +1,4 @@
-"""Tests for the external API's messaging surface.
-
-The guards that matter most here, in rough order of how bad the failure would
-be if they regressed:
-
-- **Share provenance.** A pin shared through the API must record a
-  ``LocationExposure``, because the API layer routes through the same
-  ``create_pin_share`` the web composer uses. Constructing the share row
-  directly would still "work" from the outside while silently leaving a hole in
-  the re-share chain, so this is asserted on the database, not the response.
-- **Identity masking.** A partner whose profile visibility masks them must not
-  have their real username surface over the mobile API, where it would go
-  unnoticed far longer than on the web.
-- **Credential kind.** A PAT-style ``ApiKey`` can never reach messaging, even
-  holding the scopes.
-- **Idempotency.** A retried send returns the existing message rather than
-  delivering it twice - and, for a share, without creating a second share.
-- **Tombstones.** An expired/deleted message's content must not be served to
-  the recipient just because a different surface asked for it.
-"""
+"""Tests for the external API's messaging surface."""
 
 from __future__ import annotations
 
@@ -25,6 +6,7 @@ import base64
 from datetime import timedelta
 import json
 import os
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -51,7 +33,9 @@ from urbanlens.dashboard.services.messaging.direct_messages import create_direct
 #: A real 1x1 PNG - ImageField stores whatever bytes it's given, but the
 #: upload pipeline sniffs content, so a valid file avoids testing the wrong
 #: rejection path.
-_PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 AccessToken = get_access_token_model()
 
@@ -78,7 +62,9 @@ def _token_for(user: User, scope: str = READ_WRITE) -> str:
 
 
 def _open_dms(*profiles: Profile) -> None:
-    Profile.objects.filter(pk__in=[profile.pk for profile in profiles]).update(direct_message_visibility=VisibilityChoice.ANYONE)
+    Profile.objects.filter(pk__in=[profile.pk for profile in profiles]).update(
+        direct_message_visibility=VisibilityChoice.ANYONE
+    )
     for profile in profiles:
         profile.refresh_from_db()
 
@@ -86,10 +72,8 @@ def _open_dms(*profiles: Profile) -> None:
 def _befriend(a: Profile, b: Profile) -> None:
     """Connect two profiles.
 
-    Exactly one row, never one per direction: ``Friendship.objects.between()``
-    resolves the pair with ``.get()``, so a second reciprocal row makes every
-    connection check raise ``MultipleObjectsReturned``.
-    """
+    Exactly one row, never one per direction: ``Friendship.objects.between()`` resolves the pair with
+    ``.get()``, so a second reciprocal row makes every connection check raise ``MultipleObjectsReturned``."""
     Friendship.objects.create(
         from_profile=a,
         to_profile=b,
@@ -115,24 +99,21 @@ class MessagingBaseTestCase(TestCase):
         return reverse("external_api:messages.thread", kwargs={"peer_slug": (peer or self.partner).ensure_slug()})
 
     def _post_json(self, url: str, payload: dict, **extra):
-        return self.client.post(url, data=json.dumps(payload), content_type="application/json", **{**self.auth, **extra})
+        return self.client.post(
+            url, data=json.dumps(payload), content_type="application/json", **{**self.auth, **extra}
+        )
 
 
 class ReactionEmojiLengthTests(MessagingBaseTestCase):
     """A long emoji must be refused, not 500.
 
-    ``is_safe_reaction_emoji``'s docstring states the contract: the value is
-    "already length-capped by the caller". The internal HTML path honours it with
-    ``[:10]``, exactly ``Reaction.emoji``'s column width. ``ReactionSerializer``
-    declares ``max_length=32``, so this path accepted three times the column and
-    reached the insert.
-
-    Not adversarial input: a family sequence with skin-tone modifiers is eleven
-    code points, and any emoji picker offering those can send one.
-    """
+    ``is_safe_reaction_emoji``'s docstring states the contract: the value is "already length-capped by the
+    caller"."""
 
     def _react_url(self, message_id: int) -> str:
-        return reverse("external_api:messages.react", kwargs={"peer_slug": self.partner.ensure_slug(), "message_id": message_id})
+        return reverse(
+            "external_api:messages.react", kwargs={"peer_slug": self.partner.ensure_slug(), "message_id": message_id}
+        )
 
     def _message(self):
         from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
@@ -142,7 +123,9 @@ class ReactionEmojiLengthTests(MessagingBaseTestCase):
     def test_an_over_long_emoji_is_refused(self) -> None:
         message = self._message()
         # 11 code points: four people, four skin tones, three joiners.
-        long_emoji = "\U0001F468\U0001F3FB\u200D\U0001F469\U0001F3FB\u200D\U0001F467\U0001F3FB\u200D\U0001F466\U0001F3FB"
+        long_emoji = (
+            "\U0001f468\U0001f3fb\u200d\U0001f469\U0001f3fb\u200d\U0001f467\U0001f3fb\u200d\U0001f466\U0001f3fb"
+        )
         self.assertGreater(len(long_emoji), 10, "precondition: longer than the column")
 
         response = self._post_json(self._react_url(message.pk), {"emoji": long_emoji})
@@ -152,7 +135,7 @@ class ReactionEmojiLengthTests(MessagingBaseTestCase):
     def test_an_ordinary_emoji_still_works(self) -> None:
         message = self._message()
 
-        response = self._post_json(self._react_url(message.pk), {"emoji": "\U0001F44D"})
+        response = self._post_json(self._react_url(message.pk), {"emoji": "\U0001f44d"})
 
         self.assertIn(response.status_code, (200, 201))
 
@@ -164,13 +147,17 @@ class SendMessageTests(MessagingBaseTestCase):
         response = self._post_json(self._thread_url(), {"body": "on my way"})
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["body"], "on my way")
-        self.assertTrue(DirectMessage.objects.filter(sender=self.sender, recipient=self.partner, body="on my way").exists())
+        self.assertTrue(
+            DirectMessage.objects.filter(sender=self.sender, recipient=self.partner, body="on my way").exists()
+        )
 
     def test_empty_message_is_rejected(self) -> None:
         self.assertEqual(self._post_json(self._thread_url(), {"body": "   "}).status_code, 400)
 
     def test_plaintext_and_ciphertext_together_are_rejected(self) -> None:
-        response = self._post_json(self._thread_url(), {"body": "hi", "ciphertext": "AAAA", "nonce": "BBBB", "key_version": 1})
+        response = self._post_json(
+            self._thread_url(), {"body": "hi", "ciphertext": "AAAA", "nonce": "BBBB", "key_version": 1}
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_ciphertext_without_a_nonce_is_rejected(self) -> None:
@@ -178,19 +165,44 @@ class SendMessageTests(MessagingBaseTestCase):
 
     def test_ciphertext_with_key_version_zero_is_rejected(self) -> None:
         """Version 0 means plaintext - such a message could never be decrypted."""
-        self.assertEqual(self._post_json(self._thread_url(), {"ciphertext": "AAAA", "nonce": "BBBB", "key_version": 0}).status_code, 400)
+        self.assertEqual(
+            self._post_json(self._thread_url(), {"ciphertext": "AAAA", "nonce": "BBBB", "key_version": 0}).status_code,
+            400,
+        )
+
+    def test_a_trip_invite_to_a_full_trip_is_refused(self) -> None:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+
+        SiteSettings.objects.filter(pk=SiteSettings.get_current().pk).update(max_trip_members=1)
+        _befriend(self.sender, self.partner)
+        trip = Trip.objects.create(name="Full", creator=self.sender)
+        TripMembership.objects.create(trip=trip, profile=self.sender)
+
+        response = self._post_json(self._thread_url(), {"body": "join", "shared_trip_slug": trip.slug})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("full", response.json()["error"])
+        self.assertFalse(TripMembership.objects.filter(trip=trip, profile=self.partner).exists())
 
     def test_two_shares_at_once_are_rejected(self) -> None:
         response = self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": "a", "shared_trip_slug": "b"})
         self.assertEqual(response.status_code, 400)
 
     def test_unknown_peer_is_404(self) -> None:
-        self.assertEqual(self._post_json(reverse("external_api:messages.thread", kwargs={"peer_slug": "nobody-here"}), {"body": "x"}).status_code, 404)
+        self.assertEqual(
+            self._post_json(
+                reverse("external_api:messages.thread", kwargs={"peer_slug": "nobody-here"}), {"body": "x"}
+            ).status_code,
+            404,
+        )
 
 
 def _make_image(profile: Profile, **kwargs) -> Image:
     """Create an Image row owned by *profile* with a real stored file."""
-    return Image.objects.create(image=SimpleUploadedFile("photo.png", _PNG_BYTES, content_type="image/png"), profile=profile, **kwargs)
+    return Image.objects.create(
+        image=SimpleUploadedFile("photo.png", _PNG_BYTES, content_type="image/png"), profile=profile, **kwargs
+    )
 
 
 class SendMessageAttachmentTests(MessagingBaseTestCase):
@@ -206,10 +218,14 @@ class SendMessageAttachmentTests(MessagingBaseTestCase):
     def test_image_ids_and_image_uuids_together_both_attach(self) -> None:
         by_id = _make_image(self.sender)
         by_uuid = _make_image(self.sender)
-        response = self._post_json(self._thread_url(), {"body": "two photos", "image_ids": [by_id.pk], "image_uuids": [str(by_uuid.uuid)]})
+        response = self._post_json(
+            self._thread_url(), {"body": "two photos", "image_ids": [by_id.pk], "image_uuids": [str(by_uuid.uuid)]}
+        )
         self.assertEqual(response.status_code, 201)
         message = DirectMessage.objects.get(sender=self.sender, body="two photos")
-        self.assertEqual(set(Image.objects.filter(direct_message=message).values_list("pk", flat=True)), {by_id.pk, by_uuid.pk})
+        self.assertEqual(
+            set(Image.objects.filter(direct_message=message).values_list("pk", flat=True)), {by_id.pk, by_uuid.pk}
+        )
 
     def test_another_profiles_image_uuid_is_not_attached(self) -> None:
         """image_uuids is scoped to the sender's own images, matching image_ids."""
@@ -225,12 +241,18 @@ class CredentialKindTests(MessagingBaseTestCase):
 
     def test_pat_api_key_is_refused_even_holding_messaging_scopes(self) -> None:
         key, raw = generate_api_key(self.sender.user, "leaky-key")
-        ApiKey.objects.filter(pk=key.pk).update(scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value])
-        self.assertEqual(self.client.get(reverse("external_api:messages.conversations"), **_bearer(raw)).status_code, 403)
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value]
+        )
+        self.assertEqual(
+            self.client.get(reverse("external_api:messages.conversations"), **_bearer(raw)).status_code, 403
+        )
 
     def test_read_only_token_cannot_send(self) -> None:
         token = _token_for(self.sender.user, ApiKeyScope.MESSAGES_READ.value)
-        response = self.client.post(self._thread_url(), data=json.dumps({"body": "x"}), content_type="application/json", **_bearer(token))
+        response = self.client.post(
+            self._thread_url(), data=json.dumps({"body": "x"}), content_type="application/json", **_bearer(token)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_read_only_token_cannot_mark_read(self) -> None:
@@ -286,7 +308,9 @@ class PinShareProvenanceTests(MessagingBaseTestCase):
         card and no exposure row at all.
         """
         before = LocationExposure.objects.filter(profile=self.partner, location=self.location).count()
-        response = self._post_json(self._thread_url(), {"body": "check this out", "shared_pin_id": self.pin.ensure_slug()})
+        response = self._post_json(
+            self._thread_url(), {"body": "check this out", "shared_pin_id": self.pin.ensure_slug()}
+        )
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["share"]["kind"], "pin")
@@ -294,18 +318,16 @@ class PinShareProvenanceTests(MessagingBaseTestCase):
         self.assertEqual(after, before + 1, "sharing a pin must record the recipient's exposure to its location")
 
     def test_sharing_an_unknown_pin_is_404(self) -> None:
-        self.assertEqual(self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": "no-such-pin"}).status_code, 404)
+        self.assertEqual(
+            self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": "no-such-pin"}).status_code, 404
+        )
 
     def test_cannot_share_someone_elses_pin(self) -> None:
         """Pin resolution is scoped to the sender's own pins.
 
-        Addressed by uuid rather than slug on purpose: pin slugs are unique
-        only *per profile* (``db_pin_unique_slug_per_profile``), so a slug is
-        not a global identifier and resolving one already cannot escape the
-        sender's own pins. The uuid is global, which makes this the real test
-        of the ownership filter - naming another profile's pin unambiguously
-        must still find nothing.
-        """
+        Addressed by uuid rather than slug on purpose: pin slugs are unique only *per profile*
+        (``db_pin_unique_slug_per_profile``), so a slug is not a global identifier and resolving one already
+        cannot escape the sender's own pins."""
         other_pin = baker.make(Pin, profile=self.partner, location=baker.make(Location, latitude=1.0, longitude=1.0))
         response = self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": str(other_pin.uuid)})
         self.assertEqual(response.status_code, 404)
@@ -394,6 +416,73 @@ class TombstoneTests(MessagingBaseTestCase):
         self.assertEqual(rendered["body"], "burn after reading")
 
 
+class MessageDeleteTests(MessagingBaseTestCase):
+    """DELETE messages.detail: ?scope=everyone (sender only) vs ?scope=self (recipient only)."""
+
+    def _url(self, message_id: int) -> str:
+        return reverse(
+            "external_api:messages.detail", kwargs={"peer_slug": self.partner.ensure_slug(), "message_id": message_id}
+        )
+
+    def test_sender_deletes_for_everyone(self) -> None:
+        message = create_direct_message(self.sender, self.partner, "oops")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=everyone", **self.auth)
+
+        self.assertEqual(response.status_code, 204)
+        message.refresh_from_db()
+        self.assertIsNotNone(message.deleted_by_sender_at)
+
+    def test_recipient_deletes_for_self(self) -> None:
+        message = create_direct_message(self.partner, self.sender, "incoming")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=self", **self.auth)
+
+        self.assertEqual(response.status_code, 204)
+        message.refresh_from_db()
+        self.assertIsNotNone(message.deleted_by_recipient_at)
+
+    def test_default_scope_is_self(self) -> None:
+        message = create_direct_message(self.partner, self.sender, "incoming")
+
+        response = self.client.delete(self._url(message.pk), **self.auth)
+
+        self.assertEqual(response.status_code, 204)
+        message.refresh_from_db()
+        self.assertIsNotNone(message.deleted_by_recipient_at)
+        self.assertIsNone(message.deleted_by_sender_at)
+
+    def test_recipient_cannot_delete_for_everyone(self) -> None:
+        message = create_direct_message(self.partner, self.sender, "incoming")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=everyone", **self.auth)
+
+        self.assertEqual(response.status_code, 403)
+        message.refresh_from_db()
+        self.assertIsNone(message.deleted_by_sender_at)
+
+    def test_sender_cannot_delete_for_self_only(self) -> None:
+        message = create_direct_message(self.sender, self.partner, "oops")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=self", **self.auth)
+
+        self.assertEqual(response.status_code, 403)
+        message.refresh_from_db()
+        self.assertIsNone(message.deleted_by_recipient_at)
+
+    def test_invalid_scope_is_refused(self) -> None:
+        message = create_direct_message(self.sender, self.partner, "oops")
+
+        response = self.client.delete(f"{self._url(message.pk)}?scope=bogus", **self.auth)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_message_id_is_404(self) -> None:
+        response = self.client.delete(self._url(999999), **self.auth)
+
+        self.assertEqual(response.status_code, 404)
+
+
 class ReservedSlugRoutingTests(MessagingBaseTestCase):
     """Literal routes are never shadowed by a profile with the same slug."""
 
@@ -414,7 +503,7 @@ class ReservedSlugRoutingTests(MessagingBaseTestCase):
         from urbanlens.dashboard.external_api.views_messaging import _resolve_peer
 
         Profile.objects.filter(pk=self.partner.pk).update(slug="groups")
-        self.assertIsNone(_resolve_peer("groups"))
+        self.assertIsNone(_resolve_peer("groups", self.sender))
 
 
 class PageEnvelopeTests(MessagingBaseTestCase):
@@ -511,6 +600,164 @@ class GroupMembershipTests(MessagingBaseTestCase):
             self.assertIsNone(row["member_count"])
 
 
+class GroupMemberRemovalTests(MessagingBaseTestCase):
+    """DELETE messages.groups.members: anyone may leave; only the creator may remove someone else."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.third = _profile()
+        _open_dms(self.sender, self.partner, self.third)
+
+        from urbanlens.dashboard.services.messaging.group_chats import add_group_members, create_group_chat
+
+        self.group = create_group_chat(self.sender, "Crew", [self.partner])
+        add_group_members(self.group, self.sender, [self.third])
+        self.members_url = reverse("external_api:messages.groups.members", kwargs={"group_uuid": self.group.uuid})
+
+    def _remove(self, slugs: list[str], **extra) -> object:
+        return self.client.delete(
+            self.members_url,
+            data=json.dumps({"member_slugs": slugs}),
+            content_type="application/json",
+            **{**self.auth, **extra},
+        )
+
+    def test_creator_can_remove_a_member(self) -> None:
+        response = self._remove([self.partner.ensure_slug()])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["removed"], 1)
+        self.assertIsNone(self.group.membership_for(self.partner))
+
+    def test_a_member_can_remove_themselves(self) -> None:
+        partner_token = _token_for(self.partner.user)
+
+        response = self._remove([self.partner.ensure_slug()], **_bearer(partner_token))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self.group.membership_for(self.partner))
+
+    def test_non_creator_cannot_remove_another_member(self) -> None:
+        partner_token = _token_for(self.partner.user)
+
+        response = self._remove([self.third.ensure_slug()], **_bearer(partner_token))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIsNotNone(self.group.membership_for(self.third))
+
+    def test_removing_a_non_member_is_refused(self) -> None:
+        stranger = _profile()
+
+        response = self._remove([stranger.ensure_slug()])
+
+        self.assertEqual(response.status_code, 400)
+
+
+class GroupCreateTests(MessagingBaseTestCase):
+    """POST messages.groups: start a new group chat."""
+
+    def _post(self, name: str, member_slugs: list[str], **extra) -> object:
+        return self.client.post(
+            reverse("external_api:messages.groups"),
+            data=json.dumps({"name": name, "member_slugs": member_slugs}),
+            content_type="application/json",
+            **{**self.auth, **extra},
+        )
+
+    def test_creates_a_group_with_the_named_members(self) -> None:
+        response = self._post("Crew", [self.partner.ensure_slug()])
+
+        self.assertEqual(response.status_code, 201)
+        from urbanlens.dashboard.models.group_chats.model import GroupChat
+
+        group = GroupChat.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(group.creator_id, self.sender.pk)
+        self.assertIsNotNone(group.membership_for(self.sender))
+        self.assertIsNotNone(group.membership_for(self.partner))
+
+    def test_unknown_member_slug_is_refused(self) -> None:
+        response = self._post("Crew", ["no-such-profile"])
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_naming_only_yourself_is_refused(self) -> None:
+        response = self._post("Just Me", [self.sender.ensure_slug()])
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_whitespace_only_name_is_refused(self) -> None:
+        response = self._post("   ", [self.partner.ensure_slug()])
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_read_scope_alone_cannot_create_a_group(self) -> None:
+        read_only = _bearer(_token_for(self.sender.user, ApiKeyScope.MESSAGES_READ.value))
+
+        response = self._post("Crew", [self.partner.ensure_slug()], **read_only)
+
+        self.assertEqual(response.status_code, 403)
+
+
+class GroupRenameTests(MessagingBaseTestCase):
+    """PATCH messages.groups.detail: any active member may rename the group."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
+
+        self.group = create_group_chat(self.sender, "Old Name", [self.partner])
+        self.url = reverse("external_api:messages.groups.detail", kwargs={"group_uuid": self.group.uuid})
+
+    def _patch(self, name: str, **extra) -> object:
+        return self.client.patch(
+            self.url,
+            data=json.dumps({"name": name}),
+            content_type="application/json",
+            **{**self.auth, **extra},
+        )
+
+    def test_a_member_can_rename_the_group(self) -> None:
+        response = self._patch("New Name")
+
+        self.assertEqual(response.status_code, 200)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.name, "New Name")
+
+    def test_a_non_member_gets_404_not_403(self) -> None:
+        outsider_token = _token_for(_profile().user)
+
+        response = self._patch("New Name", **_bearer(outsider_token))
+
+        self.assertEqual(response.status_code, 404)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.name, "Old Name")
+
+    def test_unknown_group_is_404(self) -> None:
+        url = reverse("external_api:messages.groups.detail", kwargs={"group_uuid": uuid4()})
+
+        response = self.client.patch(
+            url, data=json.dumps({"name": "New Name"}), content_type="application/json", **self.auth
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_whitespace_only_name_is_refused(self) -> None:
+        response = self._patch("   ")
+
+        self.assertEqual(response.status_code, 400)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.name, "Old Name")
+
+    def test_read_scope_alone_cannot_rename(self) -> None:
+        read_only = _bearer(_token_for(self.sender.user, ApiKeyScope.MESSAGES_READ.value))
+
+        response = self._patch("New Name", **read_only)
+
+        self.assertEqual(response.status_code, 403)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.name, "Old Name")
+
+
 class GroupMessageTests(MessagingBaseTestCase):
     """Sending into a group, including idempotent replay."""
 
@@ -553,6 +800,24 @@ class GroupMessageTests(MessagingBaseTestCase):
         image = _make_image(self.sender)
         response = self._post_json(self.url, {"body": "photo", "image_uuids": [str(image.uuid)]})
         self.assertEqual(response.status_code, 400)
+
+    def test_a_key_version_a_former_member_holds_is_refused_with_409(self) -> None:
+        """409 rather than 400: the request was well-formed, and the remedy is to refetch the keys and re-encrypt."""
+        from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope
+        from urbanlens.dashboard.services.messaging.group_chats import remove_group_member
+
+        key = GroupKey.objects.create(group=self.group, version=1)
+        GroupKeyEnvelope.objects.bulk_create(
+            [
+                GroupKeyEnvelope(key=key, profile=holder, wrapped_key="c2VhbGVk")
+                for holder in (self.sender, self.partner)
+            ]
+        )
+        remove_group_member(self.group, self.sender, self.partner)
+
+        response = self._post_json(self.url, {"ciphertext": "c2VhbGVk", "nonce": "bm9uY2U=", "key_version": 1})
+
+        self.assertEqual(response.status_code, 409)
 
 
 class RetentionSettingsTests(MessagingBaseTestCase):

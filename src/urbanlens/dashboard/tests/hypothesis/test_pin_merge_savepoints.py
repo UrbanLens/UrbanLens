@@ -1,27 +1,8 @@
-"""`merge_pins`' collision recoveries have to run inside savepoints.
-
-Every reassignment in `services.pins.pin_merge` runs inside one
-`transaction.atomic()` block, and eight of them were written as
-
-    try:
-        row.save(update_fields=["pin", "updated"])
-    except IntegrityError:
-        row.delete()          # drop the duplicate, carry on
-
-Postgres aborts the *whole* transaction on a failed statement, so the recovery
-query itself raised `TransactionManagementError: You can't execute queries
-until the end of the 'atomic' block`. Every one of those graceful "drop the
-duplicate" paths was therefore dead code, and any merge that hit a uniqueness
-collision failed outright rather than deduping.
-
-Reproduced before the fix by merging a pin into its own descendant while
-another top-level pin occupied the location a child had to be detached to:
-the merge raised `TransactionManagementError`, not the intended recovery.
-
-See PROBLEMS.md, "merge_pins' IntegrityError recoveries could not run".
-"""
+"""`merge_pins`' collision recoveries have to run inside savepoints."""
 
 from __future__ import annotations
+
+import contextlib
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
@@ -31,7 +12,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.pins.pin_merge import (
-    PinMergeCollisionError,
+    ChildDetachCollisionError,
     _save_within_savepoint,
     merge_pins,
 )
@@ -92,23 +73,16 @@ class SavepointKeepsTheTransactionUsableTests(_PinFixtures):
 
         with transaction.atomic(), self.assertRaises(TransactionManagementError):
             mover.location = shared
-            try:
+            with contextlib.suppress(IntegrityError):
                 mover.save(update_fields=["location", "updated"])
-            except IntegrityError:
-                pass
             Pin.objects.filter(pk=mover.pk).exists()
 
 
 class MergeRefusesRatherThanDestroyingTheSurvivorTests(_PinFixtures):
     """A child that cannot be detached must stop the merge, not be carried into it.
 
-    `_reparent_children` detaches a child to top level when re-parenting it
-    under the survivor would close a loop - which happens exactly when the
-    survivor sits *beneath* that child. Leaving it parented to the loser is not
-    a survivable fallback: `Pin.parent_pin` CASCADEs, so `loser.delete()` would
-    take the child and the survivor with it. Before the savepoint fix this was
-    masked, because the poisoned transaction raised first.
-    """
+    `_reparent_children` detaches a child to top level when re-parenting it under the survivor would close a
+    loop - which happens exactly when the survivor sits *beneath* that child."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -120,20 +94,19 @@ class MergeRefusesRatherThanDestroyingTheSurvivorTests(_PinFixtures):
         self.child = baker.make(Pin, profile=self.profile, location=self.shared, parent_pin=self.loser)
         self.survivor = baker.make(Pin, profile=self.profile, location=self.location(), parent_pin=self.child)
 
-    def test_the_merge_is_refused_with_a_reason(self) -> None:
-        with self.assertRaises(PinMergeCollisionError) as caught:
+    def test_the_merge_is_refused_with_the_right_error(self) -> None:
+        with self.assertRaises(ChildDetachCollisionError):
             merge_pins(self.survivor, self.loser, self.profile)
-        self.assertIn("already occupies its location", caught.exception.safe_message)
 
     def test_nothing_is_deleted(self) -> None:
-        with self.assertRaises(PinMergeCollisionError):
+        with self.assertRaises(ChildDetachCollisionError):
             merge_pins(self.survivor, self.loser, self.profile)
 
         for pin in (self.blocker, self.loser, self.child, self.survivor):
             self.assertTrue(Pin.objects.filter(pk=pin.pk).exists(), f"pin {pin.pk} was destroyed by a refused merge")
 
     def test_the_survivor_keeps_its_parent(self) -> None:
-        with self.assertRaises(PinMergeCollisionError):
+        with self.assertRaises(ChildDetachCollisionError):
             merge_pins(self.survivor, self.loser, self.profile)
 
         self.survivor.refresh_from_db()

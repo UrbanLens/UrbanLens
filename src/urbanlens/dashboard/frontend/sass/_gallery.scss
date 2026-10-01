@@ -20,8 +20,8 @@
   }
 
   .material-symbols-outlined,
-  .material-icons { 
-    font-size: 1.15rem; 
+  .material-icons {
+    font-size: 1.15rem;
   }
 }
 
@@ -121,6 +121,8 @@
   border-radius: 6px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  content-visibility: auto;
+  contain-intrinsic-size: 110px 110px;
 
   &:hover .gallery-delete-btn { opacity: 1; }
 }
@@ -141,6 +143,28 @@
   aspect-ratio: 1;
   object-fit: cover;
   border-radius: 4px;
+}
+
+.gallery-thumb--failed,
+.gallery-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ul-surface-2, #1c1c1c);
+  color: var(--ul-grey-5);
+
+  .material-symbols-outlined {
+    font-size: 2rem;
+  }
+}
+
+// A thumbnail whose upload is still being re-encoded - see shared/photo-processing.ts.
+.media-processing {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
 }
 
 .gallery-has-coords {
@@ -333,6 +357,77 @@
   }
 }
 
+.lightbox-side-header {
+  align-items: flex-start;
+  display: flex;
+  gap: .4rem;
+}
+
+.lightbox-actions-menu {
+  flex: 0 0 auto;
+  // The caption collapses when empty; this keeps the right-anchored list inside the clipped panel.
+  margin-left: auto;
+  position: relative;
+
+  &[hidden] { display: none; }
+}
+
+.lightbox-actions-toggle {
+  align-items: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: .4rem;
+  color: rgba(255, 255, 255, .85);
+  cursor: pointer;
+  display: inline-flex;
+  padding: .2rem;
+
+  .material-symbols-outlined { font-size: 1.25rem; }
+
+  &:hover,
+  &[aria-expanded="true"] {
+    background: rgba(255, 255, 255, .08);
+  }
+}
+
+.lightbox-actions-list {
+  background: #1c1c1c;
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: .4rem;
+  box-shadow: 0 .4rem 1.2rem rgba(0, 0, 0, .45);
+  min-width: 15.5rem;
+  padding: .25rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + .25rem);
+  z-index: 2;
+
+  &[hidden] { display: none; }
+}
+
+.lightbox-actions-item {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: .3rem;
+  color: rgba(255, 255, 255, .9);
+  cursor: pointer;
+  display: flex;
+  font-size: .85rem;
+  gap: .45rem;
+  padding: .45rem .55rem;
+  text-align: left;
+  width: 100%;
+
+  .material-symbols-outlined { font-size: 1.1rem; }
+
+  &:hover { background: rgba(255, 255, 255, .08); }
+
+  &:disabled { opacity: .55; }
+
+  &[hidden] { display: none; }
+}
+
 .lightbox-img {
   max-width: 100%;
   max-height: 90vh;
@@ -346,6 +441,47 @@
     outline: 1px dashed rgba(255, 255, 255, .35);
     outline-offset: 4px;
   }
+}
+
+// Vault > Documents' lightbox mode (item.mediaType === 'document').
+.lightbox-document-view {
+  &[hidden] {
+    display: none !important;
+  }
+
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 90vh;
+
+  @media (max-width: 720px) {
+    height: 60vh;
+  }
+}
+
+.lightbox-document-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+  background: #fff;
+  border-radius: 4px;
+}
+
+.lightbox-document-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .5rem .25rem 0;
+}
+
+.lightbox-document-name {
+  margin: 0;
+  color: rgba(255, 255, 255, .85);
+  font-size: .85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lightbox-fallback-note {
@@ -395,8 +531,8 @@
   &:hover { background: rgba(200,0,0,.7); }
 
   .material-symbols-outlined,
-  .material-icons { 
-    font-size: 1.2rem; 
+  .material-icons {
+    font-size: 1.2rem;
     color: #fff;
   }
 }
@@ -428,13 +564,16 @@
 }
 
 .lightbox-caption {
-  color: rgba(255,255,255,.85);
+  color: rgba(255, 255, 255, .85);
+  flex: 1 1 auto;
   font-size: .9rem;
   font-weight: 500;
-  padding: 0;
   margin: 0;
   min-height: 1.2rem;
+  min-width: 0;
   overflow-y: auto;
+  padding: 0;
+
   &:empty { min-height: 0; display: none; }
 }
 
@@ -457,10 +596,7 @@
   display: inline-flex;
   align-items: center;
   gap: .3rem;
-  // Always a light blue on a permanently-dark backdrop (see .gallery-lightbox's
-  // background), independent of site theme - not the (broken - see completed.md)
-  // var(--color-accent) reference this used to be, just its own fallback value
-  // made literal, since that's what always actually rendered.
+  // Always a light blue on a permanently-dark backdrop, independent of site theme.
   color: #60a5fa;
   text-decoration: none;
   cursor: pointer;
@@ -470,9 +606,7 @@
   .material-symbols-outlined { font-size: 1rem; }
 }
 
-// "Shared via" wiki/DM links - profile photo strip's lightbox only, loaded
-// into #lightbox-attachment-points (see _photo_lightbox.html). Empty for
-// every other lightbox use and for photos with no real attachment.
+// "Shared via" wiki/DM links - profile photo strip's lightbox only, loaded into #lightbox-attachment-points.
 #lightbox-attachment-points:empty { display: none; }
 
 .lightbox-attachment-points {
@@ -513,6 +647,181 @@
     .material-symbols-outlined { font-size: 1rem; color: rgba(255, 255, 255, .55); }
   }
 }
+
+// Pin/wiki filing + album membership - every lightbox use (see
+// #lightbox-associations in _photo_lightbox.html). Empty (204) for anything
+// but the viewer's own photo.
+#lightbox-associations:empty { display: none; }
+
+.lightbox-associations-wrap {
+  padding-top: .5rem;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+}
+
+.lightbox-association-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-bottom: .3rem;
+}
+
+.lightbox-association-line {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  color: rgba(255, 255, 255, .85);
+  font-size: .82rem;
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+
+  .material-symbols-outlined { font-size: 1rem; color: rgba(255, 255, 255, .55); }
+}
+
+.lightbox-association-action {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #60a5fa;
+  font-size: .8rem;
+  cursor: pointer;
+
+  &:hover { text-decoration: underline; }
+
+  .material-symbols-outlined { font-size: 1rem; }
+}
+
+.lightbox-associations-title {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  margin: .35rem 0 .35rem;
+  color: rgba(255, 255, 255, .55);
+  font-size: .78rem;
+  font-weight: 600;
+
+  .material-symbols-outlined { font-size: 1rem; }
+}
+
+.lightbox-associations-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+
+  a {
+    display: flex;
+    flex-direction: column;
+    color: rgba(255, 255, 255, .85);
+    font-size: .82rem;
+    text-decoration: none;
+
+    &:hover .lightbox-association-album-name { text-decoration: underline; }
+  }
+}
+
+.lightbox-association-album-owner {
+  color: rgba(255, 255, 255, .5);
+  font-size: .72rem;
+}
+
+// Shared "File to a pin" / "Send to a wiki" / "Share with a friend" dialog -
+// one instance, reconfigured per open (see window._lightboxOpenPicker).
+.lightbox-picker-dialog {
+  width: min(360px, 90vw);
+  padding: 1rem;
+  border-radius: .75rem;
+}
+
+.lightbox-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .6rem;
+
+  h3 { margin: 0; font-size: 1rem; }
+}
+
+.lightbox-picker-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ul-grey-6);
+}
+
+.lightbox-picker-search {
+  width: 100%;
+  padding: .45rem .6rem;
+  border: 1px solid var(--ul-surface-raised-border);
+  border-radius: .5rem;
+  font-size: .85rem;
+  background: var(--ul-surface-raised);
+  color: var(--ul-grey-8);
+  margin-bottom: .5rem;
+
+  &[hidden] { display: none; }
+}
+
+.lightbox-picker-results {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.photo-wiki-result,
+.photo-share-friend-btn {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  width: 100%;
+  text-align: left;
+  padding: .45rem .55rem;
+  border: 1px solid var(--ul-surface-raised-border);
+  border-radius: .5rem;
+  background: transparent;
+  cursor: pointer;
+  font-size: .85rem;
+  color: var(--ul-grey-8);
+
+  &:hover {
+    background: rgba(156, 39, 176, .06);
+    border-color: $color-deep-purple-500;
+  }
+
+  .material-symbols-outlined { font-size: 1.1rem; color: $color-deep-purple-500; }
+}
+
+.photo-wiki-result-sub {
+  color: var(--ul-grey-6);
+  font-size: .75rem;
+  margin-left: auto;
+}
+
+.photo-wiki-empty,
+.photo-share-friend-empty {
+  font-size: .8rem;
+  color: var(--ul-grey-6);
+  margin: .3rem 0 0;
+}
+
+.photo-share-friend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+
+.photo-share-friend-name { margin-left: .1rem; }
 
 .lightbox-location {
   display: flex;
@@ -569,8 +878,7 @@
 }
 
 // -- Shared floating multi-select toolbar ---------------------------------------
-// Generic version of the organize page's .org-bulk-bar (see _tags.scss) for any
-// page that isn't on the TS/bun bundle - paired with frontend/static/js/bulk-toolbar.js.
+// Generic version of the organize page's.org-bulk-bar for any page that isn't on the TS/bun bundle.
 .ul-bulk-bar {
   position: fixed;
   left: 50%;
@@ -720,9 +1028,7 @@
 }
 
 // -- Cover photo hero banner -----------------------------------------------------
-// Used on both the pin detail page and the wiki page (see cover-hero.js for the
-// hover prev/next cycling). Absent entirely unless a cover photo is set, so a
-// pin/wiki without one renders exactly as before.
+// Used on both the Private Pin page and the wiki page.
 .cover-hero {
   position: relative;
   height: clamp(140px, 22vw, 260px);
@@ -811,10 +1117,7 @@
   opacity: 1;
 }
 
-// The pin detail page's cover hero isn't a standalone .cover-hero div like the
-// wiki page's - it's rendered via the shared _page_hero.html's own
-// hero_image_url/--cover mechanism (see _page_hero.scss), so the nav buttons
-// live inside a .ul-page-hero--cover instead and need their own hover rule.
+// The Private Pin page's cover hero isn't a standalone.cover-hero div like the wiki page's.
 .ul-page-hero--cover:hover .cover-hero-nav {
   opacity: 1;
 }
@@ -837,6 +1140,89 @@
     transform: scale(1.1);
     box-shadow: 0 4px 10px rgba(0,0,0,.4);
   }
+}
+
+// Stacked-photo cluster: the top image sits on the second, which peeks as a
+// border. Hover fans them apart so the collection is obvious before a click.
+.leaflet-div-icon.photo-cluster-icon {
+  background: transparent;
+  border: none;
+  overflow: visible !important;
+
+  &:hover {
+    z-index: 1000 !important;
+  }
+}
+
+.photo-cluster {
+  --pcs: 44px;
+  position: relative;
+  width: calc(var(--pcs) + 11px);
+  height: calc(var(--pcs) + 11px);
+  cursor: pointer;
+}
+
+.photo-cluster__img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pcs);
+  height: var(--pcs);
+  object-fit: cover;
+  border-radius: 6px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .38), 0 0 0 1px rgba(15, 23, 42, .08);
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), box-shadow .22s ease, filter .22s ease;
+  transform-origin: 50% 80%;
+}
+
+.photo-cluster__img--back {
+  z-index: 1;
+  transform: translate(7px, 6px) rotate(7deg);
+  filter: brightness(.92);
+}
+
+.photo-cluster__img--front {
+  z-index: 2;
+  transform: rotate(-1.5deg);
+}
+
+.photo-cluster:hover .photo-cluster__img--back {
+  transform: translate(14px, 11px) rotate(12deg);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .42);
+  filter: brightness(.97);
+}
+
+.photo-cluster:hover .photo-cluster__img--front {
+  transform: translate(-5px, -4px) rotate(-5deg);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, .42);
+}
+
+.photo-cluster__count {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--pcs) - 1.2rem);
+  top: calc(var(--pcs) - 1.2rem);
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 .28rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .9);
+  color: #fff;
+  font-size: .62rem;
+  font-weight: 700;
+  line-height: 1.15rem;
+  text-align: center;
+  letter-spacing: .02em;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  pointer-events: none;
+}
+
+[data-theme="dark"] .photo-cluster__img {
+  border-color: rgba(255, 255, 255, .92);
 }
 
 // Comment image blur
@@ -871,3 +1257,78 @@
 }
 
 .photo-label-panel-slot:empty { display: none; }
+
+.lightbox-labels {
+  margin-top: .35rem;
+  padding-top: .65rem;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+
+.lightbox-labels-title {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  margin: 0 0 .45rem;
+  font-size: .85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, .85);
+
+  .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+.lightbox-labels-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-bottom: .5rem;
+}
+
+.lightbox-labels-search {
+  width: 100%;
+}
+
+.lightbox-labels-list {
+  max-height: 12rem;
+  overflow-y: auto;
+  margin: .4rem 0 0;
+}
+
+.lightbox-labels-create {
+  margin-top: .45rem;
+}
+
+.photo-context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 12rem;
+  padding: .25rem 0;
+  border-radius: 8px;
+  background: var(--ul-surface-raised);
+  border: 1px solid var(--ul-surface-raised-border);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .18), 0 1px 4px rgba(0, 0, 0, .12);
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .45rem .85rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .84rem;
+    font-weight: 500;
+    color: var(--ul-grey-6);
+    text-align: left;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+
+    &:hover { background: rgba(0, 0, 0, 0.08); }
+
+    &--danger {
+      color: var(--ul-color-danger-text, #dc2626);
+
+      &:hover { background: rgba(220, 38, 38, .08); }
+    }
+  }
+}

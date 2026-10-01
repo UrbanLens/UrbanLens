@@ -6,10 +6,10 @@
 .page-about {
 
     > div.container {
-        max-width: 100%;    
+        max-width: 100%;
     }
 
-    // Shared inner width
+
     .about-section-inner,
     .about-cta-inner {
         max-width: 120rem;
@@ -28,7 +28,7 @@
         padding: 3rem 1.5rem 2.5rem;
         text-align: center;
         background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
-        
+
         color: var(--ul-grey-4);
 
         @include up($breakpoint-sm) {
@@ -96,13 +96,7 @@
         }
 
         img {
-            // Scales with the hero's own viewport-height-driven sizing (see
-            // .about-hero's `height: 60vh`) instead of a flat cap, so the
-            // image actually grows to fill the extra room a large screen
-            // gives it rather than staying pinned at the same size forever.
-            // The lower bound matches the previous flat value (unchanged on
-            // short/small viewports); the upper bound keeps it from growing
-            // unbounded on very tall displays.
+            // Scales with the hero's own viewport-height-driven sizing instead of a flat cap, so the image actually grows to fill the extra room.
             max-height: clamp(29rem, 50vh, 44rem);
             max-width: 100%;
         }
@@ -308,7 +302,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        
+
         .material-symbols-outlined,
         .material-icons {
             font-size: 3.5rem;

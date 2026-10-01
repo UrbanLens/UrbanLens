@@ -1,11 +1,4 @@
-"""Network guards for test runs.
-
-The application has several integrations that normally talk to third-party
-services. Unit tests should mock those integrations explicitly. This module
-provides a process-wide socket guard so accidental external network calls fail
-fast while still allowing localhost services such as the test database, Redis,
-or an in-process test server.
-"""
+"""Fail fast on accidental external network calls in tests; localhost still allowed."""
 
 from __future__ import annotations
 
@@ -17,16 +10,16 @@ from unittest.mock import patch
 
 _LOCALHOST_NAMES = {"", "localhost", "localhost.localdomain"}
 
-# Public probe used to confirm the guard blocks outbound sockets before tests run.
+# Probe used to confirm the guard blocks outbound sockets.
 VERIFY_PROBE_ADDRESS: tuple[str, int] = ("1.1.1.1", 443)
 
 
 class ExternalNetworkGuardVerificationError(RuntimeError):
-    """Raised when the localhost-only network guard is inactive or misconfigured."""
+    """Guard inactive or misconfigured."""
 
 
 def _host_is_localhost(host: Any) -> bool:
-    """Return True when ``host`` points at the local machine."""
+    """Return True when host points at the local machine."""
     if host is None:
         return True
 
@@ -44,18 +37,20 @@ def _host_is_localhost(host: Any) -> bool:
 
 
 def _address_host(address: Any) -> Any:
-    """Extract the host from a socket address, if it has one."""
+    """Extract the host from a socket address."""
     if isinstance(address, tuple) and address:
         return address[0]
     return None
 
 
 class LocalhostOnlyNetwork:
-    """Patch socket connection APIs to deny non-localhost destinations."""
+    """Deny non-localhost socket destinations."""
 
     def __init__(self) -> None:
         self._stack = ExitStack()
         self._original_connect = socket.socket.connect
+        self._original_connect_ex = socket.socket.connect_ex
+        self._original_sendto = socket.socket.sendto
         self._original_create_connection = socket.create_connection
 
     def _blocked_message(self, host: Any) -> str:
@@ -66,6 +61,19 @@ class LocalhostOnlyNetwork:
         if not _host_is_localhost(host):
             raise RuntimeError(self._blocked_message(host))
         return self._original_connect(sock, address)
+
+    def _guarded_connect_ex(self, sock: socket.socket, address: Any) -> Any:
+        host = _address_host(address)
+        if not _host_is_localhost(host):
+            raise RuntimeError(self._blocked_message(host))
+        return self._original_connect_ex(sock, address)
+
+    def _guarded_sendto(self, sock: socket.socket, *args: Any) -> Any:
+        # Address is always last.
+        host = _address_host(args[-1]) if args else None
+        if not _host_is_localhost(host):
+            raise RuntimeError(self._blocked_message(host))
+        return self._original_sendto(sock, *args)
 
     def _guarded_create_connection(
         self,
@@ -88,8 +96,17 @@ class LocalhostOnlyNetwork:
         def guarded_connect(sock: socket.socket, address: Any) -> Any:
             return self._guarded_connect(sock, address)
 
+        def guarded_connect_ex(sock: socket.socket, address: Any) -> Any:
+            return self._guarded_connect_ex(sock, address)
+
+        def guarded_sendto(sock: socket.socket, *args: Any) -> Any:
+            return self._guarded_sendto(sock, *args)
+
         self._stack.enter_context(patch("socket.create_connection", self._guarded_create_connection))
         self._stack.enter_context(patch.object(socket.socket, "connect", guarded_connect))
+        # connect_ex and sendto bypass connect(), so patch them separately.
+        self._stack.enter_context(patch.object(socket.socket, "connect_ex", guarded_connect_ex))
+        self._stack.enter_context(patch.object(socket.socket, "sendto", guarded_sendto))
         return self
 
     def stop(self) -> None:
@@ -99,13 +116,10 @@ class LocalhostOnlyNetwork:
 def verify_external_network_blocked(
     probe_address: tuple[str, int] = VERIFY_PROBE_ADDRESS,
 ) -> None:
-    """Confirm outbound connections to non-localhost hosts are blocked.
-
-    Call this after ``LocalhostOnlyNetwork.start()`` during test bootstrap.
-    Exits the process when the guard is missing or allows external traffic.
+    """Confirm outbound non-localhost connections are blocked.
 
     Args:
-        probe_address: Host/port pair that must be rejected by the guard.
+        probe_address: Host/port pair that must be rejected.
 
     Raises:
         ExternalNetworkGuardVerificationError: When verification fails.

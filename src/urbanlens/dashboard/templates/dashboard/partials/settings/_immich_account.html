@@ -1,4 +1,3 @@
-{# Immich settings subsection - loaded via HTMX (ImmichSettingsView). Context: account, form #}
 <div id="immich-settings-body" class="settings-subsection-body">
     {% if account %}
     <p class="settings-help immich-connected-status">
@@ -15,7 +14,7 @@
                 hx-post="{% url 'settings.immich.disconnect' %}"
                 hx-target="#immich-settings-body"
                 hx-swap="outerHTML"
-                hx-confirm="Disconnect your Immich server? Photos already imported are kept, but the pin-detail import stops working until you reconnect.">
+                hx-confirm="Disconnect your Immich server? Photos already imported are kept, but the Private Pin import stops working until you reconnect.">
             <i class="material-symbols-outlined">link_off</i>
             Disconnect Immich
         </button>

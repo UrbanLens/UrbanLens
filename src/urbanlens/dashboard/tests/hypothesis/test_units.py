@@ -1,8 +1,8 @@
 """Tests for distance unit conversion/formatting and region inference."""
+
 from __future__ import annotations
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.profile.meta import DistanceUnit
 from urbanlens.dashboard.models.profile.model import _units_for_point

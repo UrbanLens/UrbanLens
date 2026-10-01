@@ -1,16 +1,4 @@
-"""Tests for the external API's pin-detail panel domain.
-
-Two kinds of coverage are mixed deliberately:
-
-1. Tests against the **real** panel registry, guarding the product decision
-   documented in ``services.pins.external_data`` and ``docs/notes/mobile_app_notes.md``
-   (D8): the satellite/street-view carousels stay off this API forever until a
-   signed slide-image proxy exists, because their payload is base64 imagery and
-   this API's throttle counts requests, not bytes.
-2. Tests against a **stub** source with ``panel_sources``/``get_panel_source``
-   patched, for full control over the ready / not-ready / gated / hidden
-   permutations without depending on any specific plugin's fetch behavior.
-"""
+"""Tests for the external API's pin-detail panel domain."""
 
 from __future__ import annotations
 
@@ -137,7 +125,9 @@ class ScopeAndOwnershipTests(_PanelsApiTestCase):
 
     def test_another_profiles_pin_is_404_on_list_and_detail(self) -> None:
         self.assertEqual(self.client.get(self._list_url(self.other_pin), **_bearer(self.raw_key)).status_code, 404)
-        self.assertEqual(self.client.get(self._detail_url("satellite", self.other_pin), **_bearer(self.raw_key)).status_code, 404)
+        self.assertEqual(
+            self.client.get(self._detail_url("satellite", self.other_pin), **_bearer(self.raw_key)).status_code, 404
+        )
 
 
 class StubbedSourceListTests(_PanelsApiTestCase):

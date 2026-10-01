@@ -5,8 +5,10 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from typing import TYPE_CHECKING, Any, TypedDict
+import time
+from typing import TYPE_CHECKING, Any
 
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
@@ -20,9 +22,12 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import (
     Trip,
     TripActivity,
-    TripComment,
     TripMembership,
 )
+from urbanlens.dashboard.services.core.counters import Outage
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.request_body import FORM_CONTENT_TYPES, posted_fields
+from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.trips.trip_access import (
     can_perform as _can_perform,
     get_trip_for_viewer,
@@ -33,14 +38,11 @@ from urbanlens.dashboard.services.trips.trip_activities import (
     activity_queryset as _activity_qs,
     build_activity_rows,
     complete_activity,
-    compute_activity_index_map as _compute_activity_index_map,
     create_activity,
     delete_activity,
-    expand_trip_dates as _expand_trip_dates,
-    get_activity,
+    move_activity,
     parse_scheduled_at as _parse_scheduled_at,
     reorder_activities,
-    resolve_activity_place as _resolve_activity_place,
     set_activity_position,
     set_activity_rsvp,
     set_activity_status,
@@ -49,7 +51,8 @@ from urbanlens.dashboard.services.trips.trip_activities import (
 )
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS, TripCommentData, add_comment, build_comment_tree, delete_comment, get_comment
 from urbanlens.dashboard.services.trips.trip_crud import TRIP_DELETED_MESSAGE, create_trip, delete_trip, set_trip_permissions, update_trip
-from urbanlens.dashboard.services.trips.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError
+from urbanlens.dashboard.services.trips.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError, TripRateLimitError
+from urbanlens.dashboard.services.trips.trip_invitations import invitations_visible_to, invite_to_trip_by_email, is_valid_address, parse_address_list
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
 from urbanlens.dashboard.services.trips.trip_membership import (
@@ -58,48 +61,44 @@ from urbanlens.dashboard.services.trips.trip_membership import (
     join_trip,
     leave_trip,
     list_members,
-    notify_added_to_trip as _notify_added_to_trip,
     remove_member,
     require_trip_creator,
     resolve_trip_member,
     set_member_organizer,
     set_trip_rsvp,
-    suggest_connections_for_new_member as _suggest_connections_for_new_member,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from django.db.models import QuerySet
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot
 
 logger = logging.getLogger(__name__)
 
-#: HTTP status each shared trip-service error maps to on the internal surface.
-#: The external API keeps its own copy of this mapping (it answers with JSON
-#: rather than the plain-text bodies HTMX turns into toasts), but both derive
-#: the status from the same exception classes.
+#: HTTP status each shared trip-service error maps to on the internal surface. The external API keeps its own
+#: copy of this mapping (it answers with JSON rather than the plain-text bodies HTMX turns into toasts), but
+#: both derive the status from the same exception classes.
 _TRIP_ERROR_STATUS: dict[type[TripError], int] = {
     TripNotFoundError: 404,
     TripPermissionError: 403,
+    TripRateLimitError: 429,
 }
 
 
 def _trip_error_response(exc: TripError) -> HttpResponse:
     """Turn a shared trip-service error into the plain-text response HTMX expects.
 
-    Bodies stay plain text (not JSON) because the site's global
-    ``htmx:responseError`` handler surfaces the raw body as a toast.
+    Bodies stay plain text (not JSON) because the site's global ``htmx:responseError`` handler surfaces
+    the raw body as a toast.
 
     Args:
         exc: The error raised by a trip service.
 
     Returns:
-        A response carrying the error message and its mapped status; anything
-        not specifically mapped is a 400.
+        A response carrying the error message and its mapped status; anything not specifically mapped is
+        a 400.
     """
     # The service carries the raw username so each surface escapes for its own
     # medium - HTML here, unescaped JSON in the external API.
@@ -113,33 +112,48 @@ TRIP_LIST_SORT_CHOICES = ("start_date", "updated")
 TRIP_LIST_DIRECTION_CHOICES = ("asc", "desc")
 
 
-def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "desc") -> QuerySet[Trip] | list[Trip]:
-    """Return annotated trips for the list page.
+#: Trip cards per page on the trips list.
+TRIP_LIST_PAGE_SIZE = 24
+
+
+def trip_list_context(request: HttpRequest, profile: Profile) -> dict[str, Any]:
+    """One page of the viewer's trips for ``trip_list_partial.html``, masked and sorted per the request.
 
     Args:
-        profile: The viewer's profile.
-        sort: Field to order by - ``"start_date"`` or ``"updated"``.
-        direction: ``"asc"`` or ``"desc"``.
+        request: Carries ``sort``/``dir`` and ``page``.
+        profile: The viewer.
 
     Returns:
-        Trips the profile belongs to, with list stats prefetched. Ordered per ``sort``/
-        ``direction`` - see :meth:`TripQuerySet.for_list_page` for the "soonest first"
-        grouping applied when ``sort="start_date"`` and ``direction="asc"``.
+        Context with ``trips`` (the page), ``page_obj`` and the sort state.
     """
-    return Trip.objects.for_list_page(profile, sort=sort, direction=direction)
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    from urbanlens.dashboard.services.core.pagination import get_page
+
+    sort, direction = _trip_list_sort_params(request)
+    page = get_page(request, Trip.objects.for_list_page(profile, sort=sort, direction=direction), TRIP_LIST_PAGE_SIZE)
+    trips = list(page.object_list)
+    _apply_trip_list_identity_masking(profile, trips)
+    _annotate_viewer_membership(profile, trips)
+    return {
+        "trips": trips,
+        "page_obj": page,
+        "page_url": reverse("trips.list"),
+        "extra_query": urlencode({"sort": sort, "dir": direction}),
+        "profile": profile,
+        "sort": sort,
+        "dir": direction,
+    }
 
 
 def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) -> None:
     """Mask each listed trip's member/creator identities the viewer may not see.
 
-    docs/PROBLEMS.md gap: ``services/identity_visibility.py`` masked the
-    single-trip render sites (member panel, activity/comment attribution) but
-    not the trips list, which is more diffuse - every card shows its own
-    member avatars and creator badge, across however many trips are listed at
-    once. Mutates each ``TripMembership.profile``/``Trip.creator`` object in
-    place (see ``identity_visibility.mask_profile_references``) so
-    ``trip_list_partial.html`` can render ``display_name``/``display_avatar_url``
-    instead of the raw username/avatar.
+    Mutates each ``TripMembership.profile``/``Trip.creator`` object in place (see
+    ``identity_visibility.mask_profile_references``) so ``trip_list_partial.html`` can render
+    ``display_name``/``display_avatar_url`` instead of the raw username/avatar.
 
     Args:
         viewer: The profile viewing the list.
@@ -159,9 +173,9 @@ def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) ->
 def _annotate_viewer_membership(viewer: Profile, trips: Iterable[Trip]) -> None:
     """Attach ``trip.viewer_membership`` (or ``None``) to each listed trip.
 
-    Reuses the ``memberships`` prefetch ``for_list_page`` already loads, so
-    ``trip_list_partial.html`` can gate viewer-only actions (e.g. "Start a
-    check-in") on join status without an extra query per card.
+    Reuses the ``memberships`` prefetch ``for_list_page`` already loads, so ``trip_list_partial.html``
+    can gate viewer-only actions (e.g. "Start a check-in") on join status without an extra query per
+    card.
 
     Args:
         viewer: The profile viewing the list.
@@ -189,59 +203,13 @@ def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
     return sort, direction
 
 
-def _trips_calendar_data(trips: Iterable[Trip]) -> list[dict[str, str | None]]:
-    """Serialize trips into the plain-dict shape the trips-list calendar view renders from.
-
-    Args:
-        trips: Trips to serialize, in the order they should appear within a day's chip list.
-
-    Returns:
-        One dict per trip with `uuid`, `name`, `start`/`end` (ISO dates or `None`), `status`, and `url`.
-    """
-    from django.urls import reverse
-
-    return [
-        {
-            "uuid": str(t.uuid),
-            "name": t.name,
-            "start": t.effective_start_date.isoformat() if t.effective_start_date else None,
-            "end": t.effective_end_date.isoformat() if t.effective_end_date else None,
-            "status": t.timeline_status,
-            "url": reverse("trips.detail", args=[t.slug]),
-        }
-        for t in trips
-    ]
-
-
-def _trip_overview_stats(trips: Iterable[Trip]) -> dict[str, int]:
-    """Compute trip counts by timeline status for the overview page's stat tiles.
-
-    Args:
-        trips: The viewer's trips.
-
-    Returns:
-        Dict with `total` and one key per `Trip.timeline_status` value
-        (`planning`, `upcoming`, `active`, `past`).
-    """
-    stats = {"total": 0, "planning": 0, "upcoming": 0, "active": 0, "past": 0}
-    for t in trips:
-        stats["total"] += 1
-        stats[t.timeline_status] += 1
-    return stats
-
-
 def trip_or_not_found(request: HttpRequest, trip_slug: str, profile: Profile) -> Trip | HttpResponse:
     """Return the trip when *profile* may see it, else the styled "not found" page.
 
-    The thin HTMX-facing adapter over
-    :func:`~urbanlens.dashboard.services.trips.trip_access.get_trip_for_viewer`,
-    which is where the rule itself lives.
-
-    Replaces the former ``_trip_or_403``. That version rendered the same page
-    for a missing trip and for one the viewer had no access to, but answered
-    404 for the first and 403 for the second - so the status code alone
-    distinguished "no such slug" from "somebody else's trip", which is exactly
-    the enumeration the shared page was meant to prevent. Both are 404 now.
+    That version rendered the same page for a missing trip and for one the viewer had no access to, but
+    answered 404 for the first and 403 for the second - so the status code alone distinguished "no such
+    slug" from "somebody else's trip", which is exactly the enumeration the shared page was meant to
+    prevent.
 
     Args:
         request: The incoming request (needed to render the page).
@@ -277,6 +245,7 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
             "profile": profile,
             "addable_friends": _addable_friends(trip, profile),
             "can_add_members": _can_perform(profile, trip, trip.allow_add_members),
+            "email_invitations": invitations_visible_to(trip, profile),
         },
     )
 
@@ -284,19 +253,16 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
 def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *, oob: bool = False) -> str:
     """Render just the activities panel markup (index map, vote counts, per-activity permissions).
 
-    Split out from ``_render_activities_panel`` so other views whose primary
-    response is a different panel (e.g. toggling a member's organizer status)
-    can still include a fresh copy as an out-of-band swap - organizer status
-    feeds directly into each activity's ``can_manage`` flag here.
+    Split out from ``_render_activities_panel`` so other views whose primary response is a different
+    panel (e.g. toggling a member's organizer status) can still include a fresh copy as an out-of-band
+    swap - organizer status feeds directly into each activity's ``can_manage`` flag here.
 
     Args:
         request: The incoming request.
         trip: The trip whose itinerary is being rendered.
         profile: The viewing profile.
-        oob: When True, marks the rendered root element ``hx-swap-oob="true"``
-            so it can be concatenated onto another view's primary response
-            instead of wrapping it in a second element carrying the same id
-            (which would leave two ``#trip-activities-panel`` nodes in the DOM).
+        oob: When True, marks the rendered root element ``hx-swap-oob="true"`` so it can be concatenated
+        onto another view's primary response instead...
 
     Returns:
         The rendered activities-panel markup.
@@ -328,14 +294,13 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
     )
 
 
-def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
+def _trip_hero_oob(request: HttpRequest, trip: Trip, *, viewer_has_joined: bool) -> str:
     """Render the page hero as an out-of-band HTMX swap.
 
-    The hero lives in base.html's ``{% block hero %}`` (outside ``#trip-header``,
-    as a sibling of ``{% block subnav %}``) so it renders in the correct spot
-    above the page container, but its name/description/date-range display
-    still needs to stay in sync after an edit or an activity date change - see
-    ``TripEditView`` and ``_render_activities_panel``.
+    The hero lives in base.html's ``{% block hero %}`` (outside ``#trip-header``, as a sibling of ``{%
+    block subnav %}``) so it renders in the correct spot above the page container, but its
+    name/description/date-range display still needs to stay in sync after an edit or an activity date
+    change - see ``TripEditView`` and ``_render_activities_panel``.
     """
     from django.urls import reverse
 
@@ -344,11 +309,12 @@ def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
         template_name="dashboard/partials/ui/_page_hero.html",
         context={
             "trip": trip,
+            "viewer_has_joined": viewer_has_joined,
             "id": "trip-hero",
             "oob": True,
             "body_template": "dashboard/partials/trips/_trip_detail_hero_body.html",
             "back_url": reverse("trips.overview"),
-            "back_label": "Plan",
+            "back_label": "Trips",
             "modifier": "top",
         },
     )
@@ -357,19 +323,17 @@ def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
 def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the activities panel as the primary HTMX response.
 
-    Bundles out-of-band refreshes so sibling elements don't go stale after an
-    activity add/edit/delete/complete:
+    Bundles out-of-band refreshes so sibling elements don't go stale after an activity
+    add/edit/delete/complete:
 
-    - ``#trip-header``/``#trip-hero``: an activity add/edit/delete/complete can
-      change the trip's persisted date range (see ``_expand_trip_dates``) - keep
-      the header and hero's date display in sync instead of leaving them stale
-      until reload.
-    - the weather panel can't be refreshed the same cheap way (it's a live
-      external API call), so it's told to re-fetch itself via HX-Trigger,
-      same as its own initial ``hx-trigger="load"``.
+    - ``#trip-header``/``#trip-hero``: an activity add/edit/delete/complete can change the trip's
+      persisted date range (see ``_expand_trip_dates``) - keep the head...
+    - the weather panel can't be refreshed the same cheap way (it's a live external API call), so it's
+      told to re-fetch itself via HX-Trigger, same as its own init...
     """
     activities_html = _activities_panel_html(request, trip, profile)
     viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.for_trip_and_profile(trip, profile).first()
+    viewer_has_joined = trip.creator_id == profile.id or (viewer_membership is not None and viewer_membership.status == TripMembership.STATUS_JOINED)
     header_html = render_to_string(
         request=request,
         template_name="dashboard/partials/trips/trip_header_partial.html",
@@ -378,10 +342,10 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
             "profile": profile,
             "viewer_is_organizer": _is_organizer(profile, trip),
             "viewer_membership": viewer_membership,
-            "viewer_has_joined": trip.creator_id == profile.id or (viewer_membership is not None and viewer_membership.status == TripMembership.STATUS_JOINED),
+            "viewer_has_joined": viewer_has_joined,
         },
     )
-    response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>' + _trip_hero_oob(request, trip))
+    response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>' + _trip_hero_oob(request, trip, viewer_has_joined=viewer_has_joined))
     response["HX-Trigger"] = "activityChanged"
     return response
 
@@ -398,23 +362,13 @@ class TripOverviewView(LoginRequiredMixin, View):
     def get(self, request):
         from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
         from urbanlens.dashboard.services.social.connections import get_connections
+        from urbanlens.dashboard.services.trips.trip_calendar import trip_month
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # with_effective_dates: the calendar payload and the stat tiles both read
-        # effective_start_date/effective_end_date/timeline_status, which query the
-        # trip's activities per row without the annotations.
-        all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
         recently_updated_trips = list(Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT))
         recently_viewed_trips = list(Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT))
-        # Matches TripListView/CalendarImportView - every list of other members'
-        # trips must mask identities the viewer isn't allowed to see (see
-        # _apply_trip_list_identity_masking's docstring for the gap this closes).
-        #
-        # Only the two rendered lists need it. `all_trips` never reaches the
-        # template: it is consumed here into `stats` and `trips_calendar_data`,
-        # which carry no identity fields (uuid/name/dates/status/url). Masking it
-        # walked every trip's memberships, so an unbounded trip list cost two
-        # queries per trip to mutate objects that were then discarded.
+        # Matches TripListView/CalendarImportView - every list of other members' trips must mask identities the
+        # viewer isn't allowed to see. Only the two rendered lists need it.
         _apply_trip_list_identity_masking(profile, recently_updated_trips)
         _apply_trip_list_identity_masking(profile, recently_viewed_trips)
         return render(
@@ -423,8 +377,8 @@ class TripOverviewView(LoginRequiredMixin, View):
             {
                 "profile": profile,
                 "page_name": "trips",
-                "stats": _trip_overview_stats(all_trips),
-                "trips_calendar_data": _trips_calendar_data(all_trips),
+                "stats": Trip.objects.filter(profiles=profile).timeline_counts(),
+                "trip_month": trip_month(profile, timezone.now().date()),
                 "recently_updated_trips": recently_updated_trips,
                 "recently_viewed_trips": recently_viewed_trips,
                 "calendar_account": GoogleCalendarAccount.objects.get_for_profile(profile),
@@ -445,44 +399,73 @@ class TripListView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.social.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        sort, direction = _trip_list_sort_params(request)
-        trips = list(_trips_for_list(profile, sort=sort, direction=direction))
-        _apply_trip_list_identity_masking(profile, trips)
-        _annotate_viewer_membership(profile, trips)
-        friends = get_connections(profile)
-        calendar_account = GoogleCalendarAccount.objects.get_for_profile(profile)
+        context = trip_list_context(request, profile)
+        if request.headers.get("HX-Request") == "true":
+            return render(request, "dashboard/partials/trips/trip_list_partial.html", context)
         return render(
             request,
             "dashboard/pages/trips/index.html",
             {
-                "trips": trips,
-                "profile": profile,
+                **context,
                 "page_name": "trips",
-                "friends": friends,
-                "calendar_account": calendar_account,
-                "sort": sort,
-                "dir": direction,
+                "friends": get_connections(profile),
+                "calendar_account": GoogleCalendarAccount.objects.get_for_profile(profile),
             },
         )
 
 
 class TripCalendarView(LoginRequiredMixin, View):
-    """Trips calendar page: a month view of all the viewer's trips.
+    """Trips calendar page: a month view of the viewer's trips.
 
-    GET /trips/calendar/  → calendar page
+    GET /trips/calendar/?month=YYYY-MM  → calendar page
     """
 
     def get(self, request):
+        from urbanlens.dashboard.services.trips.trip_calendar import parse_month, trip_month
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
+        month = parse_month(request.GET.get("month"), timezone.now().date())
         return render(
             request,
             "dashboard/pages/trips/calendar.html",
             {
                 "profile": profile,
                 "page_name": "trips",
-                "trips_calendar_data": _trips_calendar_data(trips),
+                "trip_month": trip_month(profile, month),
             },
+        )
+
+
+class TripCalendarMonthView(LoginRequiredMixin, View):
+    """One month of the trips calendar, for the prev/next controls.
+
+    GET /trips/calendar/month/?month=YYYY-MM  → the calendar partial
+    """
+
+    def get(self, request):
+        from urbanlens.dashboard.services.trips.trip_calendar import parse_month, trip_month
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        month = parse_month(request.GET.get("month"), timezone.now().date())
+        return render(request, "dashboard/partials/trips/_mini_calendar.html", {"trip_month": trip_month(profile, month)})
+
+
+class TripPickerView(LoginRequiredMixin, View):
+    """The viewer's trips matching a name fragment, as picker rows.
+
+    GET /trips/picker/?q=<fragment>  → at most ``LIMIT`` ``<li>`` rows, most recently updated first
+    """
+
+    LIMIT = 20
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        query = (request.GET.get("q") or "").strip()
+        trips = list(Trip.objects.search_for_member(profile, query, limit=self.LIMIT + 1))
+        return render(
+            request,
+            "dashboard/partials/trips/_trip_picker_rows.html",
+            {"trips": trips[: self.LIMIT], "truncated": len(trips) > self.LIMIT, "query": query},
         )
 
 
@@ -497,19 +480,16 @@ class TripCreateView(LoginRequiredMixin, View):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-            invite_ids = body.get("invite_profile_ids") or []
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
-            invite_ids = request.POST.getlist("invite_profile_ids")
+        body = posted_fields(request)
+        invite_ids = request.POST.getlist("invite_profile_ids") if request.content_type in FORM_CONTENT_TYPES else body.get("invite_profile_ids") or []
 
         source = body.get("source") or "list"
+        invite_emails = parse_address_list(body.get("invite_emails"))
+        malformed = next((address for address in invite_emails if not is_valid_address(address)), None)
+        if malformed is not None:
+            return HttpResponse(f'"{escape(malformed)}" isn\'t a valid email address.', status=400)
 
         try:
-            # Name is optional (UL-360): a blank submission gets a generated one,
-            # and the upcoming-trip quota/description limit are enforced by the
-            # same service the external API creates trips through.
             trip, _created = create_trip(
                 profile,
                 name=body.get("name"),
@@ -521,25 +501,19 @@ class TripCreateView(LoginRequiredMixin, View):
         except TripError as exc:
             return _trip_error_response(exc)
 
+        for address in invite_emails:
+            try:
+                invite_to_trip_by_email(trip, profile, address, invitation_url_builder=request.build_absolute_uri)
+            except TripError as exc:
+                messages.warning(request, f"Not every invitation was sent: {exc.message}")
+                break
+
         if source == "overview":
             response = HttpResponse("", status=200)
             response["HX-Redirect"] = reverse("trips.detail", kwargs={"trip_slug": trip.slug})
             return response
 
-        sort, direction = _trip_list_sort_params(request)
-        trips = list(_trips_for_list(profile, sort=sort, direction=direction))
-        _apply_trip_list_identity_masking(profile, trips)
-        _annotate_viewer_membership(profile, trips)
-        return render(
-            request,
-            "dashboard/partials/trips/trip_list_partial.html",
-            {
-                "trips": trips,
-                "profile": profile,
-                "sort": sort,
-                "dir": direction,
-            },
-        )
+        return render(request, "dashboard/partials/trips/trip_list_partial.html", trip_list_context(request, profile))
 
 
 class TripDetailView(LoginRequiredMixin, View):
@@ -590,10 +564,7 @@ class TripEditView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             # Presence-keyed: only submitted fields are touched. A blank name is
@@ -616,7 +587,7 @@ class TripEditView(LoginRequiredMixin, View):
                 **calendar_context(profile, trip),
             },
         )
-        return HttpResponse(header_html + _trip_hero_oob(request, trip))
+        return HttpResponse(header_html + _trip_hero_oob(request, trip, viewer_has_joined=True))
 
 
 class TripDeleteView(LoginRequiredMixin, View):
@@ -660,10 +631,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             create_activity(
@@ -687,13 +655,13 @@ class TripActivitiesView(LoginRequiredMixin, View):
 class TripAiSuggestionsView(LoginRequiredMixin, View):
     """AI-generated trip suggestions: pins worth adding, and a possible reorder.
 
-    GET  /trips/<slug>/ai-suggestions/  -> render panel (cached)
-    POST /trips/<slug>/ai-suggestions/  -> force a fresh generation (cooldown-limited)
+    GET /trips/<slug>/ai-suggestions/ -> render panel (cached)
+    POST /trips/<slug>/ai-suggestions/ -> force a fresh generation (cooldown-limited)
 
-    Read-only: this view never creates or changes anything by itself. Adding
-    a suggested pin re-uses the normal add-activity endpoint (the suggestion
-    already carries the requester's own pin slug); applying a suggested order
-    is a separate, explicit action (see TripApplySuggestedOrderView).
+    Read-only: this view never creates or changes anything by itself.
+    Adding a suggested pin re-uses the normal add-activity endpoint (the suggestion already carries the
+    requester's own pin slug); applying a suggested order is a separate, explicit action (see
+    TripApplySuggestedOrderView).
     """
 
     def get(self, request, trip_slug):
@@ -726,12 +694,10 @@ class TripApplySuggestedOrderView(LoginRequiredMixin, View):
     """Apply an AI-suggested activity order.
 
     POST /trips/<slug>/activities/apply-order/
-    Body: {"order": [activity_id, ...]}
 
-    Only ever accepts an exact permutation of the trip's own current
-    non-completed activities - never partial, never containing another
-    trip's ids, so a stale or tampered order can't silently drop or hijack
-    activities.
+    Body: {"order": [activity_id, ...]} Only ever accepts an exact permutation of the trip's own current
+    non-completed activities - never partial, never containing another trip's ids, so a stale or
+    tampered order can't silently drop or hijack activities.
     """
 
     def post(self, request, trip_slug):
@@ -741,13 +707,20 @@ class TripApplySuggestedOrderView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
+
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        from urbanlens.dashboard.services.core.reorder_limits import UNLIMITED_TRIP_FALLBACK, reorder_id_ceiling
+
+        submitted = body.get("order") or []
+        # The trip's own activity limit, for the same reason the list reorder
+        # uses its pin limit - and counted before the values are converted.
+        ceiling = reorder_id_ceiling(SiteSettings.get_current().max_trip_activities, UNLIMITED_TRIP_FALLBACK)
+        if len(submitted) > ceiling:
+            return HttpResponse(f"Reorder at most {ceiling} activities at a time.", status=400)
 
         try:
-            order = [int(value) for value in (body.get("order") or [])]
+            order = [int(value) for value in submitted]
         except (TypeError, ValueError):
             return HttpResponse("Invalid order.", status=400)
 
@@ -772,14 +745,10 @@ class TripActivityEditView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
-        # The edit form always submits every field, so the presence-keyed
-        # service call reproduces this endpoint's full-replace semantics -
-        # except child_trip_uuid, which the form only sends when it applies.
+        # The edit form always submits every field, so the presence-keyed service call reproduces this
+        # endpoint's full-replace semantics - except child_trip_uuid, which the form only sends when it applies.
         changes: dict[str, Any] = {
             "title": body.get("title"),
             "notes": body.get("notes"),
@@ -879,6 +848,11 @@ class TripActivityVoteView(LoginRequiredMixin, View):
         return _render_activities_panel(request, trip, profile)
 
 
+#: Top-level comments per page in the trip comments panel, matching the
+#: pin/wiki panel's own page size.
+_TRIP_COMMENTS_PAGE_SIZE = 8
+
+
 def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the comments panel from the shared visible-comment tree.
 
@@ -890,15 +864,29 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     Returns:
         The rendered comments panel.
     """
-    rendered: list[TripCommentData] = build_comment_tree(trip, profile)
-    comment_count = sum(1 + len(item["replies"]) for item in rendered)
+    from django.urls import reverse
+
+    from urbanlens.dashboard.services.core.pagination import get_page
+    from urbanlens.dashboard.services.trips.trip_comments import visible_comment_count, visible_comment_queryset
+
+    # Default to the last page: comments run oldest to newest, so the most
+    # recent activity is what a viewer should see without paging back.
+    page_obj = get_page(request, visible_comment_queryset(trip, profile), _TRIP_COMMENTS_PAGE_SIZE, default_last=True)
+    rendered: list[TripCommentData] = build_comment_tree(trip, profile, comments=page_obj.object_list)
     return render(
         request,
         "dashboard/partials/trips/trip_comments_panel.html",
         {
             "trip": trip,
             "rendered_comments": rendered,
-            "comment_count": comment_count,
+            "page_obj": page_obj,
+            # The panel partial is also rendered inside the full trip page, so
+            # the pagination bar cannot fall back to request.path - a click
+            # there would swap a whole document into the panel.
+            "comments_url": reverse("trips.comments", args=[trip.slug]),
+            # The whole visible thread, not the page - a badge taken from the
+            # page would shrink the moment paging started.
+            "comment_count": visible_comment_count(trip, profile),
             "profile": profile,
             "allowed_emojis": ALLOWED_COMMENT_EMOJIS,
             "viewer_has_joined": _viewer_has_joined(profile, trip),
@@ -968,7 +956,7 @@ class TripMembersView(LoginRequiredMixin, View):
     """Members panel for a trip.
 
     GET  /trips/<slug>/members/  → render panel
-    POST /trips/<slug>/members/  → add member by username, re-render panel
+    POST /trips/<slug>/members/  → add a member by username or invite an email address, re-render panel
     """
 
     def get(self, request, trip_slug):
@@ -985,17 +973,22 @@ class TripMembersView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
+        username = (body.get("username") or "").strip()
+        email = (body.get("email") or "").strip() or (username if "@" in username else "")
         try:
-            add_member_by_username(trip, profile, body.get("username") or "")
+            if email:
+                invite_to_trip_by_email(trip, profile, email, invitation_url_builder=request.build_absolute_uri)
+            else:
+                add_member_by_username(trip, profile, username)
         except TripError as exc:
             return _trip_error_response(exc)
 
-        return _render_members_panel(request, trip, profile)
+        response = _render_members_panel(request, trip, profile)
+        if email:
+            response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Invitation sent."}})
+        return response
 
 
 class TripMemberRemoveView(LoginRequiredMixin, View):
@@ -1035,9 +1028,7 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
         trip = result
 
         try:
-            # Scoped to this trip's roster - see TripMemberRemoveView. The panel
-            # keeps its toggle UX by computing the target value here; the service
-            # itself takes an explicit boolean so a retried API call is idempotent.
+            # Scoped to this trip's roster - see TripMemberRemoveView.
             require_trip_creator(trip, profile)
             target = resolve_trip_member(trip, profile_id=profile_id)
             membership = TripMembership.objects.for_trip_and_profile(trip, target).first()
@@ -1045,10 +1036,9 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
         except TripError as exc:
             return _trip_error_response(exc)
 
-        # Organizer status feeds directly into each activity's can_manage flag
-        # (see _activities_panel_html) - without this, the acting creator (and
-        # the newly (de)promoted organizer, on their own screen) wouldn't see
-        # activity permissions update until reloading.
+        # Organizer status feeds directly into each activity's can_manage flag (see _activities_panel_html) -
+        # without this, the acting creator (and the newly (de)promoted organizer, on their own screen) wouldn't
+        # see activity permissions update until reloading.
         members_response = _render_members_panel(request, trip, profile)
         activities_html = _activities_panel_html(request, trip, profile, oob=True)
         members_response.content += activities_html.encode()
@@ -1096,10 +1086,7 @@ class TripActivityStatusView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             # An absent/unrecognized status toggles, preserving this endpoint's
@@ -1125,18 +1112,7 @@ class TripActivityMoveView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
-            return HttpResponse("Join this trip to contribute.", status=403)
-
-        try:
-            activity = get_activity(trip, activity_id)
-        except TripError as exc:
-            return _trip_error_response(exc)
-
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         date_str = (body.get("date") or "").strip()
         if not date_str:
@@ -1147,13 +1123,12 @@ class TripActivityMoveView(LoginRequiredMixin, View):
         except ValueError:
             return HttpResponse("Invalid date format.", status=400)
 
-        if activity.scheduled_at:
-            # Preserve existing time component; only update date
-            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, activity.scheduled_at.time()))
-        else:
-            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, datetime.time(0, 0)))
-
-        activity.save(update_fields=["scheduled_at", "updated"])
+        # See services.trips.trip_activities.set_activity_position's docstring for the same class of fix made
+        # there earlier.
+        try:
+            move_activity(trip, profile, activity_id, date=new_date)
+        except TripError as exc:
+            return _trip_error_response(exc)
 
         return _render_activities_panel(request, trip, profile)
 
@@ -1163,11 +1138,10 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
 
     POST /trips/<slug>/join/
 
-    Unlocks contribution rights (add/edit activities, comment, vote, add
-    members) for an invited member - separate from RSVP, which only says
-    whether they expect to actually show up. Declining an invitation reuses
-    `TripLeaveView` instead, since a not-yet-joined member has no
-    contributions to lose by leaving.
+    Unlocks contribution rights (add/edit activities, comment, vote, add members) for an invited member
+
+    - separate from RSVP, which only says whether they expect to actually show up. Declining an
+      invitation reuses `TripLeaveView` instead, since a not-yet-joined m...
     """
 
     def post(self, request, trip_slug):
@@ -1179,9 +1153,8 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
 
         join_trip(trip, profile)
 
-        # Joining unlocks contribution across the whole page (activities,
-        # comments, members) - simplest to reload rather than stitch together
-        # OOB swaps for every affected panel for a rare, one-off action.
+        # Joining unlocks contribution across the whole page (activities, comments, members) - simplest to
+        # reload rather than stitch together OOB swaps for every affected panel for a rare, one-off action.
         response = HttpResponse("", status=200)
         response["HX-Refresh"] = "true"
         return response
@@ -1201,10 +1174,7 @@ class TripMemberRSVPView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             set_trip_rsvp(trip, profile, body.get("rsvp"))
@@ -1219,10 +1189,9 @@ class TripActivityRSVPView(LoginRequiredMixin, View):
     """Set or clear the current user's RSVP override for one activity.
 
     POST /trips/<slug>/activities/<id>/rsvp/
-    Body: {rsvp: "yes"|"no"|"maybe"|""}
 
-    An empty value deletes the override so the activity immediately inherits
-    the current trip RSVP again.
+    Body: {rsvp: "yes"|"no"|"maybe"|""} An empty value deletes the override so the activity immediately
+    inherits the current trip RSVP again.
     """
 
     def post(self, request, trip_slug, activity_id):
@@ -1241,10 +1210,7 @@ class TripActivityRSVPView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             set_activity_rsvp(trip, profile, activity_id, rsvp=body.get("rsvp"))
@@ -1259,9 +1225,8 @@ class TripLeaveView(LoginRequiredMixin, View):
 
     DELETE /trips/<slug>/leave/
 
-    Also doubles as "decline invitation" for a member who was invited but
-    never joined (see `TripMembershipJoinView`) - either way the membership
-    row is simply removed.
+    Also doubles as "decline invitation" for a member who was invited but never joined (see
+    `TripMembershipJoinView`) - either way the membership row is simply removed.
     """
 
     def delete(self, request, trip_slug):
@@ -1325,8 +1290,8 @@ class TripActivityPositionView(LoginRequiredMixin, View):
     """Save a map-drag position override for a trip activity.
 
     POST /trips/<slug>/activities/<int:activity_id>/position/
-    Body: {lat: float, lng: float}
-    This updates lat_override/lng_override on the TripActivity only - the
+
+    Body: {lat: float, lng: float} This updates lat_override/lng_override on the TripActivity only - the
     underlying Pin and Location coordinates are never modified.
     """
 
@@ -1340,14 +1305,7 @@ class TripActivityPositionView(LoginRequiredMixin, View):
 
         Returns:
             JsonResponse confirming saved coordinates, or an error HttpResponse.
-
-        Note:
-            Two deliberate behavior changes over the original implementation,
-            applied to this internal endpoint as well as the external one: it
-            now requires edit-activities permission (it previously admitted any
-            *invited* member, joined or not), and coordinates are bounds-checked
-            (they previously were not, so a marker could be saved at latitude
-            5000). See ``services.trips.trip_activities.set_activity_position``.
+            Note: See ``services.trips.trip_activities.set_activity_position``.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = trip_or_not_found(request, trip_slug, profile)
@@ -1355,10 +1313,7 @@ class TripActivityPositionView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         if "lat" not in body or "lng" not in body:
             return HttpResponse("lat and lng are required.", status=400)
@@ -1374,9 +1329,9 @@ class TripActivityPositionView(LoginRequiredMixin, View):
 class TripChildTripSearchView(LoginRequiredMixin, View):
     """Search for trips the current user can add as a child activity.
 
-    Only trips the user is a member of (excluding the current trip) are returned.
-
     GET /trips/<slug>/child-trip-search/?q=<query>
+
+    Only trips the user is a member of (excluding the current trip) are returned.
     """
 
     def get(self, request, trip_slug):
@@ -1394,7 +1349,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         if len(q) < 2:
             return JsonResponse({"results": []})
 
-        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(slug=trip_slug).order_by("name")[:8]
+        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(slug=trip_slug).with_effective_dates().order_by("name")[:8]
         results = [
             {
                 "uuid": str(t.uuid),
@@ -1410,18 +1365,14 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
 def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> float:
     """Absolute gap in seconds between a forecast slot and a scheduled time.
 
-    A slot carrying an aware-UTC ``date_utc`` (see the ``ForecastSlot``
-    contract) is compared against an aware ``target`` directly, so the gap is
-    offset-correct even when the provider's ``date`` is a local wall clock
-    (Open-Meteo's is). Slots without one fall back to comparing wall clocks,
-    forced naive on both sides so an offset-carrying ``date`` can't raise
-    "can't subtract offset-naive and offset-aware datetimes" and 500 the
-    trip page.
+    Slots without one fall back to comparing wall clocks, forced naive on both sides so an
+    offset-carrying ``date`` can't raise "can't subtract offset-naive and offset-aware datetimes" and
+    500 the trip page.
 
     Args:
         slot: The forecast slot to measure.
-        target: The activity's scheduled time (aware UTC from the ORM, but a
-            naive value is tolerated and falls back to the wall-clock path).
+        target: The activity's scheduled time (aware UTC from the ORM, but a naive value is tolerated
+        and falls back to the wall-clock path).
 
     Returns:
         The absolute difference in seconds.
@@ -1436,26 +1387,93 @@ def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> floa
     return abs((slot_date - target_naive).total_seconds())
 
 
-def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
-    """For each activity, find the closest forecast slot at its location/time.
+#: How far ahead an activity can be and still be matched to a forecast: the longest forecast any provider here
+#: publishes (Open-Meteo's 16 days) plus the gap a slot may sit from its activity. Nothing later is fetched.
+FORECAST_HORIZON = datetime.timedelta(days=16, hours=36)
+
+#: How long one place's forecast is reused.
+FORECAST_CACHE_TTL = 3600
+
+#: The widest gap between an activity and the slot describing it.
+_MAX_SLOT_GAP_HOURS = 36
+
+
+def _forecast_cell(coords: tuple[float, float]) -> tuple[float, float]:
+    return round(coords[0], 2), round(coords[1], 2)
+
+
+def _fetch_forecasts(cells: list[tuple[float, float]], *, caller: str | None) -> tuple[dict[tuple[float, float], list[ForecastSlot]], bool]:
+    """Forecast slots for each place, from the cache or one fetch under the forecast upstream's policy.
+
+    The missing places are fetched one after another in a single background call holding one slot, each
+    cached as it arrives, so a fetch that outlives the request still fills the cache for the next one.
+
+    Args:
+        cells: Rounded coordinates to forecast.
+        caller: Who to charge against the per-account rate, or None.
+
+    Returns:
+        The slots per place that could be had now, and whether asking again shortly may find more.
+    """
+    from urbanlens.dashboard.services.apis.locations.weather_resolution import get_raw_forecast_slots
+    from urbanlens.dashboard.services.apis.request_upstreams import WeatherForecastUpstream
+
+    found: dict[tuple[float, float], list[ForecastSlot]] = {}
+    missing: list[tuple[float, float]] = []
+    for cell in cells:
+        hit = WeatherForecastUpstream.cached(f"{cell[0]:.2f}:{cell[1]:.2f}")
+        if hit is not None:
+            found[cell] = hit
+        else:
+            missing.append(cell)
+    if not missing:
+        return found, False
+
+    budget = WeatherForecastUpstream.deadline * 3
+
+    def fetch() -> dict[tuple[float, float], list[ForecastSlot]]:
+        started = time.monotonic()
+        fetched: dict[tuple[float, float], list[ForecastSlot]] = {}
+        for cell in missing:
+            if time.monotonic() - started > budget:
+                break
+            try:
+                slots = get_raw_forecast_slots(*cell)
+            except (requests.RequestException, GatewayRequestError) as exc:
+                logger.warning("Weather fetch failed for a trip activity's location: %s", type(exc).__name__)
+                continue
+            if slots:
+                WeatherForecastUpstream.store(f"{cell[0]:.2f}:{cell[1]:.2f}", slots, FORECAST_CACHE_TTL)
+                fetched[cell] = slots
+        return fetched
+
+    result = WeatherForecastUpstream.call(fetch, caller=caller)
+    found.update(result.value_or({}))
+    return found, not result.ok
+
+
+def _build_activity_forecasts(activities: list[TripActivity], *, caller: str | None = None) -> list[dict]:
+    """For each activity, find the closest forecast slot at its location and time.
 
     Tries REData first, then the direct OpenWeatherMap/Open-Meteo chain - see
     ``services.apis.locations.weather_resolution.get_raw_forecast_slots``.
 
-    Returns a list of dicts with keys:
-      activity, location_name, scheduled_at, slot, no_coords, out_of_range
+    Args:
+        activities: The activities to forecast; the caller leaves out any past :data:`FORECAST_HORIZON`.
+        caller: Who to charge against the forecast upstream's per-account rate, or None.
+
+    Returns:
+        One dict per activity with ``activity``, ``location_name``, ``scheduled_at``, ``slot``, ``no_coords``,
+        ``out_of_range`` and ``pending`` (its place's forecast may arrive if asked again shortly).
     """
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
-    from urbanlens.dashboard.services.apis.locations.weather_resolution import get_raw_forecast_slots
+    coords_by_activity = {id(act): activity_coords(act) for act in activities}
+    cells = sorted({_forecast_cell(coords) for act in activities if (coords := coords_by_activity[id(act)]) is not None and act.scheduled_at is not None})
+    slots_by_cell, pending = _fetch_forecasts(cells, caller=caller) if cells else ({}, False)
 
-    cache: dict[tuple[float, float], list[ForecastSlot] | None] = {}
     results = []
-
     for act in activities:
-        coords = activity_coords(act)
-
+        coords = coords_by_activity[id(act)]
         location_name = act.effective_title if act.effective_title != "Unnamed activity" else ""
-
         entry: dict = {
             "activity": act,
             "location_name": location_name,
@@ -1463,34 +1481,23 @@ def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
             "slot": None,
             "no_coords": coords is None,
             "out_of_range": False,
+            "pending": False,
         }
-
         if coords is None or act.scheduled_at is None:
             results.append(entry)
             continue
 
-        key = (round(coords[0], 2), round(coords[1], 2))
-        if key not in cache:
-            try:
-                cache[key] = get_raw_forecast_slots(*coords)
-            except (requests.RequestException, LocationContextUnavailableError):
-                logger.warning("Weather fetch failed for coords %s", key)
-                cache[key] = None
-
-        slots = cache.get(key) or []
+        slots = slots_by_cell.get(_forecast_cell(coords)) or []
         if not slots:
+            entry["pending"] = pending
             results.append(entry)
             continue
 
-        target = act.scheduled_at
-        closest, gap_seconds = min(((slot, _forecast_gap_seconds(slot, target)) for slot in slots), key=lambda pair: pair[1])
-        gap_hours = gap_seconds / 3600
-
-        if gap_hours > 36:
+        closest, gap_seconds = min(((slot, _forecast_gap_seconds(slot, act.scheduled_at)) for slot in slots), key=lambda pair: pair[1])
+        if gap_seconds / 3600 > _MAX_SLOT_GAP_HOURS:
             entry["out_of_range"] = True
         else:
             entry["slot"] = closest
-
         results.append(entry)
 
     return results
@@ -1515,64 +1522,62 @@ def _group_by_day(rows: list[dict]) -> list[tuple]:
     return [(day, day_map[day]) for day in keys]
 
 
-def _build_activity_history(activities: list[TripActivity]) -> list[dict]:
-    """For each past activity, what the weather actually was on its day.
+def _build_activity_history(activities: list[TripActivity]) -> tuple[list[dict], bool]:
+    """For each past activity, what the weather actually was on its day, from stored rows.
 
-    The counterpart of :func:`_build_activity_forecasts`, for activities the
-    forecast can no longer say anything about. A forecast is only meaningful
-    relative to when it was made; a record of a day that has already happened
-    never changes, which is why this needs no freshness handling at all.
-
-    Grouped by coordinate before fetching, and fetched as a *range* per group,
-    so a week-long trip with five activities at one place costs one REData
-    request rather than five. Activities whose position comes from a lat/lng
-    override have no ``Location`` to cache against and take the uncached path -
-    REData still caches the days on its own side.
+    Missing days are queued for a background fetch rather than fetched here, the way the visit-history panel
+    does it; a record of a past day never changes, so once stored it needs no freshness handling.
 
     Args:
         activities: Past trip activities, in any order.
 
     Returns:
-        A list of dicts with keys ``activity``, ``location_name``,
-        ``scheduled_at`` and ``recorded`` (a
-        :class:`~urbanlens.dashboard.services.locations.visit_weather.RecordedDay`),
-        for the activities a reading could be found for. Activities with no
-        coordinates, no date, or a day outside ERA5's window are absent rather
-        than rendered as empty rows.
+        Dicts with ``activity``, ``location_name``, ``scheduled_at`` and ``recorded`` (a ``RecordedDay``),
+        earliest first, and whether some wanted days are not stored yet.
     """
-    from urbanlens.dashboard.services.locations.visit_weather import recorded_range, recorded_range_at
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+    from urbanlens.dashboard.services.locations.visit_weather import cached_records, convert_records, missing_days, queue_missing_days, weather_cell
 
-    # (rounded coordinate) -> the activities there. Rounding matches
-    # _build_activity_forecasts' own key, so the two group identically. The day
-    # is carried alongside rather than re-derived below: `scheduled_at` is
-    # nullable and the guard that rules that out is here, so re-reading it
-    # later would be reasoning the reader (and the type checker) cannot follow.
-    by_point: dict[tuple[float, float], list[tuple[TripActivity, tuple[float, float], datetime.date]]] = {}
+    by_cell: dict[tuple[int, int], list[TripActivity]] = {}
     for act in activities:
         coords = activity_coords(act)
         if coords is None or act.scheduled_at is None:
             continue
-        by_point.setdefault((round(coords[0], 2), round(coords[1], 2)), []).append((act, coords, act.scheduled_at.date()))
+        by_cell.setdefault(weather_cell(*coords), []).append(act)
+
+    wanted = {cell: [act.scheduled_at.date() for act in group if act.scheduled_at is not None] for cell, group in by_cell.items()}
+    stored = cached_records(wanted)
+    queued = False
+    for cell, days in wanted.items():
+        if missing := missing_days(days, stored[cell]):
+            queued = queue_missing_days(cell, missing) or queued
+    if queued:
+        # Where Celery runs eagerly (tests, a single-process dev stack) the days are already stored.
+        stored = cached_records(wanted)
 
     results: list[dict] = []
-    for group in by_point.values():
-        days = sorted({day for _, _, day in group})
-        first_act, coords, _ = group[0]
-        location = first_act.location or (first_act.pin.location if first_act.pin else None)
-        if location is not None and first_act.lat_override is None:
-            recorded = recorded_range(location, days[0], days[-1])
-        else:
-            recorded = recorded_range_at(coords[0], coords[1], days[0], days[-1])
-
-        for act, _, day in group:
-            entry = recorded.get(day.isoformat())
+    fetchable = redata_configured()
+    pending = False
+    for cell, group in by_cell.items():
+        days = wanted[cell]
+        pending = pending or (fetchable and bool(missing_days(days, stored[cell])))
+        recorded = convert_records(stored[cell], days)
+        for act in group:
+            if act.scheduled_at is None:
+                continue
+            entry = recorded.get(act.scheduled_at.date().isoformat())
             if entry is None or not entry.has_readings:
                 continue
             location_name = act.effective_title if act.effective_title != "Unnamed activity" else ""
             results.append({"activity": act, "location_name": location_name, "scheduled_at": act.scheduled_at, "recorded": entry})
 
     results.sort(key=lambda row: row["scheduled_at"])
-    return results
+    return results, pending
+
+
+#: Per account. Each render can fetch a forecast per activity day.
+TRIP_WEATHER_RATE = Rate(limit=30, window_seconds=60, on_outage=Outage.REFUSE)
+TRIP_WEATHER_METHODS = frozenset({"GET"})
 
 
 class TripWeatherView(LoginRequiredMixin, View):
@@ -1602,39 +1607,38 @@ class TripWeatherView(LoginRequiredMixin, View):
         error: str = ""
         grouped: list[tuple] = []
         recorded_days: list[tuple] = []
+        pending = False
 
         if not profile.external_apis_enabled:
             error = "External weather lookups are turned off in your settings."
         else:
+            from urbanlens.dashboard.services.security.throttle import account_or_address
+
             today = timezone.localdate()
+            horizon = timezone.now() + FORECAST_HORIZON
             all_activities = list(_activity_qs(trip))
-            # A past activity is one the forecast can no longer speak to. It gets
-            # the recorded-conditions treatment below instead of being dropped,
-            # which is what left a finished trip's weather panel empty.
+            # A past activity is one the forecast can no longer speak to.
             past_activities = [act for act in all_activities if act.scheduled_at is not None and act.scheduled_at.date() < today]
             try:
-                recorded = _build_activity_history(past_activities)
-            except (requests.RequestException, KeyError, TypeError, ValueError):
-                # REData's own unavailability is already absorbed inside
-                # `visit_weather._fetch_days`, which answers with no days rather
-                # than raising - so what reaches here is a malformed activity
-                # (an unparseable coordinate, say), not an outage.
-                logger.warning("Historical weather fetch failed for trip %s", trip_slug, exc_info=True)
+                recorded, pending = _build_activity_history(past_activities)
+            except (KeyError, TypeError, ValueError):
+                # Stored rows are read and missing days queued, so no outage reaches here - only a malformed
+                # activity (an unparseable coordinate, say).
+                logger.warning("Historical weather lookup failed for trip %s", trip_slug, exc_info=True)
                 recorded = []
             recorded_days = _group_by_day(recorded)
 
-            activities = [act for act in all_activities if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
+            activities = [act for act in all_activities if act.status != TripActivity.STATUS_COMPLETED and act.scheduled_at is not None and today <= act.scheduled_at.date() and act.scheduled_at <= horizon]
             if not activities:
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
                 try:
-                    activity_forecasts = _build_activity_forecasts(activities)
-                    # Drop activities with nothing useful to show (no location data,
-                    # or too far outside the 5-day forecast window) instead of
-                    # rendering an empty "No location data"/"Outside 5-day forecast"
-                    # row for them - a day (or the whole panel) with nothing left
-                    # after this simply doesn't appear, rather than showing only
-                    # empty placeholders.
+                    activity_forecasts = _build_activity_forecasts(activities, caller=account_or_address(request))
+                    pending = pending or any(af["pending"] for af in activity_forecasts)
+                    # Drop activities with nothing useful to show (no location data, or too far outside the
+                    # 5-day forecast window) instead of rendering an empty "No location data"/"Outside 5-day
+                    # forecast" row for them - a day (or the whole panel) with nothing left after this simply
+                    # doesn't appear, rather than showing only empty placeholders.
                     activity_forecasts = [af for af in activity_forecasts if af["slot"] is not None]
 
                     day_map: dict = defaultdict(list)
@@ -1657,5 +1661,8 @@ class TripWeatherView(LoginRequiredMixin, View):
                 "grouped": grouped,
                 "recorded_days": recorded_days,
                 "error": error,
+                # Asked once more after a pause while something is still arriving; the retry never asks again, so a
+                # day REData cannot answer does not poll forever.
+                "refresh_url": f"{request.path}?retry=1" if pending and not request.GET.get("retry") else "",
             },
         )

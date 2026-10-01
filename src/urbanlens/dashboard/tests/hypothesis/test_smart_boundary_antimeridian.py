@@ -1,21 +1,4 @@
-"""A smart list whose boundary crosses the date line must still match its pins.
-
-Chunk 125 fixed `filter_by_criteria`'s `include_regions`/`exclude_regions` to split
-regions at the antimeridian, but `PinList.smart_boundary` is a *separate* field
-queried by its own `__within` calls, and those were missed. There are two of them,
-and they answer different questions:
-
-- `_pin_in_boundary` decides whether one pin belongs, on every pin save;
-- `_boundary_matching_ids` resolves the whole list during a resync.
-
-Both had to be fixed, or a pin would join the list on save and vanish on the next
-resync (or the reverse), which is worse than either being wrong consistently.
-
-The unwrapped form (Leaflet gives 179 to 181 when the user draws across the line)
-is the one that actually arrives. The ordinary case is asserted alongside, because
-a boundary filter that changed behaviour for the rest of the world would be a far
-worse bug than this one.
-"""
+"""A smart list whose boundary crosses the date line must still match its pins."""
 
 from __future__ import annotations
 
@@ -42,7 +25,9 @@ class SmartBoundaryAntimeridianTests(TestCase):
         self.profile = Profile.objects.get(user=baker.make("auth.User"))
 
     def _pin(self, name: str, longitude: float, latitude: float = -15.0) -> Pin:
-        return baker.make(Pin, profile=self.profile, name=name, location=baker.make(Location, latitude=latitude, longitude=longitude))
+        return baker.make(
+            Pin, profile=self.profile, name=name, location=baker.make(Location, latitude=latitude, longitude=longitude)
+        )
 
     def _list(self, region: MultiPolygon) -> PinList:
         return baker.make(PinList, profile=self.profile, name="Across the line", smart_boundary=region)

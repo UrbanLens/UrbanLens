@@ -1,17 +1,6 @@
 """Consensus models - the wiki-data-completion game.
-
-Each round shows one player a single missing/unconfirmed piece of data about
-a ``Wiki`` they've visited-pinned (a name, a description, an alias, a photo's
-coordinates) and the player supplies it, applied to the wiki immediately -
-see ``services.consensus.fields`` for the per-field-kind registry that drives
-round generation and answer application. Solo sessions apply an answer the
-instant it's submitted; the one competitive mode races participants and
-resolves disagreement through a vote (or, failing that, a cross-session
-tentative-answer pool) - see ``services.consensus.session``.
-
-Points/leveling/trust live on a Consensus-only per-profile row
-(``ConsensusProfile``), independent of SpotGuessr/Trivia's Glicko-2 ratings -
-see ``services.consensus.points``/``trust`` for the formulas.
+Each round shows one player a single missing/unconfirmed piece of data about a ``Wiki`` they've visited-pinned (a name, a description, an alias, a photo's coordinates) and the player supplies it, applied to the wiki immediately - see ``services.consensus.fields`` for the per-field-kind registry that drives round generation and answer application.
+Points/leveling/trust live on a Consensus-only per-profile row (``ConsensusProfile``), independent of SpotGuessr/Trivia's Glicko-2 ratings - see ``services.consensus.points``/``trust`` for the formulas.
 """
 
 from __future__ import annotations
@@ -89,11 +78,7 @@ class ConsensusSessionParticipantStatus(abstract.TextChoices):
 
 class ConsensusRoundResolution(abstract.TextChoices):
     """How a round's answer(s) settled.
-
-    ``PENDING`` covers both "solo, not yet answered" and "competitive, still
-    collecting answers" - the single source of truth ``get_or_create_round``
-    reads for "is this round done" (mirrors ``GameRound.revealed_at``, but
-    named/valued so the competitive sub-phases have somewhere to live too).
+    ``PENDING`` covers both "solo, not yet answered" and "competitive, still collecting answers" - the single source of truth ``get_or_create_round`` reads for "is this round done" (mirrors ``GameRound.revealed_at``, but named/valued so the competitive sub-phases have somewhere to live too).
     """
 
     PENDING = "pending", "Pending"
@@ -116,10 +101,6 @@ class ConsensusTentativeStatus(abstract.TextChoices):
 
 class ConsensusProfile(abstract.DashboardModel):
     """A profile's Consensus points, level, and trust standing.
-
-    Consensus-only - deliberately not shared with SpotGuessr/Trivia's
-    Glicko-2 ratings, and not a generic cross-game Profile stat (per design
-    decision - see the Consensus implementation plan).
 
     Attributes:
         total_points: Lifetime point total, from both in-game contributions
@@ -184,13 +165,7 @@ class ConsensusProfile(abstract.DashboardModel):
 
 class ConsensusSession(abstract.DashboardModel):
     """One Consensus playthrough: a fixed round count, solo or competitive.
-
-    No ``mode`` field - unlike SpotGuessr's fixed-per-session mode, a
-    Consensus round's field kind varies round-to-round (see
-    ``ConsensusRound.field_kind``); solo vs. competitive is expressed the
-    same implicit way ``GameSession`` does it (a single-participant session
-    created directly ACTIVE, vs. a multi-participant session starting in
-    LOBBY).
+    No ``mode`` field - unlike SpotGuessr's fixed-per-session mode, a Consensus round's field kind varies round-to-round (see ``ConsensusRound.field_kind``); solo vs. competitive is expressed the same implicit way ``GameSession`` does it (a single-participant session created directly ACTIVE, vs. a multi-participant session starting in LOBBY).
 
     Attributes:
         status: Lifecycle state.
@@ -455,13 +430,8 @@ class ConsensusVote(abstract.DashboardModel):
 
 class ConsensusTentativeAnswer(abstract.DashboardModel):
     """A wiki-scoped, not-yet-applied candidate answer awaiting cross-session consensus.
-
-    The Wiki-scoped analog of ``PinSuggestion`` (which is Pin-scoped and
-    doesn't fit here): created when a competitive round's disagreement vote
-    fails to reach consensus (see ``services.consensus.session``'s
-    ``TENTATIVE`` resolution branch). ``support_count`` accumulates across
-    separate sessions proposing the same value, so consensus can build up
-    over time without ever touching the wiki until it does.
+    The Wiki-scoped analog of ``PinSuggestion`` (which is Pin-scoped and doesn't fit here): created when a competitive round's disagreement vote fails to reach consensus (see ``services.consensus.session``'s ``TENTATIVE`` resolution branch).
+    ``support_count`` accumulates across separate sessions proposing the same value, so consensus can build up over time without ever touching the wiki until it does.
 
     Attributes:
         support_count: How many separate proposals (across sessions) have
@@ -519,10 +489,9 @@ class ConsensusTentativeAnswer(abstract.DashboardModel):
             Index(fields=["wiki", "field_kind"], name="idxdb_ctent_wiki_field"),
         ]
         constraints = [
-            # Case-insensitive per (wiki, field_kind) - mirrors WikiAlias's
-            # uniqueness rule. NULL text_value rows (PHOTO_COORDINATES) never
-            # collide under this constraint - proximity-based dedup for those
-            # is handled in services.consensus.tentative instead.
+            # Case-insensitive per (wiki, field_kind) - mirrors WikiAlias's uniqueness rule.
+            # NULL text_value rows (PHOTO_COORDINATES) never collide under this constraint -
+            # proximity-based dedup for those is handled in services.consensus.tentative instead.
             UniqueConstraint(Lower("text_value"), "wiki", "field_kind", name="db_consensus_tentative_unique"),
         ]
 

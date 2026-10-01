@@ -190,7 +190,7 @@ round you've guessed on" rule.
 ## Glicko-2 ratings: player skill vs. question difficulty
 
 Mirrors `services.spotguessr.ratings.apply_round_ratings` exactly, reusing
-`services.spotguessr.glicko2`'s pure math directly rather than reimplementing it — same
+`services.games.glicko2`'s pure math directly rather than reimplementing it — same
 defaults (rating 1500, RD 350, volatility 0.06, scale 173.7178, τ=0.5). The one difference: a
 round's outcome is binary (1.0 for a correct answer, 0.0 for incorrect) rather than SpotGuessr's
 continuous distance-based fraction — an AI-judged "close enough" match still counts as a full

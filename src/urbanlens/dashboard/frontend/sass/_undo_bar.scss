@@ -1,0 +1,70 @@
+@use 'variables' as *;
+
+// Floating undo/redo, bottom-right of the viewport.
+.ul-undo-bar {
+    position: fixed;
+    // Above map toolbars (1000) and the sticky page footer (9999); below toasts (10070).
+    z-index: 10050;
+    right: 10px;
+    bottom: 10px;
+    // #ul-undo-bar is a <nav> element (for the landmark role).
+    width: auto;
+    height: auto;
+    // line-height is inherited (unlike width/height), so the same leaked `nav` reset rules also pushed a 56px line box down onto every.
+    line-height: normal;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    box-shadow: var(--ul-shadow-md);
+    transform: translateY(calc(-1 * var(--ul-undo-offset-y, 0px)));
+    transition: transform .2s ease;
+
+    &[hidden] {
+        display: none !important;
+    }
+
+    // Unlike the map toolbar's .map-btn-icon (sized by an ancestor selector
+    // that doesn't reach here), this one needs its own explicit sizing.
+    .map-btn-icon {
+        width: 2rem;
+        height: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: $radius-sm;
+        background: transparent;
+        color: var(--ul-grey-7);
+        cursor: pointer;
+        transition: background-color .15s ease, color .15s ease;
+
+        // Undo _reset.scss's `nav i` block-icon rule (display:block, 56px height/line-height) so the glyph sits centered instead of forcing this.
+        .material-symbols-outlined {
+            display: inline-flex;
+            align-items: center;
+            height: auto;
+            line-height: 1;
+            font-size: 1.2rem;
+        }
+
+        &:hover:not(:disabled),
+        &:focus-visible {
+            background: var(--ul-hover-bg, var(--ul-grey-1));
+            color: var(--ul-grey-9);
+        }
+
+        &:disabled {
+            opacity: .4;
+            cursor: default;
+        }
+
+        &[hidden] {
+            display: none;
+        }
+    }
+}

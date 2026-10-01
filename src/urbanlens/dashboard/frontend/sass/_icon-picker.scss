@@ -180,6 +180,14 @@
     overflow-y: auto;
 }
 
+.icon-picker-status {
+    width: 100%;
+    padding: 12px 4px;
+    color: var(--ul-grey-6);
+    font-size: 0.85rem;
+    text-align: center;
+}
+
 .icon-picker-item {
     display: flex;
     flex-direction: column;

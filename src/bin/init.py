@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from enum import Enum
+import json
 import logging
 import os
 from pathlib import Path
@@ -13,13 +15,24 @@ logger = logging.getLogger(__name__)
 
 
 class UnrecoverableError(Exception):
-    """
-    An error that cannot be recovered. This will result in a sys.exit(1)
-    """
+    """Fatal error; results in sys.exit(1)."""
+
+
+class Mode(Enum):
+    """Which part of initialization one invocation performs."""
+
+    #: Build, migrate and serve, all as whoever the credentials name.
+    FULL = "full"
+    #: Build the frontend and collect static files; touches no database, so the image build can run it.
+    FRONTEND = "frontend"
+    #: Create and migrate the database and apply the per-tier roles; needs the owner's credentials.
+    DATABASE = "database"
+    #: Build the frontend and serve, against a database DATABASE has already prepared.
+    SERVE = "serve"
 
 
 def resolve_executable(name: str) -> str:
-    """Return an absolute path for an expected executable on PATH."""
+    """Return an absolute path for an executable on PATH."""
     resolved = which(name)
     if resolved is None:
         raise UnrecoverableError(f"Required executable not found on PATH: {name}")
@@ -43,13 +56,14 @@ class DjangoProjectInitializer:
     def __init__(self, no_runserver: bool = False, environment: str | None = None):
         self.no_runserver = no_runserver
 
-        # Get database details from environment variables
         self.db_host = os.environ.get("UL_DB_HOST", "localhost")
         self.db_port = int(os.environ.get("UL_DB_PORT", "5432"))
         self.db_name = os.environ.get("UL_DB_NAME", "UrbanLens")
         self.db_user = os.environ.get("UL_DB_USER", "postgres")
         self.db_pass = os.environ.get("UL_DB_PASS", "postgres")
         self.environment = environment or os.environ.get("UL_ENVIRONMENT", "production")
+        # Hot-reload bind-mounts make build outputs host-owned; see docker-compose.hot-reload.yml.
+        self.skip_frontend_build = os.environ.get("UL_SKIP_FRONTEND_BUILD", "").lower() in {"1", "true", "yes"}
 
     @property
     def db_host(self) -> str:
@@ -57,10 +71,9 @@ class DjangoProjectInitializer:
 
     @db_host.setter
     def db_host(self, value: str):
-        # Strip special characters from the host
         self._db_host = re.sub(r"[^a-zA-Z0-9_-]", "", value)
         if value != self._db_host:
-            # Only log the "safe" value to prevent injection attacks into the logfile
+            # Log only the safe value to avoid log injection.
             logger.error("Invalid host name. Stripped special characters to %s", self._db_host)
             raise UnrecoverableError("Invalid host name.")
 
@@ -70,7 +83,6 @@ class DjangoProjectInitializer:
 
     @db_port.setter
     def db_port(self, value: int):
-        # validate that value is a number
         try:
             self._db_port = int(value)
         except ValueError as ve:
@@ -83,10 +95,9 @@ class DjangoProjectInitializer:
 
     @db_name.setter
     def db_name(self, value: str):
-        # Strip special characters from the name
         self._db_name = re.sub(r"[^a-zA-Z0-9_-]", "", value)
         if value != self._db_name:
-            # Only log the "safe" value to prevent injection attacks into the logfile
+            # Log only the safe value to avoid log injection.
             logger.error("Invalid database name. Stripped special characters to %s", self._db_name)
             raise UnrecoverableError("Invalid database name.")
 
@@ -96,10 +107,9 @@ class DjangoProjectInitializer:
 
     @db_user.setter
     def db_user(self, value: str):
-        # Strip special characters from the user
         self._db_user = re.sub(r"[^a-zA-Z0-9_-]", "", value)
         if value != self._db_user:
-            # Only log the "safe" value to prevent injection attacks into the logfile
+            # Log only the safe value to avoid log injection.
             logger.error("Invalid database user. Stripped special characters to %s", self._db_user)
             raise UnrecoverableError("Invalid database user.")
 
@@ -109,10 +119,9 @@ class DjangoProjectInitializer:
 
     @db_pass.setter
     def db_pass(self, value: str):
-        # Strip special characters from the pass
         self._db_pass = re.sub(r"[^a-zA-Z0-9!@#$^*()_-]", "", value)
         if value != self._db_pass:
-            # Only log the "safe" value to prevent injection attacks into the logfile
+            # Log only the safe value to avoid log injection.
             logger.error("Invalid database password. Stripped special characters.")
             raise UnrecoverableError("Invalid database password.")
 
@@ -122,7 +131,6 @@ class DjangoProjectInitializer:
 
     @environment.setter
     def environment(self, value: str):
-        # Ensure environment is a known option
         if value not in {"local", "development", "testing", "production", "staging"}:
             safe_value = re.sub(r"[^a-zA-Z0-9_-]", "", value)
             logger.error("Invalid environment: %s", safe_value)
@@ -131,12 +139,10 @@ class DjangoProjectInitializer:
         self._environment = value
 
     def configure_git(self):
-        """
-        Configures git with the provided username and email
+        """Configure git user/email.
 
         Raises:
-            UnrecoverableError: if the git configuration fails
-
+            UnrecoverableError: if git configuration fails.
         """
         git_user = os.environ.get("GIT_NAME")
         git_email = os.environ.get("GIT_EMAIL")
@@ -160,11 +166,7 @@ class DjangoProjectInitializer:
             logger.exception("Error configuring git: %s", e)
 
     def enable_postgis(self) -> None:
-        """Enable the PostGIS extension in the application database.
-
-        This is idempotent - CREATE EXTENSION IF NOT EXISTS is a no-op when
-        PostGIS is already present.  Must be called after the database exists.
-        """
+        """Enable PostGIS (idempotent; call after the DB exists)."""
         self.run_command(
             [
                 "psql",
@@ -185,9 +187,7 @@ class DjangoProjectInitializer:
         )
 
     def init_db(self):
-        """
-        Create the "UrbanLens" database in postgres and enable PostGIS.
-        """
+        """Create the database and enable PostGIS."""
         self.create_pgpass()
 
         if self.check_db():
@@ -205,34 +205,16 @@ class DjangoProjectInitializer:
                 logger.error("Database %s was not created.", self.db_name)
                 raise UnrecoverableError(f"Database {self.db_name} was not created.")
 
-        # Always ensure PostGIS is available - required for the PointField on Pin.
-        # Safe to call even on existing databases; IF NOT EXISTS makes it idempotent.
+        # PostGIS is required for the PointField; idempotent on existing DBs.
         self.enable_postgis()
 
-    #: Environments where a working `.env` is a local-checkout convenience. Everywhere
-    #: else the process is configured by real environment variables - compose passes
-    #: them with `env_file:` - and `.env` is deliberately kept out of the image.
+    #: Where a `.env` is just a checkout convenience; elsewhere env vars rule and `.env` stays out of the image.
     _ENV_FILE_ENVIRONMENTS = frozenset({"local", "development", "testing"})
 
     def copy_sample_env(self):
-        """Seed a local checkout's ``.env`` from ``.env-sample``, if it needs one.
+        """Seed a local checkout's `.env` from `.env-sample` when needed.
 
-        Skipped entirely in staging and production. Those get their configuration
-        from the environment (compose's ``env_file:``), and ``.env*`` is excluded
-        from the image on purpose - a secret baked into a layer outlives its own
-        rotation, since the layer survives in ``/var/lib/docker`` and
-        ``docker history`` recovers it. There is therefore nothing to seed, the
-        image directory is not writable by the app user anyway, and writing
-        ``.env-sample``'s placeholders next to real environment variables would at
-        best be noise and at worst shadow a value someone meant to set.
-
-        Never fatal. This file is a convenience for someone running the project
-        from a checkout; it is not how a deployed process is configured. Aborting
-        startup over it took the whole stack down in staging on 2026-08-17, when
-        excluding ``.env`` from the image turned a path that had always returned
-        early into one that tried to write to a read-only directory. A real
-        configuration problem still fails loudly and with a better message - see
-        the ``DJANGO_SECRET_KEY`` guard in ``settings/base.py``.
+        Skipped in staging/production (configured from the environment) and never fatal.
         """
         env_file = ROOT_DIR / ".env"
         env_sample = ROOT_DIR / ".env-sample"
@@ -261,18 +243,14 @@ class DjangoProjectInitializer:
             )
 
     def update_env(self, username: str, email: str):
-        """
-        Updates the env file with the git username and email
-
-        Probably deprecated
+        """Update the env file with git username/email (probably deprecated).
 
         Args:
-            username (str): git username
-            email (str): git email
+            username: git username.
+            email: git email.
 
         Raises:
-            UnrecoverableError: if the file cannot be updated
-
+            UnrecoverableError: if the file cannot be updated.
         """
         env_file = ROOT_DIR / ".env"
 
@@ -298,28 +276,25 @@ class DjangoProjectInitializer:
             raise UnrecoverableError(".env was updated but still does not exist.")
 
     def bun_init(self):
-        """
-        Runs npm init.
-
-        This should ideally be performed within Docker so that the results can be cached.
-        npm typically takes a long time to install.
+        """Run bun install.
 
         Raises:
-            UnrecoverableError: if npm init fails
-
+            UnrecoverableError: if bun install fails.
         """
         self.run_command(["bun", "install", "-y"], "during npm init")
 
     def build_frontend(self):
-        """
-        Builds the frontend
+        """Build SCSS/TS and collect static (twice: image build and container start).
 
         Raises:
-            UnrecoverableError: if the frontend fails to build
-
+            UnrecoverableError: if the build fails or the manifest mismatches.
         """
-        # First, ensure that all directories for build files exist.
-        # This is necessary because the build process will not create them, and will fail if they do not exist.
+        if self.skip_frontend_build:
+            # Bind-mounted checkout: outputs are host-owned and the sidecar rebuilds anyway.
+            logger.info("Skipping the frontend build: UL_SKIP_FRONTEND_BUILD is set.")
+            return
+
+        # Build dirs must exist or the build fails.
         apps = ["dashboard", "core"]
         dirs: list[Path] = []
         for app in apps:
@@ -347,16 +322,70 @@ class DjangoProjectInitializer:
 
         self.run_command(command, "building frontend")
         self.run_command(["python", "src/urbanlens/manage.py", "collectstatic", "--noinput"], "collecting static files")
+        self.verify_static_manifest()
 
-    def run_migrations(self):
-        """
-        Runs django migrations (i.e. creates the django DB tables)
+    def verify_static_manifest(self):
+        """Check manifest entries name existing files with portable separators.
 
         Raises:
-            UnrecoverableError: if the migrations fails
+            UnrecoverableError: if the manifest is unusable or incomplete.
+        """
+        manifest = APP_DIR / "frontend" / "static" / "staticfiles.json"
+        try:
+            entries: dict[str, str] = json.loads(manifest.read_text())["paths"]
+        except (OSError, ValueError, KeyError) as exc:
+            logger.exception("Static manifest at %s is missing or unreadable.", manifest)
+            raise UnrecoverableError(f"Unusable static manifest at {manifest}") from exc
 
+        root = manifest.parent
+        # Backslashes name an unresolvable URL even where the file exists.
+        separators = sorted(name for name, target in entries.items() if "\\" in target)
+        missing = sorted(name for name, target in entries.items() if "\\" not in target and not (root / target).is_file())
+
+        if separators or missing:
+            logger.error(
+                "Static manifest describes %d entries, %d with a backslash separator (%s) and %d with no file (%s).",
+                len(entries),
+                len(separators),
+                ", ".join(separators[:5]) or "-",
+                len(missing),
+                ", ".join(missing[:5]) or "-",
+            )
+            raise UnrecoverableError(f"Static manifest at {manifest} does not match the collected files.")
+
+        # Each build step must have left output; a consistent manifest can still lack all CSS/JS.
+        for label, suffix in (("sass", ".css"), ("the bundler", ".js")):
+            if not any(name.startswith("dashboard/") and name.endswith(suffix) for name in entries):
+                logger.error("Static manifest has %d entries but no dashboard/*%s - %s produced nothing.", len(entries), suffix, label)
+                raise UnrecoverableError(f"Static manifest at {manifest} contains no dashboard/*{suffix}; {label} produced nothing.")
+
+        logger.info("Static manifest verified: %d entries, all present.", len(entries))
+
+    def run_migrations(self):
+        """Run Django migrations.
+
+        Raises:
+            UnrecoverableError: if migrations fail.
         """
         self.run_command(["python", "src/urbanlens/manage.py", "migrate"], "migrating db")
+
+    def apply_database_roles(self):
+        """Create or update the per-tier login roles; needs the owner's credentials.
+
+        Raises:
+            UnrecoverableError: if the roles cannot be applied.
+        """
+        self.run_command(["python", "src/urbanlens/manage.py", "apply_database_roles"], "applying database roles")
+
+    def setup_database(self):
+        """Everything that needs the owner: create the database, migrate it, and apply the per-tier roles.
+
+        Raises:
+            UnrecoverableError: if any step fails.
+        """
+        self.init_db()
+        self.run_migrations()
+        self.apply_database_roles()
 
     def run_command(
         self,
@@ -365,18 +394,16 @@ class DjangoProjectInitializer:
         cwd: str | Path | None = None,
         raise_error: bool = True,
     ) -> bool:
-        """
-        Run a command
+        """Run a command.
 
         Args:
-            command (List[str]): the command to run
-            description (str): a description of the command
-            cwd (str): the directory to run the command in
-            raise_error (bool): whether to raise an error if the command fails (default: True)
+            command: The command to run.
+            description: Description of the command.
+            cwd: Directory to run in.
+            raise_error: Raise on failure.
 
         Raises:
-            UnrecoverableError: if the command fails
-
+            UnrecoverableError: if the command fails.
         """
         try:
             resolved_command = [resolve_executable(command[0]), *command[1:]]
@@ -386,10 +413,7 @@ class DjangoProjectInitializer:
                 cwd=cwd or ROOT_DIR,
             )  # nosec B603
             if any("manage.py" in str(part) for part in command):
-                # manage.py prints the startup-environment block once per process
-                # tree (see manage._print_startup_env). The first manage.py child
-                # (collectstatic) prints it; flag it in our environment so later
-                # children (migrate, etc.) inherit the flag and don't repeat it.
+                # manage.py prints startup env once per process tree; flag it so later children stay quiet.
                 os.environ["UL_STARTUP_ENV_PRINTED"] = "1"
             return True
 
@@ -403,43 +427,34 @@ class DjangoProjectInitializer:
             return False
 
     def run_dev_server(self):
-        """
-        Runs the development server
+        """Run the development server.
 
         Raises:
-            UnrecoverableError: if the server fails to run
-
+            UnrecoverableError: if the server fails.
         """
         self.run_command(["python", "src/urbanlens/manage.py", "runserver", "0.0.0.0:8000"], "running development server")
 
     def run_prod_server(self):
-        """
-        Runs the production server
+        """Run the production server.
 
         Raises:
-            UnrecoverableError: if the server fails to run
-
+            UnrecoverableError: if the server fails.
         """
         self.run_command(["bun", "run", "start"], "running production server")
 
     def check_network(self) -> bool:
-        """
-        Checks that we have a functioning network connection
+        """Return True when the network is up (pings google.com).
 
         Returns:
-            bool: True if the network is functioning, False otherwise
-
+            True if reachable, False otherwise.
         """
-        # Check that we can ping google.com
         return self.run_command(["ping", "-c", "1", "google.com"], "checking network connection", raise_error=False)
 
     def create_pgpass(self):
-        """
-        Creates a .pgpass file for the database connection
+        """Create the .pgpass file.
 
         Raises:
-            UnrecoverableError: if the file cannot be created
-
+            UnrecoverableError: if the file cannot be created.
         """
         pgpass = os.path.expanduser("~/.pgpass")
         if Path(pgpass).exists():
@@ -459,30 +474,20 @@ class DjangoProjectInitializer:
             raise UnrecoverableError from e
 
     def check_dependencies(self):
-        """
-        Todo:
-
-        """
+        """Not implemented yet."""
         raise NotImplementedError
 
     def install_dependencies(self):
-        """
-        Todo:
-
-        """
+        """Not implemented yet."""
         raise NotImplementedError
 
     def check_db(self) -> bool:
-        """
-        Checks that the database exists.
+        """Return True when the database exists (direct connect).
 
         Returns:
-            bool: True if the database exists, False otherwise
-
+            True if reachable, False otherwise.
         """
-        # Connect directly to the target DB; psql exits non-zero if it does not exist.
-        # Do not query pg_database via -c with :'var' syntax - psql does not expand
-        # variables in -c commands, so PostgreSQL receives the literal :'db_name'.
+        # psql doesn't expand :'var' in -c, so connect directly instead.
         command = [
             "psql",
             "-U",
@@ -499,13 +504,14 @@ class DjangoProjectInitializer:
         ]
         return self.run_command(command, "checking database", raise_error=False)
 
-    def initialize_project(self):
-        """
-        Initializes the project for the first time
+    def initialize_project(self, mode: Mode = Mode.FULL):
+        """Initialize the project.
+
+        Args:
+            mode: Which part of initialization to perform.
 
         Raises:
-            UnrecoverableError: if the project cannot be initialized
-
+            UnrecoverableError: if initialization fails.
         """
         # Clone the repo
         if not ROOT_DIR.exists():
@@ -518,15 +524,22 @@ class DjangoProjectInitializer:
             raise UnrecoverableError("SSH keys are not valid. Cannot initialize project.")
         self.clone_repo()
         """
+        if mode is Mode.FRONTEND:
+            self.build_frontend()
+            return
+        if mode is Mode.DATABASE:
+            self.setup_database()
+            return
+
         self.copy_sample_env()
 
         # Install and build the frontend
         # self.npm_init()
         self.build_frontend()
 
-        # Setup the DB
-        self.init_db()
-        self.run_migrations()
+        if mode is Mode.FULL:
+            self.init_db()
+            self.run_migrations()
 
         if not self.no_runserver:
             if self.environment == "development":
@@ -536,9 +549,7 @@ class DjangoProjectInitializer:
 
 
 def main():
-    """
-    Run the initializer.
-    """
+    """Run the initializer."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -556,6 +567,30 @@ def main():
         help="Do not run the development server after migration",
     )
     parser.add_argument("--debug", "-v", action="store_true", help="Enable debug logging")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
+        "--frontend-only",
+        "-f",
+        dest="mode",
+        action="store_const",
+        const=Mode.FRONTEND,
+        help="Build the frontend and collect static files, then exit. Touches no database, so the image build can run it.",
+    )
+    modes.add_argument(
+        "--db-only",
+        dest="mode",
+        action="store_const",
+        const=Mode.DATABASE,
+        help="Create and migrate the database and apply the per-tier Postgres roles, then exit. Needs the owner's credentials.",
+    )
+    modes.add_argument(
+        "--no-db",
+        dest="mode",
+        action="store_const",
+        const=Mode.SERVE,
+        help="Build the frontend and serve, leaving the database to a --db-only run.",
+    )
+    parser.set_defaults(mode=Mode.FULL)
     parser.add_argument(
         "--environment",
         "-e",
@@ -565,15 +600,12 @@ def main():
     args = parser.parse_args()
 
     if args.debug:
-        # Replace root logger after config change (I'm not certain this is necessary TODO)
-        # logger = logging.getLogger(__name__)
-        # Change the loglevel
         logger.setLevel(logging.DEBUG)
         logger.info("Debug logging enabled.")
 
     try:
         initializer = DjangoProjectInitializer(no_runserver=args.no_runserver, environment=args.environment)
-        initializer.initialize_project()
+        initializer.initialize_project(args.mode)
     except KeyboardInterrupt:
         logger.info("Initialization cancelled.")
         sys.exit(0)
@@ -585,7 +617,4 @@ def main():
 
 
 if __name__ == "__main__":
-    """
-    If the script is called directly...
-    """
     main()

@@ -1,5 +1,4 @@
-{# Rendered per-provider and appended (hx-swap="beforeend") into #media-gallery-grid -- #}
-{# see the media-gallery-section loaders in dashboard/pages/location/index.html. #}
+{# Rendered per-provider and appended (hx-swap="beforeend") into #media-gallery-grid see the media-gallery-section loaders. #}
 {% if debug %}
 <span class="debug-marker" hidden
       data-debug-source="{{ debug.source }}"
@@ -14,51 +13,58 @@
      data-media-source-name="{{ item.source }}"
      data-media-key="{{ entry.key }}"
      data-media-url="{{ entry.local_url|default:item.url }}"
-     data-media-thumb="{% firstof entry.local_url entry.thumb_url item.thumb_url %}"
+     {% if not entry.local_url and entry.view_url %}data-media-view-url="{{ entry.view_url }}"{% endif %}
+     data-media-thumb="{% firstof entry.local_url entry.thumb_url %}"
      data-media-page-url="{{ item.page_url|default:item.url }}"
      data-media-remote-url="{{ item.url }}"
      data-media-caption="{{ item.caption }}"
+     data-media-author="{{ item.author }}"
      data-media-relevant="{% if entry.is_relevant == True %}true{% elif entry.is_relevant == False %}false{% else %}{% endif %}"
      data-vote-score="{{ entry.vote_score|default:0 }}"
      data-image-id="{{ entry.image_id|default:"" }}"
      data-lat="{{ entry.lat|default:"" }}"
      data-lng="{{ entry.lng|default:"" }}"
-     {% if not wiki_mode and source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
-     title="{{ item.caption }}">
+     {% if entry.is_mine is not None %}data-mine="{% if entry.is_mine %}true{% else %}false{% endif %}"{% endif %}
+     data-copied-from-label="{{ entry.copied_from_label|default:"" }}"
+     {% if entry.processing %}data-id="{{ entry.image_id }}" data-processing="{{ entry.processing }}" data-processing-url="{% url 'vault.photos.processing' %}"{% endif %}
+     {% if not wiki_mode and source_key != "photos" %}draggable="true"{% endif %}
+     {% if item.caption %}data-tooltip="{{ item.caption }}" data-tooltip-float="true" data-tooltip-pos="above"{% endif %}>
     {% if not wiki_mode and source_key != "photos" %}
-    <button type="button" class="media-item-select-check" title="Select photo" onclick="window.mediaToggleSelect(event, this)" hidden>
+    <button type="button" class="media-item-select-check" title="Select photo" data-media-action="select" hidden>
         <i class="material-symbols-outlined">check_circle</i>
     </button>
     {% endif %}
-    <button type="button" class="media-item-thumb-btn" onclick="window.mediaOpenLightbox(this)">
+    <button type="button" class="media-item-thumb-btn" onclick="window.mediaOpenLightbox(this)"
+            {% if entry.processing %}disabled data-processing-open aria-label="{{ item.caption|default:'Photo' }}: {% if entry.processing == 'failed' %}This photo couldn't be processed{% else %}Processing…{% endif %}"{% endif %}>
         <span class="media-item-source">{{ item.source }}</span>
-        {% if entry.local_url or entry.thumb_url or item.thumb_url %}
-        <img class="media-item-thumb" src="{% firstof entry.local_url entry.thumb_url item.thumb_url %}" alt="{{ item.caption }}" loading="lazy"
-             onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
+        {% if entry.processing %}
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="media-item-thumb media-item-thumb-fallback" failed=entry.processing_failed %}
+        {% elif entry.local_url or entry.thumb_url %}
+        <img class="media-item-thumb" src="{% firstof entry.local_url entry.thumb_url %}" alt="{{ item.caption }}" loading="lazy"
+             data-thumb-fallback="broken_image">
         {% else %}
         <span class="media-item-thumb media-item-thumb-fallback" aria-hidden="true">
             <i class="material-symbols-outlined">description</i>
         </span>
         {% endif %}
         {% if item.caption %}
-        <span class="media-item-caption">{{ item.caption|truncatechars:80 }}</span>
+        <span class="media-item-caption" data-tooltip="{{ item.caption }}" data-tooltip-float="true" data-tooltip-pos="above">{{ item.caption|truncatechars:80 }}</span>
         {% endif %}
     </button>
     {% if wiki_mode %}
-    {# Community wiki: thumbs are votes (net score shown), applied to every #}
-    {# source including shared photos. See controllers/wiki_media.py. #}
+    {# Community wiki: thumbs are votes (net score shown), applied to every source including shared photos. #}
     <div class="media-item-actions media-item-actions--wiki">
         <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"
            target="_blank" rel="noopener noreferrer" title="Open source" onclick="event.stopPropagation()">
             <i class="material-symbols-outlined">open_in_new</i>
         </a>
         <button type="button" class="media-item-action-btn media-item-vote-up-btn{% if entry.is_relevant == True %} is-active{% endif %}"
-                title="Upvote" onclick="event.stopPropagation(); window.wikiMediaVote(this.closest('.media-item'), true)">
+                title="Upvote" data-media-action="vote-up">
             <i class="material-symbols-outlined">thumb_up</i>
         </button>
         <span class="media-item-votes" title="Community score">{{ entry.vote_score|default:0 }}</span>
         <button type="button" class="media-item-action-btn media-item-vote-down-btn{% if entry.is_relevant == False %} is-active{% endif %}"
-                title="Downvote" onclick="event.stopPropagation(); window.wikiMediaVote(this.closest('.media-item'), false)">
+                title="Downvote" data-media-action="vote-down">
             <i class="material-symbols-outlined">thumb_down</i>
         </button>
     </div>
@@ -69,11 +75,11 @@
             <i class="material-symbols-outlined">open_in_new</i>
         </a>
         <button type="button" class="media-item-action-btn media-item-relevant-btn{% if entry.is_relevant == True %} is-active{% endif %}"
-                title="Mark relevant" onclick="event.stopPropagation(); window.mediaSetRelevance(this.closest('.media-item'), true)">
+                title="Mark relevant" data-media-action="relevant">
             <i class="material-symbols-outlined">thumb_up</i>
         </button>
         <button type="button" class="media-item-action-btn media-item-not-relevant-btn{% if entry.is_relevant == False %} is-active{% endif %}"
-                title="Mark not relevant" onclick="event.stopPropagation(); window.mediaSetRelevance(this.closest('.media-item'), false)">
+                title="Mark not relevant" data-media-action="not-relevant">
             <i class="material-symbols-outlined">thumb_down</i>
         </button>
     </div>

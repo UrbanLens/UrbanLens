@@ -70,8 +70,7 @@ describe("interiorPoint", () => {
     });
 
     test("an L-shaped room's centroid is outside it", () => {
-        // The premise of the fix: naming this room by clicking it used to drop
-        // the seed in the notch, where it binds to nothing.
+        // The premise of the fix: naming this room by clicking it used to drop the seed in the notch, where it binds to nothing.
         expect(pointInRing(polygonCentroid(L_SHAPE), L_SHAPE)).toBe(false);
     });
 

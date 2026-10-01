@@ -13,19 +13,7 @@ _BASE_URL = "https://maps-api.apple.com/v1"
 
 @dataclass(slots=True, kw_only=True)
 class AppleMapsGateway(Gateway):
-    """Gateway for Apple Maps Server API endpoints.
-
-    Authentication:
-        Apple Maps Server API uses JSON Web Token (JWT) authentication.
-        ``api_key`` must be a signed JWT generated from your Apple Developer
-        account credentials (private key ``.p8`` file, Team ID, Maps ID, Key ID).
-
-        JWTs can be valid for up to 6 months - generate a long-lived token for
-        server-side use and store it as ``UL_APPLE_MAPS_API_KEY`` in ``.env``.
-
-        Apple Developer docs:
-        https://developer.apple.com/documentation/applemapsserverapi/creating_a_maps_identifier_and_a_private_key
-    """
+    """Gateway for Apple Maps Server API endpoints."""
 
     service_key: ClassVar[str] = "apple_maps"
     paid_service: ClassVar[bool] = True

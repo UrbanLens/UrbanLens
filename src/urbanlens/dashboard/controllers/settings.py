@@ -6,9 +6,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
@@ -20,6 +21,7 @@ from urbanlens.dashboard.forms.settings_form import (
     DirectMessageSettingsForm,
     ExternalApiSettingsForm,
     HistorySettingsForm,
+    HotkeySettingsForm,
     KeywordTaggingSettingsForm,
     MapCenterForm,
     MapDisplayForm,
@@ -30,23 +32,31 @@ from urbanlens.dashboard.forms.settings_form import (
     StyleSettingsForm,
     WikiSyncSettingsForm,
 )
+from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
+from urbanlens.dashboard.services.auth.api_keys import active_api_key_count
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.media.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
+from urbanlens.dashboard.services.security.throttle import Rate, account_or_address, allow, retry_after
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger(__name__)
 
+#: Upstream geocodes one profile may spend: the settings page geocodes only on an explicit click, and each call can
+#: reach paid Google and the app-wide Nominatim budget.
+GEOCODE_UPSTREAM_RATE = Rate(limit=20, window_seconds=3600)
+
 
 def _settings_redirect(anchor: str) -> HttpResponse:
     """Redirect to the settings page, landing on the tab containing ``anchor``.
 
-    The page's tab-switching JS resolves an id fragment to its containing
-    ``.settings-tab-panel`` and activates that tab, so a plain section id is
-    enough to land the user back where they were instead of the default tab.
+    The page's tab-switching JS resolves an id fragment to its containing ``.settings-tab-panel`` and
+    activates that tab, so a plain section id is enough to land the user back where they were instead of
+    the default tab.
 
     Args:
         anchor: The id of the section/subsection element to land on.
@@ -72,13 +82,13 @@ def _e2ee_enrolled(profile: Profile) -> bool:
 
 
 def _security_context(user: User, request: HttpRequest) -> dict:
-    """Context for the Security section (passkeys, TOTP status, backup codes) and the
-    Advanced tab's separate API Keys section.
+    """Context for the Security section (passkeys, TOTP status, backup codes) and the Advanced tab's
+    separate API Keys section.
 
     Thin wrapper around ``services.auth.two_factor.security_settings_context`` and
-    ``services.auth.api_keys.api_keys_settings_context``, which are also called
-    directly by the 2FA and API key action views (``two_factor.py``,
-    ``api_keys.py``) so they can re-render just their own section for htmx requests.
+    ``services.auth.api_keys.api_keys_settings_context``, which are also called directly by the 2FA and
+    API key action views (``two_factor.py``, ``api_keys.py``) so they can re-render just their own
+    section for htmx requests.
     """
     from urbanlens.dashboard.services.auth.api_keys import api_keys_settings_context
     from urbanlens.dashboard.services.auth.two_factor import security_settings_context
@@ -90,14 +100,12 @@ class SettingsView(LoginRequiredMixin, View):
     def _build_map_center_context(self, profile: Profile) -> dict:
         """Return preview coordinates and centroid for the map-center settings section.
 
-        The preview differs by mode:
-        - CUSTOM: show the stored custom coordinates.
-        - GPS / AUTO: show the pin-cluster centroid (GPS mode adds live geolocation
-          on top of this in the browser).
+        Uses the cached centroid (map_center_latitude/longitude on the profile) to avoid the expensive O(n²)
+        haversine computation on every page GET.
 
-        Uses the cached centroid (map_center_latitude/longitude on the profile) to
-        avoid the expensive O(n²) haversine computation on every page GET.  The cache
-        is refreshed lazily by compute_map_center() only when it is cold (null).
+        - CUSTOM: show the stored custom coordinates.
+        - GPS / AUTO: show the pin-cluster centroid (GPS mode adds live geolocation on top of this in the
+          browser).
         """
         from urbanlens.dashboard.models.profile.model import MapCenterMode
 
@@ -132,12 +140,13 @@ class SettingsView(LoginRequiredMixin, View):
         context = {
             "flickr_configured": flickr_is_configured(),
             "privacy_form": PrivacySettingsForm(instance=profile),
-            "contact_form": ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk),
+            "contact_form": ContactSettingsForm(initial={"email": request.user.email}),
             "style_form": StyleSettingsForm(instance=profile),
             "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
             "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
+            "hotkey_form": HotkeySettingsForm(instance=profile),
             "ai_form": AISettingsForm(instance=profile),
             "keyword_tagging_form": KeywordTaggingSettingsForm(instance=profile),
             "history_form": HistorySettingsForm(instance=profile),
@@ -149,6 +158,7 @@ class SettingsView(LoginRequiredMixin, View):
             "preview_zoom": profile.map_default_zoom or 13,
             "e2ee_enrolled": _e2ee_enrolled(profile),
             "e2ee_has_password": request.user.has_usable_password(),
+            "active_api_key_count": active_api_key_count(request.user),
             "self_slug": profile.ensure_slug(),
             **_security_context(request.user, request),
             **self._build_map_center_context(profile),
@@ -161,21 +171,17 @@ class SettingsView(LoginRequiredMixin, View):
             return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         section = request.POST.get("section")
-        # The settings page autosaves via fetch() and only checks the response
-        # status - a validation failure previously fell through to the normal
-        # 200 full-page re-render below (or a 302-then-200 redirect for the
-        # messages.error() branches), which fetch() can't distinguish from
-        # success, so the UI showed "Saved" for changes that were never
-        # persisted. AJAX requests get a JSON verdict instead.
+        # AJAX requests get a JSON verdict instead.
         is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
         privacy_form = PrivacySettingsForm(instance=profile)
-        contact_form = ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk)
+        contact_form = ContactSettingsForm(initial={"email": request.user.email})
         style_form = StyleSettingsForm(instance=profile)
         map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
         places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
+        hotkey_form = HotkeySettingsForm(instance=profile)
         ai_form = AISettingsForm(instance=profile)
         keyword_tagging_form = KeywordTaggingSettingsForm(instance=profile)
         history_form = HistorySettingsForm(instance=profile)
@@ -215,6 +221,13 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Annotation defaults saved.")
                 return _settings_redirect("markup-defaults-settings-section")
 
+        elif section == "hotkeys":
+            hotkey_form = HotkeySettingsForm(request.POST, instance=profile)
+            if hotkey_form.is_valid():
+                hotkey_form.save()
+                messages.success(request, "Keyboard shortcuts saved.")
+                return _settings_redirect("hotkeys-settings-section")
+
         elif section == "privacy":
             privacy_form = PrivacySettingsForm(request.POST, instance=profile)
             if privacy_form.is_valid():
@@ -223,12 +236,18 @@ class SettingsView(LoginRequiredMixin, View):
                 return _settings_redirect("privacy-settings-section")
 
         elif section == "contact":
-            contact_form = ContactSettingsForm(request.POST, exclude_user_id=request.user.pk)
+            contact_form = ContactSettingsForm(request.POST)
             if contact_form.is_valid():
-                request.user.email = contact_form.cleaned_data["email"]
-                request.user.save(update_fields=["email"])
-                messages.success(request, "Email address saved.")
-                return _settings_redirect("notifications-settings-section")
+                from urbanlens.dashboard.controllers.userprofile import pending_primary_message
+                from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
+
+                try:
+                    claim = claim_address(profile, contact_form.cleaned_data["email"], make_primary=True)
+                except EmailClaimError as exc:
+                    contact_form.add_error("email", str(exc))
+                else:
+                    messages.success(request, "Email address saved." if claim.pk is None else pending_primary_message(claim.email))
+                    return _settings_redirect("notifications-settings-section")
 
         elif section == "style":
             style_form = StyleSettingsForm(request.POST, instance=profile)
@@ -332,6 +351,7 @@ class SettingsView(LoginRequiredMixin, View):
             "map_center_form": map_center_form,
             "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
+            "hotkey_form": hotkey_form,
             "ai_form": ai_form,
             "keyword_tagging_form": keyword_tagging_form,
             "history_form": history_form,
@@ -346,9 +366,8 @@ class SettingsView(LoginRequiredMixin, View):
             **get_storage_settings_context(profile),
         }
         if is_xhr:
-            # Exactly one of these is bound-and-invalid (whichever `section` matched
-            # above and failed `is_valid()`) - the rest were never bound with POST
-            # data, so their .errors are empty.
+            # Exactly one of these is bound-and-invalid (whichever `section` matched above and failed
+            # `is_valid()`) - the rest were never bound with POST data, so their .errors are empty.
             bound_forms = (
                 privacy_form,
                 contact_form,
@@ -357,6 +376,7 @@ class SettingsView(LoginRequiredMixin, View):
                 map_center_form,
                 places_layer_form,
                 markup_defaults_form,
+                hotkey_form,
                 ai_form,
                 keyword_tagging_form,
                 history_form,
@@ -374,14 +394,15 @@ class SettingsView(LoginRequiredMixin, View):
         return render(request, "dashboard/pages/settings/index.html", context)
 
 
+@login_required
 def geocode_address(request: HttpRequest) -> JsonResponse:
     """Return lat/lng for a free-text address or 'lat,lng' string.
 
-    Accepts:
-        GET ?address=<text>
+    Accepts: GET ?address=<text>. A coordinate string is answered locally; anything else spends one unit of the
+    profile's ``GEOCODE_UPSTREAM_RATE``.
 
     Returns:
-        JSON {lat, lng} on success, or {error} with an appropriate HTTP status.
+        JSON {lat, lng} on success, or {error} with an appropriate HTTP status (429 once the budget is spent).
     """
     address = request.GET.get("address", "").strip()
     if not address:
@@ -398,10 +419,15 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
         except ValueError:
             pass
 
-    if request.user.is_authenticated:
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        if not profile.external_apis_enabled:
-            return JsonResponse({"error": "External lookups are turned off in your settings."}, status=403)
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    if not profile.external_apis_enabled:
+        return JsonResponse({"error": "External lookups are turned off in your settings."}, status=403)
+
+    identity = account_or_address(request)
+    if not allow("settings.geocode", identity, GEOCODE_UPSTREAM_RATE):
+        response = JsonResponse({"error": "Too many address lookups - try again later."}, status=429)
+        response.headers["Retry-After"] = str(retry_after("settings.geocode", identity, GEOCODE_UPSTREAM_RATE))
+        return response
 
     # Try Google Geocoding.
     try:
@@ -418,7 +444,9 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
                 except (KeyError, TypeError):
                     logger.warning("Google geocoding returned malformed result for %r", address, exc_info=True)
             logger.warning("Google geocoding returned no results for %r (status: %s)", address, result.get("status"))
-    except (ImportError, OSError, ValueError):
+    except (ImportError, OSError, ValueError, GatewayRequestError):
+        # GatewayRequestError also covers a rate-limiter refusal (P122) - routine (dev/demo refuse
+        # most services outright), not grounds to 500 when Nominatim can still answer below.
         logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
 
     # Fall back to Nominatim (OpenStreetMap) - no API key required. Through
@@ -434,6 +462,35 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"lat": latitude, "lng": longitude})
 
     return JsonResponse({"error": "Location not found."}, status=404)
+
+
+class PrivacyFieldView(LoginRequiredMixin, View):
+    """Change one privacy setting: the profile page's privacy hints.
+
+    POST /dashboard/settings/privacy/<field>/  body: ``value``
+
+    Only ``field`` is written. The Settings page's privacy section posts all of them together, which a hint
+    cannot do safely: another hint on the same page may have changed one since this page loaded.
+    """
+
+    def post(self, request: HttpRequest, field: str) -> HttpResponse:
+        if field not in PrivacySettingsForm.Meta.fields:
+            raise Http404
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.community_enabled:
+            return JsonResponse({"ok": False, "error": "Turn on Community to choose who can see this."}, status=409)
+        current = PrivacySettingsForm(instance=profile)
+        data = {name: current.initial.get(name) for name in PrivacySettingsForm.Meta.fields}
+        data[field] = request.POST.get("value", "")
+        form = PrivacySettingsForm(data, instance=profile)
+        if not form.is_valid():
+            return JsonResponse({"ok": False, "errors": form.errors.get_json_data()}, status=400)
+        instance = form.save(commit=False)
+        form.finalize_instance(instance)
+        instance.save(update_fields=[field, "updated"])
+        value = form.cleaned_data[field]
+        # Every privacy field chooses from VisibilityChoice, and the form has just validated this one.
+        return JsonResponse({"ok": True, "value": value, "display": VisibilityChoice(value).label})
 
 
 class SaveMapDarkModeView(LoginRequiredMixin, View):
@@ -454,9 +511,9 @@ class SaveMapDarkModeView(LoginRequiredMixin, View):
 class SaveMapPositionView(LoginRequiredMixin, View):
     """POST endpoint to save the user's last map pan/zoom for REMEMBER mode.
 
-    Accepts lat, lng (float strings) and zoom (integer string). Only writes
-    to the profile when map_center_mode is 'remember'; ignores the request
-    silently otherwise so stale JS calls are harmless.
+    Accepts lat, lng (float strings) and zoom (integer string).
+    Only writes to the profile when map_center_mode is 'remember'; ignores the request silently
+    otherwise so stale JS calls are harmless.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:

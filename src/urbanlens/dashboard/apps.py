@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from django.apps import AppConfig
+from django.contrib.auth.signals import user_logged_out
+from django.core.signals import request_finished, request_started
+from django.db.models.signals import post_delete, post_save
+from pillow_heif import register_heif_opener
 
 
 class DashboardConfig(AppConfig):
@@ -9,24 +13,24 @@ class DashboardConfig(AppConfig):
     name = "urbanlens.dashboard"
 
     def ready(self):
-        # Teach Pillow to open HEIC/HEIF before anything reads an upload.
-        # Registered here rather than at each call site because every path that
-        # opens an image needs it - thumbnails, EXIF extraction, the GPS strip -
-        # and a path that missed it would fail the way HEIC used to: silently,
-        # keeping a file whose coordinates the uploader asked to have removed.
-        from pillow_heif import register_heif_opener
-
         register_heif_opener()
 
+        # Importing the module registers its @register()ed system checks. Media
+        # authorization is default-deny, so a file family nobody authorized
+        # would 404 for everyone; the check turns that into a startup error.
+        import urbanlens.dashboard.checks
+
         # drf-spectacular resolves each extension's target_class lazily by
-        # mutating a shared class attribute with no lock - unsafe under this
-        # app's gevent concurrency. See schema.patch_extension_thread_safety.
+        # mutating a shared class attribute with no lock - unsafe under
+        # threaded workers. See schema.patch_extension_thread_safety.
         from urbanlens.dashboard.external_api.schema import patch_extension_thread_safety
 
         patch_extension_thread_safety()
 
-        from django.core.signals import request_finished, request_started
-        from django.db.models.signals import post_save
+        # channels_redis's backup-queue script declares no keys, which Dragonfly rejects outright
+        from urbanlens.dashboard.services.core.channels_redis_dragonfly_patch import patch_backup_queue_script
+
+        patch_backup_queue_script()
 
         from urbanlens.dashboard.models.achievements.signals import connect as connect_achievement_signals
         import urbanlens.dashboard.models.aliases.signals
@@ -45,19 +49,49 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.profile.signals
         import urbanlens.dashboard.models.trips.signals
         import urbanlens.dashboard.models.wiki.signals
-        import urbanlens.dashboard.models.wiki_edit.signals
+        import urbanlens.dashboard.models.wiki_edit.signals  # noqa: F401 - imported for the @receiver registrations, like every signals module above it
         from urbanlens.dashboard.plugins import plugin_registry
 
+        # Deletes an icon or avatar that a replace or a row deletion left behind.
+        # Django never removes FileField files, and a stranded file is
+        # indistinguishable from one the viewer may not learn about.
+        from urbanlens.dashboard.services.media.file_cleanup import connect as connect_file_cleanup
+
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")
+        connect_file_cleanup()
+
+        # Signing out drops the session's cached tile access rather than leaving it to expire.
+        from urbanlens.dashboard.services.map.tile_authorisation import forget_tile_viewer
+
+        user_logged_out.connect(forget_tile_viewer, dispatch_uid="basemap_tile_auth_forget")
 
         # Memoise the SiteSettings singleton for the length of a request only - see that
         # module's docstring for why this is scoped to requests instead of cached globally.
+        from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+        # And across requests for the two the navbar reads on every page - see that module for
+        # the acts that retire them.
+        from urbanlens.dashboard.models.subscriptions.access_state import connect_invalidation as connect_access_invalidation
+        from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
+
+        connect_access_invalidation()
 
         request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
         request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
         post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
+        for sender in (UserSubscription, RoleSubscription, SubscriptionRole):
+            post_save.connect(
+                site_settings_cache.invalidate,
+                sender=sender,
+                dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_save",
+            )
+            post_delete.connect(
+                site_settings_cache.invalidate,
+                sender=sender,
+                dispatch_uid=f"site_settings_cache_invalidate_{sender.__name__}_delete",
+            )
 
         # Achievements subscribe to a dozen unrelated models, so their receivers
         # are registered from a table rather than one import per sender.

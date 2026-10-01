@@ -1,14 +1,4 @@
-"""A photo belongs to everything that cites it, and outlives any one of them.
-
-`Image` carries a single `pin` and a single `wiki` column, which says a photo
-belongs to at most one of each. Child pins make that false in ordinary use: a
-photo of a building is a photo of the building's pin and of the parcel pin above
-it. `ImageAttachment` is a row per attachment instead.
-
-The durability half matters more. A floorplan cites a photo, and deleting that
-photo from somebody's media used to delete the citation with it - the reference
-row cascaded away, taking the caption and the thing it was attached to.
-"""
+"""A photo belongs to everything that cites it, and outlives any one of them."""
 
 from __future__ import annotations
 
@@ -22,7 +12,11 @@ from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanRefe
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.photos.attachment import attach_to_pin, attach_to_wiki, collect_if_unreferenced, reference_count
+from urbanlens.dashboard.services.photos.attachment import (
+    attach_to_pin,
+    collect_if_unreferenced,
+    reference_count,
+)
 
 
 def _image(profile, *, source: str = ImageSource.UPLOAD, **kwargs) -> Image:
@@ -52,7 +46,10 @@ class ImageAttachmentTests(TestCase):
         attach_to_pin(image, self.building, added_by=self.profile)
         attach_to_pin(image, self.parcel, added_by=self.profile)
 
-        self.assertEqual(set(ImageAttachment.objects.filter(image=image).values_list("pin_id", flat=True)), {self.building.pk, self.parcel.pk})
+        self.assertEqual(
+            set(ImageAttachment.objects.filter(image=image).values_list("pin_id", flat=True)),
+            {self.building.pk, self.parcel.pk},
+        )
 
     def test_attaching_twice_is_the_same_attachment(self) -> None:
         image = _image(self.profile)
@@ -80,7 +77,9 @@ class ImageAttachmentTests(TestCase):
         self.building.delete()
 
         self.assertTrue(Image.objects.filter(pk=image.pk).exists(), "deleting a pin deleted the photo itself")
-        self.assertEqual(list(ImageAttachment.objects.filter(image=image).values_list("pin_id", flat=True)), [self.parcel.pk])
+        self.assertEqual(
+            list(ImageAttachment.objects.filter(image=image).values_list("pin_id", flat=True)), [self.parcel.pk]
+        )
 
 
 class FloorplanReferenceOutlivesItsPhotoTests(TestCase):
@@ -174,7 +173,11 @@ class SourceUrlPairTests(TestCase):
         self.profile = baker.make(User).profile
 
     def test_a_person_is_sent_to_the_page_and_a_refetch_goes_to_the_file(self) -> None:
-        image = _image(self.profile, source_url="https://example.test/photos/123", source_media_url="https://cdn.example.test/123_o.jpg")
+        image = _image(
+            self.profile,
+            source_url="https://example.test/photos/123",
+            source_media_url="https://cdn.example.test/123_o.jpg",
+        )
 
         self.assertEqual(image.attribution_url, "https://example.test/photos/123")
         self.assertEqual(image.origin_media_url, "https://cdn.example.test/123_o.jpg")

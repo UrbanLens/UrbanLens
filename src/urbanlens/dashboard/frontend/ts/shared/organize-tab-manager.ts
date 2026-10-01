@@ -1,19 +1,17 @@
 import { safeColor } from "./color-safety";
 import { confirmAction, toast } from "./dialogs";
-import { getCsrfToken } from "./csrf";
+import { sendForText } from "./fetch-json";
 import { renderIconGlyphHtml, resetIconPicker } from "./icon-picker";
 import { resetColorPicker } from "./color-picker";
 import { renderTreeView } from "./tree-view";
 import { LabelRelPicker } from "./label-rel-picker";
 import { registerBulkStateUpdater } from "./organize-icon-picker";
-import { applyOrgFilter, getOrgVisibleCards, type OrgNamespace } from "./organize-filter-engine";
+import { applyOrgFilter, getOrgVisibleCards, ORG_TAB_KEY_BY_NS, type OrgNamespace } from "./organize-filter-engine";
 import { orgHeader } from "./organize-header";
+import { escHtml } from "./escape-html";
 
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
 
-function escHtml(s: string): string {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 export interface ConvertTarget {
     kind: string;
@@ -46,7 +44,7 @@ export interface OrgTabManagerConfig {
     entityPluralCap: string;
     emptyIcon: string;
     deleteWarning?: string;
-    endpoints: { bulkDelete: string; bulkEdit: string; multiMerge: string; mergeEditTemplate?: string };
+    endpoints: { bulkDelete: string; bulkEdit: string; multiMerge: string };
     supportsMergeEdit: boolean;
     isProtected?: (id: string) => boolean;
     convertTargets: ConvertTarget[];
@@ -90,7 +88,7 @@ interface CardData {
 }
 
 /**
- * Generic per-tab manager for organize/index.html's tag/category/status/people
+ * Generic per-tab manager for organize/index.html's tag/category/status/people/media
  * tabs. Consolidates what used to be four separately copy-pasted ~350-450
  * line IIFEs differing mainly in id/dataset naming plus a handful of real
  * capability differences (kind-conversion, merge-time rename/re-icon/re-color,
@@ -165,7 +163,7 @@ export class OrgTabManager {
     }
 
     private tabKey(): string {
-        return { tag: "tags", cat: "categories", status: "status", people: "people" }[this.cfg.ns] ?? this.cfg.ns;
+        return ORG_TAB_KEY_BY_NS[this.cfg.ns];
     }
 
     private get rows(): HTMLElement | null {
@@ -352,6 +350,7 @@ export class OrgTabManager {
             f.querySelector("form")?.reset();
             resetIconPicker(this.cfg.newForm.iconPickerId);
             resetColorPicker(this.cfg.newForm.colorPickerId, this.cfg.newForm.colorValueId);
+            LabelRelPicker.reset(`new-${this.cfg.ns}`);
             if (this.cfg.newForm.customPreviewId) {
                 const preview = document.getElementById(this.cfg.newForm.customPreviewId) as HTMLImageElement | null;
                 if (preview) {
@@ -451,10 +450,7 @@ export class OrgTabManager {
         if (sharedCustomIcon) {
             iconNochange.checked = true;
             if (iconValue) iconValue.value = "";
-            // escHtml, not raw: this value is read back out of a data attribute,
-            // where the DOM has already decoded any entity Django wrote, so a
-            // quote in it would close the src attribute rather than sit inside
-            // it. Every other interpolation in this file already escapes.
+            // escHtml, not raw: this value is read back out of a data attribute, where the DOM has already decoded any entity Django wrote, so.
             if (iconCurrent) iconCurrent.innerHTML = `<img src="${escHtml(sharedCustomIcon)}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
         } else if (sharedIcon !== null) {
             iconNochange.checked = false;
@@ -587,9 +583,7 @@ export class OrgTabManager {
                 this.onRowsUpdated();
                 if (converting) {
                     toast.success(ids.length === 1 ? `1 ${this.cfg.entitySingular.toLowerCase()} converted.` : `${ids.length} ${this.cfg.entityPluralLower} converted.`);
-                    // This request bypassed htmx (plain fetch), so the destination tab's
-                    // rows never see the converted items - refresh it explicitly and jump
-                    // there, mirroring the single-item edit form's kindChanged handling.
+                    // This request bypassed htmx (plain fetch), so the destination tab's rows never see the converted items.
                     if (target?.rowsUrl && target.rowsTarget) {
                         window.htmx?.ajax("GET", target.rowsUrl, { target: target.rowsTarget, swap: "innerHTML" });
                     }
@@ -731,34 +725,23 @@ export class OrgTabManager {
 
             const capturedId = this.mergeTargetId!;
             const origData = this.getCardData(capturedId);
-            let editName = "";
-            let editIcon = "";
-            let editColor = "";
-            let hasEdits = false;
+            const edits: { name?: string; icon?: string; color?: string } = {};
             if (this.cfg.supportsMergeEdit) {
-                editName = ((document.getElementById(d.editNameId ?? "") as HTMLInputElement | null)?.value ?? "").trim() || origData.name;
+                const name = ((document.getElementById(d.editNameId ?? "") as HTMLInputElement | null)?.value ?? "").trim() || origData.name;
                 const iconPickerId = d.editIconId ?? `${this.cfg.ns}-merge-edit`;
-                editIcon = (document.getElementById(`icon-value-${iconPickerId}`) as HTMLInputElement | null)?.value ?? "";
-                editColor = (document.getElementById(`${this.cfg.ns}-merge-edit-color`) as HTMLInputElement | null)?.value ?? "";
-                hasEdits = editName !== origData.name || editIcon !== origData.icon || editColor !== origData.color;
+                const icon = (document.getElementById(`icon-value-${iconPickerId}`) as HTMLInputElement | null)?.value ?? "";
+                const color = (document.getElementById(`${this.cfg.ns}-merge-edit-color`) as HTMLInputElement | null)?.value ?? "";
+                if (name !== origData.name) edits.name = name;
+                if (icon !== origData.icon) edits.icon = icon;
+                if (color !== origData.color) edits.color = color;
             }
 
             try {
-                const mergeHtml = await this.postForHtml(this.cfg.endpoints.multiMerge, {
+                const html = await this.postForHtml(this.cfg.endpoints.multiMerge, {
                     target_id: Number.parseInt(capturedId, 10),
                     source_ids: sourceIds.map((id) => Number.parseInt(id, 10)),
+                    ...edits,
                 });
-                let html = mergeHtml;
-                if (hasEdits && this.cfg.endpoints.mergeEditTemplate) {
-                    const fd = new FormData();
-                    fd.append("name", editName);
-                    fd.append("icon", editIcon);
-                    fd.append("color", editColor);
-                    const editUrl = this.cfg.endpoints.mergeEditTemplate.replace("99999", capturedId);
-                    const editResponse = await fetch(editUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: fd });
-                    if (!editResponse.ok) toast.warning("Merged, but could not save property changes.");
-                    else html = await editResponse.text();
-                }
                 (document.getElementById(d.dialogId) as HTMLDialogElement).close();
                 this.replaceRows(html);
                 this.mergeTargetId = null;
@@ -773,17 +756,11 @@ export class OrgTabManager {
     }
 
     // ── Shared fetch/DOM helpers ─────────────────────────────────────────
+    /**
+ * POST and hand back the rendered rows.
+ */
     private async postForHtml(url: string, body: unknown): Promise<string> {
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-            body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text || response.statusText);
-        }
-        return response.text();
+        return sendForText(url, "POST", body, { reportsItsOwnErrors: true });
     }
 
     private replaceRows(html: string): void {

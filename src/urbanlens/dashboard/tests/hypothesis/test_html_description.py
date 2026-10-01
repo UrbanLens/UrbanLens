@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
+from urbanlens.dashboard.services.import_formats.html_description import (
+    extract_image_urls,
+    extract_link_urls,
+    strip_html,
+)
 
 
 class StripHtmlTests(SimpleTestCase):

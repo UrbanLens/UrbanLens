@@ -1,17 +1,12 @@
-"""Air quality plugin: modelled and sensor readings near a pin, via REData.
-
-The modelled row (Copernicus CAMS, worldwide) is the panel's primary answer;
-nearby crowdsourced sensors are summarized separately and never averaged
-into it - the two kinds are not comparable, and sensors of unknown
-calibration disagree wildly (see the endpoint doc's 2.4 vs 83.2 ug/m3
-example).
-"""
+"""Air quality plugin: modelled and sensor readings near a pin, via REData."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
@@ -25,9 +20,13 @@ class AirQualityPanelSource(RedataInfoPanelSource):
 
     key = "redata_air_quality"
     cache_source = "redata_air_quality"
+    site_level: ClassVar[bool] = True
     section_id = "air-quality-section"
     icon = "air"
     title = "Air Quality"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Air Quality"
+    tab_order: ClassVar[int] = 60
 
     payload_key: ClassVar[str] = "readings"
 
@@ -79,6 +78,17 @@ class AirQualityPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Air Quality"
     description: ClassVar[str] = "Shows current modelled air quality (and a count of nearby community sensors) for the pin's location on the detail page, sourced through REData."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_air_quality."""
+        return {
+            "redata_air_quality": ServiceDefaults(
+                display_name="REData Air Quality",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Modelled and community-sensor readings via GET /air-quality/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_air_quality_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the air-quality pin-detail panel."""

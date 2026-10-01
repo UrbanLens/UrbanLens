@@ -1,12 +1,6 @@
 """ExternalVisitParticipant - a visit participant who is not (yet) a site member.
-
-Lets a pin owner record everyone who was present on a visit, not just
-connected members: an external participant is just a display name, with an
-optional one-way hash of their email address. The raw address is never
-stored - the person has not consented to being in our database - but the
-hash lets us recognise them if they ever register (or verify a matching
-secondary email), at which point the deferred friend request and visit
-suggestion are delivered (see ``services.visits.visit_invites``).
+Lets a pin owner record everyone who was present on a visit, not just connected members: an external participant is just a display name, with an optional one-way hash of their email address.
+The raw address is never stored - the person has not consented to being in our database - but the hash lets us recognise them if they ever register (or verify a matching secondary email), at which point the deferred friend request and visit suggestion are delivered (see ``services.visits.visit_invites``).
 """
 
 from __future__ import annotations
@@ -26,13 +20,14 @@ class ExternalVisitParticipant(abstract.DashboardModel):
         display_name: Name the owner entered for this person.
         email_hash: SHA-256 hash of the person's normalized email address, or
             empty when no email was provided. Used to match a future account.
-        invite_sent: Whether a join-the-site email was actually sent for this
-            row (rate caps or the one-invite-per-address rule may suppress it).
+        invite_sent: Whether a friend invitation was issued for this row (the
+            email budget or the owner's own address may prevent one). The same
+            whether or not the address has an account.
         suggestion_requested: Whether the owner asked for a visit suggestion
             to be delivered to this person (immediately when the email already
             belongs to a member, otherwise once they register).
-        matched_profile: The member account this row was resolved to, either
-            at creation time (email already registered) or later at sign-up.
+        matched_profile: The member account this row was resolved to, after the
+            request that tagged it or later at sign-up. Never shown to the owner.
     """
 
     display_name = CharField(max_length=100)

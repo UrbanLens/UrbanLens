@@ -1,28 +1,6 @@
 {% load dashboard_tags %}
-{% comment %}
-Shared "Log a Visit" / "Edit Visit" form body.
-
-Context:
-  pin        - Pin the visit belongs to
-  pin_images - owner's gallery photos on this pin (existing-photo picker)
-  connections- profiles that can be tagged as participants (with
-               avatar_color_class already assigned - see assign_avatar_colors)
-  visit      - PinVisit being edited, or absent/None for the add form
-  dialog_id  - id of the enclosing <dialog>, closed on a successful save
-  form_action- override post URL (defaults to the pin-detail visit endpoints)
-  form_target- override hx-target (defaults to "#visit-history-panel")
-  form_swap  - override hx-swap (defaults to "outerHTML")
-  default_date- ISO date to prefill the add form's date field with (optional)
-
-The action URL, submit label, and pre-filled state are all derived from
-whether `visit` is present, so both dialogs can share this single template.
-The Memories page reuses it with its own action/target to log visits for
-pins that were marked visited but never had a dated record.
-
-Photos/Map/Participants are collapsed behind one button each - only Date is
-actually required, so only Date carries a `.required` star; everything else
-just doesn't say "(optional)" instead of saying so explicitly.
-{% endcomment %}
+{% load l10n %}
+{% comment %}Shared "Log a Visit" / "Edit Visit" form body.{% endcomment %}
 {% if not form_action %}
 {% if visit %}
 {% url 'pin.visit.edit' pin.slug visit.id as form_action %}
@@ -34,7 +12,7 @@ just doesn't say "(optional)" instead of saying so explicitly.
       hx-target="{{ form_target|default:'#visit-history-panel' }}"
       hx-swap="{{ form_swap|default:'outerHTML' }}"
       hx-encoding="multipart/form-data"
-      hx-on::after-request="if(event.detail.successful){document.getElementById('{{ dialog_id }}').close()}"
+      data-ul-on-success="close:{{ dialog_id }}"
       class="visit-add-form"
       data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
       data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}">
@@ -57,14 +35,7 @@ just doesn't say "(optional)" instead of saying so explicitly.
 
     <div class="form-row">
         <label for="visit_notes_{{ dialog_id }}">Notes</label>
-        {# Same TipTap/Markdown WYSIWYG editor as the pin/wiki article (see #}
-        {# frontend/ts/entries/article-wysiwyg.ts) - it mounts on any element  #}
-        {# matching this data-article-editor/-canvas/-textarea contract, no   #}
-        {# extra JS needed here. Scoped to .visit-notes-editor (see           #}
-        {# _pin-detail.scss) for a note-sized height instead of a full        #}
-        {# article's; the toolbar only offers the marks a short note needs -  #}
-        {# no headings/tables/images, which have their own attach buttons     #}
-        {# below - and there's no Source/Preview toggle, so it's WYSIWYG-only.#}
+        {# Same TipTap/Markdown WYSIWYG editor as the pin/wiki article. #}
         <div class="visit-notes-editor" data-article-editor>
             <div class="article-editor-toolbar" role="toolbar" aria-label="Note formatting">
                 <button type="button" class="article-tool" data-md-action="bold" title="Bold (Ctrl+B)"><i class="material-symbols-outlined">format_bold</i></button>
@@ -90,15 +61,15 @@ just doesn't say "(optional)" instead of saying so explicitly.
     <div class="form-row visit-attachment-row">
         <div class="visit-attachment-buttons" role="group" aria-label="Add more to this visit">
             <button type="button" class="btn btn--ghost visit-attachment-toggle"
-                    onclick="var p=document.getElementById('visit-photos-panel-{{ dialog_id }}');p.hidden=!p.hidden;this.classList.toggle('is-open',!p.hidden)">
+                    data-toggles="visit-photos-panel-{{ dialog_id }}" aria-expanded="false">
                 <i class="material-symbols-outlined">add_photo_alternate</i> Photos
             </button>
             <button type="button" class="btn btn--ghost visit-attachment-toggle"
-                    onclick="window._commentMapDefaultLat={{ pin.effective_latitude|default_if_none:'null' }};window._commentMapDefaultLng={{ pin.effective_longitude|default_if_none:'null' }};_openCommentMapComposer(this.closest('form'))">
+                    data-comment-map="open" data-default-lat="{{ pin.effective_latitude|default_if_none:''|unlocalize }}" data-default-lng="{{ pin.effective_longitude|default_if_none:''|unlocalize }}">
                 <i class="material-symbols-outlined">add_location_alt</i> {% if visit.map_data %}Edit Map{% else %}Map{% endif %}
             </button>
             <button type="button" class="btn btn--ghost visit-attachment-toggle{% if visit_participants or visit_externals %} is-open{% endif %}"
-                    onclick="var p=document.getElementById('visit-participants-panel-{{ dialog_id }}');p.hidden=!p.hidden;this.classList.toggle('is-open',!p.hidden)">
+                    data-toggles="visit-participants-panel-{{ dialog_id }}" aria-expanded="{% if visit_participants or visit_externals %}true{% else %}false{% endif %}">
                 <i class="material-symbols-outlined">group_add</i> Participants{% if visit_participants or visit_externals %} ({{ visit_participants|length|add:visit_externals.count }}){% endif %}
             </button>
         </div>
@@ -107,11 +78,11 @@ just doesn't say "(optional)" instead of saying so explicitly.
             <i class="material-symbols-outlined">map</i>
             <span class="comment-map-chip-label">Map attached</span>
             <button type="button" class="comment-map-chip-edit" title="Edit map"
-                    onclick="_openCommentMapComposer(this.closest('form'))">
+                    data-comment-map="open">
                 <i class="material-symbols-outlined">edit</i>
             </button>
             <button type="button" class="comment-map-chip-remove" title="Remove map"
-                    onclick="_clearCommentMap(this.closest('form'))">
+                    data-comment-map="clear">
                 <i class="material-symbols-outlined">close</i>
             </button>
         </div>
@@ -121,10 +92,12 @@ just doesn't say "(optional)" instead of saying so explicitly.
             {% if pin_images %}
             <div class="visit-photo-existing" role="group" aria-label="Select existing photos">
                 {% for img in pin_images %}
-                <label class="visit-photo-pick" title="{{ img.caption|default:'Photo' }}">
+                <label class="visit-photo-pick" title="{{ img.display_caption|default:'Photo' }}"{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=img %}>
                     <input type="checkbox" name="existing_photo_ids" value="{{ img.pk }}"
                            {% if visit and img.visit_id == visit.id %}checked{% endif %}>
-                    <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+                    {% if img.pending_scan %}{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}{% else %}
+                    <img src="{{ img.display_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy">
+                    {% endif %}
                     <span class="visit-photo-pick-check"><i class="material-symbols-outlined">check</i></span>
                 </label>
                 {% endfor %}
@@ -133,8 +106,7 @@ just doesn't say "(optional)" instead of saying so explicitly.
             <label class="visit-photo-upload">
                 <i class="material-symbols-outlined">add_photo_alternate</i>
                 <span class="visit-photo-upload-text">Upload new photos</span>
-                <input type="file" name="photos" accept="image/*" multiple
-                       onchange="this.closest('.visit-photo-upload').querySelector('.visit-photo-upload-text').textContent = this.files.length ? this.files.length + ' photo(s) selected' : 'Upload new photos'">
+                <input type="file" name="photos" accept="image/*" multiple>
             </label>
         </div>
 
@@ -169,11 +141,9 @@ just doesn't say "(optional)" instead of saying so explicitly.
                 <div class="visit-external-existing">
                     <i class="material-symbols-outlined">person</i>
                     <span class="visit-external-existing-name">{{ ext.display_name }}</span>
-                    {% if ext.matched_profile %}<span class="visit-external-chip">joined as {{ ext.matched_profile.username }}</span>
-                    {% elif ext.invite_sent %}<span class="visit-external-chip">invited</span>{% endif %}
+                    {% if ext.invite_sent %}<span class="visit-external-chip">invited</span>{% endif %}
                     <input type="hidden" name="external_remove" value="{{ ext.pk }}" disabled>
-                    <button type="button" class="btn btn--icon-sm" title="Remove this person from the visit"
-                            onclick="this.closest('.visit-external-existing').querySelector('input[name=external_remove]').disabled=false;this.closest('.visit-external-existing').hidden=true">
+                    <button type="button" class="btn btn--icon-sm" title="Remove this person from the visit" data-external-remove>
                         <i class="material-symbols-outlined">close</i>
                     </button>
                 </div>
@@ -181,36 +151,25 @@ just doesn't say "(optional)" instead of saying so explicitly.
             </div>
             {% endif %}
             <div class="visit-external-list"></div>
-            <button type="button" class="btn btn--ghost btn--sm visit-external-add-btn"
-                    onclick="urbanlensAddExternalParticipantRow(this)">
+            <button type="button" class="btn btn--ghost btn--sm visit-external-add-btn" data-external-add>
                 <i class="material-symbols-outlined">person_add</i> Add someone not on UrbanLens
             </button>
-            <small class="form-help">If you add their email and leave "invite" checked, they'll be emailed an invitation to join and confirm this visit. Their email address is never stored.</small>
+            <template class="visit-external-row-template">
+                <div class="visit-external-row">
+                    <input type="text" name="external_name_{n}" placeholder="Name" maxlength="100" autocomplete="off">
+                    <input type="email" name="external_email_{n}" placeholder="Email (optional)" autocomplete="off">
+                    <label class="visit-external-invite" title="Invite them to connect with you and to confirm this visit">
+                        <input type="checkbox" name="external_invite_{n}" checked> Invite
+                    </label>
+                    <button type="button" class="btn btn--icon-sm" title="Remove" data-external-row-remove><i class="material-symbols-outlined">close</i></button>
+                </div>
+            </template>
+            <small class="form-help">With an email and "invite" checked, they're invited to connect with you and to confirm this visit, each separately. Otherwise only a one-way hash of the address is kept.</small>
         </div>
     </div>
     {% endwith %}
-    <script>
-    if (!window.urbanlensAddExternalParticipantRow) {
-        window.urbanlensAddExternalParticipantRow = function (button) {
-            window._ulExternalRowIndex = (window._ulExternalRowIndex || 0) + 1;
-            const index = window._ulExternalRowIndex;
-            const row = document.createElement('div');
-            row.className = 'visit-external-row';
-            row.innerHTML = `
-                <input type="text" name="external_name_${index}" placeholder="Name" maxlength="100" autocomplete="off">
-                <input type="email" name="external_email_${index}" placeholder="Email (optional)" autocomplete="off">
-                <label class="visit-external-invite" title="Email them an invitation to join UrbanLens and confirm this visit">
-                    <input type="checkbox" name="external_invite_${index}" checked> Invite
-                </label>
-                <button type="button" class="btn btn--icon-sm" title="Remove"><i class="material-symbols-outlined">close</i></button>`;
-            row.querySelector('button').addEventListener('click', () => row.remove());
-            button.closest('.visit-attachment-panel').querySelector('.visit-external-list').appendChild(row);
-            row.querySelector('input').focus();
-        };
-    }
-    </script>
     <div class="form-actions">
         <button type="submit" class="btn btn--primary btn--lg btn--submit">{% if visit %}Save Changes{% else %}Save Visit{% endif %}</button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
     </div>
 </form>

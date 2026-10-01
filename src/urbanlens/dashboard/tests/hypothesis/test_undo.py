@@ -32,12 +32,12 @@ from urbanlens.dashboard.services.undo.service import (
 def _expire(undo_action: UndoAction) -> None:
     """Push ``undo_action`` past its retention window, simulating elapsed time.
 
-    ``.update()`` bypasses the instance, so the caller's in-memory ``created``
-    (and therefore ``is_expired``) would still read fresh without the
-    refresh - production callers always re-fetch the row, so the staleness
-    is a test-fixture artifact, not something restore() needs to guard.
-    """
-    UndoAction.objects.filter(pk=undo_action.pk).update(created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1))
+    ``.update()`` bypasses the instance, so the caller's in-memory ``created`` (and therefore ``is_expired``)
+    would still read fresh without the refresh - production callers always re-fetch the row, so the staleness is
+    a test-fixture artifact, not something restore() needs to guard."""
+    UndoAction.objects.filter(pk=undo_action.pk).update(
+        created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1)
+    )
     undo_action.refresh_from_db()
 
 
@@ -72,7 +72,7 @@ class UndoServiceTests(TestCase):
         self.assertEqual(undo_action.model_label, "pin")
         self.assertIn("Old Mill", undo_action.object_repr)
 
-    def test_restore_recreates_instance_and_deletes_row(self) -> None:
+    def test_restore_recreates_instance_and_keeps_the_row_for_redo(self) -> None:
         old_pk = self.pin.pk
         undo_action = stash_for_undo("pin", [self.pin], self.profile)
         self.pin.delete()
@@ -82,7 +82,8 @@ class UndoServiceTests(TestCase):
         self.assertEqual(len(restored), 1)
         self.assertNotEqual(restored[0].pk, old_pk)
         self.assertEqual(restored[0].name, "Old Mill")
-        self.assertFalse(UndoAction.objects.filter(pk=undo_action.pk).exists())
+        undo_action.refresh_from_db()
+        self.assertIsNotNone(undo_action.undone_at)
 
     def test_restore_expired_action_raises_and_deletes_row(self) -> None:
         undo_action = stash_for_undo("pin", [self.pin], self.profile)
@@ -255,7 +256,9 @@ class SavedFilterUndoHandlerTests(TestCase):
         self.profile = self.user.profile
 
     def test_restores_fields(self) -> None:
-        saved_filter = baker.make(SavedFilter, profile=self.profile, name="4-star tags", icon="star", criteria={"min_rating": 4}, order=2)
+        saved_filter = baker.make(
+            SavedFilter, profile=self.profile, name="4-star tags", icon="star", criteria={"min_rating": 4}, order=2
+        )
 
         undo_action = stash_for_undo("saved_filter", [saved_filter], self.profile)
         saved_filter.delete()
@@ -340,7 +343,7 @@ class UndoRestoreViewTests(TestCase):
         self.profile = self.user.profile
         self.client.force_login(self.user)
 
-    def test_restores_and_removes_entry(self) -> None:
+    def test_restores_and_marks_entry_undone(self) -> None:
         pin = baker.make(Pin, profile=self.profile, name="Restorable")
         undo_action = stash_for_undo("pin", [pin], self.profile)
         pin.delete()
@@ -349,7 +352,8 @@ class UndoRestoreViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Pin.objects.filter(profile=self.profile, name="Restorable").exists())
-        self.assertFalse(UndoAction.objects.filter(pk=undo_action.pk).exists())
+        undo_action.refresh_from_db()
+        self.assertIsNotNone(undo_action.undone_at)
 
     def test_other_profile_cannot_restore(self) -> None:
         pin = baker.make(Pin, profile=self.profile, name="Not Yours")
@@ -396,17 +400,7 @@ class UndoClearViewTests(TestCase):
 class UndoDescriptionFitsItsColumnTests(TestCase):
     """A legally-named object must still be deletable.
 
-    `stash_for_undo` writes `handler.describe(instances)` into
-    `UndoAction.object_repr`, a `CharField(255)`. Several of the names that
-    description embeds are themselves 255 characters - `Label.name`, `Pin.name` -
-    and `describe()` wraps them in fixed text. So a name the app fully permits
-    produced a `DataError` on **delete**: the user could create the object and
-    then never remove it, and the failure surfaced as a 500 rather than anything
-    naming the cause.
-
-    Found by the write-route smoke sweep, which hit `label.delete` with a
-    baker-generated long name (PROBLEMS.md, 2026-08-16).
-    """
+    `stash_for_undo` writes `handler.describe(instances)` into `UndoAction.object_repr`, a `CharField(255)`."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -442,7 +436,10 @@ class UndoDescriptionFitsItsColumnTests(TestCase):
         from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
 
         limit = Label._meta.get_field("name").max_length
-        labels = [baker.make(Label, profile=self.profile, kind=KIND_TAG, name=f"{index}" + "y" * (limit - 1)) for index in range(3)]
+        labels = [
+            baker.make(Label, profile=self.profile, kind=KIND_TAG, name=f"{index}" + "y" * (limit - 1))
+            for index in range(3)
+        ]
 
         action = stash_for_undo(LABEL_MODEL_LABEL, labels, self.profile)
 

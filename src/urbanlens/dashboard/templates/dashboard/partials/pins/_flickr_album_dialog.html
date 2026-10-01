@@ -1,22 +1,5 @@
-{% comment %}
-"Import a Flickr Album" dialog - given the public URL of any Flickr user's
-public album/photoset (no OAuth involved, unlike _flickr_picker_dialog.html's
-per-user "Import from Flickr"), preview its photos and import selected ones
-onto a pin or a wiki. Shared between both via context, not a separate
-template per target - see controllers/flickr.py's _album_* helpers.
-
-Context:
-  target_kind      - "pin" or "wiki" (display only; behavior is driven by
-                      lookup_url/import_url already pointing at the right target).
-  lookup_url       - POST target that resolves an album URL into a preview.
-  import_url       - POST target that enqueues the import of selected photos.
-  flickr_configured - whether the site has a Flickr API key at all.
-  max_photos       - cap on photos imported per album (see services.apis.flickr.public).
-  album_url        - the URL last submitted (re-shown so the user can adjust it).
-  album            - a FlickrAlbum (title, owner_username, total), once resolved.
-  assets           - [{id, thumbnail_url, already_imported}], once resolved.
-  error            - a message to show instead of results, if lookup failed.
-{% endcomment %}
+{% load remote_copies %}
+{% comment %}"Import a Flickr Album" dialog - given the public URL of any Flickr user's public album/photoset.{% endcomment %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title="Import a Flickr Album" %}
 <div class="ul-dialog-body" id="flickr-album-body">
     {% if not flickr_configured %}
@@ -55,7 +38,7 @@ Context:
             {% for asset in assets %}
             <label class="immich-picker-item{% if asset.already_imported %} immich-picker-item--disabled{% endif %}">
                 <input type="checkbox" name="photo_ids" value="{{ asset.id }}" {% if asset.already_imported %}disabled{% endif %}>
-                <img src="{{ asset.thumbnail_url }}" loading="lazy" alt="">
+                <img src="{{ asset.thumbnail_url|remote_copy:'flickr' }}" loading="lazy" alt="">
                 {% if asset.already_imported %}<span class="immich-picker-note">Already imported</span>{% endif %}
             </label>
             {% endfor %}
@@ -65,7 +48,7 @@ Context:
                 <i class="material-symbols-outlined">download</i>
                 Import selected
             </button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
         </div>
         {% else %}
         <p class="immich-picker-empty">This album has no photos.</p>

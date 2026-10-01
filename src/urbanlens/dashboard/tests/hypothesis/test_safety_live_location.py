@@ -12,21 +12,29 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
-from django.test import TransactionTestCase, override_settings
+from django.test import TransactionTestCase
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus
-from urbanlens.dashboard.services.visits.safety import set_live_location_sharing, update_live_location
+from urbanlens.dashboard.models.safety.model import (
+    SafetyCheckin,
+    SafetyCheckinContact,
+    SafetyCheckinPartner,
+    SafetyCheckinPartnerStatus,
+    SafetyCheckinStatus,
+)
+from urbanlens.dashboard.services.visits.safety import (
+    LiveLocationUnavailableError,
+    set_live_location_sharing,
+    update_live_location,
+)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
-
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 
 def _profile(**kwargs) -> Profile:
@@ -52,7 +60,7 @@ class UpdateLiveLocationTests(TestCase):
         self.checkin = _checkin(self.owner)
 
     def test_raises_when_sharing_disabled(self):
-        with self.assertRaisesMessage(ValueError, "not enabled"):
+        with self.assertRaises(LiveLocationUnavailableError):
             update_live_location(self.checkin, latitude=1.0, longitude=2.0, accuracy=None)
 
     def test_raises_when_checkin_already_resolved(self):
@@ -61,7 +69,7 @@ class UpdateLiveLocationTests(TestCase):
         self.checkin.resolved_at = timezone.now()
         self.checkin.save(update_fields=["status", "resolved_at", "updated"])
 
-        with self.assertRaisesMessage(ValueError, "already concluded"):
+        with self.assertRaises(LiveLocationUnavailableError):
             update_live_location(self.checkin, latitude=1.0, longitude=2.0, accuracy=None)
 
     def test_update_succeeds_while_sharing_is_enabled(self):
@@ -76,17 +84,13 @@ class UpdateLiveLocationTests(TestCase):
         self.assertIsNotNone(self.checkin.live_location_updated_at)
 
     def test_concurrent_toggle_off_is_not_masked_by_a_stale_in_memory_flag(self):
-        """Regression guard: update_live_location must re-check sharing-enabled against
-        the DB at write time, not the caller's possibly-stale in-memory `checkin` - a
-        toggle-off landing between the caller's own check and this call must never
-        persist a real position onto a row now flagged "sharing disabled".
-        """
+        """Regression guard: update_live_location must re-check sharing-enabled against the DB at write time, not the caller's possibly-stale in-memory `checkin` - a toggle-off landing between the caller's own check and this call must never persist a real position onto a row now flagged "sharing disabled"."""
         set_live_location_sharing(self.checkin, enabled=True)
         # Simulate another request disabling sharing concurrently, without refreshing
         # this in-memory `self.checkin` - it still reads live_location_sharing_enabled=True.
         SafetyCheckin.objects.filter(pk=self.checkin.pk).update(live_location_sharing_enabled=False)
 
-        with self.assertRaisesMessage(ValueError, "not enabled"):
+        with self.assertRaises(LiveLocationUnavailableError):
             update_live_location(self.checkin, latitude=40.0, longitude=-74.0, accuracy=12.5)
 
         self.checkin.refresh_from_db()
@@ -149,7 +153,6 @@ def _run(coro):
     return async_to_sync(_wrap)()
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
     """The chat consumer's location group: session route only, never the contact route -
     even for a profile that is simultaneously a contact *and* an accepted partner on the
@@ -162,7 +165,9 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
         self.checkin = _checkin(self.owner_profile)
 
     def _session_communicator(self, user) -> WebsocketCommunicator:
-        comm = WebsocketCommunicator(SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/")
+        comm = WebsocketCommunicator(
+            SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/"
+        )
         comm.scope["url_route"] = {"kwargs": {"checkin_uuid": str(self.checkin.uuid), "token": None}}
         comm.scope["user"] = user
         return comm
@@ -181,7 +186,9 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
         def _setup():
             dual_user = baker.make("auth.User")
             dual_profile = dual_user.profile
-            contact = SafetyCheckinContact.objects.create(checkin=self.checkin, contact_profile=dual_profile, email=None)
+            contact = SafetyCheckinContact.objects.create(
+                checkin=self.checkin, contact_profile=dual_profile, email=None
+            )
             SafetyCheckinPartner.objects.create(
                 checkin=self.checkin,
                 profile=dual_profile,
@@ -239,7 +246,9 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
         self.assertTrue(connected)
 
         with broadcasts_delivered_inline():
-            await database_sync_to_async(update_live_location)(self.checkin, latitude=40.0, longitude=-74.0, accuracy=5.0)
+            await database_sync_to_async(update_live_location)(
+                self.checkin, latitude=40.0, longitude=-74.0, accuracy=5.0
+            )
             msg = json.loads(await partner_comm.receive_from())
         self.assertEqual(msg["type"], "location_update")
         self.assertEqual(msg["latitude"], 40.0)

@@ -1,11 +1,4 @@
-"""Tests for RedataNatureObservationsGateway against REData's
-``/nature-observations/`` contract (``../REData/docs/api-reference.md``,
-"GET /nature-observations/ - recorded wildlife and plants").
-
-Constructs the gateway with a mock ``session`` (Gateway.__post_init__ leaves a
-non-default session untouched, skipping the DB-backed rate-limiting wrapper -
-see gateway.py) so these stay pure unit tests with no database access.
-"""
+"""Tests for RedataNatureObservationsGateway against REData's ``/nature-observations/`` contract (``../REData/docs/api-reference.md``, "GET /nature-observations/ - recorded wildlife and plants")."""
 
 from __future__ import annotations
 
@@ -45,7 +38,9 @@ class GetNearbyObservationsTests(SimpleTestCase):
                         "attributes": {"obscured": False},
                     },
                 ],
-                "providers": [{"provider": "inaturalist", "status": "ok", "count": 1, "message": None, "radius_meters": 1000.0}],
+                "providers": [
+                    {"provider": "inaturalist", "status": "ok", "count": 1, "message": None, "radius_meters": 1000.0}
+                ],
             },
         )
 
@@ -84,7 +79,14 @@ class GetNearbyObservationsTests(SimpleTestCase):
             {
                 "count": 1,
                 "complete": True,
-                "results": [{"provider": "inaturalist", "common_name": "Spotted Turtle", "coordinate_uncertainty_meters": 27000, "attributes": {"obscured": True}}],
+                "results": [
+                    {
+                        "provider": "inaturalist",
+                        "common_name": "Spotted Turtle",
+                        "coordinate_uncertainty_meters": 27000,
+                        "attributes": {"obscured": True},
+                    }
+                ],
                 "providers": [],
             },
         )

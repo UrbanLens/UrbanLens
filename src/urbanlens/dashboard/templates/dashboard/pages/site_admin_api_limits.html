@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="cloud" title="API Rate Limits" subtitle="Configure per-service rate limits and geo-filtering." modifier="top" %}
@@ -64,7 +65,7 @@
                     </div>
                 </div>
                 <div class="api-limit-header-actions">
-                    <span class="api-limit-status" aria-live="polite" aria-atomic="true"></span>
+                    <span class="save-status" aria-live="polite" aria-atomic="true"></span>
                     <label class="ul-switch" title="Enable or disable this API site-wide">
                         <input type="checkbox" name="enabled" value="on" class="api-enabled-cb" {% if cfg.enabled %}checked{% endif %}>
                         <span class="ul-switch__track"></span>
@@ -197,114 +198,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-(function () {
-    function getCard(el) { return el && el.closest('.api-limit-card'); }
-
-    function setStatus(card, state, text) {
-        var el = card && card.querySelector('.api-limit-status');
-        if (!el) return;
-        el.className = 'api-limit-status is-' + state;
-        el.textContent = text;
-        clearTimeout(el._t);
-        if (state === 'saved' || state === 'error') {
-            el._t = setTimeout(function () {
-                el.style.transition = 'opacity .5s';
-                el.style.opacity = '0';
-                el._t = setTimeout(function () {
-                    el.className = 'api-limit-status';
-                    el.style.transition = '';
-                    el.style.opacity = '';
-                }, 500);
-            }, 2500);
-        }
-    }
-
-    function syncEnabledUI(card, enabled) {
-        if (!card) return;
-        card.classList.toggle('is-disabled', !enabled);
-        var icon = card.querySelector('.api-state-icon');
-        if (icon) icon.textContent = enabled ? 'cloud' : 'cloud_off';
-    }
-
-    // Each card's form debounce-saves every field together (enable toggle, USA-only,
-    // notes) in one request, so a save failure can't just invert the checkbox's
-    // current value on error - that value might not be what actually changed.
-    // Track the last value the server confirmed instead, and revert to *that*.
-    document.querySelectorAll('.api-enabled-cb').forEach(function (cb) {
-        cb.dataset.lastSaved = cb.checked ? '1' : '0';
-    });
-
-    document.body.addEventListener('change', function (e) {
-        var cb = e.target;
-        if (!cb.classList.contains('api-enabled-cb')) return;
-        syncEnabledUI(getCard(cb), cb.checked);
-    });
-
-    document.body.addEventListener('htmx:beforeRequest', function (evt) {
-        var form = evt.target.closest('.api-limit-form');
-        if (!form) return;
-        var card = getCard(form);
-        if (card) card.classList.add('is-saving');
-        setStatus(card, 'saving', 'Saving...');
-    });
-
-    document.body.addEventListener('htmx:afterRequest', function (evt) {
-        var form = evt.target.closest('.api-limit-form');
-        if (!form) return;
-        var card = getCard(form);
-        if (card) card.classList.remove('is-saving');
-        var status = evt.detail && evt.detail.xhr && evt.detail.xhr.status;
-        var cb = form.querySelector('.api-enabled-cb');
-        if (!(status >= 200 && status < 300)) {
-            setStatus(card, 'error', 'Save failed (' + (status || '?') + ')');
-            // The enable/disable toggle above updates optimistically on 'change',
-            // independent of this request's outcome - without this, a failed save
-            // left the checkbox/icon/card styling showing the unsaved state as if
-            // it were current until a reload.
-            if (cb) {
-                cb.checked = cb.dataset.lastSaved === '1';
-                syncEnabledUI(card, cb.checked);
-            }
-        } else if (cb) {
-            cb.dataset.lastSaved = cb.checked ? '1' : '0';
-        }
-    });
-
-    document.body.addEventListener('apiLimitSaved', function (evt) {
-        var svc = evt.detail && evt.detail.service;
-        var card = svc && document.querySelector('.api-limit-card[data-service="' + svc + '"]');
-        setStatus(card, 'saved', 'Saved');
-    });
-
-    // -- Search + tab filtering (client-side, no server round-trip - the page
-    // already has every service's data in the DOM) --------------------------
-    var searchInput = document.getElementById('api-limits-search-input');
-    var activeCategory = '';
-
-    function applyFilters() {
-        var query = (searchInput && searchInput.value || '').trim().toLowerCase();
-        document.querySelectorAll('.api-limit-card').forEach(function (card) {
-            var matchesCategory = !activeCategory || card.dataset.category === activeCategory;
-            var matchesSearch = !query || (card.dataset.searchText || '').indexOf(query) !== -1;
-            card.hidden = !(matchesCategory && matchesSearch);
-        });
-    }
-
-    if (searchInput) {
-        searchInput.addEventListener('input', applyFilters);
-    }
-
-    document.querySelectorAll('.api-limits-tab').forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            activeCategory = tab.dataset.category || '';
-            document.querySelectorAll('.api-limits-tab').forEach(function (t) {
-                t.classList.toggle('is-active', t === tab);
-                t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
-            });
-            applyFilters();
-        });
-    });
-}());
-</script>
+<script type="module" src="{% static 'dashboard/js/site-admin.js' %}"></script>
 {% endblock %}

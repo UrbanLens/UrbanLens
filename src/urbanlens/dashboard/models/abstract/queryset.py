@@ -2,15 +2,19 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 import uuid as uuid_lib
 
 # Django Imports
-from django.db import models as django_models
+from django.db import connections, models as django_models
 from django.db.models import Q
 
 # Lib Imports
 # App Imports
+from urbanlens.core.semijoin import crosses_many, current_scope, probe_relation, probe_scope, probe_statement
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +29,163 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
     ``abstract.QuerySet["Friendship"]``) and get correctly-typed ``.get()``/``.first()``/etc. results.
     """
 
+    def after_bulk_write(self) -> None:
+        """Called once after a bulk write that changed rows. Does nothing unless a subclass says so.
 
-class DashboardManager(django_models.Manager.from_queryset(DashboardQuerySet)):
+        ``update()`` sends no ``post_save``, and ``bulk_update`` is implemented as one, so anything
+        derived from these rows and invalidated by a signal never hears about either. A subclass
+        whose rows something caches overrides this rather than trusting the receivers to see it.
+        """
+
+    def update(self, **kwargs: Any) -> int:
+        """Apply the update, then tell the subclass if it changed anything.
+
+        Args:
+            **kwargs: The fields to write, as ``QuerySet.update`` takes them.
+
+        Returns:
+            How many rows were updated.
+        """
+        updated = super().update(**kwargs)
+        if updated:
+            self.after_bulk_write()
+        return updated
+
+    def number_in_order(self, ids: Sequence[Any], field: str = "order") -> int:
+        """Set *field* on each of *ids* to its index in *ids*, in one statement. Rows outside this queryset are left alone.
+
+        Joins against the ids as an array. ``bulk_update`` and a ``Case``/``When`` would instead write a branch per
+        row, which Postgres tests every row against: 267 ms against 26 at 5,000 rows.
+
+        Args:
+            ids: Primary keys in their new order. One this queryset does not match still takes up its index, and a
+                repeated one keeps its first.
+            field: The integer field to number.
+
+        Returns:
+            How many rows were numbered.
+        """
+        if field in getattr(self.model, "versioned_fields", ()):
+            raise TypeError(f"{self.model.__name__}.{field} is versioned; number_in_order would skip its revisions.")
+        meta = self.model._meta  # noqa: SLF001 - _meta is public API despite the underscore
+        target = meta.get_field(field)
+        if not isinstance(target, django_models.IntegerField) or target.column is None:
+            raise TypeError(f"{self.model.__name__}.{field} is not an integer column.")
+        if not isinstance(meta.pk, django_models.IntegerField) or meta.pk.column is None:
+            raise TypeError(f"{self.model.__name__} has no integer primary key.")
+        first_positions: dict[Any, int] = {}
+        for position, pk_value in enumerate(ids):
+            first_positions.setdefault(pk_value, position)
+        connection = connections[self.db]
+        quote = connection.ops.quote_name
+        scope_sql, scope_params = self.order_by().values("pk").query.sql_with_params()
+        pk = quote(meta.pk.column)
+        sql = (
+            f"UPDATE {quote(meta.db_table)} AS numbered SET {quote(target.column)} = positions.position "  # noqa: S608 - identifiers come from the model, not input
+            f"FROM unnest(%s::bigint[], %s::integer[]) AS positions(id, position) "
+            f"WHERE numbered.{pk} = positions.id AND numbered.{pk} IN ({scope_sql})"
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [list(first_positions), list(first_positions.values()), *scope_params])
+            numbered = cursor.rowcount
+        if numbered:
+            self.after_bulk_write()
+        return numbered
+
+    def match_ids(self, limit: int | None = None) -> list[Any]:
+        """The primary keys this queryset matches, read without any of the joins that hydrate a row.
+
+        The first half of match-then-fetch: run the predicate against ids alone, then fetch those
+        rows by primary key with whatever ``select_related``/``prefetch_related`` the caller wants.
+        Carrying the hydration through the matching query costs planning time proportional to the
+        relations it names, paid per call - 161.6 ms of it against 13.9 ms of execution on the map
+        autocomplete's keystroke query at capacity scale (docs/archive/PROBLEMS-ARCHIVE.md, P100).
+
+        Args:
+            limit: Stop after this many ids; None for all of them.
+
+        Returns:
+            The matching primary keys, ordered by primary key so the fetch half can be too.
+        """
+        ids = self.order_by("pk").values_list("pk", flat=True).distinct()
+        return list(ids[:limit] if limit is not None else ids)
+
+    def by_ids(self, ids: Iterable[Any]) -> Self:
+        """The second half of match-then-fetch: these rows, by primary key.
+
+        Args:
+            ids: Primary keys, typically from :meth:`match_ids`.
+
+        Returns:
+            This queryset restricted to them."""
+        return self.filter(pk__anyof=list(ids))
+
+    def bounded_by(self, path: str, queryset: DashboardQuerySet[Any]) -> Self:
+        """This queryset restricted to rows whose *path* points at one of *queryset*'s rows.
+
+        The difference from ``filter(path__in=queryset)`` is that the bound is resolved to a
+        concrete list first, so the planner cannot decide to drive the query from the far side of
+        the relation - which is what turns "the comments on trips I belong to" into a scan of every
+        comment on the site: 31.44 ms reading 50,000 rows it then discards, against 0.16 ms reading
+        none. See :mod:`~urbanlens.core.semijoin`.
+
+        Args:
+            path: The relation on this model to bound, e.g. ``"trip"``.
+            queryset: The already access-scoped rows it must point at.
+
+        Returns:
+            This queryset, bounded."""
+        return self.filter(**{f"{path}__pk__anyof": queryset.match_ids()})
+
+    def own_pks(self) -> list[Any]:
+        """The primary keys this queryset selects, fetched once per enclosing probe scope.
+
+        Args:
+            None.
+
+        Returns:
+            The primary keys, in whatever order the database returned them."""
+        scope = current_scope()
+        if scope is None:
+            return list(self.values_list("pk", flat=True))
+        return scope.pks_of(self)
+
+    def semijoin(self, path: str, condition: Q) -> Q:
+        """*condition* as a semi-join, when *path* crosses a to-many relation.
+
+        A row matching through several related rows stays one row without ``DISTINCT``, and the
+        statement never joins the relation: planning a join across several of them cost more than
+        running it. The predicate is asked of the crossing's own table where its shape allows
+        (:func:`~urbanlens.core.semijoin.probe_relation`) and as a bounded join from this model
+        where it does not (:func:`~urbanlens.core.semijoin.probe_statement`); either way the answer
+        reaches the caller as a concrete list of primary keys, which is load-bearing.
+
+        Args:
+            path: The ORM path *condition* filters through.
+            condition: The predicate, written against this queryset's model.
+
+        Returns:
+            A Q usable in ``filter()`` on this queryset's model."""
+        if not crosses_many(self.model, path):
+            return condition
+        # The scope is entered here rather than left to the caller because the setting it holds is
+        # what keeps the probe on its index; a caller that forgets it gets a correct answer read
+        # the wrong way, which only a rows-read measurement notices. Reentrant, so a caller who
+        # does hold one still pays for it once and keeps the pk memo across its own loop.
+        with probe_scope():
+            outer_pks = self.own_pks()
+            if not outer_pks:
+                return Q(pk__in=[])
+            matched = probe_relation(self.model, path, condition, outer_pks)
+            if matched is None:
+                matched = probe_statement(self.model, condition, outer_pks)
+            return Q(pk__in=matched)
+
+
+_DashboardManagerBase = django_models.Manager.from_queryset(DashboardQuerySet)
+
+
+class DashboardManager(_DashboardManagerBase):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """
@@ -37,11 +196,11 @@ class FrontendDashboardQuerySet(DashboardQuerySet[_ModelT]):
     A custom queryset. All models below will use this for interacting with results from the db.
     """
 
-    def uuid(self, uuid: str) -> Self:
-        return self.filter(uuid=uuid)
+
+_FrontendDashboardManagerBase = DashboardManager.from_queryset(FrontendDashboardQuerySet)
 
 
-class FrontendDashboardManager(DashboardManager.from_queryset(FrontendDashboardQuerySet)):
+class FrontendDashboardManager(_FrontendDashboardManagerBase):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """
@@ -54,13 +213,7 @@ class PublicDashboardQuerySet(FrontendDashboardQuerySet[_ModelT]):
 
     def slug_or_uuid(self, value: str) -> Self:
         """Return the row matching this slug, or this uuid if it was sent instead.
-
-        Every public URL for one of these models builds its identifier as
-        ``obj.slug or str(obj.uuid)`` - the uuid fallback fires whenever a row's
-        slug hasn't been minted (e.g. a legacy row predating auto-slug
-        generation, or one saved via a path that bypassed it). An endpoint that
-        only ever looks up ``slug=value`` 404s for exactly those rows even
-        though the value it received is a perfectly valid identifier for them.
+        Every public URL for one of these models builds its identifier as ``obj.slug or str(obj.uuid)`` - the uuid fallback fires whenever a row's slug hasn't been minted (e.g. a legacy row predating auto-slug generation, or one saved via a path that bypassed it).
 
         Args:
             value: The slug or uuid string taken from a URL path segment.
@@ -78,7 +231,10 @@ class PublicDashboardQuerySet(FrontendDashboardQuerySet[_ModelT]):
         return self.filter(query)
 
 
-class PublicDashboardManager(FrontendDashboardManager.from_queryset(PublicDashboardQuerySet)):
+_PublicDashboardManagerBase = FrontendDashboardManager.from_queryset(PublicDashboardQuerySet)
+
+
+class PublicDashboardManager(_PublicDashboardManagerBase):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """

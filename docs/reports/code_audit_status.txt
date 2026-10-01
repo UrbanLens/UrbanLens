@@ -341,7 +341,7 @@ Verification: all confirmed 0-ref by scanner and direct grep.
   dashboard/services/google/places.py
     - GooglePlacesGateway.get_place_photos - UNINCORPORATED
     - GooglePlacesGateway.get_recent_search_results - UNINCORPORATED
-    NOTE from Jess: get_place_photos should show up in the pin details page and the 
+    NOTE from Jess: get_place_photos should show up in the pin details page and the
     location wiki. Its results should be cached for several months to limit api calls.
 
   dashboard/services/import_data.py
@@ -375,7 +375,7 @@ Verification: all confirmed 0-ref by scanner and direct grep.
   dashboard/services/nps/parks.py
     - NPSGateway.get_park_images - UNINCORPORATED
     - NPSGateway.get_parks_near_location - UNINCORPORATED
-    NOTE from Jess: get_park_images should show up in the pin details page and the 
+    NOTE from Jess: get_park_images should show up in the pin details page and the
     location wiki. Its results should be cached for several months to limit api calls.
 
   dashboard/services/routexl.py
@@ -383,7 +383,7 @@ Verification: all confirmed 0-ref by scanner and direct grep.
       Full RouteXL route optimization gateway. Useful for trip planning but not
       wired into the trip detail view.
       NOTE from Jess: Is this duplicate functionality with the google maps directions call
-      mentioned above? If so, we should abstract it to provide 2 service providers for the 
+      mentioned above? If so, we should abstract it to provide 2 service providers for the
       feature.
 
   dashboard/services/site_admin.py
@@ -395,9 +395,9 @@ Verification: all confirmed 0-ref by scanner and direct grep.
     - SmithsonianGateway.get_images_by_coordinates - UNINCORPORATED
       Coordinate-based Smithsonian search; the live get_data method searches by
       name instead. Alternative approach for locations without strong name matches.
-      NOTE from Jess: Searching by coordinates and searching by name should both be 
+      NOTE from Jess: Searching by coordinates and searching by name should both be
       used on the pin details page and the location wiki, and duplicate results between
-      the two should be condensed before a response is returned. The results should be cached 
+      the two should be condensed before a response is returned. The results should be cached
       for several months to limit api calls.
 
 ================================================================================

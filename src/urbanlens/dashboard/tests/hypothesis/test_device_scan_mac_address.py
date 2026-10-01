@@ -1,16 +1,10 @@
-"""Tests for services.device_scan.mac_address.normalize_mac_address.
-
-Every device-scan write path funnels through this function so the same
-physical device is never split across two ``ScannedDevice`` rows over a
-casing or separator difference between two uploads - these tests are what
-would catch a regression there.
-"""
+"""Tests for services.device_scan.mac_address.normalize_mac_address."""
 
 from __future__ import annotations
 
 from django.test import SimpleTestCase
-from hypothesis import HealthCheck, given, settings, strategies as st
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.dashboard.services.device_scan.mac_address import InvalidMacAddressError, normalize_mac_address
 
 _HEX_OCTET = st.integers(min_value=0, max_value=255).map(lambda n: f"{n:02x}")
@@ -71,7 +65,9 @@ class NormalizeMacAddressPropertyTests(SimpleTestCase):
 
     @_SUPPRESS_SLOW_DRAW
     @given(octets=_OCTETS, separator=_SEPARATORS, uppercase=st.booleans())
-    def test_normalize_is_separator_and_case_insensitive(self, octets: list[str], separator: str, uppercase: bool) -> None:
+    def test_normalize_is_separator_and_case_insensitive(
+        self, octets: list[str], separator: str, uppercase: bool
+    ) -> None:
         """Any valid separator style, in either case, resolves to the same canonical form."""
         raw = separator.join(octets)
         raw = raw.upper() if uppercase else raw.lower()

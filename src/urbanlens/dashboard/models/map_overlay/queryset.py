@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from urbanlens.dashboard.models import abstract
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay  # noqa: F401 - mypy needs these; ruff does not
 
-class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet):
+
+class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet["MapImageOverlay"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.map_overlay.model.MapImageOverlay`."""
 
     def for_pin(self, pin) -> Self:
@@ -22,18 +25,9 @@ class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet):
         """Overlays created by a specific profile."""
         return self.filter(profile=profile)
 
-    def renderable(self) -> Self:
-        """Overlays that still have something to draw - an image or a tile template.
 
-        An overlay whose uploaded ``Image`` was deleted elsewhere (gallery
-        cleanup, a quota sweep) keeps its georeferencing but has nothing to
-        show; excluding it here stops every map from rendering a broken tile
-        for it.
-        """
-        from django.db.models import Q
-
-        return self.exclude(Q(image__isnull=True) & Q(image_url="") & Q(tile_url_template=""))
+_MapImageOverlayManagerBase = abstract.FrontendDashboardManager.from_queryset(MapImageOverlayQuerySet)
 
 
-class MapImageOverlayManager(abstract.FrontendDashboardManager.from_queryset(MapImageOverlayQuerySet)):
+class MapImageOverlayManager(_MapImageOverlayManagerBase):
     """Manager for MapImageOverlay."""

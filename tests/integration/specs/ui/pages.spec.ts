@@ -1,17 +1,6 @@
 /**
- * The application's collection pages, rendering real rows.
- *
- * `smoke/pages.spec.ts` visits every page and checks it does not error. That is
- * the right first question and it has a blind spot: a page that renders its
- * empty state perfectly answers 200 whether or not it can display anything. All
- * of these pages are lists, so the interesting failure - a template that breaks
- * on a row, an N+1 that only appears with data, a serializer that assumes a
- * field a real row leaves null - needs a row to exist.
- *
- * So each test here creates something through the API and then asks the page
- * about it. The console guard is doing as much work as the assertions: it fails
- * the test if the page throws or 404s a subresource while rendering, which is
- * how the fan-out problems on the pin detail page surfaced.
+ * The application's collection pages, rendering real rows. `smoke/pages.spec.ts` visits every page
+ * and checks it does not error.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

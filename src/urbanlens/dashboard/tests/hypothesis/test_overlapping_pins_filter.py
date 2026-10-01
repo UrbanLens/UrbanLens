@@ -1,18 +1,9 @@
-"""Tests for the "overlapping pins" map filter.
-
-A pin's footprint is its effective property boundary: a drawn/generated
-polygon when one exists, else a default circle around its coordinates (see
-``BoundaryManager.effective_polygon_for_pin``). ``PinQuerySet.overlapping()``
-returns every pin whose footprint intersects another pin's footprint (from the
-same queryset), which - since every pin resolves to *some* footprint - also
-catches pins accidentally left stacked on identical/near-identical
-coordinates (e.g. by the merge/child-pin coordinate bugs).
-"""
+"""Tests for the "overlapping pins" map filter."""
 
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.contrib.gis.geos import MultiPolygon, Point, Polygon
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from model_bakery import baker
 
@@ -69,8 +60,18 @@ class OverlappingPinsQuerySetTests(TestCase):
         # markers themselves sit well outside each other's default circle radius.
         a = _pin_at(self.profile, "A", 42.0000, -73.0000)
         b = _pin_at(self.profile, "B", 42.0020, -73.0020)
-        Boundary.objects.create(pin=a, profile=self.profile, boundary_type=BoundaryType.PROPERTY, polygon=_square_polygon(42.0000, -73.0000, 0.003))
-        Boundary.objects.create(pin=b, profile=self.profile, boundary_type=BoundaryType.PROPERTY, polygon=_square_polygon(42.0020, -73.0020, 0.003))
+        Boundary.objects.create(
+            pin=a,
+            profile=self.profile,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_square_polygon(42.0000, -73.0000, 0.003),
+        )
+        Boundary.objects.create(
+            pin=b,
+            profile=self.profile,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_square_polygon(42.0020, -73.0020, 0.003),
+        )
         result = {p.pk for p in Pin.objects.filter(profile=self.profile).overlapping()}
         self.assertEqual(result, {a.pk, b.pk})
 

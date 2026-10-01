@@ -1,21 +1,4 @@
-"""Every module that creates a ``PinShare`` must also record the exposure.
-
-``CLAUDE.md``: "Any new pin/location share path must call ``resolve_origin_share``
-+ ``record_share_exposure`` to keep the ``LocationExposure`` provenance chain
-intact." Today six modules create shares and all six comply - but nothing
-*enforces* it, and the cost of the seventh forgetting is silent: the share still
-sends, so nothing looks broken, while the recipient's onward shares chain under
-the wrong ancestor (or none), which is exactly what the chain exists to prevent.
-
-A static check rather than a behavioural one because the failure is "a new code
-path exists that nobody wrote a test for" - the case a behavioural test by
-definition misses.
-
-The related rule (do *not* record an exposure when merely accepting or rejecting
-an already-sent share) is covered behaviourally elsewhere; see
-``services.sharing.pin_sharing``'s module docstring for why that asymmetry is
-deliberate.
-"""
+"""Every module that creates a ``PinShare`` must also record the exposure."""
 
 from __future__ import annotations
 

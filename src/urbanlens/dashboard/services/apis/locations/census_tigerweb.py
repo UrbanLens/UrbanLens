@@ -1,9 +1,4 @@
-"""US Census Bureau TIGERweb gateway - free, keyless geography lookups by coordinate.
-
-https://tigerweb.geo.census.gov/ - an ArcGIS REST MapServer over the same
-TIGER/Line geographies used elsewhere in the government open-data space, with
-no API key and no rate-limit registration required. US coverage only.
-"""
+"""US Census Bureau TIGERweb gateway - free, keyless geography lookups by coordinate."""
 
 from __future__ import annotations
 
@@ -33,13 +28,13 @@ _LAYER_FEDERAL_RESERVATION = 36
 _LAYER_STATE_RESERVATION = 40
 
 
+class TigerwebUnavailableError(RuntimeError):
+    """TIGERweb did not answer: the request failed or ArcGIS reported the query as failed."""
+
+
 @dataclass(slots=True, kw_only=True)
 class CensusTigerwebGateway(Gateway):
-    """Gateway for the US Census Bureau's TIGERweb ArcGIS REST service.
-
-    Free, keyless point-in-polygon lookups for US Census geography (state,
-    county, incorporated place, census tract) covering any US coordinate.
-    """
+    """Gateway for the US Census Bureau's TIGERweb ArcGIS REST service."""
 
     service_key: ClassVar[str] = "census_tigerweb"
     paid_service: ClassVar[bool] = False
@@ -70,28 +65,21 @@ class CensusTigerwebGateway(Gateway):
     def get_state_boundary(self, state_abbr: str) -> dict[str, Any] | None:
         """Return the raw Esri ring geometry of one US state's boundary.
 
-        Unlike :meth:`get_geography`, this is an attribute query (matching on
-        the state's USPS abbreviation), not a point-in-polygon lookup - it
-        answers "what does this state's polygon look like", not "what state is
-        this point in". Used by ``services.geo.geo_boundary.state_boundary`` to
-        build a point-containment gate for state-scoped plugins.
-
         Args:
             state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).
 
         Returns:
-            The raw ``{"rings": [...]}`` Esri geometry dict, or None when the
-            state isn't found or the request fails.
+            The raw ``{"rings": [...]}`` Esri geometry dict, or None when no state has this abbreviation.
 
         Raises:
-            ValueError: ``state_abbr`` isn't exactly two letters - guards the
-                ``where`` clause below, which interpolates it directly.
+            ValueError: ``state_abbr`` isn't exactly two letters - guards the ``where`` clause below, which interpolates it directly.
+            TigerwebUnavailableError: No answer. Raised rather than returning None, because GeoBoundary memoizes None for good.
         """
         if len(state_abbr) != 2 or not state_abbr.isalpha():
             raise ValueError(f"state_abbr must be a two-letter USPS abbreviation, got {state_abbr!r}")
         params: dict[str, str | int] = {
-            "where": f"STUSPS='{state_abbr.upper()}'",
-            "outFields": "STUSPS",
+            "where": f"STUSAB='{state_abbr.upper()}'",
+            "outFields": "STUSAB",
             "returnGeometry": "true",
             "outSR": 4326,
             "f": "json",
@@ -100,9 +88,10 @@ class CensusTigerwebGateway(Gateway):
             response = self.session.get(f"{self.base_url}/{_LAYER_STATE}/query", params=params, timeout=15)
             response.raise_for_status()
             body = response.json()
-        except requests.exceptions.RequestException:
-            logger.warning("TIGERweb state boundary query failed for %s", state_abbr, exc_info=True)
-            return None
+        except (requests.exceptions.RequestException, ValueError) as exc:
+            raise TigerwebUnavailableError(f"TIGERweb state boundary query failed for {state_abbr}") from exc
+        if "error" in body:
+            raise TigerwebUnavailableError(f"TIGERweb refused the state boundary query for {state_abbr}: {body['error']}")
         features = body.get("features") or []
         if not features:
             return None
@@ -116,12 +105,7 @@ class CensusTigerwebGateway(Gateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            Dict with ``state``, ``county``, ``place``, ``tract``, ``zcta``,
-            ``urban_area``, ``cbsa``, ``tribal_land`` sub-dicts (each
-            ``{"name": ..., "geoid": ...}``, or None when the point isn't in
-            that geography type, e.g. an unincorporated area with no
-            enclosing place, or a rural point outside any urban area/reservation);
-            an empty dict outside the US entirely.
+            Dict with ``state``, ``county``, ``place``, ``tract``, ``zcta``, ``urban_area``, ``cbsa``, ``tribal_land`` sub-dicts (each ``{"name": ..., "geoid": ...}``, or None when the point isn't in that geography type, e.g. an unincorporated area with no...
         """
         state = self._normalize(self._query_layer(_LAYER_STATE, latitude, longitude))
         if not state:

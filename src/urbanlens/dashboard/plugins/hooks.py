@@ -1,24 +1,5 @@
 """Actions and filters for UrbanLens plugins.
-
-A small WordPress-style hook bus. Core code declares extension points by
-firing named hooks; plugins attach callbacks to those names:
-
-* **Actions** are fire-and-forget notifications (``do_action``); callbacks
-  receive the arguments and their return values are ignored.
-* **Filters** transform a value (``apply_filters``); each callback receives
-  the current value (plus any extra arguments) and returns the next value.
-
-Callbacks run in ascending ``priority`` order (default 10), with registration
-order breaking ties. A callback that raises is logged and skipped so a broken
-plugin can never take down a request; for filters the value simply passes
-through unchanged to the next callback.
-
-Most plugin integration should use the typed contribution methods on
-:class:`~urbanlens.dashboard.plugins.base.UrbanLensPlugin` instead - the hook
-bus exists for extension points that don't warrant a dedicated method, and
-for plugins that need to react to lifecycle events (e.g. the
-``plugins_loaded`` action fired after discovery).
-"""
+A callback that raises is logged and skipped so a broken plugin can never take down a request; for filters the value simply passes through unchanged to the next callback."""
 
 from __future__ import annotations
 
@@ -51,11 +32,7 @@ class _HookCallback:
 
 class HookRegistry:
     """Named action and filter hooks with priority-ordered callbacks.
-
-    Attributes are internal; use the ``add_*``/``remove_*``/``do_action``/
-    ``apply_filters`` methods. A module-level singleton, :data:`hooks`, is the
-    instance shared by core code and plugins.
-    """
+    A module-level singleton, :data:`hooks`, is the instance shared by core code and plugins."""
 
     def __init__(self) -> None:
         """Initialize an empty registry."""
@@ -110,9 +87,7 @@ class HookRegistry:
 
     def do_action(self, name: str, *args: Any, **kwargs: Any) -> None:
         """Run every callback registered for an action hook.
-
-        Callbacks run in priority order; exceptions are logged and swallowed
-        so one broken plugin cannot break the others or the caller.
+        Callbacks run in priority order; exceptions are logged and swallowed so one broken plugin cannot break the others or the caller.
 
         Args:
             name: The action hook name.
@@ -127,10 +102,6 @@ class HookRegistry:
 
     def apply_filters(self, name: str, value: Any, *args: Any, **kwargs: Any) -> Any:
         """Pass a value through every callback registered for a filter hook.
-
-        Callbacks run in priority order, each receiving the previous
-        callback's return value. A callback that raises is logged and skipped;
-        the value flows through unchanged to the next callback.
 
         Args:
             name: The filter hook name.

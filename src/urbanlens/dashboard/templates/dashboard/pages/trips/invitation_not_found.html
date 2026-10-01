@@ -1,0 +1,12 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}Invitation not found - UrbanLens{% endblock %}
+
+{% block auth_header %}{% endblock %}
+
+{% block content %}
+<div class="auth-info-icon"><i class="material-icons">link_off</i></div>
+<h2 class="auth-info-title">Invitation not found</h2>
+<p class="auth-info-text">This invitation doesn't exist, has expired, or was sent to someone else.</p>
+<div class="auth-footer"><a href="{% url 'index' %}">UrbanLens home</a></div>
+{% endblock %}

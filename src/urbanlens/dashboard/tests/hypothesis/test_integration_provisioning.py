@@ -1,20 +1,4 @@
-"""Tests for the integration suite's account provisioning.
-
-Two things are worth testing here and they are not the same thing.
-
-The first is that a provisioned account is actually usable by a headless run.
-Every precondition in ``services.integration_testing.accounts`` exists because
-some redirect, prompt or challenge would otherwise stop the suite before its
-first assertion, and each is a single field that a future change could quietly
-flip back. A test that only checked "a user row exists" would pass through every
-one of those regressions.
-
-The second is the selection query behind ``--purge``. It deletes accounts and
-everything hanging off them, and it may be pointed at a staging instance people
-also use by hand. Its boundaries are the safety property of this whole feature,
-so they are tested from both sides: that it finds what it should, and - more
-importantly - that it does not find anything else.
-"""
+"""Tests for the integration suite's account provisioning."""
 
 from __future__ import annotations
 
@@ -28,13 +12,25 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from urbanlens.dashboard.models.account.model import AccountKdf, ApiKey, ApiKeyScope, EmailVerification, TOTPDevice
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta.delivery_preference import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.subscriptions.model import (
+    SiteFeature,
+    SubscriptionRole,
+    UserSubscription,
+    grant_subscription,
+    user_features,
+    user_has_feature,
+)
 from urbanlens.dashboard.services.admin.site_admin import promote_first_user_if_needed
 from urbanlens.dashboard.services.auth.api_keys import authenticate_api_key
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_EMAIL_DOMAIN, INTEGRATION_USERNAME_PREFIX
 from urbanlens.dashboard.services.integration_testing.accounts import (
+    SUBSCRIBER_ROLE_SLUG,
     email_for,
     integration_users,
     provision,
@@ -59,12 +55,9 @@ class ProvisionAccountTests(TestCase):
     def test_account_can_actually_sign_in(self):
         """Active, verified, and holding the password that was reported.
 
-        Each of these is separately load-bearing: an inactive account is
-        refused outright, an unverified one is refused with an offer to resend
-        an email nobody can receive, and a password that does not match the
-        manifest makes every sign-in in the suite fail for a reason the suite
-        cannot see.
-        """
+        Each of these is separately load-bearing: an inactive account is refused outright, an unverified one is
+        refused with an offer to resend an email nobody can receive, and a password that does not match the
+        manifest makes every sign-in in the suite fail for a reason the suite cannot see."""
         account, _ = provision_account("primary", password=PASSWORD)
 
         user = User.objects.get(username=account.username)
@@ -75,10 +68,8 @@ class ProvisionAccountTests(TestCase):
     def test_profile_is_past_every_post_login_diversion(self):
         """``PostLoginRedirectView`` must land the run in the application.
 
-        Without both flags it redirects to the welcome flow or to profile
-        editing, and every navigation the suite makes afterwards is against the
-        wrong page.
-        """
+        Without both flags it redirects to the welcome flow or to profile editing, and every navigation the
+        suite makes afterwards is against the wrong page."""
         account, _ = provision_account("primary", password=PASSWORD)
 
         profile = Profile.objects.get(user__username=account.username)
@@ -102,10 +93,8 @@ class ProvisionAccountTests(TestCase):
     def test_no_notification_is_ever_delivered_by_email(self):
         """Every delivery preference is on-site only.
 
-        The address is on a reserved domain that cannot receive mail, so an
-        email preference would produce a delivery failure inside whatever task
-        raised the notification - reported as that feature failing.
-        """
+        The address is on a reserved domain that cannot receive mail, so an email preference would produce a
+        delivery failure inside whatever task raised the notification - reported as that feature failing."""
         account, _ = provision_account("primary", password=PASSWORD)
 
         preferences = NotificationPreference.objects.get(profile__user__username=account.username)
@@ -113,7 +102,9 @@ class ProvisionAccountTests(TestCase):
         offenders = [
             field.name
             for field in NotificationPreference._meta.get_fields()
-            if getattr(field, "choices", None) and {value for value, _ in field.choices} == set(DeliveryPreference.values) and getattr(preferences, field.name) in email_carrying
+            if getattr(field, "choices", None)
+            and {value for value, _ in field.choices} == set(DeliveryPreference.values)
+            and getattr(preferences, field.name) in email_carrying
         ]
         self.assertEqual(offenders, [], f"these notification types would still send email: {offenders}")
 
@@ -144,10 +135,8 @@ class ApiKeyProvisioningTests(TestCase):
     def test_the_restricted_key_is_valid_and_insufficient(self):
         """Valid credential, minimal grant.
 
-        A key that does not authenticate proves nothing about scope
-        enforcement - the endpoint would refuse it at the authentication step
-        and the test would pass whether or not scopes were checked at all.
-        """
+        A key that does not authenticate proves nothing about scope enforcement - the endpoint would refuse it
+        at the authentication step and the test would pass whether or not scopes were checked at all."""
         account, _ = provision_account("primary", password=PASSWORD)
 
         assert account.restricted_api_key is not None
@@ -202,10 +191,7 @@ class IdempotencyTests(TestCase):
 class SelectionBoundaryTests(TestCase):
     """What ``--purge`` is and is not allowed to see.
 
-    The negative cases matter more than the positive one. This query deletes
-    accounts and everything hanging off them, and it may be run on an instance
-    that also holds accounts somebody is using.
-    """
+    The negative cases matter more than the positive one."""
 
     def test_a_provisioned_account_is_selected(self):
         provision_account("primary", password=PASSWORD)
@@ -231,10 +217,8 @@ class SelectionBoundaryTests(TestCase):
     def test_a_staff_account_is_never_selected(self):
         """A staff account carrying both conventions is still excluded.
 
-        The last line of defence: if somebody promotes one of these to
-        investigate something, a later purge must not silently take the
-        elevated account with it.
-        """
+        The last line of defence: if somebody promotes one of these to investigate something, a later purge must
+        not silently take the elevated account with it."""
         User.objects.create_user(username=username_for("primary"), email=email_for("primary"), is_staff=True)
 
         self.assertEqual(list(integration_users()), [])
@@ -254,24 +238,29 @@ class SelectionBoundaryTests(TestCase):
 class BootstrapAdminGuardTests(TestCase):
     """A disposable account must never claim the single, permanent admin slot.
 
-    Asserted against ``SiteSettings.bootstrap_admin_user``, which is the
-    authoritative record, rather than against the return value: the promotion
-    runs from a ``post_save`` signal, so by the time a test can call the
-    function itself the decision has already been made once.
-    """
+    Asserted against ``SiteSettings.bootstrap_admin_user``, which is the authoritative record, rather than
+    against the return value: the promotion runs from a ``post_save`` signal, so by the time a test can call the
+    function itself the decision has already been made once."""
+
+    def setUp(self):
+        """Establish the global state these tests read, rather than assuming it.
+
+        ``promote_first_user_if_needed`` consults two pieces of site-wide state: the ``SiteSettings`` bootstrap
+        slot, and whether any ``User`` other than the one being created exists."""
+        super().setUp()
+        User.objects.all().delete()
+        # Redundant while the FK is SET_NULL, but this is the value every
+        # assertion below reads, so it is established rather than inferred.
+        SiteSettings.objects.filter(pk=1).update(bootstrap_admin_user=None)
 
     def _bootstrap_admin_id(self) -> int | None:
-        from urbanlens.dashboard.models.site_settings import SiteSettings
-
         return SiteSettings.get_current().bootstrap_admin_user_id
 
     def test_the_first_provisioned_account_is_not_promoted(self):
         """Provisioning against a freshly built database creates the first user on it.
 
-        The slot is single-claim and permanent, so a throwaway account taking
-        it would leave the real operator unable to ever be promoted - and a
-        purge would then leave it pointing at a row that no longer exists.
-        """
+        The slot is single-claim and permanent, so a throwaway account taking it would leave the real operator
+        unable to ever be promoted - and a purge would then leave it pointing at a row that no longer exists."""
         User.objects.create_user(username=username_for("primary"), email=email_for("primary"))
 
         self.assertIsNone(self._bootstrap_admin_id(), "a disposable account claimed the bootstrap admin slot")
@@ -285,21 +274,17 @@ class BootstrapAdminGuardTests(TestCase):
     def test_provisioning_leaves_the_slot_unclaimed(self):
         """The order that matters: disposable accounts created on a fresh instance.
 
-        The slot stays empty rather than pointing at an account a purge will
-        delete. It does *not* become claimable by whoever signs up next -
-        ``promote_first_user_if_needed`` only ever promotes a genuinely first
-        user - so on an instance provisioned before anyone registered, the
-        operator is promoted deliberately (``createsuperuser``, or the site
-        admin group) rather than automatically. That is the recoverable
-        outcome; a dangling reference to a deleted row is not.
-        """
+        The slot stays empty rather than pointing at an account a purge will delete."""
         provision_account("primary", password=PASSWORD)
         provision_account("secondary", password=PASSWORD)
 
         self.assertIsNone(self._bootstrap_admin_id())
 
         operator = User.objects.create_user(username="the_operator", email="operator@example.com")
-        self.assertFalse(promote_first_user_if_needed(operator), "the operator was not the first user, so nothing should have been promoted")
+        self.assertFalse(
+            promote_first_user_if_needed(operator),
+            "the operator was not the first user, so nothing should have been promoted",
+        )
         self.assertIsNone(self._bootstrap_admin_id())
 
 
@@ -342,7 +327,7 @@ class CommandTests(TestCase):
         self.assertEqual(list(integration_users()), [])
 
     def test_production_is_refused(self):
-        with mock.patch("urbanlens.dashboard.management.commands.provision_integration_env.app_settings") as settings:
+        with mock.patch("urbanlens.dashboard.services.integration_testing.guards.app_settings") as settings:
             settings.environment_name = "production"
             with self.assertRaises(CommandError) as caught:
                 call_command("provision_integration_env", stdout=StringIO())
@@ -353,7 +338,7 @@ class CommandTests(TestCase):
     def test_force_alone_does_not_open_production(self):
         """Two locks, because each covers a different mistake."""
         with (
-            mock.patch("urbanlens.dashboard.management.commands.provision_integration_env.app_settings") as settings,
+            mock.patch("urbanlens.dashboard.services.integration_testing.guards.app_settings") as settings,
             mock.patch.dict("os.environ", {}, clear=False),
         ):
             settings.environment_name = "production"
@@ -362,10 +347,248 @@ class CommandTests(TestCase):
 
     def test_both_locks_together_permit_production(self):
         with (
-            mock.patch("urbanlens.dashboard.management.commands.provision_integration_env.app_settings") as settings,
+            mock.patch("urbanlens.dashboard.services.integration_testing.guards.app_settings") as settings,
             mock.patch.dict("os.environ", {"UL_ALLOW_INTEGRATION_PROVISIONING": "true"}),
         ):
             settings.environment_name = "production"
-            call_command("provision_integration_env", "--force", "--roles", "primary", stdout=StringIO(), stderr=StringIO())
+            call_command(
+                "provision_integration_env", "--force", "--roles", "primary", stdout=StringIO(), stderr=StringIO()
+            )
 
         self.assertTrue(User.objects.filter(username=username_for("primary")).exists())
+
+
+class HeavySeedingTests(TestCase):
+    """`--heavy-pins`, and the two ways it could lie.
+
+    The load harness reads the shared label's id and the account's pin count out of the manifest this writes."""
+
+    def test_nothing_is_seeded_by_default(self):
+        """Provisioning is cheap; seeding is not. Every ordinary run must stay cheap."""
+        out = StringIO()
+
+        call_command("provision_integration_env", "--roles", "primary", stdout=out)
+
+        manifest = json.loads(out.getvalue())
+        self.assertEqual(manifest["seeds"], {})
+
+    def test_the_manifest_reports_a_seed_that_actually_happened(self):
+        out = StringIO()
+
+        call_command(
+            "provision_integration_env", "--roles", "primary,heavy", "--heavy-pins", "5", stdout=out, stderr=StringIO()
+        )
+
+        profile = Profile.objects.get(user__username=username_for("heavy"))
+        self.assertEqual(Pin.objects.filter(profile=profile).root_pins().count(), 5)
+
+    def test_the_manifest_carries_what_the_harness_reads(self):
+        out = StringIO()
+
+        call_command(
+            "provision_integration_env", "--roles", "primary,heavy", "--heavy-pins", "4", stdout=out, stderr=StringIO()
+        )
+
+        manifest = json.loads(out.getvalue())
+        report = manifest["seeds"]["heavy"]
+        self.assertEqual(report["pins"], 4)
+        # Asserted against the database, not against the report: the report is
+        # the thing under suspicion.
+        label = Label.objects.get(pk=report["label_id"])
+        profile = Profile.objects.get(user__username=username_for("heavy"))
+        self.assertEqual(label.profile, profile)
+        self.assertEqual(Pin.objects.filter(profile=profile, labels=label).count(), 4)
+        self.assertTrue(report["analyzed"])
+
+    def test_seeding_a_role_that_was_not_provisioned_is_refused(self):
+        """Silently seeding nothing would produce a manifest that reads as seeded."""
+        with self.assertRaises(CommandError) as caught:
+            call_command("provision_integration_env", "--roles", "primary", "--heavy-pins", "5", stdout=StringIO())
+
+        self.assertIn("heavy", str(caught.exception))
+        self.assertIn("--roles", str(caught.exception))
+
+    def test_skipping_analyze_says_so_in_both_places(self):
+        """A run whose statistics are stale must be visible without being inferred."""
+        out, err = StringIO(), StringIO()
+
+        call_command(
+            "provision_integration_env", "--roles", "heavy", "--heavy-pins", "3", "--no-analyze", stdout=out, stderr=err
+        )
+
+        self.assertFalse(json.loads(out.getvalue())["seeds"]["heavy"]["analyzed"])
+        self.assertIn("planner", err.getvalue().lower())
+
+    def test_seeding_progress_never_lands_in_the_manifest(self):
+        """stdout is a document. A progress line inside it is a parse error downstream."""
+        out, err = StringIO(), StringIO()
+
+        call_command("provision_integration_env", "--roles", "heavy", "--heavy-pins", "3", stdout=out, stderr=err)
+
+        json.loads(out.getvalue())
+        self.assertIn("Seeding", err.getvalue())
+
+
+class SubscriberProvisioningTests(TestCase):
+    """`--subscriber-roles`: one account that holds property_owners, and every other account that must not."""
+
+    def _user(self, role: str) -> User:
+        return User.objects.get(username=username_for(role))
+
+    def test_the_default_roles_are_not_subscribers(self):
+        """The negative half of every subscription-gated spec reads these accounts."""
+        result = provision(["primary", "secondary"])
+
+        for account in result.accounts:
+            self.assertNotIn(SiteFeature.PROPERTY_OWNERS.value, account.features)
+            self.assertFalse(user_has_feature(self._user(account.role), SiteFeature.PROPERTY_OWNERS))
+
+    def test_a_subscriber_role_holds_property_owners_indefinitely(self):
+        account, _ = provision_account("subscriber", password=PASSWORD, subscriber=True)
+
+        user = self._user("subscriber")
+        self.assertTrue(user_has_feature(user, SiteFeature.PROPERTY_OWNERS))
+        self.assertIn(SiteFeature.PROPERTY_OWNERS.value, account.features)
+        subscription = UserSubscription.objects.get(user=user, revoked_at__isnull=True)
+        self.assertEqual(subscription.role.slug, SUBSCRIBER_ROLE_SLUG)
+        self.assertIsNone(subscription.expires_at, "a grant that expires turns a later run into a non-subscriber run")
+
+    def test_the_role_grants_only_property_owners_and_is_not_for_sale(self):
+        """A dedicated role, so the subscriber differs from the non-subscriber in exactly one feature."""
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+
+        role = SubscriptionRole.objects.get(slug=SUBSCRIBER_ROLE_SLUG)
+        self.assertEqual(role.feature_set, {SiteFeature.PROPERTY_OWNERS.value})
+        self.assertFalse(role.is_purchasable)
+
+    def test_an_edited_role_is_reset(self):
+        SubscriptionRole.objects.create(slug=SUBSCRIBER_ROLE_SLUG, name="edited", features="ai")
+
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+
+        self.assertEqual(
+            SubscriptionRole.objects.get(slug=SUBSCRIBER_ROLE_SLUG).feature_set, {SiteFeature.PROPERTY_OWNERS.value}
+        )
+
+    def test_reprovisioning_keeps_one_grant(self):
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+
+        self.assertEqual(
+            UserSubscription.objects.filter(user=self._user("subscriber"), revoked_at__isnull=True).count(), 1
+        )
+
+    def test_reprovisioning_without_the_flag_revokes_the_grant(self):
+        """The manifest is read inside the revoking transaction, while the shared access cache still holds the grant."""
+        with self.captureOnCommitCallbacks(execute=True):
+            provision_account("primary", password=PASSWORD, subscriber=True)
+        self.assertTrue(user_has_feature(self._user("primary"), SiteFeature.PROPERTY_OWNERS))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            account, _ = provision_account("primary", password=PASSWORD)
+            self.assertIn(
+                SiteFeature.PROPERTY_OWNERS.value,
+                user_features(self._user("primary")),
+                "precondition: before the commit the shared cache still answers with the grant; if not, this test no longer covers that window",
+            )
+
+        self.assertNotIn(SiteFeature.PROPERTY_OWNERS.value, account.features)
+        self.assertFalse(user_has_feature(self._user("primary"), SiteFeature.PROPERTY_OWNERS))
+
+    def test_revoking_leaves_other_roles_alone(self):
+        provision_account("primary", password=PASSWORD, subscriber=True)
+        user = self._user("primary")
+        other = SubscriptionRole.objects.create(slug="someone-elses-role", name="Other", features="ai")
+        grant_subscription(user, other, granted_by=user, months=None)
+
+        provision_account("primary", password=PASSWORD)
+
+        self.assertTrue(UserSubscription.objects.filter(user=user, role=other, revoked_at__isnull=True).exists())
+
+    def test_purge_does_not_widen_to_the_roles_other_holders(self):
+        """The role is shared by slug; purging the suite's accounts must not delete it or anyone else's grant of it."""
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+        real = User.objects.create_user(username="a_real_person", email="someone@example.com")
+        role = SubscriptionRole.objects.get(slug=SUBSCRIBER_ROLE_SLUG)
+        grant_subscription(real, role, granted_by=real, months=None)
+
+        deleted = purge()
+
+        self.assertEqual(deleted, [username_for("subscriber")])
+        self.assertTrue(SubscriptionRole.objects.filter(slug=SUBSCRIBER_ROLE_SLUG).exists())
+        self.assertTrue(UserSubscription.objects.filter(user=real, role=role, revoked_at__isnull=True).exists())
+
+    def test_the_manifest_reports_features_per_account(self):
+        out = StringIO()
+
+        call_command(
+            "provision_integration_env",
+            "--roles",
+            "primary,secondary,subscriber",
+            "--subscriber-roles",
+            "subscriber",
+            stdout=out,
+        )
+
+        features = {account["role"]: account["features"] for account in json.loads(out.getvalue())["accounts"]}
+        self.assertIn(SiteFeature.PROPERTY_OWNERS.value, features["subscriber"])
+        self.assertNotIn(SiteFeature.PROPERTY_OWNERS.value, features["primary"])
+        self.assertNotIn(SiteFeature.PROPERTY_OWNERS.value, features["secondary"])
+
+    def test_a_subscriber_role_outside_roles_is_refused(self):
+        """Granting nothing silently would produce a manifest whose subscriber is not one."""
+        with self.assertRaises(CommandError) as caught:
+            call_command(
+                "provision_integration_env", "--roles", "primary", "--subscriber-roles", "subscriber", stdout=StringIO()
+            )
+
+        self.assertIn("subscriber", str(caught.exception))
+        self.assertIn("--roles", str(caught.exception))
+        self.assertFalse(User.objects.filter(username=username_for("primary")).exists())
+
+    def test_text_output_exports_features(self):
+        out = StringIO()
+
+        call_command(
+            "provision_integration_env",
+            "--roles",
+            "subscriber",
+            "--subscriber-roles",
+            "subscriber",
+            "--format",
+            "text",
+            stdout=out,
+        )
+
+        self.assertIn(f"export UL_E2E_SUBSCRIBER_FEATURES={SiteFeature.PROPERTY_OWNERS.value}", out.getvalue())
+
+
+class SignupVerifyPathTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        User.objects.create(username="operator", is_active=True)
+
+    def _path(self, username: str) -> str:
+        out = StringIO()
+        call_command("provision_integration_env", "--signup-verify-path", username, stdout=out)
+        return out.getvalue().strip()
+
+    def test_a_specs_pending_signup_has_its_link_read_back(self) -> None:
+        user = User.objects.create(username="ule2e_abc", is_active=False)
+        verification = EmailVerification.objects.create(user=user)
+
+        self.assertIn(str(verification.token), self._path("ule2e_abc"))
+
+    def test_any_other_account_is_refused(self) -> None:
+        user = User.objects.create(username="someone", is_active=False)
+        EmailVerification.objects.create(user=user)
+
+        with self.assertRaises(CommandError):
+            self._path("someone")
+
+    def test_a_verified_signup_has_nothing_to_read_back(self) -> None:
+        user = User.objects.create(username="ule2e_done", is_active=True)
+        EmailVerification.objects.create(user=user)
+
+        with self.assertRaises(CommandError):
+            self._path("ule2e_done")

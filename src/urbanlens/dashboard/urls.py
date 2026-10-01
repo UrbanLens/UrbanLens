@@ -5,7 +5,7 @@ import logging
 
 # Django imports
 from django.urls import include, path, re_path
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
 
 # 3rd Party imports
 from rest_framework import routers
@@ -18,12 +18,14 @@ from urbanlens.dashboard.controllers import (
     aliases,
     api_keys,
     article,
+    article_sources,
     assistant,
     basemap_tiles,
     billing,
     billing_webhooks,
     boundary,
     calendar_sync,
+    child_buildings,
     comments,
     consensus,
     costs,
@@ -35,6 +37,7 @@ from urbanlens.dashboard.controllers import (
     e2ee,
     flickr,
     floorplans,
+    friend_invitations,
     friendship,
     games,
     google_photos,
@@ -49,13 +52,11 @@ from urbanlens.dashboard.controllers import (
     map_sharing,
     maps,
     markup,
-    media_preview,
     media_proxy,
     memories,
     notifications,
     onboarding,
     organize,
-    photos,
     pin,
     pin_bulk,
     pin_edit,
@@ -68,6 +69,8 @@ from urbanlens.dashboard.controllers import (
     pin_wiki_sync,
     property_owner,
     region_search,
+    remote_copies,
+    remote_tiles,
     safety,
     saved_filters,
     search,
@@ -75,16 +78,22 @@ from urbanlens.dashboard.controllers import (
     setup,
     site_admin,
     site_admin_costs,
+    site_admin_external_tags,
     site_admin_models,
     spotguessr,
     temporal_imagery,
     thanks,
     tools,
     trip,
+    trip_invitations,
     trivia,
     two_factor,
+    ui,
     undo,
     userprofile,
+    vault,
+    vault_media,
+    vault_photos,
     visit_suggestions,
     visits,
     webauthn,
@@ -92,18 +101,18 @@ from urbanlens.dashboard.controllers import (
     wiki_share,
 )
 from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLayoutSaveView, IndexController
-from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.images.model import MediaKind
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.pin import PinViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
+from urbanlens.dashboard.services.security.throttle import account_or_address, throttled
 
 logger = logging.getLogger(__name__)
 
 app_name = "dashboard"
 
-# The REST surface is deliberately minimal: the frontend only uses
-# PATCH/DELETE on individual pins (map popup quick-edit, pin move, delete)
-# and the review-create-or-update path below (star-rating widget). Nothing
-# external consumes this API; expose more only when the app itself needs it.
+# The REST surface is deliberately minimal: the frontend only uses PATCH/DELETE on individual pins (map popup
+# quick-edit, pin move, delete) and the review-create-or-update path below (star-rating widget).
 router = routers.DefaultRouter()
 router.register("pins", PinViewSet, basename=PinViewSet.basename)
 
@@ -114,9 +123,8 @@ urlpatterns = [
         name="review-create-or-update",
     ),
     path("rest/", include(router.urls)),
-    # API-key-authenticated surface for third-party applications - see
-    # external_api/__init__.py for why this is deliberately not part of the
-    # session-authenticated router above.
+    # API-key-authenticated surface for third-party applications - see external_api/__init__.py for why this is
+    # deliberately not part of the session-authenticated router above.
     path("api/external/v1/", include("urbanlens.dashboard.external_api.urls")),
     re_path("^$", IndexController.as_view(), name="home"),
     path("home/", HomeOverviewView.as_view(), name="home.view"),
@@ -165,16 +173,19 @@ urlpatterns = [
     path("costs/", costs.CostsView.as_view(), name="costs"),
     path("billing/webhooks/stripe/", billing_webhooks.StripeWebhookView.as_view(), name="billing.stripe_webhook"),
     path("assistant/", assistant.AssistantView.as_view(), name="assistant"),
+    path("assistant/overlay/", assistant.AssistantOverlayBodyView.as_view(), name="assistant.overlay"),
     path("assistant/message/", assistant.AssistantMessageView.as_view(), name="assistant.message"),
+    path("assistant/turn/<str:turn_id>/", assistant.AssistantTurnPollView.as_view(), name="assistant.turn"),
+    path("assistant/turn/<str:turn_id>/confirm/<int:n>/", assistant.AssistantProposalConfirmView.as_view(), name="assistant.proposal.confirm"),
     path("assistant/reset/", assistant.AssistantResetView.as_view(), name="assistant.reset"),
     path("games/", games.GamesOverviewView.as_view(), name="games.overview"),
+    path("games/friends/", games.GameFriendPickerView.as_view(), name="games.friends"),
     path(
         "spotguessr/",
         include(
             [
                 path("", spotguessr.SpotGuessrHomeView.as_view(), name="spotguessr"),
                 path("settings/", spotguessr.SpotGuessrSettingsView.as_view(), name="spotguessr.settings"),
-                path("friends/", spotguessr.SpotGuessrFriendsView.as_view(), name="spotguessr.friends"),
                 path("start/", spotguessr.SpotGuessrStartView.as_view(), name="spotguessr.start"),
                 path("pins/", spotguessr.SpotGuessrPinsView.as_view(), name="spotguessr.pins"),
                 path("area_pin_count/", spotguessr.SpotGuessrAreaPinCountView.as_view(), name="spotguessr.area_pin_count"),
@@ -210,7 +221,6 @@ urlpatterns = [
             [
                 path("", trivia.TriviaHomeView.as_view(), name="trivia"),
                 path("start/", trivia.TriviaStartView.as_view(), name="trivia.start"),
-                path("friends/", trivia.TriviaFriendsView.as_view(), name="trivia.friends"),
                 path("settings/", trivia.TriviaSettingsView.as_view(), name="trivia.settings"),
                 path("session/<int:session_id>/lobby/", trivia.TriviaLobbyView.as_view(), name="trivia.lobby"),
                 path("session/<int:session_id>/invite/", trivia.TriviaInviteView.as_view(), name="trivia.invite"),
@@ -237,7 +247,6 @@ urlpatterns = [
         include(
             [
                 path("", consensus.ConsensusHomeView.as_view(), name="consensus"),
-                path("friends/", consensus.ConsensusFriendsView.as_view(), name="consensus.friends"),
                 path("start/", consensus.ConsensusStartView.as_view(), name="consensus.start"),
                 path("session/<int:session_id>/lobby/", consensus.ConsensusLobbyView.as_view(), name="consensus.lobby"),
                 path("session/<int:session_id>/invite/", consensus.ConsensusInviteView.as_view(), name="consensus.invite"),
@@ -295,6 +304,11 @@ urlpatterns = [
                     name="map.historical_tiles",
                 ),
                 path(
+                    "tile-copies/<str:digest>/<int:z>/<int:x>/<int:y>.png",
+                    remote_tiles.RemoteTileView.as_view(),
+                    name="map.remote_tiles",
+                ),
+                path(
                     "basemap-tiles/sources/",
                     basemap_tiles.BasemapTileCatalogueView.as_view(),
                     name="map.basemap_tiles.sources",
@@ -304,10 +318,27 @@ urlpatterns = [
                     basemap_tiles.BasemapTileView.as_view(),
                     name="map.basemap_tiles",
                 ),
+                # Ahead of the tile route so `tiles` is read as the literal segment it is, not as a
+                # theme name.
+                path(
+                    "basemap-vector/tiles/<int:z>/<int:x>/<int:y>/",
+                    basemap_tiles.VectorBasemapTileView.as_view(),
+                    name="map.basemap_vector_tiles",
+                ),
+                path(
+                    "basemap-vector/<slug:theme>/style/",
+                    basemap_tiles.VectorBasemapStyleView.as_view(),
+                    name="map.basemap_vector_style",
+                ),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
                 path("pins/children/", maps.MapController.as_view({"get": "map_child_pins_json"}), name="map.pins.children"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
-                path("geolocation/visits/", maps.MapController.as_view({"post": "record_geolocation_visit"}), name="map.geolocation.visits"),
+                path("document/", maps.MapController.as_view({"get": "map_document"}), name="map.document"),
+                path(
+                    "geolocation/visits/",
+                    throttled("map.geolocation", maps.GEOLOCATION_VISIT_RATE, identify=account_or_address)(maps.MapController.as_view({"post": "record_geolocation_visit"})),
+                    name="map.geolocation.visits",
+                ),
                 path("pins/list/", maps.MapController.as_view({"get": "pin_list_panel"}), name="map.pins.list"),
                 # Literal "pins/..." routes must be registered before the "pins/<slug:pin_slug>/"
                 # catch-all below, which would otherwise match e.g. "pins/bulk-delete/" as a slug.
@@ -350,7 +381,9 @@ urlpatterns = [
                 ),
                 path(
                     "search/autocomplete/places/",
-                    maps.MapController.as_view({"get": "autocomplete_places"}),
+                    throttled("map.places.autocomplete", maps.PLACE_AUTOCOMPLETE_RATE, maps.UPSTREAM_LOOKUP_METHODS, account_or_address)(
+                        maps.MapController.as_view({"get": "autocomplete_places"}),
+                    ),
                     name="map.autocomplete.places",
                 ),
                 path(
@@ -365,7 +398,7 @@ urlpatterns = [
                 ),
                 path(
                     "places/nearby/",
-                    maps.MapController.as_view({"get": "nearby_places"}),
+                    throttled("map.places.lookup", maps.PLACE_LOOKUP_RATE, maps.UPSTREAM_LOOKUP_METHODS, account_or_address)(maps.MapController.as_view({"get": "nearby_places"})),
                     name="map.places.nearby",
                 ),
                 path(
@@ -374,13 +407,13 @@ urlpatterns = [
                     name="media.google_maps_photo",
                 ),
                 path(
-                    "media-preview/",
-                    media_preview.MediaPreviewView.as_view(),
-                    name="media.preview",
+                    "media-copy/<str:digest>/",
+                    remote_copies.RemoteImageCopyView.as_view(),
+                    name="media.remote_copy",
                 ),
                 path(
                     "places/details/",
-                    maps.MapController.as_view({"get": "place_details"}),
+                    throttled("map.places.lookup", maps.PLACE_LOOKUP_RATE, maps.UPSTREAM_LOOKUP_METHODS, account_or_address)(maps.MapController.as_view({"get": "place_details"})),
                     name="map.places.details",
                 ),
                 path(
@@ -394,35 +427,37 @@ urlpatterns = [
                     "pin/",
                     include(
                         [
-                            # Registered before the <slug:pin_slug>/ catch-all below -
-                            # "map-height" is a single path segment just like a real
-                            # slug, so Django would otherwise match it there first
-                            # (treating "map-height" as a pin slug) and 405 every POST,
-                            # exactly the same class of bug documented in
-                            # test_pin_media_endpoints.py's module docstring for
-                            # media/relevance/ vs the media/<str:source>/ catch-all.
+                            # Registered before the <slug:pin_slug>/ catch-all below - "map-height" is a single
+                            # path segment just like a real slug, so Django would otherwise match it there first
+                            # (treating "map-height" as a pin slug) and 405 every POST, exactly the same class
+                            # of bug documented in test_pin_media_endpoints.py's module docstring for...
                             path(
                                 "map-height/",
                                 pin.PinController.as_view({"post": "set_map_height"}),
                                 name="pin.map_height",
                             ),
-                            # Also registered before the <slug:pin_slug>/ catch-all, same reason -
-                            # these proxy a REData media file by listing/resource uuid, not by pin,
-                            # so there's no pin_slug segment for them to nest under at all.
+                            # Also registered before the <slug:pin_slug>/ catch-all, same reason - these proxy a
+                            # REData media file by listing/resource uuid, not by pin, so there's no pin_slug
+                            # segment for them to nest under at all.
                             path(
                                 "loopnet/photo/<str:listing_uuid>/<int:photo_id>/",
-                                pin.PinLoopnetPhotoView.as_view(),
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(pin.PinLoopnetPhotoView.as_view()),
                                 name="pin.loopnet.photo",
                             ),
                             path(
                                 "cris/attachment/<str:resource_uuid>/<int:attachment_id>/",
-                                pin.PinCrisAttachmentView.as_view(),
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(pin.PinCrisAttachmentView.as_view()),
                                 name="pin.cris.attachment",
                             ),
                             path(
                                 "cris/attachment/<str:resource_uuid>/<int:attachment_id>/extracted/<int:image_id>/",
-                                pin.PinCrisExtractedImageView.as_view(),
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(pin.PinCrisExtractedImageView.as_view()),
                                 name="pin.cris.extracted_image",
+                            ),
+                            path(
+                                "place-cid/media/<int:cid>/<int:media_id>/",
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(pin.PinPlaceCidMediaView.as_view()),
+                                name="pin.place_cid.media",
                             ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
@@ -445,6 +480,12 @@ urlpatterns = [
                             path("<slug:pin_slug>/article/history/", article.ArticleHistoryView.as_view(), name="pin.article.history"),
                             path("<slug:pin_slug>/article/history/<int:revision_id>/", article.ArticleRevisionView.as_view(), name="pin.article.revision"),
                             path("<slug:pin_slug>/article/history/<int:revision_id>/restore/", article.ArticleRestoreView.as_view(), name="pin.article.restore"),
+                            path("<slug:pin_slug>/article/sources/", article_sources.ArticleSourcesView.as_view(), name="pin.article.sources"),
+                            path(
+                                "<slug:pin_slug>/article/sources/<str:source>/<str:document_id>/",
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(article_sources.ArticleSourceDocumentView.as_view()),
+                                name="pin.article.sources.document",
+                            ),
                             path(
                                 "<slug:pin_slug>/media/relevance/",
                                 pin.PinController.as_view({"post": "media_relevance"}),
@@ -466,8 +507,8 @@ urlpatterns = [
                                 name="pin.nearby_pins.json",
                             ),
                             # This catch-all must stay below the more specific media/ routes above -
-                            # <str:source> would otherwise swallow "relevance"/"send-to-wiki" as a
-                            # provider name and 405 on their POST-only methods.
+                            # <str:source> would otherwise swallow "relevance"/"send-to-wiki" as a provider name
+                            # and 405 on their POST-only methods.
                             path(
                                 "<slug:pin_slug>/media/<str:source>/",
                                 pin.PinController.as_view({"get": "media_provider"}),
@@ -615,7 +656,7 @@ urlpatterns = [
                             ),
                             path(
                                 "<slug:pin_slug>/overlays/historical/",
-                                map_overlays.HistoricalMapBrowseView.as_view(),
+                                throttled("overlays.historical.browse", map_overlays.HISTORICAL_MAP_BROWSE_RATE, map_overlays.HISTORICAL_MAP_BROWSE_METHODS, account_or_address)(map_overlays.HistoricalMapBrowseView.as_view()),
                                 name="pin.overlays.historical",
                             ),
                             path(
@@ -677,11 +718,6 @@ urlpatterns = [
                                 "<slug:pin_slug>/swap-parent/",
                                 pin_edit.PinSwapParentView.as_view(),
                                 name="pin.swap_parent",
-                            ),
-                            path(
-                                "<slug:pin_slug>/link/",
-                                pin_edit.PinRelinkView.as_view(),
-                                name="pin.link",
                             ),
                             path(
                                 "<slug:pin_slug>/link/<slug:location_slug>/",
@@ -814,6 +850,16 @@ urlpatterns = [
                                 name="pin.panel",
                             ),
                             path(
+                                "<slug:pin_slug>/building-panel/<str:panel_key>/",
+                                pin.PinController.as_view({"get": "building_panel_info"}),
+                                name="pin.building_panel",
+                            ),
+                            path(
+                                "<slug:pin_slug>/building-card/",
+                                child_buildings.PinChildBuildingCardView.as_view(),
+                                name="pin.child_building",
+                            ),
+                            path(
                                 "<slug:pin_slug>/buildings/",
                                 pin.PinController.as_view({"get": "parcel_buildings"}),
                                 name="pin.parcel_buildings",
@@ -848,9 +894,8 @@ urlpatterns = [
                                 pin.PinController.as_view({"post": "clear_debug_cache"}),
                                 name="pin.debug.clear_cache",
                             ),
-                            # Album routes: the literal "albums/" collection route and
-                            # every per-album action are registered before the
-                            # <slug:album_slug> detail route, so a literal segment
+                            # Album routes: the literal "albums/" collection route and every per-album action
+                            # are registered before the <slug:album_slug> detail route, so a literal segment
                             # can't be swallowed by the slug converter.
                             path(
                                 "<slug:pin_slug>/albums/",
@@ -888,6 +933,21 @@ urlpatterns = [
                                 name="pin.albums.upload",
                             ),
                             path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/items/",
+                                albums.AlbumItemsView.as_view(),
+                                name="pin.albums.items",
+                            ),
+                            path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/eligible/",
+                                albums.AlbumEligibleImagesView.as_view(),
+                                name="pin.albums.eligible",
+                            ),
+                            path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/move/",
+                                albums.AlbumMoveView.as_view(),
+                                name="pin.albums.move",
+                            ),
+                            path(
                                 "<slug:pin_slug>/albums/<slug:album_slug>/",
                                 albums.AlbumDetailView.as_view(),
                                 name="pin.albums.detail",
@@ -920,7 +980,7 @@ urlpatterns = [
                             ),
                             path(
                                 "<slug:pin_slug>/immich/thumbnail/<str:asset_id>/",
-                                immich.PinImmichThumbnailView.as_view(),
+                                throttled("immich.thumbnail", immich.IMMICH_THUMBNAIL_RATE, immich.IMMICH_THUMBNAIL_METHODS, account_or_address)(immich.PinImmichThumbnailView.as_view()),
                                 name="pin.immich.thumbnail",
                             ),
                             path(
@@ -1013,9 +1073,24 @@ urlpatterns = [
                                             name="pin.import.preview",
                                         ),
                                         path(
+                                            "preview/<uuid:job_id>/status/",
+                                            pin.PinController.as_view({"get": "import_preview_status"}),
+                                            name="pin.import.preview.status",
+                                        ),
+                                        path(
                                             "confirmed/",
                                             pin.PinController.as_view({"post": "import_confirmed"}),
                                             name="pin.import.confirmed",
+                                        ),
+                                        path(
+                                            "confirmed/<uuid:job_id>/status/",
+                                            pin.PinController.as_view({"get": "import_confirmed_status"}),
+                                            name="pin.import.confirmed.status",
+                                        ),
+                                        path(
+                                            "confirmed/<uuid:job_id>/cancel/",
+                                            pin.PinController.as_view({"post": "import_confirmed_cancel"}),
+                                            name="pin.import.confirmed.cancel",
                                         ),
                                     ],
                                 ),
@@ -1071,7 +1146,11 @@ urlpatterns = [
                 path("photos/<int:image_id>/attachments/", userprofile.PhotoAttachmentPointsView.as_view(), name="profile.photo.attachments"),
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
-                path("edit/social/verify/", userprofile.SocialLinkVerifyView.as_view(), name="profile.social.verify"),
+                path(
+                    "edit/social/verify/",
+                    throttled("profile.social.verify", userprofile.SOCIAL_LINK_PROBE_RATE, userprofile.SOCIAL_LINK_PROBE_METHODS, account_or_address)(userprofile.SocialLinkVerifyView.as_view()),
+                    name="profile.social.verify",
+                ),
                 path(
                     "edit/emails/verify/<uuid:token>/",
                     userprofile.ProfileEmailVerifyView.as_view(),
@@ -1138,6 +1217,7 @@ urlpatterns = [
     path("settings/geocode/", settings.geocode_address, name="settings.geocode"),
     path("settings/map-position/", settings.SaveMapPositionView.as_view(), name="settings.save_map_position"),
     path("settings/map-dark-mode/", settings.SaveMapDarkModeView.as_view(), name="settings.save_map_dark_mode"),
+    path("settings/privacy/<str:field>/", settings.PrivacyFieldView.as_view(), name="settings.privacy_field"),
     path("settings/delete-account/", account_deletion.RequestAccountDeletionView.as_view(), name="account.delete.request"),
     path("settings/delete-account/cancel/", account_deletion.CancelAccountDeletionView.as_view(), name="account.delete.cancel"),
     path("settings/undo-history/", undo.UndoHistoryView.as_view(), name="undo.history"),
@@ -1153,6 +1233,7 @@ urlpatterns = [
     path("settings/security/totp/disable/", two_factor.TOTPDisableView.as_view(), name="settings.security.totp.disable"),
     path("settings/security/backup-codes/generate/", two_factor.BackupCodesGenerateView.as_view(), name="settings.security.backup_codes.generate"),
     path("settings/security/api-keys/", api_keys.ApiKeyCreateView.as_view(), name="settings.security.api_keys.create"),
+    path("settings/security/api-keys/section/", api_keys.ApiKeySectionView.as_view(), name="settings.security.api_keys.section"),
     path("settings/security/api-keys/<int:api_key_id>/revoke/", api_keys.ApiKeyRevokeView.as_view(), name="settings.security.api_keys.revoke"),
     path("settings/billing/", billing.BillingSettingsSectionView.as_view(), name="settings.billing"),
     path("settings/billing/checkout/", billing.BillingCheckoutView.as_view(), name="settings.billing.checkout"),
@@ -1176,12 +1257,14 @@ urlpatterns = [
     path("settings/google-calendar/", calendar_sync.GoogleCalendarSettingsSectionView.as_view(), name="settings.google_calendar"),
     path("settings/google-calendar/disconnect/", calendar_sync.GoogleCalendarSettingsDisconnectView.as_view(), name="settings.google_calendar.disconnect"),
     path("site-admin/models/", site_admin_models.SiteAdminModelsView.as_view(), name="site_admin_models"),
+    path("undo/stack/", undo.UndoStackView.as_view(), name="undo.stack"),
+    path("undo/undo/", undo.UndoPerformView.as_view(), name="undo.perform"),
+    path("undo/redo/", undo.UndoRedoView.as_view(), name="undo.redo"),
     path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
         r"^(?P<label_kind>tags?|categor(y|ies)|status(es)?|people|media)/",
         include(
             [
-                path("", labels.LabelKindIndexView.as_view(), name="label.index"),
                 path("create/", labels.LabelCreateView.as_view(), name="label.create"),
                 path("rows/", labels.LabelRowsView.as_view(), name="label.rows"),
                 path("<int:label_id>/edit/", labels.LabelEditView.as_view(), name="label.edit"),
@@ -1310,6 +1393,8 @@ urlpatterns = [
                     friendship.FriendController.as_view({"post": "invite_by_email"}),
                     name="friend.invite_email",
                 ),
+                path("invitations/<uuid:token>/", friend_invitations.FriendInvitationView.as_view(), name="friend.invitation"),
+                path("invitations/<uuid:token>/answer/", friend_invitations.FriendInvitationAnswerView.as_view(), name="friend.invitation.answer"),
             ],
         ),
     ),
@@ -1349,6 +1434,12 @@ urlpatterns = [
                 path("<slug:location_slug>/wiki/article/history/", article.ArticleHistoryView.as_view(), name="location.wiki.article.history"),
                 path("<slug:location_slug>/wiki/article/history/<int:revision_id>/", article.ArticleRevisionView.as_view(), name="location.wiki.article.revision"),
                 path("<slug:location_slug>/wiki/article/history/<int:revision_id>/restore/", article.ArticleRestoreView.as_view(), name="location.wiki.article.restore"),
+                path("<slug:location_slug>/wiki/article/sources/", article_sources.ArticleSourcesView.as_view(), name="location.wiki.article.sources"),
+                path(
+                    "<slug:location_slug>/wiki/article/sources/<str:source>/<str:document_id>/",
+                    throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(article_sources.ArticleSourceDocumentView.as_view()),
+                    name="location.wiki.article.sources.document",
+                ),
                 path(
                     "<slug:location_slug>/wiki/history/<int:edit_id>/revert/",
                     location_wiki.LocationWikiRevertView.as_view(),
@@ -1411,7 +1502,7 @@ urlpatterns = [
                 ),
                 path(
                     "<slug:location_slug>/wiki/overlays/historical/",
-                    map_overlays.HistoricalMapBrowseView.as_view(),
+                    throttled("overlays.historical.browse", map_overlays.HISTORICAL_MAP_BROWSE_RATE, map_overlays.HISTORICAL_MAP_BROWSE_METHODS, account_or_address)(map_overlays.HistoricalMapBrowseView.as_view()),
                     name="location.wiki.overlays.historical",
                 ),
                 path(
@@ -1514,9 +1605,8 @@ urlpatterns = [
                     links.LocationLinkDeleteView.as_view(),
                     name="location.wiki.link.delete",
                 ),
-                # Album routes: literal per-album action segments are registered
-                # before the <slug:album_slug> detail route so they can't be
-                # swallowed by the slug converter.
+                # Album routes: literal per-album action segments are registered before the <slug:album_slug>
+                # detail route so they can't be swallowed by the slug converter.
                 path(
                     "<slug:location_slug>/wiki/albums/",
                     albums.AlbumPhotosView.as_view(),
@@ -1551,6 +1641,16 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/albums/<slug:album_slug>/upload/",
                     albums.AlbumUploadView.as_view(),
                     name="location.wiki.albums.upload",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/items/",
+                    albums.AlbumItemsView.as_view(),
+                    name="location.wiki.albums.items",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/eligible/",
+                    albums.AlbumEligibleImagesView.as_view(),
+                    name="location.wiki.albums.eligible",
                 ),
                 path(
                     "<slug:location_slug>/wiki/albums/<slug:album_slug>/",
@@ -1614,6 +1714,12 @@ urlpatterns = [
                     wiki_media.WikiMediaVoteView.as_view(),
                     name="location.wiki.media.vote",
                 ),
+                # Also registered before the <str:source>/ catch-all below, same reason.
+                path(
+                    "<slug:location_slug>/wiki/media/copy-to-pin/<int:image_id>/",
+                    wiki_media.CopyWikiPhotoView.as_view(),
+                    name="location.wiki.media.copy_to_pin",
+                ),
                 path(
                     "<slug:location_slug>/wiki/media/<str:source>/",
                     wiki_media.WikiMediaProviderView.as_view(),
@@ -1629,12 +1735,18 @@ urlpatterns = [
                 path("", trip.TripOverviewView.as_view(), name="trips.overview"),
                 path("list/", trip.TripListView.as_view(), name="trips.list"),
                 path("calendar/", trip.TripCalendarView.as_view(), name="trips.calendar"),
+                path("calendar/month/", trip.TripCalendarMonthView.as_view(), name="trips.calendar.month"),
+                path("picker/", trip.TripPickerView.as_view(), name="trips.picker"),
                 path("create/", trip.TripCreateView.as_view(), name="trips.create"),
+                path("invitations/<uuid:token>/", trip_invitations.TripInvitationView.as_view(), name="trips.invitation"),
+                path("invitations/<uuid:token>/trip/", trip_invitations.TripInvitationTripAnswerView.as_view(), name="trips.invitation.trip"),
+                path("invitations/<uuid:token>/friend/", trip_invitations.TripInvitationFriendAnswerView.as_view(), name="trips.invitation.friend"),
                 path("calendar/connect/", calendar_sync.GoogleCalendarConnectView.as_view(), name="trips.calendar.connect"),
                 path("calendar/callback/", calendar_sync.GoogleCalendarCallbackView.as_view(), name="trips.calendar.callback"),
                 path("calendar/disconnect/", calendar_sync.GoogleCalendarDisconnectView.as_view(), name="trips.calendar.disconnect"),
                 path("calendar/import/", calendar_sync.CalendarImportView.as_view(), name="trips.calendar.import"),
                 path("calendar/import/preview/", calendar_sync.CalendarImportPreviewView.as_view(), name="trips.calendar.import.preview"),
+                path("calendar/import/progress/<str:token>/", calendar_sync.CalendarImportProgressView.as_view(), name="trips.calendar.import.progress"),
                 path("<slug:trip_slug>/calendar/export/", calendar_sync.TripCalendarExportView.as_view(), name="trips.calendar.export"),
                 path("<slug:trip_slug>/calendar/auto-sync/", calendar_sync.TripCalendarAutoSyncView.as_view(), name="trips.calendar.autosync"),
                 path("<slug:trip_slug>/", trip.TripDetailView.as_view(), name="trips.detail"),
@@ -1712,6 +1824,11 @@ urlpatterns = [
                     name="trips.comment.react",
                 ),
                 path("<slug:trip_slug>/members/", trip.TripMembersView.as_view(), name="trips.members"),
+                path(
+                    "<slug:trip_slug>/invitations/<uuid:invitation_uuid>/cancel/",
+                    trip_invitations.TripInvitationCancelView.as_view(),
+                    name="trips.invitation.cancel",
+                ),
                 path("<slug:trip_slug>/members", trip.TripMembersView.as_view()),
                 path(
                     "<slug:trip_slug>/members/<int:profile_id>/remove/",
@@ -1732,7 +1849,11 @@ urlpatterns = [
                 path("<slug:trip_slug>/settings/", trip.TripSettingsView.as_view(), name="trips.settings"),
                 path("<slug:trip_slug>/settings", trip.TripSettingsView.as_view()),
                 path("<slug:trip_slug>/map-data/", trip.TripMapDataView.as_view(), name="trips.map_data"),
-                path("<slug:trip_slug>/weather/", trip.TripWeatherView.as_view(), name="trips.weather"),
+                path(
+                    "<slug:trip_slug>/weather/",
+                    throttled("trips.weather", trip.TRIP_WEATHER_RATE, trip.TRIP_WEATHER_METHODS, account_or_address)(trip.TripWeatherView.as_view()),
+                    name="trips.weather",
+                ),
             ],
         ),
     ),
@@ -1815,6 +1936,8 @@ urlpatterns = [
     path("map-shares/<int:share_id>/", map_sharing.MarkupMapShareDetailView.as_view(), name="markup_map.share.detail"),
     path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
     path("comments/images/picker/", comments.CommentImagePickerView.as_view(), name="comments.image_picker"),
+    path("comments/images/processing/", comments.PinWikiCommentImageProcessingView.as_view(), name="comments.images.processing"),
+    path("comments/trip-images/processing/", comments.TripCommentImageProcessingView.as_view(), name="comments.trip_images.processing"),
     path(
         "messages/",
         include(
@@ -1864,7 +1987,11 @@ urlpatterns = [
         "e2ee/",
         include(
             [
-                path("login-params/", e2ee.E2EELoginParamsView.as_view(), name="e2ee.login_params"),
+                path(
+                    "login-params/",
+                    throttled("e2ee.login_params", e2ee.LOGIN_PARAMS_RATE, e2ee.LOGIN_PARAMS_METHODS)(e2ee.E2EELoginParamsView.as_view()),
+                    name="e2ee.login_params",
+                ),
                 path("enroll/", e2ee.E2EEEnrollView.as_view(), name="e2ee.enroll"),
                 path("keys/", e2ee.E2EEOwnKeysView.as_view(), name="e2ee.keys"),
                 path("keys/<slug:profile_slug>/", e2ee.E2EEPartnerKeyView.as_view(), name="e2ee.partner_key"),
@@ -1884,7 +2011,11 @@ urlpatterns = [
         "search/",
         include(
             [
-                path("panel/", search.GlobalSearchPanelView.as_view(), name="search.panel"),
+                path(
+                    "panel/",
+                    throttled("search.panel", search.GLOBAL_SEARCH_RATE, search.GLOBAL_SEARCH_METHODS, account_or_address)(search.GlobalSearchPanelView.as_view()),
+                    name="search.panel",
+                ),
                 path("hints/", search.GlobalSearchHintsView.as_view(), name="search.hints"),
                 path("commit/", search.GlobalSearchCommitView.as_view(), name="search.commit"),
                 path("history/delete/", search.GlobalSearchHistoryDeleteView.as_view(), name="search.history.delete"),
@@ -1895,6 +2026,7 @@ urlpatterns = [
         "notifications/",
         include(
             [
+                path("", notifications.NotificationHistoryView.as_view(), name="notifications.view"),
                 path("dropdown/", notifications.NotificationDropdownView.as_view(), name="notifications.dropdown"),
                 path("read-all/", notifications.NotificationMarkAllReadView.as_view(), name="notifications.read_all"),
                 path(
@@ -1948,15 +2080,10 @@ urlpatterns = [
                 path("visits/bulk/<str:action>/", memories.MemoriesVisitsBulkActionView.as_view(), name="memories.visits.bulk"),
                 path("maps/", memories.MemoriesMapsView.as_view(), name="memories.maps"),
                 path("sharing/", memories.MemoriesSharingView.as_view(), name="memories.sharing"),
+                path("sharing/sent/", memories.MemoriesSharingSentView.as_view(), name="memories.sharing.sent"),
+                path("sharing/received/", memories.MemoriesSharingReceivedView.as_view(), name="memories.sharing.received"),
                 path("journal/", memories.MemoriesJournalView.as_view(), name="memories.journal"),
                 path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
-                path("photos/", photos.MemoriesPhotosView.as_view(), name="memories.photos"),
-                path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),
-                path("photos/page/", photos.PhotoGridPageView.as_view(), name="memories.photos.page"),
-                path("photos/upload/", photos.PhotoUploadView.as_view(), name="memories.photos.upload"),
-                path("photos/pin-search/", photos.PhotoPinSearchView.as_view(), name="memories.photos.pin_search"),
-                path("photos/<int:image_id>/confirm-pin/", photos.PhotoPinConfirmView.as_view(), name="memories.photos.pin_confirm"),
-                path("photos/<int:image_id>/<str:action>/", photos.PhotoActionView.as_view(), name="memories.photos.action"),
                 path("locations/", pin_suggestions.PinSuggestionQueueView.as_view(), name="memories.locations"),
                 path("locations/queue/", pin_suggestions.PinSuggestionQueuePartialView.as_view(), name="memories.locations.queue"),
                 path("locations/map-data/", pin_suggestions.PinSuggestionMapDataView.as_view(), name="memories.locations.map_data"),
@@ -1964,7 +2091,7 @@ urlpatterns = [
                 path("locations/accept-all/", pin_suggestions.PinSuggestionAcceptAllView.as_view(), name="memories.locations.accept_all"),
                 path(
                     "locations/<int:suggestion_id>/immich/thumbnail/<str:asset_id>/",
-                    pin_suggestions.PinSuggestionImmichThumbnailView.as_view(),
+                    throttled("immich.thumbnail", immich.IMMICH_THUMBNAIL_RATE, immich.IMMICH_THUMBNAIL_METHODS, account_or_address)(pin_suggestions.PinSuggestionImmichThumbnailView.as_view()),
                     name="memories.locations.immich_thumbnail",
                 ),
                 path("locations/<int:suggestion_id>/<str:action>/", pin_suggestions.PinSuggestionActionView.as_view(), name="memories.locations.action"),
@@ -1997,12 +2124,60 @@ urlpatterns = [
             ],
         ),
     ),
+    path(
+        "vault/",
+        include(
+            [
+                path("", vault.VaultHomeView.as_view(), name="vault.home"),
+                path("photos/", vault_media.VaultMediaView.as_view(), name="vault.photos", kwargs={"kind": MediaKind.PHOTO}),
+                path("photos/queue/", vault_photos.PhotoQueueView.as_view(), name="vault.photos.queue"),
+                path("photos/pin-albums/", vault_photos.VaultPinAlbumsView.as_view(), name="vault.photos.pin_albums"),
+                path("photos/items/", vault_media.VaultMediaItemsView.as_view(), name="vault.photos.items", kwargs={"kind": MediaKind.PHOTO}),
+                path("photos/processing/", vault_photos.PhotoProcessingView.as_view(), name="vault.photos.processing"),
+                path("photos/upload/", vault_media.VaultMediaUploadView.as_view(), name="vault.photos.upload", kwargs={"kind": MediaKind.PHOTO}),
+                path("photos/bulk/", image_gallery.VaultGalleryBulkView.as_view(), name="vault.photos.bulk"),
+                path("photos/failures/", vault_photos.PhotoUploadFailureCreateView.as_view(), name="vault.photos.failures"),
+                path("photos/failures/<int:failure_id>/dismiss/", vault_photos.PhotoUploadFailureDismissView.as_view(), name="vault.photos.failures.dismiss"),
+                path("photos/failures/<int:failure_id>/retry/", vault_photos.PhotoUploadFailureRetryView.as_view(), name="vault.photos.failures.retry"),
+                path("photos/failures/<int:failure_id>/discard/", vault_photos.PhotoUploadFailureDiscardView.as_view(), name="vault.photos.failures.discard"),
+                path("photos/conflicts/<int:conflict_id>/resolve/", vault_photos.PhotoMetadataConflictResolveView.as_view(), name="vault.photos.conflicts.resolve"),
+                path("photos/conflicts/<int:conflict_id>/dismiss/", vault_photos.PhotoMetadataConflictDismissView.as_view(), name="vault.photos.conflicts.dismiss"),
+                path("photos/pin-search/", vault_photos.PhotoPinSearchView.as_view(), name="vault.photos.pin_search"),
+                path("photos/wiki-search/", vault_photos.PhotoWikiSearchView.as_view(), name="vault.photos.wiki_search"),
+                path("photos/share-friends/", vault_photos.PhotoShareFriendsView.as_view(), name="vault.photos.share_friends"),
+                path("photos/<int:image_id>/confirm-pin/", vault_photos.PhotoPinConfirmView.as_view(), name="vault.photos.pin_confirm"),
+                path("photos/<int:image_id>/associations/", vault_photos.PhotoAssociationsView.as_view(), name="vault.photos.associations"),
+                path("photos/<int:image_id>/<str:action>/", vault_photos.PhotoActionView.as_view(), name="vault.photos.action"),
+                # Vault (Profile-owned) albums: same view classes as pin/wiki albums (controllers.albums), with
+                # no owner-slug segment - there is exactly one Vault per profile, resolved from the request
+                # itself.
+                path("photos/albums/", albums.AlbumPhotosView.as_view(), name="vault.photos.albums", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/edit/", albums.AlbumEditView.as_view(), name="vault.photos.albums.edit", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/delete/", albums.AlbumDeleteView.as_view(), name="vault.photos.albums.delete", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/add/", albums.AlbumAddPhotosView.as_view(), name="vault.photos.albums.add", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/remove/", albums.AlbumRemovePhotosView.as_view(), name="vault.photos.albums.remove", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/reorder/", albums.AlbumReorderView.as_view(), name="vault.photos.albums.reorder", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/upload/", albums.AlbumUploadView.as_view(), name="vault.photos.albums.upload", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/items/", albums.AlbumItemsView.as_view(), name="vault.photos.albums.items", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/eligible/", albums.AlbumEligibleImagesView.as_view(), name="vault.photos.albums.eligible", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/", albums.AlbumDetailView.as_view(), name="vault.photos.albums.detail", kwargs={"vault": True}),
+                path("documents/", vault_media.VaultMediaView.as_view(), name="vault.documents", kwargs={"kind": MediaKind.DOCUMENT}),
+                path("documents/items/", vault_media.VaultMediaItemsView.as_view(), name="vault.documents.items", kwargs={"kind": MediaKind.DOCUMENT}),
+                path("documents/upload/", vault_media.VaultMediaUploadView.as_view(), name="vault.documents.upload", kwargs={"kind": MediaKind.DOCUMENT}),
+            ],
+        ),
+    ),
+    # Bookmarked-link compatibility: Photos moved from Memories to the Vault.
+    path("memories/photos/", RedirectView.as_view(pattern_name="vault.photos", permanent=True), name="memories.photos.redirect"),
     path("setup/", setup.SetupWizardView.as_view(), name="setup"),
     path("welcome/", onboarding.WelcomeOnboardingView.as_view(), name="onboarding.welcome"),
     path("tasks/<str:task_id>/status/", site_admin.CeleryTaskStatusView.as_view(), name="celery_task_status"),
     path("site-admin/", site_admin.SiteAdminHomeView.as_view(), name="site_admin_home"),
     path("site-admin/status/", site_admin.SiteAdminHomeStatusPartialView.as_view(), name="site_admin_home_status"),
     path("site-admin/users/", site_admin.SiteAdminUsersView.as_view(), name="site_admin_users"),
+    # Shared UI fragment, versioned by content hash and cached immutably; see
+    # services/core/icon_grid.py for why it is not rendered into each picker.
+    path("ui/icon-picker-grid/", ui.IconPickerGridView.as_view(), name="ui.icon_picker_grid"),
     path("site-admin/settings/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
     path("site-admin/stats/kpi/", site_admin.SiteAdminStatsKpiPartialView.as_view(), name="site_admin_stats_kpi"),
@@ -2042,6 +2217,11 @@ urlpatterns = [
         site_admin_costs.SiteAdminCostsPublicToggleView.as_view(),
         name="site_admin_costs_toggle_public",
     ),
+    path("site-admin/external-tags/", site_admin_external_tags.SiteAdminExternalTagsView.as_view(), name="site_admin_external_tags"),
+    path("site-admin/external-tags/search/", site_admin_external_tags.SiteAdminExternalTagsSearchView.as_view(), name="site_admin_external_tags_search"),
+    path("site-admin/external-tags/group/", site_admin_external_tags.SiteAdminExternalTagsGroupView.as_view(), name="site_admin_external_tags_group"),
+    path("site-admin/external-tags/move/", site_admin_external_tags.SiteAdminExternalTagsMoveView.as_view(), name="site_admin_external_tags_move"),
+    path("site-admin/external-tags/preferred/", site_admin_external_tags.SiteAdminExternalTagsPreferredView.as_view(), name="site_admin_external_tags_preferred"),
     path(
         "site-admin/ui-components/",
         site_admin.SiteAdminUIComponentsView.as_view(),
@@ -2068,5 +2248,4 @@ urlpatterns = [
         name="dev_toolbar.reset_onboarding",
     ),
     path("", include("social_django.urls", namespace="social")),
-    re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]

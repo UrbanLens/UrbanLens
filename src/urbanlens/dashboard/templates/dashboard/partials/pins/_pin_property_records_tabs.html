@@ -1,0 +1,31 @@
+{% comment %}Property Records card: Overview, then every panel placed here (PanelPlacement.PROPERTY).{% endcomment %}
+<div id="property-records-section" class="card card--secondary"
+     data-collapse-scope="pin" data-collapse-section="property-records" data-collapse-label="Property Records">
+    <div class="card-header">
+        <i class="material-symbols-outlined">home_work</i>
+        <h3>Property Records</h3>
+    </div>
+    <div class="card-tabs" role="tablist">
+        <button type="button" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
+                hx-get="{% url 'pin.panel' pin.slug 'property_records' %}"
+                hx-target="#property-records-body" hx-swap="innerHTML"
+                hx-trigger="ul:lazy-load, click" data-ul-lazy-section="pin:property-records"
+                onclick="document.querySelectorAll('#property-records-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+            <i class="material-symbols-outlined">home_work</i>
+            <span>Overview</span>
+        </button>
+        {% for tab in property_tabs %}
+        <button type="button" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+                data-panel-key="{{ tab.key }}"
+                hx-get="{% url 'pin.panel' pin.slug tab.key %}"
+                hx-target="#property-records-body" hx-swap="innerHTML"
+                onclick="document.querySelectorAll('#property-records-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+            <i class="material-symbols-outlined">{{ tab.icon }}</i>
+            <span>{{ tab.label }}</span>
+        </button>
+        {% endfor %}
+    </div>
+    <div id="property-records-body" class="card__body pin-plugin-tab-body">
+        <p class="pin-plugin-tab-placeholder">Loading...</p>
+    </div>
+</div>

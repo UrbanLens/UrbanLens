@@ -1,10 +1,4 @@
-"""Tests for the Tools page subnav (Data | Find Pins | Account).
-
-Regression coverage for the tools page being reorganized from one flat grid
-of cards into three subnav-switched sections - covers that all the original
-cards are still present and reachable, and that the section panels/tabs
-exist with matching ids for the client-side tab-switching script to hook into.
-"""
+"""Tests for the Tools page subnav (Data | Find Pins | Account)."""
 
 from __future__ import annotations
 

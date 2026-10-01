@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -30,8 +29,8 @@ _TITLE_NORMALIZE_RE = re.compile(r"[^a-zA-Z0-9]+")
 def _request_host(request) -> str:
     """Return the request hostname without port or leading ``www.``.
 
-    Reads directly from META to avoid DisallowedHost exceptions; this function
-    is used only for branding decisions, not security validation.
+    Reads directly from META to avoid DisallowedHost exceptions; this function is used only for branding
+    decisions, not security validation.
 
     Args:
         request: The current HttpRequest.
@@ -121,8 +120,8 @@ def app_title_name_suggestions(user: User) -> list[str]:
 def setup_app_title_value(request: HttpRequest, user: User, current_title: str) -> str:
     """Resolve the app title shown in the setup wizard.
 
-    On non-official hosts, replace the factory default ``UrbanLens`` with a
-    personalized suggestion so installers are not nudged toward the reserved name.
+    On non-official hosts, replace the factory default ``UrbanLens`` with a personalized suggestion so
+    installers are not nudged toward the reserved name.
 
     Args:
         request: The current HttpRequest.
@@ -206,7 +205,7 @@ def _build_feature_groups(app_settings) -> list[dict]:
                 },
                 {
                     "name": "Google Street View",
-                    "description": "Street-level imagery on pin detail pages",
+                    "description": "Street-level imagery on Private Pin pages",
                     "env_var": "UL_GOOGLE_UNRESTRICTED_API_KEY",
                     "configured": bool(app_settings.google_unrestricted_api_key),
                 },
@@ -278,11 +277,11 @@ def _build_feature_groups(app_settings) -> list[dict]:
 class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """First-run setup wizard for the bootstrap administrator.
 
+    GET /setup/ → render wizard
+    POST /setup/ → handle action (save_title | complete)
+
     Only accessible while ``SiteSettings.bootstrap_admin_onboarding_complete`` is False.
     Once complete, all visits redirect to the map.
-
-    GET  /setup/  → render wizard
-    POST /setup/  → handle action (save_title | complete)
     """
 
     permission_required = "dashboard.view_site_admin"
@@ -301,15 +300,10 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if site.bootstrap_admin_onboarding_complete:
             return redirect("map.view")
 
-        from urbanlens.dashboard.services.profile.avatar import AvatarService
+        from urbanlens.dashboard.services.profile.avatar import AvatarService, gravatar_preview_url
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile = request.user.profile
-        email = request.user.email or ""
-        gravatar_preview_url = ""
-        if email:
-            gh = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
-            gravatar_preview_url = f"https://www.gravatar.com/avatar/{gh}?s=200&d=identicon"
 
         official_site = is_official_urbanlens_site(request)
         suggested_title = personalized_map_title(request.user)
@@ -327,7 +321,7 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "features": _build_feature_groups(app_settings),
                 "page_name": "setup",
                 "emoji_options": AvatarService.random_options(4),
-                "gravatar_preview_url": gravatar_preview_url,
+                "gravatar_preview_url": gravatar_preview_url(request.user.email or ""),
                 "current_username": request.user.username,
                 "current_avatar_url": profile.avatar.url if profile.avatar else "",
                 "is_official_urbanlens_site": official_site,

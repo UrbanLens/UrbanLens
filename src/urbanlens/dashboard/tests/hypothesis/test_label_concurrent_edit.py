@@ -1,12 +1,4 @@
-"""LabelEditView and the external API's LabelDetailView.patch must not clobber
-concurrent edits to fields they don't themselves touch.
-
-Both ended with a bare label.save(), writing every column from that request's
-in-memory snapshot - reverting any field a concurrent request (another tab, or
-the other of these two independent implementations of "edit this label")
-changed in the window between this request's load and its own save. Same bug
-class fixed for PinList's equivalent pair of views; see PROBLEMS.md.
-"""
+"""LabelEditView and the external API's LabelDetailView.patch must not clobber concurrent edits to fields they don't themselves touch."""
 
 from __future__ import annotations
 
@@ -20,7 +12,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import labels
 from urbanlens.dashboard.external_api import views as external_api_views
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
@@ -52,7 +45,11 @@ class LabelEditViewConcurrentWriteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         label.refresh_from_db()
         self.assertEqual(label.name, "New")
-        self.assertEqual(label.keywords, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
+        self.assertEqual(
+            label.keywords,
+            "Changed elsewhere",
+            "a concurrent edit to another field was reverted by this request's save",
+        )
 
 
 class LabelDetailViewConcurrentWriteTests(TestCase):
@@ -62,7 +59,9 @@ class LabelDetailViewConcurrentWriteTests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         _key, self.raw_key = generate_api_key(self.user, "Labels client")
-        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value])
+        ApiKey.objects.filter(user=self.user).update(
+            scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value]
+        )
 
     def _bearer(self) -> dict:
         return {"HTTP_AUTHORIZATION": f"Bearer {self.raw_key}"}
@@ -87,4 +86,8 @@ class LabelDetailViewConcurrentWriteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         label.refresh_from_db()
         self.assertEqual(label.name, "New")
-        self.assertEqual(label.keywords, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
+        self.assertEqual(
+            label.keywords,
+            "Changed elsewhere",
+            "a concurrent edit to another field was reverted by this request's save",
+        )

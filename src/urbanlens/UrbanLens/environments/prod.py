@@ -21,9 +21,7 @@ class Production(BaseEnvironment):
     @field_validator("debug_override")
     @classmethod
     def debug_override_must_be_off(cls, value: DebugTypes) -> DebugTypes:
-        """
-        Debug mode is not allowed in production
-        """
+        """Reject debug-on in production."""
         if value == DebugTypes.OVERRIDE_ON:
             raise ValueError("Debug mode is not allowed in production")
         return value

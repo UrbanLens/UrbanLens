@@ -1,27 +1,16 @@
-"""Regression coverage for UL-32 on the "Add Pin" dialog specifically.
-
-UL-32 ("clicking in a dialog and dragging outside unexpectedly closes it")
-was already fixed site-wide by a document-level mousedown/click handler in
-themes/base.html that only closes a <dialog> when *both* the mousedown and
-the click land on the backdrop - a drag that starts inside is tracked as
-'inside' and never closes. The add-pin dialog additionally had its own,
-independent copy of that exact same drag-guard algorithm, wired to call
-closeAddPinDialog() (which does real cleanup: clears the in-progress pin
-marker and click-placement mode, not just a bare dialog.close()).
-
-That per-dialog copy was pure duplication - the site-wide handler already
-supports routing to a custom close function via a `data-closefn` attribute,
-just no dialog was using it yet. This asserts the dialog is wired into the
-shared mechanism instead of carrying its own copy of the algorithm.
-"""
+"""Regression coverage for UL-32 on the "Add Pin" dialog specifically."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+
+_SCRIPT_SOURCE = (Path(__file__).resolve().parents[3] / "dashboard/frontend/ts/entries/map-page.ts").read_text()
 
 
 class AddPinDialogUsesSharedCloseHandlerTests(TestCase):
@@ -43,14 +32,10 @@ class AddPinDialogUsesSharedCloseHandlerTests(TestCase):
         self.assertNotIn("var apDlg", body)
 
     def test_close_add_pin_dialog_still_does_its_cleanup(self) -> None:
-        """closeAddPinDialog() must still exist with its real cleanup logic -
-        the shared handler calls it by name (window['closeAddPinDialog']())
-        rather than a bare dialog.close(), specifically so this cleanup still
-        runs on a backdrop click, not just on explicit Cancel/Escape."""
-        body = self.client.get(reverse("map.view")).content.decode()
-        fn_index = body.find("function closeAddPinDialog()")
+        """closeAddPinDialog() must still exist with its real cleanup logic - the shared handler calls it by name (window['closeAddPinDialog']()) rather than a bare dialog.close(), specifically so this cleanup still runs on a backdrop click, not just on explicit Cancel/Escape."""
+        fn_index = _SCRIPT_SOURCE.find("function closeAddPinDialog()")
         self.assertNotEqual(fn_index, -1)
-        fn_body_end = body.find("\n    }", fn_index)
-        fn_body = body[fn_index:fn_body_end]
+        fn_body = _SCRIPT_SOURCE[fn_index : _SCRIPT_SOURCE.find("\n}", fn_index)]
         self.assertIn("_addPinClickMode = false", fn_body)
         self.assertIn("map.removeLayer(_addPinMarker)", fn_body)
+        self.assertIn("window.closeAddPinDialog = closeAddPinDialog", _SCRIPT_SOURCE)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, BooleanField, ForeignKey, Index, JSONField
+from django.db.models import CASCADE, SET_NULL, BooleanField, ForeignKey, Index, JSONField, PositiveSmallIntegerField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.wiki_edit.queryset import WikiEditManager
@@ -15,23 +15,23 @@ logger = logging.getLogger(__name__)
 
 class WikiEdit(abstract.DashboardModel):
     """A single community edit applied to a Wiki's editable fields.
-
-    Each edit stores the set of field changes as a JSON diff:
-        {"name": {"from": "Old Name", "to": "New Name"}, ...}
-
-    Reverts are implemented as new WikiEdit rows (so they appear in history)
-    that carry the inverted diff, with ``reverted_by`` pointing at the edit being
-    undone.
-
-    Editable fields: name, description, security levels, dates. Coordinates
-    are not editable - a Wiki's Location is fixed at creation. Bounding-box
-    changes are stored as WKT strings under the key "bounding_box".
+    Each edit stores the set of field changes as a JSON diff: {"name": {"from": "Old Name", "to": "New Name"}, ...} Reverts are implemented as new WikiEdit rows (so they appear in history) that carry the inverted diff, with ``reverted_by`` pointing at the edit being undone.
     """
 
     # {"field": {"from": old_val, "to": new_val}, ...}
     changes = JSONField()
     # True when this edit has been superseded by a revert.
     reverted = BooleanField(default=False)
+    # True when this edit IS a revert of another one.
+    # Undoing somebody's work is not itself a contribution to pay for: paying both sides of an edit
+    # war was a standing invitation to farm points by reverting back and forth.
+    is_revert = BooleanField(default=False)
+    # What this row actually paid its editor, and whether that payment has since been taken back.
+    # Recorded rather than recomputed on demand because the weights in services.consensus.points are
+    # a first cut expected to be retuned, and a retraction has to return exactly what was paid, not
+    # what the same edit would earn today.
+    consensus_points = PositiveSmallIntegerField(default=0)
+    consensus_points_retracted = BooleanField(default=False)
 
     wiki = ForeignKey(
         "dashboard.Wiki",
@@ -53,12 +53,10 @@ class WikiEdit(abstract.DashboardModel):
         blank=True,
         related_name="reverts",
     )
-    # Set only when this edit was produced by the Consensus game
-    # (services.consensus.session), never by a manual edit. Doubles as the
-    # double-award guard for models.wiki_edit.signals's points hook - a
-    # Consensus-sourced edit already got its (larger, in-game) points at
-    # resolution time, so the generic "any wiki edit earns baseline points"
-    # signal must skip it - and as attribution for the wiki-history UI.
+    # Set only when this edit was produced by the Consensus game (services.consensus.session), never
+    # by a manual edit.
+    # Doubles as the double-award guard for models.wiki_edit.signals's points hook - a
+    # Consensus-sourced edit already got its (larger, in-game) points at resolution time, so the
     consensus_round = ForeignKey(
         "dashboard.ConsensusRound",
         on_delete=SET_NULL,
@@ -82,3 +80,21 @@ class WikiEdit(abstract.DashboardModel):
         indexes = [
             Index(fields=["wiki", "created"], name="idxdb_we_created"),
         ]
+
+    def display_changes(self) -> list[tuple[str, object, object]]:
+        """``(field, before, after)`` rows for the history list, with a boundary's revision ids shown as words.
+
+        Returns:
+            One row per changed field, in stored order.
+        """
+        from urbanlens.dashboard.services.geo.wiki_boundary_edits import is_boundary_change_key
+
+        rows: list[tuple[str, object, object]] = []
+        for field, diff in (self.changes or {}).items():
+            if not isinstance(diff, dict):
+                continue
+            before, after = diff.get("from"), diff.get("to")
+            if is_boundary_change_key(field):
+                before, after = ("Drawn outline" if value is not None else None for value in (before, after))
+            rows.append((field, before, after))
+        return rows

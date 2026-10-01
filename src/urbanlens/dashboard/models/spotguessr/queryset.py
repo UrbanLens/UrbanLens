@@ -1,6 +1,6 @@
 """QuerySets/Managers for SpotGuessr models.
 
-Glicko-2 rating math lives in ``services.spotguessr.glicko2``; eligibility
+Glicko-2 rating math lives in ``services.games.glicko2``; eligibility
 and location/photo selection live in ``services.spotguessr.eligibility``/
 ``selection``/``photos``. These classes only scope and fetch rows.
 """
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.spotguessr.model import (
+    from urbanlens.dashboard.models.spotguessr.model import (  # noqa: F401 - mypy needs these; ruff does not
         GameRound,
         GameSession,
         GameSessionChatMessage,
@@ -30,12 +30,11 @@ if TYPE_CHECKING:
 class PlayerModeRatingQuerySet(abstract.DashboardQuerySet["PlayerModeRating"]):
     """QuerySet for PlayerModeRating."""
 
-    def for_profile(self, profile: Profile) -> PlayerModeRatingQuerySet:
-        """Restrict to ``profile``'s own ratings, across all modes."""
-        return self.filter(profile=profile)
+
+_PlayerModeRatingManagerBase = abstract.DashboardManager.from_queryset(PlayerModeRatingQuerySet)
 
 
-class PlayerModeRatingManager(abstract.DashboardManager.from_queryset(PlayerModeRatingQuerySet)):
+class PlayerModeRatingManager(_PlayerModeRatingManagerBase["PlayerModeRating"]):
     """Manager for PlayerModeRating."""
 
     def get_or_create_for(self, profile: Profile, mode: str) -> PlayerModeRating:
@@ -47,12 +46,11 @@ class PlayerModeRatingManager(abstract.DashboardManager.from_queryset(PlayerMode
 class LocationModeRatingQuerySet(abstract.DashboardQuerySet["LocationModeRating"]):
     """QuerySet for LocationModeRating."""
 
-    def for_location(self, location: Location) -> LocationModeRatingQuerySet:
-        """Restrict to ``location``'s difficulty ratings, across all modes."""
-        return self.filter(location=location)
+
+_LocationModeRatingManagerBase = abstract.DashboardManager.from_queryset(LocationModeRatingQuerySet)
 
 
-class LocationModeRatingManager(abstract.DashboardManager.from_queryset(LocationModeRatingQuerySet)):
+class LocationModeRatingManager(_LocationModeRatingManagerBase["LocationModeRating"]):
     """Manager for LocationModeRating."""
 
     def get_or_create_for(self, location: Location, mode: str) -> LocationModeRating:
@@ -64,33 +62,19 @@ class LocationModeRatingManager(abstract.DashboardManager.from_queryset(Location
 class GameSessionQuerySet(abstract.DashboardQuerySet["GameSession"]):
     """QuerySet for GameSession."""
 
-    def active(self) -> GameSessionQuerySet:
-        """Restrict to sessions still in progress (lobby or active)."""
-        from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus
-
-        return self.filter(status__in=[GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE])
-
-    def for_profile(self, profile: Profile) -> GameSessionQuerySet:
-        """Restrict to sessions ``profile`` is (or was) a participant in, any status."""
-        return self.filter(participants__profile=profile).distinct()
-
     def stalled(self, *, cutoff: datetime) -> GameSessionQuerySet:
         """ACTIVE sessions whose current round was created before ``cutoff`` and still isn't revealed.
-
-        ``get_or_create_round`` never creates a session's next round until
-        its prior one is fully revealed, so at most one round per session
-        can ever match "unrevealed" at a time - this is always that
-        session's current round. Used by the stall-sweep Celery task
-        (``tasks.sweep_stalled_spotguessr_sessions``) to find sessions a
-        participant walked away from mid-round (see
-        ``services.spotguessr.session.force_reveal_round``).
+        ``get_or_create_round`` never creates a session's next round until its prior one is fully revealed, so at most one round per session can ever match "unrevealed" at a time - this is always that session's current round.
         """
         from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus
 
         return self.filter(status=GameSessionStatus.ACTIVE, rounds__revealed_at__isnull=True, rounds__created__lte=cutoff).distinct()
 
 
-class GameSessionManager(abstract.DashboardManager.from_queryset(GameSessionQuerySet)):
+_GameSessionManagerBase = abstract.DashboardManager.from_queryset(GameSessionQuerySet)
+
+
+class GameSessionManager(_GameSessionManagerBase):
     """Manager for GameSession."""
 
 
@@ -103,8 +87,15 @@ class GameSessionParticipantQuerySet(abstract.DashboardQuerySet["GameSessionPart
 
         return self.filter(status=GameSessionParticipantStatus.JOINED)
 
+    def active(self) -> GameSessionParticipantQuerySet:
+        """Participants who still have access to their session. Every status qualifies: none marks a departure."""
+        return self.all()
 
-class GameSessionParticipantManager(abstract.DashboardManager.from_queryset(GameSessionParticipantQuerySet)):
+
+_GameSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(GameSessionParticipantQuerySet)
+
+
+class GameSessionParticipantManager(_GameSessionParticipantManagerBase):
     """Manager for GameSessionParticipant."""
 
 
@@ -116,7 +107,10 @@ class GameSessionChatMessageQuerySet(abstract.DashboardQuerySet["GameSessionChat
         return self.filter(session=session).order_by("created")
 
 
-class GameSessionChatMessageManager(abstract.DashboardManager.from_queryset(GameSessionChatMessageQuerySet)):
+_GameSessionChatMessageManagerBase = abstract.DashboardManager.from_queryset(GameSessionChatMessageQuerySet)
+
+
+class GameSessionChatMessageManager(_GameSessionChatMessageManagerBase):
     """Manager for GameSessionChatMessage."""
 
 
@@ -128,7 +122,10 @@ class GameRoundQuerySet(abstract.DashboardQuerySet["GameRound"]):
         return self.filter(session=session).order_by("sequence_index")
 
 
-class GameRoundManager(abstract.DashboardManager.from_queryset(GameRoundQuerySet)):
+_GameRoundManagerBase = abstract.DashboardManager.from_queryset(GameRoundQuerySet)
+
+
+class GameRoundManager(_GameRoundManagerBase):
     """Manager for GameRound."""
 
 
@@ -140,5 +137,8 @@ class GuessQuerySet(abstract.DashboardQuerySet["Guess"]):
         return self.filter(round=round_)
 
 
-class GuessManager(abstract.DashboardManager.from_queryset(GuessQuerySet)):
+_GuessManagerBase = abstract.DashboardManager.from_queryset(GuessQuerySet)
+
+
+class GuessManager(_GuessManagerBase):
     """Manager for Guess."""

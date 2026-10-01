@@ -1,43 +1,68 @@
-"""Celery tasks for the dashboard application."""
+"""Celery tasks for the dashboard app.
+
+Tasks that hand untrusted uploaded bytes to a parser declare
+``queue=SANDBOX_QUEUE`` (or ``SANDBOX_BATCH_QUEUE`` for a minutes-long batch
+job), routing them to the isolated ``media-worker`` container rather than the
+general-purpose worker. The queue is declared on the task, not at each
+``apply_async`` site - see :mod:`urbanlens.dashboard.services.sandbox.queues`
+for why, and :mod:`urbanlens.dashboard.services.sandbox.guard` for what the
+isolation buys.
+
+Every other task declares one of :attr:`Queue.INTERACTIVE`, :attr:`Queue.BULK`
+or :attr:`Queue.MAINTENANCE`. The line is who waits - a person waiting on a
+result or a safety deadline is interactive, a job sized by how much one
+account owns is bulk, beat-driven site-wide work is maintenance -
+``dashboard.checks.check_every_task_declares_a_queue`` fails startup for a
+task that names none, since one on the default queue keeps working silently.
+"""
 
 from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import async_to_sync
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
 from django.utils import timezone
 
+from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's autodiscover_tasks() only imports <app>/tasks.py, so this is what registers the task on the worker
+    run_assistant_turn_task,
+)
+from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import update_task_progress
-from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+from urbanlens.dashboard.services.core.locks import acquire_lock, beat_lock, release_lock
+from urbanlens.dashboard.services.pins import confirmed_import, import_preview
+from urbanlens.dashboard.services.sandbox import sandbox_queue
+from urbanlens.dashboard.services.sandbox.queues import Queue
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit
 
 logger = logging.getLogger(__name__)
 
+#: Sandbox queue for untrusted parses; falls back to default when disabled.
+SANDBOX_QUEUE = sandbox_queue()
+#: Sandbox queue for minutes-long untrusted parses.
+SANDBOX_BATCH_QUEUE = sandbox_queue(batch=True)
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+#: Limits for the five-minute safety sweeps, under their overlap lock (_CHECKIN_LOCK_TIMEOUT_SECONDS).
+_CHECKIN_SOFT_TIME_LIMIT_SECONDS = 210
+_CHECKIN_TIME_LIMIT_SECONDS = 240
+#: Limits for the two-minute game stall sweeps, under their 110-second overlap locks.
+_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS = 80
+_STALL_SWEEP_TIME_LIMIT_SECONDS = 100
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def ensure_wiki_for_location(location_id: int) -> int | None:
-    """Auto-create the Wiki for a Location, so enrichment can get a head start.
-
-    Queued by the ``Pin`` post_save signal (``models.pin.signals``) whenever a
-    pin gets a shared Location, for any community-enabled profile - covering
-    every pin-creation path (manual add, CSV/Google Maps import, Flickr,
-    Immich, GPX) with one hook. The row itself is a cheap DB-only write; no
-    external API is touched here or by the signal that queued this - that
-    only happens below, once, when the draft is first created.
-
-    The page is published from the moment it exists - there is no draft state
-    and nothing for a user to "create". It starts empty and fills in as
-    enrichment lands, which is what a place nobody has written up looks like
-    anyway.
+    """Auto-create the Wiki for a Location when missing.
 
     Args:
         location_id: PK of the Location that just gained a pin.
@@ -47,8 +72,11 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
         longer exists.
     """
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
+    from urbanlens.dashboard.services.core.celery import follow_on_queue
+    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran
 
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
@@ -56,28 +84,56 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
         return None
 
     wiki, created = Wiki.objects.get_or_create_for_location(location)
+    # Enrichment sends the coordinate to outside providers, so it waits for an owner who allows that.
+    consented = Pin.objects.filter(location=location, profile__external_apis_enabled=True).exists()
+    if consented and (created or not boundary_generation_ran(location)):
+        enqueue_follow_on(enrich_wiki_location, enrich_wiki_locations, wiki.pk, queue=follow_on_queue())
     if created:
-        safely_enqueue_task(enrich_wiki_location, wiki.pk)
-        # Covers a Wikipedia article matched and cached for this location
-        # *before* there was a wiki to seed. The other direction - a match
-        # caching after the wiki exists - is handled by models.cache.signals.
-        # This used to hang off the "Create wiki" click, which was the moment
-        # the page appeared; that moment is here now.
         from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
 
         seed_wiki_article_from_wikipedia(location)
     return wiki.pk
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def enrich_wiki_location(self, wiki_id: int) -> bool:
-    """Enrich a Wiki's Location with external data.
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
+    """Chunk-shaped sibling of :func:`ensure_wiki_for_location`, for a bulk import's fan-out (P109).
 
-    Runs right after ``ensure_wiki_for_location`` creates the page: links the
-    Location to its Google Place, resolves a canonical
-    name when the wiki is still unnamed, and generates the location's default
-    property/building boundaries. This is the only place these APIs are hit
-    for a wiki - pin creation and bulk imports never call them synchronously.
+    Runs its own :func:`batching_follow_on_work` so the enrichment work a new wiki queues coalesces
+    into :func:`enrich_wiki_locations` chunks too, whether this task was itself reached from inside an
+    importer's own collector (nesting reuses it) or dispatched standalone.
+
+    Args:
+        location_ids: PKs of the Locations to ensure a Wiki for.
+
+    Returns:
+        PKs of the Wikis (new or pre-existing) - one per location that still existed.
+    """
+    from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
+
+    wiki_pks: list[int] = []
+    with batching_follow_on_work():
+        for location_id in location_ids:
+            try:
+                wiki_pk = ensure_wiki_for_location(location_id)
+            except OSError:
+                # ensure_wiki_for_location is called directly, not dispatched, so its own
+                # autoretry_for=(OSError,) can't schedule a delayed retry (Celery raises
+                # immediately when request.called_directly is True) - re-raise so this task's
+                # own autoretry retries the whole chunk instead of silently dropping the item.
+                logger.warning("ensure_wikis_for_locations: transient failure on location %s, retrying chunk", location_id)
+                raise
+            except Exception:
+                logger.exception("ensure_wikis_for_locations: location %s failed", location_id)
+                continue
+            if wiki_pk is not None:
+                wiki_pks.append(wiki_pk)
+    return wiki_pks
+
+
+@shared_task(soft_time_limit=240, time_limit=270, bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
+def enrich_wiki_location(self, wiki_id: int) -> bool:
+    """Enrich a Wiki's Location with place link, name, and boundaries.
 
     Args:
         wiki_id: PK of the Wiki to enrich.
@@ -105,30 +161,26 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     except Exception:
         logger.exception("enrich_wiki_location: Google place linking failed for location %s", location.pk)
 
-    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+    from urbanlens.dashboard.services.locations.naming import GOOGLE_PLACES_NAME_SOURCE, is_meaningful_name, update_location_name_from_external_sources
+    from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
+
+    try:
+        update_location_name_from_external_sources(location)
+    except Exception:
+        logger.exception("enrich_wiki_location: cached name refresh failed for location %s", location.pk)
+    wiki.refresh_from_db(fields=["name"])
+    location.refresh_from_db(fields=["official_name"])
 
     if not is_meaningful_name(wiki.name):
-        from urbanlens.dashboard.services.locations.naming import sanitize_name
-
-        try:
-            place_name = location.official_name or name_resolver.resolve(float(location.latitude), float(location.longitude))
-        except Exception:
-            logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
-            place_name = None
-        # This bypasses Wiki.save() (a bulk .update()), so sanitize here too -
-        # location.official_name is already sanitized by Location.save(), but
-        # name_resolver.resolve() is a live external-source result that isn't.
-        # The name= filter re-checks the wiki still carries the exact
-        # non-meaningful name read above (atomically, in the same query), so a
-        # concurrent user-driven rename isn't clobbered. Filtering on the name
-        # actually read - rather than reconstructing the set of possible
-        # placeholders - also can't drift out of sync with whatever variant
-        # was seeded: an area-suffixed placeholder built from an OLDER
-        # area_label (the address backfill may have changed it since),
-        # a coordinate-style name, or any future placeholder shape all pass
-        # the is_meaningful_name gate above and match here.
-        if place_name := sanitize_name(place_name):
-            Wiki.objects.filter(pk=wiki.pk, name=wiki.name).update(name=place_name)
+        place_name, source = location.official_name, OFFICIAL_NAME_SOURCE
+        if not is_meaningful_name(place_name):
+            source = GOOGLE_PLACES_NAME_SOURCE
+            try:
+                place_name = name_resolver.resolve(float(location.latitude), float(location.longitude))
+            except Exception:
+                logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
+                place_name = None
+        adopt_public_name(wiki, place_name, source=source)
 
     update_task_progress(self, current=1, total=2, message="Generating boundaries...")
     if not boundary_generation_ran(location):
@@ -138,17 +190,43 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def enrich_wiki_locations(self, wiki_ids: list[int]) -> dict[int, bool]:
+    """Chunk-shaped sibling of :func:`enrich_wiki_location`, for a bulk import's fan-out (P109).
+
+    Each wiki keeps its own place-linking/name/boundary failures isolated - autoretry on this task
+    retries the whole chunk, so a wiki that keeps failing must not stop its chunk-mates from ever
+    being enriched.
+
+    Args:
+        wiki_ids: PKs of the Wikis to enrich.
+
+    Returns:
+        Whether enrichment ran, per wiki id.
+    """
+    results: dict[int, bool] = {}
+    total = len(wiki_ids)
+    for index, wiki_id in enumerate(wiki_ids):
+        update_task_progress(self, current=index, total=total, message=f"Enriching wiki {index + 1} of {total}...")
+        try:
+            results[wiki_id] = enrich_wiki_location(wiki_id)
+        except OSError:
+            # enrich_wiki_location is called directly, not dispatched, so its own
+            # autoretry_for=(OSError,) can't schedule a delayed retry (Celery raises
+            # immediately when request.called_directly is True) - re-raise so this task's
+            # own autoretry retries the whole chunk instead of silently dropping the item.
+            logger.warning("enrich_wiki_locations: transient failure on wiki %s, retrying chunk", wiki_id)
+            raise
+        except Exception:
+            logger.exception("enrich_wiki_locations: wiki %s failed", wiki_id)
+            results[wiki_id] = False
+    update_task_progress(self, current=total, total=total, message="Batch enrichment complete")
+    return results
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
-    """Mirror imported buildings onto the community wiki, off the request.
-
-    The pin side of a building import has already succeeded by the time this
-    runs, so nothing here may fail it: a wiki-side problem must not surface as
-    a 500 for work that was already done (see docs/PROBLEMS.md, 2026-08-18).
-
-    Takes selection keys rather than the building records themselves so the
-    task body stays small and re-resolves against the current cache - a stale
-    key simply finds nothing.
+    """Mirror imported buildings onto the community wiki off-request.
 
     Args:
         pin_id: The parent pin whose buildings were imported.
@@ -171,14 +249,9 @@ def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
     return pin_restructure.mirror_buildings_to_wiki(pin, buildings, pin.profile)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def auto_nest_building_pins(pin_id: int) -> int:
-    """Build a new pin's default child-pin structure from cached building data.
-
-    Enqueued at pin creation when the location's building list is already
-    cached (another user pinned it first) - creating up to a campus worth of
-    child pins is not request-time work. When nothing is cached yet, the
-    fetch/enrichment paths run the same sweep once the list arrives instead.
+    """Build a new pin's default child-pin structure from cached buildings.
 
     Args:
         pin_id: The freshly-created root pin.
@@ -196,17 +269,15 @@ def auto_nest_building_pins(pin_id: int) -> int:
     return auto_nest_pin(pin)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def generate_boundaries_for_location(location_id: int) -> bool:
-    """Generate (or, if stale, refresh) the default property/building boundaries for a Location.
-
-    Scheduled single-flight by ``schedule_location_boundary_generation`` (wiki
-    page, and the pin detail page's stale-refresh path) - the pin detail
-    page's first-ever generation uses the "boundary" panel source instead,
-    which calls the same ``generate_location_boundaries`` function.
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def generate_boundaries_for_location(location_id: int, *, force: bool = False, attempt: int = 0) -> bool:
+    """Generate or refresh default boundaries for a Location.
 
     Args:
         location_id: PK of the Location.
+        force: Re-run the provider chain even when the coordinate already resolves - a retry after the
+            authoritative provider deferred and a fallback answered meanwhile.
+        attempt: How many deferred retries preceded this run.
 
     Returns:
         True when the location existed and generation ran (or was already
@@ -223,14 +294,14 @@ def generate_boundaries_for_location(location_id: int) -> bool:
             logger.info("generate_boundaries_for_location: location %s no longer exists", location_id)
             return False
         ran, stale = generation_status(location)
-        if not ran or stale:
-            generate_location_boundaries(location)
+        if force or not ran or stale:
+            generate_location_boundaries(location, force=force, attempt=attempt)
         return True
     finally:
         cache.delete(generation_lock_key(location_id))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def classify_detail_marker(kind: str, marker_id: int) -> bool:
     """Decide whether a newly placed child pin/wiki stands on a building.
 
@@ -238,12 +309,12 @@ def classify_detail_marker(kind: str, marker_id: int) -> bool:
     choosing a type themselves (see ``controllers.detail_pins``). Generating
     the marker's own boundaries first is the whole point: the provider chain
     only fills a location's ``BUILDING`` boundary when some provider has a
-    footprint polygon containing that exact point, which is precisely the
-    question being asked.
+    footprint polygon containing that exact point.
 
-    Runs on the default (prefork) queue rather than ``panel_fetch``: boundary
-    generation does real CPU-bound geometry work, and a campus import queues
-    one of these per building. See ``PanelSource.queue`` for the same reasoning.
+    Runs on the interactive (prefork) queue rather than ``panel_fetch``:
+    boundary generation does real CPU-bound geometry work, and a campus
+    import queues one of these per building. See ``PanelSource.queue`` for
+    the same reasoning.
 
     Args:
         kind: ``"pin"`` or ``"wiki"``.
@@ -272,37 +343,27 @@ def classify_detail_marker(kind: str, marker_id: int) -> bool:
     return classify_building_pin_type(marker)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def warm_saved_filter_cache(profile_id: int) -> int:
-    """Precompute and cache a profile's saved-filter matching-pin uuid lists.
-
-    Queued right after login (see ``models.profile.signals``) so the bottom-right
-    map toolbar's first filter toggle of the session hits a warm
-    ``services.search.saved_filter_cache`` entry instead of a cold query.
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def refresh_profile_map_center(profile_id: int) -> bool:
+    """Recompute one profile's cached map centre away from the request that made it stale.
 
     Args:
-        profile_id: PK of the ``Profile`` to warm - never a bare user-supplied
-            uuid, so this can't be used to warm (or probe) another user's data.
+        profile_id: PK of the ``Profile`` whose centre a new pin outdated.
 
     Returns:
-        Number of saved filters warmed, or 0 if the profile no longer exists.
+        True when a centre was computed, False when the profile is gone or owns no locatable pins.
     """
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.search.saved_filter_cache import warm_all_for_profile
 
     profile = Profile.objects.filter(pk=profile_id).first()
     if profile is None:
-        return 0
-    return warm_all_for_profile(profile)
+        return False
+    return profile.refresh_map_center() is not None
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def push_trip_to_calendar(trip_id: int) -> int:
-    """Push a trip's current state to every calendar it is auto-synced with.
-
-    Queued after a trip or trip activity is saved, so calendar events created
-    by the "keep in sync" import option stay current without the user having
-    to re-export manually. Sync is one-way (UrbanLens to Google) only.
+    """Push a changed trip to its auto-synced calendars.
 
     Args:
         trip_id: PK of the trip that changed.
@@ -320,7 +381,40 @@ def push_trip_to_calendar(trip_id: int) -> int:
     return push_auto_synced_trip_changes(trip)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+#: An auto-sync request older than this lost its push, or its push failed.
+PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
+#: Failed pushes after which a request is dropped until the trip changes again.
+MAX_CALENDAR_PUSH_ATTEMPTS = 5
+PENDING_CALENDAR_PUSH_BATCH = 200
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def requeue_pending_calendar_pushes() -> int:
+    """Queue the auto-sync pushes whose trip change was never delivered to the calendar.
+
+    Returns:
+        How many trips were queued.
+    """
+    from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    cutoff = timezone.now() - PENDING_CALENDAR_PUSH_AGE
+    pending = TripCalendarLink.objects.filter(activity__isnull=True, auto_sync=True, push_requested_at__lt=cutoff)
+    abandoned = pending.filter(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS).update(push_requested_at=None, push_attempts=0)
+    if abandoned:
+        logger.warning("Dropped %d calendar auto-sync request(s) after %d failed pushes", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
+    trip_ids = list(pending.order_by("trip_id").values_list("trip_id", flat=True).distinct()[:PENDING_CALENDAR_PUSH_BATCH])
+    queued = 0
+    for trip_id in trip_ids:
+        # A refusal is found again by the next sweep.
+        if safely_enqueue_task(push_trip_to_calendar, trip_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Re-queued %d calendar auto-sync push(es)", queued)
+    return queued
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Build a user's data export archive outside the web request."""
     from urbanlens.dashboard.services.import_export.export import run_export
@@ -337,7 +431,7 @@ def run_user_data_export(self, user_id: int, export_types: list[str], export_dir
     return False
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) -> None:
     """Remove expired export artifacts and cache-backed status."""
     from urbanlens.dashboard.services.import_export.export import ExportJobStatus, cleanup_export_artifacts
@@ -346,7 +440,7 @@ def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) ->
     logger.info("Cleaned up export artifacts for job %s", job_id or export_dir)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_BATCH_QUEUE)
 def run_user_data_import(self, user_id: int, zip_path: str, job_id: str) -> bool:
     """Parse a UrbanLens export ZIP and import data for the user."""
     from urbanlens.dashboard.services.import_export.import_data import run_import
@@ -363,7 +457,7 @@ def run_user_data_import(self, user_id: int, zip_path: str, job_id: str) -> bool
     return False
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = None) -> None:
     """Remove expired import artifacts and cache-backed status."""
     from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus, cleanup_import_artifacts
@@ -372,7 +466,69 @@ def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = Non
     logger.info("Cleaned up import artifacts for job %s", job_id or import_dir_path)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(queue=Queue.BULK, soft_time_limit=confirmed_import.SOFT_TIME_LIMIT_SECONDS, time_limit=confirmed_import.TIME_LIMIT_SECONDS)
+def run_confirmed_pin_import(profile_id: int, job_id: str) -> dict[str, Any]:
+    """Run one account's confirmed pin import from the selection stored under *job_id*."""
+    return confirmed_import.run_confirmed_import(profile_id, job_id)
+
+
+@shared_task(
+    bind=True,
+    queue=SANDBOX_QUEUE,
+    soft_time_limit=import_preview.PARSE_SOFT_TIME_LIMIT_SECONDS,
+    time_limit=import_preview.PARSE_TIME_LIMIT_SECONDS,
+    max_retries=import_preview.PARSE_SLOT_MAX_RETRIES,
+)
+def parse_import_preview_task(self, profile_id: int, job_id: str) -> None:
+    """Read an import preview's uploaded files in the sandbox worker, once a site-wide slot is free."""
+    if not import_preview.parse_import_preview(profile_id, job_id):
+        raise self.retry(countdown=import_preview.PARSE_SLOT_RETRY_SECONDS)
+
+
+@shared_task(soft_time_limit=import_preview.FINISH_SOFT_TIME_LIMIT_SECONDS, time_limit=import_preview.FINISH_TIME_LIMIT_SECONDS, queue=Queue.INTERACTIVE)
+def finish_import_preview_task(profile_id: int, job_id: str) -> None:
+    """Finish the part of an import preview that needs the network."""
+    import_preview.finish_import_preview(profile_id, job_id)
+
+
+@shared_task(bind=True, queue=SANDBOX_QUEUE, max_retries=5)
+def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
+    """Re-encode a held icon or avatar in the sandbox worker and show it.
+
+    Storage failing past the task's own retries leaves the upload held, waiting for :func:`retry_waiting_uploads`.
+    """
+    from urbanlens.dashboard.services.media import upload_retry
+    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS, drop_held, publish_held
+
+    try:
+        published = publish_held(key, pk, held_name, attempt=self.request.id)
+    except STORAGE_ERRORS as exc:
+        if upload_retry.means_file_is_gone(exc):
+            if upload_retry.file_is_gone(key, pk, held_name, exc):
+                logger.warning("Dropping the upload held for %s %s: storage has not had its file for %s", key, pk, upload_retry.GONE_GRACE)
+                drop_held(key, pk, held_name)
+                upload_retry.stop_waiting(key, pk)
+            return False
+        if self.request.retries < self.max_retries and not upload_retry.is_waiting(key, pk):
+            raise self.retry(exc=exc, countdown=min(60 * (2**self.request.retries), 900)) from exc
+        logger.warning("Storage could not read or write the upload held for %s %s; it waits for storage", key, pk, exc_info=True)
+        upload_retry.wait_for_storage(key, pk, held_name, exc)
+        return False
+    upload_retry.stop_waiting(key, pk)
+    if published:
+        upload_retry.record_storage_success()
+    return published
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def measure_media_usage_task() -> float:
+    """Measure the media volume for the site-admin system panel."""
+    from urbanlens.dashboard.services.admin.media_usage import measure_media_usage
+
+    return measure_media_usage().megabytes
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def cleanup_vestigial_assets_task() -> dict[str, int]:
     """Sweep stale import/export artifacts missed by per-job cleanup tasks."""
     from urbanlens.dashboard.services.import_export.vestigial_assets import cleanup_vestigial_assets
@@ -385,27 +541,32 @@ def cleanup_vestigial_assets_task() -> dict[str, int]:
     return result.as_dict()
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def rebuild_map_pin_cache(self, profile_id: int) -> int:
-    """Rebuild the full root-pin map cache for a profile."""
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def build_map_document(profile_id: int) -> int:
+    """Build and cache one profile's map document.
+
+    Off the request path because building it holds the whole document in memory, which is exactly what
+    the streaming response exists to avoid.
+
+    Args:
+        profile_id: Whose document to build.
+
+    Returns:
+        Bytes stored, or 0 when it was already cached, too large, or the profile is gone.
+    """
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.map_pins import MapPinCache
+    from urbanlens.dashboard.services.map_pins import document as map_document
+    from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
 
-    logger.info("Rebuilding map pin cache for profile %s", profile_id)
-    update_task_progress(self, current=0, total=1, message="Rebuilding map cache...")
     profile = Profile.objects.filter(pk=profile_id).first()
     if profile is None:
-        logger.info("rebuild_map_pin_cache: profile %s no longer exists", profile_id)
         return 0
     query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
-    cache = MapPinCache(profile)
-    cache.rebuild(query)
-    update_task_progress(self, current=1, total=1, message="Map cache ready")
-    return query.count()
+    return map_document.build_and_store(profile, query, decorate=with_view_urls)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def suggest_wiki_category(self, wiki_id: int) -> list[str]:
     """Suggest and attach labels for a community Wiki outside model signals."""
     from urbanlens.dashboard.models.wiki import Wiki
@@ -421,7 +582,34 @@ def suggest_wiki_category(self, wiki_id: int) -> list[str]:
     return [b.name for b in labels]
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def suggest_wiki_categories(wiki_ids: list[int]) -> dict[int, list[str]]:
+    """Chunk-shaped sibling of :func:`suggest_wiki_category`, for a bulk import's fan-out (P109).
+
+    Args:
+        wiki_ids: PKs of the Wikis to suggest and attach labels for.
+
+    Returns:
+        The names of the labels attached, per wiki id.
+    """
+    results: dict[int, list[str]] = {}
+    for wiki_id in wiki_ids:
+        try:
+            results[wiki_id] = suggest_wiki_category(wiki_id)
+        except OSError:
+            # suggest_wiki_category is called directly, not dispatched, so its own
+            # autoretry_for=(OSError,) can't schedule a delayed retry (Celery raises
+            # immediately when request.called_directly is True) - re-raise so this task's
+            # own autoretry retries the whole chunk instead of silently dropping the item.
+            logger.warning("suggest_wiki_categories: transient failure on wiki %s, retrying chunk", wiki_id)
+            raise
+        except Exception:
+            logger.exception("suggest_wiki_categories: wiki %s failed", wiki_id)
+            results[wiki_id] = []
+    return results
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def suggest_pin_category(self, pin_id: int) -> list[str]:
     """Suggest and attach labels for a Pin outside request/import loops."""
     from urbanlens.dashboard.models.pin import Pin
@@ -437,14 +625,40 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
     return [b.name for b in labels]
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def suggest_pin_categories(pin_ids: list[int]) -> dict[int, list[str]]:
+    """Chunk-shaped sibling of :func:`suggest_pin_category`, for a bulk import's fan-out (P109).
+
+    Args:
+        pin_ids: PKs of the Pins to suggest and attach labels for.
+
+    Returns:
+        The names of the labels attached, per pin id.
+    """
+    results: dict[int, list[str]] = {}
+    for pin_id in pin_ids:
+        try:
+            results[pin_id] = suggest_pin_category(pin_id)
+        except OSError:
+            # suggest_pin_category is called directly, not dispatched, so its own
+            # autoretry_for=(OSError,) can't schedule a delayed retry (Celery raises
+            # immediately when request.called_directly is True) - re-raise so this task's
+            # own autoretry retries the whole chunk instead of silently dropping the item.
+            logger.warning("suggest_pin_categories: transient failure on pin %s, retrying chunk", pin_id)
+            raise
+        except Exception:
+            logger.exception("suggest_pin_categories: pin %s failed", pin_id)
+            results[pin_id] = []
+    return results
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def resolve_location_place_name(location_id: int) -> str | None:
     """Fetch and cache a Location's Google place name outside the request/response cycle.
 
-    Location.place_name is deliberately cache-only (see its docstring) - this
-    is what actually populates that cache, dispatched from wherever a missing
-    place name is first noticed (e.g. PinController.view) so the next render
-    of this Location, by any pin/user sharing its coordinates, finds it warm.
+    Location.place_name is deliberately cache-only (see its docstring) - this is what actually populates
+    that cache, dispatched from wherever a missing place name is first noticed (e.g. PinController.view)
+    so the next render of this Location, by any pin/user sharing its coordinates, finds it warm.
     """
     from urbanlens.dashboard.models.location.model import Location
 
@@ -455,16 +669,14 @@ def resolve_location_place_name(location_id: int) -> str | None:
     return location.get_place_name()
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def backfill_location_address(location_id: int) -> bool:
     """Reverse-geocode and persist a Location's street address outside the request/response cycle.
 
-    The background counterpart to ``resolve_location_place_name`` for address
-    components: ``ensure_location_address`` makes a live Google Geocoding
-    call, so it must never run inline on a page render - PinOverviewView
-    dispatches this instead when it notices a route-less location, and the
-    next render (by any pin/user sharing this Location) reads the backfilled
-    row straight from the DB.
+    The background counterpart to ``resolve_location_place_name`` for address components:
+    ``ensure_location_address`` makes a live Google Geocoding call, so it must never run inline on a
+    page render - PinOverviewView dispatches this instead when it notices a route-less location, and the
+    next render (by any pin/user sharing this Location) reads the backfilled row straight from the DB.
 
     Args:
         location_id: PK of the Location to backfill.
@@ -482,16 +694,14 @@ def backfill_location_address(location_id: int) -> bool:
     return ensure_location_address(location)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
-    """Best-effort archive a PinLink's or WikiLink's URL to the Wayback Machine.
+def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
+    """Shared logic for :func:`archive_link_to_wayback` and its per-model chunk-batching siblings.
 
-    Prefers an existing recent snapshot (cheap availability check) over asking
-    the Wayback Machine to crawl the page again. HTTP-level failures (dead
-    link, the Archive refusing the URL, ...) are logged and left for the user
-    to retry later rather than retried automatically - only transport-level
-    errors (OSError) get Celery's automatic retry, since a permanently
-    unarchivable URL would otherwise retry forever.
+    A plain function, not a task - the siblings call this directly rather than invoking
+    ``archive_link_to_wayback`` itself, so a transient failure here surfaces as this *caller's*
+    exception rather than being swallowed by ``archive_link_to_wayback``'s own retry wrapper, which
+    would immediately re-raise instead of scheduling a delayed retry (Celery only defers a retry
+    when the task was reached through the broker, not called as a plain function).
 
     Args:
         link_model: ``"PinLink"`` or ``"WikiLink"``.
@@ -515,8 +725,6 @@ def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
         return False
 
     if is_own_site_url(link.url):
-        # Most of our own pages require being logged in - archiving them would
-        # only ever save an unreadable login wall, not the actual content.
         return False
 
     gateway = WaybackMachineGateway()
@@ -530,7 +738,12 @@ def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
         logger.warning("archive_link_to_wayback: could not archive %s", link.url, exc_info=True)
         return False
 
-    if not wayback_url:
+    from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
+    from urbanlens.dashboard.services.security.link_urls import is_link_url
+
+    # The snapshot URL embeds the original, so a near-cap link comes back too long to store.
+    if not is_link_url(wayback_url, max_length=MAX_LINK_URL_LENGTH):
+        logger.info("archive_link_to_wayback: snapshot url for %s %s is not storable", link_model, link_id)
         return False
 
     link.wayback_url = wayback_url
@@ -538,21 +751,97 @@ def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None) -> None:
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
+    """Best-effort archive a link URL to the Wayback Machine.
+
+    Args:
+        link_model: ``"PinLink"`` or ``"WikiLink"``.
+        link_id: PK of the link row to archive.
+
+    Returns:
+        True when a wayback_url was saved, False otherwise.
+    """
+    return _archive_link_to_wayback(link_model, link_id)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def archive_pin_link_to_wayback(link_id: int) -> bool:
+    """Single-id ``PinLink`` entry point, fitting :func:`enqueue_follow_on`'s one-argument contract."""
+    return _archive_link_to_wayback("PinLink", link_id)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def archive_pin_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
+    """Chunk-shaped sibling of :func:`archive_pin_link_to_wayback`, for a bulk import's fan-out (P109).
+
+    A confirmed import that extracts embedded links from each pin's raw description
+    (``maps.py::_attach_description_extras``) creates one ``PinLink`` per link, each of which
+    otherwise queues its own Wayback-archive task.
+
+    Args:
+        link_ids: PKs of the PinLinks to archive.
+
+    Returns:
+        Whether archiving saved a wayback_url, per link id.
+    """
+    results: dict[int, bool] = {}
+    for link_id in link_ids:
+        try:
+            results[link_id] = _archive_link_to_wayback("PinLink", link_id)
+        except OSError:
+            logger.warning("archive_pin_links_to_wayback: transient failure on link %s, retrying chunk", link_id)
+            raise
+        except Exception:
+            logger.exception("archive_pin_links_to_wayback: link %s failed", link_id)
+            results[link_id] = False
+    return results
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def archive_wiki_link_to_wayback(link_id: int) -> bool:
+    """Single-id ``WikiLink`` entry point, fitting :func:`enqueue_follow_on`'s one-argument contract."""
+    return _archive_link_to_wayback("WikiLink", link_id)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
+    """Chunk-shaped sibling of :func:`archive_wiki_link_to_wayback`, for a bulk import's fan-out (P109).
+
+    Args:
+        link_ids: PKs of the WikiLinks to archive.
+
+    Returns:
+        Whether archiving saved a wayback_url, per link id.
+    """
+    results: dict[int, bool] = {}
+    for link_id in link_ids:
+        try:
+            results[link_id] = _archive_link_to_wayback("WikiLink", link_id)
+        except OSError:
+            logger.warning("archive_wiki_links_to_wayback: transient failure on link %s, retrying chunk", link_id)
+            raise
+        except Exception:
+            logger.exception("archive_wiki_links_to_wayback: link %s failed", link_id)
+            results[link_id] = False
+    return results
+
+
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None, pin_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 
-    Runs Wikipedia and NPS lookups so that the first time a user opens the pin
-    detail page the data is already cached.  Also migrates any Google Places
-    details already held in the Django request cache into LocationCache so the
-    pin detail page can skip the Places Details API call.
+    Runs Wikipedia and NPS lookups so that the first time a user opens the pin detail page the data is
+    already cached. Every lookup is driven by the Location's public data, never the pin's own name.
 
     Args:
         location_id: PK of the Location to prefetch data for.
-        google_place_id: Optional Google Places place_id already resolved by the
-            caller; used to copy existing Django-cache data into LocationCache.
-        profile_id: PK of the profile whose action enqueued this task, if any -
-            used to honor that profile's name-source priority override.
+        google_place_id: Optional Google Places place_id already resolved by the caller; used to copy
+        existing Django-cache data into LocationCache.
+        profile_id: PK of the profile whose action enqueued this task, if any - used to honor that
+        profile's name-source priority override.
+        pin_id: PK of the pin just created here, if any. A match cached before it existed was never
+        seeded into it, since pin articles are seeded only when a write turns a miss into a match.
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.location.model import Location
@@ -571,28 +860,19 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     if not lat and not lng:
         return
 
-    # Wikipedia
+    # Resolves the address first when there is none, which a coordinate-only pin's match depends on.
     if LocationCache.get_fresh(location, "wikipedia") is None:
         try:
-            from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+            from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaEnrichmentSource
 
-            address_components = {
-                "locality": location.locality or "",
-                "route": location.route or "",
-                "street_number": location.street_number or "",
-                "administrative_area_level_1": location.administrative_area_level_1 or "",
-            }
-            name = location.official_name or location.display_name or ""
-            article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
-            LocationCache.set(location, "wikipedia", article or {}, query_key=name)
+            WikipediaEnrichmentSource().enrich(location)
             logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
 
-    # NPS: caches the nearest park unit to the location, if any is within
-    # REData's search radius (see plugins.builtin.nps for why this is a
-    # proximity search rather than the boundary-containment lookup this used
-    # to be).
+    if pin_id is not None:
+        _seed_new_pin_from_cached_wikipedia(location, pin_id)
+
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
     if redata_configured() and LocationCache.get_fresh(location, "nps") is None:
@@ -605,8 +885,6 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         except Exception:
             logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
 
-    # Google Places - migrate from Django request cache into LocationCache so the
-    # pin detail page can display it without a fresh API call.
     if google_place_id and LocationCache.get_fresh(location, "google_places") is None:
         try:
             from django.core.cache import cache as django_cache
@@ -624,29 +902,49 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                 location_id,
             )
 
-    # Resolve the official name once, after every cache write above has landed,
-    # so the plugin name providers see all fresh candidates in a single pass
-    # (per-source refreshes let whichever source ran last win).
     try:
         update_location_name_from_external_sources(location, profile=profile)
     except Exception:
         logger.exception("prefetch_location_external_data: name refresh failed for location %s", location_id)
 
 
+def _seed_new_pin_from_cached_wikipedia(location: Location, pin_id: int) -> None:
+    """Give a new pin the article and link its location's cached Wikipedia match offers.
+
+    Args:
+        location: The pin's location.
+        pin_id: PK of the new pin.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_from_cached_wikipedia
+
+    if (pin := Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()) is not None:
+        seed_pin_from_cached_wikipedia(pin)
+
+
 @dataclass
 class _UploadProcessResult:
-    """What each media-type-specific processing step produced."""
+    """Fields produced by one media-type processing step."""
 
     update_fields: dict[str, object]
     coords: tuple[float, float] | None = None
     new_stored_size: int | None = None
+    superseded_name: str | None = None
 
 
-def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> _UploadProcessResult | None:
-    """Photo-specific metadata extraction and downscaling.
+def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max_dimension_override: int | None = None) -> _UploadProcessResult | None:
+    """Extract photo metadata and downscale; None on unreadable file.
 
-    Returns None on unrecoverable read failure (the caller treats that as a
-    failed task run).
+    Args:
+        image: The row to process.
+        image_id: Its pk, for log lines that must survive a deleted row.
+        strip_location: Whether to discard the coordinates rather than record them.
+        max_dimension_override: Longest-edge cap for a row with no profile to
+            derive a plan policy from - see :func:`process_image_upload`.
+
+    Returns:
+        The fields to write back, or None on unrecoverable read failure (the
+        caller treats that as a failed task run).
     """
     from decimal import Decimal
 
@@ -655,47 +953,93 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     from urbanlens.dashboard.services.media.images import (
         compute_checksum,
         downscale_stored_image,
+        extract_aperture,
         extract_author,
+        extract_camera_info,
         extract_caption_from_metadata,
         extract_copyright_notice,
+        extract_embedded_keywords,
         extract_exif_data,
+        extract_focal_length,
+        extract_gps_altitude,
         extract_gps_coords,
         extract_gps_direction,
+        extract_gps_orientation,
+        extract_lens_model,
+        extract_shutter_speed,
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
+        write_image_analysis_thumbnail,
+        write_image_marker_thumbnail,
+        write_image_thumbnail,
     )
-    from urbanlens.dashboard.services.media.storage import get_downscale_policy
+    from urbanlens.dashboard.services.media.storage import get_stored_photo_policy
 
     try:
         with image.image.open("rb") as image_file:
             coords = None if strip_location else extract_gps_coords(image_file)
-            # Same GPS-IFD-derived, same privacy opt-out as coords above - the
-            # compass bearing is only ever meaningful alongside a location.
             direction = None if strip_location else extract_gps_direction(image_file)
+            altitude = None if strip_location or image.exif_altitude is not None else extract_gps_altitude(image_file)
+            orientation = None if strip_location or image.exif_pitch is not None else extract_gps_orientation(image_file)
             taken_at = extract_taken_at(image_file)
             checksum = compute_checksum(image_file) if not image.checksum else None
             exif_data = extract_exif_data(image_file) if image.exif_data is None else None
+            embedded_keywords = extract_embedded_keywords(image_file) if image.embedded_keywords is None else None
             author = extract_author(image_file) if not image.author else None
             copyright_notice = extract_copyright_notice(image_file) if not image.copyright else None
             metadata_caption = extract_caption_from_metadata(image_file) if not image.caption else None
             source_url = extract_source_url(image_file) if not image.source_url else None
+            camera_make, camera_model = (None, None) if (image.exif_camera_make or image.exif_camera_model) else extract_camera_info(image_file)
+            lens_model = extract_lens_model(image_file) if not image.exif_lens_model else None
+            shutter_speed = extract_shutter_speed(image_file) if not image.exif_shutter_speed else None
+            aperture = extract_aperture(image_file) if image.exif_aperture is None else None
+            focal_length = extract_focal_length(image_file) if image.exif_focal_length is None else None
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return None
 
-    # Dropping GPSInfo makes "what did the EXIF say" permanently unanswerable
-    # for this photo - the deliberate exception to exif_data being the surviving
-    # record of EXIF provenance. That is the point of the opt-out, not an
-    # oversight; any future coordinate-provenance work must treat a
-    # location-stripped photo as having no EXIF position rather than an unknown one.
     if strip_location and exif_data:
         exif_data.pop("GPSInfo", None)
+
+    if coords is None and not strip_location and image.latitude is not None and image.longitude is not None:
+        coords = (float(image.latitude), float(image.longitude))
 
     update_fields: dict[str, object] = {}
     if direction is not None:
         image.direction = Decimal(str(round(direction, 2)))
         update_fields["direction"] = image.direction
+    if not strip_location and image.exif_latitude is None and coords is not None:
+        image.exif_latitude = Decimal(str(round(coords[0], 6)))
+        image.exif_longitude = Decimal(str(round(coords[1], 6)))
+        update_fields["exif_latitude"] = image.exif_latitude
+        update_fields["exif_longitude"] = image.exif_longitude
+    if altitude is not None:
+        image.exif_altitude = Decimal(str(round(altitude, 2)))
+        update_fields["exif_altitude"] = image.exif_altitude
+    if orientation is not None:
+        image.exif_pitch = Decimal(str(round(orientation[0], 2)))
+        image.exif_roll = Decimal(str(round(orientation[1], 2)))
+        update_fields["exif_pitch"] = image.exif_pitch
+        update_fields["exif_roll"] = image.exif_roll
+    if camera_make:
+        image.exif_camera_make = camera_make
+        update_fields["exif_camera_make"] = camera_make
+    if camera_model:
+        image.exif_camera_model = camera_model
+        update_fields["exif_camera_model"] = camera_model
+    if lens_model:
+        image.exif_lens_model = lens_model
+        update_fields["exif_lens_model"] = lens_model
+    if shutter_speed:
+        image.exif_shutter_speed = shutter_speed
+        update_fields["exif_shutter_speed"] = shutter_speed
+    if aperture is not None:
+        image.exif_aperture = Decimal(str(round(aperture, 1)))
+        update_fields["exif_aperture"] = image.exif_aperture
+    if focal_length is not None:
+        image.exif_focal_length = Decimal(str(round(focal_length, 1)))
+        update_fields["exif_focal_length"] = image.exif_focal_length
     if taken_at:
         image.taken_at = taken_at
         update_fields["taken_at"] = taken_at
@@ -705,6 +1049,9 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     if exif_data:
         image.exif_data = exif_data
         update_fields["exif_data"] = exif_data
+    if embedded_keywords is not None:
+        image.embedded_keywords = embedded_keywords
+        update_fields["embedded_keywords"] = embedded_keywords
     if author:
         image.author = author
         update_fields["author"] = author
@@ -718,40 +1065,52 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         image.source_url = source_url
         update_fields["source_url"] = source_url
 
-    if image.profile is not None and not (image.author or image.source_url or image.caption or image.copyright) and is_camera_generated_filename(image.image.name or ""):
+    if image.profile is not None and not (image.author or image.source_url or image.caption or image.copyright) and is_camera_generated_filename(image.original_filename or ""):
         uploader_name = image.profile.full_name or image.profile.username
         if uploader_name:
             image.author = uploader_name
             update_fields["author"] = uploader_name
 
     new_stored_size: int | None = None
-    if image.profile is not None:
-        max_dimension, convert_webp = get_downscale_policy(image.profile)
-        # Called unconditionally. It used to be gated on there being a resize, a
-        # conversion, a location opt-out or a HEIC to transcode - reasonable while
-        # this function existed to resize, but it is also what removes EXIF now,
-        # and "no cap, no conversion" is exactly the policy a downscale-exempt
-        # subscriber gets. Gating it left their photos carrying the block.
-        # downscale_stored_image decides for itself whether anything needs doing,
-        # including the HEIC case (`stored_file_needs_transcode`), where the stored
-        # bytes are what a plain <img src> gets and most browsers cannot render them.
-        try:
-            new_size = downscale_stored_image(image, max_dimension, convert_webp)
-        except (OSError, ValueError, PILDecompressionBombError) as exc:
-            # DecompressionBombError inherits straight from Exception, not from
-            # OSError/ValueError like the rest of Pillow's failures (Unidentified-
-            # ImageError does), so it escaped this handler and took the whole
-            # photo-processing task down with it. Pillow's own 89MP ceiling already
-            # prevents the memory exhaustion; what was missing was degrading to the
-            # same logged warning every other unprocessable image gets, leaving the
-            # upload stored and the rest of the pipeline intact.
-            logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
-        else:
-            if new_size is not None:
-                update_fields["image"] = image.image.name
-                new_stored_size = new_size
+    superseded_name: str | None = None
+    max_dimension, convert_webp = get_stored_photo_policy(image, max_dimension_override)
+    try:
+        replacement = downscale_stored_image(image, max_dimension, convert_webp)
+    except (OSError, ValueError, EOFError, SyntaxError, PILDecompressionBombError) as exc:
+        # DecompressionBombError derives from Exception alone, so it needs naming.
+        logger.warning("Re-encoding failed for image %s: %s", image_id, exc, exc_info=True)
+        if image.pending_scan:
+            # Publishing a fresh upload that was never re-encoded would publish whatever metadata it carries.
+            return None
+    else:
+        if replacement is not None:
+            update_fields["image"] = image.image.name
+            new_stored_size = replacement.size
+            superseded_name = replacement.superseded_name
 
-    return _UploadProcessResult(update_fields, coords, new_stored_size)
+    try:
+        if write_image_thumbnail(image):
+            update_fields["thumbnail"] = image.thumbnail.name
+    except (OSError, ValueError, PILDecompressionBombError) as exc:
+        # A miss here is retried by the hourly backfill_image_thumbnails sweep
+        logger.warning("Thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
+
+    try:
+        if write_image_marker_thumbnail(image):
+            update_fields["marker_thumbnail"] = image.marker_thumbnail.name
+    except (OSError, ValueError, PILDecompressionBombError) as exc:
+        # A miss here is retried by the hourly backfill_image_marker_thumbnails sweep
+        logger.warning("Marker thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
+
+    try:
+        if write_image_analysis_thumbnail(image):
+            update_fields["analysis_thumbnail"] = image.analysis_thumbnail.name
+    except (OSError, ValueError, PILDecompressionBombError) as exc:
+        # A miss here is retried by the hourly backfill_image_analysis_thumbnails sweep. Keywording skips a
+        # photo that has no analysis copy rather than decoding one itself - see services.photos.photo_keywords.
+        logger.warning("Analysis thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
+
+    return _UploadProcessResult(update_fields, coords, new_stored_size, superseded_name)
 
 
 def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessResult:
@@ -760,7 +1119,9 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
     from urbanlens.dashboard.services.media.videos import process_uploaded_video
 
     max_height = get_video_downscale_policy(image.profile) if image.profile is not None else None
-    metadata, new_size = process_uploaded_video(image, max_height, strip_location=strip_location)
+    # The container's own location tags are always removed from the stored file; strip_location decides only
+    # whether the coordinates are recorded on the row, where the app's visibility rules govern them.
+    metadata, replacement = process_uploaded_video(image, max_height)
 
     update_fields: dict[str, object] = {}
     coords: tuple[float, float] | None = None
@@ -770,9 +1131,14 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
             update_fields["taken_at"] = image.taken_at
         if "latitude" in metadata and "longitude" in metadata:
             coords = (metadata["latitude"], metadata["longitude"])
-    if new_size is not None:
+    if replacement is not None:
         update_fields["image"] = image.image.name
-    return _UploadProcessResult(update_fields, coords, new_size)
+    return _UploadProcessResult(
+        update_fields,
+        coords,
+        replacement.size if replacement else None,
+        replacement.superseded_name if replacement else None,
+    )
 
 
 def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResult:
@@ -781,45 +1147,207 @@ def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResul
 
     update_fields: dict[str, object] = {}
     try:
-        new_size = convert_to_pdf(image)
+        replacement = convert_to_pdf(image)
     except (OSError, ValueError) as exc:
         logger.warning("Document conversion failed for image %s: %s", image_id, exc, exc_info=True)
-        new_size = None
-    if new_size is not None:
+        replacement = None
+    if replacement is not None:
         update_fields["image"] = image.image.name
 
     ocr_text = extract_pdf_text(image)
     if ocr_text:
         image.ocr_text = ocr_text
         update_fields["ocr_text"] = ocr_text
-    return _UploadProcessResult(update_fields, None, new_size)
+    return _UploadProcessResult(
+        update_fields,
+        None,
+        replacement.size if replacement else None,
+        replacement.superseded_name if replacement else None,
+    )
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def process_image_upload(self, image_id: int) -> bool:
+def _sync_deduped_siblings(image: Image) -> None:
+    """Copy the processed file and its metadata onto this user's other rows of the same bytes.
+
+    ``attach_deduped_copy`` gives a fresh sibling the same ``pending_scan`` its original had at that
+    moment (so it isn't immediately visible in its own, different pin/wiki while the shared file is
+    still raw) - but a dedup sibling never runs this task itself, so this is the only place anything
+    ever clears it again.
+    """
+    from urbanlens.dashboard.models.images.model import Image as ImageModel, QuotaExemption
+    from urbanlens.dashboard.services.media.images import file_still_referenced
+
+    if not image.checksum or image.profile_id is None:
+        return
+    if image.quota_exempt_reason == QuotaExemption.DEDUPLICATED:
+        return
+    processed_name = image.image.name if image.image else ""
+    payload: dict[str, object] = {
+        "author": image.author,
+        "copyright": image.copyright,
+        "taken_at": image.taken_at,
+        "latitude": image.latitude,
+        "longitude": image.longitude,
+        "direction": image.direction,
+        "exif_data": image.exif_data,
+        "embedded_keywords": image.embedded_keywords,
+        "file_size": image.file_size,
+        "thumbnail": image.thumbnail.name if image.thumbnail else "",
+        "marker_thumbnail": image.marker_thumbnail.name if image.marker_thumbnail else "",
+        "pending_scan": image.pending_scan,
+    }
+    if processed_name:
+        payload["image"] = processed_name
+
+    siblings = ImageModel.objects.filter(
+        profile_id=image.profile_id,
+        checksum=image.checksum,
+        quota_exempt_reason=QuotaExemption.DEDUPLICATED,
+    ).exclude(pk=image.pk)
+    stale_names = {name for name in siblings.values_list("image", flat=True) if name and name != processed_name}
+    siblings.update(**payload)
+
+    # Those siblings were the only reason downscale_stored_image kept the raw
+    # upload; once they point at the processed file it is unreferenced.
+    for name in stale_names:
+        if not file_still_referenced("image", name):
+            with contextlib.suppress(OSError):
+                image.image.storage.delete(name)
+
+
+def _scan_pending_upload(task, image: Image) -> bool:
+    """Run the malware scan a pending upload has not had yet.
+
+    It runs here instead, which is what makes an upload return immediately; ``Image.pending_scan`` is
+    what makes that safe, since nobody but the uploader can see the row until this clears it.
+
+    Args:
+        task: The bound Celery task, for ``retry``.
+        image: The pending row whose stored file to scan.
+
+    Returns:
+        True when the file is clean and processing should continue.
+
+    Raises:
+        celery.exceptions.Retry: clamd was unreachable and retries remain.
+    """
+    from urbanlens.dashboard.services.security.malware_scan import (
+        VIRUSTOTAL_ELIGIBLE_SOURCES,
+        MalwareScanUnavailableError,
+        malware_error_for_fetched_asset,
+        malware_error_for_upload,
+    )
+
+    try:
+        with image.image.open("rb") as stored:
+            if image.source in VIRUSTOTAL_ELIGIBLE_SOURCES:
+                malware_error = malware_error_for_fetched_asset(stored, checksum=image.checksum)
+            else:
+                malware_error = malware_error_for_upload(stored)
+    except MalwareScanUnavailableError as exc:
+        if task.request.retries < task.max_retries:
+            # A clamd hiccup must not reject somebody's photo. Same backoff the comment scan uses; the upload
+            # stays pending (invisible to anyone else) for as long as this takes.
+            raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+        logger.exception("Malware scan permanently unavailable for image %s after %s retries", image.pk, task.request.retries)
+        _reject_image_upload(image, "Our antivirus scanner was unavailable, so this upload could not be checked and was removed. Please try again.")
+        return False
+    except OSError as exc:
+        # The stored file could not be opened at all. Treated as a scan failure instead, which is what it is:
+        # not scanned.
+        if task.request.retries < task.max_retries:
+            raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+        logger.exception("Could not open image %s to scan it, after %s retries", image.pk, task.request.retries)
+        _reject_image_upload(image, "We couldn't read this file to check it, so it was removed. You can try uploading it again.")
+        return False
+
+    if malware_error:
+        _reject_image_upload(image, malware_error)
+        return False
+    return True
+
+
+def _reject_image_upload(image: Image, reason: str) -> None:
+    """Notify an uploader their upload was rejected, and remove it.
+
+    Also rejects every dedup sibling pointing at the same stored file (``attach_deduped_copy`` copies
+    ``pending_scan`` from its original at creation, but nothing besides *this* function ever runs on a
+    sibling row - unlike :func:`_sync_deduped_siblings`, which only fires on success - so leaving them
+    would strand each one hidden forever with no path to either clearing or removal).
+
+    Args:
+        image: The still-pending ``Image`` - photo, video or document - that was condemned by the scan
+        or whose processing failed permanently.
+        reason: The user-facing reason, e.g. the scanner's own message.
+    """
+    from django.urls import NoReverseMatch, reverse
+
+    from urbanlens.dashboard.models.images.model import Image as ImageModel, QuotaExemption
+    from urbanlens.dashboard.models.notifications.meta import NotificationType
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.media.images import delete_stored_file
+    from urbanlens.dashboard.services.photos.uploads import record_photo_upload_failure
+
+    siblings = list(
+        ImageModel.objects.filter(
+            profile_id=image.profile_id,
+            checksum=image.checksum,
+            quota_exempt_reason=QuotaExemption.DEDUPLICATED,
+        ).exclude(pk=image.pk)
+        if image.checksum and image.profile_id is not None
+        else []
+    )
+    sibling_pks = [sibling.pk for sibling in siblings]
+
+    url = ""
+    try:
+        if image.pin is not None:
+            url = reverse("pin.details", kwargs={"pin_slug": image.pin.slug or str(image.pin.uuid)})
+        elif image.wiki is not None and image.wiki.location_id:
+            url = reverse("location.wiki", kwargs={"location_slug": image.wiki.location.slug or str(image.wiki.location.uuid)})
+        else:
+            url = reverse("vault.photos")
+    except NoReverseMatch:
+        logger.warning("Could not build a photo URL while notifying about a rejected upload (image %s)", image.pk)
+
+    if image.profile is not None:
+        NotificationLog.objects.notify(
+            profile=image.profile,
+            notification_type=NotificationType.PHOTO_UPLOAD_FAILED,
+            title="An upload could not be processed",
+            message=reason,
+            url=url,
+        )
+        record_photo_upload_failure(image.profile, image.original_filename or "photo", reason, pin=image.pin)
+
+    for sibling in siblings:
+        delete_stored_file(sibling, also_deleting=[image.pk, *sibling_pks])
+        sibling.delete()
+    delete_stored_file(image, also_deleting=sibling_pks)
+    image.delete()
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
+def process_image_upload(self, image_id: int, max_dimension: int | None = None) -> bool:
     """Extract metadata after an upload and update the Image row.
 
-    Dispatches to media-type-specific extraction/downscaling (photo: EXIF +
-    Pillow; video: ffprobe/ffmpeg; document: LibreOffice-to-PDF + OCR), then
-    runs the shared tail identical for every type: resolving the photo's
-    ``location`` link (taken from the pin/wiki it's attached to, or resolved
-    from GPS via ``get_nearby_or_create``), raising a visit suggestion, and
-    queuing keyword generation. This is the single place PinSuggestion/
-    VisitSuggestion creation happens for any uploaded media - see
-    ``maybe_suggest_photo_visit``.
+    When the uploader has turned off visit-history tracking (``track_pin_visits``), GPS is treated as
+    sensitive rather than useful: it's never read into ``Image.latitude``/``longitude`` or the
+    ``exif_data`` snapshot, the stored file's own embedded GPS tag is stripped where supported, and no
+    visit suggestion is raised.
 
-    Attribution fields (author/source_url/caption/copyright), where
-    applicable, are filled from metadata when present and not already set.
+    Args:
+        image_id: PK of the row to process.
+        max_dimension: Longest-edge cap to downscale to when the row has **no profile** - a
+        location-enrichment photo fetched from a provider...
 
-    When the uploader has turned off visit-history tracking (``track_pin_visits``),
-    GPS is treated as sensitive rather than useful: it's never read into
-    ``Image.latitude``/``longitude`` or the ``exif_data`` snapshot, the stored
-    file's own embedded GPS tag is stripped where supported, and no visit
-    suggestion is raised.
+    Returns:
+        True when the row was processed.
     """
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media.images import discard_superseded_file
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
     from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
@@ -828,10 +1356,14 @@ def process_image_upload(self, image_id: int) -> bool:
     if image is None or not image.image:
         return False
 
-    # A profile with visit-history tracking off doesn't want its location
-    # trail reconstructible from any uploaded media either - GPS coordinates
-    # are neither extracted into the DB nor left embedded in the stored file
-    # below, and no visit suggestion is raised.
+    if image.pending_scan and not _scan_pending_upload(self, image):
+        # Infected, or unscannable after every retry. The row and its file are
+        # already gone (_reject_image_upload); nothing left to process.
+        return False
+
+    # A profile with visit-history tracking off doesn't want its location trail reconstructible from any
+    # uploaded media either - GPS coordinates are neither extracted into the DB nor left embedded in the stored
+    # file below, and no visit suggestion is raised.
     strip_location = image.profile is not None and not visit_logging_allowed(image.profile)
 
     stored_size: int | None = None
@@ -843,12 +1375,27 @@ def process_image_upload(self, image_id: int) -> bool:
     elif image.media_type == MediaKind.DOCUMENT:
         result = _process_document_upload(image, image_id)
     else:
-        photo_result = _process_photo_upload(image, image_id, strip_location)
+        photo_result = _process_photo_upload(image, image_id, strip_location, max_dimension)
         if photo_result is None:
+            if not image.pending_scan:
+                return False
+            # A fresh upload's stored file could not be opened at all - _process_photo_upload's own try/except
+            # swallows the OSError/ ValueError rather than raising, specifically so this task's
+            # autoretry_for=(OSError,) never sees it and never retries on its own; explicit retry here scopes
+            # that decision to this one failure.
+            if self.request.retries < self.max_retries:
+                raise self.retry(countdown=min(60 * (2**self.request.retries), 900))
+            # Retries exhausted.
+            _reject_image_upload(image, "We couldn't process this photo, so it was removed. You can try uploading it again.")
             return False
         result = photo_result
 
     update_fields, coords = result.update_fields, result.coords
+
+    if image.pending_scan:
+        # Set at upload time - see Image.pending_scan.
+        image.pending_scan = False
+        update_fields["pending_scan"] = False
 
     # Unconditional, unlike the exif_data write in _process_photo_upload, which
     # only fills a row that has none. A re-enqueued or retried run therefore
@@ -869,6 +1416,8 @@ def process_image_upload(self, image_id: int) -> bool:
     if stored_size is not None and stored_size != image.file_size:
         image.file_size = stored_size
         update_fields["file_size"] = stored_size
+    image.upload_processed_at = timezone.now()
+    update_fields["upload_processed_at"] = image.upload_processed_at
 
     if image.location_id is None:
         location = _resolve_image_location(image, coords)
@@ -879,19 +1428,24 @@ def process_image_upload(self, image_id: int) -> bool:
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
 
+    # Only now, with the row naming the processed file.
+    discard_superseded_file(image, result.superseded_name)
+
+    _sync_deduped_siblings(image)
+
     if not strip_location:
         maybe_suggest_photo_visit(image)
 
-    # Keyword generation runs as its own task so a slow provider (AI vision,
-    # classifiers) never delays the metadata/downscale pipeline above; it also
-    # deliberately runs after the downscale so providers read the final file.
-    # Photo-keyword plugins are built around analyzing a raster image, so this
-    # only applies to actual photos - videos/documents are made searchable via
-    # their own metadata/ocr_text instead.
+    # Keyword generation runs as its own task so a slow provider (AI vision, classifiers) never delays the
+    # metadata/downscale pipeline above; it also deliberately runs after the downscale so providers read the
+    # final file.
     if image.media_type == MediaKind.PHOTO:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task as _enqueue
 
-        if image.profile is None or image.profile.generate_photo_keywords:
+        # A profile-less row (location enrichment, provider photos) has no uploader who opted into keyword
+        # generation, and no gallery of their own for the keywords to be searched from - so it does not get the
+        # (plugin-dependent, possibly billed) vision pass.
+        if image.profile is not None and image.profile.generate_photo_keywords:
             _enqueue(generate_image_keywords, image_id)
 
         from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
@@ -902,13 +1456,672 @@ def process_image_upload(self, image_id: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+#: Seconds one REData extraction may take; it runs an AI model over a scanned form.
+_CRIS_EXTRACTION_TIMEOUT_SECONDS = 180
+
+
+@shared_task(queue=Queue.BULK, soft_time_limit=_CRIS_EXTRACTION_TIMEOUT_SECONDS * 4)
+def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_ids: list[int]) -> int:
+    """Ask REData to extract photos from CRIS documents, and merge them into the location's cached CRIS payload.
+
+    Args:
+        location_id: PK of the Location whose ``cris_building_usn`` cache lists the attachments.
+        resource_uuid: The CRIS resource the attachments belong to.
+        attachment_ids: The document attachments to extract.
+
+    Returns:
+        How many attachments gained extracted images.
+    """
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+
+    gateway = RedataGateway()
+    merged = 0
+    for attachment_id in attachment_ids:
+        try:
+            result = gateway.extract_cultural_resource_attachment(resource_uuid, attachment_id, timeout=_CRIS_EXTRACTION_TIMEOUT_SECONDS)
+        except PropertyRecordsUnavailableError:
+            logger.debug("extract_cris_attachments: nothing extracted from attachment %s of %s", attachment_id, resource_uuid, exc_info=True)
+            continue
+        if images := result.get("extracted_images"):
+            merged += _merge_cris_extraction(location_id, resource_uuid, attachment_id, images)
+    return merged
+
+
+def _merge_cris_extraction(location_id: int, resource_uuid: str, attachment_id: int, images: list) -> int:
+    """Write one attachment's extracted images into the cached CRIS payload, returning 1 if it was there to update."""
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+    with transaction.atomic():
+        row = LocationCache.objects.select_for_update().filter(location_id=location_id, source="cris_building_usn").first()
+        if row is None:
+            return 0
+        data = dict(row.data or {})
+        merged = 0
+        for attachment in data.get("attachments") or []:
+            if attachment.get("resource_uuid") == resource_uuid and attachment.get("id") == attachment_id:
+                attachment["extracted_images"] = images
+                merged = 1
+        if merged:
+            LocationCache.objects.filter(pk=row.pk).update(data=data)
+    return merged
+
+
+@shared_task(queue=SANDBOX_QUEUE)
+def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int, failure_ttl: int) -> bool:
+    """Decode one proxied provider file into a browser-renderable preview.
+
+    Args:
+        source_cache_key: Key holding the proxy's cached ``(bytes, content_type)`` pair.
+        preview_cache_key: Key to write the result (or the failure sentinel) to.
+        ttl: Seconds to cache a successful render.
+        failure_ttl: Seconds to cache the failure sentinel.
+
+    Returns:
+        True when a preview was produced and cached.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.bounded_cache import get_or_none
+    from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, render_preview
+
+    source = get_or_none(source_cache_key, label=f"preview source {source_cache_key}")
+    if not isinstance(source, tuple):
+        # Expired between the caller writing it and this running. Nothing is cached either way: a retry would
+        # only re-read the same miss, and marking it UNPREVIEWABLE would blacklist a perfectly good document.
+        logger.info("Preview source %s was gone before it could be rendered", source_cache_key)
+        return False
+
+    preview = render_preview(*source)
+    if preview is None:
+        cache.set(preview_cache_key, UNPREVIEWABLE, failure_ttl)
+        return False
+    cache.set(preview_cache_key, preview, ttl)
+    return True
+
+
+#: ``remote_copies.DOWNLOAD_TIMEOUT_SECONDS`` bounds each read, so a provider trickling bytes needs a bound on the whole.
+_REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS = 100
+
+
+@shared_task(queue=Queue.INTERACTIVE, soft_time_limit=_REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS, time_limit=_REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS + 10)
+def fetch_remote_image_copy(copy_id: int, slot: str = "") -> bool:
+    """Download a third-party image for its first copy and hand the bytes to the sandbox to decode.
+
+    Runs on an ordinary worker because the sandbox has no egress. Nothing here parses the bytes.
+
+    Args:
+        copy_id: The ``RemoteImageCopy`` being made.
+        slot: The download slot the view claimed (``remote_copies.take_download_slot``), given back once the
+            download ends.
+
+    Returns:
+        True when the bytes were staged and their render queued.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.previews import RemoteSourceTimeoutError, discard_preview_source, fetch_remote_source, stage_preview_source
+    from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS, MAX_REMOTE_COPY_SOURCE_BYTES, forgive_timeout, pending_marker, record_failure, release_download_slot
+
+    timed_out = False
+    try:
+        copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
+        if copy is None or copy.file.name:
+            return False
+        try:
+            fetched = fetch_remote_source(copy.source_url, max_bytes=MAX_REMOTE_COPY_SOURCE_BYTES, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+        except (RemoteSourceTimeoutError, SoftTimeLimitExceeded):
+            fetched, timed_out = None, True
+    finally:
+        release_download_slot(slot, str(copy_id))
+    queued = False
+    try:
+        if fetched is None:
+            if not (timed_out and forgive_timeout(copy)):
+                record_failure(copy)
+            return False
+        descriptor = stage_preview_source(f"copy_{copy.url_digest}", *fetched)
+        if safely_enqueue_task(render_remote_image_copy, copy.pk, descriptor, durable=False) is None:
+            discard_preview_source(descriptor)
+            return False
+        queued = True
+        return True
+    finally:
+        # The render clears the mark once it is queued; any other way out leaves the next request free to start again.
+        if not queued:
+            cache.delete(pending_marker(copy.url_digest))
+
+
+@shared_task(queue=SANDBOX_QUEUE)
+def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
+    """Decode one downloaded third-party image and keep its re-encoded copy.
+
+    Args:
+        copy_id: The ``RemoteImageCopy`` being made.
+        descriptor: Where :func:`fetch_remote_image_copy` staged the source (``previews.stage_preview_source``).
+
+    Returns:
+        True when the copy was stored.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+    from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
+    from urbanlens.dashboard.services.media.remote_copies import REMOTE_COPY_MAX_DIMENSION, pending_marker, record_failure, store
+
+    copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
+    try:
+        source = load_preview_source(descriptor)
+        rendered = render_preview(*source, max_dimension=REMOTE_COPY_MAX_DIMENSION) if copy is not None and source is not None else None
+        if copy is None:
+            return False
+        if rendered is None:
+            record_failure(copy)
+            return False
+        store(copy, *rendered)
+        return True
+    finally:
+        discard_preview_source(descriptor)
+        if copy is not None:
+            cache.delete(pending_marker(copy.url_digest))
+
+
+@shared_task(queue=SANDBOX_QUEUE)
+def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
+    """Decode one downloaded foreign map tile and keep its re-encoded copy.
+
+    Args:
+        tile_id: The ``RemoteTile`` being kept.
+        descriptor: Where the web process staged the source (``previews.stage_preview_source``).
+
+    Returns:
+        True when the tile was stored.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.remote_tiles.model import RemoteTile
+    from urbanlens.dashboard.services.map.remote_tiles import REMOTE_TILE_MAX_DIMENSION, pending_marker, record_failure, store
+    from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
+
+    tile = RemoteTile.objects.select_related("source").filter(pk=tile_id).first()
+    try:
+        source = load_preview_source(descriptor)
+        rendered = render_preview(*source, max_dimension=REMOTE_TILE_MAX_DIMENSION) if tile is not None and source is not None else None
+        if tile is None:
+            return False
+        if rendered is None:
+            record_failure(tile)
+            return False
+        if not store(tile, *rendered):
+            logger.warning("Tile source %s keeps as many tiles as it may; %s/%s/%s was not kept", tile.source_id, tile.z, tile.x, tile.y)
+            record_failure(tile)
+            return False
+        return True
+    finally:
+        discard_preview_source(descriptor)
+        if tile is not None:
+            cache.delete(pending_marker(tile.source.template_digest, tile.z, tile.x, tile.y))
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
+def generate_image_thumbnails(image_ids: list[int]) -> int:
+    """Fill in missing grid thumbnails for already-stored photos.
+
+    Called from :func:`backfill_image_thumbnails` (and nowhere on a request path).
+
+    Args:
+        image_ids: Primary keys of :class:`~urbanlens.dashboard.models.images.model.Image` rows.
+
+    Returns:
+        How many thumbnails were written.
+    """
+    from PIL.Image import DecompressionBombError as PILDecompressionBombError
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media.images import write_image_thumbnail
+
+    written = 0
+    for image in Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO):
+        try:
+            if write_image_thumbnail(image):
+                fields = ["thumbnail", "updated"]
+                if image.media_unreadable_at is not None:
+                    # The file is back. Cleared in the same write, so a row
+                    # cannot carry a scar that outlives the fault.
+                    image.media_unreadable_at = None
+                    fields.append("media_unreadable_at")
+                image.save(update_fields=fields)
+                written += 1
+        except (OSError, ValueError, PILDecompressionBombError) as exc:
+            # Recorded, not only logged: the sweep resets its cursor and comes
+            # round again, so without this a row whose bytes are gone is retried
+            # hourly forever (N22 H64). Written with `.update()` because the
+            # in-memory row is mid-failure and must not be saved wholesale.
+            Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
+            logger.warning("Thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
+    return written
+
+
+#: Cache key for the exclusive pk cursor :func:`backfill_image_thumbnails` walks.
+_THUMBNAIL_BACKFILL_CURSOR_KEY = "image-thumbnail-backfill-cursor"
+#: Long enough that a beat outage does not restart a half-finished walk at pk 0.
+_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
+
+
+#: How long a row may sit ``pending_scan`` before the sweep assumes its task was lost rather than merely slow.
+STALLED_UPLOAD_AGE = timedelta(hours=6)
+
+#: Bound on one sweep, so a large backlog is drained over several ticks rather
+#: than dumped onto the sandbox worker at once.
+STALLED_UPLOAD_BATCH = 100
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def sweep_stale_preview_sources() -> int:
+    """Remove staged preview sources whose render never ran.
+
+    ``render_media_preview`` deletes its own source, so anything this finds is from an enqueue that
+    failed - the broker was down when a tile was requested
+
+    - leaving a file on the media volume nothing will ever read.
+
+    Returns:
+        How many files were removed.
+    """
+    from urbanlens.dashboard.services.media.previews import sweep_preview_sources
+
+    removed = sweep_preview_sources()
+    if removed:
+        logger.info("Removed %s orphaned preview source file(s)", removed)
+    return removed
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def sweep_held_uploads() -> int:
+    """Re-queue stalled held icons and avatars, drop ones whose file is gone or whose publish never finishes, and remove held files nothing names.
+
+    Deliberately not on the sandbox queue - it enqueues, it does not parse.
+
+    Returns:
+        How many held uploads were queued or dropped, plus how many files were removed.
+    """
+    from urbanlens.dashboard.services.media.held_upload import sweep_held_uploads as sweep
+
+    handled, removed = sweep()
+    if handled or removed:
+        logger.info("Held uploads: %s queued or dropped, %s unnamed file(s) removed", handled, removed)
+    return handled + removed
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def sweep_unnamed_files() -> int:
+    """Delete icon, avatar and comment image files no row names, such as one whose delete storage refused.
+
+    Returns:
+        How many files were deleted.
+    """
+    from urbanlens.dashboard.services.media.stored_field import sweep_unnamed_files as sweep
+
+    removed = sweep()
+    if removed:
+        logger.info("Removed %s stored file(s) no row names", removed)
+    return removed
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def retry_waiting_uploads() -> int:
+    """Queue a bounded batch of uploads waiting for storage whose next attempt is due, and report stuck ones.
+
+    Returns:
+        How many attempts were queued.
+    """
+    from urbanlens.dashboard.services.media.upload_retry import retry_waiting_uploads as retry
+
+    queued = retry()
+    if queued:
+        logger.info("Queued %s upload(s) waiting for storage", queued)
+    return queued
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def adopt_stalled_comment_scans() -> int:
+    """Leave pending comments whose scan never ran to :func:`retry_waiting_uploads`.
+
+    Returns:
+        How many comments were taken up.
+    """
+    from urbanlens.dashboard.services.media.upload_retry import adopt_stalled_comment_scans as adopt
+
+    adopted = adopt()
+    if adopted:
+        logger.info("%s pending comment scan(s) never ran and now wait for a retry", adopted)
+    return adopted
+
+
+#: Lock TTL for the outbox drain: above its hard time limit, below its 60-second beat interval.
+_OUTBOX_DRAIN_LOCK_SECONDS = 55
+
+
+@shared_task(queue=Queue.INTERACTIVE, soft_time_limit=40, time_limit=50)
+def drain_task_outbox() -> int:
+    """Queue the tasks the broker refused while it was down.
+
+    Interactive, because what it replays is mostly interactive work (alerts, uploads, invitations) whose
+    delay is a person waiting; the drain itself is a bounded batch of inserts.
+
+    Returns:
+        How many tasks were queued.
+    """
+    from urbanlens.dashboard.services.core.locks import beat_lock
+    from urbanlens.dashboard.services.core.task_outbox import drain_outbox
+
+    with beat_lock("urbanlens:task-outbox:drain-lock", _OUTBOX_DRAIN_LOCK_SECONDS) as acquired:
+        if not acquired:
+            return 0
+        return drain_outbox()
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
+    """Re-enqueue uploads whose processing task never ran.
+
+    Without a sweep that is permanent, and the uploader sees an upload that succeeded and then never
+    appeared to anyone.
+
+    Args:
+        limit: Override the batch size.
+
+    Returns:
+        How many rows were re-enqueued.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.images.model import Image, QuotaExemption
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.photos.photo_enrichment import enriched_max_dimension
+
+    cutoff = timezone.now() - STALLED_UPLOAD_AGE
+    batch = STALLED_UPLOAD_BATCH if limit is None else max(1, limit)
+    # Deduplicated siblings are deliberately excluded.
+    stalled = list(Image.objects.processing().filter(created__lt=cutoff).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source", "upload_sweep_attempts")[:batch])
+    if not stalled:
+        return _clear_orphaned_dedup_siblings(cutoff)
+
+    from django.db.models import F
+
+    from urbanlens.dashboard.services.media.upload_failures import MAX_SWEEP_ATTEMPTS, record_upload_processing_failure
+
+    requeued = 0
+    for image_id, profile_id, source, attempts in stalled:
+        if attempts >= MAX_SWEEP_ATTEMPTS:
+            record_upload_processing_failure(image_id, "This photo could not be processed after several attempts. Retry it, or discard it and upload again.")
+            continue
+        # A profile-less row is a provider photo, and its cap lived only at the call site that created it -
+        # recovered here from its source so the reprocessed file matches what it should have been, rather than
+        # falling back to the generic default.
+        max_dimension = None if profile_id is not None else enriched_max_dimension(source)
+        Image.objects.filter(pk=image_id).update(upload_sweep_attempts=F("upload_sweep_attempts") + 1)
+        safely_enqueue_task(process_image_upload, image_id, max_dimension)
+        requeued += 1
+    logger.info("Re-enqueued %s upload(s) still pending after %s (%s gave up)", requeued, STALLED_UPLOAD_AGE, len(stalled) - requeued)
+    return requeued
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def discard_unretried_failed_uploads(limit: int | None = None) -> int:
+    """Throw away failed uploads nobody came back for.
+
+    Its filename is how the uploader recognises which picture went away, and once the bytes are gone it
+    is the only trace.
+
+    Args:
+        limit: Override the batch size.
+
+    Returns:
+        How many uploads were discarded.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoUploadFailure
+    from urbanlens.dashboard.services.media.upload_failures import UNRETRIED_DISCARD_AGE, discard_failed_upload
+
+    cutoff = timezone.now() - UNRETRIED_DISCARD_AGE
+    batch = STALLED_UPLOAD_BATCH if limit is None else max(1, limit)
+    stale = list(
+        PhotoUploadFailure.objects.filter(status=PhotoIssueStatus.PENDING, image__isnull=False, image__upload_failed_at__lt=cutoff).select_related("image").order_by("created")[:batch],
+    )
+    for failure in stale:
+        discard_failed_upload(failure)
+    if stale:
+        logger.info("Discarded %s failed upload(s) untouched for %s", len(stale), UNRETRIED_DISCARD_AGE)
+    return len(stale)
+
+
+def _clear_orphaned_dedup_siblings(cutoff) -> int:
+    """Clear dedup siblings whose original is gone, so they are not stuck forever.
+
+    If the original was deleted first (the user removed it, or it was rejected in a way that missed this
+    sibling), nothing is left to do that - and unlike a real upload the sibling must not be run through
+    the task itself, because the file it points at belongs to somebody else's row.
+
+    Args:
+        cutoff: Only siblings created before this are considered.
+
+    Returns:
+        How many rows were cleared.
+    """
+    from django.db.models import Exists, OuterRef
+
+    from urbanlens.dashboard.models.images.model import Image, QuotaExemption
+
+    has_source_row = Image.objects.filter(profile_id=OuterRef("profile_id"), checksum=OuterRef("checksum")).exclude(pk=OuterRef("pk")).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED)
+    orphaned = Image.objects.processing().filter(created__lt=cutoff, quota_exempt_reason=QuotaExemption.DEDUPLICATED).annotate(has_source=Exists(has_source_row)).filter(has_source=False)
+    cleared = orphaned.update(pending_scan=False)
+    if cleared:
+        logger.info("Cleared %s dedup sibling(s) whose original no longer exists", cleared)
+    return cleared
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def backfill_image_thumbnails(limit: int | None = None) -> int:
+    """Enqueue a bounded batch of photos that still lack a grid thumbnail.
+
+    Walks the table by primary key so a handful of unreadable files cannot stall the rest of the
+    library: this tick's last id is the next tick's exclusive floor, and an exhausted cursor resets on a
+    later tick rather than re-queueing the same in-flight batch immediately.
+
+    Args:
+        limit: Override the default batch size.
+
+    Returns:
+        How many image ids were queued (0 when the library is caught up, or this tick only reset the
+        cursor).
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import THUMBNAIL_BACKFILL_BATCH, photos_missing_thumbnails
+
+    batch = THUMBNAIL_BACKFILL_BATCH if limit is None else max(1, limit)
+    cursor = int(cache.get(_THUMBNAIL_BACKFILL_CURSOR_KEY) or 0)
+    ids = photos_missing_thumbnails(after_pk=cursor, limit=batch)
+    if not ids:
+        if cursor:
+            cache.delete(_THUMBNAIL_BACKFILL_CURSOR_KEY)
+            logger.info("Thumbnail backfill wrapped; next tick resumes from the start")
+        return 0
+
+    cache.set(_THUMBNAIL_BACKFILL_CURSOR_KEY, ids[-1], _THUMBNAIL_BACKFILL_CURSOR_TTL)
+    safely_enqueue_task(generate_image_thumbnails, ids)
+    logger.info("Thumbnail backfill queued %d photo(s) after pk %s", len(ids), cursor)
+    return len(ids)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
+def generate_image_marker_thumbnails(image_ids: list[int]) -> int:
+    """Fill in missing map-marker thumbnails for already-stored photos.
+
+    The marker-thumbnail mirror of :func:`generate_image_thumbnails` - see its docstring for why this
+    exists alongside upload-time generation.
+
+    Args:
+        image_ids: Primary keys of :class:`~urbanlens.dashboard.models.images.model.Image` rows.
+
+    Returns:
+        How many marker thumbnails were written.
+    """
+    from PIL.Image import DecompressionBombError as PILDecompressionBombError
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media.images import write_image_marker_thumbnail
+
+    written = 0
+    for image in Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO):
+        try:
+            if write_image_marker_thumbnail(image):
+                fields = ["marker_thumbnail", "updated"]
+                if image.media_unreadable_at is not None:
+                    # The file is back. Cleared in the same write, so a row
+                    # cannot carry a scar that outlives the fault.
+                    image.media_unreadable_at = None
+                    fields.append("media_unreadable_at")
+                image.save(update_fields=fields)
+                written += 1
+        except (OSError, ValueError, PILDecompressionBombError) as exc:
+            # Recorded, not only logged: the sweep resets its cursor and comes
+            # round again, so without this a row whose bytes are gone is retried
+            # hourly forever (N22 H64). Written with `.update()` because the
+            # in-memory row is mid-failure and must not be saved wholesale.
+            Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
+            logger.warning("Marker thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
+    return written
+
+
+#: Cache key for the exclusive pk cursor :func:`backfill_image_marker_thumbnails` walks.
+_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY = "image-marker-thumbnail-backfill-cursor"
+#: Same rationale as _THUMBNAIL_BACKFILL_CURSOR_TTL.
+_MARKER_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def backfill_image_marker_thumbnails(limit: int | None = None) -> int:
+    """Enqueue a bounded batch of photos that still lack a map-marker thumbnail.
+
+    The marker-thumbnail mirror of :func:`backfill_image_thumbnails` - see its docstring for the
+    walk/cursor behaviour, which this copies exactly.
+
+    Args:
+        limit: Override the default batch size.
+
+    Returns:
+        How many image ids were queued (0 when the library is caught up, or this tick only reset the
+        cursor).
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import THUMBNAIL_BACKFILL_BATCH, photos_missing_marker_thumbnails
+
+    batch = THUMBNAIL_BACKFILL_BATCH if limit is None else max(1, limit)
+    cursor = int(cache.get(_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY) or 0)
+    ids = photos_missing_marker_thumbnails(after_pk=cursor, limit=batch)
+    if not ids:
+        if cursor:
+            cache.delete(_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY)
+            logger.info("Marker thumbnail backfill wrapped; next tick resumes from the start")
+        return 0
+
+    cache.set(_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY, ids[-1], _MARKER_THUMBNAIL_BACKFILL_CURSOR_TTL)
+    safely_enqueue_task(generate_image_marker_thumbnails, ids)
+    logger.info("Marker thumbnail backfill queued %d photo(s) after pk %s", len(ids), cursor)
+    return len(ids)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
+def generate_image_analysis_thumbnails(image_ids: list[int]) -> int:
+    """Fill in missing analysis copies for already-stored photos.
+
+    Re-enqueues keywording for every row it fixes, so a write that failed during upload still ends in
+    keywords rather than needing a manual sweep.
+
+    Args:
+        image_ids: Primary keys of :class:`~urbanlens.dashboard.models.images.model.Image` rows.
+
+    Returns:
+        How many analysis copies were written.
+    """
+    from PIL.Image import DecompressionBombError as PILDecompressionBombError
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import write_image_analysis_thumbnail
+
+    written = 0
+    for image in Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO):
+        try:
+            if not write_image_analysis_thumbnail(image):
+                continue
+        except (OSError, ValueError, PILDecompressionBombError) as exc:
+            logger.warning("Analysis thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
+            continue
+        image.save(update_fields=["analysis_thumbnail", "updated"])
+        written += 1
+        # Same gate process_image_upload applies - a profile-less row has no uploader who opted in, and
+        # keywording it would spend a billed call nobody asked for.
+        if image.profile is not None and image.profile.generate_photo_keywords:
+            safely_enqueue_task(generate_image_keywords, image.pk)
+    return written
+
+
+#: Cache key for the exclusive pk cursor :func:`backfill_image_analysis_thumbnails` walks.
+_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY = "image-analysis-thumbnail-backfill-cursor"
+#: Long enough that a beat outage does not restart a half-finished walk at pk 0.
+_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def backfill_image_analysis_thumbnails(limit: int | None = None) -> int:
+    """Queue analysis-copy generation for photos that still lack one.
+
+    The analysis-copy mirror of :func:`backfill_image_thumbnails` - see its docstring for the
+    walk/cursor behaviour, which this copies exactly.
+
+    Args:
+        limit: Override the default batch size.
+
+    Returns:
+        How many image ids were queued (0 when the library is caught up, or this tick only reset the
+        cursor).
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import THUMBNAIL_BACKFILL_BATCH, photos_missing_analysis_thumbnails
+
+    batch = THUMBNAIL_BACKFILL_BATCH if limit is None else max(1, limit)
+    cursor = int(cache.get(_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY) or 0)
+    ids = photos_missing_analysis_thumbnails(after_pk=cursor, limit=batch)
+    if not ids:
+        if cursor:
+            cache.delete(_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY)
+            logger.info("Analysis thumbnail backfill wrapped; next tick resumes from the start")
+        return 0
+
+    cache.set(_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY, ids[-1], _ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_TTL)
+    safely_enqueue_task(generate_image_analysis_thumbnails, ids)
+    logger.info("Analysis thumbnail backfill queued %d photo(s) after pk %s", len(ids), cursor)
+    return len(ids)
+
+
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_image_keywords(image_id: int) -> dict[str, int]:
     """Generate searchable keywords for an uploaded photo via keyword plugins.
 
-    Enqueued at the end of ``process_image_upload`` (fully in the background -
-    uploads never wait on it). Each enabled photo-keyword provider stores its
-    own ``ImageKeyword`` rows; see ``services.photos.photo_keywords``.
+    Enqueued at the end of ``process_image_upload`` (fully in the background - uploads never wait on
+    it).
 
     Args:
         image_id: PK of the image to keyword.
@@ -921,21 +2134,17 @@ def generate_image_keywords(image_id: int) -> dict[str, int]:
     return generate_keywords_for_image(image_id)
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def submit_redata_photos(image_ids: list[int]) -> bool:
     """Submit photo observations to REData and cache the confidence scores it returns.
 
-    Enqueued from ``services.photos.redata_relevance.queue_photo_submission``
-    whenever a photo is uploaded, discovered from an external source
-    (Google Places business photos), or materialized from the Media gallery.
-    Best-effort like every other REData call site (e.g.
-    ``import_immich_photos``) - a REData outage is logged and swallowed
-    rather than retried, since a later submission (or the periodic photo
-    itself being re-saved) will pick it up.
+    Best-effort like every other REData call site (e.g. ``import_immich_photos``) - a REData outage is
+    logged and swallowed rather than retried, since a later submission (or the periodic photo itself
+    being re-saved) will pick it up.
 
     Args:
-        image_ids: PKs of photos to submit - filtered to actual photos
-            (not video/document rows) with a resolved location.
+        image_ids: PKs of photos to submit - filtered to actual photos (not video/document rows) with a
+        resolved location.
 
     Returns:
         True when at least one photo was submitted.
@@ -950,14 +2159,12 @@ def submit_redata_photos(image_ids: list[int]) -> bool:
     return True
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) -> bool:
     """Submit one relevance vote on a photo to REData.
 
-    Enqueued from ``services.photos.redata_relevance.queue_relevance_vote``
-    whenever a user marks a materialized photo relevant or not relevant.
-    Best-effort - see ``submit_redata_photos``' docstring for why REData
-    outages aren't retried here.
+    Enqueued from ``services.photos.redata_relevance.queue_relevance_vote`` whenever a user marks a
+    materialized photo relevant or not relevant.
 
     Args:
         image_id: PK of the photo being voted on.
@@ -986,20 +2193,17 @@ def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) 
     return str(image.uuid) not in (response.get("unknown_photo_ids") or [])
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def sync_redata_label_definitions(profile_ids: list[int], definitions: list[dict]) -> bool:
     """Push tag/category label definitions into every listed profile's REData taxonomy.
 
     Enqueued from ``services.labels.redata_suggestions.queue_label_definition_sync``/
-    ``queue_label_retirement`` whenever a tag/category label is created,
-    edited, reparented, or retired. Best-effort like every other REData task.
+    ``queue_label_retirement`` whenever a tag/category label is created, edited, reparented, or retired.
 
     Args:
-        profile_ids: PKs of profiles whose taxonomy should receive
-            ``definitions`` (a global label maps to every profile; an
-            owned label maps to just its one owner).
-        definitions: Definition dicts built by
-            ``services.labels.redata_suggestions._label_definition``.
+        profile_ids: PKs of profiles whose taxonomy should receive ``definitions`` (a global label maps
+        to every profile; an owned label maps to just its one...
+        definitions: Definition dicts built by ``services.labels.redata_suggestions._label_definition``.
 
     Returns:
         True when at least one profile was targeted.
@@ -1012,14 +2216,13 @@ def sync_redata_label_definitions(profile_ids: list[int], definitions: list[dict
     return True
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def sync_redata_pin_assignment(pin_id: int) -> bool:
     """Push one pin's complete current tag/category label set to REData.
 
-    Enqueued from ``services.labels.redata_suggestions.queue_pin_assignment_sync``,
-    itself called from the ``Pin.labels`` ``m2m_changed`` signal - the single
-    choke point that sees every pin-tagging call site. Best-effort like
-    every other REData task.
+    Enqueued from ``services.labels.redata_suggestions.queue_pin_assignment_sync``, itself called from
+    the ``Pin.labels`` ``m2m_changed`` signal - the single choke point that sees every pin-tagging call
+    site.
 
     Args:
         pin_id: PK of the pin whose label set changed.
@@ -1037,19 +2240,35 @@ def sync_redata_pin_assignment(pin_id: int) -> bool:
     return True
 
 
-@shared_task(bind=True, max_retries=5)
+@shared_task(queue=Queue.BULK)
+def sync_redata_pin_assignments(pin_ids: list[int]) -> int:
+    """Chunk-shaped sibling of :func:`sync_redata_pin_assignment`, for a bulk import's fan-out (P109).
+
+    A label added to every pin in an import (a list category, a shared tag) fires the
+    ``Pin.labels`` ``m2m_changed`` signal once per pin - queued here instead of one broker task each.
+
+    Args:
+        pin_ids: PKs of the pins whose label sets changed.
+
+    Returns:
+        How many pins were found and synced.
+    """
+    synced = 0
+    for pin_id in pin_ids:
+        try:
+            if sync_redata_pin_assignment(pin_id):
+                synced += 1
+        except Exception:
+            logger.exception("sync_redata_pin_assignments: pin %s failed", pin_id)
+    return synced
+
+
+@shared_task(bind=True, max_retries=5, queue=SANDBOX_QUEUE)
 def scan_comment_image(self, comment_id: int) -> bool:
     """Background malware-scan a newly-uploaded pin/wiki comment image.
 
-    Runs after the comment (and its image) is already saved and visible to
-    its own author only (see ``controllers.comments.start_comment_image_scan`` -
-    sets ``pending_scan`` before enqueuing this) - a clamd round-trip no
-    longer blocks the comment POST itself. Clears ``pending_scan`` on a clean
-    result, making the comment visible to every other viewer; on an infected
-    result, deletes the comment and notifies its author with their original
-    text so they can try posting again (see ``_reject_comment_upload``). A
-    clamd connectivity hiccup retries with backoff instead of immediately
-    treating the upload as rejected.
+    A clamd connectivity hiccup retries with backoff instead of immediately treating the upload as
+    rejected.
 
     Args:
         comment_id: PK of the ``Comment`` whose image should be scanned.
@@ -1058,14 +2277,16 @@ def scan_comment_image(self, comment_id: int) -> bool:
         True when the scan completed and found the image clean.
     """
     from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.services.media.upload_retry import COMMENT_IMAGE, stop_waiting
 
     comment = Comment.objects.filter(pk=comment_id, pending_scan=True).select_related("profile", "pin", "wiki__location").first()
     if comment is None or not comment.image:
+        stop_waiting(COMMENT_IMAGE, comment_id)
         return False
     return _run_comment_image_scan(self, comment, Comment)
 
 
-@shared_task(bind=True, max_retries=5)
+@shared_task(bind=True, max_retries=5, queue=SANDBOX_QUEUE)
 def scan_trip_comment_image(self, comment_id: int) -> bool:
     """Background malware-scan a newly-uploaded trip comment image. Mirrors ``scan_comment_image``.
 
@@ -1076,9 +2297,11 @@ def scan_trip_comment_image(self, comment_id: int) -> bool:
         True when the scan completed and found the image clean.
     """
     from urbanlens.dashboard.models.trips.model import TripComment
+    from urbanlens.dashboard.services.media.upload_retry import TRIP_COMMENT_IMAGE, stop_waiting
 
     comment = TripComment.objects.filter(pk=comment_id, pending_scan=True).select_related("author", "trip").first()
     if comment is None or not comment.image:
+        stop_waiting(TRIP_COMMENT_IMAGE, comment_id)
         return False
     return _run_comment_image_scan(self, comment, TripComment)
 
@@ -1094,36 +2317,100 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     Returns:
         True when the scan completed and found the image clean.
     """
+    from django.core.files.base import ContentFile
+
+    from urbanlens.dashboard.services.media import upload_retry
+    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
 
+    target = f"{model._meta.label}.image"  # noqa: SLF001 - _meta is Django's public model API
+    # Read before the scan, which reports any OSError reading its stream as the scanner being down.
     try:
-        malware_error = malware_error_for_upload(comment.image)
+        with comment.image.open("rb") as handle:
+            upload = ContentFile(handle.read(), name=comment.image.name)
+    except STORAGE_ERRORS as exc:
+        return _comment_storage_failed(task, comment, target, exc)
+
+    try:
+        malware_error = malware_error_for_upload(upload)
     except MalwareScanUnavailableError as exc:
         if task.request.retries >= task.max_retries:
             logger.exception("Malware scan permanently unavailable for comment %s after %s retries", comment.pk, task.request.retries)
-            _reject_comment_upload(comment, "Our antivirus scanner was unavailable and your photo could not be scanned.")
+            upload_retry.stop_waiting(target, comment.pk)
+            reject_comment_upload(comment, "Our antivirus scanner was unavailable and your photo could not be scanned.")
             return False
         raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
 
     if malware_error:
-        _reject_comment_upload(comment, malware_error)
+        upload_retry.stop_waiting(target, comment.pk)
+        reject_comment_upload(comment, malware_error)
         return False
 
-    model.objects.filter(pk=comment.pk).update(pending_scan=False)
-    return True
+    from urbanlens.dashboard.services.media.storage import get_downscale_policy
+    from urbanlens.dashboard.services.media.stored_field import Reencoded, reencode_stored_field
+
+    owner = getattr(comment, "profile", None) or getattr(comment, "author", None)
+    max_dimension, convert_webp = get_downscale_policy(owner) if owner is not None else (None, True)
+    # pending_scan clears in the update that swaps in the re-encoded file, so the upload as sent is never shown.
+    try:
+        outcome = reencode_stored_field(
+            model.objects.all(),
+            comment.pk,
+            "image",
+            comment.image.name,
+            max_dimension=max_dimension,
+            convert_webp=convert_webp,
+            only_if={"pending_scan": True},
+            also_set={"pending_scan": False},
+        )
+    except STORAGE_ERRORS as exc:
+        return _comment_storage_failed(task, comment, target, exc)
+    upload_retry.stop_waiting(target, comment.pk)
+    if outcome is Reencoded.UNDECODABLE:
+        reject_comment_upload(comment, "That photo couldn't be processed.")
+        return False
+    if outcome is Reencoded.REPLACED:
+        upload_retry.record_storage_success()
+    return outcome is Reencoded.REPLACED
 
 
-def _reject_comment_upload(comment, reason: str) -> None:
+def _comment_storage_failed(task, comment, target: str, exc: Exception) -> bool:
+    """Retry a comment image storage failed on, then leave it pending, waiting for storage; reject it once its file is gone.
+
+    Args:
+        task: The bound Celery task instance.
+        comment: The pending ``Comment`` or ``TripComment``.
+        target: Its :class:`~urbanlens.dashboard.models.upload_retry.UploadRetry` target.
+        exc: What storage raised.
+
+    Returns:
+        False: the image was not published.
+
+    Raises:
+        Retry: While the task has retries left and the comment is not already waiting.
+    """
+    from urbanlens.dashboard.services.media import upload_retry
+
+    if upload_retry.means_file_is_gone(exc):
+        if upload_retry.file_is_gone(target, comment.pk, comment.image.name, exc):
+            logger.warning("Rejecting comment %s: storage has not had its image for %s", comment.pk, upload_retry.GONE_GRACE)
+            upload_retry.stop_waiting(target, comment.pk)
+            reject_comment_upload(comment, "That photo couldn't be processed.")
+        return False
+    if task.request.retries < task.max_retries and not upload_retry.is_waiting(target, comment.pk):
+        raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+    logger.warning("Storage could not read or write the image for comment %s; it waits for storage", comment.pk, exc_info=exc)
+    upload_retry.wait_for_storage(target, comment.pk, comment.image.name, exc)
+    return False
+
+
+def reject_comment_upload(comment, reason: str) -> None:
     """Notify a comment's author their upload was rejected, and remove the comment.
 
-    The comment (text included) never went visible to anyone but its own
-    author (see ``pending_scan``), so removing it outright and handing the
-    author their own text back via the notification is simpler than leaving
-    a permanently-broken "image rejected" placeholder behind - they can copy
-    the text from the notification and try posting again. Explicitly deletes
-    the stored image file too (not just the DB row) - this path is also hit
-    for a confirmed-infected upload, which shouldn't linger in storage just
-    because nothing points at it anymore.
+    The comment (text included) never went visible to anyone but its own author (see ``pending_scan``),
+    so removing it outright and handing the author their own text back via the notification is simpler
+    than leaving a permanently-broken "image rejected" placeholder behind - they can copy the text from
+    the notification and try posting again.
 
     Args:
         comment: The ``Comment`` or ``TripComment`` to remove.
@@ -1163,8 +2450,8 @@ def _reject_comment_upload(comment, reason: str) -> None:
 def _resolve_image_location(image: Image, coords: tuple[float, float] | None) -> Location | None:
     """Resolve the shared Location an image belongs to, if determinable.
 
-    Prefers the Location of the pin or wiki the photo is attached to; otherwise
-    falls back to matching/creating a Location at the photo's GPS coordinates.
+    Prefers the Location of the pin or wiki the photo is attached to; otherwise falls back to
+    matching/creating a Location at the photo's GPS coordinates.
 
     Args:
         image: The Image needing a location link.
@@ -1186,28 +2473,19 @@ def _resolve_image_location(image: Image, coords: tuple[float, float] | None) ->
     return None
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str], visit_id_by_asset: dict[str, int] | None = None) -> dict[str, int]:
     """Download selected Immich assets and import them onto a pin.
 
-    Runs the same checksum-dedupe and storage-quota checks as a manual upload
-    (``PinGalleryView.post``), attaches a photo-sourced ``PinVisit`` per new
-    image, and enqueues ``process_image_upload`` for each so EXIF/downscale
-    post-processing matches every other upload path. An asset already
-    imported to this pin, or one that would exceed the uploader's storage
-    quota, is skipped rather than failing the whole batch.
+    An asset already imported to this pin, or one that would exceed the uploader's storage quota, is
+    skipped rather than failing the whole batch.
 
     Args:
         pin_id: PK of the pin to import onto.
         profile_id: PK of the requesting profile (also the pin owner).
         asset_ids: Immich asset ids selected in the picker dialog.
-        visit_id_by_asset: When importing on behalf of an accepted
-            ``PinSuggestion`` (see ``services.pins.pin_suggestions.accept_pin_suggestion``),
-            maps an asset id to the specific ``PinVisit`` (already created for
-            that suggestion's dates) it should attach to instead of getting a
-            fresh one of its own. Omitted assets, and every asset when this is
-            ``None`` (the manual "Import from Immich" picker path), fall back
-            to creating their own visit via ``log_visit_on_pin``.
+        visit_id_by_asset: When importing on behalf of an accepted ``PinSuggestion`` (see
+        ``services.pins.pin_suggestions.accept_pin_suggestion``), maps an asset...
 
     Returns:
         Counts of imported/skipped/failed assets, surfaced to the polling UI.
@@ -1216,7 +2494,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
 
     from django.core.files.base import ContentFile
 
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.immich.model import ImmichAccount
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -1225,7 +2503,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -1237,7 +2515,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
         return counts
 
     gateway = ImmichGateway(account=account)
-    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
+    dedupe_filter = {"pin": pin, "profile": profile}
     total = len(asset_ids)
     for index, asset_id in enumerate(asset_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1249,32 +2527,37 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if checksum in existing_checksums:
-            counts["skipped"] += 1
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
+                    counts["skipped"] += 1
+                    continue
+                reservation.reserve(len(content))
+
+                target_visit_id = (visit_id_by_asset or {}).get(asset_id)
+                target_visit = PinVisit.objects.filter(pk=target_visit_id, pin=pin).first() if target_visit_id else None
+
+                image = Image.objects.create(
+                    image=ContentFile(content, name=filename),
+                    pin=pin,
+                    location=pin.location,
+                    profile=profile,
+                    source=ImageSource.IMMICH,
+                    checksum=checksum,
+                    file_size=len(content),
+                    source_url=account.asset_web_url(asset_id),
+                    visit=target_visit,
+                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
+                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
+                    # strips and clears it.
+                    pending_scan=True,
+                )
+        except UploadRefusedError:
+            counts["failed"] += 1
             continue
-
-        with per_profile_upload_lock(profile):
-            if quota_error_for_upload(profile, len(content)):
-                counts["failed"] += 1
-                continue
-
-            target_visit_id = (visit_id_by_asset or {}).get(asset_id)
-            target_visit = PinVisit.objects.filter(pk=target_visit_id, pin=pin).first() if target_visit_id else None
-
-            image = Image.objects.create(
-                image=ContentFile(content, name=filename),
-                pin=pin,
-                location=pin.location,
-                profile=profile,
-                checksum=checksum,
-                file_size=len(content),
-                source_url=account.asset_web_url(asset_id),
-                visit=target_visit,
-            )
         if target_visit is None:
             log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
-        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1286,20 +2569,78 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
     return counts
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+#: Coordinate precision the library sweep groups assets by, about 11m. Chosen to
+#: sit well inside ``CLUSTER_RADIUS_M`` (50m): collapsing points that clustering
+#: would merge anyway cannot change which cluster they land in.
+_SWEEP_BUCKET_DECIMALS = 4
+
+
+class _SweptPlace:
+    """Assets from one place in a library sweep, held as counts rather than rows.
+
+    A library has far fewer places in it than photos, so grouping as the sweep
+    reads means peak memory tracks places. Nothing is discarded that anything
+    downstream reads: ``weight`` carries how many photos the place stands for and
+    ``extra_dates`` carries their date spread, which is what ``_dates_from_hits``
+    and every ``hit_count`` derivation actually consume.
+    """
+
+    __slots__ = ("_dates", "_label", "_latitude", "_longitude", "_samples", "_taken_at", "_total")
+
+    def __init__(self, latitude: float, longitude: float, taken_at: datetime, label: str | None) -> None:
+        self._latitude = latitude
+        self._longitude = longitude
+        self._taken_at = taken_at
+        self._label = label
+        self._total = 0
+        self._dates: set[str] = set()
+        self._samples: list[str] = []
+
+    def add(self, asset, sample_limit: int) -> None:
+        """Fold one asset into this place.
+
+        Args:
+            asset: The ``SearchAsset`` being swept.
+            sample_limit: How many asset ids to keep for review-queue thumbnails.
+        """
+        self._total += 1
+        self._dates.add(asset.taken_at.date().isoformat())
+        if len(self._samples) < sample_limit and asset.id:
+            self._samples.append(asset.id)
+        if not self._label and asset.city:
+            self._label = asset.city
+
+    def to_hits(self) -> list[LocationHit]:
+        """One hit per kept sample, carrying this place's whole weight between them.
+
+        Returns:
+            Hits whose ``weight`` sums to every asset folded in here.
+        """
+        from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit
+
+        samples: list[str | None] = list(self._samples) or [None]
+        extra = tuple(sorted(self._dates - {self._taken_at.date().isoformat()}))
+        # The first hit carries the unattributed remainder and the full date
+        # spread; the rest exist only to keep their sample asset ids.
+        first = LocationHit(
+            latitude=self._latitude,
+            longitude=self._longitude,
+            taken_at=self._taken_at,
+            label=self._label,
+            asset_id=samples[0],
+            weight=self._total - (len(samples) - 1),
+            extra_dates=extra,
+        )
+        rest = [LocationHit(latitude=self._latitude, longitude=self._longitude, taken_at=self._taken_at, label=self._label, asset_id=sample) for sample in samples[1:]]
+        return [first, *rest]
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     """Sweep a user's entire Immich library for places they've been.
 
-    Unlike ``import_immich_photos``, this never downloads any photo - it pages
-    through the lightweight ``/search/metadata`` listing (GPS + capture date
-    + city, already present in the response) and feeds every geotagged asset
-    through ``services.pins.pin_suggestions.ingest_location_hits``, which matches
-    each coordinate against the profile's existing pins and clusters whatever
-    doesn't match into new-pin suggestions. Nothing is created automatically -
-    this only produces/updates ``PinSuggestion`` rows for the user to review
-    and accept or reject. Only triggered by an explicit "Scan your library"
-    action (see ``controllers.immich.ImmichLibraryScanStartView``), never on
-    connect.
+    Only triggered by an explicit "Scan your library" action (see
+    ``controllers.immich.ImmichLibraryScanStartView``), never on connect.
 
     Args:
         profile_id: PK of the requesting profile (also the Immich account owner).
@@ -1310,11 +2651,11 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     from urbanlens.dashboard.models.immich.model import ImmichAccount
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestionOrigin
+    from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_PHOTOS, PinSuggestionOrigin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.immich import ImmichGateway
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-    from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, ingest_location_hits
+    from urbanlens.dashboard.services.pins.pin_suggestions import ingest_location_hits
     from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
     empty = {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0}
@@ -1333,7 +2674,11 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     except GatewayRequestError:
         library_total = 0
 
-    hits: list[LocationHit] = []
+    # Collapsed per place as they arrive rather than kept per photo. LocationHit.weight
+    # exists for exactly this and its docstring records the same fix on the local-scan
+    # path; this sweep was the one that never got it, so peak memory tracked the size of
+    # someone's library instead of the number of places in it.
+    buckets: dict[tuple[float, float], _SweptPlace] = {}
     scanned = 0
     try:
         for page, _page_total in gateway.iter_library_assets():
@@ -1341,7 +2686,11 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
                 scanned += 1
                 if asset.lat is None or asset.lon is None or asset.taken_at is None:
                     continue
-                hits.append(LocationHit(latitude=asset.lat, longitude=asset.lon, taken_at=asset.taken_at, label=asset.city, asset_id=asset.id))
+                key = (round(asset.lat, _SWEEP_BUCKET_DECIMALS), round(asset.lon, _SWEEP_BUCKET_DECIMALS))
+                place = buckets.get(key)
+                if place is None:
+                    place = buckets[key] = _SweptPlace(latitude=asset.lat, longitude=asset.lon, taken_at=asset.taken_at, label=asset.city)
+                place.add(asset, sample_limit=MAX_SUGGESTION_PHOTOS)
             # library_total is the true library-wide count (see library_asset_count) -
             # unlike the deprecated per-page "total" iter_library_assets also yields,
             # which mirrors the current page size and would make this message read
@@ -1355,6 +2704,7 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
         return {**empty, "scanned": scanned}
 
     update_task_progress(self, current=scanned, total=max(scanned, 1), message="Matching against your pins...")
+    hits = [hit for place in buckets.values() for hit in place.to_hits()]
     summary = ingest_location_hits(profile, hits, origin=PinSuggestionOrigin.IMMICH)
 
     result = {"scanned": scanned, "matched_suggestions": summary.matched_suggestions, "new_pin_suggestions": summary.new_pin_suggestions}
@@ -1372,46 +2722,21 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     return result
 
 
-#: How many consecutive whole-batch REData request failures (network error,
-#: non-200, unparseable body - see CidResolutionResult.request_failed) this
-#: task tolerates before giving up. Deliberately separate from
-#: max_retries=None: a batch that's genuinely still resolving on REData's own
-#: end (result.pending with request_failed=False) should keep retrying
-#: indefinitely as it makes progress, but a REData outage that fails every
-#: single attempt would otherwise retry forever too, with no cap and no
-#: notification - unlike the auth_failed case, which already stops.
+#: How many consecutive whole-batch REData request failures (network error, non-200, unparseable body - see
+#: CidResolutionResult.request_failed) this task tolerates before giving up.
 _MAX_CONSECUTIVE_REDATA_FAILURES = 5
 
-#: How many consecutive retries may report the exact same pending cids with
-#: zero of them resolved before this task gives up on them. Distinct from
-#: _MAX_CONSECUTIVE_REDATA_FAILURES: REData's own cid-resolution cache policy
-#: (StaggeredCachePolicy, see ../REData's core.services.staggered_cache) has a
-#: hard minimum-TTL floor - once a cid has been checked at all, REData won't
-#: queue another resolution attempt for it for weeks, but keeps reporting it
-#: as "pending" (HTTP 200, no error) every time it's asked, since it's neither
-#: resolved nor confirmed unresolvable yet. Without this cap, a batch that
-#: falls into that state retries every ~120s forever even though REData is
-#: responding successfully - see docs/notes/ai/completed.md for the incident
-#: this was diagnosed from. A batch still making real progress (even one cid
-#: resolved per round) never trips this, since the counter resets whenever
-#: the pending set shrinks.
+#: How many consecutive retries may report the exact same pending cids with zero of them resolved before this
+#: task gives up on them. A batch still making real progress (even one cid resolved per round) never trips this,
+#: since the counter resets whenever the pending set shrinks.
 _MAX_CONSECUTIVE_NO_PROGRESS_RETRIES = 5
 
-#: How long a deferred-lookup batch keeps trying before it gives up and turns
-#: into PinImportFailure rows for the user to resolve by hand.
-#:
-#: The counters above choose only *how far apart* retries are spaced; this
-#: deadline is the only thing that ends the batch. Letting the counters end it
-#: caps attempts at ~10 minutes, and a REData cid that resolves an hour later -
-#: the common case for a large import - then produces hundreds of import
-#: failures for work that would have completed on its own.
+#: How long a deferred-lookup batch keeps trying before it gives up and turns into PinImportFailure rows for the
+#: user to resolve by hand. The counters above choose only *how far apart* retries are spaced; this deadline is
+#: the only thing that ends the batch.
 _DEFERRED_LOOKUP_DEADLINE = timedelta(days=2)
 
 #: Seconds between retries, indexed by attempt number (the last entry repeats).
-#: Front-loaded because a batch waiting on a rate limit usually clears in
-#: minutes, then widening sharply so two days costs ~16 attempts instead of
-#: ~1,400 - REData will not re-queue a cid it has already checked for weeks, so
-#: asking it every two minutes for two days is pure load with no new answer.
 _DEFERRED_RETRY_SCHEDULE = (120, 120, 120, 300, 600, 1800, 3600, 7200, 14400, 21600)
 
 
@@ -1431,9 +2756,8 @@ def _deferred_deadline_passed(started_at: str | None) -> bool:
     """Whether this batch has been retrying past :data:`_DEFERRED_LOOKUP_DEADLINE`.
 
     Args:
-        started_at: ISO timestamp of the batch's first attempt, or None on that
-            first attempt (also None for any batch missing this field, which
-            gets a fresh two-day window rather than being failed immediately).
+        started_at: ISO timestamp of the batch's first attempt, or None on that first attempt (also None
+        for any batch missing this field, which gets a...
 
     Returns:
         True when the batch should stop retrying.
@@ -1445,13 +2769,9 @@ def _deferred_deadline_passed(started_at: str | None) -> bool:
     except ValueError:
         return False
     if timezone.is_naive(started):
-        # The only producer stamps an aware `timezone.now().isoformat()`, but a
-        # replayed or hand-enqueued message can carry a naive one, and subtracting
-        # it raises TypeError rather than the ValueError caught above - killing the
-        # task instead of retiring the batch. Assuming the active timezone is also
-        # better than treating it as unparseable: falling back to False would let
-        # the batch retry forever, which is the exact thing the deadline exists to
-        # stop.
+        # The only producer stamps an aware `timezone.now().isoformat()`, but a replayed or hand-enqueued
+        # message can carry a naive one, and subtracting it raises TypeError rather than the ValueError caught
+        # above - killing the task instead of retiring the batch.
         started = timezone.make_aware(started)
     return timezone.now() - started >= _DEFERRED_LOOKUP_DEADLINE
 
@@ -1459,99 +2779,94 @@ def _deferred_deadline_passed(started_at: str | None) -> bool:
 def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_tag: bool) -> tuple[int, int, int]:
     """Place every pin in ``deferred_lists`` whose cid this round actually resolved.
 
-    Called on *every* round of ``resolve_deferred_pin_locations``, not only the final
-    one - see that task's own docstring ("places whatever resolves now"): a round with
-    pending cids must still place whatever did resolve, not wait for the batch to
-    fully clear.
-
-    The three buckets are handled differently and the distinction is the whole point:
+    Called on *every* round of ``resolve_deferred_pin_locations``, not only the final one - see that
+    task's own docstring ("places whatever resolves now"): a round with pending cids must still place
+    whatever did resolve, not wait for the batch to fully clear.
 
     - ``result.resolved`` - place the pin.
-    - ``result.unresolvable`` - a terminal "no such location" answer; record a
-      ``NO_LOCATION_FOUND`` failure card so the user can fix it by hand.
-    - anything else (still pending) - do nothing at all. A pending cid is unfinished
-      work, not a failure, and writing a card for it here would put a transient state
-      into a table with a unique ``(profile, cid)`` constraint and no expiry.
+    - ``result.unresolvable`` - a terminal "no such location" answer; record a ``NO_LOCATION_FOUND``
+      failure card so the user can fix it by hand.
+    - anything else (still pending) - do nothing at all. A pending cid is unfinished work, not a
+      failure, and writing a card for it here would put a transient stat...
 
     Args:
         result: The ``CidResolutionResult`` for this round.
-        deferred_lists: The lists being imported, in import_preview_streaming's shape.
+        deferred_lists: The lists being imported, in iter_confirmed_import_events's shape.
         profile: The importing profile.
         auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
 
     Returns:
-        ``(created, exists, skipped)`` for this round only - each retry is a fresh task
-        invocation, so these are per-round counts, not per-batch totals.
+        ``(created, exists, skipped)`` for this round only - each retry is a fresh task invocation, so
+        these are per-round counts, not per-batch...
     """
     from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.location import Location
     from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureReason
     from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
+    from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
+    from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
     from urbanlens.dashboard.services.pins.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
 
     created_count = exists_count = skipped_count = 0
-    for lst in deferred_lists:
-        stem = lst.get("stem", "")
-        list_label_ids = lst.get("label_ids") or []
-        create_category = bool(lst.get("create_category", False))
-        list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
+    # Coalesces this round's per-pin follow-on work (wiki creation, category suggestion, reputation
+    # scoring) into bounded chunks rather than one broker task each - see confirmed_import.py's own
+    # collector for the fast (non-deferred) path this mirrors (P109).
+    with batching_follow_on_work():
+        for lst in deferred_lists:
+            stem = (lst.get("stem") or "").strip()
+            list_label_ids = lst.get("label_ids") or []
+            create_category = bool(lst.get("create_category", False))
+            list_labels = list(Label.objects.pin_assignable_by(profile).filter(id__in=list_label_ids)) if list_label_ids else []
 
-        category_label = None
-        if create_category and stem:
-            category_label, _ = Label.objects.get_or_create(
-                profile=profile,
-                name__iexact=stem,
-                # kind belongs in the lookup, not defaults: with it only in
-                # defaults, the get half matches any kind, so a same-named
-                # *tag* was returned and used as the list's category (see
-                # PROBLEMS.md, label lookups by name alone).
-                kind=KIND_CATEGORY,
-                defaults={"name": stem},
-            )
+            category_label = None
+            if create_category and stem:
+                try:
+                    category_label, _ = resolve_or_create_styled_label(profile, stem, KIND_CATEGORY)
+                except CapacityExceededError as exc:
+                    logger.info("Deferred import for profile %s: no category %r: %s", profile.pk, stem, exc)
 
-        for pin_dict in lst.get("pins", []):
-            cid = pin_dict["cid"]
-            coords = result.resolved.get(cid)
-            if coords is None:
-                if cid in result.unresolvable:
-                    record_pin_import_failure(
-                        profile,
-                        cid,
-                        name=pin_dict.get("name", ""),
-                        description=pin_dict.get("description", ""),
-                        reason=PinImportFailureReason.NO_LOCATION_FOUND,
-                    )
-                    skipped_count += 1
-                continue
+            for pin_dict in lst.get("pins", []):
+                cid = pin_dict["cid"]
+                coords = result.resolved.get(cid)
+                if coords is None:
+                    if cid in result.unresolvable:
+                        record_pin_import_failure(
+                            profile,
+                            cid,
+                            name=pin_dict.get("name", ""),
+                            description=pin_dict.get("description", ""),
+                            reason=PinImportFailureReason.NO_LOCATION_FOUND,
+                        )
+                        skipped_count += 1
+                    continue
 
-            # Re-check now, not just at defer time: an earlier pin in this
-            # same batch referencing the same cid (saved to two lists) may
-            # have just linked/created its Location.
-            location = Location.objects.by_cid(cid).first()
-            pin, created = _create_pin_from_confirmed(
-                pin_dict,
-                location=location,
-                latitude=coords[0],
-                longitude=coords[1],
-                user_profile=profile,
-                list_labels=list_labels,
-                category_label=category_label,
-                auto_tag=auto_tag,
-            )
-            if pin:
-                auto_resolve_pin_import_failure_for_cid(profile, cid, pin)
-                if created:
-                    created_count += 1
+                # Re-check now, not just at defer time: an earlier pin in this same batch referencing the same cid
+                # (saved to two lists) may have just linked/created its Location.
+                location = Location.objects.by_cid(cid).first()
+                pin, created = _create_pin_from_confirmed(
+                    pin_dict,
+                    location=location,
+                    latitude=coords[0],
+                    longitude=coords[1],
+                    user_profile=profile,
+                    list_labels=list_labels,
+                    category_label=category_label,
+                    auto_tag=auto_tag,
+                )
+                if pin:
+                    auto_resolve_pin_import_failure_for_cid(profile, cid, pin)
+                    if created:
+                        created_count += 1
+                    else:
+                        exists_count += 1
                 else:
-                    exists_count += 1
-            else:
-                skipped_count += 1
+                    skipped_count += 1
 
     return created_count, exists_count, skipped_count
 
 
-@shared_task(bind=True, max_retries=None)
+@shared_task(bind=True, max_retries=None, queue=Queue.BULK)
 def resolve_deferred_pin_locations(
     self,
     profile_id: int,
@@ -1564,7 +2879,7 @@ def resolve_deferred_pin_locations(
 ) -> dict[str, int]:
     """Place pins whose Google Maps CID needed a live lookup to be accurate.
 
-    Queued by ``GoogleMapsGateway.import_preview_streaming`` for any
+    Queued by ``GoogleMapsGateway.iter_confirmed_import_events`` for any
     confirmed pin whose cid had neither an existing Location nor a cached
     Places lookup - see that method's docstring for why the preview's own
     lat/lng can't be trusted for these. Resolves every cid in one batch via
@@ -1577,27 +2892,16 @@ def resolve_deferred_pin_locations(
 
     Args:
         profile_id: PK of the importing profile.
-        deferred_lists: Same shape as import_preview_streaming's
+        deferred_lists: Same shape as iter_confirmed_import_events's
             confirmed_lists, restricted to pins needing a live cid lookup -
             shrinks on each retry to just what's still unresolved.
         auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
-        original_total: Total pin count across the *first* call, before any
-            retry narrowed deferred_lists - carried through retries purely so
-            progress reporting stays relative to the whole job, not just
-            whatever's left. Defaults to this call's own pin count when unset
-            (i.e. on the first, non-retry invocation).
-        consecutive_request_failures: How many retries in a row have hit a
-            whole-batch REData request failure with zero progress - see
-            ``_MAX_CONSECUTIVE_REDATA_FAILURES``. Reset to 0 by any call that
-            isn't a request failure (including one that still leaves cids
-            pending on REData's own end), so a flaky-then-recovering REData
-            never accumulates toward the cap.
-        consecutive_no_progress: How many retries in a row have come back
-            with the exact same cids pending and none newly resolved - see
-            ``_MAX_CONSECUTIVE_NO_PROGRESS_RETRIES``. Reset to 0 the moment
-            any cid resolves or is confirmed unresolvable, so a batch that's
-            still working its way through REData's queue never accumulates
-            toward the cap - only one that's genuinely stopped moving does.
+        original_total: Total pin count across the *first* call, before any retry narrowed
+        deferred_lists - carried through retries purely so progress reporting...
+        consecutive_request_failures: How many retries in a row have hit a whole-batch REData request
+        failure with zero progress - see ``_MAX_CONSECUTIVE_REDATA_FAILURES``.
+        consecutive_no_progress: How many retries in a row have come back with the exact same cids
+        pending and none newly resolved - see...
 
     Returns:
         Summary counts (created/exists/skipped).
@@ -1621,9 +2925,9 @@ def resolve_deferred_pin_locations(
     if not all_cids:
         return empty
     pin_dict_by_cid = {pin["cid"]: pin for lst in deferred_lists for pin in lst.get("pins", [])}
-    # A cid whose pin dict still carries the Google Maps URL it was parsed from
-    # (e.g. a Takeout CSV import) - passed through to REData, which resolves
-    # via a place's own URL faster and more reliably than the bare cid alone.
+    # A cid whose pin dict still carries the Google Maps URL it was parsed from (e.g. a Takeout CSV import) -
+    # passed through to REData, which resolves via a place's own URL faster and more reliably than the bare cid
+    # alone.
     urls_by_cid = {cid: pin["maps_url"] for cid, pin in pin_dict_by_cid.items() if pin.get("maps_url")}
     total = original_total if original_total is not None else len(all_cids)
 
@@ -1681,9 +2985,8 @@ def resolve_deferred_pin_locations(
 
     if result.pending:
         if result.request_failed:
-            # Already tracked by consecutive_request_failures above - a failed
-            # request trivially leaves every cid pending, which isn't the
-            # "REData responded but nothing moved" case this counter targets.
+            # Already tracked by consecutive_request_failures above - a failed request trivially leaves every
+            # cid pending, which isn't the "REData responded but nothing moved" case this counter targets.
             consecutive_no_progress = 0
         else:
             consecutive_no_progress = consecutive_no_progress + 1 if len(result.pending) == len(all_cids) else 0
@@ -1714,12 +3017,9 @@ def resolve_deferred_pin_locations(
             update_task_progress(self, current=total, total=total, message="Failed: location lookups stalled.")
             return {"created": 0, "exists": 0, "skipped": len(all_cids)}
 
-        # Place whatever DID resolve this round before scheduling the retry:
-        # `remaining_pins` below drops every resolved cid from the retry args, so any
-        # coordinate not placed here is never placed at all - not this round, not a
-        # later one. A long import is mixed (some resolved, some still pending) on
-        # nearly every round, so skipping this would silently lose the bulk of a large
-        # batch.
+        # Place whatever DID resolve this round before scheduling the retry: `remaining_pins` below drops every
+        # resolved cid from the retry args, so any coordinate not placed here is never placed at all - not this
+        # round, not a later one.
         _place_resolved_pins(result, deferred_lists, profile=profile, auto_tag=auto_tag)
 
         pending_set = set(result.pending)
@@ -1746,11 +3046,9 @@ def resolve_deferred_pin_locations(
             result.provider,
             countdown,
         )
-        # throw=False: still waiting on REData is the expected, routine case, not an
-        # error - raising here would go through Celery's task_retry signal (see
-        # UrbanLens/celery.py), which logs a WARNING + full traceback on every single
-        # retry. Scheduling silently keeps the log free of spurious tracebacks for a
-        # batch that just hasn't resolved yet.
+        # throw=False: still waiting on REData is the expected, routine case, not an error - raising here would
+        # go through Celery's task_retry signal (see UrbanLens/celery.py), which logs a WARNING + full traceback
+        # on every single retry.
         self.retry(
             args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures, consecutive_no_progress, started_at or timezone.now().isoformat()],
             countdown=countdown,
@@ -1776,13 +3074,13 @@ def resolve_deferred_pin_locations(
     return {"created": created_count, "exists": exists_count, "skipped": skipped_count}
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str]) -> dict[str, int]:
     """Download selected Flickr photos and import them onto a pin.
 
-    Same five-step pipeline as ``import_immich_photos`` (checksum dedupe,
-    storage-quota check, ``Image`` creation, ``log_visit_on_pin``,
-    ``process_image_upload`` enqueue) - only the download source differs.
+    Same five-step pipeline as ``import_immich_photos`` (checksum dedupe, storage-quota check, ``Image``
+    creation, ``log_visit_on_pin``, ``process_image_upload`` enqueue) - only the download source
+    differs.
 
     Args:
         pin_id: PK of the pin to import onto.
@@ -1804,7 +3102,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -1816,7 +3114,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
         return counts
 
     gateway = FlickrGateway(account=account)
-    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
+    dedupe_filter = {"pin": pin, "profile": profile}
     total = len(photo_ids)
     for index, photo_id in enumerate(photo_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1828,28 +3126,32 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if checksum in existing_checksums:
-            counts["skipped"] += 1
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
+                    counts["skipped"] += 1
+                    continue
+                reservation.reserve(len(content))
+
+                image = Image.objects.create(
+                    image=ContentFile(content, name=filename),
+                    pin=pin,
+                    location=pin.location,
+                    profile=profile,
+                    source=ImageSource.FLICKR,
+                    checksum=checksum,
+                    file_size=len(content),
+                    source_url=account.photo_web_url(photo_id),
+                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
+                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
+                    # strips and clears it.
+                    pending_scan=True,
+                )
+        except UploadRefusedError:
+            counts["failed"] += 1
             continue
-
-        with per_profile_upload_lock(profile):
-            if quota_error_for_upload(profile, len(content)):
-                counts["failed"] += 1
-                continue
-
-            image = Image.objects.create(
-                image=ContentFile(content, name=filename),
-                pin=pin,
-                location=pin.location,
-                profile=profile,
-                source=ImageSource.FLICKR,
-                checksum=checksum,
-                file_size=len(content),
-                source_url=account.photo_web_url(photo_id),
-            )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
-        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1861,25 +3163,38 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
     return counts
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, queue=Queue.INTERACTIVE)
+def import_calendar_events(self, profile_id: int, selections: list[dict[str, Any]]) -> dict[str, Any]:
+    """Create trips from the calendar events a profile picked in the import dialog.
+
+    Args:
+        profile_id: The importing profile.
+        selections: Per-event choices, as ``services.trips.calendar_sync.import_events_as_trips`` takes them.
+
+    Returns:
+        ``{"level", "message", "created"}`` for the polling dialog's toast.
+    """
+    from urbanlens.dashboard.services.trips.calendar_sync import run_calendar_import
+
+    def report(done: int, total: int) -> None:
+        update_task_progress(self, current=done, total=total, message=f"Importing event {done} of {total}...")
+
+    return run_calendar_import(profile_id, selections, report_progress=report)
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_id: int, album_url: str, photo_ids: list[str]) -> dict[str, int]:
     """Download selected photos from a *public* Flickr album/photoset onto a pin or wiki.
 
-    Unlike ``import_flickr_photos`` (one user's own OAuth-connected library),
-    this imports from any public album given its URL - no OAuth token
-    involved, just the site's Flickr API key. No ``log_visit_on_pin`` call:
-    these are someone else's public photos, not evidence the importing
-    profile visited in person.
+    Unlike ``import_flickr_photos`` (one user's own OAuth-connected library), this imports from any
+    public album given its URL - no OAuth token involved, just the site's Flickr API key.
 
     Args:
-        target_kind: ``"pin"`` or ``"wiki"`` - which FK to set on the created
-            ``Image`` rows.
+        target_kind: ``"pin"`` or ``"wiki"`` - which FK to set on the created ``Image`` rows.
         target_id: PK of the target pin or wiki.
         profile_id: PK of the requesting profile.
-        album_url: The Flickr album URL as submitted in the lookup step -
-            re-resolved here (rather than trusting a client-supplied photo
-            list) so the download URLs are fresh and the selected ids are
-            verified against the real album.
+        album_url: The Flickr album URL as submitted in the lookup step - re-resolved here (rather than
+        trusting a client-supplied photo list) so the...
         photo_ids: Flickr photo ids selected in the preview grid.
 
     Returns:
@@ -1897,7 +3212,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
     profile = Profile.objects.filter(pk=profile_id).first()
@@ -1916,8 +3231,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
 
     photos_by_id = {photo.id: photo for photo in album.photos}
     selected = [photos_by_id[photo_id] for photo_id in photo_ids if photo_id in photos_by_id]
-    dedupe_filter = {"pin": pin} if pin is not None else {"wiki": wiki}
-    existing_checksums = set(Image.objects.filter(profile=profile, **dedupe_filter).values_list("checksum", flat=True))
+    dedupe_filter = {"profile": profile, **({"pin": pin} if pin is not None else {"wiki": wiki})}
     total = len(selected)
     for index, photo in enumerate(selected):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1929,30 +3243,34 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if checksum in existing_checksums:
-            counts["skipped"] += 1
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
+                    counts["skipped"] += 1
+                    continue
+                reservation.reserve(len(content))
+
+                image = Image.objects.create(
+                    image=ContentFile(content, name=filename),
+                    pin=pin,
+                    wiki=wiki,
+                    location=location,
+                    profile=profile,
+                    source=ImageSource.FLICKR,
+                    caption=photo.title or "",
+                    author=photo.author,
+                    source_url=photo_web_url(album.owner_nsid, photo.id),
+                    checksum=checksum,
+                    file_size=len(content),
+                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
+                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
+                    # strips and clears it.
+                    pending_scan=True,
+                )
+        except UploadRefusedError:
+            counts["failed"] += 1
             continue
-
-        with per_profile_upload_lock(profile):
-            if quota_error_for_upload(profile, len(content)):
-                counts["failed"] += 1
-                continue
-
-            image = Image.objects.create(
-                image=ContentFile(content, name=filename),
-                pin=pin,
-                wiki=wiki,
-                location=location,
-                profile=profile,
-                source=ImageSource.FLICKR,
-                caption=photo.title or "",
-                author=photo.author,
-                source_url=photo_web_url(album.owner_nsid, photo.id),
-                checksum=checksum,
-                file_size=len(content),
-            )
         safely_enqueue_task(process_image_upload, image.pk)
-        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1964,16 +3282,12 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
     return counts
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, media_item_ids: list[str]) -> dict[str, int]:
     """Download selected Google Photos picker items and import them onto a pin.
 
-    Same five-step pipeline as ``import_immich_photos``/``import_flickr_photos``
-    (checksum dedupe, storage-quota check, ``Image`` creation,
-    ``log_visit_on_pin``, ``process_image_upload`` enqueue). Each item's
-    download URL is resolved from the session-items cache the picker view
-    populated when it listed the session (falls back to re-listing the
-    session directly if that cache entry expired before the import ran).
+    Same five-step pipeline as ``import_immich_photos``/``import_flickr_photos`` (checksum dedupe,
+    storage-quota check, ``Image`` creation, ``log_visit_on_pin``, ``process_image_upload`` enqueue).
 
     Args:
         pin_id: PK of the pin to import onto.
@@ -1990,14 +3304,14 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.photos.google import GooglePhotosGateway, media_item_web_url, session_items_cache_key
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -2018,7 +3332,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
         except GatewayRequestError:
             logger.warning("import_google_photos: could not re-list session %s to resolve %d missing item(s)", session_id, len(missing_ids), exc_info=True)
 
-    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
+    dedupe_filter = {"pin": pin, "profile": profile}
     total = len(media_item_ids)
     for index, item_id in enumerate(media_item_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -2034,27 +3348,32 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if checksum in existing_checksums:
-            counts["skipped"] += 1
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
+                    counts["skipped"] += 1
+                    continue
+                reservation.reserve(len(content))
+
+                image = Image.objects.create(
+                    image=ContentFile(content, name=cached_item.get("filename") or f"{item_id}.jpg"),
+                    pin=pin,
+                    location=pin.location,
+                    profile=profile,
+                    source=ImageSource.GOOGLE_PHOTOS,
+                    checksum=checksum,
+                    file_size=len(content),
+                    source_url=media_item_web_url(item_id),
+                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
+                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
+                    # strips and clears it.
+                    pending_scan=True,
+                )
+        except UploadRefusedError:
+            counts["failed"] += 1
             continue
-
-        with per_profile_upload_lock(profile):
-            if quota_error_for_upload(profile, len(content)):
-                counts["failed"] += 1
-                continue
-
-            image = Image.objects.create(
-                image=ContentFile(content, name=cached_item.get("filename") or f"{item_id}.jpg"),
-                pin=pin,
-                location=pin.location,
-                profile=profile,
-                checksum=checksum,
-                file_size=len(content),
-                source_url=media_item_web_url(item_id),
-            )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
-        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -2066,30 +3385,49 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
     return counts
 
 
+#: One database backup at a time, whichever entry point started it: the admin button, the
+#: schedule, and an OSError retry of either all reach :func:`_run_database_backup`.
+DATABASE_BACKUP_LOCK_KEY = "backup:database:running"
+
+
 def _run_database_backup(task=None) -> bool:
-    """Run database backup and retention cleanup using current site settings."""
-    from urbanlens.core.controllers.backups.db import DatabaseBackup
+    """Run database backup and retention cleanup using current site settings.
+
+    Returns:
+        Whether a backup was written; False when another backup already holds the lock.
+    """
+    from urbanlens.core.controllers.backups.db import BACKUP_TIMEOUT_SECONDS, DatabaseBackup
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
-    site_settings = SiteSettings.get_current()
-    if task is not None:
-        update_task_progress(task, current=0, total=1, message="Running database backup...")
-    backup = DatabaseBackup(auto_schedule=False)
-    backup.backup_retention = site_settings.backup_retention
-    backup.create_backup_dir()
-    result = backup.run()
-    if task is not None:
-        update_task_progress(task, current=1, total=1, message="Database backup complete" if result else "Database backup failed")
-    return result
+    # Outlives pg_dump's own timeout, so a dump that is still running still holds it.
+    token = acquire_lock(DATABASE_BACKUP_LOCK_KEY, BACKUP_TIMEOUT_SECONDS + 300)
+    if token is None:
+        logger.info("Database backup skipped: another backup is still running")
+        if task is not None:
+            update_task_progress(task, current=1, total=1, message="Another backup is already running")
+        return False
+    try:
+        site_settings = SiteSettings.get_current()
+        if task is not None:
+            update_task_progress(task, current=0, total=1, message="Running database backup...")
+        backup = DatabaseBackup(auto_schedule=False)
+        backup.backup_retention = site_settings.backup_retention
+        backup.create_backup_dir()
+        result = backup.run()
+        if task is not None:
+            update_task_progress(task, current=1, total=1, message="Database backup complete" if result else "Database backup failed")
+        return result
+    finally:
+        release_lock(DATABASE_BACKUP_LOCK_KEY, token)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def run_database_backup(self) -> bool:
     """Run database backup and retention cleanup from a Celery worker."""
     return _run_database_backup(self)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def run_scheduled_database_backup(self) -> bool:
     """Run a database backup only when site-admin schedule settings say it is due."""
     from urbanlens.dashboard.services.admin.backups import scheduled_backup_due
@@ -2105,25 +3443,19 @@ def run_scheduled_database_backup(self) -> bool:
 # anyway, and a retry racing the next scheduled run would double-spend the
 # API budget the cycle just computed. The time limits keep a slow cycle (many
 # sources with long stagger pauses) from ever overlapping the next hourly
-# firing; SoftTimeLimitExceeded propagates out of run_enrichment_cycle so the
+# firing; a soft time limit propagates out of run_enrichment_cycle so the
 # task winds down cleanly mid-batch.
-@shared_task(bind=True, soft_time_limit=3000, time_limit=3300)
+@shared_task(bind=True, soft_time_limit=2900, time_limit=3100, queue=Queue.MAINTENANCE)
 def run_scheduled_enrichment(self) -> dict:
     """Run one background-enrichment cycle when site settings allow it.
 
-    Fired hourly by Celery beat. ``services.locations.enrichment.run_enrichment_cycle``
-    checks the admin's enabled toggle and UTC run window, computes how much of
-    each API's rate limit is safely spendable (keeping the configured buffer
-    in reserve), and enriches the highest-impact Locations still missing
-    official names, aliases, addresses, or boundaries.
+    Fired hourly by Celery beat.
 
     Returns:
-        The cycle summary dict (also cached for the site-admin page), or a
-        skip marker when another run holds the single-flight lock.
+        The cycle summary dict (also cached for the site-admin page), or a skip marker when another run
+        holds the single-flight lock.
     """
-    from celery.exceptions import SoftTimeLimitExceeded
-    from django.core.cache import cache
-
+    from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
     from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY, run_enrichment_cycle
 
     _lock_token = acquire_lock(RUN_LOCK_CACHE_KEY, 3300)
@@ -2135,14 +3467,14 @@ def run_scheduled_enrichment(self) -> dict:
         summary = run_enrichment_cycle()
         update_task_progress(self, current=1, total=1, message="Enrichment cycle complete")
         return summary
-    except SoftTimeLimitExceeded:
+    except SOFT_TIME_LIMIT_ERRORS:
         logger.warning("run_scheduled_enrichment: cycle wound down at the soft time limit")
         return {"skipped": "timed_out"}
     finally:
         release_lock(RUN_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def refresh_pin_web_search(self, pin_id: int) -> int:
     """Pre-warm the shared web-search cache for a pin's Location."""
     from urllib.parse import urlparse
@@ -2152,7 +3484,9 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     from urbanlens.dashboard.services.search.search import format_search_date, search_web
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
-    query = pin.get_unique_search_name(quote_name=True, quote_locality=True) if pin and pin.location else None
+    if pin is None or pin.location is None:
+        return 0
+    query = pin.get_unique_search_name(quote_name=True, quote_locality=True)
     if not query:
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing web search...")
@@ -2168,11 +3502,10 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     return len(results)
 
 
-# These safety check-in beat tasks share the RUN_LOCK_CACHE_KEY-style guard already
-# used by run_scheduled_enrichment: they run every 5 minutes (see CELERY_BEAT_SCHEDULE), and
-# without a lock, an overrunning execution (many due checkins, slow SMTP) racing the next
-# scheduled tick could process the same rows twice - most seriously for escalation, which
-# would otherwise re-email emergency contacts.
+# These safety check-in beat tasks share the RUN_LOCK_CACHE_KEY-style guard already used by
+# run_scheduled_enrichment: they run every 5 minutes (see CELERY_BEAT_SCHEDULE), and without a lock, an
+# overrunning execution (many due checkins, slow SMTP) racing the next scheduled tick could process the same
+# rows twice - most seriously for escalation, which would otherwise re-email emergency contacts.
 _CHECKIN_REMINDER_LOCK_CACHE_KEY = "urbanlens:safety:reminder-lock"
 _CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY = "urbanlens:safety:final-warning-lock"
 _CHECKIN_ESCALATION_LOCK_CACHE_KEY = "urbanlens:safety:escalation-lock"
@@ -2180,10 +3513,9 @@ _CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY = "urbanlens:safety:archival-sweep-lock"
 _CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_due_checkin_reminders() -> int:
     """Send the check-in-due reminder for every safety check-in whose time has arrived."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import send_checkin_reminder
@@ -2195,10 +3527,9 @@ def send_due_checkin_reminders() -> int:
     try:
         count = 0
         for checkin in SafetyCheckin.objects.due_for_reminder():
-            # Isolated per check-in for the same reason the archival sweep below is:
-            # this queryset has a deterministic ordering, so one repeatably-failing row
-            # would otherwise abort the run at the same position on every tick and
-            # silently starve every check-in behind it.
+            # Isolated per check-in for the same reason the archival sweep below is: this queryset has a
+            # deterministic ordering, so one repeatably-failing row would otherwise abort the run at the same
+            # position on every tick and silently starve every check-in behind it.
             try:
                 send_checkin_reminder(checkin)
                 count += 1
@@ -2211,10 +3542,9 @@ def send_due_checkin_reminders() -> int:
         release_lock(_CHECKIN_REMINDER_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_final_checkin_warnings() -> int:
     """Send a final "check in now" warning for every safety check-in about to escalate."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import send_final_warning
@@ -2238,10 +3568,9 @@ def send_final_checkin_warnings() -> int:
         release_lock(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import escalate_checkin
@@ -2253,10 +3582,9 @@ def escalate_overdue_checkins() -> int:
     try:
         count = 0
         for checkin in SafetyCheckin.objects.overdue():
-            # The most consequential of the three sweeps to isolate: this is the call
-            # that reaches someone's emergency contacts, and escalate_checkin is already
-            # per-contact idempotent, so retrying a failed one next tick only reaches the
-            # contacts the failed attempt never got to.
+            # The most consequential of the three sweeps to isolate: this is the call that reaches someone's
+            # emergency contacts, and escalate_checkin is already per-contact idempotent, so retrying a failed
+            # one next tick only reaches the contacts the failed attempt never got to.
             try:
                 escalate_checkin(checkin)
                 count += 1
@@ -2269,13 +3597,13 @@ def escalate_overdue_checkins() -> int:
         release_lock(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def archive_safety_checkin(checkin_id: int) -> None:
-    """Encrypt-and-scrub one resolved check-in, dispatched with a countdown= at resolution
-    time (``services.visits.safety.schedule_checkin_archival``) for responsiveness.
+    """Encrypt-and-scrub one resolved check-in, dispatched with a countdown= at resolution time
+    (``services.visits.safety.schedule_checkin_archival``) for responsiveness.
 
-    Idempotent - ``services.visits.safety.archive_checkin`` no-ops if the check-in already has
-    an archive, so a duplicate dispatch (or this task racing the sweep below) is harmless.
+    Idempotent - ``services.visits.safety.archive_checkin`` no-ops if the check-in already has an
+    archive, so a duplicate dispatch (or this task racing the sweep below) is harmless.
     """
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import archive_checkin
@@ -2285,18 +3613,14 @@ def archive_safety_checkin(checkin_id: int) -> None:
         archive_checkin(checkin)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_due_safety_checkin_archival() -> int:
     """Backstop for ``archive_safety_checkin``'s countdown-scheduled dispatch.
 
-    A broker/worker restart can drop a countdown-scheduled task outright; a bare
-    5-minute poll alone would also make the "no other viewers - archive immediately"
-    case visibly wait up to 5 minutes, which isn't "immediately". Running both gives
-    responsiveness on the common path and durability against the scheduled task
-    getting lost - the same trade-off the other checkin beat tasks above already make
-    for their own timing precision vs. this file's 5-minute cadence.
+    A broker/worker restart can drop a countdown-scheduled task outright; a bare 5-minute poll alone
+    would also make the "no other viewers - archive immediately" case visibly wait up to 5 minutes,
+    which isn't "immediately".
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import archive_checkin
@@ -2308,9 +3632,9 @@ def sweep_due_safety_checkin_archival() -> int:
     try:
         count = 0
         for checkin in SafetyCheckin.objects.due_for_archival():
-            # One checkin's failure (e.g. a malformed key bundle) must not stop the
-            # sweep from archiving every other overdue checkin in this same run -
-            # each is independent, and the next sweep will retry only the failed one.
+            # One checkin's failure (e.g. a malformed key bundle) must not stop the sweep from archiving every
+            # other overdue checkin in this same run - each is independent, and the next sweep will retry only
+            # the failed one.
             try:
                 archive_checkin(checkin)
                 count += 1
@@ -2323,7 +3647,7 @@ def sweep_due_safety_checkin_archival() -> int:
         release_lock(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def delete_expired_safety_checkins() -> int:
     """Permanently delete every resolved safety check-in past its owner's auto-delete window."""
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
@@ -2336,16 +3660,13 @@ def delete_expired_safety_checkins() -> int:
     return count
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def prune_expired_undo_actions() -> int:
     """Delete UndoAction rows past their retention window.
 
-    Each row's restore payload is stored directly on the row itself (see
-    ``models.undo.UndoAction``'s docstring), not in a cache, specifically so
-    an entry's restorability depends only on its own ``created`` timestamp
-    versus ``UNDO_RETENTION`` - not on a separately-expiring cache TTL. This
-    task just deletes rows once that window has passed, so the settings
-    page's history list doesn't need to filter expired rows forever.
+    Each row's restore payload is stored directly on the row itself (see ``models.undo.UndoAction``'s
+    docstring), not in a cache, specifically so an entry's restorability depends only on its own
+    ``created`` timestamp versus ``UNDO_RETENTION`` - not on a separately-expiring cache TTL.
     """
     from urbanlens.dashboard.models.undo import UndoAction
 
@@ -2357,14 +3678,13 @@ def prune_expired_undo_actions() -> int:
     return count
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def detect_dm_address_mentions(message_id: int) -> int:
     """Detect street addresses in a direct message's text and record their shares.
 
     The forward-geocoding half of DM location detection (see
-    ``services.messaging.dm_location_detection``) - coordinates are detected inline at
-    send time, but addresses need a geocoding API call, which never belongs
-    in the request path.
+    ``services.messaging.dm_location_detection``) - coordinates are detected inline at send time, but
+    addresses need a geocoding API call, which never belongs in the request path.
 
     Args:
         message_id: PK of the just-sent message to scan.
@@ -2381,34 +3701,19 @@ def detect_dm_address_mentions(message_id: int) -> int:
     return len(detect_address_mentions(message))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def hard_delete_expired_direct_messages(batch_size: int = 2000, max_per_run: int = 50000) -> int:
     """Permanently delete every direct message past its sender's disappearing-message window.
 
-    Unlike delete_message_for_everyone (a tombstone - the row and its content
-    stay in the DB, just hidden from both parties' rendered view),
-    DirectMessage.is_expired_for_recipient only ever gated *display*: the row
-    and its body/ciphertext sat in the DB untouched forever. This sweep is
-    what actually removes it. Image.direct_message is SET_NULL (not CASCADE),
-    so attached images are explicitly deleted here too - otherwise they'd
-    survive as orphaned, still-unencrypted files after the message is gone.
-
-    Work is taken in batches rather than as one set. In steady state a single
-    hourly run has one hour of expiries to clear and takes one batch, but a
-    backlog becoming due at once - the first run after a retention-policy
-    change, or after the beat worker was down - would otherwise pull every due
-    id into memory and send it back as a single ``IN (...)`` list, against
-    Postgres' parameter and planning limits.
-
-    A file shared by rows in different batches survives the earlier batch (its
-    other row still references it) and is removed by the later one, since the
-    earlier batch's rows are gone by then.
+    In steady state a single hourly run has one hour of expiries to clear and takes one batch, but a
+    backlog becoming due at once - the first run after a retention-policy change, or after the beat
+    worker was down - would otherwise pull every due id into memory and send it back as a single ``IN
+    (...)`` list, against Postgres' parameter and planning limits.
 
     Args:
         batch_size: Rows to claim per iteration.
-        max_per_run: Ceiling on one invocation, so a large backlog drains over
-            several scheduled runs instead of running unboundedly long. Any
-            remainder is picked up by the next run.
+        max_per_run: Ceiling on one invocation, so a large backlog drains over several scheduled runs
+        instead of running unboundedly long.
 
     Returns:
         Number of messages deleted.
@@ -2444,23 +3749,18 @@ def hard_delete_expired_direct_messages(batch_size: int = 2000, max_per_run: int
     return deleted
 
 
-#: Overlap lock for the deletion-reminder sweep, matching the safety reminder
-#: tasks above. It is the only hourly beat task whose repetition is *visible to
-#: a user*: `due_for_deletion_reminder` filters on
-#: `deletion_reminder_sent_at__isnull=True`, which guards at selection time,
-#: while `send_deletion_reminder` emails first and marks afterwards - so two
-#: overlapping runs both select the same profile and both send.
-#:
-#: A lock rather than the claim-before-side-effect fix used elsewhere in this
-#: codebase, because the failure directions are not symmetric here: a duplicate
-#: is a second "your account will be deleted tomorrow" notice, while a lost one
-#: is *no* warning before a permanent deletion. A lock loses nothing - the
-#: skipped run leaves the marker unset, so the next tick sends it.
+#: Overlap lock for the deletion-reminder sweep, matching the safety reminder tasks above.
 _DELETION_REMINDER_LOCK_CACHE_KEY = "urbanlens:account:deletion-reminder-lock"
 _DELETION_REMINDER_LOCK_TIMEOUT_SECONDS = 3300  # just under the hourly beat interval
 
+#: The hard-delete sweep has the same hazard for the same reason: it selects on `deletion_requested_at`, which
+#: `hard_delete_profile` does not clear until it has already sent the final "your account has been deleted"
+#: email.
+_HARD_DELETE_LOCK_CACHE_KEY = "urbanlens:account:hard-delete-lock"
+_HARD_DELETE_LOCK_TIMEOUT_SECONDS = 3300  # just under the hourly beat interval
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def send_account_deletion_reminders() -> int:
     """Send the "1 day left" reminder for every account approaching its hard delete."""
     from urbanlens.dashboard.models.profile.model import Profile
@@ -2473,8 +3773,10 @@ def send_account_deletion_reminders() -> int:
     try:
         count = 0
         for profile in Profile.objects.due_for_deletion_reminder():
-            send_deletion_reminder(profile)
-            count += 1
+            try:
+                count += send_deletion_reminder(profile)
+            except Exception:
+                logger.exception("send_account_deletion_reminders: reminder for profile %s failed", profile.pk)
         if count:
             logger.info("Sent %s account deletion reminder(s)", count)
         return count
@@ -2482,19 +3784,31 @@ def send_account_deletion_reminders() -> int:
         release_lock(_DELETION_REMINDER_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def hard_delete_expired_accounts() -> int:
     """Permanently delete every account whose 7-day deletion grace period has elapsed."""
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
 
-    count = 0
-    for profile in Profile.objects.due_for_hard_delete():
-        hard_delete_profile(profile)
-        count += 1
-    if count:
-        logger.info("Hard-deleted %s expired account(s)", count)
-    return count
+    _lock_token = acquire_lock(_HARD_DELETE_LOCK_CACHE_KEY, _HARD_DELETE_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
+        logger.info("hard_delete_expired_accounts: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for profile in Profile.objects.due_for_hard_delete():
+            # One account that cannot be deleted must not hold up the rest; the next run retries it.
+            try:
+                hard_delete_profile(profile)
+            except Exception:
+                logger.exception("hard_delete_expired_accounts: deleting profile %s failed", profile.pk)
+                continue
+            count += 1
+        if count:
+            logger.info("Hard-deleted %s expired account(s)", count)
+        return count
+    finally:
+        release_lock(_HARD_DELETE_LOCK_CACHE_KEY, _lock_token)
 
 
 # No autoretry here, deliberately: run_panel_fetch owns the failure policy
@@ -2502,20 +3816,19 @@ def hard_delete_expired_accounts() -> int:
 # race the poll-driven re-scheduling in schedule_panel_fetch. The time limits
 # sit under external_data.FLIGHT_TTL_SECONDS so a hard-killed task's
 # single-flight marker expires right after the task does.
-@shared_task(soft_time_limit=110, time_limit=130)
+@shared_task(soft_time_limit=110, time_limit=130, queue=Queue.INTERACTIVE)
 def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = None) -> None:
     """Fetch one external-data panel's upstream data in the background.
 
-    Scheduled by ``external_data.schedule_panel_fetch`` when a pin detail page
-    finds a panel's store empty; the page polls until this task persists the
-    result (LocationCache row, Boundary geometry column, or warmed slide caches).
+    Scheduled by ``external_data.schedule_panel_fetch`` when a Private Pin page finds a panel's store
+    empty; the page polls until this task persists the result (LocationCache row, Boundary geometry
+    column, or warmed slide caches).
 
     Args:
         source_key: An ``external_data.panel_sources()`` key.
         pin_id: PK of the pin whose panel data should be fetched.
-        flight_token: Single-flight token from ``schedule_panel_fetch``; the
-            fetch releases the marker only while it is still its own. Absent for
-            tasks enqueued before tokens existed.
+        flight_token: Single-flight token from ``schedule_panel_fetch``; the fetch releases the marker
+        only while it is still its own.
     """
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.pins.external_data import run_panel_fetch
@@ -2527,15 +3840,90 @@ def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = 
     run_panel_fetch(source_key, pin, flight_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(queue=Queue.INTERACTIVE)
+def deliver_friend_invitation(invitation_id: int, url: str, send_join_email: bool) -> None:
+    """Deliver an email friend invitation after the request that made it, so its latency tells the inviter nothing.
+
+    Args:
+        invitation_id: PK of the FriendInvitation.
+        url: Absolute URL of its response page.
+        send_join_email: Whether the address may be emailed.
+    """
+    from urbanlens.dashboard.services.social.friend_invitations import deliver
+
+    deliver(invitation_id, url, send_join_email=send_join_email)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def deliver_visit_invite(participant_id: int, invitation_id: int) -> None:
+    """Offer a tagged visit to the account proven to own the address, after the request that tagged it.
+
+    Args:
+        participant_id: PK of the ExternalVisitParticipant.
+        invitation_id: PK of the FriendInvitation issued for the same address, which holds it.
+    """
+    from urbanlens.dashboard.services.visits.visit_invites import deliver_to_participant
+
+    deliver_to_participant(participant_id, invitation_id)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def deliver_trip_invitation(invitation_id: int, url: str) -> None:
+    """Deliver a trip invitation after the request that created it, so its latency tells the inviter nothing.
+
+    Args:
+        invitation_id: PK of the invitation.
+        url: Absolute URL of its response page.
+    """
+    from urbanlens.dashboard.models.trips.invitation import TripInvitation
+    from urbanlens.dashboard.services.trips.trip_invitations import deliver_invitation
+
+    invitation = TripInvitation.objects.filter(pk=invitation_id).select_related("trip", "inviter__user").first()
+    if invitation is not None:
+        deliver_invitation(invitation, url)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def send_email_task(to: str, subject: str, text_body: str, html_body: str) -> None:
+    """Send an email queued by ``notification_delivery.queue_email``.
+
+    Args:
+        to: Recipient address.
+        subject: Subject line.
+        text_body: Plain-text body.
+        html_body: HTML alternative, or empty.
+    """
+    from urbanlens.dashboard.services.notifications.notification_delivery import send_email_now
+
+    send_email_now(to=to, subject=subject, text_body=text_body, html_body=html_body)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def send_notification_email_task(profile_id: int, title: str, body_text: str, url: str | None, action_label: str) -> None:
+    """Send a notification email queued by ``notification_delivery.send_notification_email``.
+
+    Args:
+        profile_id: PK of the recipient profile.
+        title: Subject line and heading.
+        body_text: Notification message text.
+        url: Site-relative action link, or None.
+        action_label: Button text.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email_now
+
+    recipient = Profile.objects.select_related("user").filter(pk=profile_id).first()
+    if recipient is None:
+        return
+    send_notification_email_now(recipient, title=title, body_text=body_text, url=url, action_label=action_label)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_direct_message_email_if_unread(message_id: int) -> None:
     """Send the delayed "new message" email, unless it's since been read or already sent.
 
-    Scheduled by ``services.messaging.direct_messages._schedule_message_email`` with a
-    countdown, giving a logged-in recipient a chance to read the message
-    organically first. No-ops if the message was read in the meantime, or if
-    an earlier message in the same unread streak already triggered this email
-    (``services.messaging.direct_messages.send_message_email_now`` sets that marker).
+    Scheduled by ``services.messaging.direct_messages._schedule_message_email`` with a countdown, giving
+    a logged-in recipient a chance to read the message organically first.
 
     Args:
         message_id: PK of the message to check and possibly email about.
@@ -2549,19 +3937,11 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
         return
     if message.read_at is not None:
         return
-    # "Still unread" is not "still there". Both delete-for-everyone and the
-    # recipient's own delete are soft - the row survives with a timestamp, and
-    # the app shows a tombstone - so without this the delayed alert delivers, out
-    # of band and permanently, the text the app has already withdrawn. Asking the
-    # same helper the UI asks keeps the two from drifting, and picks up expired
-    # disappearing messages for free.
+    # "Still unread" is not "still there".
     if message.tombstone_text_for(message.recipient_id) is not None:
         return
-    # Re-asked, not remembered: sending was permitted 120 seconds ago, and a
-    # block is most often placed in exactly that window - right after the message
-    # that prompted it. Asking the same helper create_direct_message asks keeps
-    # the two from drifting, and covers a recipient who has since tightened their
-    # direct-message visibility for the same reason.
+    # Re-asked, not remembered: sending was permitted 120 seconds ago, and a block is most often placed in
+    # exactly that window - right after the message that prompted it.
     if not can_direct_message(message.sender, message.recipient):
         return
     if is_email_debounced(message.sender_id, message.recipient_id):
@@ -2569,15 +3949,14 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
     send_message_email_now(message)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     """Send the delayed WhatsApp/SMS "new message" alert, unless read or already alerted.
 
-    Scheduled by ``services.messaging.direct_messages._schedule_message_text_alerts``
-    with a countdown, mirroring the delayed-email flow: no-ops if the message
-    was read in the meantime or an earlier message in the same unread streak
-    already triggered an alert (``send_message_text_alerts_now`` sets that
-    marker; viewing the conversation clears it).
+    Scheduled by ``services.messaging.direct_messages._schedule_message_text_alerts`` with a countdown,
+    mirroring the delayed-email flow: no-ops if the message was read in the meantime or an earlier
+    message in the same unread streak already triggered an alert (``send_message_text_alerts_now`` sets
+    that marker; viewing the conversation clears it).
 
     Args:
         message_id: PK of the message to check and possibly alert about.
@@ -2591,19 +3970,11 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
         return
     if message.read_at is not None:
         return
-    # "Still unread" is not "still there". Both delete-for-everyone and the
-    # recipient's own delete are soft - the row survives with a timestamp, and
-    # the app shows a tombstone - so without this the delayed alert delivers, out
-    # of band and permanently, the text the app has already withdrawn. Asking the
-    # same helper the UI asks keeps the two from drifting, and picks up expired
-    # disappearing messages for free.
+    # "Still unread" is not "still there".
     if message.tombstone_text_for(message.recipient_id) is not None:
         return
-    # Re-asked, not remembered: sending was permitted 120 seconds ago, and a
-    # block is most often placed in exactly that window - right after the message
-    # that prompted it. Asking the same helper create_direct_message asks keeps
-    # the two from drifting, and covers a recipient who has since tightened their
-    # direct-message visibility for the same reason.
+    # Re-asked, not remembered: sending was permitted 120 seconds ago, and a block is most often placed in
+    # exactly that window - right after the message that prompted it.
     if not can_direct_message(message.sender, message.recipient):
         return
     if is_text_alert_debounced(message.sender_id, message.recipient_id):
@@ -2611,22 +3982,13 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     send_message_text_alerts_now(message)
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def prune_api_call_logs() -> int:
     """Delete ApiCallLog rows older than every consumer's longest window.
 
-    The table is written on every external API call and, until this task
-    existed, never trimmed - ``ApiCallLog.prune_older_than_days`` was
-    documented as the way to trim it, but nothing ever called it, so the
-    rate-limit COUNTs that run before each call scanned an ever-growing
-    table. Scheduled daily (see ``CELERY_BEAT_SCHEDULE``).
-
-    Retention is set by the longest reader, not the rate limiter: limits need
-    30 days, but ``services.admin.cost_tracking.monthly_cost_series``
-    reconstructs the public costs page's 12-month API-spend chart from these
-    rows - pruning at the model helper's 90-day default would silently zero
-    out three-quarters of that chart. 400 days covers 13 calendar months with
-    margin.
+    The table is written on every external API call and, until this task existed, never trimmed -
+    ``ApiCallLog.prune_older_than_days`` was documented as the way to trim it, but nothing ever called
+    it, so the rate-limit COUNTs that run before each call scanned an ever-growing table.
 
     Returns:
         Number of rows deleted.
@@ -2643,15 +4005,35 @@ def prune_api_call_logs() -> int:
 _API_CALL_LOG_RETENTION_DAYS = 400
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
+def prune_expired_sessions() -> None:
+    """Delete expired session rows; the database session backends never do it themselves."""
+    from django.core.management import call_command
+
+    call_command("clearsessions")
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def prune_read_notifications() -> int:
+    """Delete read notifications past ``SiteSettings.notification_retention_days``.
+
+    Returns:
+        How many were deleted.
+    """
+    from urbanlens.dashboard.services.core import retention
+
+    deleted = retention.prune_read_notifications()
+    if deleted:
+        logger.info("Pruned %d read notification(s)", deleted)
+    return deleted
+
+
+@shared_task(queue=Queue.MAINTENANCE)
 def prune_pin_tombstones() -> int:
     """Remove pin-deletion tombstones older than the sync retention window.
 
-    Scheduled daily (see ``CELERY_BEAT_SCHEDULE``). Retention is
-    ``services.pins.pin_sync.TOMBSTONE_RETENTION`` - the longest supported
-    sync-client offline gap. A client whose ``deleted_since`` predates that
-    floor gets an HTTP 410 full-resync signal from ``pins/deleted/`` instead
-    of a silently incomplete deletions feed, so pruning can never cause a
+    A client whose ``deleted_since`` predates that floor gets an HTTP 410 full-resync signal from
+    ``pins/deleted/`` instead of a silently incomplete deletions feed, so pruning can never cause a
     quiet miss.
 
     Returns:
@@ -2666,35 +4048,40 @@ def prune_pin_tombstones() -> int:
     return deleted
 
 
-@shared_task
+#: Hourly, so a run that overruns the hour would otherwise meet the next one on the same candidates.
+PUBLIC_PIN_EVALUATION_LOCK_KEY = "public-pins:evaluate"
+PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS = 55 * 60
+
+
+@shared_task(queue=Queue.MAINTENANCE)
 def evaluate_public_pin_candidates() -> dict[str, int]:
     """Run the public-pin eligibility engine and settle open votes.
 
-    Scheduled hourly (see ``CELERY_BEAT_SCHEDULE``). Everything lives in
-    ``services.pins.public_pins`` - this is only the beat entry point. Idempotent
-    at any frequency; hourly keeps vote outcomes and suggestion fan-out
-    reasonably fresh without the engine's aggregate queries running hot.
+    Everything lives in ``services.pins.public_pins`` - this is only the beat entry point.
 
     Returns:
         Transition counters (opened/reopened/suspended/passed/rejected).
     """
     from urbanlens.dashboard.services.pins import public_pins
 
-    counters = public_pins.evaluate_public_pin_candidates()
+    with beat_lock(PUBLIC_PIN_EVALUATION_LOCK_KEY, PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS) as acquired:
+        if not acquired:
+            logger.info("Public-pin evaluation skipped: the previous run is still going")
+            return {}
+        counters = public_pins.evaluate_public_pin_candidates()
     if any(counters.values()):
         logger.info("Public-pin evaluation: %s", counters)
     return counters
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_notification_text_alerts_if_unread(notification_id: int) -> None:
     """Send the delayed WhatsApp/SMS alert for a site notification, unless read or debounced.
 
     Scheduled by ``services.notifications.notification_text_alerts.schedule_notification_text_alerts``
-    (via the ``notification_text_alerts`` post_save signal) with a countdown,
-    mirroring the DM text-alert flow: no-ops when the notification was read in
-    the meantime, when a same-type text recently went to this recipient, or
-    when the recipient turned the toggles off after it was enqueued.
+    (via the ``notification_text_alerts`` post_save signal) with a countdown, mirroring the DM
+    text-alert flow: no-ops when the notification was read in the meantime, when a same-type text
+    recently went to this recipient, or when the recipient turned the toggles off after it was enqueued.
 
     Args:
         notification_id: PK of the notification to check and possibly alert about.
@@ -2714,19 +4101,15 @@ def send_notification_text_alerts_if_unread(notification_id: int) -> None:
     send_notification_text_alerts_now(notification)
 
 
-@shared_task
+@shared_task(queue=Queue.INTERACTIVE)
 def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None:
     """Deliver ``message`` to every channel in channel-layer group ``group``.
 
-    Runs the actual ``async_to_sync(channel_layer.group_send)`` call here, on
-    ``celery-worker``'s prefork pool, rather than inline in whatever gunicorn
-    gevent greenlet handled the request that triggered it - see
-    ``services.core.channel_broadcast`` and docs/PROBLEMS.md's gevent/asyncio entry
-    for why calling into asyncio directly from a gevent-scheduled request can
-    raise ``SynchronousOnlyOperation`` on a *different*, unrelated concurrent
-    request. Best-effort: a channel-layer failure is logged, not raised,
-    matching every caller's existing "already durably saved, live delivery is
-    a bonus" contract.
+    Runs the actual ``async_to_sync(channel_layer.group_send)`` call here, on ``celery-worker``'s
+    prefork pool, rather than inline in whatever gunicorn gevent greenlet handled the request that
+    triggered it - see ``services.core.channel_broadcast`` and docs/PROBLEMS.md's gevent/asyncio entry
+    for why calling into asyncio directly from a gevent-scheduled request can raise
+    ``SynchronousOnlyOperation`` on a *different*, unrelated concurrent request.
 
     Args:
         group: Channel-layer group name to deliver to.
@@ -2741,14 +4124,39 @@ def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None
         logger.exception("Failed to broadcast to channel-layer group %s", group)
 
 
-@shared_task
+@shared_task(queue=Queue.INTERACTIVE)
+def broadcast_channel_group_messages(deliveries: list[tuple[str, dict[str, Any]]]) -> None:
+    """Deliver many ``(group, message)`` pairs inside one event loop.
+
+    The batched counterpart to :func:`broadcast_channel_group_message`, for a
+    fan-out whose length is set by how many people are in a conversation. One
+    loop and one channel-layer connection for the whole batch; a failure on one
+    group is logged and the rest still go.
+
+    Args:
+        deliveries: ``(channel group name, event dict)`` pairs.
+    """
+    layer = get_channel_layer()
+    if layer is None:
+        return
+
+    async def send_all() -> None:
+        for group, message in deliveries:
+            try:
+                await layer.group_send(group, message)
+            except Exception:
+                logger.exception("Failed to broadcast to channel-layer group %s", group)
+
+    async_to_sync(send_all)()
+
+
+@shared_task(soft_time_limit=240, time_limit=270, queue=Queue.INTERACTIVE)
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
 
-    No Celery autoretry: the run itself records every failure mode on the
-    LinkExtraction row (and notifies the user either way), and each attempt
-    consumes a fetch plus AI tokens - retrying automatically would silently
-    multiply cost for a user-triggered, user-visible action they can simply
+    No Celery autoretry: the run itself records every failure mode on the LinkExtraction row (and
+    notifies the user either way), and each attempt consumes a fetch plus AI tokens - retrying
+    automatically would silently multiply cost for a user-triggered, user-visible action they can simply
     click again.
 
     Args:
@@ -2764,16 +4172,15 @@ def run_link_extraction(extraction_id: int) -> None:
     run_extraction(extraction)
 
 
-@shared_task
+@shared_task(soft_time_limit=180, time_limit=210, queue=Queue.INTERACTIVE)
 def classify_trivia_submission(question_id: int) -> None:
     """Classify one pending user-submitted Trivia question and record its verdict.
 
-    No Celery autoretry: each attempt consumes an AI call, and this is a
-    background action with no user waiting on it - if this task never runs
-    (or the classifier can't reach AI right now), the question simply stays
-    PENDING_REVIEW (silently excluded from rotation, see
-    services.trivia.submission.classify_and_update), no different from any
-    other transient Celery outage.
+    No Celery autoretry: each attempt consumes an AI call, and this is a background action with no user
+    waiting on it - if this task never runs (or the classifier can't reach AI right now), the question
+    simply stays PENDING_REVIEW (silently excluded from rotation, see
+    services.trivia.submission.classify_and_update), no different from any other transient Celery
+    outage.
 
     Args:
         question_id: PK of the pending TriviaQuestion row.
@@ -2788,22 +4195,16 @@ def classify_trivia_submission(question_id: int) -> None:
     classify_and_update(question)
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_trivia_generation() -> dict:
     """Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
 
-    Fired hourly by Celery beat, mirroring run_scheduled_enrichment's
-    single-flight lock (a run that's still going when the next hour ticks
-    over is left alone rather than started twice). No autoretry: each
-    wiki considered spends AI tokens on generation and classification, so an
-    automatic retry would silently multiply cost; a skipped wiki is simply
-    picked up on the next scheduled run.
+    Fired hourly by Celery beat, mirroring run_scheduled_enrichment's single-flight lock (a run that's
+    still going when the next hour ticks over is left alone rather than started twice).
 
     Returns:
-        The sweep summary dict, or a skip marker when another run holds the
-        single-flight lock.
+        The sweep summary dict, or a skip marker when another run holds the single-flight lock.
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.services.trivia.generation import sweep_wikis_for_generation
 
@@ -2818,22 +4219,16 @@ def run_scheduled_trivia_generation() -> dict:
         release_lock(lock_key, _lock_token)
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_trivia_wiki_incorporation() -> dict:
     """Fold well-upvoted user-submitted Trivia questions into their location wikis.
 
-    Fired hourly by Celery beat, mirroring run_scheduled_trivia_generation's
-    single-flight lock (a run still going when the next hour ticks over is
-    left alone rather than started twice). No autoretry: each candidate
-    question considered spends AI tokens on writing and safety review, so an
-    automatic retry would silently multiply cost; a skipped question is
-    simply picked up on the next scheduled run.
+    Fired hourly by Celery beat, mirroring run_scheduled_trivia_generation's single-flight lock (a run
+    still going when the next hour ticks over is left alone rather than started twice).
 
     Returns:
-        The sweep summary dict, or a skip marker when another run holds the
-        single-flight lock.
+        The sweep summary dict, or a skip marker when another run holds the single-flight lock.
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.services.trivia.wiki_incorporation import sweep_questions_for_wiki_incorporation
 
@@ -2848,47 +4243,28 @@ def run_scheduled_trivia_wiki_incorporation() -> dict:
         release_lock(lock_key, _lock_token)
 
 
-#: Slugs a pin gets when it is created before anything knows what it is. Listed
-#: explicitly so the sweep below is an indexed lookup rather than a scan of every
-#: pin; ``Pin.slug_is_placeholder`` still has the final say on each candidate.
+#: Slugs a pin gets when it is created before anything knows what it is. Listed explicitly so the sweep below is
+#: an indexed lookup rather than a scan of every pin; ``Pin.slug_is_placeholder`` still has the final say on
+#: each candidate.
 _PLACEHOLDER_SLUGS = ("unnamed-location", "unnamed", "dropped-pin", "pin", "location", "place", "point", "marker", "unknown-location", "unknown")
 
 #: How old a pin must be before this sweep will change its slug.
-#:
-#: Generous on purpose. The window that matters is "somebody has this pin's
-#: detail page open", and the cost of waiting is that a legacy pin keeps a
-#: placeholder URL an hour longer - which it has already kept for months.
 _RESLUG_MIN_AGE = timedelta(hours=1)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     """Clear a pin's stored placeholder name once its location has a meaningful one to fall back to.
 
-    ``Pin.name`` is meant to be None ("show the location's canonical name")
-    unless a user actually typed something - but some pins from earlier,
-    less careful ingestion pipelines have a literal placeholder string
-    (coordinates, "Dropped Pin", "Unnamed Location", ...) stored directly on
-    ``name`` with ``name_is_user_provided=False``. Those pins are stuck
-    showing that placeholder forever: ``Pin.effective_name`` only falls back
-    to the location's name when ``Pin.name`` is falsy, and nothing else ever
-    revisits an already-set name. This sweep finds exactly that case and
-    clears ``name`` back to None wherever the location now resolves to a
-    meaningful name (e.g. because background enrichment / a later pin at the
-    same coordinates has since resolved ``Location.official_name`` or a wiki
-    name) - once cleared, ``effective_name`` picks up the better name
-    immediately and stays current automatically as the location's name
-    improves further, with no further sweeps needed for that pin.
+    Once ingestion is guaranteed to never store a placeholder name this way, this task (and the gap it
+    patches) should be removed - new pins never need it.
 
-    TODO: This exists only to backfill legacy data from earlier ingestion
-    versions that didn't leave ``Pin.name`` as None for an unnamed pin. Once
-    ingestion is guaranteed to never store a placeholder name this way, this
-    task (and the gap it patches) should be removed - new pins never need it.
+    TODO: This exists only to backfill legacy data from earlier ingestion versions that didn't leave
+    ``Pin.name`` as None for an unnamed pin.
 
     Args:
-        batch_size: Maximum number of pins to upgrade in one run, so a single
-            invocation can't run unboundedly long; any remainder is picked up
-            by the next scheduled run.
+        batch_size: Maximum number of pins to upgrade in one run, so a single invocation can't run
+        unboundedly long; any remainder is picked up by the next...
 
     Returns:
         Number of pins whose name was cleared.
@@ -2910,21 +4286,8 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     if upgraded:
         logger.info("upgrade_placeholder_pin_names: cleared %s placeholder pin name(s)", upgraded)
 
-    # Slugs are generated once and never revisited, so a pin created before
-    # anything knew what it was keeps `unnamed-location` in its URL even after it
-    # is named - reported from staging on a pin called "HRSH" with three aliases.
-    # Refreshed here rather than on save: the pins that need it were named long
-    # ago, and only a slug that still reads as a placeholder is replaced.
-    #
-    # "So no working link changes" was the original claim here, and it is not
-    # quite true: a link can be *open*. A pin created minutes ago has its detail
-    # page rendered with the old slug baked into every HTMX panel URL, so
-    # replacing the slug underneath it 404s those panels, and the global
-    # `htmx:responseError` handler turns each into an error toast on a pin the
-    # user has just made. `tests/integration/` caught exactly that; see
-    # docs/PROBLEMS.md, 2026-08-23. The age guard restores the assumption by
-    # making it true - this sweep is for legacy data, per the docstring above,
-    # and legacy data is not five minutes old.
+    # Refreshed here rather than on save: the pins that need it were named long ago, and only a slug that still
+    # reads as a placeholder is replaced.
     reslugged = 0
     for pin in Pin.objects.filter(slug__in=_PLACEHOLDER_SLUGS, created__lt=timezone.now() - _RESLUG_MIN_AGE).select_related("location")[:batch_size]:
         if pin.refresh_placeholder_slug():
@@ -2935,14 +4298,12 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     return upgraded
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(queue=Queue.INTERACTIVE)
 def dispatch_native_push(notification_id: int) -> int:
     """Deliver one notification to the recipient's registered native push devices.
 
-    Enqueued by ``models.notifications.signals.enqueue_native_push`` on every
-    ``NotificationLog`` insert; exits immediately for the (common) profile with
-    no registered devices. Delivery itself is best-effort per device - see
-    ``services.notifications.push.send_push_to_profile``.
+    Enqueued by ``models.notifications.signals.enqueue_native_push`` on every ``NotificationLog``
+    insert; exits immediately for the (common) profile with no registered devices.
 
     Args:
         notification_id: Primary key of the ``NotificationLog`` row to deliver.
@@ -2960,28 +4321,37 @@ def dispatch_native_push(notification_id: int) -> int:
     return send_push_to_profile(notification.profile_id, as_push_payload(notification))
 
 
+@shared_task(queue=Queue.INTERACTIVE)
+def dispatch_push_to_devices(device_ids: list[int], payload: dict) -> int:
+    """Deliver a payload to one batch of a profile's devices, handed off by ``send_push_to_profile``.
+
+    Args:
+        device_ids: At most ``push.PUSH_BATCH_SIZE`` device primary keys.
+        payload: JSON-serializable notification payload.
+
+    Returns:
+        Number of devices successfully delivered to.
+    """
+    from urbanlens.dashboard.services.notifications.push import send_push_to_devices
+
+    return send_push_to_devices(device_ids, payload)
+
+
 _SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:spotguessr:stall-sweep-lock"
 _SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_spotguessr_sessions() -> int:
     """Force-reveal any SpotGuessr round that's been open too long.
 
-    The safety net for a multiplayer round that can otherwise stall forever:
-    a round only completes once every joined participant has guessed
-    (``services.spotguessr.session.submit_guess``), but a participant who
-    simply closes their tab is invisible to that check - there's no
-    disconnect signal wired into the game state (see the SpotGuessr audit's
-    "multiplayer stall" finding). This sweep finds any session whose current
-    round has sat unrevealed past ``STALL_ROUND_TIMEOUT_MINUTES`` and force-
-    reveals it (``force_reveal_round``), which either lets the game continue
-    with whoever did guess, or marks the session ``ABANDONED`` if literally
-    nobody did.
+    The safety net for a multiplayer round that can otherwise stall forever: a round only completes once
+    every joined participant has guessed (``services.spotguessr.session.submit_guess``), but a
+    participant who simply closes their tab is invisible to that check - there's no disconnect signal
+    wired into the game state (see the SpotGuessr audit's "multiplayer stall" finding).
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.spotguessr.model import GameSession
@@ -3011,20 +4381,15 @@ def sweep_stalled_spotguessr_sessions() -> int:
         release_lock(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prewarm_spotguessr_round(session_id: int, sequence_index: int) -> bool:
     """Pre-select a SpotGuessr session's next round, so it's ready the instant a player reaches it.
 
-    Queued by ``services.spotguessr.session.get_or_create_round`` right after
-    it creates the round *before* this one - by the time that round is
-    guessed and revealed, this round's location (and, for Street View mode,
-    its Google Maps imagery - see ``services.spotguessr.street_view``, whose
-    result this warms via the same lat/lng cache key) is already picked and
-    cached, so the round that actually gets created next is a cache hit
-    instead of live selection (see ``services.spotguessr.prewarm``). A no-op
-    if the session has since ended, this round already exists (a page reload
-    or another guess raced this task to it), or nothing eligible is left -
-    none of those are errors, just nothing worth prewarming anymore.
+    Queued by ``services.spotguessr.session.get_or_create_round`` right after it creates the round
+    *before* this one - by the time that round is guessed and revealed, this round's location (and, for
+    Street View mode, its Google Maps imagery - see ``services.spotguessr.street_view``, whose result
+    this warms via the same lat/lng cache key) is already picked and cached, so the round that actually
+    gets created next is a cache hit instead of live selection (see ``services.spotguessr.prewarm``).
 
     Args:
         session_id: The session to prewarm a round for.
@@ -3064,24 +4429,18 @@ def prewarm_spotguessr_round(session_id: int, sequence_index: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prewarm_spotguessr_solo_start(profile_id: int, mode: str, config_dict: dict) -> bool:
     """Pre-select a solo player's likely first round before they've even clicked "start".
 
-    Queued from ``controllers.spotguessr.SpotGuessrHomeView`` on every visit
-    to the SpotGuessr overview page, using the player's last-used settings
-    (``SpotGuessrPreference.last_config``) and most-recently-played mode as
-    the best guess of what they'll start next. Keyed by a fingerprint of the
-    exact config (see ``services.spotguessr.prewarm``), so it's simply never
-    redeemed - not wrongly redeemed - if the player changes a setting before
-    actually starting.
+    Keyed by a fingerprint of the exact config (see ``services.spotguessr.prewarm``), so it's simply
+    never redeemed - not wrongly redeemed - if the player changes a setting before actually starting.
 
     Args:
         profile_id: The player who loaded the SpotGuessr overview page.
         mode: The guessed ``SpotGuessrMode`` they'll start.
-        config_dict: A ``GameConfig.to_dict()`` snapshot of their guessed
-            settings (unknown keys ignored, mirroring
-            ``session.config_from_session``).
+        config_dict: A ``GameConfig.to_dict()`` snapshot of their guessed settings (unknown keys
+        ignored, mirroring ``session.config_from_session``).
 
     Returns:
         True if a round was prewarmed, False if there was nothing eligible.
@@ -3114,25 +4473,17 @@ _TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:trivia:stall-sweep-lock"
 _TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_trivia_sessions() -> int:
     """Force-reveal any Trivia round that's been open too long.
 
-    The safety net for a multiplayer round that can otherwise stall forever:
-    a round only completes once every joined participant has answered
-    (``services.trivia.session.submit_answer``), but a participant who
-    simply closes their tab is invisible to that check - there's no
-    disconnect signal wired into the game state. Mirrors
-    ``sweep_stalled_spotguessr_sessions`` exactly. This sweep finds any
-    session whose current round has sat unrevealed past
-    ``STALL_ROUND_TIMEOUT_MINUTES`` and force-reveals it
-    (``force_reveal_round``), which either lets the game continue with
-    whoever did answer, or marks the session ``ABANDONED`` if literally
-    nobody did.
+    The safety net for a multiplayer round that can otherwise stall forever: a round only completes once
+    every joined participant has answered (``services.trivia.session.submit_answer``), but a participant
+    who simply closes their tab is invisible to that check - there's no disconnect signal wired into the
+    game state.
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.trivia.model import TriviaSession
@@ -3166,20 +4517,17 @@ _CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:consensus:stall-sweep-lock"
 _CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_consensus_sessions() -> int:
     """Force-resolve any Consensus round that's been open too long.
 
-    Unlike SpotGuessr/Trivia, a Consensus round has *two* sub-phases that
-    can each stall independently: answer-collection (mirrors
-    ``sweep_stalled_spotguessr_sessions`` - force-reveals via
-    ``force_reveal_round``) and, for a competitive round whose answers
-    disagreed, the follow-on vote (force-tallies via
-    ``force_resolve_vote``). Both are swept in the same task run.
+    Unlike SpotGuessr/Trivia, a Consensus round has *two* sub-phases that can each stall independently:
+    answer-collection (mirrors ``sweep_stalled_spotguessr_sessions`` - force-reveals via
+    ``force_reveal_round``) and, for a competitive round whose answers disagreed, the follow-on vote
+    (force-tallies via ``force_resolve_vote``).
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSession
@@ -3219,49 +4567,74 @@ def sweep_stalled_consensus_sessions() -> int:
         release_lock(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def recompute_fact_confidence(fact_id: int) -> None:
     """Recompute one Fact's confidence/status/value from its accumulated evidence.
 
     Queued (never called inline) from every Facts evidence write site - see
-    ``services.facts.evidence.record_evidence``. Per-fact evidence volume is
-    small by construction, mirroring the same reasoning behind SpotGuessr's
-    synchronous-but-cheap ``recompute_estimated_coordinates``, so no
-    debounce/locking is needed here.
+    ``services.facts.evidence.record_evidence``.
     """
     from urbanlens.dashboard.services.facts.confidence import recompute
 
     recompute(fact_id)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+#: A flagged fact left alone this long lost its queued recompute.
+STALE_FACT_CONFIDENCE_AGE = timedelta(minutes=10)
+STALE_FACT_CONFIDENCE_BATCH = 500
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def sweep_stale_fact_confidence() -> int:
+    """Queue a recompute for every fact whose new evidence no recompute has read.
+
+    Returns:
+        How many recomputes were queued.
+    """
+    from urbanlens.dashboard.models.facts.model import Fact
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    cutoff = timezone.now() - STALE_FACT_CONFIDENCE_AGE
+    stale = Fact.objects.filter(needs_recompute=True, updated__lt=cutoff).order_by("updated").values_list("pk", flat=True)[:STALE_FACT_CONFIDENCE_BATCH]
+    queued = 0
+    for fact_id in stale:
+        # A refusal is found again by the next sweep.
+        if safely_enqueue_task(recompute_fact_confidence, fact_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Queued %d fact confidence recompute(s) that never ran", queued)
+    return queued
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def process_device_scan_upload(self, upload_id: int) -> bool:
     """Classify, wiki-match, and cluster one wireless device-scan upload.
 
-    Runs on the default queue - real CPU-bound geometry work, not
-    ``panel_fetch`` (same reasoning as ``classify_detail_marker``). Always
-    marks the upload PROCESSED or FAILED by the time this returns, even on an
-    unexpected error, so a stuck PENDING row always means the task never ran
-    at all rather than having failed silently mid-way.
+    Runs on the bulk queue - up to 100,000 rows of real CPU-bound geometry
+    work, sized by one account's upload, so it must not share a pool with
+    anything a person is waiting on.
 
-    Claims the upload by flipping PENDING -> PROCESSED atomically before doing
-    any work, so a redelivered or manually retried task for an upload that
-    already finished (or is being worked by another worker) is a no-op rather
-    than re-running ``record_absence_report`` and inflating a marker's absence
-    streak a second time for the same physical report.
+    Claims the upload by flipping PENDING -> PROCESSING, so a redelivered or
+    duplicate task is a no-op. The work and the flip to PROCESSED commit
+    together, so ``record_absence_report`` counts a physical report once even
+    when a worker dies mid-run: its partial work rolls back, and
+    :func:`requeue_stalled_device_scans` hands the still-PROCESSING upload to
+    another worker.
 
     Args:
         upload_id: PK of the DeviceScanUpload to process.
 
     Returns:
-        True when this call claimed and processed the upload (successfully or
-        not); False when it no longer exists, or was already claimed by a
-        prior run.
+        True when this call claimed the upload (whether processing succeeded or failed); False when it no
+        longer exists or is not pending.
     """
+    from django.db import transaction
+    from django.db.models import F
+
     from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus
     from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
 
-    claimed = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PENDING).update(status=ScanUploadStatus.PROCESSED)
+    claimed = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PENDING).update(status=ScanUploadStatus.PROCESSING, claimed_at=timezone.now(), attempts=F("attempts") + 1)
     if not claimed:
         logger.info("process_device_scan_upload: upload %s no longer exists or is not pending", upload_id)
         return False
@@ -3272,7 +4645,9 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
 
     update_task_progress(self, current=0, total=1, message="Processing device scan...")
     try:
-        process_scan_upload(upload)
+        with transaction.atomic():
+            process_scan_upload(upload)
+            DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PROCESSING).update(status=ScanUploadStatus.PROCESSED)
     except Exception as exc:
         logger.exception("process_device_scan_upload: failed for upload %s", upload_id)
         DeviceScanUpload.objects.filter(pk=upload_id).update(status=ScanUploadStatus.FAILED, error=str(exc))
@@ -3283,21 +4658,66 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+#: A pending upload older than this lost its enqueue.
+STALLED_SCAN_PENDING_AGE = timedelta(minutes=15)
+
+
+def stalled_scan_claim_age() -> timedelta:
+    """How long a processing upload's claim is honoured: past the longest hard limit E013 allows on its queue."""
+    from urbanlens.dashboard.services.core.task_limits import ceiling_for
+
+    return timedelta(seconds=ceiling_for(process_device_scan_upload.queue) + 60)
+
+
+#: Claims after which an upload that keeps killing its worker is marked failed.
+MAX_SCAN_UPLOAD_ATTEMPTS = 3
+STALLED_SCAN_BATCH = 200
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def requeue_stalled_device_scans() -> int:
+    """Re-enqueue device-scan uploads nothing is processing.
+
+    A pending upload whose enqueue was lost, or a processing one whose worker died (its work rolled back
+    with it), goes back to pending and is queued again. One that has been claimed
+    ``MAX_SCAN_UPLOAD_ATTEMPTS`` times is marked failed instead.
+
+    Returns:
+        How many uploads were queued.
+    """
+    from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    now = timezone.now()
+    stalled = DeviceScanUpload.objects.stalled(pending_before=now - STALLED_SCAN_PENDING_AGE, claimed_before=now - stalled_scan_claim_age())
+    queued = 0
+    for upload_id, status, claimed_at, attempts in stalled.values_list("pk", "status", "claimed_at", "attempts")[:STALLED_SCAN_BATCH]:
+        if status == ScanUploadStatus.PROCESSING:
+            same_claim = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PROCESSING, claimed_at=claimed_at)
+            if attempts >= MAX_SCAN_UPLOAD_ATTEMPTS:
+                same_claim.update(status=ScanUploadStatus.FAILED, error="Processing never finished after several attempts.")
+                continue
+            if not same_claim.update(status=ScanUploadStatus.PENDING):
+                continue
+        # The next sweep finds it again if the broker refuses this.
+        if safely_enqueue_task(process_device_scan_upload, upload_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Re-enqueued %d stalled device-scan upload(s)", queued)
+    return queued
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | None = None) -> int:
     """Grant any achievements a profile now qualifies for.
 
-    Queued by ``models.achievements.signals`` after a contribution, but only
-    when some active award actually measures the affected metric - so this runs
-    rarely, and when it does it re-checks a single count rather than sweeping.
-
-    Streak days are recorded synchronously by the signal, not here, so a task
-    delayed past midnight cannot credit the wrong day.
+    Queued by ``models.achievements.signals`` after a contribution, but only when some active award
+    actually measures the affected metric - so this runs rarely, and when it does it re-checks a single
+    count rather than sweeping.
 
     Args:
         profile_id: PK of the profile that contributed.
-        metric_keys: Registry keys of the metrics to re-check. None re-checks
-            every active achievement; an empty list re-checks nothing.
+        metric_keys: Registry keys of the metrics to re-check.
 
     Returns:
         How many awards were newly granted.
@@ -3316,39 +4736,62 @@ def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | 
     return len(evaluate_profile(profile, metric_keys=metric_keys))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def backfill_achievement(achievement_id: int) -> int:
     """Grant a newly defined achievement to everyone who already qualifies.
 
-    Queued when an admin saves an ``Achievement``, so awards added at any point
-    reach users retroactively instead of only rewarding activity from then on.
+    Queued when an admin saves an ``Achievement`` or asks for a re-check, so awards added at any point reach
+    users retroactively. Dispatch only: each profile range is its own :func:`backfill_achievement_range`.
 
     Args:
         achievement_id: PK of the achievement to backfill.
 
     Returns:
-        How many profiles received the award.
+        How many range subtasks were queued.
     """
     from urbanlens.dashboard.models.achievements.model import Achievement
-    from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.achievements.evaluate import BACKFILL_CHUNK_SIZE
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
 
     achievement = Achievement.objects.filter(pk=achievement_id).first()
     if achievement is None:
         logger.info("backfill_achievement: achievement %s no longer exists", achievement_id)
         return 0
+    if not achievement.is_active:
+        return 0
 
-    return evaluate_achievement_for_all(achievement)
+    return dispatch_pk_ranges(Profile.objects.all(), backfill_achievement_range, achievement_id, chunk_size=BACKFILL_CHUNK_SIZE)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def backfill_achievement_range(achievement_id: int, start_pk: int, end_pk: int) -> int:
+    """Grant one achievement to the qualifying profiles with ``start_pk <= pk <= end_pk``.
+
+    Args:
+        achievement_id: PK of the achievement to backfill.
+        start_pk: Lowest profile pk in the range, inclusive.
+        end_pk: Highest profile pk in the range, inclusive.
+
+    Returns:
+        How many profiles received the award.
+    """
+    from urbanlens.dashboard.models.achievements.model import Achievement
+    from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_in_range
+
+    achievement = Achievement.objects.filter(pk=achievement_id).first()
+    if achievement is None:
+        return 0
+    return evaluate_achievement_in_range(achievement, start_pk, end_pk)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def score_reputation_event(event_id: int) -> str:
     """Work out what one recorded contribution was worth.
 
-    Queued from ``models.reputation.signals`` after the row is already written.
-    Deferred because establishing how badly a target needed a contribution
-    means querying that target's state, which for photos can mean walking
-    external gallery panels - by far the most expensive input in the model, and
-    exactly the cost this feature must not add to a page load.
+    Deferred because establishing how badly a target needed a contribution means querying that target's
+    state, which for photos can mean walking external gallery panels - by far the most expensive input
+    in the model, and exactly the cost this feature must not add to a page load.
 
     Args:
         event_id: PK of the ledger row to value.
@@ -3372,7 +4815,43 @@ def score_reputation_event(event_id: int) -> str:
     return "unscorable" if value is None else str(value)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def score_reputation_events(event_ids: list[int]) -> int:
+    """Chunk-shaped sibling of :func:`score_reputation_event`, for a bulk import's fan-out (P109).
+
+    ``_decay_multiplier`` is explicitly order-independent (see
+    ``services.reputation.scoring``), so scoring a chunk's events in any order is safe. Each
+    touched profile's total is rebuilt once for the whole chunk rather than once per event -
+    ``recompute_total`` fully rebuilds from the ledger every call, so recomputing it per event here
+    would repeat the same O(n) read for every other event belonging to that profile in the chunk.
+
+    Args:
+        event_ids: PKs of the ledger rows to value.
+
+    Returns:
+        How many events were scored (excludes already-scored and missing rows).
+    """
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
+
+    touched: set[int] = set()
+    scored = 0
+    for event in ReputationEvent.objects.filter(pk__in=event_ids, value__isnull=True):
+        try:
+            value = score_event(event)
+        except Exception:
+            logger.exception("score_reputation_events: event %s failed", event.pk)
+            continue
+        if value is not None:
+            scored += 1
+        touched.add(event.profile_id)
+
+    for profile_id in touched:
+        recompute_total(profile_id)
+    return scored
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def recompute_reputation_total(profile_id: int) -> str:
     """Rebuild one profile's cached reputation totals from the ledger.
 
@@ -3387,18 +4866,12 @@ def recompute_reputation_total(profile_id: int) -> str:
     return str(recompute_total(profile_id))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_reputation(chunk_size: int = 500) -> int:
     """Drain unscored ledger rows and rebuild any totals known to be stale.
 
-    The backstop for a lost enqueue. ``safely_enqueue_task`` swallows broker
-    failures and returns None, so a row can sit unscored indefinitely with
-    nothing to notice - which is survivable only because the row itself was
-    written synchronously and is therefore still there to find.
-
-    Dispatch only: rows are sliced into bounded ranges, in pk order, and each
-    range is handled by its own subtask, so a chunk that crashes costs its own
-    range rather than the whole sweep.
+    Dispatch only: rows are sliced into bounded ranges, in pk order, and each range is handled by its
+    own subtask, so a chunk that crashes costs its own range rather than the whole sweep.
 
     Args:
         chunk_size: Maximum rows per subtask.
@@ -3407,25 +4880,18 @@ def sweep_reputation(chunk_size: int = 500) -> int:
         How many subtasks were dispatched.
     """
     from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges, safely_enqueue_task
 
-    chunk_size = max(1, chunk_size)
-    pks = list(ReputationEvent.objects.unscored().order_by("pk").values_list("pk", flat=True))
-
-    dispatched = 0
-    for start in range(0, len(pks), chunk_size):
-        chunk = pks[start : start + chunk_size]
-        if safely_enqueue_task(sweep_reputation_range, chunk[0], chunk[-1]) is not None:
-            dispatched += 1
+    dispatched = dispatch_pk_ranges(ReputationEvent.objects.unscored(), sweep_reputation_range, chunk_size=chunk_size)
 
     for profile_id in ProfileReputation.objects.stale().values_list("profile_id", flat=True):
-        if safely_enqueue_task(recompute_reputation_total, profile_id) is not None:
+        if safely_enqueue_task(recompute_reputation_total, profile_id, durable=True) is not None:
             dispatched += 1
 
     return dispatched
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
     """Score every unscored ledger row with ``start_pk <= pk <= end_pk``.
 
@@ -3452,21 +4918,13 @@ def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
     return scored
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_achievements(chunk_size: int = 1000) -> int:
     """Fan the nightly achievement sweep out as bounded profile-range subtasks.
 
-    The nightly safety net. Some thresholds are crossed with no write to react
-    to - "trips attended" ticks up simply because a trip's end date passed - and
-    an enqueue is lost whenever the broker is briefly unreachable.
-
-    This task only dispatches: profile pks are sliced, in pk order, into
-    ranges of at most ``chunk_size`` and each range is evaluated by its own
-    :func:`sweep_achievements_range` task. Evaluating everything in one task
-    would hit the hard ``CELERY_TASK_TIME_LIMIT`` at scale and die
-    mid-iteration; a bounded chunk cannot approach the limit, and a chunk that
-    crashes anyway costs only its own range until the next nightly dispatch.
-    Profiles created after dispatch are simply picked up the following night.
+    Evaluating everything in one task would hit the hard ``CELERY_TASK_TIME_LIMIT`` at scale and die
+    mid-iteration; a bounded chunk cannot approach the limit, and a chunk that crashes anyway costs only
+    its own range until the next nightly dispatch.
 
     Args:
         chunk_size: Maximum profiles per subtask.
@@ -3476,31 +4934,22 @@ def sweep_achievements(chunk_size: int = 1000) -> int:
     """
     from urbanlens.dashboard.models.achievements.model import Achievement
     from urbanlens.dashboard.models.profile import Profile
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
 
     # Same gate the contribution signals apply: with no active award defined
     # there is provably nothing to evaluate, so don't fan out empty subtasks.
     if not Achievement.objects.active().exists():
         return 0
 
-    chunk_size = max(1, chunk_size)
-    pks = list(Profile.objects.order_by("pk").values_list("pk", flat=True))
-
-    dispatched = 0
-    for start in range(0, len(pks), chunk_size):
-        chunk = pks[start : start + chunk_size]
-        if safely_enqueue_task(sweep_achievements_range, chunk[0], chunk[-1]) is not None:
-            dispatched += 1
-    return dispatched
+    return dispatch_pk_ranges(Profile.objects.all(), sweep_achievements_range, chunk_size=chunk_size)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     """Evaluate every achievement for profiles with ``start_pk <= pk <= end_pk``.
 
-    One chunk of the sweep dispatched by :func:`sweep_achievements`. The range
-    is evaluated with one bulk metric pass for the whole chunk, so it costs on
-    the order of the metric count in queries rather than ~30 per profile.
+    The range is evaluated with one bulk metric pass for the whole chunk, so it costs on the order of
+    the metric count in queries rather than ~30 per profile.
 
     Args:
         start_pk: Lowest profile pk in the chunk, inclusive.
@@ -3514,56 +4963,84 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     return evaluate_profiles_in_range(start_pk, end_pk)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def sync_stripe_subscriptions() -> int:
-    """Re-sync every non-canceled RoleSubscription's status/price/threshold from Stripe.
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def sync_stripe_subscriptions(self, starting_after: str | None = None, sweep_started_at: float | None = None) -> int:
+    """Re-sync one page of Stripe subscriptions onto their RoleSubscription rows, then hand off the next page.
 
-    Webhooks (see controllers.billing_webhooks.StripeWebhookView) are the primary
-    mechanism for keeping RoleSubscription in sync - this is the nightly safety net for
-    deliveries Stripe couldn't complete (e.g. this server briefly unreachable exhausting
-    Stripe's own retry schedule). Pure drift correction, not load-bearing for the core
-    "did this charge clear the threshold" mechanic, which happens at webhook time.
+    Webhooks (see controllers.billing_webhooks.StripeWebhookView) are the primary mechanism for keeping
+    RoleSubscription in sync - this is the nightly safety net for deliveries Stripe couldn't complete. Each page is
+    its own task, so a retry repeats one page rather than the whole sweep. After the last page,
+    ``reconcile_unlisted_stripe_subscriptions`` retrieves the live rows no page reached.
+
+    Args:
+        starting_after: The previous page's last subscription id; None starts a sweep.
+        sweep_started_at: Unix time the sweep started; None starts a sweep.
 
     Returns:
-        How many subscriptions were checked.
+        How many rows this page applied.
     """
     import stripe
 
-    from urbanlens.dashboard.models.billing import RoleSubscription
-    from urbanlens.dashboard.services.billing import stripe_client
-    from urbanlens.dashboard.services.billing.webhooks import sync_from_stripe_subscription
+    from urbanlens.dashboard.services.billing import stripe_client, sync
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
     if not stripe_client.is_configured():
         return 0
+    stripe_client.configure()
+    if sweep_started_at is None:
+        # Whole seconds, like the stamps the pages write, so a row this sweep applies never reads as older than it.
+        sweep_started_at = float(int(timezone.now().timestamp()))
 
-    count = 0
-    for role_subscription in RoleSubscription.objects.not_canceled().select_related("role"):
-        try:
-            stripe_subscription = stripe.Subscription.retrieve(role_subscription.stripe_subscription_id).to_dict()
-        except stripe.StripeError:
-            logger.exception("sync_stripe_subscriptions: failed to retrieve %s", role_subscription.stripe_subscription_id)
-            continue
-        # Applying the payload is inside the guard too, not just fetching it:
-        # sync_from_stripe_subscription indexes into items.data[0], so one subscription
-        # in an unexpected shape would otherwise abort the sweep for everyone after it.
-        try:
-            sync_from_stripe_subscription(role_subscription, stripe_subscription)
-        except Exception:
-            logger.exception("sync_stripe_subscriptions: failed to apply %s", role_subscription.stripe_subscription_id)
-            continue
-        count += 1
-    return count
+    try:
+        progress = sync.sync_page(starting_after)
+    except (stripe.APIConnectionError, stripe.RateLimitError, stripe.APIError) as exc:
+        raise self.retry(exc=exc) from exc
+
+    if progress.resume_after is not None:
+        safely_enqueue_task(sync_stripe_subscriptions, progress.resume_after, sweep_started_at)
+    else:
+        safely_enqueue_task(reconcile_unlisted_stripe_subscriptions, sweep_started_at, 0)
+    return progress.applied
 
 
-@shared_task
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def reconcile_unlisted_stripe_subscriptions(sweep_started_at: float, after_pk: int, chunk_size: int = 100) -> int:
+    """Retrieve one chunk of live RoleSubscription rows the Stripe listing did not reach, then hand off the next.
+
+    Args:
+        sweep_started_at: Unix time the sweep started.
+        after_pk: Resume after this primary key.
+        chunk_size: Rows per task.
+
+    Returns:
+        How many rows this chunk applied.
+    """
+    from datetime import UTC
+
+    from urbanlens.dashboard.services.billing import stripe_client, sync
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    if not stripe_client.is_configured():
+        return 0
+    stripe_client.configure()
+
+    progress = sync.reconcile_unlisted(datetime.fromtimestamp(sweep_started_at, tz=UTC), after_pk, chunk_size)
+    if progress.resume_after is not None:
+        safely_enqueue_task(reconcile_unlisted_stripe_subscriptions, sweep_started_at, progress.resume_after, chunk_size)
+    return progress.applied
+
+
+@shared_task(queue=Queue.MAINTENANCE)
 def advance_pwyw_usage_ledgers() -> int:
     """Advance every pay-what-you-want RoleSubscription's usage ledger.
 
-    invoice.payment_succeeded already ticks a subscription's ledger the moment a
-    payment lands (see services.billing.banking), but that's the only trigger while a
-    subscription is actively billed - a canceled subscription gets no further Stripe
-    events at all, so this daily sweep is what keeps its banked balance counting down
-    (and eventually running out) once the money stops coming in.
+    invoice.payment_succeeded already ticks a subscription's ledger the moment a payment lands (see
+    services.billing.banking), but that's the only trigger while a subscription is actively billed - a
+    canceled subscription gets no further Stripe events at all, so this daily sweep is what keeps its
+    banked balance counting down (and eventually running out) once the money stops coming in.
+
+    Only ledgers that could move are visited (``RoleSubscriptionQuerySet.ledger_advance_due``); each is advanced under
+    its own row lock, so a re-run is harmless.
 
     Returns:
         How many pay-what-you-want subscriptions were checked.
@@ -3571,27 +5048,28 @@ def advance_pwyw_usage_ledgers() -> int:
     from urbanlens.dashboard.models.billing import RoleSubscription
     from urbanlens.dashboard.services.billing import banking
 
+    due = RoleSubscription.objects.ledger_advance_due(timezone.now()).select_related("role").order_by("pk")
     count = 0
-    for role_subscription in RoleSubscription.objects.filter(role__pay_what_you_want=True).select_related("role"):
-        # This daily sweep is the only thing counting a canceled subscription's banked
-        # balance down, so one row failing must not freeze every other user's ledger.
-        try:
-            banking.advance_usage_ledger(role_subscription)
-            count += 1
-        except Exception:
-            logger.exception("advance_pwyw_usage_ledgers: failed to advance subscription %s", role_subscription.pk)
+    last_pk = 0
+    while chunk := list(due.filter(pk__gt=last_pk)[:500]):
+        last_pk = chunk[-1].pk
+        for role_subscription in chunk:
+            # This daily sweep is the only thing counting a canceled subscription's banked
+            # balance down, so one row failing must not freeze every other user's ledger.
+            try:
+                banking.advance_usage_ledger(role_subscription)
+                count += 1
+            except Exception:
+                logger.exception("advance_pwyw_usage_ledgers: failed to advance subscription %s", role_subscription.pk)
     return count
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and file the local copy into an album.
 
-    The relevance vote is written synchronously by the request that queues
-    this (it's a cheap DB write, and it's the part that must not be lost), so
-    this task only owns the slow half: the HTTP download. Splitting it that
-    way means a broker outage or a dead provider costs the user their photo,
-    not their vote.
+    The relevance vote is written synchronously by the request that queues this (it's a cheap DB write,
+    and it's the part that must not be lost), so this task only owns the slow half: the HTTP download.
 
     Args:
         album_id: PK of the Album to file the photo into.
@@ -3602,12 +5080,12 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
         caption: Optional caption carried from the gallery tile.
 
     Returns:
-        PK of the materialized Image, or None if the album/profile vanished or
-        the download failed.
+        PK of the materialized Image, or None if the album/profile vanished or the download failed.
     """
     from urbanlens.dashboard.models.album.model import Album
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
     from urbanlens.dashboard.services.photos.albums import add_images_to_album, album_owner
     from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
@@ -3619,15 +5097,26 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
         return None
 
     owner = album_owner(album)
-    location = getattr(owner, "location", None)
-    if owner is None or location is None:
+    # A personal (Profile-owned) album has no Pin/Wiki to attach media to at all - checked directly rather than
+    # via `getattr(owner, "location", None)`, which happened to also catch this case today only because Profile
+    # has no `location` attribute of its own to shadow the default.
+    if not isinstance(owner, Pin | Wiki):
+        logger.info("cache_media_item_into_album: album %s has no pin or wiki to attach media to", album_id)
+        return None
+    location = owner.location
+    if location is None:
         logger.info("cache_media_item_into_album: album %s has no location to attach media to", album_id)
         return None
+    try:
+        ensure_room(ALBUM_PHOTOS, album.pk)
+    except CapacityExceededError as exc:
+        logger.info("cache_media_item_into_album: album %s is full, not downloading %s: %s", album_id, url, exc)
+        return None
 
-    # isinstance rather than `album.parent_pin_id is not None`: it asks the
-    # question directly of the object album_owner actually returned, so the two
-    # cannot disagree - and unlike a boolean flag it narrows the Pin | Wiki union
-    # for the two arguments below.
+    # isinstance rather than `album.parent_pin_id is not None`: it asks the question directly of the object
+    # album_owner actually returned, so the two cannot disagree - and narrows each argument to exactly the type
+    # materialize_media_item expects, rather than assuming "not a Pin" means "must be a Wiki" (album_owner can
+    # also return a bare Profile).
     try:
         image = materialize_media_item(
             location=location,
@@ -3637,30 +5126,24 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
             page_url=page_url,
             caption=caption,
             pin=owner if isinstance(owner, Pin) else None,
-            wiki=None if isinstance(owner, Pin) else owner,
+            wiki=owner if isinstance(owner, Wiki) else None,
         )
     except MaterializeError:
         # The vote is already recorded and stays; only the download is lost.
         logger.warning("cache_media_item_into_album: failed to materialize %s for album %s", url, album_id)
         return None
 
-    add_images_to_album(album, [image], profile)
+    try:
+        add_images_to_album(album, [image], profile)
+    except CapacityExceededError as exc:
+        logger.info("cache_media_item_into_album: album %s filled during the download; %s stays unfiled: %s", album_id, image.pk, exc)
     queue_relevance_vote(image, profile, is_relevant=True)
     return image.pk
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and attach the local copy to a wiki.
-
-    The wiki-send counterpart to :func:`cache_media_item_into_album`, and split the
-    same way: the request validates and enqueues, this owns the slow half. Sending a
-    full gallery selection meant up to 20 remote downloads inside one request, which
-    is both a multi-second hang with no progress indicator and a request that can time
-    out partway, leaving some photos attached and the rest silently dropped.
-
-    Tolerates the wiki or profile being deleted between enqueue and run - by then the
-    work is simply moot, which is not an error worth retrying.
 
     Args:
         wiki_id: PK of the Wiki to attach the photo to.
@@ -3671,8 +5154,7 @@ def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: 
         caption: Optional caption carried from the gallery tile.
 
     Returns:
-        PK of the materialized Image, or None if the wiki/profile vanished or the
-        download failed.
+        PK of the materialized Image, or None if the wiki/profile vanished or the download failed.
     """
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -3703,28 +5185,50 @@ def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: 
     return image.pk
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
-    """Fill a Location's recorded-weather cache for a set of days.
+def _parse_iso_days(iso_days: list[str], what: object) -> list[date]:
+    days = []
+    for iso in iso_days:
+        try:
+            days.append(date.fromisoformat(iso))
+        except ValueError:
+            logger.warning("fetch_recorded_weather: ignoring malformed date %r for %s", iso, what)
+    return days
 
-    Queued by the visit-history panel, which reads the cache without fetching:
-    that panel renders a page of visits inline, and a page render must not
-    block on an outbound call - a slow REData would hold up the whole visit
-    list for a decorative line of text. So the first view shows what is known
-    and asks for the rest, and the next view has it. This is the same
-    fetch-behind/render-from-cache split every pin-detail panel already uses;
-    it is only unusual here because the days come from the visits rather than
-    from the location.
+
+@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[str]) -> int:
+    """Store the recorded weather for a set of days at a coordinate.
+
+    Queued by the pages that show recorded weather - visit history and a trip's weather panel - which read
+    stored rows without fetching, so a slow REData never holds up their render.
 
     Args:
-        location_id: PK of the Location the days belong to.
+        latitude: WGS-84 latitude, usually a weather cell's centre.
+        longitude: WGS-84 longitude.
         iso_days: ISO dates to fetch, as the caller found them missing.
 
     Returns:
-        How many days ended up in the cache, for the task log.
+        How many of the days are now stored, for the task log.
     """
-    from datetime import date
+    from urbanlens.dashboard.services.locations.visit_weather import recorded_days_at
 
+    days = _parse_iso_days(iso_days, "a weather cell")
+    if not days:
+        return 0
+    return len(recorded_days_at(latitude, longitude, days))
+
+
+@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
+    """:func:`fetch_recorded_weather_at` for a Location, which may have been deleted since it was queued.
+
+    Args:
+        location_id: PK of the Location the days belong to.
+        iso_days: ISO dates to fetch.
+
+    Returns:
+        How many of the days are now stored.
+    """
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.services.locations.visit_weather import recorded_days
 
@@ -3732,32 +5236,23 @@ def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
     if location is None:
         logger.info("fetch_recorded_weather: location %s no longer exists", location_id)
         return 0
-
-    days = []
-    for iso in iso_days:
-        try:
-            days.append(date.fromisoformat(iso))
-        except ValueError:
-            logger.warning("fetch_recorded_weather: ignoring malformed date %r for location %s", iso, location_id)
+    days = _parse_iso_days(iso_days, f"location {location_id}")
     if not days:
         return 0
     return len(recorded_days(location, days))
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_demo_account_purge() -> bool:
     """Delete expired demo accounts. A no-op on any instance that is not the demo.
 
-    Unconditionally scheduled (see ``CELERY_BEAT_SCHEDULE``) rather than
-    registered only when ``UL_DEMO_MODE`` is on, matching every other entry
-    there - the schedule is fixed at process start, and the individual task
-    deciding whether it is due is the existing pattern (see
-    ``run_scheduled_database_backup``). Harmless to fire on the real site: it
-    checks the flag and returns immediately.
+    Unconditionally scheduled (see ``CELERY_BEAT_SCHEDULE``) rather than registered only when
+    ``UL_DEMO_MODE`` is on, matching every other entry there - the schedule is fixed at process start,
+    and the individual task deciding whether it is due is the existing pattern (see
+    ``run_scheduled_database_backup``).
 
     Returns:
-        True when this ran (this is the demo instance), False otherwise. The
-        command itself logs how many accounts it purged.
+        True when this ran (this is the demo instance), False otherwise.
     """
     from django.core.management import call_command
 
@@ -3770,15 +5265,11 @@ def run_scheduled_demo_account_purge() -> bool:
     return True
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_redata_public_locations_sync() -> bool:
     """Refresh the demo instance's location pool from REData. A no-op everywhere else.
 
-    Unconditionally scheduled, same reasoning as
-    ``run_scheduled_demo_account_purge``. REData's ``/public-locations/`` is
-    not deployed anywhere reachable as of 2026-08-20, so this fires and finds
-    nothing to import until that changes - once it does, the pool grows with
-    no further action needed here.
+    Unconditionally scheduled, same reasoning as ``run_scheduled_demo_account_purge``.
 
     Returns:
         True when this ran (this is the demo instance), False otherwise.
@@ -3792,3 +5283,96 @@ def run_scheduled_redata_public_locations_sync() -> bool:
 
     call_command("import_redata_public_locations")
     return True
+
+
+@shared_task(queue=Queue.BULK)
+def fan_out_wiki_alias_to_pins(alias_id: int) -> int:
+    """Mirror one new wiki alias onto every opted-in pin at that location.
+
+    Bulk rather than interactive because the list is as long as the place is
+    popular, and nobody is waiting on it - the person who added the name has
+    already seen it on the wiki.
+
+    Args:
+        alias_id: Primary key of the ``WikiAlias`` that was created.
+
+    Returns:
+        How many pins were considered.
+    """
+    from urbanlens.dashboard.services.aliases.fanout import mirror_wiki_alias_to_pins
+
+    return mirror_wiki_alias_to_pins(alias_id)
+
+
+@shared_task(queue=Queue.BULK)
+def sync_pin_against_smart_lists_task(pin_id: int) -> None:
+    """Re-evaluate one pin against every smart list its owner has.
+
+    The hand-off for a profile with more smart lists than a request should walk.
+
+    Args:
+        pin_id: Primary key of the pin that was created or edited.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.pins.pin_list_membership import sync_pin_against_smart_lists
+
+    pin = Pin.objects.filter(pk=pin_id).first()
+    if pin is not None:
+        sync_pin_against_smart_lists(pin, deferred=True)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def process_signup(username: str, email: str, password_hash: str, auth_salt: str, invite_token: str | None) -> None:
+    """Finish a signup after the response, so a registered address takes no longer to answer than a new one.
+
+    Args:
+        username: The validated username.
+        email: The address as typed, lowercased.
+        password_hash: The already-hashed password.
+        auth_salt: The client-side KDF salt, or an empty string.
+        invite_token: The invitation token the signup link carried, if any.
+    """
+    import uuid
+
+    from urbanlens.dashboard.services.auth.signup import complete_signup
+
+    complete_signup(username, email, password_hash, auth_salt, uuid.UUID(invite_token) if invite_token else None)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def resend_signup_verification(email: str) -> None:
+    """Send a fresh verification link, if ``email`` has an account awaiting one, after the response.
+
+    Args:
+        email: The address as typed.
+    """
+    from urbanlens.dashboard.services.auth.signup import resend_verification
+
+    resend_verification(email)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def send_password_reset(email: str) -> None:
+    """Send a password-reset link, if ``email`` has an active account, after the response.
+
+    Args:
+        email: The address as typed.
+    """
+    from urbanlens.dashboard.services.auth.signup import send_password_reset as send
+
+    send(email)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def deliver_email_claim(claim_id: int) -> None:
+    """Send a claimed address its confirmation link, or the in-use notice, after the response.
+
+    Args:
+        claim_id: PK of the pending ProfileEmail.
+    """
+    from urbanlens.dashboard.models.profile.email import ProfileEmail
+    from urbanlens.dashboard.services.auth.email_claims import send_confirmation
+
+    claim = ProfileEmail.objects.select_related("profile__user").filter(pk=claim_id, is_verified=False).first()
+    if claim is not None:
+        send_confirmation(claim)

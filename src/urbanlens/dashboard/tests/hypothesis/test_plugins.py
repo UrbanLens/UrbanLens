@@ -1,13 +1,4 @@
-"""Tests for the plugin framework: hook bus, plugin registry, and integrations.
-
-- HookRegistry: pure in-memory; priority ordering property-tested with
-  hypothesis.
-- PluginRegistry: exercised with locally defined dummy plugins on a fresh
-  registry instance (never the app-wide singleton, which real discovery owns).
-- Integration: the builtin plugins really are discovered, feed the rate
-  limiter's merged defaults, and populate external_data's panel registry.
-  DB-free throughout.
-"""
+"""Tests for the plugin framework: hook bus, plugin registry, and integrations."""
 
 from __future__ import annotations
 
@@ -15,7 +6,6 @@ from typing import ClassVar
 from unittest.mock import patch
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.plugins import UrbanLensPlugin, plugin_registry
 from urbanlens.dashboard.plugins.hooks import HookRegistry
@@ -68,14 +58,14 @@ class HookRegistryFilterTests(SimpleTestCase):
 
     def test_extra_arguments_are_forwarded(self) -> None:
         hooks = HookRegistry()
-        hooks.add_filter("value", lambda v, pin: v + [pin])
+        hooks.add_filter("value", lambda v, pin: [*v, pin])
         self.assertEqual(hooks.apply_filters("value", [], "pin-7"), ["pin-7"])
 
     @given(priorities=st.lists(st.integers(min_value=-100, max_value=100), min_size=1, max_size=8))
     def test_callbacks_always_run_in_ascending_priority(self, priorities: list[int]) -> None:
         hooks = HookRegistry()
         for priority in priorities:
-            hooks.add_filter("order", lambda seen, p=priority: seen + [p], priority=priority)
+            hooks.add_filter("order", lambda seen, p=priority: [*seen, p], priority=priority)
         seen = hooks.apply_filters("order", [])
         self.assertEqual(seen, sorted(priorities))
 
@@ -261,7 +251,15 @@ class BuiltinDiscoveryTests(SimpleTestCase):
             ],
         )
         street = [type(p).__name__ for p in plugin_registry.street_view_providers()]
-        self.assertEqual(street, ["GoogleMapsGateway", "MapillaryStreetViewProvider", "KartaViewStreetViewProvider", "PanoramaxStreetViewProvider"])
+        self.assertEqual(
+            street,
+            [
+                "GoogleMapsGateway",
+                "MapillaryStreetViewProvider",
+                "KartaViewStreetViewProvider",
+                "PanoramaxStreetViewProvider",
+            ],
+        )
 
     def test_unknown_panel_source_is_rejected_cleanly(self) -> None:
         from urbanlens.dashboard.services.pins.external_data import get_panel_source, schedule_panel_fetch

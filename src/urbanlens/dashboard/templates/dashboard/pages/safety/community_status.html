@@ -1,22 +1,15 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 {% load vendor_assets %}
 {% load humanize %}
 
-{% comment %}
-Read-only shared view of a safety check-in - reached either from a comment posted to a
-destination's community wiki at escalation (services.safety.post_checkin_to_community_wiki),
-or by a logged-in registered emergency contact from their safety overview page's
-"Shared with you" section (viewer_is_contact=True).
-
-Deliberately limited: status, owner, expected check-in time, and the destination map.
-The trip plan, contact message, emergency contacts, photos, and chat stay owner-only -
-opting into the wiki post shares that the owner is overdue and where, not the whole
-check-in, and a contact gets the same limited view rather than the full owner page.
-{% endcomment %}
+{% comment %}Read-only shared view of a safety.{% endcomment %}
 
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% endblock %}
 
 {% block hero %}
@@ -60,9 +53,12 @@ check-in, and a contact gets the same limited view rather than the full owner pa
         {% endif %}
     </div>
 
-    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude %}
+    {% include "dashboard/partials/safety/_safety_map.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude %}
 
 {% endif %}
 </div>
-{% include "dashboard/partials/safety/_dissolve_animation.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/safety.js' %}"></script>
 {% endblock %}

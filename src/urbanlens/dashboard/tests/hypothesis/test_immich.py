@@ -1,53 +1,58 @@
-"""Tests for the Immich photo-import integration.
-
-Covers:
-- EncryptedTextField - values round-trip through encrypt/decrypt, and the raw
-  DB-stored value is not the plaintext (property-based).
-- ImmichGateway - auth header, map-marker parsing, GatewayRequestError on
-  failure. All HTTP calls are mocked; no real network access occurs.
-- ImmichSettingsView / ImmichDisconnectView - connect only persists a
-  credential that ping() verifies; disconnect removes it.
-- PinImmichSearchView - distance filtering, "during my visits"/"all photos"
-  mode branching, and already-imported flagging.
-- import_immich_photos task - creates Image + PinVisit for a new asset,
-  skips a duplicate checksum, skips an over-quota asset, without failing the
-  rest of the batch, and (when called with visit_id_by_asset, as
-  accept_pin_suggestion does) attaches to that visit instead of creating a
-  redundant one of its own.
-"""
+"""Tests for the Immich photo-import integration."""
 
 from __future__ import annotations
 
 import datetime
 from decimal import Decimal
 import hashlib
+import socket
 from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.fields import EncryptedTextField
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.immich.gateway import GatewayRequestError, ImmichGateway, MapMarker, SearchAsset
+from urbanlens.dashboard.services.apis.immich.nearby import NEARBY_ASSET_LIMIT
+from urbanlens.dashboard.services.media.storage import (
+    StorageQuotaExceededError,
+    UploadReservation,
+    lock_profile_uploads,
+)
 
-_db_settings = settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+_db_settings = settings(
+    max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture]
+)
 
 
-def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b"", headers: dict | None = None):
+def _mock_response(
+    *, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b"", headers: dict | None = None
+):
     resp = mock.MagicMock()
     resp.ok = ok
+    resp.is_redirect = False
     resp.status_code = status_code
     resp.json.return_value = json_data
     resp.content = content
     resp.headers = headers or {}
     resp.text = ""
+    # Binary bodies are streamed and bounded (see gateway._get_binary), so the
+    # double serves both shapes: `.content` for the JSON paths, and a real
+    # `iter_content` plus context manager for the binary ones. Without the
+    # latter a MagicMock yields nothing and the body silently reads as empty.
+    resp.iter_content.side_effect = lambda chunk_size=8192: iter(
+        [content[i : i + chunk_size] for i in range(0, len(content), chunk_size)]
+    )
+    resp.__enter__.return_value = resp
+    resp.__exit__.return_value = None
     return resp
 
 
@@ -81,7 +86,9 @@ class EncryptedTextFieldTests(TestCase):
         from django.db import connection
 
         user = baker.make(User)
-        account = ImmichAccount.objects.create(profile=user.profile, server_url="https://photos.example.com", api_key="s3cret-key")
+        account = ImmichAccount.objects.create(
+            profile=user.profile, server_url="https://photos.example.com", api_key="s3cret-key"
+        )
 
         # Bypass the ORM's from_db_value conversion to see the actual stored bytes.
         with connection.cursor() as cursor:
@@ -95,15 +102,11 @@ class EncryptedTextFieldTests(TestCase):
     def test_key_is_derived_from_djangos_stable_secret_key_not_appsettings(self) -> None:
         """Regression test: the Fernet key must come from Django's SECRET_KEY.
 
-        AppSettings.secret_key (a separate pydantic field, env var UL_SECRET_KEY)
-        has no wired env var in any deployment of this app and silently falls
-        back to a fresh random value in every process - using it here meant
-        every gunicorn worker/Celery worker/manage.py run derived a *different*
-        key, so anything encrypted by one process was undecryptable by any
-        other (see the ImmichAccountManagerTests below for the user-facing
-        fallout). Django's SECRET_KEY (DJANGO_SECRET_KEY) is the one secret
-        every deployment actually configures consistently.
-        """
+        AppSettings.secret_key (a separate pydantic field, env var UL_SECRET_KEY) has no wired env var in any
+        deployment of this app and silently falls back to a fresh random value in every process - using it here
+        meant every gunicorn worker/Celery worker/manage.py run derived a *different* key, so anything encrypted
+        by one process was undecryptable by any other (see the ImmichAccountManagerTests below for the
+        user-facing fallout)."""
         import base64
         import hashlib
 
@@ -128,6 +131,15 @@ def _account(**kwargs) -> ImmichAccount:
 
 class ImmichGatewayTests(TestCase):
     """ImmichGateway sends the API key header and maps failures to GatewayRequestError."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Every request resolves the server first; without an answer here the test would depend on real DNS.
+        resolution = mock.patch(
+            "socket.getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+        )
+        resolution.start()
+        self.addCleanup(resolution.stop)
 
     def test_ping_true_on_success(self) -> None:
         gw = ImmichGateway(account=_account(), session=mock.MagicMock())
@@ -165,7 +177,10 @@ class ImmichGatewayTests(TestCase):
 
     def test_get_asset_original_returns_bytes_filename_and_content_type(self) -> None:
         gw = ImmichGateway(account=_account(), session=mock.MagicMock())
-        gw.session.get.return_value = _mock_response(content=b"jpegdata", headers={"Content-Type": "image/jpeg", "Content-Disposition": 'attachment; filename="photo.jpg"'})
+        gw.session.get.return_value = _mock_response(
+            content=b"jpegdata",
+            headers={"Content-Type": "image/jpeg", "Content-Disposition": 'attachment; filename="photo.jpg"'},
+        )
         content, filename, content_type = gw.get_asset_original("a1")
         self.assertEqual(content, b"jpegdata")
         self.assertEqual(filename, "photo.jpg")
@@ -174,7 +189,9 @@ class ImmichGatewayTests(TestCase):
     def test_search_by_dates_issues_one_call_per_date_and_dedupes(self) -> None:
         gw = ImmichGateway(account=_account(), session=mock.MagicMock())
         gw.session.post.side_effect = [
-            _mock_response(json_data={"assets": {"items": [{"id": "a1", "fileCreatedAt": "2024-01-01T12:00:00+00:00"}]}}),
+            _mock_response(
+                json_data={"assets": {"items": [{"id": "a1", "fileCreatedAt": "2024-01-01T12:00:00+00:00"}]}}
+            ),
             _mock_response(
                 json_data={
                     "assets": {
@@ -201,7 +218,21 @@ class ImmichGatewayTests(TestCase):
     def test_search_metadata_parses_gps_and_city_from_exif_info(self) -> None:
         gw = ImmichGateway(account=_account(), session=mock.MagicMock())
         gw.session.post.return_value = _mock_response(
-            json_data={"assets": {"items": [{"id": "a1", "exifInfo": {"latitude": 40.5, "longitude": -74.5, "city": "Newark", "dateTimeOriginal": "2024-01-01T12:00:00+00:00"}}]}},
+            json_data={
+                "assets": {
+                    "items": [
+                        {
+                            "id": "a1",
+                            "exifInfo": {
+                                "latitude": 40.5,
+                                "longitude": -74.5,
+                                "city": "Newark",
+                                "dateTimeOriginal": "2024-01-01T12:00:00+00:00",
+                            },
+                        }
+                    ]
+                }
+            },
         )
         (asset,) = gw.list_recent()
         self.assertEqual(asset.lat, 40.5)
@@ -220,8 +251,24 @@ class ImmichGatewayTests(TestCase):
     def test_iter_library_assets_pages_until_no_next_page(self) -> None:
         gw = ImmichGateway(account=_account(), session=mock.MagicMock())
         gw.session.post.side_effect = [
-            _mock_response(json_data={"assets": {"items": [{"id": "a1", "exifInfo": {"latitude": 1.0, "longitude": 2.0}}], "nextPage": "2", "total": 2}}),
-            _mock_response(json_data={"assets": {"items": [{"id": "a2", "exifInfo": {"latitude": 3.0, "longitude": 4.0}}], "nextPage": None, "total": 2}}),
+            _mock_response(
+                json_data={
+                    "assets": {
+                        "items": [{"id": "a1", "exifInfo": {"latitude": 1.0, "longitude": 2.0}}],
+                        "nextPage": "2",
+                        "total": 2,
+                    }
+                }
+            ),
+            _mock_response(
+                json_data={
+                    "assets": {
+                        "items": [{"id": "a2", "exifInfo": {"latitude": 3.0, "longitude": 4.0}}],
+                        "nextPage": None,
+                        "total": 2,
+                    }
+                }
+            ),
         ]
         pages = list(gw.iter_library_assets(page_size=1))
         self.assertEqual(gw.session.post.call_count, 2)
@@ -267,19 +314,15 @@ class ImmichSettingsViewTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.client.force_login(self.user)
-        # "photos.example.com" is RFC 2606 non-resolving (unlike bare
-        # example.com, arbitrary subdomains don't resolve), and
-        # ImmichAccountForm.clean_server_url now runs it through the SSRF
-        # guard in services.security.url_safety, which resolves the hostname for
-        # real. Mock DNS to a fixed public IP, matching the convention used
-        # elsewhere for this same guard (see test_pin_suggestions.py).
         self._dns_patch = mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))])
         self._dns_patch.start()
         self.addCleanup(self._dns_patch.stop)
 
     def test_valid_credentials_are_saved(self) -> None:
         with mock.patch.object(ImmichGateway, "ping", return_value=True):
-            response = self.client.post(reverse("settings.immich"), {"server_url": "https://photos.example.com", "api_key": "good-key"})
+            response = self.client.post(
+                reverse("settings.immich"), {"server_url": "https://photos.example.com", "api_key": "good-key"}
+            )
         self.assertEqual(response.status_code, 200)
         account = ImmichAccount.objects.get(profile=self.user.profile)
         self.assertEqual(account.server_url, "https://photos.example.com")
@@ -287,12 +330,25 @@ class ImmichSettingsViewTests(TestCase):
 
     def test_invalid_credentials_are_rejected_and_not_saved(self) -> None:
         with mock.patch.object(ImmichGateway, "ping", return_value=False):
-            self.client.post(reverse("settings.immich"), {"server_url": "https://photos.example.com", "api_key": "bad-key"})
+            self.client.post(
+                reverse("settings.immich"), {"server_url": "https://photos.example.com", "api_key": "bad-key"}
+            )
         self.assertFalse(ImmichAccount.objects.filter(profile=self.user.profile).exists())
 
     def test_disconnect_removes_the_account(self) -> None:
         ImmichAccount.objects.create(profile=self.user.profile, server_url="https://photos.example.com", api_key="k")
         self.client.post(reverse("settings.immich.disconnect"))
+        self.assertFalse(ImmichAccount.objects.filter(profile=self.user.profile).exists())
+
+    def test_a_rate_limit_refusal_during_ping_is_a_failed_check_not_a_500(self) -> None:
+        """P122: `post` has no handler of its own around `ping()` - it relies on `ping()` degrading to False."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with mock.patch.object(ImmichGateway, "_get", side_effect=RateLimitExceededError("immich")):
+            response = self.client.post(
+                reverse("settings.immich"), {"server_url": "https://photos.example.com", "api_key": "some-key"}
+            )
+        self.assertEqual(response.status_code, 200)
         self.assertFalse(ImmichAccount.objects.filter(profile=self.user.profile).exists())
 
 
@@ -305,27 +361,34 @@ def _corrupt_api_key(account: ImmichAccount) -> None:
     from django.db import connection
 
     with connection.cursor() as cursor:
-        cursor.execute(f"UPDATE {ImmichAccount._meta.db_table} SET api_key = %s WHERE id = %s", ["not-a-valid-fernet-token", account.pk])  # noqa: S608 - table name from Django _meta, not user input
+        cursor.execute(
+            f"UPDATE {ImmichAccount._meta.db_table} SET api_key = %s WHERE id = %s",
+            ["not-a-valid-fernet-token", account.pk],
+        )  # noqa: S608 - table name from Django _meta, not user input
 
 
 class ImmichAccountManagerTests(TestCase):
-    """get_for_profile/delete_for_profile self-heal instead of raising InvalidToken."""
+    """An undecryptable account reads as absent without raising, and only an explicit delete removes it."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.account = ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
+        self.account = ImmichAccount.objects.create(
+            profile=self.profile, server_url="https://photos.example.com", api_key="k"
+        )
         _corrupt_api_key(self.account)
 
     def test_get_for_profile_returns_none_instead_of_raising(self) -> None:
         self.assertIsNone(ImmichAccount.objects.get_for_profile(self.profile))
 
-    def test_get_for_profile_clears_the_undecryptable_row(self) -> None:
+    def test_get_for_profile_keeps_the_undecryptable_row(self) -> None:
         ImmichAccount.objects.get_for_profile(self.profile)
-        self.assertFalse(ImmichAccount.objects.filter(profile=self.profile).exists())
+        self.assertTrue(ImmichAccount.objects.filter(profile=self.profile).exists())
 
     def test_get_for_profile_is_a_noop_for_a_healthy_account(self) -> None:
-        healthy = ImmichAccount.objects.create(profile=baker.make(User).profile, server_url="https://photos.example.com", api_key="fine")
+        healthy = ImmichAccount.objects.create(
+            profile=baker.make(User).profile, server_url="https://photos.example.com", api_key="fine"
+        )
         result = ImmichAccount.objects.get_for_profile(healthy.profile)
         self.assertEqual(result, healthy)
 
@@ -337,7 +400,8 @@ class ImmichAccountManagerTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("settings.immich"))
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(ImmichAccount.objects.filter(profile=self.profile).exists())
+        self.assertIsNotNone(response.context["form"])
+        self.assertTrue(ImmichAccount.objects.filter(profile=self.profile).exists())
 
     def test_pin_search_does_not_500_with_a_corrupted_account(self) -> None:
         self.client.force_login(self.user)
@@ -366,7 +430,9 @@ class ImmichLibraryScanStartViewTests(TestCase):
     def test_enqueues_the_sweep_task_when_connected(self) -> None:
         ImmichAccount.objects.create(profile=self.user.profile, server_url="https://photos.example.com", api_key="k")
         fake_result = mock.MagicMock(id="task-123")
-        with mock.patch("urbanlens.dashboard.controllers.immich.safely_enqueue_task", return_value=fake_result) as enqueue:
+        with mock.patch(
+            "urbanlens.dashboard.controllers.immich.safely_enqueue_task", return_value=fake_result
+        ) as enqueue:
             response = self.client.post(reverse("settings.immich.scan"))
         self.assertEqual(response.status_code, 200)
         enqueue.assert_called_once()
@@ -416,7 +482,13 @@ class ImmichLibraryScanResumeTests(TestCase):
 
         _set_active_scan_task_id(self.profile.pk, "task-123")
         with mock.patch("urbanlens.dashboard.controllers.immich.get_task_progress") as get_progress:
-            get_progress.return_value = mock.MagicMock(state="SUCCESS", percent=100, message="Done", error="", result={"scanned": 5, "matched_suggestions": 0, "new_pin_suggestions": 0})
+            get_progress.return_value = mock.MagicMock(
+                state="SUCCESS",
+                percent=100,
+                message="Done",
+                error="",
+                result={"scanned": 5, "matched_suggestions": 0, "new_pin_suggestions": 0},
+            )
             self.client.get(reverse("settings.immich.scan.progress", args=["task-123"]))
         self.assertIsNone(get_active_scan_task_id(self.profile.pk))
 
@@ -425,7 +497,9 @@ class ImmichLibraryScanResumeTests(TestCase):
 
         _set_active_scan_task_id(self.profile.pk, "task-123")
         with mock.patch("urbanlens.dashboard.controllers.immich.get_task_progress") as get_progress:
-            get_progress.return_value = mock.MagicMock(state="FAILURE", percent=0, message="", error="boom", result=None)
+            get_progress.return_value = mock.MagicMock(
+                state="FAILURE", percent=0, message="", error="boom", result=None
+            )
             self.client.get(reverse("settings.immich.scan.progress", args=["task-123"]))
         self.assertIsNone(get_active_scan_task_id(self.profile.pk))
 
@@ -442,7 +516,9 @@ class PinImmichSearchViewTests(TestCase):
         self.client.force_login(self.user)
         self.location = baker.make("dashboard.Location", latitude=Decimal("40.000000"), longitude=Decimal("-74.000000"))
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
-        self.account = ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
+        self.account = ImmichAccount.objects.create(
+            profile=self.profile, server_url="https://photos.example.com", api_key="k"
+        )
 
     def test_only_markers_within_radius_are_returned(self) -> None:
         # ~11m north and ~1.1km north of the pin, respectively.
@@ -452,6 +528,95 @@ class PinImmichSearchViewTests(TestCase):
             response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "500"})
         asset_ids = [a["id"] for a in response.context["assets"]]
         self.assertEqual(asset_ids, ["near"])
+
+    def test_the_library_is_fetched_once_across_every_radius_option(self) -> None:
+        markers = [MapMarker(id="near", lat=40.0001, lon=-74.0), MapMarker(id="far", lat=40.01, lon=-74.0)]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=markers) as get_markers:
+            for radius in (100, 250, 500, 1000, 2000, 5000):
+                self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": str(radius)})
+
+        get_markers.assert_called_once()
+
+    def test_each_radius_still_filters_from_the_cached_neighbourhood(self) -> None:
+        markers = [MapMarker(id="near", lat=40.0001, lon=-74.0), MapMarker(id="far", lat=40.01, lon=-74.0)]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=markers):
+            tight = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "500"})
+            wide = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "5000"})
+
+        self.assertEqual([a["id"] for a in tight.context["assets"]], ["near"])
+        self.assertEqual([a["id"] for a in wide.context["assets"]], ["near", "far"])
+
+    def test_another_account_never_reads_this_ones_cache(self) -> None:
+        stranger = baker.make(User)
+        ImmichAccount.objects.create(profile=stranger.profile, server_url="https://other.example.com", api_key="k2")
+        stranger_pin = baker.make_recipe("dashboard.pin", profile=stranger.profile, location=self.location)
+
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="mine", lat=40.0, lon=-74.0)]
+        ):
+            self.client.get(reverse("pin.immich.search", args=[self.pin.slug]))
+        self.client.force_login(stranger)
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="theirs", lat=40.0, lon=-74.0)]
+        ) as get_markers:
+            response = self.client.get(reverse("pin.immich.search", args=[stranger_pin.slug]))
+
+        get_markers.assert_called_once()
+        self.assertEqual([a["id"] for a in response.context["assets"]], ["theirs"])
+
+    def test_reconnecting_the_account_does_not_serve_the_old_server(self) -> None:
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="old", lat=40.0, lon=-74.0)]
+        ):
+            self.client.get(reverse("pin.immich.search", args=[self.pin.slug]))
+        self.account.server_url = "https://moved.example.com"
+        self.account.save(update_fields=["server_url", "updated"])
+
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="new", lat=40.0, lon=-74.0)]
+        ):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]))
+
+        self.assertEqual([a["id"] for a in response.context["assets"]], ["new"])
+
+    def test_only_the_nearest_are_kept_and_the_page_says_so(self) -> None:
+        # Every marker inside the widest radius, so the cap is the only thing
+        # that can bound the result.
+        crowd = [
+            MapMarker(id=f"a{index}", lat=40.0 + index * 0.000001, lon=-74.0)
+            for index in range(NEARBY_ASSET_LIMIT + 20)
+        ]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=crowd):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "5000"})
+
+        self.assertEqual(len(response.context["assets"]), NEARBY_ASSET_LIMIT)
+        self.assertEqual(
+            [a["id"] for a in response.context["assets"][:2]], ["a0", "a1"], "the nearest are the ones kept"
+        )
+        self.assertContains(response, f"Showing the {NEARBY_ASSET_LIMIT} photos closest to this pin")
+
+    def test_a_library_of_exactly_the_cap_is_not_reported_as_truncated(self) -> None:
+        # The cap dropped nothing, so the picker is showing everything there
+        # is - telling the user to narrow the search would be a lie. Inferring
+        # truncation from the result's length gets this exact case wrong.
+        crowd = [
+            MapMarker(id=f"a{index}", lat=40.0 + index * 0.000001, lon=-74.0) for index in range(NEARBY_ASSET_LIMIT)
+        ]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=crowd):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "5000"})
+
+        self.assertEqual(len(response.context["assets"]), NEARBY_ASSET_LIMIT)
+        self.assertFalse(response.context["nearby_truncated"])
+        self.assertNotContains(response, "photos closest to this pin")
+
+    def test_a_short_result_is_not_reported_as_truncated(self) -> None:
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="one", lat=40.0, lon=-74.0)]
+        ):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]))
+
+        self.assertFalse(response.context["nearby_truncated"])
+        self.assertNotContains(response, "photos closest to this pin")
 
     def test_already_imported_asset_is_flagged(self) -> None:
         marker = MapMarker(id="dup", lat=40.0, lon=-74.0)
@@ -505,7 +670,9 @@ class ImportImmichPhotosTaskTests(TestCase):
         self.profile = self.user.profile
         self.location = baker.make("dashboard.Location", latitude=Decimal("40.000000"), longitude=Decimal("-74.000000"))
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
-        self.account = ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
+        self.account = ImmichAccount.objects.create(
+            profile=self.profile, server_url="https://photos.example.com", api_key="k"
+        )
 
     def _run(self, asset_ids, downloads, visit_id_by_asset=None):
         """Run the task with get_asset_original mapped per asset id from `downloads`."""
@@ -526,6 +693,14 @@ class ImportImmichPhotosTaskTests(TestCase):
         self.assertEqual(image.source_url, self.account.asset_web_url("a1"))
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.PHOTO).exists())
 
+    def test_imported_rows_are_labelled_immich_not_upload(self) -> None:
+        # Omitting source= defaults the row to UPLOAD, which is indistinguishable
+        # from the upload form to every source-keyed consumer: the Media gallery's
+        # per-source tabs, achievements' UPLOAD-filtered counts, and the
+        # UPLOAD-gated reputation rules all silently miscount these.
+        self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
+        self.assertEqual(Image.objects.get(pin=self.pin, profile=self.profile).source, ImageSource.IMMICH)
+
     def test_skips_asset_already_imported_by_checksum(self) -> None:
         content = b"already-here"
         checksum = hashlib.sha256(content).hexdigest()
@@ -538,27 +713,31 @@ class ImportImmichPhotosTaskTests(TestCase):
 
     def test_over_quota_asset_is_skipped_without_failing_the_batch(self) -> None:
         # First call (asset "ok") is admitted; second ("too_big") exceeds quota.
-        with mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", side_effect=[None, "Storage quota exceeded."]):
+        with mock.patch.object(
+            UploadReservation, "reserve", side_effect=[None, StorageQuotaExceededError("Storage quota exceeded.")]
+        ):
             counts = self._run(
                 ["ok", "too_big"],
                 {"ok": (b"small", "a.jpg", "image/jpeg"), "too_big": (b"huge", "b.jpg", "image/jpeg")},
             )
         self.assertEqual(counts, {"imported": 1, "failed": 1, "skipped": 0})
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
-        with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
+        with mock.patch(
+            "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+        ) as lock:
             self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
     def test_visit_id_by_asset_attaches_to_that_visit_without_creating_another(self) -> None:
         """Regression test for accept_pin_suggestion's photo-import wiring (services/pin_suggestions.py)."""
         target_visit = baker.make_recipe("dashboard.pin_visit", pin=self.pin, source=VisitSource.HISTORY)
         before = PinVisit.objects.filter(pin=self.pin).count()
 
-        counts = self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")}, visit_id_by_asset={"a1": target_visit.pk})
+        counts = self._run(
+            ["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")}, visit_id_by_asset={"a1": target_visit.pk}
+        )
 
         self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
         image = Image.objects.get(pin=self.pin, profile=self.profile)
@@ -566,7 +745,9 @@ class ImportImmichPhotosTaskTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=self.pin).count(), before)
 
     def test_asset_not_in_visit_id_by_asset_falls_back_to_its_own_visit(self) -> None:
-        counts = self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")}, visit_id_by_asset={"other-asset": 999})
+        counts = self._run(
+            ["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")}, visit_id_by_asset={"other-asset": 999}
+        )
         self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertIsNotNone(image.visit_id)
@@ -584,6 +765,7 @@ class ImportImmichPhotosTaskTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_immich_photos(self.pin.pk, self.profile.pk, ["a1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+        self.assertTrue(ImmichAccount.objects.filter(pk=self.account.pk).exists())
 
 
 # -- Celery task: sweep_immich_library_locations ------------------------------------
@@ -597,12 +779,16 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self.profile = self.user.profile
         self.location = baker.make("dashboard.Location", latitude=Decimal("40.000000"), longitude=Decimal("-74.000000"))
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
-        self.account = ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
+        self.account = ImmichAccount.objects.create(
+            profile=self.profile, server_url="https://photos.example.com", api_key="k"
+        )
 
     def _run(self, pages):
         with (
             mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter(pages)),
-            mock.patch.object(ImmichGateway, "library_asset_count", return_value=sum(len(page) for page, _total in pages)),
+            mock.patch.object(
+                ImmichGateway, "library_asset_count", return_value=sum(len(page) for page, _total in pages)
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             return tasks.sweep_immich_library_locations(self.profile.pk)
@@ -610,7 +796,9 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
     def test_sweep_matches_a_geotagged_asset_against_an_existing_pin(self) -> None:
         from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion
 
-        asset = SearchAsset(id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0)
+        asset = SearchAsset(
+            id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
+        )
         result = self._run([([asset], 1)])
         self.assertEqual(result, {"scanned": 1, "matched_suggestions": 1, "new_pin_suggestions": 0})
         suggestion = PinSuggestion.objects.get()
@@ -632,7 +820,9 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self._run([([], 0)])
         self.assertFalse(NotificationLog.objects.filter(profile=self.profile).exists())
 
-        asset = SearchAsset(id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0)
+        asset = SearchAsset(
+            id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
+        )
         self._run([([asset], 1)])
         self.assertTrue(NotificationLog.objects.filter(profile=self.profile).exists())
 
@@ -670,11 +860,10 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self.assertFalse(PinSuggestion.objects.exists())
 
     def test_progress_message_uses_the_real_total_not_the_deprecated_page_total(self) -> None:
-        """Regression test: Immich's per-page 'total' field mirrors the page size (a
-        deprecated field), so a naive "Scanned N of <page total>" message goes stale
-        and nonsensical once scanned outgrows a single page (e.g. "Scanned 194000 of
-        1000"). The real library-wide count must come from library_asset_count()."""
-        asset = SearchAsset(id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0)
+        """Regression test: Immich's per-page 'total' field mirrors the page size (a deprecated field), so a naive "Scanned N of <page total>" message goes stale and nonsensical once scanned outgrows a single page (e.g. "Scanned 194000 of 1000")."""
+        asset = SearchAsset(
+            id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
+        )
         with (
             mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter([([asset], 1000)])),
             mock.patch.object(ImmichGateway, "library_asset_count", return_value=194000),
@@ -686,7 +875,9 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self.assertFalse(any("of 1000" in message for message in messages))
 
     def test_progress_message_falls_back_gracefully_when_statistics_endpoint_fails(self) -> None:
-        asset = SearchAsset(id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0)
+        asset = SearchAsset(
+            id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0
+        )
         with (
             mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter([([asset], 1000)])),
             mock.patch.object(ImmichGateway, "library_asset_count", side_effect=GatewayRequestError("boom")),
@@ -700,12 +891,11 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
     def test_undecryptable_account_is_a_noop_not_a_crash(self) -> None:
         """Regression test for the InvalidToken crash seen in production (see tasks.py).
 
-        This is the exact traceback reported: sweep_immich_library_locations
-        raised cryptography.fernet.InvalidToken instead of failing gracefully,
-        because the account had been connected under a since-invalidated
-        per-process encryption key (see EncryptedTextField / _fernet()).
-        """
+        This is the exact traceback reported: sweep_immich_library_locations raised
+        cryptography.fernet.InvalidToken instead of failing gracefully, because the account had been connected
+        under a since-invalidated per-process encryption key (see EncryptedTextField / _fernet())."""
         _corrupt_api_key(self.account)
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             result = tasks.sweep_immich_library_locations(self.profile.pk)
         self.assertEqual(result, {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0})
+        self.assertTrue(ImmichAccount.objects.filter(pk=self.account.pk).exists())

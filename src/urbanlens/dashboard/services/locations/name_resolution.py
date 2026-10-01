@@ -1,18 +1,5 @@
 """Plugin-driven place-name candidates and the resolver that picks a winner.
-
-Plugins contribute :class:`NameProvider` objects (via
-``UrbanLensPlugin.get_name_providers``) that yield raw name candidates for a
-:class:`~urbanlens.dashboard.models.location.model.Location`, usually read
-from :class:`~urbanlens.dashboard.models.cache.location_cache.LocationCache`
-rows their panels already populate. The candidates are cleaned and
-quality-gated in :mod:`urbanlens.dashboard.services.locations.naming`, then a
-:class:`NameResolver` picks the official name.
-
-The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the
-default (source agreement first, then admin-configured priority), and a future
-AI-backed arbiter can slot in behind :func:`default_name_resolver` without any
-caller changing.
-"""
+The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the default (source agreement first, then admin-configured priority), and a future AI-backed arbiter can slot in behind :func:`default_name_resolver` without any caller changing."""
 
 from __future__ import annotations
 
@@ -21,6 +8,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.services.locations.name_tiers import DEFAULT_TIER, NameTier, NamingScope, rank_key
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 
 if TYPE_CHECKING:
@@ -38,23 +26,16 @@ class NameCandidate:
 
     Attributes:
         name: The cleaned surface form of the candidate name.
-        source: The provider slug the candidate came from. Doubles as the
-            alias ``source`` value when persisted and as the key looked up in
-            the admin-configured priority list.
-    """
+        source: The provider slug the candidate came from.
+        tier: What kind of name it is - see :mod:`~urbanlens.dashboard.services.locations.name_tiers`."""
 
     name: str
     source: str
+    tier: NameTier = DEFAULT_TIER
 
 
 class NameProvider:
-    """One source of place-name candidates, contributed by a plugin.
-
-    Providers are instantiated by plugins at discovery time and must not touch
-    the database or the network in ``__init__``; :meth:`candidates` runs
-    lazily at request/Celery time and should only read already-cached data
-    (fetching happens in the plugin's panel/task machinery, not here).
-    """
+    """One source of place-name candidates, contributed by a plugin."""
 
     def __init__(self, *, source: str, verbose_name: str = "") -> None:
         """Initialize the provider.
@@ -68,9 +49,7 @@ class NameProvider:
 
     def candidates(self, location: Location) -> list[str | None]:
         """Return raw name candidates for a location.
-
-        Values are cleaned and quality-gated by the caller, so returning
-        ``None`` or junk entries is acceptable.
+        Values are cleaned and quality-gated by the caller, so returning ``None`` or junk entries is acceptable.
 
         Args:
             location: The location to name.
@@ -82,12 +61,7 @@ class NameProvider:
 
 
 class LocationCacheNameProvider(NameProvider):
-    """Declarative provider reading top-level keys from a fresh LocationCache row.
-
-    Covers the common case where a plugin's panel already caches an API payload
-    per location and the place name lives at one or more top-level keys of
-    that payload (e.g. Wikipedia's ``title``, NPS's ``fullName``).
-    """
+    """Declarative provider reading top-level keys from a fresh LocationCache row."""
 
     def __init__(self, *, source: str, cache_source: str, keys: tuple[str, ...], verbose_name: str = "") -> None:
         """Initialize the provider.
@@ -110,8 +84,7 @@ class LocationCacheNameProvider(NameProvider):
             location: The location to name.
 
         Returns:
-            The raw values at each configured key, or an empty list when no
-            fresh cache row exists or the payload is not a dict.
+            The raw values at each configured key, or an empty list when no fresh cache row exists or the payload is not a dict.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
@@ -141,31 +114,10 @@ class NameResolver(ABC):
 
 
 class RuleBasedNameResolver(NameResolver):
-    """Default resolver: source agreement beats priority, priority beats arrival order.
+    """Default resolver: the better tier wins, then source agreement, then priority, then arrival order.
+    Candidates are grouped by :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison` so trivially different spellings of the same name count as agreement."""
 
-    Candidates are grouped by
-    :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison`
-    so trivially different spellings of the same name count as agreement.
-    Groups are ranked by:
-
-    1. Whether two or more distinct sources agree on the name (agreement wins
-       over any single source, however prioritized).
-    2. The best priority rank among the group's sources. Rank is the index in
-       the configured priority list; sources not in the list rank after all
-       listed ones, in arrival order.
-    3. First-seen order, as a stable tiebreak.
-
-    The winning group's surface form is the member from its highest-priority
-    source. There are deliberately no numeric confidence scores - agreement
-    count and admin-configured priority are the only signals.
-
-    ``override_source``, when set, skips all of the above: the first
-    candidate from that source wins outright, even against a two-source
-    agreement. Used to make REData's building name dominate when naming a
-    detail (child) pin's location - see :func:`default_name_resolver`.
-    """
-
-    def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None) -> None:
+    def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None, scope: NamingScope = NamingScope.PARCEL) -> None:
         """Initialize the resolver.
 
         Args:
@@ -174,9 +126,11 @@ class RuleBasedNameResolver(NameResolver):
             override_source: When set and at least one candidate comes from
                 this source, that candidate wins outright, bypassing the
                 agreement/priority ranking entirely.
+            scope: Whether the location names a property or one building, which orders the tiers.
         """
         self._priority_rank: dict[str, int] = {slug: rank for rank, slug in enumerate(priority)}
         self._override_source = override_source
+        self._scope = scope
 
     def _rank(self, source: str, arrival_index: int) -> tuple[int, int]:
         """Sort key for one source: listed sources first, then arrival order."""
@@ -185,8 +139,8 @@ class RuleBasedNameResolver(NameResolver):
             return (1, arrival_index)
         return (0, rank)
 
-    def resolve(self, candidates: Sequence[NameCandidate], location: Location) -> NameCandidate | None:
-        """Pick the best candidate per the agreement-then-priority rules.
+    def resolve(self, candidates: Sequence[NameCandidate], location: Location | None) -> NameCandidate | None:
+        """Pick the best candidate per the tier-then-agreement-then-priority rules.
 
         Args:
             candidates: Cleaned, quality-gated candidates in arrival order.
@@ -210,70 +164,43 @@ class RuleBasedNameResolver(NameResolver):
             groups[key].append((index, candidate))
 
         best_key: str | None = None
-        best_rank: tuple[int, int, int, int] | None = None
+        best_rank: tuple[int, ...] | None = None
         for seen, key in enumerate(order):
             members = groups[key]
             distinct_sources = {candidate.source for _index, candidate in members}
             source_rank = min(self._rank(candidate.source, index) for index, candidate in members)
-            rank = (0 if len(distinct_sources) >= 2 else 1, *source_rank, seen)
+            tier_rank = min(rank_key(candidate.tier, self._scope) for _index, candidate in members)
+            rank = (*tier_rank, 0 if len(distinct_sources) >= 2 else 1, *source_rank, seen)
             if best_rank is None or rank < best_rank:
                 best_key = key
                 best_rank = rank
 
         if best_key is None:
             return None
-        return min(groups[best_key], key=lambda item: self._rank(item[1].source, item[0]))[1]
+        return min(groups[best_key], key=lambda item: (rank_key(item[1].tier, self._scope), self._rank(item[1].source, item[0])))[1]
 
 
-#: Name-provider source whose candidate wins outright when naming a detail
-#: (child) pin's location - see the ``location`` handling below. Hardcodes a
-#: specific plugin's source slug into this core module, the same kind of
-#: named-source special-case as ``naming._FALLBACK_ONLY_SOURCES``.
+#: Name-provider source whose candidate wins outright when naming a detail (child) pin's location -
+#: see the ``location`` handling below.
+#: Hardcodes a specific plugin's source slug into this core module, the same kind of named-source
+#: special-case as ``naming.FALLBACK_ONLY_NAME_SOURCES``.
 _CHILD_PIN_PREFERRED_SOURCE = "redata_building"
 
 
 def default_name_resolver(profile: Profile | None = None, *, location: Location | None = None) -> NameResolver:
     """Return the resolver used for official-name selection.
 
-    This is the single seam where a future AI-backed resolver plugs in (e.g.
-    switched by a SiteSettings choice); today it is always the rule-based
-    resolver driven by the site-wide admin-configured source priority. Name
-    resolution is an intentionally system-driven decision - individual users
-    cannot override the source ordering with their own preference.
-
     Args:
         profile: The profile whose action triggered this resolution, if any.
-            Unused by the current resolver but kept for a future
-            profile-aware (e.g. AI-backed) resolver to consume.
-
-            **Read this before consuming it.** One caller is a panel fetch
-            (``plugins.builtin.nominatim``), and panel fetches are
-            single-flighted per *location*, not per pin - see
-            ``services.pins.external_data.schedule_panel_fetch``. Several users
-            viewing the same place produce one fetch, and the profile it carries
-            is simply whoever's poll claimed the flight marker first. A resolver
-            that let this profile influence the outcome would therefore make a
-            *shared* location's name depend on which user happened to load the
-            page first, non-deterministically. That is precisely what the
-            paragraph above rules out today; a profile-aware resolver would need
-            the caller to establish whose preference legitimately applies rather
-            than inheriting a race winner.
-        location: The location being named, if known. When it has at least
-            one detail (child) pin (``Pin.parent_pin`` - see
-            ``models.pin.model``), REData's building name is given outright
-            priority over every other source for naming it - a child pin
-            typically represents one specific building within a larger
-            property, so the county/CRIS-sourced building name is a much
-            stronger signal there than for an ordinary root pin, where it
-            still competes normally via the admin-configured priority order.
+        location: The location being named, if known.
 
     Returns:
-        The resolver to use for official-name selection.
-    """
+        The resolver to use for official-name selection."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
+    from urbanlens.dashboard.services.locations.name_tiers import naming_scope
 
     override_source = None
     if location is not None and location.pk and location.pins.filter(parent_pin__isnull=False).exists():
         override_source = _CHILD_PIN_PREFERRED_SOURCE
 
-    return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list, override_source=override_source)
+    return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list, override_source=override_source, scope=naming_scope(location))

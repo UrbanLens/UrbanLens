@@ -12,3 +12,7 @@ class BillingSubscriptionStatus(TextChoices):
     UNPAID = "unpaid", "Unpaid"
     TRIALING = "trialing", "Trialing"
     PAUSED = "paused", "Paused"
+
+
+#: Statuses Stripe never moves a subscription out of.
+TERMINAL_SUBSCRIPTION_STATUSES = (BillingSubscriptionStatus.CANCELED, BillingSubscriptionStatus.INCOMPLETE_EXPIRED)

@@ -1,14 +1,5 @@
-"""Tests for trip controller helper functions (pure logic, no DB needed where possible).
+"""Tests for trip controller helper functions (pure logic, no DB needed where possible)."""
 
-Covers:
-- _parse_scheduled_at() - date/time string parsing
-- _activity_coords() - coordinate resolution with override/pin/location priority
-- _expand_trip_dates() - trip date range expansion
-- _is_organizer() - organizer detection
-- _can_perform() - permission level checking
-- _compute_activity_index_map() - map-index assignment
-- _build_activity_forecasts() - weather slot matching
-"""
 from __future__ import annotations
 
 import datetime
@@ -18,20 +9,27 @@ from unittest.mock import MagicMock, patch
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import (
     _build_activity_forecasts,
     _can_perform,
-    _compute_activity_index_map,
-    _expand_trip_dates,
     _is_organizer,
     _parse_scheduled_at,
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+
+# Imported from the service that defines them, not through the controller. The
+# controller re-exported both under a `_`-prefixed alias it never called, which
+# made this file's import the only thing keeping those lines alive.
+from urbanlens.dashboard.services.trips.trip_activities import (
+    compute_activity_index_map as _compute_activity_index_map,
+    expand_trip_dates as _expand_trip_dates,
+)
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords as _activity_coords
 
 if TYPE_CHECKING:
@@ -43,6 +41,7 @@ _hyp = hyp_settings(max_examples=40, deadline=None)
 # ---------------------------------------------------------------------------
 # _parse_scheduled_at
 # ---------------------------------------------------------------------------
+
 
 class ParseScheduledAtTests(SimpleTestCase):
     """_parse_scheduled_at combines ISO date and time strings."""
@@ -90,6 +89,7 @@ class ParseScheduledAtTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # _activity_coords
 # ---------------------------------------------------------------------------
+
 
 class ActivityCoordsTests(SimpleTestCase):
     """_activity_coords resolves coordinates with correct priority."""
@@ -161,6 +161,7 @@ class ActivityCoordsTests(SimpleTestCase):
 # _expand_trip_dates (DB-backed)
 # ---------------------------------------------------------------------------
 
+
 class ExpandTripDatesTests(TestCase):
     """_expand_trip_dates extends the trip date range as needed."""
 
@@ -205,14 +206,13 @@ class ExpandTripDatesTests(TestCase):
 # Trip.elapsed_day (pure - unsaved instances, no DB needed once dates are set)
 # ---------------------------------------------------------------------------
 
+
 class TripElapsedDayTests(TestCase):
     """Trip.elapsed_day - 1-indexed day-of-trip while active, else None.
 
-    Uses unsaved instances where possible (elapsed_day never touches the DB
-    once both dates are set - effective_start_date/effective_end_date
-    short-circuit before falling back to querying activities), except for
-    the undated case below, which needs a real pk for that fallback query.
-    """
+    Uses unsaved instances where possible (elapsed_day never touches the DB once both dates are set -
+    effective_start_date/effective_end_date short-circuit before falling back to querying activities), except
+    for the undated case below, which needs a real pk for that fallback query."""
 
     def _trip(self, start, end):
         return Trip(start_date=start, end_date=end)
@@ -261,6 +261,7 @@ class TripElapsedDayTests(TestCase):
 # _is_organizer (DB-backed)
 # ---------------------------------------------------------------------------
 
+
 class IsOrganizerTests(TestCase):
     """_is_organizer returns True for creators and designated organizers."""
 
@@ -293,6 +294,7 @@ class IsOrganizerTests(TestCase):
 # ---------------------------------------------------------------------------
 # _can_perform (DB-backed)
 # ---------------------------------------------------------------------------
+
 
 class CanPerformTests(TestCase):
     """_can_perform checks permission level against profile's relationship to trip."""
@@ -334,6 +336,7 @@ class CanPerformTests(TestCase):
 # ---------------------------------------------------------------------------
 # _compute_activity_index_map
 # ---------------------------------------------------------------------------
+
 
 class ComputeActivityIndexMapTests(SimpleTestCase):
     """_compute_activity_index_map assigns sequential 1-based indices to visible activities."""
@@ -412,10 +415,8 @@ class BuildActivityForecastsTests(SimpleTestCase):
     """_build_activity_forecasts matches activities to weather slots.
 
     ``get_raw_forecast_slots`` (REData-first, OWM/Open-Meteo-fallback - see
-    ``services.apis.locations.weather_resolution``) is mocked directly rather
-    than a gateway instance, since ``_build_activity_forecasts`` no longer
-    picks a provider itself.
-    """
+    ``services.apis.locations.weather_resolution``) is mocked directly rather than a gateway instance, since
+    ``_build_activity_forecasts`` no longer picks a provider itself."""
 
     def _make_activity(self, lat=51.5, lng=-0.12, scheduled_at=None, status="proposed"):
         act = MagicMock()
@@ -467,6 +468,7 @@ class BuildActivityForecastsTests(SimpleTestCase):
 
     def test_gateway_exception_returns_no_slot(self):
         import requests as req_lib
+
         target = datetime.datetime(2025, 7, 4, 12, 0)
         act = self._make_activity(scheduled_at=target)
         with patch(_GET_RAW_FORECAST_SLOTS, side_effect=req_lib.RequestException("timeout")):
@@ -491,6 +493,7 @@ class BuildActivityForecastsTests(SimpleTestCase):
 # TripWeatherView - drops activities with nothing useful to show instead of
 # rendering an empty "No location data"/"Outside 5-day forecast" row
 # ---------------------------------------------------------------------------
+
 
 class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
     def setUp(self) -> None:
@@ -608,6 +611,7 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
 # "Needs location" badge
 # ---------------------------------------------------------------------------
 
+
 class ActivitiesPanelHasCoordsTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -619,14 +623,24 @@ class ActivitiesPanelHasCoordsTests(TestCase):
         TripMembership.objects.get_or_create(trip=self.trip, profile=self.profile, defaults={"rsvp": "yes"})
 
     def test_activity_with_no_coords_shows_needs_location_badge(self) -> None:
-        baker.make(TripActivity, trip=self.trip, title="Campground", lat_override=None, lng_override=None, pin=None, location=None)
+        baker.make(
+            TripActivity,
+            trip=self.trip,
+            title="Campground",
+            lat_override=None,
+            lng_override=None,
+            pin=None,
+            location=None,
+        )
 
         resp = self.client_.get(reverse("trips.activities", args=[self.trip.slug]))
 
         self.assertIn("Needs location", resp.content.decode())
 
     def test_activity_with_coords_does_not_show_needs_location_badge(self) -> None:
-        baker.make(TripActivity, trip=self.trip, title="Museum", lat_override=51.5, lng_override=-0.12, pin=None, location=None)
+        baker.make(
+            TripActivity, trip=self.trip, title="Museum", lat_override=51.5, lng_override=-0.12, pin=None, location=None
+        )
 
         resp = self.client_.get(reverse("trips.activities", args=[self.trip.slug]))
 
@@ -637,6 +651,7 @@ class ActivitiesPanelHasCoordsTests(TestCase):
 # TripMembershipQuerySet - custom queryset/manager (previously the bare
 # default manager, inconsistent with the rest of the codebase's convention)
 # ---------------------------------------------------------------------------
+
 
 class TripMembershipQuerySetTests(TestCase):
     def setUp(self) -> None:
@@ -691,16 +706,6 @@ class TripMembershipQuerySetTests(TestCase):
 
         self.assertEqual(result, [joined])
 
-    def test_rsvp_yes_includes_only_yes_responses(self) -> None:
-        yes_member = TripMembership.objects.create(trip=self.trip, profile=self.member, rsvp=TripMembership.RSVP_YES)
-        maybe_user: User = baker.make("auth.User")
-        maybe_profile = Profile.objects.get(user=maybe_user)
-        TripMembership.objects.create(trip=self.trip, profile=maybe_profile, rsvp=TripMembership.RSVP_MAYBE)
-
-        result = list(TripMembership.objects.rsvp_yes(self.trip))
-
-        self.assertEqual(result, [yes_member])
-
 
 # ---------------------------------------------------------------------------
 # TripWeatherView - a finished trip gets what the weather *was*, not a forecast
@@ -719,14 +724,15 @@ _HISTORY_ROW = {
 
 
 class TripRecordedWeatherTests(TestCase):
-    """A past trip's weather panel was empty: the view filtered to activities
-    scheduled today or later, so a finished trip had nothing to forecast and the
-    whole card hid. REData's `/weather/history/` answers the question that
-    actually applies to a finished trip.
-    """
+    """A past trip's weather panel was empty: the view filtered to activities scheduled today or later, so a finished trip had nothing to forecast and the whole card hid. REData's `/weather/history/` answers the question that actually applies to a finished trip."""
 
     def setUp(self) -> None:
         super().setUp()
+        configured = patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        )
+        configured.start()
+        self.addCleanup(configured.stop)
         self.user: User = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.profile.external_apis_enabled = True
@@ -738,6 +744,13 @@ class TripRecordedWeatherTests(TestCase):
 
     def _url(self) -> str:
         return reverse("trips.weather", args=[self.trip.slug])
+
+    def _get(self):
+        """The panel with the queued history fetch run inline, as a worker would run it."""
+        from urbanlens.dashboard.tasks import fetch_recorded_weather_at
+
+        with tasks_run_inline(fetch_recorded_weather_at):
+            return self.client_.get(self._url())
 
     def _past_activity(self, when: datetime.datetime) -> TripActivity:
         return baker.make(
@@ -759,7 +772,7 @@ class TripRecordedWeatherTests(TestCase):
             "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
             return_value={"2026-05-01": _HISTORY_ROW},
         ):
-            resp = self.client_.get(self._url())
+            resp = self._get()
 
         self.assertEqual(resp.status_code, 200)
         recorded = resp.context["recorded_days"]
@@ -782,7 +795,7 @@ class TripRecordedWeatherTests(TestCase):
             "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
             return_value={"2026-05-01": _HISTORY_ROW},
         ):
-            content = self.client_.get(self._url()).content.decode()
+            content = self._get().content.decode()
 
         self.assertIn("What the weather was", content)
         self.assertNotIn('id="trip-weather-panel" hidden', content)
@@ -796,7 +809,7 @@ class TripRecordedWeatherTests(TestCase):
             "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
             return_value={"2026-05-01": _HISTORY_ROW},
         ) as fetch:
-            self.client_.get(self._url())
+            self._get()
 
         self.assertEqual(fetch.call_count, 1)
         _lat, _lng, start, end = fetch.call_args.args
@@ -808,7 +821,7 @@ class TripRecordedWeatherTests(TestCase):
         self._past_activity(timezone.now() - datetime.timedelta(days=1))
 
         with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days") as fetch:
-            resp = self.client_.get(self._url())
+            resp = self._get()
 
         fetch.assert_not_called()
         self.assertEqual(resp.context["recorded_days"], [])
@@ -817,7 +830,7 @@ class TripRecordedWeatherTests(TestCase):
         self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0)))
 
         with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days", return_value={}):
-            resp = self.client_.get(self._url())
+            resp = self._get()
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["recorded_days"], [])

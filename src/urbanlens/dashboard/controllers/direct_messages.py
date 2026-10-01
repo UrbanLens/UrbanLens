@@ -10,25 +10,37 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.auth.username import username_search_q
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import (
     REACTION_PICKER_EMOJIS,
-    DirectMessagePermissionError,
+    BlockedParticipantError,
+    DirectMessageTooLongError,
     DirectMessageValidationError,
+    EmptyDirectMessageError,
+    MalformedCiphertextError,
+    MixedPlaintextAndCiphertextError,
+    NoEligibleAttachmentsError,
+    NotConversationParticipantError,
+    NotDirectMessageRecipientError,
+    NotDirectMessageSenderError,
+    RecipientNotAcceptingMessagesError,
     all_conversations_for,
     build_thread_timeline,
     can_direct_message,
     clear_email_debounce,
+    conversation_reachable,
     create_direct_message,
     delete_message_for_everyone,
     delete_message_for_self,
@@ -39,6 +51,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     is_safe_reaction_emoji,
     key_change_events_for,
     mark_thread_open,
+    messageable_profile_pks,
     reaction_summary,
     search_direct_messages,
     set_conversation_muted,
@@ -48,19 +61,44 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
 )
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
 #: How many conversations the navbar dropdown shows.
 DROPDOWN_CONVERSATION_LIMIT = 8
 
+#: Conversations the messages sidebar lists before "Show more", and how many each press adds.
+SIDEBAR_CONVERSATION_STEP = 50
+#: The most one sidebar render lists.
+SIDEBAR_CONVERSATION_MAX = 1000
+
+
+def sidebar_conversations(profile: Profile, requested: str | None = None) -> dict[str, Any]:
+    """The sidebar's conversations, newest first, cut in SQL, and the limit "Show more" asks for next.
+
+    Args:
+        profile: The viewer.
+        requested: The ``limit`` query parameter, if any.
+
+    Returns:
+        Template context with ``conversations`` and ``more_limit`` (None when nothing is hidden).
+    """
+    try:
+        limit = int(requested or SIDEBAR_CONVERSATION_STEP)
+    except ValueError:
+        limit = SIDEBAR_CONVERSATION_STEP
+    limit = max(SIDEBAR_CONVERSATION_STEP, min(limit, SIDEBAR_CONVERSATION_MAX))
+    conversations = all_conversations_for(profile, limit=limit + 1)
+    more = len(conversations) > limit and limit < SIDEBAR_CONVERSATION_MAX
+    return {"conversations": conversations[:limit], "more_limit": min(limit + SIDEBAR_CONVERSATION_STEP, SIDEBAR_CONVERSATION_MAX) if more else None}
+
+
 #: How many profiles the new-message recipient search returns.
 RECIPIENT_SEARCH_LIMIT = 8
 
-#: Minimum characters before a message search runs at all, matching the
-#: recipient search's threshold - short of that, results would be too broad
-#: to be useful and would just add query load on every keystroke.
+#: Minimum characters before a message search runs at all, matching the recipient search's threshold - short of
+#: that, results would be too broad to be useful and would just add query load on every keystroke.
 MESSAGE_SEARCH_MIN_QUERY_LENGTH = 2
 
 
@@ -88,10 +126,11 @@ def _get_partner(profile: Profile, profile_slug: str) -> Profile:
         The partner Profile.
 
     Raises:
-        Http404: When no such profile exists or it is the requester's own.
+        Http404: When no such profile exists, it is the requester's own, or the pair share no conversation
+            and the partner would refuse a message.
     """
     partner = get_object_or_404(Profile.objects.select_related("user"), slug=profile_slug)
-    if partner.pk == profile.pk:
+    if partner.pk == profile.pk or not conversation_reachable(profile, partner):
         raise Http404
     return partner
 
@@ -99,9 +138,9 @@ def _get_partner(profile: Profile, profile_slug: str) -> Profile:
 def _trigger_msg_label_refresh(response: HttpResponse) -> HttpResponse:
     """Attach HTMX triggers so the navbar messages label and sidebar conversation list refresh.
 
-    Used both when opening a thread (marks it read - the sidebar's unread pill and
-    last-message preview need to catch up) and on the plain-POST send fallback
-    (the sidebar's last-message preview needs to catch up there too).
+    Used both when opening a thread (marks it read - the sidebar's unread pill and last-message preview
+    need to catch up) and on the plain-POST send fallback (the sidebar's last-message preview needs to
+    catch up there too).
 
     Args:
         response: The response to annotate.
@@ -116,10 +155,9 @@ def _trigger_msg_label_refresh(response: HttpResponse) -> HttpResponse:
 def _visible_key_events(profile: Profile, partner: Profile, messages: list[DirectMessage]) -> list[dict]:
     """Restrict key-change notices to the time span actually covered by `messages`.
 
-    ``key_change_events_for`` returns every key rotation across the whole
-    conversation's history; a single paginated page only wants the ones that
-    fall between its own oldest and newest loaded message, so a notice never
-    renders detached from the messages it explains.
+    ``key_change_events_for`` returns every key rotation across the whole conversation's history; a
+    single paginated page only wants the ones that fall between its own oldest and newest loaded
+    message, so a notice never renders detached from the messages it explains.
 
     Args:
         profile: One participant.
@@ -127,8 +165,8 @@ def _visible_key_events(profile: Profile, partner: Profile, messages: list[Direc
         messages: The currently loaded page of messages (any order).
 
     Returns:
-        Key-change events whose timestamp falls within `messages`' span, or
-        an empty list when `messages` is empty.
+        Key-change events whose timestamp falls within `messages`' span, or an empty list when
+        `messages` is empty.
     """
     if not messages:
         return []
@@ -140,9 +178,8 @@ def _visible_key_events(profile: Profile, partner: Profile, messages: list[Direc
 def _thread_context(profile: Profile, partner: Profile) -> dict:
     """Build the template context for one conversation thread.
 
-    Marks the partner's unread messages as read - rendering the thread is the
-    act of reading it. Only the most recent page of history is loaded here;
-    older messages are fetched on demand (see ``ConversationOlderMessagesView``).
+    Only the most recent page of history is loaded here; older messages are fetched on demand (see
+    ``ConversationOlderMessagesView``).
 
     Args:
         profile: The viewing profile.
@@ -154,11 +191,9 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
     clear_email_debounce(partner.pk, profile.pk)
     mark_thread_open(profile.pk, partner.pk)
     thread_messages, has_more_older = thread_page(profile, partner)
-    # Mark read only AFTER loading the page: the loaded instances keep their
-    # in-memory read_at=None, so a "delete as soon as read" message renders
-    # its content on this first open instead of tombstoning the instant the
-    # read mark lands (is_expired_for_recipient keys off read_at). The next
-    # render sees the persisted read_at and tombstones it as intended.
+    # Mark read only AFTER loading the page: the loaded instances keep their in-memory read_at=None, so a
+    # "delete as soon as read" message renders its content on this first open instead of tombstoning the instant
+    # the read mark lands (is_expired_for_recipient keys off read_at).
     DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
     timeline = build_thread_timeline(thread_messages, _visible_key_events(profile, partner, thread_messages))
     identity = display_identity_for(profile, partner)
@@ -187,8 +222,8 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
 def _e2ee_enrolled(profile: Profile) -> bool:
     """Return True when `profile` has a direct-message encryption key bundle.
 
-    Drives whether the composer encrypts: a message is only encrypted when
-    both participants have published a key bundle.
+    Drives whether the composer encrypts: a message is only encrypted when both participants have
+    published a key bundle.
 
     Args:
         profile: The profile to check.
@@ -235,7 +270,7 @@ class MessagesPageView(LoginRequiredMixin, View):
             request,
             "dashboard/pages/messages/index.html",
             {
-                "conversations": all_conversations_for(profile),
+                **sidebar_conversations(profile),
                 "active_partner": None,
                 "active_slug": "",
                 "profile": profile,
@@ -250,28 +285,22 @@ class ConversationView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         """Render the conversation with ``profile_slug``.
 
-        HTMX requests get just the thread partial (the page swaps it into the
-        right-hand pane); plain navigation gets the whole page with this
-        conversation active.
+        HTMX requests get just the thread partial (the page swaps it into the right-hand pane); plain
+        navigation gets the whole page with this conversation active.
 
         Args:
             request: The incoming request.
             profile_slug: Slug of the conversation partner.
 
         Returns:
-            Thread partial or full page, with a label-refresh trigger since
-            opening a thread marks it read.
+            Thread partial or full page, with a label-refresh trigger since opening a thread marks it read.
 
         Raises:
-            Http404: When there is no existing conversation and the partner's
-                privacy settings would reject a message - so conversation URLs
-                don't confirm the existence of profiles that are hidden from
-                this user.
+            Http404: When there is no existing conversation and the partner's privacy settings would reject
+            a message - so conversation URLs don't confirm...
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        if not DirectMessage.objects.between(profile, partner).exists() and not can_direct_message(profile, partner):
-            raise Http404
 
         if request.headers.get("HX-Request"):
             response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
@@ -279,7 +308,7 @@ class ConversationView(LoginRequiredMixin, View):
 
         context = {
             **_thread_context(profile, partner),
-            "conversations": all_conversations_for(profile),
+            **sidebar_conversations(profile),
             "active_partner": partner,
             "active_slug": partner.slug or "",
             "profile": profile,
@@ -297,11 +326,8 @@ class ConversationMuteToggleView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         """Flip the caller's mute for this conversation and return the refreshed thread.
 
-        The flip lives here rather than in the service because it is a property
-        of *this button*: the web UI has one control whose meaning is "the
-        other state". ``set_conversation_muted`` names an end state instead, so
-        the external API's PUT/DELETE pair cannot be turned into a toggle by a
-        retry - see its docstring.
+        ``set_conversation_muted`` names an end state instead, so the external API's PUT/DELETE pair cannot
+        be turned into a toggle by a retry - see its docstring.
 
         Args:
             request: The incoming request.
@@ -326,13 +352,12 @@ class ConversationSendView(LoginRequiredMixin, View):
         """Create a message and return the refreshed thread partial.
 
         Args:
-            request: The incoming request. Reads ``body``.
+            request: The incoming request.
             profile_slug: Slug of the recipient.
 
         Returns:
-            The thread partial on success; a plain-text 400/403 on rejection -
-            the page JS surfaces that text verbatim as a toast, mirroring the
-            safety chat fallback contract.
+            The thread partial on success; a plain-text 400/403 on rejection - the page JS surfaces that
+            text verbatim as a toast, mirroring the...
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
@@ -351,10 +376,33 @@ class ConversationSendView(LoginRequiredMixin, View):
                 markup_map_uuid=request.POST.get("markup_map_uuid") or None,
                 reply_to_id=int(reply_to_raw) if reply_to_raw.isdigit() else None,
             )
+        except MessageRateLimitedError as exc:
+            # Caught before DirectMessageValidationError: both are ValueErrors, and this is a 429 rather than a
+            # 400 - the message was fine, the sender is simply ahead of their budget, and a client that reads a
+            # 400 as "malformed" would tell them to edit it.
+            logger.info("Direct message rate-limited for profile %s: %s", profile.pk, exc)
+            return HttpResponse("You're sending messages too quickly. Wait a moment and try again.", status=429, content_type="text/plain; charset=utf-8")
+        except DirectMessageTooLongError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        except MixedPlaintextAndCiphertextError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("A message can't be both plaintext and encrypted.")
+        except MalformedCiphertextError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That encrypted message is malformed.")
+        except NoEligibleAttachmentsError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("None of those attachments could be sent.")
+        except EmptyDirectMessageError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Message cannot be empty.")
         except DirectMessageValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
-        except DirectMessagePermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That message couldn't be sent.")
+        except RecipientNotAcceptingMessagesError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("This user isn't accepting messages from you.")
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
 
@@ -362,22 +410,20 @@ class ConversationSendView(LoginRequiredMixin, View):
 class ConversationOlderMessagesView(LoginRequiredMixin, View):
     """GET /messages/<profile_slug>/older/?before=<id> - one older page of a conversation.
 
-    Powers infinite-scroll-up in the thread pane: the oldest bubble currently
-    loaded carries a sentinel that HTMX fires once it's scrolled into view
-    (see ``_thread.html`` / ``_thread_messages_page.html``), which lands here
-    and returns the next page of history to prepend.
+    Powers infinite-scroll-up in the thread pane: the oldest bubble currently loaded carries a sentinel
+    that HTMX fires once it's scrolled into view (see ``_thread.html`` /
+    ``_thread_messages_page.html``), which lands here and returns the next page of history to prepend.
     """
 
     def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         """Return the page of messages immediately older than ``before``.
 
         Args:
-            request: The incoming request. Reads ``before`` (a message pk).
+            request: The incoming request.
             profile_slug: Slug of the conversation partner.
 
         Returns:
-            The message-items partial for that page, or 400 if ``before`` is
-            missing or not an integer.
+            The message-items partial for that page, or 400 if ``before`` is missing or not an integer.
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
@@ -399,9 +445,8 @@ class ConversationOlderMessagesView(LoginRequiredMixin, View):
                 "image_permission_status": _image_permission_status(profile, partner),
                 "has_more_older": has_more_older,
                 "oldest_message_id": messages[0].pk if messages else None,
-                # _message_items.html's quoted-reply header needs display_name
-                # to mask the partner's identity the same way the initial
-                # page (_thread_context) already does.
+                # _message_items.html's quoted-reply header needs display_name to mask the partner's identity
+                # the same way the initial page (_thread_context) already does.
                 **display_identity_for(profile, partner),
             },
         )
@@ -410,11 +455,11 @@ class ConversationOlderMessagesView(LoginRequiredMixin, View):
 class DirectMessageImageUploadView(LoginRequiredMixin, View):
     """POST /messages/upload-image/ - upload one photo attachment ahead of sending.
 
-    Mirrors ``PhotoUploadView``: creates an unattached ``Image`` (no
-    ``direct_message`` yet) so the client can upload as soon as a file is
-    picked. ``create_direct_message`` attaches it by id once the message is
-    actually sent - an upload with no matching send just leaves a harmless
-    unattached row, the same tradeoff other upload-then-attach flows make.
+    Mirrors ``vault_media.VaultMediaUploadView``: creates an unattached ``Image`` (no ``direct_message`` yet) so the
+    client can upload as soon as a file is picked.
+    ``create_direct_message`` attaches it by id once the message is actually sent - an upload with no
+    matching send just leaves a harmless unattached row, the same tradeoff other upload-then-attach
+    flows make.
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
@@ -424,11 +469,12 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             request: The HTTP request carrying an ``image`` file.
 
         Returns:
-            JSON with the new image's ``id`` and ``url``, or a 400/413 error.
+            JSON with the new image's ``id``, its ``url`` (null while ``processing``), and ``processing``, or a
+            400/413 error.
         """
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
         profile = _get_profile(request)
         image_file = request.FILES.get("image")
@@ -437,37 +483,34 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
         if not (image_file.content_type or "").startswith("image/"):
             return JsonResponse({"error": "That file is not an image."}, status=400)
 
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        # Scanned asynchronously instead: prepare_photo_upload below marks the row
+        # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
         if upload_error:
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
+        try:
+            with reserve_upload(profile, image_file.size):
+                # Stored already stripped - see services.media.images.prepare_photo_upload.
+                prepared = prepare_photo_upload(image_file, profile)
+                image = Image.objects.create(image=prepared.file, profile=profile, checksum=checksum, file_size=prepared.size, **prepared.metadata)
+        except UploadRefusedError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, image.pk)
-        return JsonResponse({"id": image.pk, "url": image.image.url}, status=201)
+        return JsonResponse({"id": image.pk, "url": image.file_url, "processing": image.is_processing}, status=201)
 
 
 class DirectMessageMapPickerView(LoginRequiredMixin, View):
     """GET /messages/attach-map/picker/ - list the caller's own maps to attach.
 
-    Companion to the draw-a-new-map composer flow (``#dm-attach-map-btn``):
-    lets the sender attach one of their existing maps instead - the only way
-    a previously-cloned ("Add to my maps") map can be forwarded on, since
-    ``create_direct_message`` only accepts maps the sender already owns.
-
-    Despite the name/URL, this is entirely generic (just the caller's own
-    maps, no DM-specific filtering) - also reused by the comment/Notes map
-    composer's "Choose Existing" tab (see base.html's
+    Despite the name/URL, this is entirely generic (just the caller's own maps, no DM-specific
+    filtering) - also reused by the comment/Notes map composer's "Choose Existing" tab (see base.html's
     ``_openCommentAttachMapDialog``) rather than duplicating this endpoint.
     """
 
@@ -493,18 +536,14 @@ class DirectMessageMapPickerView(LoginRequiredMixin, View):
 class MessageReactionToggleView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/react/<message_id>/ - toggle an emoji reaction.
 
-    Args come from the POST body (``emoji``). Broadcasts the message's updated
-    reaction summary to both participants over the WebSocket (see
-    ``services.messaging.direct_messages.toggle_reaction``); the response itself is the
-    re-rendered reaction-bar partial, used to update the acting client's own
-    UI immediately without waiting on the WS round-trip.
+    Args come from the POST body (``emoji``).
     """
 
     def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
         """Toggle the caller's reaction and return the refreshed reaction bar.
 
         Args:
-            request: The incoming request. Reads ``emoji``.
+            request: The incoming request.
             profile_slug: Slug of the conversation partner (scopes the lookup).
             message_id: PK of the message being reacted to.
 
@@ -523,8 +562,12 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
 
         try:
             toggle_reaction(profile, message, emoji)
-        except DirectMessagePermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+        except NotConversationParticipantError as exc:
+            logger.info("Reaction toggle rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You aren't part of this conversation.")
+        except BlockedParticipantError as exc:
+            logger.info("Reaction toggle rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You can't react to this message.")
 
         return render(
             request,
@@ -542,18 +585,17 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
 class MessageDeleteView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/delete/<message_id>/ - delete or hide one message.
 
-    ``scope=everyone`` (only valid for the message's sender) tombstones it for
-    the recipient - the sender always keeps their own copy. ``scope=self``
-    (only valid for the message's recipient) hides it from that recipient's
-    own view only, leaving the sender's copy and any pending `@`-mention
-    share completely untouched.
+    ``scope=everyone`` (only valid for the message's sender) tombstones it for the recipient - the
+    sender always keeps their own copy.
+    ``scope=self`` (only valid for the message's recipient) hides it from that recipient's own view
+    only, leaving the sender's copy and any pending `@`-mention share completely untouched.
     """
 
     def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
         """Apply the requested delete scope and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``scope`` (``everyone`` or ``self``).
+            request: The incoming request.
             profile_slug: Slug of the conversation partner.
             message_id: PK of the message to delete.
 
@@ -572,8 +614,9 @@ class MessageDeleteView(LoginRequiredMixin, View):
                 delete_message_for_self(message, profile)
             else:
                 return HttpResponseBadRequest("Unknown delete scope.")
-        except DirectMessagePermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+        except (NotDirectMessageSenderError, NotDirectMessageRecipientError) as exc:
+            logger.info("Message delete rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to delete this message.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
@@ -582,18 +625,17 @@ class MessageDeleteView(LoginRequiredMixin, View):
 class MessageImagePermissionView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/image-permission/ - respond to the image-consent prompt.
 
-    ``decision=allow`` and ``decision=reject`` set a standing decision for
-    every future image from that sender. ``decision=allow_once`` (with
-    ``message_id``) reveals just that one message's images without changing
-    the standing decision.
+    ``decision=allow`` and ``decision=reject`` set a standing decision for every future image from that
+    sender.
+    ``decision=allow_once`` (with ``message_id``) reveals just that one message's images without
+    changing the standing decision.
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         """Apply the recipient's image-consent decision and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``decision`` and, for
-                ``allow_once``, ``message_id``.
+            request: The incoming request.
             profile_slug: Slug of the conversation partner (the image sender).
 
         Returns:
@@ -624,9 +666,8 @@ class MessageImagePermissionView(LoginRequiredMixin, View):
 class ConversationReadView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/read/ - mark the partner's messages as read.
 
-    Called by the messages page when a live message arrives on the thread the
-    user is already looking at, so the unread label doesn't claim a message
-    the user has plainly seen.
+    Called by the messages page when a live message arrives on the thread the user is already looking
+    at, so the unread label doesn't claim a message the user has plainly seen.
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
@@ -662,7 +703,7 @@ class ConversationSearchView(LoginRequiredMixin, View):
         """Return message hits within this conversation matching ``q``.
 
         Args:
-            request: The incoming request. Reads ``q``.
+            request: The incoming request.
             profile_slug: Slug of the conversation partner.
 
         Returns:
@@ -690,7 +731,7 @@ class MessagesSearchView(LoginRequiredMixin, View):
         """Return message hits across all of the profile's conversations matching ``q``.
 
         Args:
-            request: The incoming request. Reads ``q``.
+            request: The incoming request.
 
         Returns:
             The message-search-results partial, grouped by conversation.
@@ -715,16 +756,14 @@ class ConversationListView(LoginRequiredMixin, View):
             request: The incoming request.
 
         Returns:
-            The conversation-list partial. ``active_slug`` comes from the
-            query string so the refreshed list keeps highlighting the open
-            conversation.
+            The conversation-list partial.
         """
         profile = _get_profile(request)
         return render(
             request,
             "dashboard/partials/messages/_conversation_list.html",
             {
-                "conversations": all_conversations_for(profile),
+                **sidebar_conversations(profile, request.GET.get("limit")),
                 "active_slug": request.GET.get("active", ""),
                 "active_group_uuid": request.GET.get("active_group", ""),
                 "viewer_id": profile.pk,
@@ -735,10 +774,9 @@ class ConversationListView(LoginRequiredMixin, View):
 class MessagesDropdownView(LoginRequiredMixin, View):
     """GET /messages/dropdown/ - renders the navbar messages dropdown partial.
 
-    The dropdown behaves like a notification tray: it lists only conversations
-    with unread messages. Once a thread is read its row disappears from here
-    (the panel re-fetches on every open); the full history lives on the
-    messages page.
+    The dropdown behaves like a notification tray: it lists only conversations with unread messages.
+    Once a thread is read its row disappears from here (the panel re-fetches on every open); the full
+    history lives on the messages page.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -748,25 +786,15 @@ class MessagesDropdownView(LoginRequiredMixin, View):
             request: The incoming request.
 
         Returns:
-            The dropdown partial. ``has_conversations`` distinguishes the
-            "all caught up" empty state (some DM history, nothing unread)
-            from "no messages yet" (no DM history at all).
+            The dropdown partial.
         """
         profile = _get_profile(request)
-        # Narrowed in the query, not after it: this used to build every
-        # conversation in the inbox - partner identity, last message, mute state
-        # - and then keep at most eight of them.
-        unread = unread_conversations_for(profile)[:DROPDOWN_CONVERSATION_LIMIT]
+        unread = unread_conversations_for(profile, limit=DROPDOWN_CONVERSATION_LIMIT)
         return render(
             request,
             "dashboard/partials/messages/_dropdown.html",
-            # viewer_id: the preview goes through `message_preview`, which needs
-            # it to apply this viewer's own tombstone/expiry rules. The dropdown
-            # hand-rolled the preview instead until 2026-08-19, which both
-            # showed a deleted message's body and defeated the `images` prefetch
-            # `all_conversations_for` pays for (`.exists()` ignores the cache).
-            # `has_conversations` distinguishes "all caught up" from "no messages
-            # yet", and needs only existence - not the whole inbox built.
+            # viewer_id: the preview goes through `message_preview`, which needs it to apply this viewer's own
+            # tombstone/expiry rules.
             {"conversations": unread, "has_conversations": has_any_conversation(profile), "viewer_id": profile.pk},
         )
 
@@ -781,15 +809,12 @@ class MessagesUnreadCountView(LoginRequiredMixin, View):
             request: The incoming request.
 
         Returns:
-            The label partial with the count of conversations that have at
-            least one unread message (not the total unread message count -
-            one label per conversation needing attention).
+            The label partial with the count of conversations that have at least one unread message (not the
+            total unread message count - one label...
         """
-        from urbanlens.dashboard.services.messaging.group_chats import unread_group_conversation_count
+        from urbanlens.dashboard.services.messaging.direct_messages import unread_conversation_total
 
-        profile = _get_profile(request)
-        count = DirectMessage.objects.unread_conversation_count(profile) + unread_group_conversation_count(profile)
-        return render(request, "dashboard/partials/messages/_label.html", {"unread_count": count})
+        return render(request, "dashboard/partials/messages/_label.html", {"unread_count": unread_conversation_total(_get_profile(request))})
 
 
 class RecipientSearchView(LoginRequiredMixin, View):
@@ -798,17 +823,11 @@ class RecipientSearchView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         """Return matching, messageable profiles for the new-message picker.
 
-        Only profiles whose privacy settings permit a message from the
-        requester are returned - the picker never offers someone who would
-        reject the send. Candidates whose ``profile_visibility`` hides their
-        identity from the requester are excluded too: the results partial
-        renders each candidate's real username/slug/avatar, so returning a
-        hidden-but-messageable profile would let anyone enumerate identities
-        by querying short substrings that every other surface (thread,
-        sidebar, notifications) deliberately masks.
+        Only profiles whose privacy settings permit a message from the requester are returned - the picker
+        never offers someone who would reject the send.
 
         Args:
-            request: The incoming request. Reads ``q``.
+            request: The incoming request.
 
         Returns:
             The recipient search-results partial.
@@ -817,8 +836,14 @@ class RecipientSearchView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         results: list[Profile] = []
         if len(query) >= 2:
-            candidates = Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4]
-            results = [candidate for candidate in candidates if can_direct_message(profile, candidate) and candidate.can_view_profile(profile)][:RECIPIENT_SEARCH_LIMIT]
+            candidates = list(Profile.objects.select_related("user").filter(username_search_q(query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4])
+            # Both gates in batch. Per candidate they each rebuild the
+            # requester's own pinned-place set, so a substring matching a lot
+            # of people cost a full scan of the requester's pins per match, on
+            # every keystroke.
+            messageable = messageable_profile_pks(profile, candidates)
+            identifiable = Profile.visible_profile_pks(profile, candidates)
+            results = [candidate for candidate in candidates if candidate.pk in messageable and candidate.pk in identifiable][:RECIPIENT_SEARCH_LIMIT]
             for candidate in results:
                 candidate.ensure_slug()
         return render(

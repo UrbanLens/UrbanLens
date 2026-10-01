@@ -1,8 +1,4 @@
-"""Elevation plugin: metres above sea level, sourced through REData.
-
-Contributes a simple pin-detail "Elevation" info panel; see
-``services.apis.locations.redata_elevation_gateway`` for the gateway.
-"""
+"""Elevation plugin: metres above sea level, sourced through REData."""
 
 from __future__ import annotations
 
@@ -10,7 +6,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, OverviewSummary, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -20,14 +17,15 @@ if TYPE_CHECKING:
 _METERS_PER_FOOT = 0.3048
 
 
+def _elevation_text(elevation_m: float) -> str:
+    """An elevation in both units, e.g. ``"58 m (190 ft) above sea level"``."""
+    elevation_ft = elevation_m / _METERS_PER_FOOT
+    return f"{abs(elevation_m):,.0f} m ({abs(elevation_ft):,.0f} ft) {'below' if elevation_m < 0 else 'above'} sea level"
+
+
 def _pick_elevation(readings: list[dict[str, Any]]) -> float | None:
     """The single "best" elevation reading to show as one line.
-
-    REData orders ``results`` finest-resolution-first, so the first entry is
-    authoritative. Its ``elevation_meters: null`` is itself a real answer (a
-    gap in that model's own coverage, e.g. open ocean) - not a cue to fall
-    through to a coarser model looking for a non-null value instead.
-    """
+    REData orders ``results`` finest-resolution-first, so the first entry is authoritative."""
     if not readings:
         return None
     value = readings[0].get("elevation_meters")
@@ -42,20 +40,15 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "open-elevation-section"
     icon = "landscape"
     title = "Elevation"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    tab_order: ClassVar[int] = 30
 
     def gate(self, pin: Pin) -> bool:
         """Also requires REData to be configured - this panel has no other data source."""
         return super().gate(pin) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Look up elevation from every REData-configured DEM and cache the results.
-
-        Letting :class:`~...redata_context_gateway.LocationContextUnavailableError`
-        propagate (rather than catching it here) lets ``run_panel_fetch``'s
-        shared failure-suppression decide the retry cadence for a REData
-        outage instead of this panel permanently caching a null reading for
-        what might be transient.
-        """
+        """Look up elevation from every REData-configured DEM and cache the results."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.redata_elevation_gateway import RedataElevationGateway
 
@@ -79,16 +72,20 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
         """
         return (data or {}).get("elevation_m") is not None
 
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """The primary reading as one field."""
+        elevation_m = (data or {}).get("elevation_m")
+        if elevation_m is None:
+            return None
+        return OverviewSummary(fields=[{"label": "Elevation", "value": _elevation_text(elevation_m)}])
+
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build a quick-fact line from the primary reading, plus any other model's reading that disagrees."""
         elevation_m = (data or {}).get("elevation_m")
         if elevation_m is None:
             return None
 
-        elevation_ft = elevation_m / _METERS_PER_FOOT
-        below_sea_level = elevation_m < 0
-        text = f"{abs(elevation_m):,.0f} m ({abs(elevation_ft):,.0f} ft) {'below' if below_sea_level else 'above'} sea level"
-        context: dict[str, Any] = {"facts": [{"icon": self.icon, "text": text}]}
+        context: dict[str, Any] = {"facts": [{"icon": self.icon, "text": _elevation_text(elevation_m)}]}
 
         other_readings = [r for r in (data or {}).get("readings", [])[1:] if isinstance(r.get("elevation_meters"), (int, float))]
         if other_readings:
@@ -101,8 +98,19 @@ class OpenElevationPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "open_elevation"
     verbose_name: ClassVar[str] = "Elevation"
-    description: ClassVar[str] = "Shows the pin's elevation above/below sea level on the pin detail page, sourced through REData (USGS 3DEP, Open-Elevation, Open-Meteo/Copernicus)."
+    description: ClassVar[str] = "Shows the pin's elevation above/below sea level on the Private Pin page, sourced through REData (USGS 3DEP, Open-Elevation, Open-Meteo/Copernicus)."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_elevation."""
+        return {
+            "redata_elevation": ServiceDefaults(
+                display_name="REData Elevation",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Point elevation via GET /elevation/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_elevation_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the elevation pin-detail panel."""

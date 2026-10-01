@@ -1,13 +1,4 @@
-{% comment %}
-Results fragment for the shared map composer dialog's "Choose Existing" tab
-(base.html's #comment-map-composer, opts.existingMapPicker) - rendered by
-DirectMessageMapPickerView. Items are plain buttons (not hx-post, unlike the
-safety check-in picker) because attaching here just records the uuid
-client-side (see base.html's #cmc-existing-list click handler) until the
-message is actually sent.
-
-Expects: candidates (queryset of MarkupMap, owned by the caller), query (str).
-{% endcomment %}
+{% comment %}Results fragment for the shared map composer dialog's "Choose Existing" tab.{% endcomment %}
 {% if candidates %}
 <ul class="dm-map-picker-list">
     {% for candidate in candidates %}

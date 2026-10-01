@@ -1,20 +1,5 @@
 """Gateway for REData's ``/air-quality/`` near-a-coordinate endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /air-quality/ - air-quality
-readings". Two keyless providers answering the same question differently,
-returned side by side rather than reconciled:
-
-- ``open_meteo_air`` (``source_kind: "modelled"``): Copernicus CAMS
-  interpolated worldwide - always answers, never a measurement of that
-  address.
-- ``sensor_community`` (``source_kind: "sensor"``): crowdsourced instruments
-  of unknown calibration, dense in central Europe, sparse elsewhere.
-
-``source_kind`` governs what every number means and the two must not be
-mixed, averaged, or ranked against each other. Every concentration is µg/m³
-(carbon monoxide included). ``european_aqi`` and ``us_aqi`` are separate
-scales, not one field plus a scale name, and neither is a concentration.
-"""
+Two keyless providers answering the same question differently, returned side by side rather than reconciled:"""
 
 from __future__ import annotations
 
@@ -54,15 +39,10 @@ class RedataAirQualityGateway(RedataLocationContextGateway):
                 REData's API.
 
         Returns:
-            The parsed envelope. Entries carry ``source_kind`` (read it
-            before any number - see module docstring), per-pollutant
-            concentrations in µg/m³ (nullable independently: a device
-            measuring only particulates must not imply zero ozone), and the
-            separate ``european_aqi``/``us_aqi`` scales.
+            The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: Every covering source failed to
-                answer, or the request itself failed.
+            LocationContextUnavailableError: Every covering source failed to answer, or the request itself failed.
         """
         extra_params: dict[str, Any] = {}
         if include_indoor:

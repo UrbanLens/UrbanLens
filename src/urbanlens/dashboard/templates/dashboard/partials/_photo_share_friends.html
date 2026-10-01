@@ -1,0 +1,15 @@
+{% comment %}Friend list for the lightbox's "Share with a friend" picker.{% endcomment %}
+<ul class="photo-share-friend-list">
+    {% for friend in friends %}
+    <li class="photo-share-friend-item" data-search="{{ friend.username|lower }}">
+        <button type="button" class="photo-share-friend-btn" data-friend-slug="{{ friend.slug }}" data-username="{{ friend.username }}" data-lightbox-action="pick-friend">
+            <span class="msg-avatar" aria-hidden="true">
+                {% if friend.avatar %}<img src="{{ friend.avatar.url }}" alt="" class="msg-avatar-img">{% else %}<span class="msg-avatar-initial">{{ friend.username|first|upper }}</span>{% endif %}
+            </span>
+            <span class="photo-share-friend-name">{{ friend.username }}</span>
+        </button>
+    </li>
+    {% empty %}
+    <li class="photo-share-friend-empty">No friends yet - add some from your profile.</li>
+    {% endfor %}
+</ul>

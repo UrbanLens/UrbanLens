@@ -8,10 +8,14 @@ import logging
 import re
 import struct
 import tarfile
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 import zipfile
 
 from urbanlens.dashboard.services.import_formats.heuristics import DEFAULT_LATITUDE_KEYS, DEFAULT_LONGITUDE_KEYS, normalize_header_key
+from urbanlens.dashboard.services.sandbox import untrusted_parse
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -20,17 +24,14 @@ _ZIP_MAGIC = b"PK\x03\x04"
 _GZIP_MAGIC = b"\x1f\x8b"
 
 # Hard limits to prevent resource exhaustion / zip bombs
-_MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB total across all extracted files
-_MAX_SINGLE_FILE_BYTES = 1 * 1024 * 1024 * 1024  # 1 GB per individual file
+_MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+_MAX_SINGLE_FILE_BYTES = 1 * 1024 * 1024 * 1024
 _MAX_FILE_COUNT = 1000
 
 # Only files with these extensions are considered when extracting from archives.
-# KMZ is included because it is itself a ZIP (containing KML) and may appear inside
-# an outer archive. shp/dbf/shx/prj/cpg are Shapefile sidecar parts, which are
-# grouped by filename stem elsewhere (see services.import_formats.shapefile)
-# rather than sniffed individually here. html is for Google Takeout's My Activity
-# export, which ships as Takeout/My Activity/Maps/MyActivity.html inside a zipped
-# Takeout archive.
+# KMZ is included because it is itself a ZIP (containing KML) and may appear inside an outer
+# archive. shp/dbf/shx/prj/cpg are Shapefile sidecar parts, which are grouped by filename stem
+# elsewhere (see services.import_formats.shapefile) rather than sniffed individually here. html is
 _ARCHIVE_ALLOWED_EXTENSIONS = frozenset(
     {"json", "kml", "csv", "kmz", "gpx", "geojson", "wkt", "wkb", "osm", "shp", "dbf", "shx", "prj", "cpg", "html"},
 )
@@ -61,24 +62,7 @@ class ExtractedFile(NamedTuple):
 
 class ExtractionBudget:
     """One allowance for everything extracted from a single upload.
-
-    The limits above are per *archive*, which is not the same as per upload:
-    an upload can contain several archives, and an archive can contain nested
-    archives that callers expand with a second `extract_archive` call. Each of
-    those calls used to start a fresh 2 GB / 1000-file allowance, so an outer
-    ZIP holding N nested bombs cost N x 2 GB - the cap bound each call and
-    nothing bound the total. Callers that expand nested archives must create
-    one of these and pass it to every call.
-
-    Charging is against bytes actually read rather than the size the archive
-    declares. That is exactness, not a hole being closed: CPython's ``zipfile``
-    bounds a read by the declared ``file_size`` and then fails the CRC check,
-    so a understated declaration truncates rather than overruns (verified
-    against 3.12 - patching a 5 MB entry's declared size to 1 raises
-    ``BadZipFile: Bad CRC-32``, it does not hand back 5 MB). The declared value
-    was therefore always a valid upper bound; the actual length is simply the
-    right thing to bill.
-    """
+    Charging is against bytes actually read rather than the size the archive declares."""
 
     def __init__(self, max_bytes: int = _MAX_UNCOMPRESSED_BYTES, max_files: int = _MAX_FILE_COUNT) -> None:
         """Start an allowance.
@@ -100,6 +84,14 @@ class ExtractionBudget:
         if self.remaining_files < 0:
             raise ValueError(f"Archive contains more than {_MAX_FILE_COUNT} supported files.")
 
+    def read_limit(self) -> int:
+        """The most one entry may read: the per-file cap, or less when the upload has less left.
+
+        Returns:
+            Bytes an entry may read before its size alone decides the outcome.
+        """
+        return min(_MAX_SINGLE_FILE_BYTES, max(self.remaining_bytes, 0))
+
     def claim_bytes(self, size: int) -> None:
         """Account for *size* uncompressed bytes.
 
@@ -118,38 +110,42 @@ def is_archive(data: bytes) -> bool:
     """Returns True if *data* starts with ZIP or GZIP magic bytes.
 
     Args:
-        data: Raw bytes to inspect (at least 4 bytes recommended).
+        data: Raw bytes to inspect .
 
     Returns:
-        True when the bytes indicate a ZIP or GZIP/TGZ archive.
-    """
+        True when the bytes indicate a ZIP or GZIP/TGZ archive."""
     return data[:4] == _ZIP_MAGIC or data[:2] == _GZIP_MAGIC
 
 
 def extract_archive(data: bytes, budget: ExtractionBudget | None = None) -> list[ExtractedFile]:
     """Safely extract supported files from a ZIP or TGZ archive.
 
-    Security measures applied:
-    - Type verified by magic bytes, not filename extension.
-    - Path-traversal entries (``../`` or absolute paths) are silently skipped.
-    - Symlinks and non-regular-file entries are skipped.
-    - Per-file and cumulative uncompressed-size limits enforced, the cumulative
-      ones shared across every call that passes the same ``budget``.
-    - Only entries whose extension is in ``_ARCHIVE_ALLOWED_EXTENSIONS`` are extracted.
-
     Args:
         data: Raw bytes of the archive.
-        budget: Allowance to draw on. Callers expanding *nested* archives must
-            create one :class:`ExtractionBudget` and pass it to every call, so
-            the whole upload shares one limit; omitting it gives this archive
-            its own, which is only correct when nothing else will be extracted.
+        budget: Allowance to draw on.
 
     Returns:
         List of :class:`ExtractedFile` for every supported entry found.
 
     Raises:
-        ValueError: If the archive is malformed or exceeds safety limits.
-    """
+        ValueError: If the archive is malformed or exceeds safety limits."""
+    return list(iter_archive(data, budget))
+
+
+def iter_archive(data: bytes, budget: ExtractionBudget | None = None) -> Iterator[ExtractedFile]:
+    """Extract supported files from a ZIP or TGZ archive one at a time, as each is asked for.
+
+    A caller that lets go of an entry before asking for the next holds one entry, not the archive.
+
+    Args:
+        data: Raw bytes of the archive.
+        budget: Allowance to draw on.
+
+    Returns:
+        An iterator of :class:`ExtractedFile`, one per supported entry.
+
+    Raises:
+        ValueError: If the archive is not a ZIP or TGZ; while iterating, if it is malformed or exceeds safety limits."""
     if budget is None:
         budget = ExtractionBudget()
     if data[:4] == _ZIP_MAGIC:
@@ -162,23 +158,12 @@ def extract_archive(data: bytes, budget: ExtractionBudget | None = None) -> list
 def validate_content_type(name: str, data: bytes) -> str | None:
     """Validate file content and return its format string, or ``None`` if unsupported.
 
-    Validation is performed on the *content* of the file, not just its extension,
-    to guard against misnamed or deliberately misleading uploads.
-
-    Supported return values: ``'json'``, ``'kml'``, ``'csv'``, ``'location_history'``,
-    ``'gpx'``, ``'wkt'``, ``'wkb'``, ``'osm_xml'``, ``'my_activity'``. KMZ files are
-    handled at the archive-extraction layer and are not returned here. Shapefile parts
-    (``.shp``/``.dbf``/``.shx``/``.prj``/``.cpg``) are not sniffed here either -
-    they are grouped by filename stem in ``services.import_formats.shapefile``
-    before this function is ever consulted for them.
-
     Args:
         name: Filename used only for diagnostic logging.
         data: Raw file bytes.
 
     Returns:
-        Format string, or ``None`` when the content is unrecognised or invalid.
-    """
+        Format string, or ``None`` when the content is unrecognised or invalid."""
     if len(data) < 4:
         logger.debug("Skipping file too small to validate: %s", name)
         return None
@@ -188,10 +173,9 @@ def validate_content_type(name: str, data: bytes) -> str | None:
     if _sniff_wkb(data):
         return "wkb"
 
-    # Binary files (those that can't decode as UTF-8) are rejected outright.
-    # utf-8-sig strips a leading BOM so Excel "CSV UTF-8" exports whose first
-    # header is ``latitude`` still sniff as CSV (plain utf-8 leaves the BOM
-    # glued to that header, and str.lstrip() does not remove \\ufeff).
+    # Binary files (those that can't decode as UTF-8) are rejected outright. utf-8-sig strips a
+    # leading BOM so Excel "CSV UTF-8" exports whose first header is ``latitude`` still sniff as CSV
+    # (plain utf-8 leaves the BOM glued to that header, and str.lstrip() does not remove \\ufeff).
     try:
         text = data.decode("utf-8-sig").lstrip()
     except UnicodeDecodeError:
@@ -202,9 +186,7 @@ def validate_content_type(name: str, data: bytes) -> str | None:
         return None
 
     # JSON: must start with '{' or '[' and parse successfully.
-    # Recognised variants:
-    #   "json"             - GeoJSON (Takeout "Saved Places" or generic FeatureCollection)
-    #   "location_history" - Google Semantic Location History (has "timelineObjects")
+    # Recognised variants: "json" - GeoJSON (Takeout "Saved Places" or generic FeatureCollection)
     if text[0] in "{[":
         try:
             parsed = json.loads(text)
@@ -228,10 +210,10 @@ def validate_content_type(name: str, data: bytes) -> str | None:
         logger.debug("File is XML but does not match a known format: %s", name)
         return None
 
-    # HTML: Google Takeout's My Activity export. Checked before the WKT/CSV
-    # heuristics below - a huge single-line My Activity file's <title> tag or
-    # "mdl-typography--title" class name would otherwise trip the CSV header
-    # heuristic's "title" substring check and get misclassified as CSV.
+    # HTML: Google Takeout's My Activity export.
+    # Checked before the WKT/CSV heuristics below - a huge single-line My Activity file's <title>
+    # tag or "mdl-typography--title" class name would otherwise trip the CSV header heuristic's
+    # "title" substring check and get misclassified as CSV.
     if text[:20].lower().startswith(("<!doctype html", "<html")):
         from urbanlens.dashboard.services.apis.locations.google.my_activity import looks_like_my_activity
 
@@ -276,13 +258,7 @@ _WKB_GEOMETRY_TYPE_CODES = frozenset(range(1, 8))  # Point .. GeometryCollection
 
 
 def _sniff_wkb(data: bytes) -> bool:
-    """Return True if *data* looks like a binary WKB geometry.
-
-    Checks the leading byte-order flag (``0x00``/``0x01``) and the following
-    4-byte geometry-type code, masking out PostGIS EWKB's SRID/Z/M flag bits
-    and ISO SQL/MM's ``+1000``/``+2000``/``+3000`` dimensionality offsets so
-    every common WKB dialect is recognised.
-    """
+    """Return True if *data* looks like a binary WKB geometry."""
     if len(data) < 5 or data[0] not in (0, 1):
         return False
     endianness = "<" if data[0] == 1 else ">"
@@ -293,17 +269,11 @@ def _sniff_wkb(data: bytes) -> bool:
     return (geom_code & 0xFFFF) % 1000 in _WKB_GEOMETRY_TYPE_CODES
 
 
-# ---------------------------------------------------------------------------
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _safe_basename(path: str) -> str | None:
-    """Return the basename of *path*, or ``None`` if any component is suspicious.
-
-    Rejects paths that contain ``..`` components or that are absolute
-    (start with ``/`` on Unix or a drive letter on Windows).
-    """
+    """Return the basename of *path*, or ``None`` if any component is suspicious."""
     parts = path.replace("\\", "/").split("/")
     basename = parts[-1]
     if ".." in parts or not basename:
@@ -316,10 +286,9 @@ def _extension(filename: str) -> str:
     return filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
 
-def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
-    """Extract supported files from a ZIP archive, drawing on *budget*."""
-    results: list[ExtractedFile] = []
-
+@untrusted_parse("archive.extract")
+def _extract_zip(data: bytes, budget: ExtractionBudget) -> Iterator[ExtractedFile]:
+    """Extract supported files from a ZIP archive one at a time, drawing on *budget*."""
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for info in zf.infolist():
@@ -350,9 +319,9 @@ def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                 budget.claim_file()
 
                 with zf.open(info) as f:
-                    # Read one extra byte so we can detect if the actual size
-                    # exceeds the declared file_size (compression-ratio attack).
-                    content = f.read(_MAX_SINGLE_FILE_BYTES + 1)
+                    # One byte past the limit is enough to tell an entry that exceeds it - its declared file_size
+                    # can lie - without holding the rest of it in memory.
+                    content = f.read(budget.read_limit() + 1)
 
                 budget.claim_bytes(len(content))
 
@@ -363,18 +332,16 @@ def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                     )
                     continue
 
-                results.append(ExtractedFile(safe_name, content))
+                yield ExtractedFile(safe_name, content)
 
     except zipfile.BadZipFile as exc:
-        raise ValueError(f"Invalid ZIP archive: {exc}") from exc
+        logger.info("Invalid ZIP archive: %s", exc)
+        raise ValueError("Invalid ZIP archive.") from exc
 
-    return results
 
-
-def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
-    """Extract supported files from a GZIP-compressed TAR archive, drawing on *budget*."""
-    results: list[ExtractedFile] = []
-
+@untrusted_parse("archive.extract")
+def _extract_tgz(data: bytes, budget: ExtractionBudget) -> Iterator[ExtractedFile]:
+    """Extract supported files from a GZIP-compressed TAR archive one at a time, drawing on *budget*."""
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
             for member in tf.getmembers():
@@ -404,7 +371,7 @@ def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                 if fobj is None:
                     continue
 
-                content = fobj.read(_MAX_SINGLE_FILE_BYTES + 1)
+                content = fobj.read(budget.read_limit() + 1)
                 budget.claim_bytes(len(content))
                 if len(content) > _MAX_SINGLE_FILE_BYTES:
                     logger.warning(
@@ -413,9 +380,8 @@ def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                     )
                     continue
 
-                results.append(ExtractedFile(safe_name, content))
+                yield ExtractedFile(safe_name, content)
 
     except tarfile.TarError as exc:
-        raise ValueError(f"Invalid TGZ archive: {exc}") from exc
-
-    return results
+        logger.info("Invalid TGZ archive: %s", exc)
+        raise ValueError("Invalid TGZ archive.") from exc

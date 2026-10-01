@@ -1,16 +1,4 @@
-"""Behavioral lock on the Memories photo-upload path.
-
-Written to characterize ``controllers.photos.PhotoUploadView.post`` *before*
-its body was extracted into ``services.photos.photo_upload.upload_photo``, and kept
-afterwards so the extraction stays honest: the web uploader and the external
-API's ``POST photos/`` now share one implementation, and this is what catches
-that implementation drifting away from what the page has always done.
-
-Every assertion here is about the HTMX/JSON contract the Memories page's
-uploader JS depends on - the status codes in particular, since the page
-distinguishes a duplicate (409) from a rejected file (400) from a quota
-overrun (413) purely by status.
-"""
+"""Behavioral lock on the Vault photo-upload path."""
 
 from __future__ import annotations
 
@@ -27,7 +15,9 @@ from model_bakery import baker
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.profile.model import Profile
 
-_PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 
 class PhotoUploadViewTests(TestCase):
@@ -37,7 +27,7 @@ class PhotoUploadViewTests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
-        self.url = reverse("memories.photos.upload")
+        self.url = reverse("vault.photos.upload")
 
     def _upload(self, name: str = "shot.png", content: bytes = _PNG_BYTES, content_type: str = "image/png"):
         """POST one file to the upload endpoint."""
@@ -86,11 +76,11 @@ class PhotoUploadViewTests(TestCase):
         """Anything that isn't an image, video, or known document type is refused."""
         response = self._upload(name="notes.bin", content=b"not-an-image", content_type="application/octet-stream")
         self.assertEqual(response.status_code, HTTPStatus.BAD_REQUEST)
-        self.assertEqual(response.json()["error"], "That file is not an image, video, or supported document type.")
+        self.assertEqual(response.json()["error"], "That file couldn't be processed.")
 
     def test_video_without_the_feature_is_403(self) -> None:
         """Video uploads stay behind their account feature gate."""
         with patch("urbanlens.dashboard.models.subscriptions.user_has_feature", return_value=False):
             response = self._upload(name="clip.mp4", content=b"\x00\x00\x00\x18ftypmp42", content_type="video/mp4")
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
-        self.assertEqual(response.json()["error"], "Video uploads are not enabled for your account.")
+        self.assertEqual(response.json()["error"], "That upload type isn't enabled for your account.")

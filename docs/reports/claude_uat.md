@@ -12,7 +12,7 @@ Round 1 findings are in `docs/reports/ua_testing.md`. This document covers the s
 
 ## Overall Assessment
 
-The app is substantially more polished than Round 1. The pin detail page title issue (raw coordinates in the `<title>`) has been fixed. The filter sidebar, pin list, enrichment panels, and all major nav pages are working. The most critical remaining issue is the raw Google API error still rendering in the Street View panel, and the REST API being broken on staging.
+The app is substantially more polished than Round 1. The Private Pin page title issue (raw coordinates in the `<title>`) has been fixed. The filter sidebar, pin list, enrichment panels, and all major nav pages are working. The most critical remaining issue is the raw Google API error still rendering in the Street View panel, and the REST API being broken on staging.
 
 ---
 
@@ -125,7 +125,7 @@ The error is in a black text box in the panel. This must never be shown to a use
 
 **Issue** — Web Results includes wrong-city matches. For "118 W 9th St", results included addresses in Los Angeles, CA and Tracy, CA. The search is not constrained by the pin's city/state (Cincinnati, OH).
 
-**Issue** — The loading bar that appears at the top of the pin detail page on initial load is jarring. It's a full-width gray bar with "Loading…" text that disappears once panels render. Per-panel loading spinners are sufficient; this global bar is unnecessary.
+**Issue** — The loading bar that appears at the top of the Private Pin page on initial load is jarring. It's a full-width gray bar with "Loading…" text that disappears once panels render. Per-panel loading spinners are sufficient; this global bar is unnecessary.
 
 **Not observed** — The following panels from FEATURES.md were not seen on any tested pin:
 - Library of Congress (may be in the "All" media tab but no separate UI label was visible)

@@ -1,21 +1,32 @@
-{% comment %}
-Single-month trip calendar grid. Rendered by both the trips list page's
-Calendar view toggle and the trips overview page's "This month" widget - the
-two never appear on the same page, so both reuse the same element ids
-(trips-cal-*) and the shared tripsCalRender()/tripsCalNav() functions in
-_mini_calendar_script.html.
-
-Context:
-  calendar_data - list of trip dicts from _trips_calendar_data() (uuid, name, start, end, status, url)
-{% endcomment %}
+{% comment %}Single-month trip calendar grid, rendered on the server; prev/next swap in the neighbouring month.{% endcomment %}
+<div class="trips-cal" id="trips-cal">
 <div class="cal-header">
-    <button type="button" class="cal-nav-btn" onclick="tripsCalNav(-1)" aria-label="Show previous month">
+    <button type="button" class="cal-nav-btn" aria-label="Show previous month"
+            hx-get="{% url 'trips.calendar.month' %}?month={{ trip_month.previous }}" hx-target="#trips-cal" hx-swap="outerHTML">
         <i class="material-icons">chevron_left</i>
     </button>
-    <span class="cal-month-label" id="trips-cal-month-label"></span>
-    <button type="button" class="cal-nav-btn" onclick="tripsCalNav(1)" aria-label="Show next month">
+    <span class="cal-month-label" id="trips-cal-month-label">{{ trip_month.first|date:"F Y" }}</span>
+    <button type="button" class="cal-nav-btn" aria-label="Show next month"
+            hx-get="{% url 'trips.calendar.month' %}?month={{ trip_month.next }}" hx-target="#trips-cal" hx-swap="outerHTML">
         <i class="material-icons">chevron_right</i>
     </button>
 </div>
-<div class="cal-grid" id="trips-cal-grid"></div>
-{{ calendar_data|json_script:"trips-cal-data" }}
+<div class="cal-grid" id="trips-cal-grid">
+    {% for name in trip_month.weekdays %}<div class="cal-cell cal-cell--header">{{ name }}</div>{% endfor %}
+    {% for cell in trip_month.days %}
+    {% if cell.day %}
+    <div class="cal-cell{% if cell.trips %} cal-cell--has-events{% endif %}{% if cell.is_today %} cal-cell--today{% endif %}">
+        <span class="cal-day-num">{{ cell.day.day }}</span>
+        {% if cell.trips %}
+        <div class="cal-events">
+            {% for t in cell.trips %}<a class="cal-event cal-event--{{ t.status }}" href="{{ t.url }}" title="{{ t.name }}">{{ t.name }}</a>{% endfor %}
+            {% if cell.more %}<span class="cal-event-more">+{{ cell.more }} more</span>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="cal-cell cal-cell--empty"></div>
+    {% endif %}
+    {% endfor %}
+</div>
+</div>

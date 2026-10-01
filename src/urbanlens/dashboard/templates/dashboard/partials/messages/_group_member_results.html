@@ -1,9 +1,4 @@
-{% comment %}
-Search results for the group member pickers (new-group dialog and the
-members dialog's add form). Each row is a toggle button the page JS turns
-into a picked-member chip + hidden `member_slugs` input. Context: `results`,
-`query`.
-{% endcomment %}
+{% comment %}Search results for the group member pickers (new-group dialog and the members dialog's add form).{% endcomment %}
 {% if results %}
 <ul class="dm-recipient-list" role="list">
   {% for candidate in results %}

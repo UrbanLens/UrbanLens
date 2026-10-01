@@ -1,15 +1,4 @@
-"""Tests that one bad safety check-in cannot suppress everyone else's escalation.
-
-The three safety beat tasks each loop over a queryset and call a per-check-in
-service. An exception from any one of them used to abort the whole run, and
-``SafetyCheckin`` has a deterministic ``ordering``, so a row that fails
-repeatably - corrupt contact data, a template that won't render, an address the
-mail backend rejects - would fail at the same position on every tick and every
-check-in behind it would never escalate.
-
-That failure mode is silent and unbounded: the sweep just returns early, and the
-people whose emergency contacts were never called have no way to know.
-"""
+"""Tests that one bad safety check-in cannot suppress everyone else's escalation."""
 
 from __future__ import annotations
 
@@ -52,8 +41,12 @@ class SafetySweepIsolationTests(TestCase):
 
     def test_one_failing_escalation_does_not_suppress_the_others(self) -> None:
         # Ordering is "-checkin_by", so the newer row is visited first - make that one fail.
-        self._checkin(title="poisoned", checkin_by=self.now - timedelta(hours=2), status=SafetyCheckinStatus.AWAITING_CHECKIN)
-        healthy = self._checkin(title="healthy", checkin_by=self.now - timedelta(hours=3), status=SafetyCheckinStatus.AWAITING_CHECKIN)
+        self._checkin(
+            title="poisoned", checkin_by=self.now - timedelta(hours=2), status=SafetyCheckinStatus.AWAITING_CHECKIN
+        )
+        healthy = self._checkin(
+            title="healthy", checkin_by=self.now - timedelta(hours=3), status=SafetyCheckinStatus.AWAITING_CHECKIN
+        )
 
         escalated: list[str] = []
 
@@ -73,8 +66,12 @@ class SafetySweepIsolationTests(TestCase):
         self.assertEqual(healthy.status, SafetyCheckinStatus.OVERDUE)
 
     def test_one_failing_reminder_does_not_suppress_the_others(self) -> None:
-        self._checkin(title="poisoned", checkin_by=self.now - timedelta(minutes=10), status=SafetyCheckinStatus.SCHEDULED)
-        self._checkin(title="healthy", checkin_by=self.now - timedelta(minutes=20), status=SafetyCheckinStatus.SCHEDULED)
+        self._checkin(
+            title="poisoned", checkin_by=self.now - timedelta(minutes=10), status=SafetyCheckinStatus.SCHEDULED
+        )
+        self._checkin(
+            title="healthy", checkin_by=self.now - timedelta(minutes=20), status=SafetyCheckinStatus.SCHEDULED
+        )
 
         reminded: list[str] = []
 
@@ -93,7 +90,9 @@ class SafetySweepIsolationTests(TestCase):
         # FINAL_WARNING_LEAD_TIME (5 minutes), so with a 1-hour grace these sit just under an
         # hour ago. Ordering is "-checkin_by", so the later one is visited first.
         nearly_due = self.now - timedelta(minutes=58)
-        self._checkin(title="poisoned", checkin_by=nearly_due + timedelta(minutes=1), status=SafetyCheckinStatus.AWAITING_CHECKIN)
+        self._checkin(
+            title="poisoned", checkin_by=nearly_due + timedelta(minutes=1), status=SafetyCheckinStatus.AWAITING_CHECKIN
+        )
         self._checkin(title="healthy", checkin_by=nearly_due, status=SafetyCheckinStatus.AWAITING_CHECKIN)
 
         warned: list[str] = []
@@ -110,8 +109,12 @@ class SafetySweepIsolationTests(TestCase):
 
     def test_the_sweep_still_reports_only_what_actually_succeeded(self) -> None:
         """A run that swallowed a failure must not report the failed one as done."""
-        self._checkin(title="poisoned", checkin_by=self.now - timedelta(hours=2), status=SafetyCheckinStatus.AWAITING_CHECKIN)
-        self._checkin(title="healthy", checkin_by=self.now - timedelta(hours=3), status=SafetyCheckinStatus.AWAITING_CHECKIN)
+        self._checkin(
+            title="poisoned", checkin_by=self.now - timedelta(hours=2), status=SafetyCheckinStatus.AWAITING_CHECKIN
+        )
+        self._checkin(
+            title="healthy", checkin_by=self.now - timedelta(hours=3), status=SafetyCheckinStatus.AWAITING_CHECKIN
+        )
 
         def escalate(checkin: SafetyCheckin) -> None:
             if checkin.title == "poisoned":

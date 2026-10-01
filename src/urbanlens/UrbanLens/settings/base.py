@@ -2,84 +2,74 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import sys
 from urllib.parse import urlparse
 
 from celery.schedules import crontab
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 from dotenv import find_dotenv, load_dotenv
+from oauth2_provider.utils import set_oauthlib_user_to_device_request_user
 
-from urbanlens.UrbanLens.settings._env import is_production_environment
+from urbanlens.dashboard.services.auth.oauth_device import refuse_an_inactive_account
+from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS, environment_from_env
+from urbanlens.UrbanLens.settings._env import (
+    deployment_settings_required,
+    is_loopback_host,
+    is_production_environment,
+    persistent_connection_seconds,
+    prepare_threshold,
+    require_deployment_setting,
+    running_under_pytest,
+)
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env - search upward from this file so the
-# repo-root .env is found regardless of working directory.
+# Find the repo-root .env regardless of working directory.
 load_dotenv(find_dotenv())
 
-# Detect the current environment early - other settings branch on it.
-ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
+ENVIRONMENT_NAME = str(environment_from_env())
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
+#: Local, development and testing may default what a deployment must configure; see require_deployment_setting.
+_is_ephemeral = ENVIRONMENT_NAME in EPHEMERAL_ENVIRONMENTS
+_deployment = deployment_settings_required(ENVIRONMENT_NAME)
 
-# Whether this process is the real production deployment, as opposed to a dev
-# slot, a staging box, a test run, or a misconfigured deployment.
-#
-# `_is_dev`/`_is_local` above answer "may I be lax here?" and each name only a
-# subset of the non-production world, so neither can be negated into "is this
-# production": `not _is_dev` is true for staging, testing, and a typo'd
-# UL_ENVIRONMENT alike. This is the positive form, and it is fail-closed - see
-# `_env.is_production_environment`. Guard anything whose wrong answer is
-# expensive on this rather than on `not _is_dev`.
+# Positive fail-closed production check; `not _is_dev` also matches typos/staging.
 IS_PRODUCTION = is_production_environment(ENVIRONMENT_NAME)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 #
-# The random fallback is a data-loss hazard wherever encrypted data can exist,
-# not just a session-stability one: SECRET_KEY is also the fallback source for
-# EncryptedTextField's key (dashboard/models/fields.py), gunicorn runs without
-# preload_app, and celery/manage.py are separate processes - so an unset value
-# gives every process a different key, and anything written to an encrypted
-# field is unreadable by every other process and after the next restart. Fail
-# loudly instead of degrading, anywhere a real database is in play.
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or ""
-if not SECRET_KEY:
-    # Ephemeral keys are only safe where no durable encrypted data exists:
-    # developer machines and test runs. staging/production must fail.
-    _key_optional = _is_dev or ENVIRONMENT_NAME == "testing" or any(arg.endswith("pytest") or "pytest" in arg for arg in sys.argv)
-    if not _key_optional:
-        from django.core.exceptions import ImproperlyConfigured
-
-        raise ImproperlyConfigured(
-            f"DJANGO_SECRET_KEY must be set when UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. "
-            "Without it every process derives its own random key, which breaks sessions "
-            "across workers and permanently orphans anything already written to an "
-            "encrypted field. Generate one with: "
-            'python -c "import secrets; print(secrets.token_urlsafe(64))" '
-            "- see .env-sample and docs/DATA_ENCRYPTION.md.",
-        )
-    SECRET_KEY = get_random_secret_key()
+# The random fallback would orphan encrypted-field data across processes.
+SECRET_KEY = require_deployment_setting(
+    "DJANGO_SECRET_KEY",
+    os.environ.get("DJANGO_SECRET_KEY"),
+    environment=ENVIRONMENT_NAME,
+    fallback=get_random_secret_key(),
+    reason=(
+        "Without it every process derives its own random key, which breaks sessions across workers and "
+        "permanently orphans anything already written to an encrypted field. Generate one with: "
+        'python -c "import secrets; print(secrets.token_urlsafe(64))" - see .env-sample and docs/DATA_ENCRYPTION.md.'
+    ),
+)
 
 
 def _env_bool(name: str, default: bool) -> bool:
     return os.getenv(name, str(default)).lower() in {"true", "1", "yes"}
 
 
-# Test clients issue HTTP requests. Django's DiscoverRunner disables HTTPS
-# redirects in setup_test_environment(), but pytest-django imports settings
-# directly and does not run that project test runner hook.
-TESTING = _env_bool("DJANGO_TESTING", False) or any(
-    arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
-)
+# pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
+TESTING = _env_bool("DJANGO_TESTING", False) or running_under_pytest()
 
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
+if DEBUG and _deployment:
+    raise ImproperlyConfigured(
+        f"DJANGO_DEBUG is on while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Debug pages publish settings, SQL and "
+        "tracebacks to anyone who triggers an error; it is only allowed in local, development and testing.",
+    )
 
-# ALLOWED_HOSTS: AppSettings is the source of truth (override via UL_ALLOWED_HOSTS,
-# a comma-separated list). Local environment defaults to wildcard-friendly hosts so
-# developers can access the site immediately without any configuration.
+# AppSettings owns ALLOWED_HOSTS (UL_ALLOWED_HOSTS); local defaults allow immediate access.
+from urbanlens.UrbanLens.settings import _metrics  # noqa: E402
 from urbanlens.UrbanLens.settings._env import env_bool  # noqa: E402
 from urbanlens.UrbanLens.settings.app import settings as _app_settings  # noqa: E402
 
@@ -87,11 +77,7 @@ ALLOWED_HOSTS = _app_settings.allowed_hosts
 
 # Application definition
 INSTALLED_APPS = [
-    # "daphne" must come before "django.contrib.staticfiles" - Channels patches
-    # the `runserver` management command to be ASGI/WebSocket-aware only when
-    # daphne is registered ahead of it, which is what gives local dev working
-    # WebSockets with no extra process (production instead runs a dedicated
-    # daphne container - see docker-compose.yml's `app-ws` service).
+    # Before staticfiles so runserver serves WebSockets via Channels in dev.
     "daphne",
     "channels",
     "django.contrib.admin",
@@ -103,48 +89,70 @@ INSTALLED_APPS = [
     "django.contrib.postgres",
     "django.contrib.humanize",
     "corsheaders",
-    # Registers django-csp's system checks (the app itself defines no models);
-    # csp.E001 fires if anyone reintroduces the pre-4.0 `CSP_*` setting format,
-    # which django-csp 4 silently ignores.
+    # Registers django-csp checks (e.g. csp.E001 on legacy setting format).
     "csp",
     "urbanlens.dashboard.apps.DashboardConfig",
     "social_django",
-    # OAuth2/OIDC provider for native clients (mobile/desktop apps) hitting the
-    # external API - browser sessions and PAT-style ApiKeys are unaffected.
+    # OAuth2 provider for native clients; browser sessions/ApiKeys unaffected.
     "oauth2_provider",
-    # OpenAPI schema generation, served only for the external API surface
-    # (see external_api.schema's preprocessing hook).
+    # OpenAPI schema for the external API surface only.
     "drf_spectacular",
 ]
 
-# Routes the websocket protocol (see UrbanLens/asgi.py); HTTP keeps using
-# WSGI_APPLICATION in production (gunicorn) - only the dedicated `app-ws`
-# daphne container and local `runserver` actually serve ASGI traffic.
+# Prometheus counters, only on processes that serve /metrics.
+UL_METRICS_ENABLED = _app_settings.metrics_enabled
+UL_METRICS_TOKEN = _app_settings.metrics_token
+UL_METRICS_ALLOWED_CIDRS = _app_settings.metrics_allowed_cidrs
+
+# Only scraped roles pay for instrumentation; see settings/_metrics.py.
+UL_METRICS_INSTRUMENTED = _metrics.instrumentation_wanted(metrics_enabled=UL_METRICS_ENABLED, process_role=_app_settings.process_role)
+
+if UL_METRICS_INSTRUMENTED:
+    _metrics.require_django_prometheus()
+    INSTALLED_APPS.append("django_prometheus")
+
+# ASGI for websockets; production HTTP stays on WSGI/gunicorn.
 ASGI_APPLICATION = "urbanlens.UrbanLens.asgi.application"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    # Emits the Content-Security-Policy header built from CONTENT_SECURITY_POLICY
-    # (or ..._REPORT_ONLY) below. Sits directly under SecurityMiddleware so the
-    # header is attached to every response that leaves the stack, including ones
-    # short-circuited further in.
+    "urbanlens.dashboard.middleware.SecurityHeadersMiddleware",
+    # Attaches the CSP header to every response, including short-circuited ones.
     "csp.middleware.CSPMiddleware",
-    # CorsMiddleware must sit above CommonMiddleware (and anything else that
-    # can short-circuit a response) so CORS headers are applied to redirects
-    # and preflight responses - see django-cors-headers docs.
+    # Above CommonMiddleware so redirects/preflights carry CORS headers.
     "corsheaders.middleware.CorsMiddleware",
+    # Serves STATIC_ROOT where no nginx fronts the app; no-op behind compose nginx.
+    #
+    # Short-circuits in the request phase: layers above still touch the response,
+    # layers below (sessions, auth, cookies) are skipped, keeping it cacheable.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Reports user id; logs wall/CPU/SQL for requests over UL_SLOW_REQUEST_MS.
+    "urbanlens.dashboard.middleware.RequestTelemetryMiddleware",
+    # Mints the media-origin cookie; no-op unless UL_MEDIA_BASE_URL is set.
+    "urbanlens.dashboard.middleware.MediaOriginCookieMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    # Innermost: swaps in the simulated viewer for "view profile as" previews.
+    # Innermost: swaps in the ghost viewer for profile previews.
     "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
-    # Below the preview swap on purpose: field provenance should record the
-    # viewer the request is actually acting as.
+    # Records the viewer the request actually acts as.
     "urbanlens.dashboard.middleware.WriteSourceMiddleware",
 ]
+
+if UL_METRICS_INSTRUMENTED:
+    # Outermost/innermost pair per django-prometheus docs; the delta is stack cost.
+    MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
+    MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
+
+# Narrower than django-prometheus defaults, straddling actual serve times.
+# 120 matches nginx proxy_read_timeout; keep in step.
+PROMETHEUS_LATENCY_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, float("inf"))
+
+# Off: /health/ready already reports migration state to the prober.
+PROMETHEUS_EXPORT_MIGRATIONS = False
 
 AUTHENTICATION_BACKENDS = [
     "social_core.backends.google.GoogleOAuth2",
@@ -154,33 +162,49 @@ AUTHENTICATION_BACKENDS = [
 
 ROOT_URLCONF = "urbanlens.UrbanLens.urls"
 
+# Shared by both engines: a processor added to one and not the other is invisible until a ported
+# template reads it and gets nothing.
+CONTEXT_PROCESSORS = [
+    "django.template.context_processors.debug",
+    "django.template.context_processors.request",
+    "django.contrib.auth.context_processors.auth",
+    "django.contrib.messages.context_processors.messages",
+    "urbanlens.dashboard.context_processors.add_page_name",
+    "urbanlens.dashboard.context_processors.add_site_settings",
+    "urbanlens.dashboard.context_processors.add_dev_toolbar",
+    "urbanlens.dashboard.context_processors.add_feature_access",
+    "urbanlens.dashboard.context_processors.add_pending_account_deletion",
+    "urbanlens.dashboard.context_processors.add_environment_indicator",
+    "urbanlens.dashboard.context_processors.add_distance_units",
+    "urbanlens.dashboard.context_processors.add_keyboard_shortcuts",
+    "urbanlens.dashboard.context_processors.add_direct_messages",
+    "urbanlens.dashboard.context_processors.add_unread_messages_badge",
+    "urbanlens.dashboard.context_processors.add_unread_notifications_badge",
+    "urbanlens.dashboard.context_processors.add_active_checkins_banner",
+    "urbanlens.dashboard.context_processors.add_demo_context",
+    "urbanlens.dashboard.context_processors.add_comment_map_config",
+    "urbanlens.dashboard.context_processors.add_e2ee_urls",
+]
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        # Explicit DIRS is searched before the APP_DIRS loader, so this app's
-        # own registration/*.html and password_reset_*.txt templates always
-        # win over django.contrib.admin/auth's bundled templates of the same
-        # name (both apps are registered ahead of "dashboard" in
-        # INSTALLED_APPS, so without this the app_directories loader picks
-        # theirs first and ours is silently never rendered - UL-257).
+        # Before APP_DIRS so our registration templates win over admin/auth.
         "DIRS": [os.path.join(PROJECT_ROOT, "dashboard", "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.debug",
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-                "urbanlens.dashboard.context_processors.add_page_name",
-                "urbanlens.dashboard.context_processors.add_site_settings",
-                "urbanlens.dashboard.context_processors.add_dev_toolbar",
-                "urbanlens.dashboard.context_processors.add_feature_access",
-                "urbanlens.dashboard.context_processors.add_pending_account_deletion",
-                "urbanlens.dashboard.context_processors.add_environment_indicator",
-                "urbanlens.dashboard.context_processors.add_distance_units",
-                "urbanlens.dashboard.context_processors.add_direct_messages",
-                "urbanlens.dashboard.context_processors.add_demo_context",
-            ],
+            "context_processors": CONTEXT_PROCESSORS,
+        },
+    },
+    {
+        # Ported templates only. A name resolves in exactly one engine, so moving a file between
+        # these two directories is the port.
+        "BACKEND": "django.template.backends.jinja2.Jinja2",
+        "DIRS": [os.path.join(PROJECT_ROOT, "dashboard", "jinja2")],
+        "APP_DIRS": False,
+        "OPTIONS": {
+            "environment": "urbanlens.dashboard.jinja_env.environment",
+            "context_processors": CONTEXT_PROCESSORS,
         },
     },
 ]
@@ -199,33 +223,64 @@ DATABASES = {
         "PASSWORD": os.getenv("UL_DB_PASS"),
         "HOST": os.getenv("UL_DB_HOST", "localhost"),
         "PORT": os.getenv("UL_DB_PORT", "5432"),
-        # Persistent connections. Defaults to Django's close-every-request
-        # behaviour, which is fine when the database is a container away. It
-        # stops being fine when an instance reaches its database across a
-        # ~100ms link, where reconnecting costs several round trips before any
-        # query runs - set this (and the health check, which discards a
-        # connection that died while idle) wherever that is the case.
-        "CONN_MAX_AGE": int(os.getenv("UL_DB_CONN_MAX_AGE", "0")),
+        # Persistent connections for deployments reaching the DB over high-latency links.
+        "CONN_MAX_AGE": persistent_connection_seconds(),
         "CONN_HEALTH_CHECKS": os.getenv("UL_DB_CONN_HEALTH_CHECKS", "").lower() in {"1", "true", "yes"},
-        # Fail fast rather than hanging a worker when the database host is
-        # unreachable: during a site failover it is unreachable by definition,
-        # and a request that errors immediately is a better outcome than one
-        # that occupies a worker until the client gives up.
-        "OPTIONS": {"connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10"))},
-        # UL_TEST_DB_NAME lets concurrent test runs (e.g. two working copies
-        # or agent sessions on one machine) use separate test databases
-        # instead of fighting over the default "test_<NAME>".
+        # Required behind a transaction-mode pooler: .iterator() outside atomic() holds a cursor across transactions.
+        "DISABLE_SERVER_SIDE_CURSORS": env_bool("UL_DB_DISABLE_SERVER_SIDE_CURSORS", False),
+        # Fail fast on unreachable DB so a request errors instead of holding a worker.
+        "OPTIONS": {
+            "connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10")),
+            # Labels this tier in pg_stat_activity for pool attribution.
+            "application_name": f"urbanlens-{os.getenv('UL_PROCESS_ROLE', 'unknown')}",
+            # Parameters go to the server rather than into the SQL text, which is what lets one
+            # statement be prepared once and reused. Both keys are needed: without the threshold
+            # Django leaves preparation off and this buys nothing (X27).
+            "server_side_binding": True,
+            "prepare_threshold": prepare_threshold(),
+        },
+        # UL_TEST_DB_NAME isolates concurrent test runs to separate databases.
         "TEST": {"NAME": os.getenv("UL_TEST_DB_NAME") or None},
     },
 }
-# Valkey/Redis cache. Used for per-profile map pin payloads and Django's
-# transient application cache when UL_VALKEY_URL/UL_REDIS_URL is configured.
-VALKEY_URL = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
-if VALKEY_URL:
+UL_DB_APP_PASS = _app_settings.db_app_pass
+# Dragonfly/Redis for the Django cache, sessions and the Channels layer. UL_VALKEY_URL and UL_REDIS_URL are
+# honored too, for anything still pointed at the store this replaced.
+DRAGONFLY_URL = require_deployment_setting(
+    "UL_DRAGONFLY_URL (or UL_VALKEY_URL)",
+    os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL"),
+    environment=ENVIRONMENT_NAME,
+    fallback="",
+    reason=(
+        "Without a shared store the cache falls back to per-process memory, so every lock, throttle and "
+        "single-flight guard only holds within one worker, and there is no Channels layer for live updates."
+    ),
+)
+
+#: Cache alias for bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
+#: previews. Its keyspace is bounded by nobody: a tile is cached per layer and coordinate, so the
+#: number of keys is the number of coordinates anyone looked at, and the store holding them raises
+#: rather than evicting once full. Sessions and the Channels layer live in `default` and must not
+#: be what breaks when a week of panning fills it, so this points at an instance that may evict.
+PROXIED_BYTES_CACHE = "proxied_bytes"
+#: Falls back to the shared store, which is the arrangement this exists to end - so a deployment
+#: that has not provisioned the second instance still works, and is measurably not fixed.
+PROXIED_BYTES_URL = os.getenv("UL_PROXY_CACHE_URL") or DRAGONFLY_URL
+#: The Channels layer gets its own instance too: the shared store refuses writes once full, and a refused group_send
+#: is a live message nobody receives. The layer's capacity and expiry bound its working set, so a small instance
+#: nothing else writes to does not fill. Same fallback as above.
+CHANNEL_LAYER_URL = os.getenv("UL_CHANNEL_LAYER_URL") or DRAGONFLY_URL
+
+if DRAGONFLY_URL:
     CACHES = {
         "default": {
-            "BACKEND": "django.core.cache.backends.redis.RedisCache",
-            "LOCATION": VALKEY_URL,
+            # Not the stock RedisCache: with Dragonfly down that raises from the
+            # two paths Django leaves unguarded in cached_db (login and
+            # logout), and every request pays socket_timeout once per cache
+            # call - measured at 32s per request, readiness probe included.
+            # See core/cache_backend.py and P105.
+            "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
+            "LOCATION": DRAGONFLY_URL,
             "KEY_PREFIX": "urbanlens",
             "VERSION": 1,
             "TIMEOUT": 300,
@@ -234,31 +289,38 @@ if VALKEY_URL:
                 "socket_connect_timeout": 1,
                 "socket_timeout": 2,
                 "retry_on_timeout": True,
+                "BREAKER_SECONDS": _app_settings.cache_breaker_seconds,
+            },
+        },
+        PROXIED_BYTES_CACHE: {
+            "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
+            "LOCATION": PROXIED_BYTES_URL,
+            # Its own namespace, so pointing it at the shared instance stays legible in a dump and
+            # a flush of one is not a flush of the other.
+            "KEY_PREFIX": "urbanlens-proxied",
+            "VERSION": 1,
+            "TIMEOUT": 300,
+            "OPTIONS": {
+                "max_connections": 50,
+                "socket_connect_timeout": 1,
+                "socket_timeout": 2,
+                "retry_on_timeout": True,
+                "BREAKER_SECONDS": _app_settings.cache_breaker_seconds,
             },
         },
     }
-    # Cache-backed sessions avoid per-request DB reads on every page load.
-    # cached_db writes through to the database so sessions survive a cache flush.
+    # Write-through sessions survive a cache flush.
     SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
     SESSION_CACHE_ALIAS = "default"
 
-    # Django Channels layer backed by Valkey for cross-process group messaging.
-    #
-    # socket_timeout MUST be comfortably larger than RedisChannelLayer.brpop_timeout
-    # (5s, hardcoded upstream). redis-py's default socket_timeout is also 5s, so
-    # with no override here every long-poll BRPOP raced its own read timeout -
-    # any latency jitter (GC pause, a busy Valkey tick) pushed the read past
-    # 5.000s and raised redis.exceptions.TimeoutError, even with a healthy
-    # server. Because channels_redis serializes all receive() calls in a
-    # process behind one asyncio.Lock, that single race repeating tore down
-    # every websocket in this process, not just the one that timed out.
+    # Cross-process group messaging. socket_timeout stays above BRPOP's 5s timeout.
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
                 "hosts": [
                     {
-                        "address": VALKEY_URL,
+                        "address": CHANNEL_LAYER_URL,
                         "socket_connect_timeout": 5,
                         "socket_timeout": 20,
                         "retry_on_timeout": True,
@@ -267,44 +329,35 @@ if VALKEY_URL:
                 ],
                 "capacity": 1500,
                 "expiry": 60,
-                # Channel-group names are derived from model pks
-                # (``profile_notifications_<id>``), and every test database
-                # restarts its sequences at 1 - so two concurrent test runs
-                # produce identical group names. UL_TEST_DB_NAME isolates
-                # Postgres but not this layer, which left websocket tests in
-                # one run receiving (or losing) another run's messages: a
-                # flake that only ever appeared when suites overlapped. The
-                # per-run prefix closes that; outside tests it is the
-                # channels_redis default.
+                # Per-run prefix isolates concurrent test runs sharing group names.
                 **({"prefix": f"asgi-test-{os.getenv('UL_TEST_DB_NAME', 'default')}"} if TESTING else {}),
             },
         },
     }
+else:
+    # No store configured, so Django's implicit single-alias default would leave
+    # PROXIED_BYTES_CACHE unresolvable and every proxied body raising on lookup.
+    CACHES = {
+        "default": {"BACKEND": "urbanlens.core.cache_backend.AtomicLocMemCache"},
+        PROXIED_BYTES_CACHE: {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": PROXIED_BYTES_CACHE},
+    }
 
 DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]
 
-# Celery - background job processing. Defaults to the configured Valkey/Redis
-# endpoint when available, otherwise local Redis for development.
-CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or VALKEY_URL or "redis://localhost:6379/0"
-CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or CELERY_BROKER_URL
-# Bounds the result backend's connection-recovery retry loop
-# (RedisBackend.ensure(), used by its pub/sub result-tracking reconnect) to a
-# few seconds instead of Celery's default near-unbounded exponential backoff
-# (interval_start=2s, interval_max=30s, no timeout/max_retries set) - without
-# this, any request-path call to safely_enqueue_task() blocks for several
-# minutes before failing whenever the broker is unreachable (it does catch
-# the eventual RuntimeError, but only after the retry storm completes).
-# Matches the fail-fast philosophy already applied to the plain Django
-# cache's own Redis connection above (socket_connect_timeout/socket_timeout).
+RABBITMQ_URL = os.getenv("UL_RABBITMQ_URL")
+# The Dragonfly/local-Redis fallback is for local and development only: a process that lands on it while its peers
+# use RabbitMQ publishes tasks nobody consumes. The result backend stays on Dragonfly - it wants a key/value store.
+CELERY_BROKER_URL = require_deployment_setting(
+    "UL_RABBITMQ_URL (or UL_CELERY_BROKER_URL)",
+    os.getenv("UL_CELERY_BROKER_URL") or RABBITMQ_URL,
+    environment=ENVIRONMENT_NAME,
+    fallback=DRAGONFLY_URL or "redis://localhost:6379/0",
+    reason="A process that guesses a different broker from its peers splits the queue, and its tasks are never consumed.",
+)
+CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or DRAGONFLY_URL or CELERY_BROKER_URL
+# Bound result-backend recovery retries to fail fast when the broker is down.
 CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_policy": {"timeout": 5.0}}
-# With a Redis broker and CELERY_TASK_ACKS_LATE, any message unacked past
-# visibility_timeout is redelivered to another worker - Redis's default is
-# 3600s, which exactly equals both the hard CELERY_TASK_TIME_LIMIT above and
-# the longest countdown= this app schedules (import/export cleanup at 3600s,
-# check-in archival at ARCHIVE_VIEWER_GRACE_PERIOD = 1h). At that boundary a
-# legitimately long task, or a countdown sitting in a worker, is duplicated
-# right as it finishes/fires. Keep this comfortably above
-# max(time_limit, longest countdown); raise it if either grows.
+# Keep above max(time_limit, longest countdown) to avoid duplicate delivery.
 CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 2 * 60 * 60}
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
@@ -313,31 +366,44 @@ CELERY_TIMEZONE = os.getenv("UL_CELERY_TIMEZONE", "UTC")
 CELERY_TASK_ALWAYS_EAGER = os.getenv("UL_CELERY_TASK_ALWAYS_EAGER", "False").lower() in {"true", "1", "yes"}
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SEND_SENT_EVENT = True
+# Events feed the celery-metrics exporter; off when metrics are off.
+CELERY_WORKER_SEND_TASK_EVENTS = UL_METRICS_ENABLED
 CELERY_TASK_ACKS_LATE = True
-CELERY_TASK_REJECT_ON_WORKER_LOST = True
+# Off: a child killed by OOM/segfault would otherwise requeue unboundedly with no failure event.
+CELERY_TASK_REJECT_ON_WORKER_LOST = False
+# Pinned default; False with ACKS_LATE requeues every over-limit task. Guarded by E007/E008.
+CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_SOFT_TIME_LIMIT", "2700"))
 CELERY_TASK_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_TIME_LIMIT", "3600"))
-# Backup defaults. Site admins can override these values in the database-backed settings UI.
+# A task declaring no limits gets its queue's; see services/core/task_limits.py and check E013.
+CELERY_TASK_ANNOTATIONS = ("urbanlens.dashboard.services.core.task_limits.QueueTimeLimits",)
+# Recycle workers to bound RSS growth from long-lived C-extension imports.
+CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_TASKS_PER_CHILD", "200"))
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_MEMORY_PER_CHILD", str(512 * 1024)))  # KiB
+
+# Sandbox tier; see services/sandbox/guard.py and docs/MEDIA_PIPELINE.md.
+UL_PROCESS_ROLE = _app_settings.process_role
+# Threshold for RequestTelemetryMiddleware's slow-request log. See settings/app.py.
+UL_SLOW_REQUEST_MS = _app_settings.slow_request_ms
+UL_SANDBOX_ENABLED = _app_settings.sandbox_enabled
+UL_UNTRUSTED_PARSE_POLICY = _app_settings.untrusted_parse_policy
+# AI inference sandbox tier - see services/sandbox/guard.py's
+# DirectInferencePolicy and docs/AI_PIPELINE.md for the deployment topology.
+UL_AI_INFERENCE_URL = _app_settings.ai_inference_url
+UL_AI_INFERENCE_TOKEN = _app_settings.ai_inference_token
+UL_AI_INFERENCE_TIMEOUT_SECONDS = _app_settings.ai_inference_timeout_seconds
+UL_DIRECT_INFERENCE_POLICY = _app_settings.direct_inference_policy
+UL_AI_WORKER_ENABLED = _app_settings.ai_worker_enabled
+# Backup defaults, overridable in the database-backed settings UI.
 UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"}
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
 UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 
-# Leaflet zoom level at/above which a saved MarkupMap viewport is considered
-# "zoomed in" for pin-share detection purposes (see
-# services.sharing.map_pin_share_detection.is_zoomed_in): every one of the sender's
-# pins visible in frame counts as shared, regardless of markup content. Below
-# this, only pins specifically called out by markup (in-boundary marker,
-# arrow pointing toward, or shape overlap) count.
+# Leaflet zoom at/above which a MarkupMap viewport counts every visible pin as shared.
 UL_MAP_SHARE_ZOOM_THRESHOLD = float(os.getenv("UL_MAP_SHARE_ZOOM_THRESHOLD", "14"))
 
-# Interval schedules all fire relative to beat start, so same-interval entries
-# fire *simultaneously* - eleven hourly sweeps would stampede the default queue
-# at once each hour, delaying user-facing tasks (image processing shares it).
-# Hourly work is therefore staggered across distinct crontab minutes and daily
-# work across off-peak UTC hours. The 5-minute safety-check-in chain
-# stays interval-based on purpose: it is time-critical, cheap, and its four
-# tasks are sequenced by their own due-time filters rather than by spacing.
+# Hourly work is staggered so same-interval entries don't stampede one queue.
 CELERY_BEAT_SCHEDULE = {
     "scheduled-database-backup-check": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",
@@ -382,28 +448,22 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_stalled_consensus_sessions",
         "schedule": 2 * 60,
     },
-    # Catches thresholds no write crosses - "trips attended" ticks up simply
-    # because a trip's end date passed - and anything a signal enqueue lost.
+    # Catches date-passed thresholds and lost signal enqueues.
     "achievements-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_achievements",
         "schedule": crontab(hour=3, minute=10),
     },
-    # Drains ledger rows whose scoring enqueue was lost to a broker blip, and
-    # rebuilds totals flagged stale. The rows themselves are written
-    # synchronously, so this recovers value rather than data.
+    # Recovers scoring rows lost to broker blips.
     "reputation-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_reputation",
         "schedule": crontab(hour=6, minute=10),
     },
-    # Safety net for missed Stripe webhook deliveries - the core "did this
-    # charge clear the threshold" mechanic runs at webhook time, not here.
+    # Safety net for missed Stripe webhooks.
     "stripe-subscriptions-sync": {
         "task": "urbanlens.dashboard.tasks.sync_stripe_subscriptions",
         "schedule": crontab(hour=4, minute=10),
     },
-    # Keeps a canceled pay-what-you-want subscription's banked-access balance counting
-    # down over time - invoice.payment_succeeded is the only other trigger, and it stops
-    # firing entirely once Stripe considers the subscription gone.
+    # Counts down banked access after cancel; webhooks stop firing then.
     "pwyw-usage-ledger-sweep": {
         "task": "urbanlens.dashboard.tasks.advance_pwyw_usage_ledgers",
         "schedule": crontab(hour=4, minute=40),
@@ -448,18 +508,95 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.upgrade_placeholder_pin_names",
         "schedule": crontab(minute=52),
     },
-    # Daily is plenty: retention is measured in hundreds of days
-    # (services.pins.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
-    # full-resync signal guards clients against any pruning-induced gap.
+    # Backfills photos predating grid thumbnails.
+    "image-thumbnail-backfill": {
+        "task": "urbanlens.dashboard.tasks.backfill_image_thumbnails",
+        "schedule": crontab(minute=4),
+    },
+    # Queues what the broker refused while it was down; see services/core/task_outbox.py.
+    "task-outbox-drain": {
+        "task": "urbanlens.dashboard.tasks.drain_task_outbox",
+        "schedule": 60,
+    },
+    # Recovers uploads stuck pending_scan from a lost enqueue.
+    "requeue-stalled-pending-uploads": {
+        "task": "urbanlens.dashboard.tasks.requeue_stalled_pending_uploads",
+        "schedule": crontab(minute=19),
+    },
+    # Calendar auto-sync pushes that were lost or failed.
+    "calendar-push-sweep": {
+        "task": "urbanlens.dashboard.tasks.requeue_pending_calendar_pushes",
+        "schedule": crontab(minute="*/15"),
+    },
+    # Facts whose queued confidence recompute never ran.
+    "fact-confidence-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_stale_fact_confidence",
+        "schedule": crontab(minute="*/15"),
+    },
+    # Device-scan uploads whose enqueue was lost or whose worker died mid-run.
+    "requeue-stalled-device-scans": {
+        "task": "urbanlens.dashboard.tasks.requeue_stalled_device_scans",
+        "schedule": crontab(minute="*/10"),
+    },
+    # Daily: enforces a week-long retry window for abandoned failed uploads.
+    "discard-unretried-failed-uploads": {
+        "task": "urbanlens.dashboard.tasks.discard_unretried_failed_uploads",
+        "schedule": crontab(minute=9, hour=4),
+    },
+    # Leftover preview sources from failed enqueues.
+    "sweep-stale-preview-sources": {
+        "task": "urbanlens.dashboard.tasks.sweep_stale_preview_sources",
+        "schedule": crontab(minute=34),
+    },
+    # Held icons and avatars whose publish was never queued stay "processing" for
+    # ever without this, and held files a deleted row left behind outlive undo.
+    "sweep-held-uploads": {
+        "task": "urbanlens.dashboard.tasks.sweep_held_uploads",
+        "schedule": crontab(minute=41),
+    },
+    # Uploads storage failed on wait instead of being dropped; each is retried with backoff, a bounded batch at a time.
+    "retry-waiting-uploads": {
+        "task": "urbanlens.dashboard.tasks.retry_waiting_uploads",
+        "schedule": crontab(minute="*/5"),
+    },
+    # A pending comment whose scan was never queued has nothing else to retry it.
+    "adopt-stalled-comment-scans": {
+        "task": "urbanlens.dashboard.tasks.adopt_stalled_comment_scans",
+        "schedule": crontab(minute=53),
+    },
+    # The media gate serves any icon or avatar path, so one no row names must not outlive a refused delete.
+    "sweep-unnamed-files": {
+        "task": "urbanlens.dashboard.tasks.sweep_unnamed_files",
+        "schedule": crontab(minute=47),
+    },
+    # Map-marker thumbnail backfill; offset to avoid tick contention.
+    "image-marker-thumbnail-backfill": {
+        "task": "urbanlens.dashboard.tasks.backfill_image_marker_thumbnails",
+        "schedule": crontab(minute=34),
+    },
+    # Analysis-copy backfill; gates AI keywording, so not merely cosmetic.
+    "image-analysis-thumbnail-backfill": {
+        "task": "urbanlens.dashboard.tasks.backfill_image_analysis_thumbnails",
+        "schedule": crontab(minute=19),
+    },
+    # Daily; clients resync past any pruning gap via the 410 signal.
     "pin-tombstone-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",
         "schedule": crontab(hour=5, minute=10),
     },
-    # Daily. Retention (400 days) is set by the costs page's 12-month spend
-    # chart, the longest reader of this table - see prune_api_call_logs.
+    # Daily; retention follows the costs page's 12-month chart.
     "api-call-log-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_api_call_logs",
         "schedule": crontab(hour=5, minute=40),
+    },
+    # Daily retention sweeps; periods live in SiteSettings.
+    "session-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_expired_sessions",
+        "schedule": crontab(hour=5, minute=20),
+    },
+    "read-notification-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_read_notifications",
+        "schedule": crontab(hour=5, minute=25),
     },
     "public-pin-candidate-evaluation": {
         "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",
@@ -515,95 +652,125 @@ STATIC_ROOT = os.path.join(PROJECT_ROOT, "frontend", "static")
 STATICFILES_DIRS = [
     os.path.join(PROJECT_ROOT, "dashboard/frontend/static"),
 ]
-# CompressedManifestStaticFilesStorage requires collectstatic to have been run
-# to generate the manifest; the test suite never runs collectstatic, so fall
-# back to plain (non-hashed) storage there.
+# Filesystem default; 's3' points the same FileField API at object storage.
+# GatedS3Storage keeps FileField.url on /media/ behind the gate.
+UL_MEDIA_STORAGE_BACKEND = _app_settings.media_storage_backend.strip().lower()
+
+_S3_STORAGE_OPTIONS = {
+    "bucket_name": _app_settings.s3_bucket_name,
+    "endpoint_url": _app_settings.s3_endpoint_url or None,
+    "access_key": _app_settings.s3_access_key_id,
+    "secret_key": _app_settings.s3_secret_access_key,
+    "region_name": _app_settings.s3_region_name,
+    "addressing_style": _app_settings.s3_addressing_style,
+    # Private bucket: no per-object ACL, no direct serving.
+    "default_acl": None,
+    "querystring_auth": True,
+    # Never overwrite; differs from S3Storage's default.
+    "file_overwrite": False,
+    "signature_version": "s3v4",
+}
+
+# Manifest storage needs collectstatic; tests use plain storage.
 STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
+    "default": ({"BACKEND": "urbanlens.dashboard.services.media.object_storage.GatedS3Storage", "OPTIONS": _S3_STORAGE_OPTIONS} if UL_MEDIA_STORAGE_BACKEND == "s3" else {"BACKEND": "django.core.files.storage.FileSystemStorage"}),
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage" if TESTING else "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 
-MEDIA_URL = "/media/"
+# Own origin isolates uploads from session cookies; empty keeps same-origin /media/.
+UL_MEDIA_BASE_URL = _app_settings.media_base_url.rstrip("/")
+UL_MEDIA_COOKIE_DOMAIN = _app_settings.media_cookie_domain
+# Media-origin CSP minus frame-ancestors; empty uses the service default.
+UL_MEDIA_CSP = os.getenv("UL_MEDIA_CSP", "")
+
+MEDIA_URL = f"{UL_MEDIA_BASE_URL}/media/" if UL_MEDIA_BASE_URL else "/media/"
 MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
 
-# Authenticated media serving (dashboard.controllers.media.MediaGateView).
-# When nginx fronts the app (docker/staging/production), the gate view answers
-# authorized requests with an X-Accel-Redirect to the internal-only
-# /_protected_media/ location and nginx streams the file; in local dev
-# (runserver, no nginx) the view streams the file itself via FileResponse.
-# Override with UL_MEDIA_X_ACCEL if a deployment diverges from this default
-# (e.g. a development-flagged docker stack that still runs behind nginx and
-# wants the more efficient handoff).
+# Gate answers with X-Accel-Redirect behind nginx, streams directly in dev.
 MEDIA_X_ACCEL = _env_bool("UL_MEDIA_X_ACCEL", not _is_dev)
-# Must match the `location /_protected_media/` block in
-# src/urbanlens/config/nginx/django.conf.
+# Must match the nginx `location /_protected_media/` block.
 MEDIA_X_ACCEL_PREFIX = "/_protected_media/"
+
+# Object-store X-Accel prefix; empty streams through Django. Needs its own nginx location.
+MEDIA_X_ACCEL_OBJECT_PREFIX = _app_settings.media_x_accel_object_prefix
+
+# Short-lived: consumed by nginx within the minting request, plus clock skew.
+MEDIA_X_ACCEL_OBJECT_URL_TTL_SECONDS = 60
+
+# Ingress body cap, enforced early so users get an app error, not a proxy page.
+MAX_REQUEST_BODY_BYTES = max(0, _app_settings.max_request_body_mb) * 1_000_000
+MAP_DOCUMENT_MAX_PINS = _app_settings.map_document_max_pins
+MAP_DOCUMENT_CACHE_SECONDS = _app_settings.map_document_cache_seconds
+IMPORT_PREVIEW_MAX_CONCURRENT_PARSES = _app_settings.import_preview_max_concurrent_parses
+EXTERNAL_MEDIA_DAILY_BYTES = _app_settings.external_media_daily_bytes
+MARKUP_MAX_GEOMETRY_POINTS = _app_settings.markup_max_geometry_points
+MARKUP_MAX_ITEMS_PER_RESPONSE = _app_settings.markup_max_items_per_response
+MARKUP_MAX_SHAPES_PER_SNAPSHOT = _app_settings.markup_max_shapes_per_snapshot
+PUBLIC_COSTS_PAGE_CACHE_SECONDS = _app_settings.public_costs_page_cache_seconds
+IMMICH_MAX_THUMBNAIL_BYTES = _app_settings.immich_max_thumbnail_bytes
+IMMICH_MAX_JSON_BYTES = _app_settings.immich_max_json_bytes
+IMMICH_THUMBNAIL_DEADLINE_SECONDS = _app_settings.immich_thumbnail_deadline_seconds
+AVATAR_MAX_UPLOAD_BYTES = _app_settings.avatar_max_upload_bytes
+LABEL_BULK_EDIT_MAX_IDS = _app_settings.label_bulk_edit_max_ids
+LABEL_REORDER_MAX_IDS = _app_settings.label_reorder_max_ids
+MAX_SMART_LISTS_PER_SYNC = _app_settings.max_smart_lists_per_sync
+IMMICH_MARKER_CACHE_MAX_ASSETS = _app_settings.immich_marker_cache_max_assets
+SEARCH_MAX_LABEL_GROUPS = _app_settings.search_max_label_groups
+SEARCH_MAX_LABEL_FILTER_IDS = _app_settings.search_max_label_filter_ids
+SEARCH_MAX_LABEL_EXPANSION = _app_settings.search_max_label_expansion
+WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT = _app_settings.websocket_max_sockets_per_account
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Reject plain HTTP in production. Local and development environments allow it
-# by default so developers can access the site without TLS configuration.
-# Override via UL_UNSAFE_ALLOW_HTTP in .env (or set to False to enforce HTTPS locally).
+# Plain HTTP only for local/dev by default; override via UL_UNSAFE_ALLOW_HTTP.
 _http_default = "True" if _is_dev else "False"
 UNSAFE_ALLOW_HTTP = _env_bool("UL_UNSAFE_ALLOW_HTTP", _http_default == "True")
 SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP and not TESTING
 SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", SECURE_SSL_REDIRECT)
 CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", SECURE_SSL_REDIRECT)
-# Internal container health checks hit /health over HTTP on the app port.
+# Container health checks hit /health over HTTP.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
 
-# HSTS, gated on exactly the same condition as SECURE_SSL_REDIRECT so an
-# intentionally HTTP-only deployment (UL_UNSAFE_ALLOW_HTTP, the dev default) and
-# the test suite are unaffected. Without it, SECURE_SSL_REDIRECT alone still
-# leaves a first visit strippable: that redirect is itself served over HTTP, so
-# an attacker on the path can answer it instead. A year, with subdomains, is the
-# usual production value; preload is deliberately left off, since submitting a
-# domain to the preload list is a decision for whoever owns it - it is painful to
-# reverse and this project is self-hosted by design.
+# HSTS mirrors SECURE_SSL_REDIRECT; preload left off for self-hosted domains.
 SECURE_HSTS_SECONDS = int(os.getenv("UL_HSTS_SECONDS", "31536000")) if SECURE_SSL_REDIRECT else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("UL_HSTS_INCLUDE_SUBDOMAINS", SECURE_HSTS_SECONDS > 0)
 
-# Content-Security-Policy (django-csp >= 4, which takes the CONTENT_SECURITY_POLICY
-# dict rather than the pre-4.0 flat `CSP_*` settings - those are silently ignored,
-# and csp.E001 flags them if they reappear).
+# No Django setting exists for these; consumed by SecurityHeadersMiddleware.
+PERMISSIONS_POLICY = "geolocation=(self), clipboard-write=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()"
+# same-site covers sibling origins under the parent domain.
+CROSS_ORIGIN_RESOURCE_POLICY = "same-site"
+X_PERMITTED_CROSS_DOMAIN_POLICIES = "none"
+
+# Report-only: `require-corp` would break the third-party thumbnails img-src admits; `credentialless` fails open where unsupported.
+CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
+
+# Content-Security-Policy (django-csp >= 4).
 #
-# Every host below was read out of a template or a frontend module rather than
-# assumed; the inventory, and which file each host came from, is in docs/NOTES.md.
-# Leaflet expands the `{s}` placeholder in its tile templates to a/b/c subdomains,
-# so the tile hosts need both the wildcard and the bare form.
+# Tile hosts need wildcard and bare forms for Leaflet's {s} expansion.
 #
-# 'unsafe-inline' in script-src is load-bearing, not laziness: the frontend has
-# ~99 inline <script> blocks (starting with the anti-FOUC block in themes/base.html),
-# HTMX `hx-on:` attributes, and json_script payloads. Removing it requires threading
-# a nonce through every one of those - tracked as the inline-JS extraction roadmap
-# item. Until that lands, script-src buys host restriction (an injected
-# `<script src=//evil>` is blocked) but not injected-inline-script protection.
-# Note also that a nonce and 'unsafe-inline' cannot coexist: browsers ignore
-# 'unsafe-inline' as soon as a nonce is present, so the migration has to convert
-# every inline block at once per response, not incrementally.
-_CSP_DIRECTIVES: dict[str, object] = {
+# script-src 'unsafe-inline' is load-bearing (inline <script> blocks and on* attributes, P34/P83); a nonce would need
+# every one converted at once, since browsers ignore 'unsafe-inline' beside a nonce. htmx must not need 'unsafe-eval':
+# no hx-on, js: hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
+_CSP_DIRECTIVES: dict[str, list[str]] = {
     "default-src": ["'self'"],
-    # jQuery/toastr/Leaflet/HTMX/Chart.js/Sortable are all loaded from CDNs by
-    # themes/base.html and the per-page templates; maps.googleapis.com is injected
-    # at runtime by the SpotGuessr Street View round.
+    # CDN scripts plus runtime-injected Maps API.
     "script-src": [
         "'self'",
         "'unsafe-inline'",
+        # libsodium's Argon2id (E2EE key derivation) compiles WebAssembly; eval stays refused.
+        "'wasm-unsafe-eval'",
         "https://code.jquery.com",
         "https://cdnjs.cloudflare.com",
         "https://unpkg.com",
         "https://cdn.jsdelivr.net",
         "https://maps.googleapis.com",
     ],
-    # 'unsafe-inline' here covers the inline style="" attributes used throughout
-    # the templates as well as Leaflet's runtime positioning styles.
+    # Inline styles and Leaflet runtime positioning.
     "style-src": [
         "'self'",
         "'unsafe-inline'",
@@ -616,18 +783,12 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "'self'",
         "data:",
         "blob:",
-        # Any HTTPS image host, because map image overlays are a paste-any-URL
-        # feature (_map_overlays_list.html, map-image-overlays.ts) - a finite
-        # list would make every overlay outside it vanish the moment an
-        # operator sets UL_CSP_ENFORCE. Widening img-src is the cheap half of
-        # the trade: images do not execute, and the alternative is proxying
-        # arbitrary user-supplied URLs through the server, which buys an SSRF
-        # surface to avoid a directive that never blocked script. The named
-        # hosts below stay for the documentation value.
+        # Media-gallery, web-search, historical-sheet and imagery thumbnails load from unbounded provider hosts;
+        # narrowing this needs them proxied (P165). Images don't execute.
         "https:",
-        # Base map tiles and overlays (frontend/ts/shared/map-layers.ts).
-        "https://*.tile.openstreetmap.org",
-        "https://tile.openstreetmap.org",
+        # Base map tiles and overlays. Not tile.openstreetmap.org (P126) - nothing
+        # loads from OSM's own tile servers anymore, and the "https:" entry above
+        # would cover it anyway if something did.
         "https://*.basemaps.cartocdn.com",
         "https://basemaps.cartocdn.com",
         "https://*.tile.opentopomap.org",
@@ -635,57 +796,66 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
-        # Leaflet's default marker/shadow PNGs (frontend/ts/entries/map-annotations.ts).
-        "https://cdnjs.cloudflare.com",
-        # Result favicons on the web-search page and the Gravatar avatar preview.
+        # Favicons and avatar preview.
         "https://www.google.com",
         "https://www.gravatar.com",
-        # Google Maps JS API imagery, including Street View panorama tiles. The
-        # API picks its own image hosts at runtime, so this list is the known set
-        # rather than a proven-complete one - report-only mode is what will show
-        # whether anything else is needed.
+        # Maps imagery hosts (runtime-chosen; report-only reveals gaps).
         "https://maps.googleapis.com",
         "https://maps.gstatic.com",
     ],
-    # ws: alongside wss: because local/dev deployments are served over plain HTTP
-    # (UNSAFE_ALLOW_HTTP) and the game sockets follow the page protocol.
+    # ws: for plain-HTTP local/dev game sockets.
     "connect-src": [
         "'self'",
         "ws:",
         "wss:",
-        # Browser-side geocoding, deliberately unproxied (location-search-engine.ts).
+        # Unproxied browser geocoding and inline place summaries.
         "https://nominatim.openstreetmap.org",
-        # Place summaries fetched inline by the map page.
         "https://en.wikipedia.org",
         "https://maps.googleapis.com",
+        # MapLibre tiles: loaded via XHR (connect-src), not <img> (img-src) the
+        # way Leaflet loads the same vendors - PL8 item 9. Mirrors img-src's
+        # tile-vendor entries below.
+        "https://*.basemaps.cartocdn.com",
+        "https://basemaps.cartocdn.com",
+        "https://*.tile.opentopomap.org",
+        "https://tile.opentopomap.org",
+        "https://server.arcgisonline.com",
+        "https://services.arcgisonline.com",
+        # Leaflet's source map, fetched when devtools is open against the unpkg build.
+        "https://unpkg.com",
     ],
-    # The Street View embed on the location page.
+    # Street View embed.
     "frame-src": ["'self'", "https://www.google.com"],
     "media-src": ["'self'", "data:", "blob:"],
+    # MapLibre builds its tile workers from a blob: URL.
+    "worker-src": ["'self'", "blob:"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
-    # NOTE: X_FRAME_OPTIONS is "DENY", which is stricter than this. Browsers that
-    # honour frame-ancestors ignore X-Frame-Options entirely, so enforcing this
-    # policy relaxes framing from "nobody" to "same origin only". Change this to
-    # 'none' if the DENY posture is meant to be kept.
+    # DENY-equivalent; use 'none' to keep the stricter X-Frame-Options posture.
     "frame-ancestors": ["'self'"],
-    "form-action": ["'self'"],
+    # controllers/csp_report.py logs each one.
+    "report-uri": ["/csp-report/"],
+    # Chrome also checks the redirect a form POST answers with: social login and Stripe hand off to these.
+    "form-action": [
+        "'self'",
+        "https://accounts.google.com",
+        "https://discord.com",
+        "https://checkout.stripe.com",
+        "https://billing.stripe.com",
+    ],
 }
 
-# A configured vendor-asset mirror serves the scripts, stylesheets and font files
-# the CDN hosts above would otherwise serve, so the policy has to admit it or
-# setting UL_VENDOR_ASSET_BASE_URL takes every one of them off the page the
-# moment UL_CSP_ENFORCE is on. img-src already allows https: wholesale, so the
-# mirrored images need nothing here.
-def allow_vendor_mirror(directives: dict[str, object], base_url: object) -> str | None:
-    """Admit a vendor-asset mirror's origin to the directives that need it.
+
+# A vendor mirror must be admitted or UL_CSP_ENFORCE drops those assets.
+def allow_vendor_mirror(directives: dict[str, list[str]], base_url: object) -> str | None:
+    """Admit a vendor-asset mirror origin.
 
     Args:
         directives: The CSP directive lists, modified in place.
         base_url: The configured mirror root, or a falsy value for none.
 
     Returns:
-        The origin admitted, or None when no mirror is configured.
+        The origin admitted, or None when unconfigured.
     """
     if not base_url:
         return None
@@ -693,79 +863,166 @@ def allow_vendor_mirror(directives: dict[str, object], base_url: object) -> str 
     origin = f"{parsed.scheme}://{parsed.netloc}"
     for name in ("script-src", "style-src", "font-src"):
         hosts = directives.get(name)
-        if isinstance(hosts, list) and origin not in hosts:
+        if hosts is not None and origin not in hosts:
             hosts.append(origin)
     return origin
 
 
-allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
+def allow_media_origin(directives: dict[str, list[str]], base_url: str) -> str | None:
+    """Admit the media origin where uploads are fetched (video, iframe, JS bytes).
 
-# Report-only by default: the header is emitted and violations are reported, but
-# nothing is blocked, so a policy mistake shows up in reports instead of as a
-# broken page. Flip per environment with UL_CSP_ENFORCE=true once that
-# environment's reports are clean. Exactly one of the two settings is defined -
-# django-csp emits a header for each one that exists.
+    Args:
+        directives: The CSP directive lists, modified in place.
+        base_url: The configured media origin, or empty for same-origin.
+
+    Returns:
+        The origin admitted, or None when same-origin.
+    """
+    if not base_url:
+        return None
+    parsed = urlparse(base_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    for name in ("img-src", "media-src", "frame-src", "connect-src"):
+        hosts = directives.get(name)
+        if hosts is not None and origin not in hosts:
+            hosts.append(origin)
+    return origin
+
+
+def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str) -> list[str]:
+    """Admit the origins a vector basemap is served from.
+
+    A raster basemap needs nothing here: it is proxied, so the browser only ever talks to this
+    origin. A vector one is the opposite - REData publishes a ``style_url`` and the browser fetches
+    the style, its glyphs, its sprite and the tile archive itself directly (REData's ``D11``).
+    MapLibre fetches all four with ``fetch``/XHR rather than as ``<img>``, so ``connect-src`` is
+    the only directive that has to name them. Deliberately not the other two it might look like it
+    needs: ``img-src`` already admits ``https:`` wholesale, so the sprite's image half is covered
+    and a host entry would be noise (the same reasoning ``allow_vendor_mirror`` applies), and
+    MapLibre's tile-decoding workers are same-origin, so the style's origin has no bearing on them.
+
+    More than one origin is accepted because a style's assets need not share a host with its
+    tiles: Protomaps' hosted API serves tiles from ``api.protomaps.com`` and the glyphs and sprite
+    its style names from ``protomaps.github.io``. Admitting only the style's own origin leaves
+    MapLibre with no labels.
+
+    Args:
+        directives: The CSP directive lists, modified in place.
+        base_urls: Whitespace- or comma-separated origins, or empty when this deployment serves no
+            vector basemap.
+
+    Returns:
+        The origins admitted, in the order given.
+    """
+    admitted: list[str] = []
+    for base_url in base_urls.replace(",", " ").split():
+        parsed = urlparse(base_url)
+        if not parsed.scheme or not parsed.netloc:
+            continue
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        if origin in admitted:
+            continue
+        admitted.append(origin)
+        for name in ("connect-src",):
+            hosts = directives.get(name)
+            if hosts is not None and origin not in hosts:
+                hosts.append(origin)
+    return admitted
+
+
+#: Where Protomaps' hosted styles fetch glyphs and sprites; VectorBasemapStyleView proxies only the tiles.
+PROTOMAPS_STYLE_ASSETS_ORIGIN = "https://protomaps.github.io"
+
+
+def allow_hosted_basemap_assets(directives: dict[str, list[str]], protomaps_api_key: str) -> list[str]:
+    """Admit the glyph and sprite host of the hosted Protomaps styles, when this deployment buys them.
+
+    Args:
+        directives: The CSP directive lists, modified in place.
+        protomaps_api_key: The configured key, or empty when the hosted basemap is off.
+
+    Returns:
+        The origins admitted.
+    """
+    return allow_basemap_style_origins(directives, PROTOMAPS_STYLE_ASSETS_ORIGIN) if protomaps_api_key else []
+
+
+allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
+allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
+allow_basemap_style_origins(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
+allow_hosted_basemap_assets(_CSP_DIRECTIVES, _app_settings.protomaps_api_key)
+
+# Enforced unless UL_CSP_ENFORCE=false; docs/notes/csp-violations.md covers diagnosing a block.
 CSP_ENFORCE = _app_settings.csp_enforce
 if CSP_ENFORCE:
     CONTENT_SECURITY_POLICY = {"DIRECTIVES": _CSP_DIRECTIVES}
 else:
     CONTENT_SECURITY_POLICY_REPORT_ONLY = {"DIRECTIVES": _CSP_DIRECTIVES}
 
-# Trust the X-Forwarded-Proto header set by Nginx so Django builds https:// URLs
-# when sitting behind a reverse proxy that terminates SSL.
+# Behind a TLS-terminating proxy.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
-# Proxy hops whose X-Forwarded-For entries are ours rather than the client's.
-# Read by the per-IP rate limiters; see the field description in settings/app.py.
+# Proxy hops; read by per-IP rate limiters. See app.py field.
 TRUSTED_PROXY_COUNT = _app_settings.trusted_proxy_count
 
+# Per-connection WebSocket bounds; see app.py and frame_limits.py.
+UL_WEBSOCKET_MAX_FRAME_CHARS = _app_settings.websocket_max_frame_chars
+UL_WEBSOCKET_FRAMES_PER_MINUTE = _app_settings.websocket_frames_per_minute
+UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE = _app_settings.websocket_fanout_frames_per_minute
+UL_MESSAGES_PER_MINUTE = _app_settings.messages_per_minute
+UL_MESSAGE_BURST = _app_settings.message_burst
+UL_WEBSOCKET_FRAME_BURST = _app_settings.websocket_frame_burst
+
+# Transport bound derived at 4 bytes/char so it stays above the app bound.
+UL_WEBSOCKET_MAX_MESSAGE_BYTES = UL_WEBSOCKET_MAX_FRAME_CHARS * 4
+
+# Published app port; read from env so origins can't drift from compose.
+_APP_PORT = os.getenv("UL_APP_PORT", "21800")
+
 protocols = ["https://"]
+domains: list[str]
 if _is_local:
-    # Local development: cover common ports used by docker-compose and direct runserver.
     domains = [
-        "urbanlens.org",
         "localhost",
         "localhost:8000",
-        "localhost:21080",
-        "localhost:21800",
+        f"localhost:{_APP_PORT}",
         "127.0.0.1",
         "127.0.0.1:8000",
-        "127.0.0.1:21080",
-        "127.0.0.1:21800",
+        f"127.0.0.1:{_APP_PORT}",
         "[::1]",
         "[::1]:8000",
     ]
-elif _is_dev:
-    domains = ["urbanlens.org", "localhost", "localhost:21080", "localhost:21800", "127.0.0.1"]
+elif _is_ephemeral:
+    domains = ["localhost", f"localhost:{_APP_PORT}", "127.0.0.1"]
 else:
-    domains = ["urbanlens.org", "localhost", "localhost:21080"]
+    # A deployment trusts only the hosts it serves, derived below from ALLOWED_HOSTS and UL_SITE_URL.
+    domains = []
 
 subdomains = ["www.", ""]
 if UNSAFE_ALLOW_HTTP:
     protocols.append("http://")
 
-CORS_ALLOWED_ORIGINS = list(dict.fromkeys(
-    f"{protocol}{subdomain}{domain}"
-    for protocol in protocols
-    for subdomain in subdomains
-    for domain in domains
-    if not (subdomain and domain.startswith("["))  # IPv6 literals can't have a subdomain prefix
-))
+CORS_ALLOWED_ORIGINS = list(
+    dict.fromkeys(
+        f"{protocol}{subdomain}{domain}"
+        for protocol in protocols
+        for subdomain in subdomains
+        for domain in domains
+        if not (subdomain and domain.startswith("["))  # IPv6 literals can't have a subdomain prefix
+    )
+)
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
 
 def _origin_from_url(url: str) -> str | None:
-    """Reduce a URL to the bare origin an ``Origin``/``Referer`` header carries.
+    """Reduce a URL to its bare origin, or None when not absolute http(s).
 
     Args:
-        url: An absolute ``http``/``https`` URL. Anything else - a path, a
-            hostname with no scheme, an unparseable port - yields None rather
-            than a half-formed origin.
+        url: Candidate URL.
 
     Returns:
-        ``scheme://host[:port]``, with IPv6 literals re-bracketed (``urlsplit``
-        strips the brackets that an origin must carry), or None.
+        ``scheme://host[:port]`` (IPv6 re-bracketed), or None.
     """
     from urllib.parse import urlsplit
 
@@ -776,8 +1033,7 @@ def _origin_from_url(url: str) -> str | None:
         port = parsed.port
     except ValueError:
         return None
-    # urlsplit parses happily but validates nothing, so a malformed ALLOWED_HOSTS
-    # entry would otherwise become a malformed origin rather than be skipped.
+    # Skip malformed ALLOWED_HOSTS entries rather than minting bad origins.
     if not all(char.isascii() and (char.isalnum() or char in "-._:") for char in parsed.hostname):
         return None
     host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
@@ -785,35 +1041,15 @@ def _origin_from_url(url: str) -> str | None:
 
 
 def _derive_trusted_origins(allowed_hosts: list[str], site_url: str, *, allow_http: bool) -> tuple[list[str], list[str]]:
-    """The origins a deployment implicitly trusts because it already answers to them.
-
-    A hardcoded domain list cannot name an ephemeral dev environment's
-    generated hostname (``<slug>.dev.urbanlens.org``, see the `infrastructure`
-    repo's ``bin/dev_env.py``),
-    and the failure that causes is not the obvious one: pages render perfectly
-    and every POST - login included - is rejected on its Referer, which reads
-    as a broken app rather than an untrusted origin. Deriving the list instead
-    means an operator who has already told this deployment which hostnames it
-    serves does not also have to repeat them here.
-
-    This does not loosen anything: a host reaches this function only because it
-    is already in ``ALLOWED_HOSTS`` or is ``UL_SITE_URL``, both of which are
-    deliberate per-deployment configuration. ``*`` is skipped - it is a
-    catch-all for the Host header, and there is no such thing as a catch-all
-    origin to mint from it.
+    """Derive trusted origins from hosts the deployment already serves.
 
     Args:
-        allowed_hosts: ``ALLOWED_HOSTS``, as configured for this deployment.
-        site_url: ``UL_SITE_URL`` - already a full origin.
-        allow_http: Whether this deployment is served over plain HTTP too
-            (``UL_UNSAFE_ALLOW_HTTP``); false everywhere HTTPS is enforced, so
-            no ``http://`` origin is minted there.
+        allowed_hosts: ``ALLOWED_HOSTS`` for this deployment.
+        site_url: ``UL_SITE_URL`` origin.
+        allow_http: Whether plain-HTTP origins may be minted.
 
     Returns:
-        ``(exact, wildcard)``. Exact origins are valid for both
-        ``CSRF_TRUSTED_ORIGINS`` and ``CORS_ALLOWED_ORIGINS``; the wildcard
-        forms (from ``.example.com``-style subdomain entries) are CSRF-only,
-        since django-cors-headers rejects a non-URI origin at check time.
+        ``(exact, wildcard)``; wildcards are CSRF-only.
     """
     schemes = ["https", "http"] if allow_http else ["https"]
     exact: list[str] = []
@@ -827,20 +1063,15 @@ def _derive_trusted_origins(allowed_hosts: list[str], site_url: str, *, allow_ht
         entry = raw.strip().lower()
         if not entry or entry == "*":
             continue
-        # An entry carrying URL punctuation is not a host Django would ever
-        # match, so nothing may be trusted on its behalf - and read as a URL it
-        # would mean something else entirely ("evil.com/x" -> the whole of
-        # evil.com, "user@host" -> host).
+        # Skip non-host entries that Django would never match.
         if any(char in entry for char in "/@?#"):
             continue
-        # Django spells "this domain and its subdomains" as a leading dot;
-        # `*.example.com` is not a form it accepts, but operators write it, and
-        # reading it as the same intent beats silently ignoring the entry.
+        # Treat `*.example.com` like Django's `.example.com`.
         covers_subdomains = entry.startswith((".", "*."))
         entry = entry.removeprefix("*").lstrip(".")
         if not entry or "*" in entry:
             continue
-        # A bare IPv6 literal, which ALLOWED_HOSTS canonically brackets already.
+        # Bracket bare IPv6 literals.
         if entry.count(":") > 1 and not entry.startswith("["):
             entry = f"[{entry}]"
         for scheme in schemes:
@@ -854,9 +1085,7 @@ def _derive_trusted_origins(allowed_hosts: list[str], site_url: str, *, allow_ht
     return list(dict.fromkeys(exact)), list(dict.fromkeys(wildcard))
 
 
-# The environment variable rather than SITE_URL (defined further down): SITE_URL
-# falls back to http://localhost:21080 when unset, and a fallback nobody
-# configured must not become an origin this deployment trusts.
+# Read the env var directly: the SITE_URL fallback must not become trusted.
 _derived_origins, _derived_wildcard_origins = _derive_trusted_origins(
     ALLOWED_HOSTS,
     os.getenv("UL_SITE_URL", ""),
@@ -871,69 +1100,94 @@ SOCIAL_AUTH_DISCORD_KEY = os.getenv("UL_DISCORD_CLIENT_ID", "")
 SOCIAL_AUTH_DISCORD_SECRET = os.getenv("UL_DISCORD_CLIENT_SECRET", "")
 SOCIAL_AUTH_DISCORD_SCOPE = ["identify", "email"]
 
-# Custom social-auth pipeline.
-# Replaces get_username with provider handle when available, else random name.
-# Fetches and saves the provider avatar (or Gravatar) after the user is created.
-# Clears last_name on new accounts to limit personal data exposure.
+# Custom social-auth pipeline: provider handle, avatar, 2FA last.
 SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.social_details",
     "social_core.pipeline.social_auth.social_uid",
     "social_core.pipeline.social_auth.auth_allowed",
+    "urbanlens.dashboard.services.social_auth.pipeline.refuse_unverified_address_link",
     "social_core.pipeline.social_auth.social_user",
-    # Provider username when free, else random adjective+animal+number.
     "urbanlens.dashboard.services.social_auth.pipeline.generate_sso_username",
+    "urbanlens.dashboard.services.social_auth.pipeline.resolve_sso_email",
     "social_core.pipeline.user.create_user",
     "social_core.pipeline.social_auth.associate_user",
     "social_core.pipeline.social_auth.load_extra_data",
-    # user_details copies first_name, last_name, email from provider.
     "social_core.pipeline.user.user_details",
-    # Strip last_name to preserve partial anonymity for new accounts.
+    "urbanlens.dashboard.services.social_auth.pipeline.record_provider_verified_email",
+    "urbanlens.dashboard.services.social_auth.pipeline.claim_unverified_sso_email",
     "urbanlens.dashboard.services.social_auth.pipeline.suppress_last_name_for_new_users",
-    # Download and store the provider avatar (or Gravatar) if none exists yet.
     "urbanlens.dashboard.services.social_auth.pipeline.fetch_and_save_avatar",
-    # Flag new SSO users for onboarding (username + avatar selection).
     "urbanlens.dashboard.services.social_auth.pipeline.mark_new_user_onboarding",
-    # Save Discord username as a social link for Discord SSO users.
     "urbanlens.dashboard.services.social_auth.pipeline.save_discord_social_link",
-    # Must be last: detours through the 2FA challenge (instead of the implicit
-    # login social-auth performs once the pipeline finishes) for any account
-    # that already has a passkey or authenticator app enrolled.
     "urbanlens.dashboard.services.social_auth.pipeline.enforce_two_factor_for_sso",
 )
 
-# After login/signup, send users through post-login routing (map or site admin setup).
+# social_core protects email by default; named here so a change of that default cannot let a provider rewrite
+# the address on every login. Address changes go through email_claims.
+SOCIAL_AUTH_PROTECTED_USER_FIELDS = ["email"]
+
 LOGIN_REDIRECT_URL = "/accounts/post-login/"
 LOGIN_URL = "/accounts/login/"
 LOGOUT_REDIRECT_URL = "/"
 
-# social-auth redirects after OAuth completion
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/accounts/post-login/"
 SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/accounts/post-login/"
 
-# Email backend - use console in dev, configure via env in production
-EMAIL_BACKEND = os.getenv("UL_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+# Every message passes the recipient guard first, which refuses addresses no mailbox can exist at (reserved
+# domains, impossible Gmail names such as the integration suite's) and hands the rest to UL_EMAIL_BACKEND.
+EMAIL_BACKEND = "urbanlens.dashboard.services.security.mail_guard.RecipientGuardEmailBackend"
+# The console backend prints mail instead of sending it, so a deployment that forgot to configure mail would drop
+# safety alerts and password resets without an error. Deployments default to SMTP, which fails loudly.
+EMAIL_DELIVERY_BACKEND = os.getenv("UL_EMAIL_BACKEND") or (
+    "django.core.mail.backends.console.EmailBackend" if _is_ephemeral else "django.core.mail.backends.smtp.EmailBackend"
+)
 EMAIL_HOST = os.getenv("UL_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("UL_EMAIL_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
-# Parsed leniently: app.py declares these same two variables as pydantic bools, which
-# accept true/1/yes, so a literal == "True" here made the two readers of one variable
-# disagree - and for TLS the disagreement resolved toward sending mail in plaintext.
+# Lenient parse to match app.py's pydantic bools.
 EMAIL_USE_TLS = env_bool("UL_EMAIL_TLS", default=True)
 EMAIL_USE_SSL = env_bool("UL_EMAIL_USE_SSL", default=False)
 DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
-# Canonical base URL used to build absolute links in emails/notifications sent
-# from contexts with no HttpRequest to build them from (e.g. Celery tasks).
-_site_url_env = os.getenv("UL_SITE_URL")
-SITE_URL = _site_url_env or "http://localhost:21080"
-if not _site_url_env and not _is_dev:
-    import logging
+# Without this Django passes no timeout to smtplib, so a mail server that hangs
+# rather than refuses holds the worker thread for as long as it stays silent.
+# The inbound throttle on signup/reset caps how often mail is sent, not how long
+# a send may take, so the two are needed together.
+EMAIL_TIMEOUT = _app_settings.email_timeout
 
-    logging.getLogger(__name__).warning(
-        "UL_SITE_URL is not set outside a local/development environment - falling back to "
-        "%r. Emails and safety alerts will contain broken links until UL_SITE_URL is set to "
-        "this deployment's real public URL.",
-        SITE_URL,
+
+def _site_url_from_env(value: str | None, default: str) -> str:
+    """``UL_SITE_URL`` as an absolute URL, taking a bare host to be served over https.
+
+    Args:
+        value: The environment value, if set.
+        default: What to use when it is unset or blank.
+
+    Returns:
+        The base every request-less link is built on.
+    """
+    value = (value or "").strip()
+    if not value:
+        return default
+    return value if "://" in value else f"https://{value}"
+
+
+# Base URL for absolute links from request-less contexts (e.g. Celery); build them with services.core.site_urls.
+_SITE_URL_FALLBACK = f"http://localhost:{_APP_PORT}"
+SITE_URL = _site_url_from_env(
+    require_deployment_setting(
+        "UL_SITE_URL",
+        os.getenv("UL_SITE_URL"),
+        environment=ENVIRONMENT_NAME,
+        fallback=_SITE_URL_FALLBACK,
+        reason="Emails and safety alerts link to it; set it to this deployment's public URL, e.g. https://urbanlens.org.",
+    ),
+    _SITE_URL_FALLBACK,
+)
+if _deployment and is_loopback_host(urlparse(SITE_URL).hostname):
+    raise ImproperlyConfigured(
+        f"UL_SITE_URL is {SITE_URL!r} while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Every emailed link would point at "
+        "the recipient's own machine; set it to this deployment's public URL.",
     )
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_UNRESTRICTED_API_KEY = os.getenv("UL_GOOGLE_UNRESTRICTED_API_KEY", "")
@@ -944,12 +1198,9 @@ NPS_API_KEY = os.getenv("UL_NPS_API_KEY", "")
 
 TEST_RUNNER = "urbanlens.core.tests.runner.TestRunner"
 
-# DRF global throttle limits - authenticated users get generous burst/day limits;
-# anonymous requests (e.g. public API endpoints) are tightly constrained.
-# Requires Valkey cache to be configured - no-ops gracefully when cache is absent.
+# Authenticated users get burst/day limits; anonymous is tightly constrained.
 REST_FRAMEWORK = {
-    # Every registered API endpoint is user-scoped; opt out per-view if a
-    # genuinely public endpoint is ever added.
+    # All endpoints user-scoped; opt out per-view for public ones.
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
@@ -960,87 +1211,48 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/minute",
         "user": "600/minute",
-        # external_api.throttling - per credential, not per user, so one
-        # connected app's misbehavior can't burn through a budget shared with a
-        # user's other keys. Split by tier because an interactive sync client
-        # reads far more than it writes: a flat cap generous enough for a full
-        # resync would also be generous enough for a runaway write loop.
-        # The burst cap applies on top of both tiers, bounding a stampede
-        # without lowering the hourly ceiling.
-        "external_api_read": "1000/hour",
-        "external_api_write": "300/hour",
-        "external_api_burst": "60/minute",
-        # Credential-authenticated /media/ fetches (controllers.media). One
-        # gallery screen is dozens of files, so this is deliberately far more
-        # generous than the burst cap - but it is still a cap, so a leaked key
-        # cannot be used as an unmetered CDN.
+        # Per-credential tiers; reads/writes split so resync reads don't fund write loops.
+        "external_api_read": _app_settings.external_api_read_rate,
+        "external_api_write": _app_settings.external_api_write_rate,
+        "external_api_burst": _app_settings.external_api_burst_rate,
+        # Gallery fetches dozens of files per screen; still capped against key leaks.
         "external_api_media": "2000/hour",
-        # Applied on top of the above, to the handful of endpoints whose cost
-        # is unbounded in the caller's own data rather than fixed per request
-        # (currently the smart-list resync). See
-        # external_api.throttling.ExternalApiResyncThrottle.
+        # Endpoints whose cost scales with caller data (smart-list resync).
         "external_api_resync": "12/hour",
-        # Autocomplete replaces (rather than adds to) the read cap for the
-        # location-search endpoints - it is charged per keystroke, so counting
-        # it against the shared read budget would let a few minutes of typing
-        # starve the client's actual syncing. Clients are still expected to
-        # debounce; the burst cap above applies here too.
+        # Per-keystroke autocomplete; separate so typing doesn't starve sync.
         "external_api_location_search": "1200/hour",
-        # Starting a game session runs up to 25 eligibility passes over the
-        # player's pins, an N+1 difficulty-proxy lookup across them, and a
-        # *billed* Street View call per attempt - resync-shaped cost, so it gets
-        # a resync-shaped cap rather than a share of the write budget. Generous
-        # enough for dozens of real games an hour.
-        # See external_api.throttling.GameStartThrottle.
+        # Billed game-start cost; resync-shaped cap.
         "external_api_game_start": "40/hour",
-        # Global search fans one request out across every domain provider
-        # (pins, wikis, trips, photos, messages, ...), so a single call is far
-        # from a single query. Its own budget keeps a search-heavy session from
-        # starving the client's actual syncing, and vice versa.
+        # Multi-provider fan-out per call.
         "external_api_global_search": "300/hour",
-        # Calendar export talks to Google on the request path and may make one
-        # upstream call per trip activity. Tight, because the cost lands on a
-        # third party's rate limit as much as on ours.
+        # Per-activity upstream calls on the request path.
         "external_api_calendar": "30/hour",
-        # One assistant chat turn bills real model-provider cost and can fan
-        # out to up to 6 model round trips before it replies - resync-shaped
-        # cost, same reasoning as external_api_game_start.
+        # Billed multi-round-trip chat turns.
         "external_api_assistant_message": "60/hour",
-        # Live-location updates while a check-in is active are a foreground-
-        # tracking workload, not an ordinary write - the standard write cap
-        # (300/hour) dies in under an hour at one fix per 10 seconds. Its own
-        # budget accommodates that cadence without loosening the cap every
-        # other safety write shares.
+        # Foreground tracking cadence, not ordinary writes.
         "external_api_safety_location": "360/hour",
     },
-    # Only consulted by views whose schema is actually generated - the
-    # preprocessing hook in external_api.schema limits that to the external API.
+    # Only for views in the generated external-API schema.
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # JSON only; avoids BrowsableAPIRenderer 500s and debug-page leaks.
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
 }
 
-# OpenAPI schema for the external API only - the internal HTMX/REST surface has
-# no public contract and is deliberately excluded (external_api.schema).
+# External API only; internal HTMX/REST surface excluded.
 SPECTACULAR_SETTINGS = {
     "TITLE": "UrbanLens External API",
     "DESCRIPTION": "Versioned API for external applications and native clients holding a user's API key or OAuth2 token.",
     "VERSION": "v1",
     "SERVE_INCLUDE_SCHEMA": False,
     "PREPROCESSING_HOOKS": ["urbanlens.dashboard.external_api.schema.preprocess_external_api_only"],
-    # Both entries are required. Setting this key *replaces* drf-spectacular's
-    # default list rather than extending it, and the default is
-    # `postprocess_schema_enums` - drop it and every choice field inlines its
-    # enum instead of referencing a named component, which renames types in
-    # every generated client.
+    # Replaces (not extends) defaults; keep the enum postprocessor.
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",
         "urbanlens.dashboard.external_api.schema.document_error_responses",
     ],
-    # Stable names for choice sets spectacular would otherwise hash
-    # (Status0ebEnum, ...). Hashed names are derived from the *colliding set*,
-    # so adding one more `status` field can renumber the rest and silently
-    # break a generated client's types. Subset lists (a write serializer
-    # restricting the settable states) are spelled out; full model choice
-    # sets are referenced by import string so they follow the model.
+    # Stable names so new choice fields don't renumber generated clients.
     "ENUM_NAME_OVERRIDES": {
         "SafetyCheckinStatusEnum": "urbanlens.dashboard.models.safety.model.SafetyCheckinStatus.choices",
         "SafetyCheckinPartnerStatusEnum": "urbanlens.dashboard.models.safety.model.SafetyCheckinPartnerStatus.choices",
@@ -1051,22 +1263,15 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
-# OAuth2 provider (django-oauth-toolkit) - the auth path for native clients
-# (the mobile app registers as a *public* client and must use PKCE; PAT-style
-# ApiKeys remain for simple server-to-server integrations). Scope names
-# deliberately mirror dashboard.models.account.ApiKeyScope values so
-# external_api.permissions.HasApiKeyScope can enforce either credential kind
-# with the same required_scopes declarations.
+# Native-client auth; scopes mirror ApiKeyScope so both credentials share checks.
 OAUTH2_PROVIDER = {
     "PKCE_REQUIRED": True,
-    # The native app's redirect targets: its custom scheme on Android/iOS, and
-    # RFC 8252 loopback (any port - django-oauth-toolkit matches loopback IPs
-    # port-insensitively) on desktop. "https" stays for any future web client.
+    "OAUTH2_VALIDATOR_CLASS": "urbanlens.dashboard.services.auth.oauth_validator.ActiveOwnerOAuth2Validator",
+    # The toolkit's own step sets the device grant's account; the next refuses a deactivated one.
+    "OAUTH_PRE_TOKEN_VALIDATION": [set_oauthlib_user_to_device_request_user, refuse_an_inactive_account],
+    # Custom scheme + loopback for native apps; https for future web clients.
     "ALLOWED_REDIRECT_URI_SCHEMES": ["https", "http", "urbanlens"],
-    # Mirrors dashboard.models.account.model.ApiKeyScope verbatim (value ->
-    # label). The duplication is unavoidable - settings load before the app
-    # registry, so this module cannot import a model - and
-    # test_external_api_scopes asserts the two stay identical.
+    # Duplicates ApiKeyScope (settings load before models; tests assert parity).
     "SCOPES": {
         "profile:read": "Read your profile UUID",
         "settings:read": "Read your account preferences",
@@ -1107,10 +1312,7 @@ OAUTH2_PROVIDER = {
         "device_scans:read": "Read nearby expected devices and their signal info",
         "device_scans:write": "Upload wireless device scan data",
     },
-    # Deliberately NOT the full SCOPES list: a token that asked for nothing in
-    # particular gets the same minimal grant a PAT does
-    # (account.model._default_api_key_scopes). Everything else must be
-    # explicitly requested so it appears on the consent screen.
+    # Minimal default grant matching PATs; rest need explicit consent.
     "DEFAULT_SCOPES": ["profile:read", "pins:read", "pins:write", "push:manage"],
     "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
     "REFRESH_TOKEN_EXPIRE_SECONDS": 60 * 60 * 24 * 90,
@@ -1122,8 +1324,7 @@ _log_file_path = os.path.join(LOG_DIR, "django.log")
 _log_handlers = ["console"]
 try:
     os.makedirs(LOG_DIR, exist_ok=True)
-    # Actually probe that the log file can be opened - makedirs succeeding
-    # doesn't guarantee it (e.g. a broken symlink or a read-only mount).
+    # Probe writability; makedirs alone doesn't prove it.
     with open(_log_file_path, "a"):
         pass
 except OSError:
@@ -1168,14 +1369,13 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
-        # Full tracebacks for unhandled view exceptions (5xx responses).
+        # Full tracebacks for 5xx.
         "django.request": {
             "handlers": _log_handlers,
             "level": "ERROR",
             "propagate": False,
         },
-        # ASGI/WSGI dev-server access loggers - silence the health check
-        # probe's request line specifically, since it fires every ~30s.
+        # Silence health-check probes in dev-server access logs.
         "django.channels.server": {
             "handlers": _log_handlers,
             "filters": ["health_check_access"],

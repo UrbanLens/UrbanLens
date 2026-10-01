@@ -1,10 +1,4 @@
-"""WKT/WKB pin import.
-
-Unlike the other formats, a WKT/WKB file is treated as N independent one-line
-records rather than a single all-or-nothing document: a malformed line is skipped
-with a warning instead of failing the whole file, since these are typically hand-
-pasted or hand-edited rather than produced by a single trusted export pipeline.
-"""
+"""WKT/WKB pin import."""
 
 from __future__ import annotations
 
@@ -14,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 import shapely.errors
 import shapely.wkb
 import shapely.wkt
+
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -41,6 +37,7 @@ def _pin_from_geometry(geometry: BaseGeometry, index: int, source_label: str, us
     }
 
 
+@untrusted_parse("geo.wkt")
 def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a WKT file (one geometry per line) into pin dicts.
 
@@ -49,12 +46,10 @@ def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
         user_profile: The profile to associate with each pin.
 
     Returns:
-        List of pin dicts, one per valid geometry line. Lines that fail to parse
-        are skipped with a warning rather than aborting the whole file.
+        List of pin dicts, one per valid geometry line.
 
     Raises:
-        UnicodeDecodeError: If the file is not UTF-8 text.
-    """
+        UnicodeDecodeError: If the file is not UTF-8 text."""
     text = file_contents.decode("utf-8")
     pins: list[dict[str, Any]] = []
 
@@ -76,22 +71,16 @@ def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
     return pins
 
 
+@untrusted_parse("geo.wkb")
 def wkb_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a WKB file into pin dicts.
-
-    Supports two forms:
-
-    - Raw binary WKB: the entire file is treated as a single geometry.
-    - Hex-encoded WKB text (e.g. copy-pasted from ``ST_AsBinary``/``ST_AsHexWKB``
-      in a PostGIS client): one hex-encoded geometry per line.
 
     Args:
         file_contents: Raw file bytes.
         user_profile: The profile to associate with each pin.
 
     Returns:
-        List of pin dicts, one per valid geometry.
-    """
+        List of pin dicts, one per valid geometry."""
     pins: list[dict[str, Any]] = []
 
     try:

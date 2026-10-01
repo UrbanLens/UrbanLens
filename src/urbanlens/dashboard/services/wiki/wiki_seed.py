@@ -1,28 +1,4 @@
-"""Seed a wiki's or pin's article from a confidently-matched Wikipedia article.
-
-Wikis are created empty (see ``tasks.ensure_wiki_for_location``'s
-docstring: "Wikis are never created automatically") - but once a Wikipedia
-article has been confidently matched to the wiki's location (see
-``WikipediaGateway.get_article_for_location``, which only ever returns a
-candidate that passed its own address/title verification), that's a natural
-starting point rather than an empty page. This module turns the cached
-match into the wiki's initial article, once, the first time either becomes
-true:
-
-- a Wikipedia match is (re)cached for a location that already has a wiki
-  with no article yet (see ``models.cache.signals``), or
-- a wiki is created for a location that already has a cached Wikipedia
-  match (see ``services.wiki.wiki_share.WikiShareService``).
-
-Never overwrites: any existing Article row (seeded or human-written) is left
-untouched - see ``seed_wiki_article_from_wikipedia``'s own guard.
-
-``seed_pin_article_from_wikipedia`` does the same thing for a single pin,
-gated on the pin owner's own ``Profile.auto_create_pin_article_from_wikipedia``
-setting (on by default) - unlike a community wiki, a pin's article is
-private to its owner, so seeding it is opt-out per-user rather than
-something that always happens.
-"""
+"""Seed a wiki's or pin's article from a confidently-matched Wikipedia article."""
 
 from __future__ import annotations
 
@@ -35,6 +11,7 @@ from typing import TYPE_CHECKING
 import lxml.html as lxml_html  # nosec B410
 
 from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
+from urbanlens.dashboard.services.security.url_safety import request_public_url
 
 if TYPE_CHECKING:
     from lxml.html import HtmlElement
@@ -42,11 +19,13 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.article.model import Article
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
 _WIKIPEDIA_CACHE_SOURCE = "wikipedia"
 _EDIT_SUMMARY = EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
+_COVER_MAX_BYTES = 8_000_000
 
 #: Markdown heading prefix for each heading tag WikipediaGateway's extract
 #: allowlist permits (h2-h6 - Wikipedia extracts never carry an h1).
@@ -56,18 +35,14 @@ _HEADING_MD_PREFIX = {"h2": "##", "h3": "###", "h4": "####", "h5": "#####", "h6"
 def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
     """Write the wiki's first article from a cached Wikipedia match, if applicable.
 
-    No-ops (returns None) unless all of: the location has a wiki, that wiki
-    has no article yet (seeded or human-written - never overwrites either),
-    and a Wikipedia article is actually cached for the location with a
-    non-empty extract.
-
     Args:
         location: The location to seed a wiki article for.
 
     Returns:
-        The newly created Article, or None if nothing was seeded.
-    """
-    wiki = getattr(location, "wiki", None)
+        The newly created Article, or None if nothing was seeded."""
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    wiki = Wiki.objects.existing_for_location(location)
     if wiki is None:
         return None
 
@@ -81,6 +56,7 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
         return None
 
     article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, wiki=wiki)
+    apply_wikipedia_cover_if_missing(location=location)
     logger.debug("Seeded wiki %s's article from Wikipedia", wiki.pk)
     return article
 
@@ -88,18 +64,11 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
 def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
     """Write a pin's first article from a cached Wikipedia match, if applicable.
 
-    No-ops (returns None) unless all of: the pin owner's
-    ``auto_create_pin_article_from_wikipedia`` setting is on, the pin has a
-    location, the pin has no article yet (seeded or human-written - never
-    overwrites either), and a Wikipedia article is actually cached for the
-    pin's location with a non-empty extract.
-
     Args:
         pin: The pin to seed an article for.
 
     Returns:
-        The newly created Article, or None if nothing was seeded.
-    """
+        The newly created Article, or None if nothing was seeded."""
     if not pin.profile.auto_create_pin_article_from_wikipedia:
         return None
 
@@ -116,9 +85,37 @@ def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
     if content is None:
         return None
 
-    article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, pin=pin)
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    try:
+        article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, pin=pin)
+    except Pin.DoesNotExist:
+        return None
+    apply_wikipedia_cover_if_missing(pin=pin)
     logger.debug("Seeded pin %s's article from Wikipedia", pin.pk)
     return article
+
+
+def seed_pin_from_cached_wikipedia(pin: Pin) -> None:
+    """Give a pin the article and link its location's cached Wikipedia match offers.
+
+    Called only for the pin owner's own activity: a match another account's lookup cached reaches
+    this pin when its owner next opens it.
+
+    Args:
+        pin: The pin to seed.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.services.locations.external_links import add_pin_link
+
+    if pin.location_id is None:
+        return
+    cached = LocationCache.objects.filter(location_id=pin.location_id, source=_WIKIPEDIA_CACHE_SOURCE).first()
+    if cached is None or not (cached.data or {}).get("title"):
+        return
+    seed_pin_article_from_wikipedia(pin)
+    if url := cached.data.get("url"):
+        add_pin_link(pin, url, "Wikipedia")
 
 
 def _seed_content_for_location(location: Location) -> str | None:
@@ -128,9 +125,7 @@ def _seed_content_for_location(location: Location) -> str | None:
         location: The location whose cached "wikipedia" LocationCache row to read.
 
     Returns:
-        Markdown content (body + attribution footer), or None when there's no
-        usable cached match to seed from.
-    """
+        Markdown content (body + attribution footer), or None when there's no usable cached match to seed from."""
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
     cached = LocationCache.objects.filter(location=location, source=_WIKIPEDIA_CACHE_SOURCE).first()
@@ -151,56 +146,94 @@ def _seed_content_for_location(location: Location) -> str | None:
     return f"{body}\n\n{_attribution_line(cached.data)}".strip()
 
 
-def _lead_image_markdown(article_data: dict) -> str:
-    """Render the article's lead thumbnail (already cached alongside the extract) as a Markdown image.
+def apply_wikipedia_cover_if_missing(*, pin: Pin | None = None, location: Location | None = None) -> None:
+    """Use the Wikipedia lead image as the cover when the pin or wiki has none yet.
 
-    Uses ``WikipediaGateway._normalise``'s own ``thumbnail`` field - no extra
-    fetch - rather than pulling in the separate, multi-image
-    ``get_article_media`` gallery source (used for the pin's Media tab, a
-    different feature): a seeded article calls for the one image Wikipedia
-    itself leads with, not every image on the page.
+    An existing cover is left alone. A failed download does not affect the article.
+
+    Args:
+        pin: The pin whose cover may be set. Its location supplies the cached article.
+        location: The wiki location whose cover may be set, when there is no pin.
+    """
+    target_location = pin.location if pin is not None else location
+    if target_location is None:
+        return
+    if pin is not None and pin.cover_photo_id is not None:
+        return
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    wiki = None if pin is not None else Wiki.objects.existing_for_location(target_location)
+    if wiki is not None and wiki.cover_photo_id is not None:
+        return
+    cached = LocationCache.objects.filter(location=target_location, source=_WIKIPEDIA_CACHE_SOURCE).first()
+    url = ((cached.data or {}).get("thumbnail") or "").strip() if cached is not None else ""
+    if not url:
+        return
+    import requests
+
+    from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError
+
+    try:
+        _store_cover_from_url(url, pin=pin, wiki=wiki)
+    except (OSError, ValueError, requests.RequestException, PhotoUploadError):
+        logger.debug("Wikipedia lead image was not saved as a cover", exc_info=True)
+
+
+def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: Wiki | None) -> None:
+    """Download one image and set it as the pin or wiki cover."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.photos.photo_upload import upload_photo
+
+    owner = pin.profile if pin is not None else None
+    if owner is None:
+        # TODO: a wiki cover has no owning profile for upload_photo; decide who owns it before fetching one.
+        return
+    response = request_public_url("GET", url, timeout=8, max_bytes=_COVER_MAX_BYTES)
+    response.raise_for_status()
+    content = response.content
+    if not content:
+        return
+    name = url.rsplit("/", 1)[-1].split("?", 1)[0] or "wikipedia-cover.jpg"
+    if "." not in name:
+        name = f"{name}.jpg"
+    image = upload_photo(owner, SimpleUploadedFile(name, content, content_type=response.headers.get("Content-Type", "image/jpeg")), caption="Wikipedia", pin=pin)
+    if pin is not None and pin.cover_photo_id is None:
+        pin.cover_photo = image
+        pin.save(update_fields=["cover_photo"])
+    if wiki is not None and wiki.cover_photo_id is None:
+        Image.objects.filter(pk=image.pk).update(wiki=wiki)
+        wiki.cover_photo = image
+        wiki.save(update_fields=["cover_photo"])
+
+
+def _lead_image_markdown(article_data: dict) -> str:
+    """Render the article's lead thumbnail (already cached alongside the extract) as a Markdown image of this site's copy.
 
     Args:
         article_data: The cached Wikipedia article dict (``title``/``thumbnail``).
 
     Returns:
-        A Markdown image block, or "" when there's no thumbnail cached.
-    """
+        A Markdown image block, or "" when there's no thumbnail cached."""
+    from urbanlens.dashboard.services.media.remote_copies import copy_url
+
     url = (article_data.get("thumbnail") or "").strip()
     if not url:
         return ""
     alt = (article_data.get("title") or "Wikipedia lead image").replace("[", "(").replace("]", ")")
-    return f"![{alt}]({url})"
+    return f"![{alt}]({copy_url(url, provider='wikipedia', page_url=article_data.get('url') or '')})"
 
 
 def _infobox_markdown(pairs: object) -> str:
     """Render a Wikipedia infobox's label/value fact pairs as a Markdown bullet list.
 
-    ``WikipediaGateway._fetch_infobox`` reaches Wikipedia's real rendered
-    HTML (the only response of theirs that carries the infobox at all - the
-    lead/extended extracts are both backed by an extension that strips
-    tables before returning) and already reduces it to plain-text ``[label,
-    value]`` pairs, skipping the infobox's own title row, section dividers,
-    and any image/map-only row (the embedded Kartographer map has no
-    Markdown equivalent) - this only needs to format what's left.
-
-    A GFM table was tried first, but a Markdown table always needs a header
-    row, and a blank one (there's no natural two-column header for an
-    arbitrary facts list) renders as a visibly empty header row once parsed
-    into the article editor - ProseMirror fills any truly empty cell with
-    its own placeholder paragraph (the ``<tr><th>...<br
-    class="ProseMirror-trailingBreak">...`` artifact reported against the
-    seeded article). A bullet list has no such requirement.
-
     Args:
-        pairs: The cached ``infobox`` value (``list[list[str]]`` when
-            present) - typed loosely since it comes back out of a JSONField
-            and may be missing/None for a location cached before this field
-            existed, or genuinely empty when the article had no infobox.
+        pairs: The cached ``infobox`` value (``list[list[str]]`` when present) - typed loosely since it comes back out of a JSONField and may be missing/None for a location cached before this field existed, or genuinely empty when the article had no infobox.
 
     Returns:
-        A Markdown bullet list, or "" if there are no usable pairs.
-    """
+        A Markdown bullet list, or "" if there are no usable pairs."""
     if not isinstance(pairs, list):
         return ""
     lines: list[str] = []
@@ -222,10 +255,7 @@ def _attribution_line(article_data: dict) -> str:
         article_data: The cached Wikipedia article dict (``title``/``url``).
 
     Returns:
-        A Markdown footer crediting the source article, or "" if there's no
-        URL to link (shouldn't happen for a real match, but content without
-        attribution should never be seeded).
-    """
+        A Markdown footer crediting the source article, or "" if there's no URL to link (shouldn't happen for a real match, but content without attribution should never be seeded)."""
     url = article_data.get("url") or ""
     if not url:
         return ""
@@ -236,17 +266,13 @@ def _attribution_line(article_data: dict) -> str:
 
 def _extract_html_to_markdown(html: str) -> str:
     """Convert a WikipediaGateway extract to Markdown source.
-
-    The input is always sanitized HTML restricted to a small, known tag set
-    (see ``_ALLOWED_TAGS`` in ``services.apis.assets.wikipedia``) - this only
-    needs to handle exactly those tags, not arbitrary HTML.
+    The input is always sanitized HTML restricted to a small, known tag set (see ``_ALLOWED_TAGS`` in ``services.apis.assets.wikipedia``) - this only needs to handle exactly those tags, not arbitrary HTML.
 
     Args:
         html: The extract HTML (e.g. ``LocationCache`` row's ``data["extract"]``).
 
     Returns:
-        Markdown source, blocks separated by blank lines.
-    """
+        Markdown source, blocks separated by blank lines."""
     root = lxml_html.fromstring(f"<div>{html}</div>")
     blocks: list[str] = []
     for el in root:
@@ -305,11 +331,7 @@ def _definition_list_markdown(dl_el: HtmlElement) -> str:
 
 def _inline_markdown(el: HtmlElement) -> str:
     """Render one element's text + inline children (b/i/em/strong/sup/sub/br) to Markdown.
-
-    sup/sub have no Markdown equivalent - kept as plain text rather than
-    emitting raw HTML the renderer would otherwise escape literally (see
-    services.wiki.articles.render_article, which doesn't enable raw HTML passthrough).
-    """
+    sup/sub have no Markdown equivalent - kept as plain text rather than emitting raw HTML the renderer would otherwise escape literally (see services.wiki.articles.render_article, which doesn't enable raw HTML passthrough)."""
     parts: list[str] = []
     if el.text:
         parts.append(el.text)

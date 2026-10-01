@@ -1,0 +1,109 @@
+# The media origin: media.urbanlens.org and nothing else.
+#
+# A second, deliberately tiny nginx whose config contains only the two media
+# locations. The app's routes are not merely un-matched here, they are absent -
+# there is no `proxy_pass` to a page, no /static/, no /ws/. That is the point of
+# giving this its own container and its own published port rather than adding a
+# `server_name` block to django.conf: a Host header cannot walk from this vhost
+# into the application, because this vhost does not know how to get there.
+#
+# Point NGINX Proxy Manager's media.urbanlens.org host at ${UL_MEDIA_PORT}.
+#
+# Requests still reach Django - the media gate authenticates and authorizes every
+# byte (dashboard/controllers/media.py). What changes on this origin is *how* it
+# authenticates: the session cookie is host-only for the app's hostname and is
+# never sent here, so the gate falls back to the media-only signed cookie. See
+# dashboard/services/media/origin.py.
+
+map $http_x_forwarded_proto $forwarded_scheme {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+server {
+    listen 8080 default_server;
+    # Looked up per request, so a recreated app container is picked up without a restart.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $app_upstream urbanlens_app:8000;
+    server_name _;
+
+    # Both of Docker's default pools; the reasoning is django.conf's.
+    set_real_ip_from 172.16.0.0/12;
+    set_real_ip_from 192.168.0.0/16;
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+
+    # This origin serves files; it never accepts one. Uploads go to the app
+    # origin, which is where the size ceiling and the scanners live. A small cap
+    # here means a request body aimed at this vhost is refused by nginx before it
+    # can occupy a worker.
+    client_max_body_size 64k;
+
+    # nginx owns these headers, not Django - and that is not belt-and-braces,
+    # it is the only thing that works. An authorized media response is an
+    # X-Accel-Redirect (settings.MEDIA_X_ACCEL, on for every non-dev
+    # deployment), and nginx forwards only a small allow-list of upstream
+    # headers when it follows one. Measured, on this exact image:
+    #
+    #   survives : Cache-Control, Content-Type, Content-Disposition,
+    #              ETag, Last-Modified, Accept-Ranges
+    #   dropped  : Content-Security-Policy, X-Frame-Options,
+    #              X-Content-Type-Options, Referrer-Policy
+    #
+    # So every header services/media/origin.py sets vanishes before the browser
+    # sees it, on exactly the responses that carry the bytes. A server-level
+    # `add_header ... always` here does survive, which is why the whole set
+    # lives here. Django still sets them for the FileResponse path (local dev,
+    # no nginx), where they are what actually applies.
+    #
+    # This file is a *template*: the official nginx entrypoint runs envsubst
+    # over /etc/nginx/templates/*.template, substituting only names that exist
+    # in the environment - so ${MEDIA_FRAME_ANCESTORS} is filled from compose
+    # while nginx's own $host/$scheme/$remote_addr are left alone.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Cross-Origin-Resource-Policy "same-site" always;
+    # default-src 'none': an upload the browser decides to treat as a document
+    # can then load nothing at all - no script, no fetch, no beacon - so even a
+    # file that executes has no second stage. Costs the images, video and PDFs
+    # this actually serves nothing; none of them fetch subresources.
+    #
+    # frame-ancestors names the app origin because the Vault document lightbox
+    # frames a PDF from here, which is now a cross-origin frame. It defaults to
+    # 'none' when UL_SITE_URL is unset, so a misconfigured deployment refuses
+    # framing rather than allowing it from anywhere.
+    add_header Content-Security-Policy "default-src 'none'; frame-ancestors ${MEDIA_FRAME_ANCESTORS}" always;
+
+    location /media/ {
+        proxy_read_timeout 120s;
+        proxy_pass http://$app_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_scheme;
+        # Overwritten, never passed through - same reasoning as django.conf: with
+        # USE_X_FORWARDED_HOST this outranks Host, and the media gate reads the
+        # host to decide it is on the media origin.
+        proxy_set_header X-Forwarded-Host $host;
+    }
+
+    # Reached only via X-Accel-Redirect from the gate above; `internal` 404s a
+    # direct request. Must match MEDIA_X_ACCEL_PREFIX in settings/base.py and
+    # alias the same media_volume mount the app containers use.
+    location /_protected_media/ {
+        internal;
+        alias /app/src/urbanlens/media/;
+    }
+
+    location /nginx-health {
+        access_log off;
+        return 200 "OK\n";
+        add_header Content-Type text/plain;
+    }
+
+    # Everything else. Not a proxy to the app, not a redirect to it - a flat 404,
+    # so this hostname is never a second front door to the application.
+    location / {
+        return 404;
+    }
+}

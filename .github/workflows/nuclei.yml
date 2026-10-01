@@ -1,0 +1,153 @@
+name: Nuclei scan
+
+# Manual only
+#
+# Two ways in:
+#   - `workflow_dispatch`, to run it on its own.
+#   - `workflow_call`, so integration.yml can run it as part of an integration
+#     pass without duplicating the job.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Deployment to scan, e.g. https://s1.dev.urbanlens.org"
+        required: true
+        type: string
+      severity:
+        description: "Comma-separated severities"
+        required: false
+        default: "info,low,medium,high,critical"
+        type: string
+      fail_on_findings:
+        description: "Fail the job if anything matched"
+        required: false
+        default: false
+        type: boolean
+      authenticated:
+        description: "Also scan as the primary account (all four auth tiers), when the staging environment has one provisioned"
+        required: false
+        default: true
+        type: boolean
+  workflow_call:
+    inputs:
+      base_url:
+        required: true
+        type: string
+      severity:
+        required: false
+        default: "info,low,medium,high,critical"
+        type: string
+      fail_on_findings:
+        required: false
+        default: false
+        type: boolean
+      authenticated:
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  # Independent of integration.yml's own `integration-${{ base_url }}` group:
+  # a scan reads and probes rather than writing rows, so it doesn't need to
+  # queue behind (or block) a Playwright run against the same target.
+  group: nuclei-${{ inputs.base_url }}
+  cancel-in-progress: false
+
+jobs:
+  nuclei:
+    name: Nuclei scan
+    runs-on: ubuntu-latest
+    # Same secret integration.yml uses (UL_E2E_ACCOUNTS_JSON)
+    environment: staging
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Write the accounts manifest
+        if: inputs.authenticated
+        env:
+          ACCOUNTS_JSON: ${{ secrets.UL_E2E_ACCOUNTS_JSON }}
+        run: |
+          if [ -z "$ACCOUNTS_JSON" ]; then
+            echo "No UL_E2E_ACCOUNTS_JSON secret on the staging environment - scanning unauthenticated."
+            exit 0
+          fi
+          umask 077
+          printf '%s' "$ACCOUNTS_JSON" > "${RUNNER_TEMP}/e2e-accounts.json"
+
+      # The session tier signs in through a real browser (reusing
+      # tests/integration/setup/auth.setup.ts), which needs Node - the
+      # script itself runs `npm install`/`playwright install` on demand, but
+      # the runner needs a modern enough `node` on PATH first.
+      - name: Set up Node
+        if: inputs.authenticated
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Run the scan
+        run: |
+          args=(--url "${{ inputs.base_url }}" --severity "${{ inputs.severity }}" --docker)
+          if [ "${{ inputs.fail_on_findings }}" = "true" ]; then
+            args+=(--fail-on-findings)
+          fi
+          if [ -f "${RUNNER_TEMP}/e2e-accounts.json" ]; then
+            args+=(--accounts-file "${RUNNER_TEMP}/e2e-accounts.json" --all-tiers)
+          fi
+          bash bin/run_nuclei_scan.sh "${args[@]}"
+
+      # One category per tier so Code Scanning doesn't conflate an
+      # unauthenticated finding with the same template matching again under
+      # a different credential - each `if` is independent, so a tier that
+      # was skipped (no restricted key provisioned, sign-in unavailable)
+      # just has nothing to upload rather than failing the job.
+      - name: Upload Code Scanning results (unauthenticated)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/unauthenticated/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/unauthenticated/results.sarif
+          category: nuclei-unauthenticated
+
+      - name: Upload Code Scanning results (API key, restricted)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/apikey-restricted/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/apikey-restricted/results.sarif
+          category: nuclei-apikey-restricted
+
+      - name: Upload Code Scanning results (API key, full)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/apikey-full/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/apikey-full/results.sarif
+          category: nuclei-apikey-full
+
+      - name: Upload Code Scanning results (session)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/session/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/session/results.sarif
+          category: nuclei-session
+
+      # The flat (non-multi-tier) path: no accounts secret was configured.
+      - name: Upload Code Scanning results (unauthenticated only)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/results.sarif
+          category: nuclei
+
+      - name: Upload raw results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: nuclei-report-${{ github.run_id }}
+          path: tests/integration/reports/nuclei
+          retention-days: 14
+          if-no-files-found: warn

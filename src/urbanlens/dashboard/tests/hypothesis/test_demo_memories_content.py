@@ -1,10 +1,4 @@
-"""The Memories-page content: routes, markup maps, shares, check-ins, unlogged visits, on-this-day.
-
-Same setup pattern as test_demo_social.py - a real location pool so every
-code path actually executes - but focused on the surfaces this batch of
-work added, and on the Memories queries themselves rather than just the
-models each page reads from.
-"""
+"""The Memories-page content: routes, markup maps, shares, check-ins, unlogged visits, on-this-day."""
 
 from __future__ import annotations
 
@@ -94,9 +88,15 @@ class DemoMemoriesContentTests(TestCase):
         from urbanlens.dashboard.models.images.model import Image
 
         today = timezone.now().date()
-        visits = PinVisit.objects.filter(pin__profile=self.owner, visited_at__month=today.month, visited_at__day=today.day).exclude(visited_at__year=today.year)
-        photos = Image.objects.filter(profile=self.owner, taken_at__month=today.month, taken_at__day=today.day).exclude(taken_at__year=today.year)
-        self.assertTrue(visits.exists() or photos.exists(), "neither a visit nor a photo landed on today's month/day in a past year")
+        visits = PinVisit.objects.filter(
+            pin__profile=self.owner, visited_at__month=today.month, visited_at__day=today.day
+        ).exclude(visited_at__year=today.year)
+        photos = Image.objects.filter(profile=self.owner, taken_at__month=today.month, taken_at__day=today.day).exclude(
+            taken_at__year=today.year
+        )
+        self.assertTrue(
+            visits.exists() or photos.exists(), "neither a visit nor a photo landed on today's month/day in a past year"
+        )
 
     def test_the_unlogged_visits_queue_is_populated(self) -> None:
         """The exact query behind Memories -> Visits: last_visited set, zero PinVisit rows."""
@@ -132,4 +132,7 @@ class DemoMemoriesContentTests(TestCase):
         self.assertGreater(trips.count(), 0)
         for trip in trips:
             has_date = trip.start_date is not None or trip.activities.filter(scheduled_at__isnull=False).exists()
-            self.assertTrue(has_date, f"trip {trip.pk!r} has neither start_date nor a scheduled activity - it would be invisible on the Memories timeline")
+            self.assertTrue(
+                has_date,
+                f"trip {trip.pk!r} has neither start_date nor a scheduled activity - it would be invisible on the Memories timeline",
+            )

@@ -1,14 +1,4 @@
-"""Tests for the shared photo-reposition payload parser and its endpoints.
-
-The pin, wiki, and safety gallery reposition endpoints all accepted a dragged
-marker's ``{"latitude", "longitude"}`` JSON with the same subtle hole: they
-caught ``ValueError``, but ``Decimal("abc")`` raises
-``decimal.InvalidOperation`` (an ``ArithmeticError``), so garbage input
-500'd instead of 400ing - and ``Decimal("nan")`` parsed fine (Postgres
-``numeric`` stores NaN), so nothing rejected non-finite coordinates.
-``parse_reposition_payload`` centralizes the validation; these tests cover
-the parser exhaustively plus one endpoint-level regression per bug class.
-"""
+"""Tests for the shared photo-reposition payload parser and its endpoints."""
 
 from __future__ import annotations
 
@@ -17,9 +7,9 @@ import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin

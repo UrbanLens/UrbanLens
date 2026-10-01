@@ -1,18 +1,13 @@
-"""Tests for services.auth.api_keys: generation, hash-based verification, and revocation.
-
-Mirrors the coverage shape of backup codes (test_backup_services.py doesn't
-cover BackupCode itself, so this is closer to two_factor's own
-verify_and_consume_backup_code tests in spirit): plaintext is only ever
-returned at generation time, every later check goes through a salted hash,
-and revocation is immediate and scoped to the owning user.
-"""
+"""Tests for services.auth.api_keys: generation, hash-based verification, and revocation."""
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope, ApiKeyUsageLog
 from urbanlens.dashboard.services.auth.api_keys import (
@@ -50,16 +45,19 @@ class GenerateApiKeyTests(TestCase):
     def test_default_scopes_are_the_original_fixed_grant(self) -> None:
         """Every new key gets exactly the original four-scope grant, not the full vocabulary.
 
-        See ``_default_api_key_scopes``'s docstring and
-        ``test_external_api_scopes.py::DefaultScopesTests`` - deliberately not
-        widened as ``ApiKeyScope`` grew, so an existing (or newly issued
-        PAT-style) key never silently gains reach the owner didn't consent to.
-        """
+        See ``_default_api_key_scopes``'s docstring and ``test_external_api_scopes.py::DefaultScopesTests`` -
+        deliberately not widened as ``ApiKeyScope`` grew, so an existing (or newly issued PAT-style) key never
+        silently gains reach the owner didn't consent to."""
         user = baker.make(User)
         api_key, _raw_key = generate_api_key(user, "Zapier")
         self.assertCountEqual(
             api_key.scopes,
-            [ApiKeyScope.PROFILE_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.PINS_WRITE.value, ApiKeyScope.PUSH_MANAGE.value],
+            [
+                ApiKeyScope.PROFILE_READ.value,
+                ApiKeyScope.PINS_READ.value,
+                ApiKeyScope.PINS_WRITE.value,
+                ApiKeyScope.PUSH_MANAGE.value,
+            ],
         )
 
     def test_blank_name_falls_back_to_default_label(self) -> None:
@@ -78,6 +76,21 @@ class GenerateApiKeyTests(TestCase):
         first, _ = generate_api_key(user, "One")
         second, _ = generate_api_key(user, "Two")
         self.assertNotEqual(first.prefix, second.prefix)
+
+    def test_exhausting_prefix_collision_retries_raises(self) -> None:
+        """Every retry hitting an existing prefix must surface, not loop forever
+        or silently proceed with a duplicate (which would violate the unique
+        column and raise the wrong exception type to the caller)."""
+        user = baker.make(User)
+        baker.make(ApiKey, prefix="collide123")
+        with (
+            patch(
+                "urbanlens.dashboard.services.auth.api_keys.secrets.token_urlsafe",
+                side_effect=lambda n: "collide123456" if n == 8 else "s" * 48,
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            generate_api_key(user, "Zapier")
 
 
 class AuthenticateApiKeyTests(TestCase):
@@ -109,6 +122,12 @@ class AuthenticateApiKeyTests(TestCase):
     def test_revoked_key_is_rejected(self) -> None:
         user = baker.make(User)
         api_key, raw_key = generate_api_key(user, "Zapier")
+        # Same key must authenticate before the real revoke transition, and stop
+        # right after it - otherwise an "always deny" authenticator would pass
+        # this test for the wrong reason.
+        resolved = authenticate_api_key(raw_key)
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved.pk, api_key.pk)
         revoke_api_key(user, api_key.pk)
         self.assertIsNone(authenticate_api_key(raw_key))
 
@@ -124,7 +143,13 @@ class AuthenticateApiKeyTests(TestCase):
         """revoke_api_key() only fires on explicit user action - an admin disabling
         a compromised account (User.is_active=False) must also cut off its keys."""
         user = baker.make(User)
-        _api_key, raw_key = generate_api_key(user, "Zapier")
+        api_key, raw_key = generate_api_key(user, "Zapier")
+        # Same key must authenticate while the account is active, and stop right
+        # after the real deactivation - otherwise an "always deny" authenticator
+        # would pass this test for the wrong reason.
+        resolved = authenticate_api_key(raw_key)
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved.pk, api_key.pk)
         User.objects.filter(pk=user.pk).update(is_active=False)
         self.assertIsNone(authenticate_api_key(raw_key))
 

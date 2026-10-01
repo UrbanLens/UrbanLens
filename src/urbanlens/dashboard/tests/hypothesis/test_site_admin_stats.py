@@ -3,9 +3,10 @@
 Covers:
 - _monthly_series() label count, ordering, and accuracy
 - _app_uptime() monotonic uptime formatting
-- _dir_size_mb() size computation and error handling
+- directory_size_mb() size computation and error handling
 - SiteAdminStatsView access control and context completeness
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -23,11 +24,11 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.site_admin import (
     _app_uptime,
-    _dir_size_mb,
     _monthly_series,
 )
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.site_settings.meta import EnvironmentOverrideChoice
+from urbanlens.dashboard.services.admin.media_usage import directory_size_mb
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
 # -- _monthly_series -----------------------------------------------------------
@@ -91,14 +92,16 @@ class ServerUptimeTests(SimpleTestCase):
 
     def _uptime_at(self, elapsed_seconds: float) -> str:
         """Return _app_uptime() when monotonic has advanced by ``elapsed_seconds``."""
-        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 0.0), mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.time.monotonic",
-            return_value=elapsed_seconds,
+        with (
+            mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 0.0),
+            mock.patch(
+                "urbanlens.dashboard.controllers.site_admin.time.monotonic",
+                return_value=elapsed_seconds,
+            ),
         ):
             return _app_uptime()
 
     def test_parses_days_hours_minutes_correctly(self) -> None:
-        # 1 day + 2 hours + 3 minutes = 86400 + 7200 + 180 = 93780 seconds
         seconds = 86400 + 7200 + 180
         self.assertEqual(self._uptime_at(seconds), "1d 2h 3m")
 
@@ -109,34 +112,37 @@ class ServerUptimeTests(SimpleTestCase):
         self.assertEqual(self._uptime_at(3600), "0d 1h 0m")
 
     def test_never_returns_negative_uptime(self) -> None:
-        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 100.0), mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.time.monotonic",
-            return_value=50.0,
+        with (
+            mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 100.0),
+            mock.patch(
+                "urbanlens.dashboard.controllers.site_admin.time.monotonic",
+                return_value=50.0,
+            ),
         ):
             result = _app_uptime()
         self.assertEqual(result, "0d 0h 0m")
 
 
-# -- _dir_size_mb --------------------------------------------------------------
+# -- directory_size_mb --------------------------------------------------------------
 
 
 class DirSizeMbTests(SimpleTestCase):
-    """_dir_size_mb returns megabytes and handles missing paths gracefully."""
+    """directory_size_mb returns megabytes and handles missing paths gracefully."""
 
     def test_nonexistent_path_returns_zero(self) -> None:
-        result = _dir_size_mb("/no/such/path/exists/12345")
+        result = directory_size_mb("/no/such/path/exists/12345")
         self.assertEqual(result, 0.0)
 
     def test_empty_directory_returns_zero(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = _dir_size_mb(tmpdir)
+            result = directory_size_mb(tmpdir)
         self.assertEqual(result, 0.0)
 
     def test_single_file_size_is_correct(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = os.path.join(tmpdir, "sample.bin")
             pathlib.Path(path).write_bytes(b"x" * 1_048_576)  # exactly 1 MiB
-            result = _dir_size_mb(tmpdir)
+            result = directory_size_mb(tmpdir)
         self.assertAlmostEqual(result, 1.0, places=1)
 
     def test_multiple_files_are_summed(self) -> None:
@@ -144,12 +150,12 @@ class DirSizeMbTests(SimpleTestCase):
             for i in range(3):
                 path = os.path.join(tmpdir, f"file{i}.bin")
                 pathlib.Path(path).write_bytes(b"x" * 524_288)  # 0.5 MiB each → 1.5 MiB total
-            result = _dir_size_mb(tmpdir)
+            result = directory_size_mb(tmpdir)
         self.assertAlmostEqual(result, 1.5, places=1)
 
     def test_returns_float(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = _dir_size_mb(tmpdir)
+            result = directory_size_mb(tmpdir)
         self.assertIsInstance(result, float)
 
 
@@ -220,6 +226,12 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertIn("total_users", ctx)
         self.assertIsInstance(ctx["total_users"], int)
 
+    def test_there_is_no_top_locations_table(self) -> None:
+        """Jess, 2026-09-30: it has always been empty, and is removed rather than filled."""
+        response = self.client.get(reverse("site_admin_stats_kpi"))
+        self.assertNotIn("top_locations", response.context)
+        self.assertNotContains(response, "Most Pinned Locations")
+
     def test_context_has_total_locations(self) -> None:
         ctx = self._get_kpi_context()
         self.assertIn("total_locations", ctx)
@@ -255,7 +267,7 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertIn("infrastructure_services", ctx)
         services = ctx["infrastructure_services"]
         self.assertEqual(len(services), 4)
-        self.assertEqual([service.key for service in services], ["postgres", "valkey", "celery", "nginx"])
+        self.assertEqual([service.key for service in services], ["postgres", "dragonfly", "celery", "nginx"])
         self.assertEqual(services[0].status, "healthy")
 
     def test_context_has_app_software_info(self) -> None:
@@ -287,10 +299,8 @@ class SiteAdminStatsViewContextTests(TestCase):
 class SiteAdminHomeViewTests(TestCase):
     """The admin homepage renders without waiting on infra/git I/O.
 
-    Service health (Postgres/Valkey/Celery/nginx pings) and the git update
-    check (a git fetch) are real I/O - SiteAdminHomeStatusPartialView fetches
-    them lazily via HTMX instead of SiteAdminHomeView blocking on them.
-    """
+    Service health (Postgres/Dragonfly/Celery/nginx pings) and the git update check (a git fetch) are real I/O -
+    SiteAdminHomeStatusPartialView fetches them lazily via HTMX instead of SiteAdminHomeView blocking on them."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -337,8 +347,17 @@ class SiteAdminHomeViewTests(TestCase):
         from urbanlens.dashboard.services.admin.infrastructure_stats import InfrastructureServiceStat
 
         fake_services = (
-            InfrastructureServiceStat(key="postgres", name="PostgreSQL", icon="storage", status="healthy", status_label="Connected", metrics=()),
-            InfrastructureServiceStat(key="valkey", name="Valkey", icon="memory", status="unhealthy", status_label="Down", metrics=()),
+            InfrastructureServiceStat(
+                key="postgres",
+                name="PostgreSQL",
+                icon="storage",
+                status="healthy",
+                status_label="Connected",
+                metrics=(),
+            ),
+            InfrastructureServiceStat(
+                key="dragonfly", name="Dragonfly", icon="memory", status="unhealthy", status_label="Down", metrics=()
+            ),
         )
         with mock.patch(
             "urbanlens.dashboard.services.admin.infrastructure_stats.collect_infrastructure_service_stats",

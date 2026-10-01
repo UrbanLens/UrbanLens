@@ -1,10 +1,4 @@
-"""Tests for GeoBoundary - the generalized replacement for the old "USA only" bool flag.
-
-Covers the lazy-load/memoization contract (a boundary's geometry loader must
-never run more than once per instance, and never at construction time), the
-bbox/WKT factories, and ``state_boundary``'s two-layer caching (Django cache
-across process restarts, per-instance memoization within one).
-"""
+"""Tests for GeoBoundary - the generalized replacement for the old "USA only" bool flag."""
 
 from __future__ import annotations
 
@@ -94,7 +88,10 @@ class FromBboxesTests(SimpleTestCase):
         with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=0.0):
             self.assertFalse(boundary.contains(42.0, -75.0))
 
-        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=_FAILED_LOAD_RETRY_SECONDS + 1.0):
+        with patch(
+            "urbanlens.dashboard.services.geo.geo_boundary.time.monotonic",
+            return_value=_FAILED_LOAD_RETRY_SECONDS + 1.0,
+        ):
             self.assertTrue(boundary.contains(42.0, -75.0), "the boundary never recovered from a transient failure")
 
         self.assertEqual(len(calls), 2)
@@ -113,7 +110,10 @@ class FromBboxesTests(SimpleTestCase):
 
         with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=0.0):
             boundary.contains(42.0, -75.0)
-        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=_FAILED_LOAD_RETRY_SECONDS + 1.0):
+        with patch(
+            "urbanlens.dashboard.services.geo.geo_boundary.time.monotonic",
+            return_value=_FAILED_LOAD_RETRY_SECONDS + 1.0,
+        ):
             boundary.contains(42.0, -75.0)
             boundary.contains(42.0, -75.0)
             _ = boundary.geometry
@@ -132,7 +132,9 @@ class FromBboxesTests(SimpleTestCase):
 
         with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=0.0):
             boundary.contains(42.0, -75.0)
-        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=_FAILED_LOAD_RETRY_SECONDS * 10):
+        with patch(
+            "urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=_FAILED_LOAD_RETRY_SECONDS * 10
+        ):
             boundary.contains(42.0, -75.0)
 
         self.assertEqual(len(calls), 1)
@@ -169,25 +171,37 @@ class StateBoundaryTests(SimpleTestCase):
         super().tearDown()
 
     def test_contains_point_inside_fetched_polygon(self) -> None:
-        with patch("urbanlens.dashboard.services.apis.locations.census_tigerweb.CensusTigerwebGateway.get_state_boundary", return_value={"rings": _SQUARE_RINGS}) as mock_fetch:
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.census_tigerweb.CensusTigerwebGateway.get_state_boundary",
+            return_value={"rings": _SQUARE_RINGS},
+        ) as mock_fetch:
             boundary = state_boundary("NY")
             self.assertTrue(boundary.contains(42.0, -75.0))
             mock_fetch.assert_called_once_with("NY")
 
     def test_excludes_point_outside_fetched_polygon(self) -> None:
-        with patch("urbanlens.dashboard.services.apis.locations.census_tigerweb.CensusTigerwebGateway.get_state_boundary", return_value={"rings": _SQUARE_RINGS}):
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.census_tigerweb.CensusTigerwebGateway.get_state_boundary",
+            return_value={"rings": _SQUARE_RINGS},
+        ):
             boundary = state_boundary("NY")
             self.assertFalse(boundary.contains(0.0, 0.0))
 
     def test_second_instance_reuses_django_cache_without_refetching(self) -> None:
-        with patch("urbanlens.dashboard.services.apis.locations.census_tigerweb.CensusTigerwebGateway.get_state_boundary", return_value={"rings": _SQUARE_RINGS}) as mock_fetch:
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.census_tigerweb.CensusTigerwebGateway.get_state_boundary",
+            return_value={"rings": _SQUARE_RINGS},
+        ) as mock_fetch:
             state_boundary("NY").contains(42.0, -75.0)
             state_boundary("NY").contains(42.0, -75.0)  # a fresh GeoBoundary instance
 
         mock_fetch.assert_called_once()
 
     def test_missing_state_resolves_to_no_geometry(self) -> None:
-        with patch("urbanlens.dashboard.services.apis.locations.census_tigerweb.CensusTigerwebGateway.get_state_boundary", return_value=None):
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.census_tigerweb.CensusTigerwebGateway.get_state_boundary",
+            return_value=None,
+        ):
             boundary = state_boundary("ZZ")
             self.assertFalse(boundary.contains(42.0, -75.0))
             self.assertIsNone(boundary.geometry)

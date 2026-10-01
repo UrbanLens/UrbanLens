@@ -11,7 +11,7 @@ from urbanlens.dashboard.services.apis.infra.github.contributors import (
 
 
 class ThanksView(TemplateView):
-    """Render the thanks page with live GitHub contributor data."""
+    """Render the thanks page with GitHub contributor data."""
 
     template_name = "dashboard/pages/thanks/index.html"
 

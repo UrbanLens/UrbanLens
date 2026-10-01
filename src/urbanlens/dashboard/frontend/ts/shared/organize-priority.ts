@@ -1,25 +1,11 @@
 import Sortable from "sortablejs";
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { LatestWinsSaver } from "./latest-wins-saver";
 import { ORG_NS_BY_LABEL_KIND } from "./organize-filter-engine";
 
 /**
- * Priority tab: plain drag-handle reordering (via Sortable) plus a manual
- * click-based multi-select (shift-range) that dispatches to whichever tab's
- * bulk-edit dialog matches the selected items' kind.
- *
- * The original template additionally tried to enable Sortable's MultiDrag
- * plugin (`Sortable.mount(new Sortable.MultiDrag())`, `opts.multiDrag = true`)
- * gated on `window.Sortable.MultiDrag` being truthy. That property was never
- * actually exposed by the sortablejs version in use (1.15.x's UMD bundle
- * auto-mounts the plugin internally without exposing the class), so the
- * guard was always false - multiDrag was never enabled, and worse,
- * `_setPrioritySelected` always took the `Sortable.utils.select/deselect`
- * branch (since `Sortable.utils` itself IS populated by the auto-mount) which
- * silently no-ops without `options.multiDrag`, so clicking a priority item
- * never visibly selected it. This port drops the dead MultiDrag branch
- * entirely and always toggles the selection class directly, which is the
- * only path that ever actually worked.
+ * Priority tab: plain drag-handle reordering (via Sortable) plus a manual click-based multi-select (shift-range) that dispatches.
  */
 export function initOrganizePriority(): void {
     let prioritySortable: Sortable | null = null;
@@ -66,38 +52,69 @@ export function initOrganizePriority(): void {
         edit.saveBtn.tabIndex = -1;
     }
 
-    /** Reorder failed - put the list back the way the server still has it,
-     * rather than leaving a drag/jump shown as if it landed when it didn't. */
-    function restorePriorityOrder(list: HTMLElement, previousOrder: HTMLElement[]): void {
-        previousOrder.forEach((el) => list.appendChild(el));
-        previousOrder.forEach((el, i) => {
+    interface PriorityOrder {
+        list: HTMLElement;
+        ids: string[];
+        flash: HTMLElement | null;
+    }
+
+    function listItems(list: HTMLElement): HTMLElement[] {
+        return Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]"));
+    }
+
+    function renumber(order: HTMLElement[]): void {
+        order.forEach((el, i) => {
             const badge = priorityOrderBadge(el);
             if (badge) badge.textContent = String(i + 1);
         });
     }
 
-    async function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null, previousOrder: HTMLElement[]): Promise<void> {
-        const items = Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]")).map((el, i) => {
-            const badge = priorityOrderBadge(el);
-            if (badge) badge.textContent = String(i + 1);
-            return { id: Number.parseInt(el.dataset.id ?? "0", 10) };
+    async function sendPriorityOrder({ list, ids }: PriorityOrder): Promise<void> {
+        const response = await fetch(list.dataset.saveUrl ?? "", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+            body: JSON.stringify({ items: ids.map((id) => ({ id: Number.parseInt(id, 10) })) }),
         });
-        try {
-            const response = await fetch(list.dataset.saveUrl ?? "", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                body: JSON.stringify({ items }),
-            });
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || response.statusText);
-            }
-            if (flashItem) flashPriorityOrderSaved(flashItem);
-            toast.success("Display order saved.");
-        } catch (err) {
-            toast.error(`Save failed: ${(err as Error).message}`);
-            restorePriorityOrder(list, previousOrder);
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || response.statusText);
         }
+    }
+
+    let orderSaver: { list: HTMLElement; saver: LatestWinsSaver<PriorityOrder> } | null = null;
+
+    /** One saver per rendered list: each save sends the whole order, so only the newest matters. */
+    function saverFor(list: HTMLElement): LatestWinsSaver<PriorityOrder> {
+        if (orderSaver?.list !== list) {
+            const saver = new LatestWinsSaver<PriorityOrder>(
+                {
+                    send: sendPriorityOrder,
+                    onSaved: ({ flash }) => {
+                        if (flash) flashPriorityOrderSaved(flash);
+                        toast.success("Display order saved.");
+                    },
+                    onFailed: (err, confirmed) => {
+                        toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+                        if (!confirmed) return;
+                        // By id, against what the list holds now: it may have been re-rendered since.
+                        const current = listItems(list);
+                        const rank = new Map(confirmed.ids.map((id, i) => [id, i]));
+                        const restored = [...current].sort((a, b) => (rank.get(a.dataset.id ?? "") ?? Infinity) - (rank.get(b.dataset.id ?? "") ?? Infinity));
+                        restored.forEach((el) => list.appendChild(el));
+                        renumber(restored);
+                    },
+                },
+                { list, ids: listItems(list).map((el) => el.dataset.id ?? ""), flash: null },
+            );
+            orderSaver = { list, saver };
+        }
+        return orderSaver.saver;
+    }
+
+    function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null): void {
+        const order = listItems(list);
+        renumber(order);
+        saverFor(list).request({ list, ids: order.map((el) => el.dataset.id ?? ""), flash: flashItem });
     }
 
     function commitOrderEditor(): void {
@@ -120,12 +137,13 @@ export function initOrganizePriority(): void {
         closeOrderEditor(clampedPos);
         if (currentIdx === targetIdx) return;
 
+        saverFor(list);
         edit.item.remove();
         const remaining = Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]"));
         if (targetIdx >= remaining.length) list.appendChild(edit.item);
         else list.insertBefore(edit.item, remaining[targetIdx]!);
 
-        savePriorityOrder(list, edit.item, items);
+        savePriorityOrder(list, edit.item);
     }
 
     function cancelOrderEditor(): void {
@@ -240,9 +258,7 @@ export function initOrganizePriority(): void {
         window._orgBulk.del = () => {
             const picked = selectedPriorityItems();
             if (!picked.ids.length) return;
-            // Delete is per-kind for the same reason edit and merge are: each kind's
-            // rows live in a different panel, and the bulk-delete endpoint and the
-            // rows it re-renders are chosen by kind.
+            // Delete is per-kind for the same reason edit and merge are.
             if (picked.kinds.size > 1) {
                 toast.warning("Select only tags, only categories, or only statuses to delete them together.");
                 return;
@@ -279,26 +295,20 @@ export function initOrganizePriority(): void {
         const list = document.getElementById("priority-list");
         if (!list) return;
         prioritySortable?.destroy();
-        // Captured on drag start, not derived after the fact: two rapid
-        // drags can each fire a save while the earlier one is still in
-        // flight, and restoring a snapshot taken *before this specific
-        // drag* is what makes a failed save undo only its own change.
-        let dragStartOrder: HTMLElement[] = [];
+        saverFor(list);
         prioritySortable = new Sortable(list, {
             animation: 150,
             handle: ".priority-drag-handle",
             ghostClass: "priority-item--ghost",
             fallbackTolerance: 3,
-            onStart: () => {
-                dragStartOrder = priorityItems();
-            },
             onEnd: () => {
-                savePriorityOrder(list, null, dragStartOrder);
+                savePriorityOrder(list, null);
             },
         });
     }
 
-    document.getElementById("priority-list")?.addEventListener("click", (e) => {
+    // Delegated from #panel-priority, not #priority-list, for the same reason as the htmx:afterSwap binding below.
+    document.getElementById("panel-priority")?.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;
         const badge = target.closest<HTMLElement>(".priority-order-chip");
         if (badge) {
@@ -311,10 +321,10 @@ export function initOrganizePriority(): void {
             const jumpItem = jumpBtn.closest<HTMLElement>(".priority-item");
             const list = document.getElementById("priority-list");
             if (!jumpItem || !list) return;
-            const previousOrder = priorityItems();
+            saverFor(list);
             if (jumpBtn.dataset.priorityJump === "top") list.insertBefore(jumpItem, list.firstElementChild);
             else list.appendChild(jumpItem);
-            savePriorityOrder(list, jumpItem, previousOrder);
+            savePriorityOrder(list, jumpItem);
             return;
         }
 
@@ -343,12 +353,8 @@ export function initOrganizePriority(): void {
 
     window._initPrioritySortable = initPrioritySortable;
 
-    // The list re-fetches its own contents (see _priority_list.html's
-    // hx-trigger="refreshPriority from:body") after a label mutation elsewhere
-    // on the page. That's an innerHTML swap - #priority-list itself survives,
-    // but its children (and Sortable's references to them) don't, so it needs
-    // rebinding same as the tab-switch case in organize-header.ts.
-    document.getElementById("priority-list")?.addEventListener("htmx:afterSwap", () => {
+    // Bound to #panel-priority (always present), not #priority-list itself.
+    document.getElementById("panel-priority")?.addEventListener("htmx:afterSwap", () => {
         clearPrioritySelection();
         initPrioritySortable();
     });

@@ -4,25 +4,25 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, CharField, ForeignKey, Index, IntegerField, JSONField
+from django.db.models import CASCADE, CharField, ForeignKey, IntegerField, JSONField
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
 from urbanlens.dashboard.models.saved_filter.queryset import SavedFilterManager
+from urbanlens.dashboard.services.core.colors import clean_color
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin.queryset import PinQuerySet
 
 logger = logging.getLogger(__name__)
 
 
 class SavedFilter(abstract.FrontendDashboardModel):
     """A profile's saved main-map filter combination.
-
-    ``criteria`` stores a JSON-safe, normalized form of the fields
-    ``SearchForm.cleaned_data`` (plus parsed ``label_groups``/custom-field
-    criteria) would produce - see ``dashboard.services.search.filter_criteria`` for
-    the (de)serialization helpers that build and replay this shape against
-    ``Pin.objects.filter_by_criteria()``.
+    ``criteria`` stores a JSON-safe, normalized form of the fields ``SearchForm.cleaned_data`` (plus parsed ``label_groups``/custom-field criteria) would produce - see ``dashboard.services.search.filter_criteria`` for the (de)serialization helpers that build and replay this shape against ``Pin.objects.filter_by_criteria()``.
 
     Attributes:
         icon: Material Symbols icon name or emoji shown on the filter's button.
@@ -39,10 +39,34 @@ class SavedFilter(abstract.FrontendDashboardModel):
     criteria = JSONField(default=dict)
     order = IntegerField(default=0)
 
+    def coerce_colors(self) -> None:
+        """Drop `color` to its unset value unless it is a colour we can store.
+        The column declares `choices`, which Django enforces in a form and not in the database - and the archive importer writes this straight from an uploaded file.
+        """
+        self.color = clean_color(self.color, default="")
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the filter, coercing its colour first."""
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "color" in update_fields:
+            self.coerce_colors()
+        super().save(*args, **kwargs)
+
     objects = SavedFilterManager()
 
     def __str__(self) -> str:
         return self.name
+
+    def matching_pins(self) -> PinQuerySet:
+        """The owner's root pins that satisfy this filter, as an unevaluated queryset.
+
+        Returns:
+            A queryset callers compose as a subquery (``pk__in=...values("pk")``) rather than evaluate.
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
+
+        return Pin.objects.filter(profile_id=self.profile_id).root_pins().filter_by_criteria(deserialize_criteria(self.criteria, self.profile))
 
     @property
     def criteria_json(self) -> str:

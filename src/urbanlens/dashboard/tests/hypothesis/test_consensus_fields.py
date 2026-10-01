@@ -1,22 +1,18 @@
-"""Tests for the Consensus field-kind strategy registry (services.consensus.fields).
-
-Pure logic - registry completeness and the text/coordinate agreement rules
-each strategy's ``agrees``/``normalize`` implement. No DB required for these
-(strategies that need the ORM - find_missing/apply_answer - are exercised by
-the DB-backed session tests instead).
-"""
+"""Tests for the Consensus field-kind strategy registry (services.consensus.fields)."""
 
 from __future__ import annotations
 
 from django.contrib.gis.geos import Point
-from hypothesis import given, settings, strategies as st
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind
 from urbanlens.dashboard.services.consensus.fields import AGREEMENT_DISTANCE_METERS, all_kinds, get_strategy
 
 _HYP = {"max_examples": 100, "deadline": None}
-_ascii_text = st.text(alphabet=st.characters(min_codepoint=32, max_codepoint=126, blacklist_characters='\n\r"'), min_size=1, max_size=40)
+_ascii_text = st.text(
+    alphabet=st.characters(min_codepoint=32, max_codepoint=126, blacklist_characters='\n\r"'), min_size=1, max_size=40
+)
 
 
 class RegistryCompletenessTests(SimpleTestCase):

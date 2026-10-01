@@ -1,0 +1,9 @@
+{# The filter panel's result set as identifiers, for a client that already holds #}
+{# the pins. The same 10,000-pin result is ~360KB here against 11.45MB as        #}
+{# payloads, and the server builds no payloads at all - see                      #}
+{# services/map_pins/filter_results.py for when this form is served.             #}
+{# Data only: map-page.ts applies it when this swaps into #map-body.             #}
+<div id="map-body">
+{{ map_pin_uuids|json_script:"map-filter-uuids" }}
+{{ map_meta|json_script:"map-filter-meta" }}
+</div>

@@ -22,7 +22,8 @@ class DirectFriendRequestMessageTests(TestCase):
         self.requester = baker.make(User, username="requester")
         self.target = baker.make(User, username="target", is_active=True)
         self.target.profile.friend_request_visibility = VisibilityChoice.ANYONE
-        self.target.profile.save(update_fields=["friend_request_visibility"])
+        self.target.profile.profile_visibility = VisibilityChoice.ANYONE
+        self.target.profile.save(update_fields=["friend_request_visibility", "profile_visibility"])
         self.client.force_login(self.requester)
         self.url = reverse("friend.request", args=[self.target.profile.id])
 
@@ -35,7 +36,9 @@ class DirectFriendRequestMessageTests(TestCase):
     def test_message_is_included_in_the_notification(self) -> None:
         self.client.post(self.url, {"message": "Hey, we met at the abandoned mill!"})
 
-        notification = NotificationLog.objects.get(profile=self.target.profile, notification_type=NotificationType.FRIEND_REQUEST)
+        notification = NotificationLog.objects.get(
+            profile=self.target.profile, notification_type=NotificationType.FRIEND_REQUEST
+        )
         self.assertIn("Hey, we met at the abandoned mill!", notification.message)
 
     def test_request_without_a_message_still_works(self) -> None:
@@ -58,14 +61,22 @@ class EmailInviteMessageTests(TestCase):
         self.client.force_login(self.inviter)
         self.url = reverse("friend.invite_email")
 
-    def test_message_is_stored_on_the_friendship_for_an_existing_user(self) -> None:
+    def test_message_is_carried_to_the_friendship_for_an_existing_user(self) -> None:
         # Open to friend requests, or invite_by_email's visibility gate refuses
         # and there is no Friendship to carry the message - see
         # test_friend_invite_privacy.make_invitable_user.
         target = make_invitable_user(username="realuser", email="target@example.com", is_active=True)
 
-        self.client.post(self.url, {"email": target.email, "message": "Join me on UrbanLens!"})
+        from urbanlens.core.tests.celery_inline import tasks_run_inline
+        from urbanlens.dashboard.tasks import deliver_friend_invitation
 
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": target.email, "message": "Join me on UrbanLens!"})
+
+        invitation = FriendInvitation.objects.get(inviter=self.inviter.profile, invitee=target.profile)
+        self.assertEqual(invitation.message, "Join me on UrbanLens!")
+        self.client.force_login(target)
+        self.client.post(reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "accept"})
         friendship = Friendship.objects.all().between(self.inviter.profile, target.profile)
         self.assertEqual(friendship.request_message, "Join me on UrbanLens!")
 
@@ -78,7 +89,11 @@ class EmailInviteMessageTests(TestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives")
     def test_message_appears_in_the_sent_email_body(self, mock_email_cls) -> None:
-        self.client.post(self.url, {"email": "brandnew@example.com", "message": "Come check out UrbanLens!"})
+        from urbanlens.core.tests.celery_inline import tasks_run_inline
+        from urbanlens.dashboard.tasks import deliver_friend_invitation
+
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": "brandnew@example.com", "message": "Come check out UrbanLens!"})
 
         _args, kwargs = mock_email_cls.call_args
         self.assertIn("Come check out UrbanLens!", kwargs["body"])
@@ -91,14 +106,19 @@ class EmailInviteMessageTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    def test_invitation_message_carries_through_to_signup_auto_friend_request(self) -> None:
-        FriendInvitation.objects.create(inviter=self.inviter.profile, email="newperson@example.com", message="Welcome aboard!")
+    def test_invitation_message_reaches_the_new_account_and_its_friendship(self) -> None:
+        invitation = FriendInvitation.objects.create(
+            inviter=self.inviter.profile, email="newperson@example.com", message="Welcome aboard!"
+        )
 
         new_user = baker.make(User, username="newperson", email="newperson@example.com", is_active=True)
         from urbanlens.dashboard.controllers.account import _process_pending_invitations
 
         _process_pending_invitations(new_user)
 
+        note = NotificationLog.objects.get(profile=new_user.profile, notification_type=NotificationType.FRIEND_REQUEST)
+        self.assertIn("Welcome aboard!", note.message)
+        self.client.force_login(new_user)
+        self.client.post(reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "accept"})
         friendship = Friendship.objects.all().between(self.inviter.profile, new_user.profile)
-        self.assertIsNotNone(friendship)
         self.assertEqual(friendship.request_message, "Welcome aboard!")

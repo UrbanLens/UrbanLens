@@ -1,0 +1,11 @@
+{% comment %}Body of the global assistant overlay dialog.{% endcomment %}
+{% if assistant_enabled %}
+{% include "dashboard/partials/assistant/_messages.html" %}
+{% include "dashboard/partials/assistant/_composer.html" %}
+<p class="assistant-footnote">
+    The assistant only sees and organizes your own pins and trips. It can create trips and
+    add activities for you; it can never delete or share anything.
+</p>
+{% else %}
+{% include "dashboard/partials/assistant/_disabled.html" %}
+{% endif %}

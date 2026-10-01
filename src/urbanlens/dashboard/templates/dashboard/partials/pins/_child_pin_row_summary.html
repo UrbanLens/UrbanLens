@@ -1,0 +1,5 @@
+{% load dashboard_tags %}<span class="parcel-building-type material-symbols-outlined" title="{{ row.type_label }}">{{ row.pin_type|pin_type_icon }}</span>
+<span class="parcel-building-info">
+    <span class="parcel-building-name">{% if row.child_url %}<a href="{{ row.child_url }}">{{ row.name|default:"Unnamed" }}</a>{% else %}{{ row.name|default:"Unnamed" }}{% endif %}</span>
+    <span class="parcel-building-meta"><span>{{ row.type_label }}</span></span>
+</span>

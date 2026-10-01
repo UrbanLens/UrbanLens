@@ -1,29 +1,22 @@
-"""Tests for the place-resolution TTL.
-
-``boundary_generation_stale``, the ``schedule_location_boundary_generation``
-gate, and ``generate_location_boundaries``' refresh-overwrite behaviour.
-
-Staleness now keys off ``Location.place_resolved_at`` (stamped even when the
-providers found nothing, so an unknown coordinate is asked about once rather
-than on every page view) and, when a place was found,
-``Place.geometry_generated_at``.
-"""
+"""Tests for the place-resolution TTL."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.locations.boundaries import (
+    CIRCLE_RETRY_AFTER,
     ResolvedBoundaries,
     boundary_generation_ran,
     boundary_generation_stale,
@@ -40,7 +33,10 @@ def _resolved(location: Location, *, age_days: float, polygon=None) -> Location:
     ``polygon=None`` models the real "the providers were asked and had nothing"
     case: the location is stamped as resolved but sits on no known place.
     """
-    stamped = timezone.now() - timedelta(days=age_days)
+    return _resolved_at(location, timezone.now() - timedelta(days=age_days), polygon=polygon)
+
+
+def _resolved_at(location: Location, stamped, *, polygon=None) -> Location:
     place = None
     if polygon is not None:
         place = Place.objects.create(kind=PlaceKind.PARCEL, geometry=polygon, geometry_generated_at=stamped)
@@ -59,14 +55,19 @@ def _square(lon: float, lat: float, size: float = 0.001) -> MultiPolygon:
 class BoundaryGenerationStaleTests(TestCase):
     """boundary_generation_stale() uses SiteSettings.boundary_cache_days as its threshold."""
 
-    def _make_location_with_row(self, *, age_days: float | None, polygon=None) -> Location:
+    def _make_location_with_row(self, *, age_days: float | None) -> Location:
+        """A location on a resolved parcel: the cache window governs parcels, not the fallback circle."""
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
         if age_days is None:
             return location
-        return _resolved(location, age_days=age_days, polygon=polygon)
+        return _resolved(location, age_days=age_days, polygon=_square(-73.75, 42.65))
 
     def test_never_generated_is_not_stale(self):
         location = self._make_location_with_row(age_days=None)
+        # Both members of the (ran, stale) tuple come off the same early
+        # return - pin ran=False too, not just stale=False, so a mutant that
+        # only breaks the ran half can't hide behind this test.
+        self.assertFalse(boundary_generation_ran(location))
         self.assertFalse(boundary_generation_stale(location))
 
     def test_fresh_generation_is_not_stale(self):
@@ -86,16 +87,54 @@ class BoundaryGenerationStaleTests(TestCase):
 
         self.assertFalse(boundary_generation_stale(location))
 
-    @given(configured_days=st.integers(min_value=1, max_value=365), age_days=st.floats(min_value=0, max_value=400, allow_nan=False))
+    def test_exact_cache_window_boundary_is_not_stale_but_one_microsecond_past_is(self):
+        """Pins the strict `>` comparison at the exact cutoff instant, both sides."""
+        site_settings = SiteSettings.get_current()
+        site_settings.boundary_cache_days = 60
+        site_settings.save()
+
+        frozen_now = timezone.now()
+        with patch("django.utils.timezone.now", return_value=frozen_now):
+            at_boundary = baker.make(Location, latitude=42.65, longitude=-73.75)
+            _resolved_at(at_boundary, frozen_now - timedelta(days=60), polygon=_square(-73.75, 42.65))
+            self.assertFalse(boundary_generation_stale(at_boundary))
+
+            just_past = baker.make(Location, latitude=42.6501, longitude=-73.7501)
+            _resolved_at(just_past, frozen_now - timedelta(days=60, microseconds=1), polygon=_square(-73.7501, 42.6501))
+            self.assertTrue(boundary_generation_stale(just_past))
+
+    def test_a_placeless_stamp_is_asked_again_after_the_circle_retry(self):
+        """A stamped miss draws the fallback circle, so it retries on CIRCLE_RETRY_AFTER, not the cache window."""
+        frozen_now = timezone.now()
+        with patch("django.utils.timezone.now", return_value=frozen_now):
+            recent = _resolved_at(
+                baker.make(Location, latitude=42.65, longitude=-73.75), frozen_now - CIRCLE_RETRY_AFTER
+            )
+            self.assertFalse(boundary_generation_stale(recent))
+            older = _resolved_at(
+                baker.make(Location, latitude=42.6501, longitude=-73.7501),
+                frozen_now - CIRCLE_RETRY_AFTER - timedelta(seconds=1),
+            )
+            self.assertTrue(boundary_generation_stale(older))
+
+    @given(
+        configured_days=st.integers(min_value=1, max_value=365),
+        age_days=st.floats(min_value=0, max_value=400, allow_nan=False),
+    )
     @_hyp
     def test_staleness_matches_configured_threshold(self, configured_days: int, age_days: float):
         site_settings = SiteSettings.get_current()
         site_settings.boundary_cache_days = configured_days
         site_settings.save()
 
-        location = self._make_location_with_row(age_days=age_days)
-
-        self.assertEqual(boundary_generation_stale(location), age_days > configured_days)
+        # Freeze the clock the implementation reads: unfrozen, a boundary-
+        # adjacent example (age_days == configured_days) drifts stale by
+        # however long the test body takes to run between stamping and
+        # checking, flaking the exact-equality case (see dashboard/tests/CLAUDE.md).
+        frozen_now = timezone.now()
+        with patch("django.utils.timezone.now", return_value=frozen_now):
+            location = self._make_location_with_row(age_days=age_days)
+            self.assertEqual(boundary_generation_stale(location), age_days > configured_days)
 
 
 class ScheduleLocationBoundaryGenerationGateTests(TestCase):
@@ -135,6 +174,27 @@ class ScheduleLocationBoundaryGenerationGateTests(TestCase):
         self.assertFalse(result)
         enqueue.assert_not_called()
 
+    def test_profile_with_external_apis_disabled_is_never_scheduled(self):
+        """The profile opt-out gate blocks scheduling even for a never-run location."""
+        location = baker.make(Location, latitude=42.65, longitude=-73.75)
+        profile = baker.make(User).profile  # baker.make(Profile) directly races the post_save signal on User.
+        profile.external_apis_enabled = False
+        profile.save()
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            result = schedule_location_boundary_generation(location, profile=profile)
+        self.assertFalse(result)
+        enqueue.assert_not_called()
+
+    def test_profile_with_external_apis_enabled_still_schedules(self):
+        """Same never-run location and an opted-in profile: the gate must not also block this side."""
+        location = baker.make(Location, latitude=42.65, longitude=-73.75)
+        profile = baker.make(User).profile
+        self.assertTrue(profile.external_apis_enabled)
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            result = schedule_location_boundary_generation(location, profile=profile)
+        self.assertTrue(result)
+        enqueue.assert_called_once()
+
 
 class GenerateLocationBoundariesRefreshTests(TestCase):
     """A refresh run overwrites generated_polygon with new geometry, but never with nothing."""
@@ -145,10 +205,14 @@ class GenerateLocationBoundariesRefreshTests(TestCase):
 
         new_polygon = _square(-73.75, 42.65)
         resolved = ResolvedBoundaries(property_polygon=new_polygon, building_polygon=None)
-        with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
             place = generate_location_boundaries(location)
 
-        assert place is not None and place.geometry is not None
+        assert place is not None
+        assert place.geometry is not None
         self.assertEqual(place.geometry.wkb, new_polygon.wkb)
         location.refresh_from_db()
         self.assertFalse(boundary_generation_stale(location))
@@ -160,7 +224,10 @@ class GenerateLocationBoundariesRefreshTests(TestCase):
 
         new_polygon = _square(-73.7502, 42.6502)
         resolved = ResolvedBoundaries(property_polygon=new_polygon, building_polygon=None)
-        with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
             generate_location_boundaries(location)
 
         place.refresh_from_db()
@@ -174,7 +241,10 @@ class GenerateLocationBoundariesRefreshTests(TestCase):
         place = _resolved(location, age_days=90, polygon=old_polygon).place
 
         resolved = ResolvedBoundaries(property_polygon=None, building_polygon=None)
-        with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
             generate_location_boundaries(location)
 
         place.refresh_from_db()

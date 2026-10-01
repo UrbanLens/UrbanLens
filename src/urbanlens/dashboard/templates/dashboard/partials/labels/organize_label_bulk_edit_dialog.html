@@ -2,7 +2,7 @@
 <dialog id="{{ ns }}-bulk-edit-dialog" class="tag-edit-dialog ul-dialog" aria-label="Edit selected labels">
     {% include "dashboard/partials/ui/_dialog_header.html" with title=title title_id=ns|add:"-bulk-edit-title" %}
     <div class="tag-edit-dialog-body organize-label-edit-form">
-        {% if ns != 'people' %}
+        {% if ns == 'tag' or ns == 'cat' or ns == 'status' %}
         <div class="form-field">
             <label class="form-label">Type</label>
             <div class="kind-toggle">
@@ -44,20 +44,20 @@
                     <div class="color-picker" id="{{ ns }}-bulk-color-picker">
                         <input type="hidden" id="{{ ns }}-bulk-color-value">
                         {% for hex, color_name in color_choices %}
-                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% endif %};"></button>
+                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% elif ns == 'media' %}_updateMediaBulkState(){% endif %};"></button>
                         {% endfor %}
-                        <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
+                        <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% elif ns == 'media' %}_updateMediaBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
                     </div>
                     <label class="bulk-nochange-label"><input type="checkbox" id="{{ ns }}-bulk-color-nochange" checked><span>No change - leave color unchanged</span></label>
                 </div>
             </div>
             <div class="form-field">
-                {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id=ns|add:'-bulk' mode='additive' ns=ns candidates=parent_items|default:priority_items %}
+                {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id=ns|add:'-bulk' mode='additive' ns=ns candidates_from=candidates_from|default:'priority' %}
             </div>
         </div>
         <div class="tag-form-actions">
             <button type="button" id="{{ ns }}-bulk-edit-confirm" class="btn btn--primary"><i class="material-icons" style="font-size:1rem;vertical-align:middle">edit</i> Apply Changes</button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
         </div>
     </div>
 </dialog>

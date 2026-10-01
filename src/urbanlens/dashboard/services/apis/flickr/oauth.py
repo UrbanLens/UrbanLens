@@ -1,19 +1,5 @@
 """Flickr OAuth 1.0a (3-legged) authorization flow.
-
-Flickr has no OAuth2 option for accessing a user's private photos, so this is
-the one integration in the app that needs the older 3-legged dance:
-
-1. :func:`start_authorization` fetches a *temporary* request token and
-   returns the URL to send the user to. The temporary token's secret is
-   needed again in step 3 but Flickr's callback only echoes back the token
-   itself (no generic ``state`` passthrough like OAuth2), so the caller must
-   stash ``(oauth_token -> oauth_token_secret)`` somewhere keyed by the token
-   (short-TTL cache) and look it up again on callback.
-2. The user approves on Flickr's site; Flickr redirects back with the same
-   ``oauth_token`` plus an ``oauth_verifier``.
-3. :func:`finish_authorization` exchanges the temporary token + verifier for
-   the permanent access token pair, using the secret stashed in step 1.
-"""
+Flickr has no OAuth2 option for accessing a user's private photos, so this is the one integration in the app that needs the older 3-legged dance:"""
 
 from __future__ import annotations
 
@@ -24,9 +10,9 @@ from requests_oauthlib import OAuth1Session
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
-REQUEST_TOKEN_URL = "https://www.flickr.com/services/oauth/request_token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a credential
+REQUEST_TOKEN_URL = "https://www.flickr.com/services/oauth/request_token"  # noqa: S105 # nosec B105 - OAuth...
 AUTHORIZE_URL = "https://www.flickr.com/services/oauth/authorize"
-ACCESS_TOKEN_URL = "https://www.flickr.com/services/oauth/access_token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a credential
+ACCESS_TOKEN_URL = "https://www.flickr.com/services/oauth/access_token"  # noqa: S105 # nosec B105 - OAuth endpoint...
 
 _OAUTH_TIMEOUT = 30
 
@@ -86,13 +72,11 @@ def start_authorization(callback_uri: str) -> PendingFlickrAuthorization:
         callback_uri: Absolute URL Flickr should redirect back to.
 
     Returns:
-        The authorize URL to redirect the user to, plus the temporary
-        request-token pair the caller must stash until the callback.
+        The authorize URL to redirect the user to, plus the temporary request-token pair the caller must stash until the callback.
 
     Raises:
         FlickrNotConfiguredError: When the OAuth client is not configured.
-        GatewayRequestError: When the request-token step fails.
-    """
+        GatewayRequestError: When the request-token step fails."""
     api_key, api_secret = _consumer_credentials()
     session = OAuth1Session(api_key, client_secret=api_secret, callback_uri=callback_uri)
     try:
@@ -111,8 +95,7 @@ def finish_authorization(*, oauth_token: str, oauth_token_secret: str, oauth_ver
     """Exchange a verified temporary token for the permanent access token pair.
 
     Args:
-        oauth_token: The temporary request token from step 1 (echoed back by
-            Flickr's callback - the caller should verify it matches).
+        oauth_token: The temporary request token from step 1 (echoed back by Flickr's callback - the caller should verify it matches).
         oauth_token_secret: The temporary token's secret, as stashed after step 1.
         oauth_verifier: The verifier Flickr's callback supplied.
 
@@ -121,8 +104,7 @@ def finish_authorization(*, oauth_token: str, oauth_token_secret: str, oauth_ver
 
     Raises:
         FlickrNotConfiguredError: When the OAuth client is not configured.
-        GatewayRequestError: When the access-token exchange fails.
-    """
+        GatewayRequestError: When the access-token exchange fails."""
     api_key, api_secret = _consumer_credentials()
     session = OAuth1Session(
         api_key,

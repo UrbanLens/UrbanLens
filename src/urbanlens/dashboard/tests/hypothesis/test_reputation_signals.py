@@ -1,11 +1,4 @@
-"""Contributions reach the ledger by themselves, and reverts take them back.
-
-The write half of these handlers is deliberately synchronous, so these tests
-assert that a row exists immediately after the contributing save - not after a
-Celery round trip. Scoring is the deferred half and is queued through
-``transaction.on_commit``, which does not run inside a TestCase's transaction;
-that is why the rows here are expected to be *unscored* rather than valued.
-"""
+"""Contributions reach the ledger by themselves, and reverts take them back."""
 
 from __future__ import annotations
 
@@ -117,7 +110,9 @@ class RevertSignalTests(TestCase):
         )
 
     def _event(self) -> ReputationEvent:
-        return ReputationEvent.objects.get(rule_key="wiki_field_edit", target_kind=TargetKind.WIKI_EDIT, target_id=self.edit.pk)
+        return ReputationEvent.objects.get(
+            rule_key="wiki_field_edit", target_kind=TargetKind.WIKI_EDIT, target_id=self.edit.pk
+        )
 
     def test_reverting_the_edit_retracts_its_row(self) -> None:
         """A contribution somebody undid should not go on paying."""

@@ -9,23 +9,59 @@ from django.db.models import Case, IntegerField, Q, Sum, Value, When
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from urbanlens.dashboard.models.images.model import Image  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.images.relevance import MediaRelevance  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+    from urbanlens.dashboard.models.profile.model import Profile
+
+
+def _own_contribution_q() -> Q:
+    """Build the ORM form of ``Image.is_own_contribution``.
+    Three conjuncts, each ruling out a real row shape that ``source`` alone misreads: This is what excludes a photograph the profile merely up-voted, and ``LINKED_URL`` bytes fetched because a page referred to them. * No ``media_source_key``.
+
+    Returns:
+        A ``Q`` matching rows whose ``profile`` is the photographer.
+    """
+    from urbanlens.dashboard.models.images.model import ImageSource
+
+    return Q(profile__isnull=False) & Q(source__in=ImageSource.personal_library()) & (Q(media_source_key__isnull=True) | Q(media_source_key=""))
+
+
+#: Instance attributes :func:`prime_viewer_scope` fills in, and
+#: ``ImageQuerySet._viewer_scoped`` reads.
+_FRIEND_IDS_ATTR = "_ul_visible_friend_ids"
+_TRIP_IDS_ATTR = "_ul_visible_trip_ids"
+
+
+def prime_viewer_scope(profile: Profile) -> None:
+    """Resolve a viewer's relationship sets once, for a caller about to reuse them.
+    ``visible_to`` resolves the viewer's friends, trip memberships and reachable wikis as it builds its filter.
+    Explicit rather than automatic, and this is the important part: caching on first read would change what ``visible_to`` means for every caller, including one that creates a pin and then asks about visibility in the same breath.
+
+    Args:
+        profile: The viewer whose sets to resolve.
+    """
+    from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+    from urbanlens.dashboard.models.trips.model import TripMembership
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
+
+    accepted = FriendshipStatus.ACCEPTED
+    friends = set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(
+        Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True),
+    )
+    # setattr rather than direct assignment: these are not declared on Profile,
+    # and django-stubs is right to flag that.
+    setattr(profile, _FRIEND_IDS_ATTR, friends)
+    setattr(profile, _TRIP_IDS_ATTR, set(TripMembership.objects.trip_ids_for(profile)))
+    # Fills the same instance attribute _shared_within_reach_of reads through.
+    visible_wiki_locations_cached(profile)
 
 
 def _named_this_viewer(viewer_profile: Profile) -> Q:
     """Containers whose membership *is* the consent, so settings do not apply.
-
-    A direct message and a safety check-in both work by naming one person. The
-    owner did not publish to an audience and then filter it; they picked this
-    individual, which is the same act ``photo_upload_visibility`` exists to let
-    them perform. That setting reads "who can see the photos you upload to
-    locations" - a check-in photo is not a location contribution, and a safety
-    partner is typically a stranger to the uploader by design, so consulting it
-    here denies the photos to exactly the person the feature exists to inform.
-
-    Direct messages never reach this function - ``MediaGateView`` admits the two
-    participants earlier, before any queryset filtering.
+    A direct message and a safety check-in both work by naming one person.
 
     Args:
         viewer_profile: The profile doing the looking.
@@ -40,29 +76,7 @@ def _named_this_viewer(viewer_profile: Profile) -> Q:
 
 def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     """The container gate: shared deliberately, into a wiki this viewer can reach.
-
-    A photo is private until its owner shares it, and being on a wiki is that
-    act - somebody put it there deliberately. This is the *first* of two gates,
-    not the only one: ``photo_upload_visibility`` then decides which of the
-    people who can reach that wiki may actually see it. Both have to say yes.
-
-    *Which* container matters as much as whether. Wiki access is a place-domain
-    rule, so reaching one wiki says nothing about any other; asking only
-    ``wiki__isnull=False`` let a permissive upload setting carry a photo to
-    somebody whose only pin is somewhere else entirely - and denied a safety
-    check-in's photos to the partner watching it, since a check-in has no wiki.
-
-    Each container answers reachability its own way, and each answer is asked of
-    the model that owns it rather than restated here.
-
-    Filing a photo under a pin is not sharing. An explicit pin share hands the
-    recipient their own row, which they see as its owner rather than through here.
-    Direct messages are handled before this gate: sending is itself the consent,
-    so ``MediaGateView`` admits the two participants without consulting settings.
-
-    A trip is the other audience-shaped container: putting a pin on a shared
-    itinerary shows its photos to the trip, so every member reaches them and the
-    uploader's setting then decides which of them actually sees each one.
+    This is the *first* of two gates, not the only one: ``photo_upload_visibility`` then decides which of the people who can reach that wiki may actually see it.
 
     Args:
         viewer_profile: The profile doing the looking.
@@ -70,48 +84,127 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     Returns:
         A ``Q`` matching photos in containers within this viewer's reach.
     """
-    from urbanlens.dashboard.models.trips.model import TripActivity, TripMembership
-    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
+    # Uses a primed value when a caller has said it is about to resolve this viewer repeatedly (see
+    # prime_viewer_scope), and reads fresh otherwise.
+    # Never populates: reading through the self-caching variant would make every caller a cacher,
+    # and a request that pins a place and then asks what it can see would get the answer from before
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations, visible_wiki_locations_if_primed
 
-    # Subquery rather than a join through ``pin__trip_activities``: a pin can be
-    # an activity on several of the viewer's trips, and the join would repeat the
-    # image row once per activity in every gallery that calls this.
-    activity_pin_ids = TripActivity.objects.filter(trip_id__in=TripMembership.objects.trip_ids_for(viewer_profile)).values_list("pin_id", flat=True)
-
-    return Q(wiki__location_id__in=visible_wiki_location_ids(viewer_profile)) | Q(pin_id__in=activity_pin_ids)
+    primed = visible_wiki_locations_if_primed(viewer_profile)
+    return Q(wiki__location_id__in=visible_wiki_locations(viewer_profile) if primed is None else primed)
 
 
-class ImageQuerySet(abstract.FrontendDashboardQuerySet):
+def _viewer_scoped(profile: Profile, attribute: str, compute: Callable[[], set[int]]) -> set[int]:
+    """Read a viewer-scoped id set, using a primed value when there is one.
+
+    These sets describe the *viewer*, not the queryset, so every
+    ``visible_to`` call in one render wants the same answer - and a page can make
+    several. Album detail resolves the same visibility four times
+    (``visible_album_item_pairs``, ``album_images_page``, ``eligible_images_for``
+    and the picker payload), which cost four copies of each lookup.
+
+    **Opt-in, and never self-populating.** An earlier version cached on first
+    read, which silently changed what ``visible_to`` means: a caller that creates
+    a pin and then asks about visibility got the answer from before the pin
+    existed. That is not a hypothetical -
+    ``test_gaining_a_pin_at_the_far_place_grants_the_photo`` is exactly that
+    sequence, and its docstring says the gate must track reachability rather than
+    anything cached earlier. So a value is used only when a caller has explicitly
+    said it is about to resolve the same viewer repeatedly, via
+    :func:`prime_viewer_scope`, and the default stays a fresh read.
+
+    Args:
+        profile: The viewing profile the set describes.
+        attribute: Instance attribute a primed value would be under.
+        compute: Builds the set when nothing is primed.
+
+    Returns:
+        The viewer's id set.
+    """
+    primed = getattr(profile, attribute, None)
+    return compute() if primed is None else primed
+
+
+def _friend_ids_for(profile: Profile) -> set[int]:
+    """Profile ids of *profile*'s accepted friends."""
+
+    def compute() -> set[int]:
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        accepted = FriendshipStatus.ACCEPTED
+        return set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
+
+    return _viewer_scoped(profile, _FRIEND_IDS_ATTR, compute)
+
+
+def _trip_ids_for(profile: Profile) -> set[int]:
+    """Trip ids *profile* is a member of."""
+
+    def compute() -> set[int]:
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        return set(TripMembership.objects.trip_ids_for(profile))
+
+    return _viewer_scoped(profile, _TRIP_IDS_ATTR, compute)
+
+
+class _ViewerScope:
+    """The viewer's relationships, each resolved on first use.
+
+    Which of them an answer depends on is decided by the settings being
+    evaluated, not known in advance: ``ANYONE`` and ``NO_ONE`` need none,
+    ``FRIENDS`` needs only the friend set, and ``ANYTHING_IN_COMMON`` stops at
+    the first of pin/friend/trip that matches. Reading all three up front cost
+    four queries on every call whether or not the answer used them - amortised
+    over a gallery listing, but paid in full per tile on the media path, where
+    each thumbnail is its own request authorizing one image.
+
+    Each read honours a primed value where a caller has set one (see
+    ``prime_viewer_scope``), so priming and laziness compose rather than
+    competing: priming decides whether a lookup is needed at all, this decides
+    whether it is reached for.
+    """
+
+    __slots__ = ("_friend_ids", "_profile", "_trip_ids")
+
+    def __init__(self, profile: Profile) -> None:
+        self._profile = profile
+        self._friend_ids: set[int] | None = None
+        self._trip_ids: set[int] | None = None
+
+    @property
+    def friend_ids(self) -> set[int]:
+        """Profile ids of the viewer's accepted friends."""
+        if self._friend_ids is None:
+            self._friend_ids = _friend_ids_for(self._profile)
+        return self._friend_ids
+
+    def shares_a_place_with(self, uploader_id: int) -> bool:
+        """Whether the viewer and *uploader_id* have pinned the same place."""
+        from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
+
+        return pins_sharing_a_place_with(self._profile).filter(profile_id=uploader_id).exists()
+
+    @property
+    def trip_ids(self) -> set[int]:
+        """Trip ids the viewer is a member of."""
+        if self._trip_ids is None:
+            self._trip_ids = _trip_ids_for(self._profile)
+        return self._trip_ids
+
+
+class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
     def visible_to(self, viewer_profile: Profile | None) -> Self:
         """Filter to images the given viewer is allowed to see.
-
-        Enforces two independent settings:
-        - The uploader's ``photo_upload_visibility`` (who can see my photos).
-        - The viewer's own ``viewer_photo_filter`` (whose photos I want to see).
-
-        Both are gated behind the photo having been shared into a wiki the viewer
-        can actually reach - see :func:`_shared_within_reach_of`. Containers that
-        work by naming one person answer separately, since picking somebody is
-        itself the consent the settings exist to express - see
-        :func:`_named_this_viewer`.
-
-        Images uploaded by the viewer are always included regardless of settings.
-        If ``viewer_profile`` is None (anonymous), nothing is returned.
-
-        Unlike an ordinary queryset method this one is **eager**: the
-        relationship rules can't be expressed in SQL, so the allowed-uploader
-        set is resolved immediately from whatever ``self`` already narrows to.
-        Narrow first - ``Image.objects.filter(pk=n).visible_to(p)`` inspects one
-        uploader, ``Image.objects.visible_to(p).filter(pk=n)`` inspects every
-        uploader on the site for the same answer.
+        Enforces two independent settings: - The uploader's ``photo_upload_visibility`` (who can see my photos). - The viewer's own ``viewer_photo_filter`` (whose photos I want to see).
+        ``authorize_image`` enforces the same rule for a direct media-URL fetch; this is what keeps it out of a gallery listing in the first place, rather than appearing as a broken image.
         """
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
         if viewer_profile is None:
-            # Nothing. Wiki access is earned by having pinned the place, which a
-            # signed-out visitor cannot have done, so no container is in reach -
-            # and the most permissive setting is labelled "Anyone (Logged In)",
-            # which does not describe them either.
+            # Wiki access is earned by having pinned the place, which a signed-out visitor cannot
+            # have done, so no container is in reach - and the most permissive setting is labelled
+            # "Anyone (Logged In)", which does not describe them either.
             return self.none()
 
         # 1. Determine which uploader profiles this viewer is allowed to see photos from,
@@ -121,23 +214,26 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             # Viewer has opted out of all other users' photos.
             return self.filter(profile=viewer_profile)
 
-        # 2. Start with all images, then restrict by uploader's upload_visibility.
-        #    We only have ORM access to the uploader's setting directly; relationship
-        #    checks (friends, common pins, etc.) happen per-uploader so we rely on
-        #    a Python-level filter over the resulting set when advanced checks are needed.
-        #
-        #    For scalability we pre-compute the set of allowed uploader IDs.
+        # Start with all images, then restrict by uploader's upload_visibility.
+        # We only have ORM access to the uploader's setting directly; relationship checks (friends,
+        # common pins, etc.) happen per-uploader so we rely on a Python-level filter over the
+        # resulting set when advanced checks are needed.
         allowed_uploader_ids = self._allowed_uploader_ids(viewer_profile, viewer_filter)
 
-        # Both gates, and in this order: the photo must have been shared, and the
-        # uploader's setting must admit this viewer. Sharing alone is not enough -
-        # that is what the setting is for - and a permissive setting alone is not
-        # enough either, which is the half that was missing: a photo filed under a
-        # pin was reachable by anyone the setting happened to admit, and the
-        # default admits whoever pinned the same place.
-        return self.filter(
-            Q(profile=viewer_profile) | _named_this_viewer(viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)),
-        )
+        # Both gates, in this order: the photo must have been shared, and the uploader's
+        # setting must admit this viewer. Sharing alone isn't enough - that's what the
+        # setting is for - and a permissive setting alone isn't enough either, which is
+        # the half that was missing: a photo filed under a pin was reachable by anyone
+        # the setting admitted, and the default admits whoever pinned the same place.
+        if allowed_uploader_ids:
+            shared = Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)
+        else:
+            # No uploader passed the settings, so this would only ever match nothing -
+            # and building it resolves the viewer's whole wiki reach, the most
+            # expensive part of this gate.
+            shared = Q(pk__in=[])
+        others_visible = Q(pending_scan=False) & (_named_this_viewer(viewer_profile) | shared)
+        return self.filter(Q(profile=viewer_profile) | others_visible)
 
     def _allowed_uploader_ids(self, viewer_profile: Profile, viewer_filter: str) -> set[int]:
         """Return the set of profile IDs whose photos this viewer may see.
@@ -145,24 +241,22 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         Takes into account both the viewer's filter preference and each
         uploader's own upload-visibility setting.
         """
-        from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+        from urbanlens.dashboard.models.profile.model import Profile
 
         # Scope candidate uploaders to those who actually have an image in
         # *this* queryset (the gallery being rendered), not every uploader on
         # the whole site - keeps the cost proportional to the gallery size.
         uploaders = Profile.objects.filter(pk__in=self.values_list("profile_id", flat=True).distinct()).exclude(pk=viewer_profile.pk).values_list("pk", "photo_upload_visibility")
 
-        viewer_friend_ids = self._get_friend_ids(viewer_profile)
-        viewer_loc_ids = self._get_location_ids(viewer_profile)
-        viewer_trip_ids = self._get_trip_ids(viewer_profile)
+        scope = _ViewerScope(viewer_profile)
 
         allowed: set[int] = set()
         for uploader_id, upload_vis in uploaders:
             # a) Uploader's own restriction
-            if not self._relationship_allows(upload_vis, uploader_id, viewer_friend_ids, viewer_loc_ids, viewer_trip_ids):
+            if not self._relationship_allows(upload_vis, uploader_id, scope):
                 continue
             # b) Viewer's own filter
-            if not self._relationship_allows(viewer_filter, uploader_id, viewer_friend_ids, viewer_loc_ids, viewer_trip_ids):
+            if not self._relationship_allows(viewer_filter, uploader_id, scope):
                 continue
             allowed.add(uploader_id)
         return allowed
@@ -170,68 +264,46 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
     # -- Helpers ----------------------------------------------------------------
 
     def _get_friend_ids(self, profile: Profile) -> set[int]:
-        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-        accepted = FriendshipStatus.ACCEPTED
-        return set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
-
-    def _get_location_ids(self, profile: Profile) -> set[int]:
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        return set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True))
+        """Profile ids of *profile*'s accepted friends."""
+        return _friend_ids_for(profile)
 
     def _get_trip_ids(self, profile: Profile) -> set[int]:
-        from urbanlens.dashboard.models.trips.model import TripMembership
+        """Trip ids *profile* is a member of."""
+        return _trip_ids_for(profile)
 
-        return set(TripMembership.objects.trip_ids_for(profile))
-
-    def _relationship_allows(
-        self,
-        visibility: str,
-        uploader_id: int,
-        viewer_friend_ids: set[int],
-        viewer_loc_ids: set[int],
-        viewer_trip_ids: set[int],
-    ) -> bool:
+    def _relationship_allows(self, visibility: str, uploader_id: int, scope: _ViewerScope) -> bool:
         """Evaluate one VisibilityChoice for a (viewer, uploader) pair.
-
-        Bulk twin of ``Profile.visibility_permits`` - the viewer's friend/
-        location/trip id sets are pre-computed once so the per-uploader work
-        stays bounded. Accepted friends qualify for every option except
-        NO_ONE, matching the per-pair evaluator.
+        Bulk twin of ``Profile.visibility_permits`` - the viewer's friend/ location/trip id sets are pre-computed once so the per-uploader work stays bounded.
 
         Args:
             visibility: The VisibilityChoice being evaluated (either side's).
             uploader_id: Profile id of the image uploader.
-            viewer_friend_ids: The viewer's accepted-friend profile ids.
-            viewer_loc_ids: Location ids the viewer has pinned.
-            viewer_trip_ids: Trip ids the viewer is a member of.
+            scope: The viewer's relationship sets, each resolved on first use.
 
         Returns:
             True when the relationship satisfies the visibility requirement.
         """
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
+        # Ordered so the two answers that depend on no relationship at all are
+        # returned before anything is resolved.
         if visibility == VisibilityChoice.ANYONE:
             return True
         if visibility == VisibilityChoice.NO_ONE:
             return False
-        if uploader_id in viewer_friend_ids:
+        if uploader_id in scope.friend_ids:
             return True
         if visibility == VisibilityChoice.FRIENDS:
             return False
 
         def common_pin() -> bool:
-            from urbanlens.dashboard.models.pin.model import Pin
-
-            uploader_loc_ids = set(Pin.objects.filter(profile_id=uploader_id, location__isnull=False).values_list("location_id", flat=True))
-            return bool(viewer_loc_ids & uploader_loc_ids)
+            return scope.shares_a_place_with(uploader_id)
 
         def common_friend() -> bool:
-            return bool(viewer_friend_ids & self._get_friend_ids_by_id(uploader_id))
+            return bool(scope.friend_ids & self._get_friend_ids_by_id(uploader_id))
 
         def common_trip() -> bool:
-            return bool(viewer_trip_ids & self._get_trip_ids_by_id(uploader_id))
+            return bool(scope.trip_ids & self._get_trip_ids_by_id(uploader_id))
 
         if visibility == VisibilityChoice.COMMON_PIN:
             return common_pin()
@@ -255,8 +327,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         return set(TripMembership.objects.trip_ids_for(profile_id))
 
     def with_coords(self) -> Self:
-        """Filter to images that have GPS coordinates (suitable for the map layer)."""
-        return self.filter(latitude__isnull=False, longitude__isnull=False)
+        """Filter to images that have GPS and the owner has not hidden from the map."""
+        return self.filter(latitude__isnull=False, longitude__isnull=False, map_hidden=False)
 
     def uploaded_by(self, profile: Profile) -> Self:
         """Filter to images uploaded by a given profile, newest first.
@@ -269,17 +341,75 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """
         return self.filter(profile=profile).order_by("-created")
 
+    def own_contributions(self) -> Self:
+        """Filter to rows whose ``profile`` is the photographer, not the up-voter.
+        The distinction ``source`` cannot draw: a photo imported from the uploader's own Immich server or Google Photos library carries that provider's name in ``source`` while still being their own picture, whereas a row materialised from somebody else's provider search carries the up-voter in ``profile``.
+        Ownership questions - concealment, who may withdraw a photo from a wiki, whether a contribution earns reputation - all want this rather than ``source == UPLOAD``.
+
+        Returns:
+            Rows the profile actually contributed.
+        """
+        return self.filter(_own_contribution_q())
+
+    def with_file(self) -> Self:
+        """Filter out rows whose stored file is missing.
+        ``ImageField`` is non-null with a blank default, so a row can exist with no file behind it - the wiki gallery endpoint already excludes these.
+
+        Returns:
+            The queryset without file-less rows.
+        """
+        return self.exclude(image="")
+
+    def servable(self) -> Self:
+        """Filter out uploads still pending processing, whose stored file is about to be replaced.
+
+        Returns:
+            The queryset without ``pending_scan`` rows.
+        """
+        return self.filter(pending_scan=False)
+
+    def processing(self) -> Self:
+        """Uploads still awaiting their re-encode, excluding ones processing gave up on (``Image.is_processing``).
+
+        Matches the ``idxdb_image_pending_created`` partial index, so the sweeps that walk these by age use it.
+
+        Returns:
+            The pending, not-failed rows.
+        """
+        return self.filter(pending_scan=True, upload_failed_at__isnull=True)
+
+    def of_kind(self, kind: str) -> Self:
+        """Filter to one :class:`MediaKind`.
+
+        Args:
+            kind: The ``media_type`` to keep.
+
+        Returns:
+            The narrowed queryset.
+        """
+        return self.filter(media_type=kind)
+
+    def photos(self) -> Self:
+        """Filter to photos only - Vault Photos' scope, excluding videos/documents."""
+        from urbanlens.dashboard.models.images.model import MediaKind
+
+        return self.of_kind(MediaKind.PHOTO)
+
+    def documents(self) -> Self:
+        """Filter to documents only - Vault Documents' scope."""
+        from urbanlens.dashboard.models.images.model import MediaKind
+
+        return self.of_kind(MediaKind.DOCUMENT)
+
+    def videos(self) -> Self:
+        """Filter to videos only - the Vault home's video accounting."""
+        from urbanlens.dashboard.models.images.model import MediaKind
+
+        return self.of_kind(MediaKind.VIDEO)
+
     def needs_attention(self, profile: Profile) -> Self:
         """Filter to a profile's unfiled photos awaiting organization.
-
-        These are photos the user uploaded that are not yet tied to a visit and
-        have not been dismissed - the pool the Memories "needs attention" queue
-        surfaces so they can be confirmed, pinned, or manually logged. Photos
-        uploaded directly to a pin/wiki gallery are excluded; only bare
-        Memories-page uploads (no pin, no wiki) qualify. Photos staged as scan
-        candidates (``pin_suggestion`` set) are also excluded - those belong to
-        the Locations review queue, not this one, until their suggestion is
-        accepted or rejected.
+        These are photos the user uploaded that are not yet tied to a visit and have not been dismissed - the pool the Memories "needs attention" queue surfaces so they can be confirmed, pinned, or manually logged.
 
         Args:
             profile: The uploader whose unfiled photos to return.
@@ -296,20 +426,30 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             pin_suggestion__isnull=True,
         ).order_by("-created")
 
+    def copied_from_others(self) -> Self:
+        """Filter to photos this queryset's owner holds a copy of, but did not author.
+        Keyed on ``copied_from_profile`` (set at copy time - see ``services.photos.wiki_copy.copy_wiki_photo_to_pin``), not on comparing ``profile`` to some other row's uploader: a copy is *owned* by the profile that made it (that's what lets it survive the original being deleted), so "whose photo is this really" has to be answered by a separate field, not by ``profile`` itself.
+        ``.filter(profile=viewer)``) - this only narrows further.
+        """
+        return self.filter(copied_from_profile__isnull=False)
 
-class ImageManager(abstract.FrontendDashboardManager.from_queryset(ImageQuerySet)):
+
+_ImageManagerBase = abstract.FrontendDashboardManager.from_queryset(ImageQuerySet)
+
+
+class ImageManager(_ImageManagerBase["Image"]):
     pass
 
 
-class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
+class MediaRelevanceQuerySet(abstract.DashboardQuerySet["MediaRelevance"]):
     """Custom queryset for MediaRelevance models."""
 
-    def for_gallery(self, profile: Profile, location: Location, source: str) -> MediaRelevanceQuerySet:
+    def for_gallery(self, profile: Profile, location: Location | int, source: str) -> MediaRelevanceQuerySet:
         """Every relevance mark one profile holds for one provider's gallery at a location.
 
         Args:
             profile: The marking profile.
-            location: The location whose Media gallery is being viewed.
+            location: The location (or its id) whose Media gallery is being viewed.
             source: The provider key (e.g. ``"wikimedia"``).
 
         Returns:
@@ -317,19 +457,13 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
         """
         return self.filter(profile=profile, location=location, source=source)
 
-    def vote_scores(self, location: Location, source: str) -> dict[str, int]:
+    def vote_scores(self, location: Location | int, source: str) -> dict[str, int]:
         """Net community vote score per item for one provider's gallery at a location.
-
-        On the community wiki, a relevance mark is read as a vote: every
-        ``is_relevant=True`` row counts ``+1`` and every ``is_relevant=False``
-        row counts ``-1``, summed across all contributing profiles. Because
-        :class:`MediaRelevance` is keyed by Location (not Pin), a relevance
-        mark made on any user's pin detail page for this place is already part
-        of this aggregate - that's how a pin-detail thumbs-up "carries over" to
-        the wiki with no extra bookkeeping.
+        On the community wiki, a relevance mark is read as a vote: every ``is_relevant=True`` row counts ``+1`` and every ``is_relevant=False`` row counts ``-1``, summed across all contributing profiles.
+        Because :class:`MediaRelevance` is keyed by Location (not Pin), a relevance mark made on any user's Private Pin page for this place is already part of this aggregate - that's how a pin-detail thumbs-up "carries over" to the wiki with no extra bookkeeping.
 
         Args:
-            location: The location whose Media gallery is being scored.
+            location: The location (or its id) whose Media gallery is being scored.
             source: The provider key (e.g. ``"wikimedia"``, ``"photos"``).
 
         Returns:
@@ -340,5 +474,8 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
         return {row["item_key"]: row["score"] or 0 for row in rows}
 
 
-class MediaRelevanceManager(abstract.DashboardManager.from_queryset(MediaRelevanceQuerySet)):
+_MediaRelevanceManagerBase = abstract.DashboardManager.from_queryset(MediaRelevanceQuerySet)
+
+
+class MediaRelevanceManager(_MediaRelevanceManagerBase):
     """Custom query manager for MediaRelevance models."""

@@ -1,18 +1,13 @@
-"""Tests for AI article expansion from link extraction.
-
-Covers plain-text sanitization, the fail-closed safety classifier, append
-applies to pin and wiki articles, feature-flag skips, and the
-run_extraction integration hook. Gateways are always mocked.
-"""
+"""Tests for AI article expansion from link extraction."""
 
 from __future__ import annotations
 
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.link_extraction.model import LinkExtraction, LinkExtractionStatus
@@ -24,6 +19,7 @@ from urbanlens.dashboard.models.subscriptions.model import SiteFeature
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.ai.article_expansion import (
     EDIT_SUMMARY_EXPANDED_FROM_LINK,
+    MAX_NEW_TEXT_CHARS,
     expand_articles_from_page,
     sanitize_article_plain_text,
 )
@@ -68,9 +64,7 @@ class SanitizeArticlePlainTextTests(SimpleTestCase):
         self.assertEqual(sanitize_article_plain_text("<p>Hello <b>world</b></p>"), "Hello world")
 
     def test_strips_entity_encoded_and_double_encoded_html(self) -> None:
-        cleaned = sanitize_article_plain_text(
-            "&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;Built in 1920."
-        )
+        cleaned = sanitize_article_plain_text("&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;Built in 1920.")
         self.assertNotIn("<", cleaned)
         self.assertNotIn(">", cleaned)
         self.assertNotIn("alert", cleaned)
@@ -131,6 +125,15 @@ class SanitizeArticlePlainTextTests(SimpleTestCase):
         cleaned = sanitize_article_plain_text("First paragraph.\n\nSecond paragraph.")
         self.assertEqual(cleaned, "First paragraph.\n\nSecond paragraph.")
 
+    def test_truncates_to_max_new_text_chars(self) -> None:
+        # The hypothesis fuzz test below only ever generates <=500 chars, so it
+        # never actually exercises this truncation - assert it directly against
+        # input well past the cap.
+        raw = "a" * (MAX_NEW_TEXT_CHARS + 500)
+        cleaned = sanitize_article_plain_text(raw)
+        self.assertEqual(len(cleaned), MAX_NEW_TEXT_CHARS)
+        self.assertEqual(cleaned, "a" * MAX_NEW_TEXT_CHARS)
+
     @given(st.text(max_size=500))
     @hypothesis_settings(max_examples=40, deadline=None)
     def test_sanitize_never_raises_and_bounds_length(self, raw: str) -> None:
@@ -141,7 +144,7 @@ class SanitizeArticlePlainTextTests(SimpleTestCase):
         self.assertNotIn("</", cleaned)
 
 
-class ClassifyArticleTextTests(SimpleTestCase):
+class ClassifyArticleTextTests(TestCase):
     """Fail-closed safety classifier token contract (no DB — gateway is mocked)."""
 
     def _classify(self, answer_token: str | None) -> ArticleSafetyVerdict:
@@ -203,7 +206,9 @@ class ExpandArticlesFromPageTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.location = baker.make(Location, official_name="Old Mill")
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Old Mill", name_is_user_provided=True)
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="Old Mill", name_is_user_provided=True
+        )
         self.extraction = LinkExtraction.objects.create(
             profile=self.profile,
             pin=self.pin,
@@ -323,6 +328,56 @@ class ExpandArticlesFromPageTests(TestCase):
             rows = expand_articles_from_page(self.extraction, "Page.")
         self.assertFalse(rows[0]["applied"])
         self.assertIn("length limit", rows[0]["note"])
+
+    def test_length_cap_truncates_new_text_when_room_remains(self) -> None:
+        # Counterpart to the reject-outright case above: when there's still
+        # room (>=40 chars) but not enough for the whole draft, the append
+        # must be truncated to fit exactly at MAX_ARTICLE_LENGTH rather than
+        # rejected outright or overflowing the cap.
+        existing_len = MAX_ARTICLE_LENGTH - 100
+        Article.objects.create(pin=self.pin, content="e" * existing_len, content_html="", toc=[])
+        factory, _, _ = self._gateways(write="N" * 150, safety="APPROVE")
+        with patch("urbanlens.dashboard.services.ai.factory.get_gateway", side_effect=factory):
+            rows = expand_articles_from_page(self.extraction, "Page.")
+        self.assertTrue(rows[0]["applied"])
+        article = get_article(pin=self.pin)
+        assert article is not None
+        self.assertEqual(len(article.content), MAX_ARTICLE_LENGTH)
+        self.assertTrue(article.content.endswith("N" * 98))
+        self.assertFalse(article.content.endswith("N" * 99))
+
+    def test_write_gateway_unavailable_skips_safety_call(self) -> None:
+        # Distinct from test_empty_writing_skips_without_safety_call: here the
+        # writing gateway itself returns no answer at all (raw is None, before
+        # sanitizing), which is a separate early-return branch.
+        factory, write_gw, safety_gw = self._gateways(write=None, safety="APPROVE")
+        with patch("urbanlens.dashboard.services.ai.factory.get_gateway", side_effect=factory):
+            rows = expand_articles_from_page(self.extraction, "Page text.")
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0]["applied"])
+        self.assertIn("unavailable", rows[0]["note"])
+        self.assertGreaterEqual(len(write_gw.prompts), 1)
+        self.assertEqual(safety_gw.prompts, [])
+        self.assertIsNone(get_article(pin=self.pin))
+
+    def test_mixed_outcome_applies_independently_per_host(self) -> None:
+        # Pin and wiki appends are two independent append_to_article calls;
+        # make sure their applied/note results aren't accidentally coupled by
+        # giving them different real outcomes (pin: fresh append; wiki:
+        # already-present dedupe) in the same run.
+        wiki = baker.make(Wiki, location=self.location, created_by=self.profile)
+        write_text = "The mill added a second floor in 1930."
+        save_article(editor=self.profile, content=write_text, wiki=wiki)
+        factory, _, _ = self._gateways(write=write_text, safety="APPROVE")
+        with patch("urbanlens.dashboard.services.ai.factory.get_gateway", side_effect=factory):
+            rows = expand_articles_from_page(self.extraction, "Page.")
+        by_key = {row["key"]: row for row in rows}
+        self.assertTrue(by_key["article_pin"]["applied"])
+        self.assertFalse(by_key["article_wiki"]["applied"])
+        self.assertIn("Already present", by_key["article_wiki"]["note"])
+        pin_article = get_article(pin=self.pin)
+        assert pin_article is not None
+        self.assertIn(write_text, pin_article.content)
 
 
 class RunExtractionArticleHookTests(TestCase):

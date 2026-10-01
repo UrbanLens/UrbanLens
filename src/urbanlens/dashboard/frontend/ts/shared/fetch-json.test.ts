@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { HttpError, fetchJson, sendJson } from "./fetch-json";
+import { HttpError, fetchJson, fetchText, sendForText, sendJson } from "./fetch-json";
+import { wrapFetch } from "./site-runtime";
 
 const realFetch = globalThis.fetch;
 let calls: { url: string; init: RequestInit }[] = [];
@@ -99,10 +100,7 @@ describe("a rejected request", () => {
         await expect(fetchJson("/x/")).rejects.toThrow("HTTP 400");
     });
 
-    // Many of this project's views answer a refused write with a bare
-    // HttpResponse("...", status=400) rather than JSON. Discarding those as
-    // "not JSON" turned the one sentence explaining the refusal into "HTTP 400"
-    // - so a user selecting 600 pins was told "Update failed." with no reason.
+    // Many of this project's views answer a refused write with a bare HttpResponse("...", status=400) rather than JSON.
     test("a plain-text refusal is the message", async () => {
         stub({ status: 400, body: "Select at most 500 pins at a time." });
         await expect(fetchJson("/x/")).rejects.toThrow("Select at most 500 pins at a time.");
@@ -187,5 +185,118 @@ describe("sendJson", () => {
     test("a 204 write resolves with null", async () => {
         stub({ status: 204 });
         expect(await sendJson("/pins/1/", "DELETE")).toBeNull();
+    });
+});
+
+/**
+ * The marker is a contract with site-runtime.ts's fetch wrapper, which every base.html page installs.
+ */
+describe("the __ulReported contract with the fetch wrapper", () => {
+    function throughWrapper(status: number): { report: string[]; restore: () => void } {
+        const report: string[] = [];
+        const real = globalThis.fetch;
+        // Borrowing the real fetch's static members gives the stub fetch's full type.
+        globalThis.fetch = wrapFetch(Object.assign(async () => new Response("Nope.", { status }), real), (m) => void report.push(m));
+        return { report, restore: () => (globalThis.fetch = real) };
+    }
+
+    test("fetchJson reports its own failure, so the wrapper stays quiet", async () => {
+        const { report, restore } = throughWrapper(503);
+        try {
+            await expect(fetchJson("/anything/", { reportsItsOwnErrors: true })).rejects.toThrow();
+        } finally {
+            restore();
+        }
+        expect(report).toEqual([]);
+    });
+
+    test("an ordinary caller keeps the net", async () => {
+        // The regression this replaced: setting the marker inside fetchJson for everyone turned the generic toast into silence on every page.
+        const { report, restore } = throughWrapper(503);
+        try {
+            await expect(fetchJson("/anything/")).rejects.toThrow();
+        } finally {
+            restore();
+        }
+        expect(report).toEqual(["Request failed (HTTP 503)."]);
+    });
+});
+
+describe("an endpoint that answers with markup", () => {
+    // Organize's bulk delete/edit/merge answer with the re-rendered row list.
+    test("fetchText returns the body verbatim rather than parsing it", async () => {
+        stub({ body: "<li class=\"tag-card\">Bridges</li>" });
+        expect(await fetchText("/rows/")).toBe('<li class="tag-card">Bridges</li>');
+    });
+
+    test("an empty fragment is not an error", async () => {
+        // A row list with nothing left in it renders as nothing, and swapping
+        // that in is the correct outcome of deleting the last row.
+        stub({ body: "" });
+        expect(await fetchText("/rows/")).toBe("");
+    });
+
+    test("a non-2xx still throws, carrying the server's own sentence", async () => {
+        stub({ status: 400, body: "You cannot delete a protected label." });
+        await expect(fetchText("/rows/")).rejects.toThrow("You cannot delete a protected label.");
+    });
+
+    test("an HTML error page is still discarded, even though the caller wants HTML", async () => {
+        // The caller wanting markup back does not make Django's debug page a
+        // sensible toast - and swapping it into the row list would be worse.
+        stub({ status: 500, body: "<!doctype html><title>Server Error</title>" });
+        await expect(fetchText("/rows/")).rejects.toThrow("HTTP 500");
+    });
+
+    test("sendForText sends JSON with the CSRF header and hands back markup", async () => {
+        stub({ body: "<li>ok</li>" });
+        expect(await sendForText("/rows/", "POST", { ids: [1, 2] })).toBe("<li>ok</li>");
+        expect(calls[0]!.init.method).toBe("POST");
+        expect(calls[0]!.init.body).toBe('{"ids":[1,2]}');
+        expect((calls[0]!.init.headers as Record<string, string>)["X-CSRFToken"]).toBe("tok123");
+    });
+
+    test("it carries the opt-out through to the wrapper the same way fetchJson does", async () => {
+        stub({ body: "<li>ok</li>" });
+        await sendForText("/rows/", "POST", {}, { reportsItsOwnErrors: true });
+        expect((calls[0]!.init as { __ulReported?: boolean }).__ulReported).toBe(true);
+    });
+});
+
+describe("a body that stalls after the headers arrive", () => {
+    // A real Response rejects its body read when the signal aborts.
+    function stallingBody(): void {
+        globalThis.fetch = ((_url: string, init: RequestInit) => {
+            const body = <T>() =>
+                new Promise<T>((_resolve, reject) => {
+                    init.signal?.addEventListener("abort", () => reject(new Error("the body read was aborted")));
+                });
+            return Promise.resolve({ ok: true, status: 200, text: body<string>, json: body<unknown> } as unknown as Response);
+        }) as unknown as typeof fetch;
+    }
+
+    test("fetchJson is still abandoned after the timeout", async () => {
+        stallingBody();
+        await expect(fetchJson("/x/", { timeoutMs: 20 })).rejects.toThrow("the body read was aborted");
+    });
+
+    test("fetchText is still abandoned after the timeout", async () => {
+        stallingBody();
+        await expect(fetchText("/rows/", { timeoutMs: 20 })).rejects.toThrow("the body read was aborted");
+    });
+
+    test("so is the message extraction on a refusal", async () => {
+        // errorMessage() reads the body too, on a path where the caller is
+        // already being told something went wrong.
+        globalThis.fetch = ((_url: string, init: RequestInit) => {
+            return Promise.resolve({
+                ok: false,
+                status: 500,
+                text: () => new Promise<string>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new Error("the body read was aborted")))),
+            } as unknown as Response);
+        }) as unknown as typeof fetch;
+        // errorMessage swallows its own failures and falls back to the status,
+        // so the abort surfaces as the generic message rather than a hang.
+        await expect(fetchJson("/x/", { timeoutMs: 20 })).rejects.toThrow("HTTP 500");
     });
 });

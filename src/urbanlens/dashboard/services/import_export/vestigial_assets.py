@@ -12,6 +12,7 @@ from django.conf import settings as django_settings
 
 from urbanlens.dashboard.services.import_export.export import EXPORT_TTL_SECONDS
 from urbanlens.dashboard.services.import_export.import_data import IMPORT_TTL_SECONDS
+from urbanlens.dashboard.services.pins import confirmed_import, import_preview
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +44,13 @@ class VestigialAssetCleanupResult:
 _MANAGED_ARTIFACT_DIRS = {
     "exports": EXPORT_TTL_SECONDS,
     "imports": IMPORT_TTL_SECONDS,
+    confirmed_import.ARTIFACT_DIRNAME: confirmed_import.GUARD_TTL_SECONDS,
+    import_preview.ARTIFACT_DIRNAME: import_preview.KEEP_SECONDS,
 }
 
 
 def cleanup_vestigial_assets(*, now: datetime | None = None) -> VestigialAssetCleanupResult:
-    """Delete stale managed artifacts left behind after one-off cleanup failures.
-
-    Export and import jobs schedule per-job deletion after their TTL expires. This
-    sweep is a safety net for cases where that delayed Celery task could not be
-    enqueued or failed after the artifact was already eligible for deletion.
-    """
+    """Delete stale managed artifacts left behind after one-off cleanup failures."""
     reference_time = now or datetime.now(UTC)
     media_root = Path(django_settings.MEDIA_ROOT).resolve()
     scanned = deleted = skipped = errors = 0

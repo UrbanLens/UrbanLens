@@ -14,11 +14,7 @@ export interface TreeViewConfig {
 const DEFAULT_TREE_ROOT_CLASS = "tag-tree-root";
 
 /**
- * Rebuilds a flat list of cards into a parent/child tree by cloning each card
- * into a nested `.tag-tree-item` wrapper, based on `data-*-parents` (a
- * comma-joined id list already rendered server-side). Shared by
- * categories/tags/organize's tag+category tabs (status/people already used a
- * single generic copy of this before this migration).
+ * Rebuilds a flat list of cards into a parent/child tree by cloning each card into a nested `.tag-tree-item` wrapper, based.
  */
 export function renderTreeView(rows: HTMLElement, config: TreeViewConfig): void {
     const treeRootClass = config.treeRootClass ?? DEFAULT_TREE_ROOT_CLASS;

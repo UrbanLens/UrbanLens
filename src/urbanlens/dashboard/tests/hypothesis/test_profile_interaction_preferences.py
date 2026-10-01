@@ -1,23 +1,12 @@
-"""Tests for the consent-style interaction-preference fields on Profile.
-
-Covers:
-- Profile.preference_display / Profile.interaction_preferences (model logic:
-  unset vs. answered, and the "other" free-text fallback).
-- ProfileForm accepts/rejects preference choices and enforces the "other"/
-  additional_preferences length caps.
-- ProfileFieldUpdateView's autosave path for each preference field and its
-  "_other" companion.
-- Profile page rendering: the section is omitted entirely when nothing has
-  been answered, and shown (with the right text) when it has.
-"""
+"""Tests for the consent-style interaction-preference fields on Profile."""
 
 from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.profile_form import ProfileForm
 from urbanlens.dashboard.models.profile.meta import (
@@ -48,6 +37,7 @@ _PREFERENCE_CHOICE_CLASSES = {
 
 
 # -- Profile.preference_display / interaction_preferences ----------------------
+
 
 class PreferenceDisplayTests(TestCase):
     """Profile.preference_display and the interaction_preferences property."""
@@ -101,6 +91,7 @@ class PreferenceDisplayTests(TestCase):
 
 
 # -- ProfileForm -----------------------------------------------------------
+
 
 class ProfileFormPreferenceTests(TestCase):
     """ProfileForm validates the preference choice fields and their length caps."""
@@ -162,6 +153,7 @@ class ProfileFormPreferenceTests(TestCase):
 
 # -- ProfileFieldUpdateView autosave -----------------------------------------
 
+
 class ProfileFieldUpdatePreferenceTests(TestCase):
     """ProfileFieldUpdateView's autosave path for preference fields."""
 
@@ -216,6 +208,7 @@ class ProfileFieldUpdatePreferenceTests(TestCase):
 
 
 # -- Profile page rendering ---------------------------------------------------
+
 
 class ProfilePreferencesRenderingTests(TestCase):
     """The profile page's Interaction Preferences section: shown only when answered."""

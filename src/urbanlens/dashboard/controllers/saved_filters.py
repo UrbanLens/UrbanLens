@@ -16,13 +16,14 @@ from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIE
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+from urbanlens.dashboard.services.core.capacity import SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.geo.geo import dissolve_polygons
+from urbanlens.dashboard.services.geo.sampling import select_spread
 from urbanlens.dashboard.services.pins.pin_list_membership import resync_lists_for_saved_filter
 from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
-from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
 from urbanlens.dashboard.services.undo.handlers.saved_filter import MODEL_LABEL as SAVED_FILTER_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -48,11 +49,10 @@ def _clamp_opacity(raw: str | None) -> int:
 def _render_section(request, profile: Profile) -> HttpResponse:
     """Re-render the sidebar's Saved Filters section plus an OOB update of the map's toolbar.
 
-    The bottom-right saved-filters toolbar (main map page only) mirrors the
-    same ``profile.saved_filters`` list, so every create/delete response also
-    carries an out-of-band swap of it - if the toolbar isn't in the DOM (any
-    page other than the map), the extra ``hx-swap-oob`` fragment is simply
-    ignored by htmx.
+    The bottom-right saved-filters toolbar (main map page only) mirrors the same
+    ``profile.saved_filters`` list, so every create/delete response also carries an out-of-band swap of
+    it - if the toolbar isn't in the DOM (any page other than the map), the extra ``hx-swap-oob``
+    fragment is simply ignored by htmx.
     """
     saved_filters = list(profile.saved_filters.all())
     section_html = render(request, _SECTION_TEMPLATE, {"saved_filters": saved_filters}).content.decode()
@@ -63,16 +63,15 @@ def _render_section(request, profile: Profile) -> HttpResponse:
 def _dissolve_regions(search_form: SearchForm) -> dict[str, MultiPolygon | None]:
     """Parse and independently dissolve a submitted form's include/exclude regions.
 
-    Each of ``include_regions``/``exclude_regions`` is dissolved on its own -
-    overlapping polygons within the same type merge into one component;
-    include and exclude are never merged against each other.
+    Each of ``include_regions``/``exclude_regions`` is dissolved on its own - overlapping polygons
+    within the same type merge into one component; include and exclude are never merged against each
+    other.
 
     Args:
         search_form: A validated ``SearchForm`` (``is_valid()`` already called).
 
     Returns:
-        Mapping of both keys to a dissolved MultiPolygon, or None when that
-        side had no polygons.
+        Mapping of both keys to a dissolved MultiPolygon, or None when that side had no polygons.
     """
     result: dict[str, MultiPolygon | None] = {}
     for key in ("include_regions", "exclude_regions"):
@@ -90,10 +89,9 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
 
     POST /saved-filters/create/ → re-renders the sidebar's Saved Filters section.
 
-    Reads the same POST fields ``SearchForm`` reads (submitted via
-    ``hx-include="#filter-form"`` on the map page, or directly by the Filters
-    tab's create dialog) so the criteria stored are derived through the exact
-    same validation/parsing pipeline the map search endpoint uses.
+    Reads the same POST fields ``SearchForm`` reads (submitted via ``hx-include="#filter-form"`` on the
+    map page, or directly by the Filters tab's create dialog) so the criteria stored are derived through
+    the exact same validation/parsing pipeline the map search endpoint uses.
     """
 
     def post(self, request):
@@ -122,23 +120,27 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
 
         icon = clean_icon(request.POST.get("icon"), default="bookmark", max_length=column_max_length(SavedFilter, "icon"))
         color = clean_color(request.POST.get("color"), default="")
-        SavedFilter.objects.create(
-            profile=profile,
-            name=name,
-            icon=icon,
-            color=color if color in _ALLOWED_COLORS else "",
-            opacity=_clamp_opacity(request.POST.get("opacity")),
-            criteria=criteria,
-            order=profile.saved_filters.count(),
-        )
+        try:
+            with reserve(SAVED_FILTERS, profile.pk):
+                SavedFilter.objects.create(
+                    profile=profile,
+                    name=name,
+                    icon=icon,
+                    color=color if color in _ALLOWED_COLORS else "",
+                    opacity=_clamp_opacity(request.POST.get("opacity")),
+                    criteria=criteria,
+                    order=profile.saved_filters.count(),
+                )
+        except CapacityExceededError as exc:
+            return HttpResponse(exc.user_message, status=409)
         return _render_section(request, profile)
 
 
 def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
     """Build the shared context every "every option editable" filter form needs.
 
-    Used by both the create/edit dialog and the filter's own dedicated detail
-    page, so the two never drift out of sync on what fields/choices they offer.
+    Used by both the create/edit dialog and the filter's own dedicated detail page, so the two never
+    drift out of sync on what fields/choices they offer.
 
     Args:
         profile: The requesting user.
@@ -172,9 +174,8 @@ def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
         "security_fields": SECURITY_FIELDS,
         "security_level_choices": SecurityLevel.choices,
         "security_values": security_values,
-        # The rich picker seeds itself from the stored structured groups when
-        # present (formulas round-trip now - see _saved_filter_label_picker.html),
-        # falling back to the flat include/exclude sets below.
+        # The rich picker seeds itself from the stored structured groups when present (formulas round-trip now -
+        # see _saved_filter_label_picker.html), falling back to the flat include/exclude sets below.
         "initial_label_groups_json": json.dumps(saved_filter.criteria["label_groups"]) if saved_filter and saved_filter.criteria.get("label_groups") else "",
         "selected_tag_ids": initial.get("tags", []),
         "selected_exclude_tag_ids": initial.get("exclude_tags", []),
@@ -191,20 +192,13 @@ class SavedFilterEditView(LoginRequiredMixin, View):
 
     GET /saved-filters/new/ (no uuid) → blank create-dialog body.
     GET /saved-filters/<uuid>/edit/ → same dialog body, pre-filled from the
-    existing filter. Both share one template so "New Filter" and "Edit" are
-    visually identical; the form's submit target differs (this view's own
-    POST vs. ``SavedFilterCreateView``) based on whether a filter was given.
-
     POST /saved-filters/<uuid>/edit/ → same validation/parsing pipeline as
-    ``SavedFilterCreateView``, but updates the existing instance in place.
-    Returns JSON ``{"ok": true}`` on success.
 
-    Any ``PinList`` still pointing at this filter (``PinList.source_saved_filter``,
-    set by ``PinListEditView`` whenever a list is pointed at a SavedFilter) gets
-    its ``smart_filter`` snapshot refreshed and membership resynced too -
-    otherwise a list would silently drift out of sync the moment its source
-    filter's criteria changed, since ``smart_filter`` is normally a one-time
-    copy, not a live reference.
+    Any ``PinList`` still pointing at this filter (``PinList.source_saved_filter``, set by
+    ``PinListEditView`` whenever a list is pointed at a SavedFilter) gets its ``smart_filter`` snapshot
+    refreshed and membership resynced too - otherwise a list would silently drift out of sync the moment
+    its source filter's criteria changed, since ``smart_filter`` is normally a one-time copy, not a live
+    reference.
     """
 
     def get(self, request, filter_uuid=None):
@@ -213,13 +207,8 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         return render(request, _FORM_DIALOG_TEMPLATE, context)
 
     def post(self, request, filter_uuid=None):
-        # This view backs two routes: `saved_filters.edit` (with a uuid) and
-        # `saved_filters.new` (without), which exists only to hx-get a blank
-        # form - the form itself posts to `saved_filters.create`. The parameter
-        # was required, so POSTing to `new/` raised TypeError before reaching
-        # any of this: a guaranteed 500 on a route nothing was meant to post to.
-        # Editing without naming what to edit is not a request this view can
-        # answer, so it is refused rather than quietly redirected to a create.
+        # This view backs two routes: `saved_filters.edit` (with a uuid) and `saved_filters.new` (without),
+        # which exists only to hx-get a blank form - the form itself posts to `saved_filters.create`.
         if filter_uuid is None:
             return HttpResponseNotAllowed(["GET"])
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -251,9 +240,8 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         saved_filter.criteria = criteria
         saved_filter.save(update_fields=["name", "icon", "color", "opacity", "criteria", "updated"])
 
-        # Refreshes every PinList still pointing at this filter, resolving the
-        # matching pin ids once and reusing them across all of them - see
-        # services.pins.pin_list_membership.resync_lists_for_saved_filter.
+        # Refreshes every PinList still pointing at this filter, resolving the matching pin ids once and reusing
+        # them across all of them - see services.pins.pin_list_membership.resync_lists_for_saved_filter.
         resync_lists_for_saved_filter(saved_filter)
 
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})
@@ -264,13 +252,10 @@ class SavedFilterSuggestNameView(LoginRequiredMixin, View):
 
     POST /saved-filters/suggest-name/ → JSON ``{"name": str | None}``
 
-    Read-only preview, called from the dialog's JS as the user builds a
-    filter, so the "Filter name" field can pre-fill itself (e.g. "4★+ · 2 tags
-    included") unless the user has typed their own name. Reads the same
-    ``SearchForm``-shaped POST fields the create/edit endpoints read, so the
-    suggestion always matches what would actually be saved. Returns
-    ``{"name": None}`` on an invalid or still-empty form rather than an error,
-    so the caller can just leave the name field alone.
+    Reads the same ``SearchForm``-shaped POST fields the create/edit endpoints read, so the suggestion
+    always matches what would actually be saved.
+    Returns ``{"name": None}`` on an invalid or still-empty form rather than an error, so the caller can
+    just leave the name field alone.
     """
 
     def post(self, request):
@@ -299,21 +284,18 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
 
     GET /saved-filters/counts/ → JSON ``{"counts": {filter_uuid: count}}``
 
-    An icon-less saved filter's toolbar button shows a live count instead of a
-    generic fallback icon (otherwise every icon-less filter looks identical).
-    The count is "how many pins would be visible if this filter were turned
-    on right now" - the candidate filter combined with the sidebar's own
-    ``SearchForm`` criteria AND every OTHER toolbar filter currently active
-    (excluding the candidate itself, so an already-active filter's own count
-    isn't AND-ed against itself). Reads the same fields ``SearchForm`` and
-    ``_apply_toolbar_filters`` read, sent via the same ``hx-include``/params
-    the map page already builds for ``map.pins.list``/``map.search``.
+    An icon-less saved filter's toolbar button shows a live count instead of a generic fallback icon
+    (otherwise every icon-less filter looks identical).
+    The count is "how many pins would be visible if this filter were turned on right now" - the
+    candidate filter combined with the sidebar's own ``SearchForm`` criteria AND every OTHER toolbar
+    filter currently active (excluding the candidate itself, so an already-active filter's own count
+    isn't AND-ed against itself).
     """
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        saved_filters = list(SavedFilter.objects.filter(profile=profile))
+        saved_filters = list(profile.saved_filters.all())
         if not saved_filters:
             return JsonResponse({"counts": {}})
 
@@ -330,33 +312,19 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             base_query = base_query.filter_by_criteria(criteria)
 
-        base_uuids = {str(u) for u in base_query.values_list("uuid", flat=True)}
-
         active_ids = {v for v in request.GET.get("toolbar_filter_ids", "").split(",") if v.strip()}
         active_filters = [f for f in saved_filters if str(f.uuid) in active_ids]
 
-        # Resolve each filter's matching-uuid set exactly once up front (this
-        # is already backend-cached per filter, but was still being re-fetched
-        # and re-queried against the DB via chained .filter(uuid__in=...) for
-        # every (candidate, active) pair below - O(F^2) query construction for
-        # F saved filters). Set intersections in Python are cheap in
-        # comparison, so every pair is now just an in-memory set op.
-        # fingerprint computed once for every filter below (was previously
-        # recomputed by get_or_compute_matching_uuids on every one of these N
-        # calls - an identical DB aggregate re-run once per saved filter the
-        # profile owns, on every single toolbar toggle that hits this view).
-        fingerprint = pins_fingerprint(profile)
-        matching_uuids: dict[str, set[str]] = {str(f.uuid): set(get_or_compute_matching_uuids(profile, f, fingerprint=fingerprint)) for f in saved_filters}
+        matching_pks = {str(f.uuid): f.matching_pins().values("pk") for f in saved_filters}
 
         counts: dict[str, int] = {}
         for candidate in saved_filters:
             candidate_key = str(candidate.uuid)
-            matches = base_uuids & matching_uuids[candidate_key]
+            matches = base_query.filter(pk__in=matching_pks[candidate_key])
             for other in active_filters:
-                if other.uuid == candidate.uuid:
-                    continue
-                matches &= matching_uuids[str(other.uuid)]
-            counts[candidate_key] = len(matches)
+                if other.uuid != candidate.uuid:
+                    matches = matches.filter(pk__in=matching_pks[str(other.uuid)])
+            counts[candidate_key] = matches.count()
 
         return JsonResponse({"counts": counts})
 
@@ -377,10 +345,29 @@ class SavedFilterDeleteView(LoginRequiredMixin, View):
         return response
 
 
-#: Cap on markers drawn for the live preview map - a filter matching thousands
-#: of pins would just paint an unreadable blob; the match count (shown
-#: separately) stays accurate even when the marker list is truncated.
+#: Cap on markers drawn for the live preview map - a filter matching thousands of pins would just paint an
+#: unreadable blob; the match count (shown separately) stays accurate even when the marker list is truncated.
 _PREVIEW_MAP_PIN_LIMIT = 500
+
+
+def _preview_pins(query, total: int) -> list[dict]:
+    """The preview map's markers, capped for coverage rather than for order.
+
+    Over the cap, a slice keeps whichever pins sort first, which for a filter
+    over a whole account is arbitrary and usually clustered - the preview then
+    shows one region and claims to show the filter. See
+    ``services/geo/sampling.py``.
+
+    Args:
+        query: The filter's matching pins.
+        total: How many matched, already counted by the caller.
+
+    Returns:
+        One payload per plotted pin.
+    """
+    if total > _PREVIEW_MAP_PIN_LIMIT:
+        query = select_spread(query, _PREVIEW_MAP_PIN_LIMIT, latitude_field="location__latitude", longitude_field="location__longitude")
+    return _serialize_preview_pins(query)
 
 
 def _serialize_preview_pins(pins) -> list[dict]:
@@ -395,9 +382,9 @@ def _serialize_preview_pins(pins) -> list[dict]:
 
 
 class SavedFilterDetailView(LoginRequiredMixin, View):
-    """A saved filter's own page: a live-updating map of its matching pins plus
-    every editable option - replaces the old static card + "Edit" dialog (see
-    _filters_tab_grid.html, whose card now links here instead).
+    """A saved filter's own page: a live-updating map of its matching pins plus every editable option -
+    replaces the old static card + "Edit" dialog (see _filters_tab_grid.html, whose card now links here
+    instead).
 
     GET /saved-filters/<uuid>/
     """
@@ -406,13 +393,13 @@ class SavedFilterDetailView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         context = _build_filter_form_context(profile, filter_uuid)
         query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(context["criteria"]).select_related("location")
+        matched = query.count()
         context.update(
             {
-                # Raw list, not pre-serialized - the template's |json_script
-                # filter does its own json.dumps(); passing an already-dumped
-                # string here would double-encode it.
-                "initial_pins": _serialize_preview_pins(query[:_PREVIEW_MAP_PIN_LIMIT]),
-                "initial_match_count": query.count(),
+                # Raw list, not pre-serialized - the template's |json_script filter does its own json.dumps();
+                # passing an already-dumped string here would double-encode it.
+                "initial_pins": _preview_pins(query, matched),
+                "initial_match_count": matched,
                 "preview_pin_limit": _PREVIEW_MAP_PIN_LIMIT,
                 **profile.get_map_center_template_context(),
             },
@@ -421,14 +408,14 @@ class SavedFilterDetailView(LoginRequiredMixin, View):
 
 
 class SavedFilterPreviewView(LoginRequiredMixin, View):
-    """Live map preview: pins matching whatever criteria the detail page's form
-    currently holds, whether or not it's been saved yet.
+    """Live map preview: pins matching whatever criteria the detail page's form currently holds, whether or
+    not it's been saved yet.
 
     POST /saved-filters/preview/ → JSON {"pins": [...], "count": N}
 
-    Reads the same SearchForm-shaped POST fields the create/edit endpoints
-    read (via hx-include="#saved-filter-form" style form serialization on the
-    client), so the preview always matches what Save would actually persist.
+    Reads the same SearchForm-shaped POST fields the create/edit endpoints read (via
+    hx-include="#saved-filter-form" style form serialization on the client), so the preview always
+    matches what Save would actually persist.
     """
 
     def post(self, request):
@@ -448,4 +435,5 @@ class SavedFilterPreviewView(LoginRequiredMixin, View):
         cleaned["exclude_regions"] = regions["exclude_regions"]
 
         query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(cleaned).select_related("location")
-        return JsonResponse({"pins": _serialize_preview_pins(query[:_PREVIEW_MAP_PIN_LIMIT]), "count": query.count()})
+        matched = query.count()
+        return JsonResponse({"pins": _preview_pins(query, matched), "count": matched})

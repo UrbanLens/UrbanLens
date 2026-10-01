@@ -1,36 +1,6 @@
 /**
- * External media arriving on the pin detail page and on the wiki.
- *
- * ## Nothing is fetched until somebody looks
- *
- * The media gallery is entirely lazy. Creating a pin fetches no imagery at all;
- * the first page view finds no fresh `LocationCache` row, calls
- * `schedule_panel_fetch`, and returns a self-polling placeholder carrying
- * `UL-Panel-Pending: 1`. That placeholder re-polls every 2 s up to 30 times
- * (~60 s) while a `fetch_panel_source` task runs on the **`panel_fetch`** queue.
- *
- * The queue matters more than it looks: the default Celery worker does not
- * consume `panel_fetch`. A deployment running only `celery-worker` and not
- * `celery-worker-panels` will show every gallery pending forever, and nothing
- * in the UI says so. That is worth ruling out before reading a failure here as
- * a data problem.
- *
- * ## Why `waitForHtmxSettled` is wrong here
- *
- * The pending loaders poll with `hx-trigger="load delay:2s"`, so there are ~2 s
- * windows in which no HTMX request is in flight and the gallery is still
- * mid-fetch. A settle-based wait passes straight through them and asserts on an
- * empty grid. The signal that actually means "finished" differs by page:
- *
- * - **Pin page:** each loader removes itself (`el.remove()`), and
- *   `#media-gallery-loading` is removed from the DOM.
- * - **Wiki page:** loaders are never removed; `#wiki-media-loading` is only
- *   hidden. There is also a 15 s timer that reveals `#wiki-media-empty`, which a
- *   provider landing at t+40 s then hides again - so "empty is visible" is not a
- *   stable conclusion until well past the poll budget.
- *
- * Both are handled by counting `.media-provider-loader` down to zero rather than
- * trusting either page's own completion flag.
+ * External media arriving on the pin detail page and on the wiki. The media gallery is entirely
+ * lazy.
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
@@ -188,6 +158,52 @@ test.describe("Hudson River State Hospital - external media", () => {
             `the pin page shows ${onPin} media items and the wiki shows ${onWiki}. Both read the same per-Location cache, so one being ` +
                 "empty while the other is populated points at that page's loader set rather than at the data",
         ).toBe(true);
+    });
+
+    test("every photo the Media panel shows is also in the Photos tab", async ({ campus, page }) => {
+        await page.goto(`/dashboard/map/pin/${campus.pin.slug}/`);
+        await settleGallery(page);
+
+        const shown = await page.locator(".media-item:not(.media-item--not-relevant):has(img.media-item-thumb)").evaluateAll((items) =>
+            items.map((el) => ({ source: (el as HTMLElement).dataset.mediaSource ?? "", key: (el as HTMLElement).dataset.mediaKey ?? "", imageId: (el as HTMLElement).dataset.imageId ?? "" })),
+        );
+        test.skip(shown.length === 0, "the Media panel shows no photos, so there is nothing to find in the Photos tab.");
+
+        await page.locator('.ul-subnav-tab[data-tab="photos"]').click();
+        const external = page.locator("#albums-external");
+        await expect(external.locator(".view-loading"), "the Photos tab's public-source section never loaded").toHaveCount(0, { timeout: 60_000 });
+        await expect(external.locator("[role=status]"), "the Photos tab is still searching sources the Media panel already finished").toHaveCount(0, { timeout: 180_000 });
+
+        // Both grids page on scroll, so membership is read from the endpoints they page through.
+        const pageThrough = async (grid: string): Promise<Record<string, unknown>[]> => {
+            const itemsUrl = await page.locator(grid).getAttribute("data-items-url").catch(() => null);
+            if (!itemsUrl) return [];
+            const items: Record<string, unknown>[] = [];
+            for (;;) {
+                const url = `${itemsUrl}${itemsUrl.includes("?") ? "&" : "?"}offset=${items.length}&limit=100`;
+                const response = await page.request.get(url);
+                expect(response.ok(), `${url} answered HTTP ${response.status()}`).toBeTruthy();
+                const body = (await response.json()) as { items: Record<string, unknown>[]; total: number };
+                items.push(...body.items);
+                if (!body.items.length || items.length >= body.total) return items;
+            }
+        };
+        const own = await pageThrough("#albums-loose-grid");
+        const publicPhotos = await pageThrough("#albums-external-grid");
+        const ownIds = new Set(own.map((item) => String(item.id)));
+        const keys = new Set([...publicPhotos.map((item) => String(item.key)), ...own.map((item) => String(item.media_key ?? "")).filter(Boolean)]);
+
+        const missing = shown.filter((item) => (item.source === "photos" ? !ownIds.has(item.imageId) : !keys.has(item.key)));
+        expect(missing, `${missing.length} of the Media panel's ${shown.length} photos are absent from the Photos tab: ${JSON.stringify(missing.slice(0, 5))}`).toEqual([]);
+        expect(own.length + publicPhotos.length, "the Photos tab lists fewer photos than the Media panel shows").toBeGreaterThanOrEqual(shown.length);
+
+        if (publicPhotos.length) {
+            const tile = page.locator("#albums-external-grid .gallery-item[data-media-key]").first();
+            await expect(tile, "public-source photos are listed but none rendered in the Photos tab").toBeVisible();
+            await expect(tile.locator(".gallery-child-ribbon"), "a public-source tile does not name its source").not.toBeEmpty();
+            await tile.locator("[data-photo-open]").click();
+            await expect(page.locator("#lightbox-source-name"), "the lightbox opened on a public-source photo does not credit it").toBeVisible();
+        }
     });
 
     test("a pending gallery is visibly pending rather than silently empty", async ({ campus, page }) => {

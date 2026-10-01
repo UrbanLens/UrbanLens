@@ -9,7 +9,7 @@ body.page-faq {
         max-width: 100%;
     }
 
-    // Shared inner width
+
     .faq-section-inner,
     .faq-cta-inner {
         max-width: 90rem;
@@ -68,11 +68,7 @@ body.page-faq {
         margin: 0 auto;
     }
 
-    // Quick jump nav now uses the shared .ul-page-subnav/.ul-subnav-tabs/
-    // .ul-subnav-tab component (see _page_hero.scss) instead of bespoke pill
-    // styling, so its look matches every other page's subnav (Safety, Trips,
-    // Profile, Memories, Settings, ...). Smooth-scroll the same way every
-    // other in-page anchor on this page already does.
+    // Quick jump nav now uses the shared.ul-page-subnav/.ul-subnav-tabs/.ul-subnav-tab component instead of bespoke pill styling, so its.
     .ul-page-subnav .ul-subnav-tabs {
         scroll-behavior: smooth;
     }

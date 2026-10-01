@@ -1,20 +1,4 @@
-"""Tests for process_image_upload's media-type dispatch and shared tail.
-
-Verifies that photo/video/document uploads each get their own type-specific
-extraction/downscaling step, but all funnel into the SAME shared tail:
-resolving `location`, raising a visit suggestion, and recording file_size -
-this is the "reuse the exact same code, no duplication" requirement for
-PinSuggestion/VisitSuggestion creation. The type-specific service calls
-(ffmpeg/soffice/tesseract) are mocked; only the dispatch/reuse logic is
-under test here (see test_video_processing.py / test_document_processing.py
-for the service-level logic itself).
-
-Every call to process_image_upload() also mocks update_task_progress, same
-as test_image_attribution.py - calling a bound task directly (rather than via
-.delay()/.apply()) leaves self.request.id unset, and update_task_progress's
-task.update_state() would otherwise hit the real (Redis) result backend with
-an empty task_id.
-"""
+"""Tests for process_image_upload's media-type dispatch and shared tail."""
 
 from __future__ import annotations
 
@@ -31,6 +15,7 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
+from urbanlens.dashboard.services.media.images import StoredFileReplacement
 from urbanlens.dashboard.tasks import generate_image_keywords, process_image_upload
 
 
@@ -73,11 +58,25 @@ class VideoUploadDispatchTests(TestCase):
     def test_video_downscale_updates_file_size(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.media.videos.process_uploaded_video", return_value=({}, 12345)),
+            patch(
+                "urbanlens.dashboard.services.media.videos.process_uploaded_video",
+                return_value=({}, StoredFileReplacement(12345, None)),
+            ),
         ):
             process_image_upload(self.image.pk)
         self.image.refresh_from_db()
         self.assertEqual(self.image.file_size, 12345)
+
+    def test_successful_processing_marks_upload_processed(self) -> None:
+        self.assertIsNone(self.image.upload_processed_at)
+        with (
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+            patch("urbanlens.dashboard.services.media.videos.process_uploaded_video", return_value=({}, None)),
+        ):
+            process_image_upload(self.image.pk)
+
+        self.image.refresh_from_db()
+        self.assertIsNotNone(self.image.upload_processed_at)
 
     def test_video_upload_does_not_enqueue_photo_keyword_generation(self) -> None:
         with (
@@ -100,14 +99,23 @@ class DocumentUploadDispatchTests(TestCase):
             Image,
             profile=self.profile,
             media_type=MediaKind.DOCUMENT,
-            image=SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            image=SimpleUploadedFile(
+                "notes.docx",
+                b"doc-bytes",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
         )
 
     def test_conversion_and_ocr_are_invoked_and_persisted(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.media.documents.convert_to_pdf", return_value=999) as mock_convert,
-            patch("urbanlens.dashboard.services.media.documents.extract_pdf_text", return_value="Extracted document text") as mock_ocr,
+            patch(
+                "urbanlens.dashboard.services.media.documents.convert_to_pdf",
+                return_value=StoredFileReplacement(999, None),
+            ) as mock_convert,
+            patch(
+                "urbanlens.dashboard.services.media.documents.extract_pdf_text", return_value="Extracted document text"
+            ) as mock_ocr,
         ):
             result = process_image_upload(self.image.pk)
 

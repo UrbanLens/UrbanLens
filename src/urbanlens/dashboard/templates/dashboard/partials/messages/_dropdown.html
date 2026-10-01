@@ -1,10 +1,4 @@
-{% comment %}
-Navbar messages dropdown - unread conversations only. Opening a thread marks it
-read, so its row disappears from here on the next open (the panel re-fetches on
-every msgOpen event). Context: `conversations` (unread rows from
-services.direct_messages.conversations_for) and `has_conversations` (whether
-the user has any DM history at all - selects the empty-state copy).
-{% endcomment %}
+{% comment %}Navbar messages dropdown - unread conversations only.{% endcomment %}
 {% load dashboard_tags %}
 <div class="msg-dropdown" id="msg-dropdown">
   <div class="msg-dropdown__header">

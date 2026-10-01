@@ -1,9 +1,11 @@
-"""Image processing utilities - EXIF extraction, downscaling, and metadata helpers."""
+"""Image processing utilities - EXIF extraction, downscaling, and metadata helpers.
+Everything here that opens a file with Pillow is marked :func:`~urbanlens.dashboard.services.sandbox.guard.untrusted_parse` and runs only in the sandbox worker."""
 
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from decimal import Decimal
 import hashlib
 import io
@@ -14,51 +16,46 @@ import re
 from typing import IO, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Collection, Sequence
 
 from django.utils import timezone
 from PIL import Image as PILImage, ImageOps
 from PIL.ExifTags import GPSTAGS, TAGS
 
+from urbanlens.dashboard.services.sandbox import untrusted_parse
+
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
+    from django.db.models import QuerySet
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.models.images.model import Image, Image as ImageModel, MediaKind
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
 _EXIF_DATETIME_FORMAT = "%Y:%m:%d %H:%M:%S"
 
-# Formats the downscale pipeline will re-encode. Anything else (animated GIFs,
-# exotic formats) is stored untouched - only its size is counted.
-_PROCESSABLE_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF"}
+# Formats a photo stays in when the uploader's policy does not ask for WebP. Anything else is transcoded: HEIF because
+# browsers outside Safari cannot render it, MPO because it is a JPEG holding several images that browsers show only the
+# first of, and whatever else Pillow opens because nothing serves it.
+_STORED_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "TIFF", "AVIF", "BMP"}
+_TRANSCODE_TARGET = "JPEG"
+_TRANSCODE_TARGET_WITH_ALPHA = "PNG"
 
-_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif", "HEIF": ".heic"}
+_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "GIF": ".gif", "TIFF": ".tif", "AVIF": ".avif", "BMP": ".bmp"}
 
-# Formats whose stored file we can rewrite carrying modified EXIF. A superset of
-# _PROCESSABLE_FORMATS on purpose: those are the formats the *downscaler* will
-# re-encode, whereas these are the ones a GPS strip can be honoured for. Keeping
-# the two separate is what stops "we would never resize an AVIF" from silently
-# turning into "we never scrub an AVIF's coordinates either".
-# HEIF covers both .heic and .heif - pillow-heif registers one opener reporting
-# format "HEIF" for both, so the extension a phone happens to use does not
-# change what this pipeline sees.
-_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF", "HEIF"}
+# Formats that keep an animation. Anything else stores the first frame.
+_ANIMATED_FORMATS = {"GIF", "PNG", "WEBP"}
 
-# Formats that must be re-encoded whatever the downscale policy says, because no
-# mainstream browser outside Safari renders them and stored photos are served
-# through a plain <img src>. Accepting the upload and keeping the bytes verbatim
-# swaps an explicit "convert it to JPEG first" refusal for a broken image, which
-# is strictly worse. `_MUST_TRANSCODE_TARGET` is the format they land in when the
-# uploader's policy does not already pick one (a subscriber with downscaling off
-# and no WebP conversion, which is the default).
-#
-# AVIF is deliberately not here: browser support for it is broad, so re-encoding
-# one would cost quality for nothing.
-_MUST_TRANSCODE_FORMATS = {"HEIF"}
-_MUST_TRANSCODE_TARGET = "JPEG"
+# The colour profile is kept where the format carries one: dropping it shifts a wide-gamut photo's colours.
+_ICC_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF", "AVIF"}
+
+_SAVE_PARAMS: dict[str, dict[str, Any]] = {
+    "WEBP": {"quality": 85, "method": 4},
+    "JPEG": {"quality": 85, "optimize": True},
+    "PNG": {"optimize": True},
+}
 
 # EXIF tag 34853 - the GPSInfo IFD pointer.
 _GPS_IFD_TAG = 0x8825
@@ -70,25 +67,16 @@ _EXIF_BYTES_HEX_LIMIT = 4096
 
 def coerce_coordinates(data: Any) -> tuple[Decimal, Decimal]:
     """Validate and convert a mapping's ``latitude``/``longitude`` entries into Decimals.
-
-    Shared by ``parse_reposition_payload`` (raw JSON body) and any caller
-    that already has a parsed request-data mapping (e.g. DRF's
-    ``request.data``). Centralized because ``Decimal("abc")`` raises
-    ``decimal.InvalidOperation`` (an ``ArithmeticError``, not a
-    ``ValueError``), and ``Decimal("nan")`` parses fine and Postgres
-    ``numeric`` happily stores NaN, so neither is safe to skip validating.
+    Centralized because ``Decimal("abc")`` raises ``decimal.InvalidOperation`` (an ``ArithmeticError``, not a ``ValueError``), and ``Decimal("nan")`` parses fine and Postgres ``numeric`` happily stores NaN, so neither is safe to skip validating.
 
     Args:
-        data: The parsed request payload, expected to be a mapping with
-            ``latitude``/``longitude`` keys.
+        data: The parsed request payload, expected to be a mapping with ``latitude``/``longitude`` keys.
 
     Returns:
         ``(latitude, longitude)`` as finite, in-range Decimals.
 
     Raises:
-        ValueError: On a non-mapping payload, missing keys,
-            non-numeric/non-finite values, or out-of-range coordinates.
-    """
+        ValueError: On a non-mapping payload, missing keys, non-numeric/non-finite values, or out-of-range coordinates."""
     try:
         latitude = Decimal(str(data["latitude"]))
         longitude = Decimal(str(data["longitude"]))
@@ -104,9 +92,6 @@ def coerce_coordinates(data: Any) -> tuple[Decimal, Decimal]:
 def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
     """Parse a photo-reposition JSON payload into validated latitude/longitude Decimals.
 
-    Shared by the pin/wiki/safety gallery reposition endpoints, which all
-    accept ``{"latitude": ..., "longitude": ...}`` from a dragged map marker.
-
     Args:
         body: The raw request body.
 
@@ -114,9 +99,7 @@ def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
         ``(latitude, longitude)`` as finite, in-range Decimals.
 
     Raises:
-        ValueError: On malformed JSON, a non-object payload, missing keys,
-            non-numeric/non-finite values, or out-of-range coordinates.
-    """
+        ValueError: On malformed JSON, a non-object payload, missing keys, non-numeric/non-finite values, or out-of-range coordinates."""
     import json
 
     try:
@@ -124,6 +107,60 @@ def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
     except (TypeError, ValueError) as exc:
         raise ValueError("Invalid request data.") from exc
     return coerce_coordinates(data)
+
+
+def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
+    """Apply a map-visibility or reposition POST to *image*.
+    ``{"map_hidden": true}`` hides the photo on maps without clearing GPS.
+
+    Args:
+        image: The photo being updated.
+        body: Raw JSON request body.
+
+    Returns:
+        JSON-serialisable lat/lng/map_hidden of the saved row.
+
+    Raises:
+        ValueError: Malformed JSON, or a reposition payload that fails :func:`coerce_coordinates`."""
+    import json
+
+    try:
+        data = json.loads(body or b"{}")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid request data.") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Invalid request data.")  # noqa: TRY004
+
+    fields: list[str] = []
+    before = {
+        "latitude": str(image.latitude) if image.latitude is not None else None,
+        "longitude": str(image.longitude) if image.longitude is not None else None,
+        "map_hidden": bool(image.map_hidden),
+    }
+    if "latitude" in data or "longitude" in data:
+        image.latitude, image.longitude = coerce_coordinates(data)
+        image.map_hidden = False
+        fields.extend(["latitude", "longitude", "map_hidden"])
+    elif "map_hidden" in data:
+        image.map_hidden = bool(data["map_hidden"])
+        fields.append("map_hidden")
+    else:
+        raise ValueError("Invalid request data.")
+    image.save(update_fields=[*fields, "updated"])
+    after = {
+        "latitude": str(image.latitude) if image.latitude is not None else None,
+        "longitude": str(image.longitude) if image.longitude is not None else None,
+        "map_hidden": bool(image.map_hidden),
+    }
+    if image.profile is not None:
+        from urbanlens.dashboard.services.undo.mutations import stash_photo_fields
+
+        stash_photo_fields(image.profile, image, before=before, after=after)
+    return {
+        "latitude": float(image.latitude) if image.latitude is not None else None,
+        "longitude": float(image.longitude) if image.longitude is not None else None,
+        "map_hidden": bool(image.map_hidden),
+    }
 
 
 def _get_gps_ifd(image_file: IO[bytes]) -> dict[int, Any] | None:
@@ -155,6 +192,7 @@ def _dms_to_decimal(dms: tuple[float, ...], ref: str) -> float:
     return decimal
 
 
+@untrusted_parse("image.exif")
 def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
     """Return (latitude, longitude) from EXIF GPS tags, or None if not present."""
     try:
@@ -180,25 +218,15 @@ def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
     return lat, lng
 
 
+@untrusted_parse("image.exif")
 def extract_gps_direction(image_file: IO[bytes]) -> float | None:
     """Return the compass bearing the camera was pointing, or None if absent.
-
-    Prefers ``GPSImgDirection`` (the direction the camera itself was facing -
-    what a "same place, same angle over time" comparison actually needs);
-    falls back to ``GPSDestBearing`` (direction *to* a destination point) only
-    when a device wrote that instead, which happens on some cameras. Neither
-    tag's *Ref* companion (``"T"`` true north vs ``"M"`` magnetic north) is
-    preserved as a separate field - like ``GPSLatitudeRef``/``GPSLongitudeRef``
-    above, it's a single already-decided reference frame per photo, not a
-    per-record ambiguity worth threading through the rest of the app for.
 
     Args:
         image_file: The uploaded/stored image file to read EXIF from.
 
     Returns:
-        A bearing in degrees, normalized to ``[0, 360)``, or ``None`` if the
-        image has no GPS IFD or neither direction tag.
-    """
+        A bearing in degrees, normalized to ``[0, 360)``, or ``None`` if the image has no GPS IFD or neither direction tag."""
     try:
         gps_ifd = _get_gps_ifd(image_file)
     except Exception as exc:
@@ -224,12 +252,208 @@ def extract_gps_direction(image_file: IO[bytes]) -> float | None:
     return direction
 
 
+@untrusted_parse("image.exif")
+def extract_gps_altitude(image_file: IO[bytes]) -> float | None:
+    """Return altitude in meters from EXIF GPS tags, or None if absent."""
+    try:
+        gps_ifd = _get_gps_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF GPS altitude extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+
+    if not gps_ifd:
+        return None
+    gps_data = {GPSTAGS.get(k, k): v for k, v in gps_ifd.items()}
+    raw = gps_data.get("GPSAltitude")
+    if raw is None:
+        return None
+    try:
+        altitude = float(raw)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    if not math.isfinite(altitude):
+        return None
+    return -altitude if gps_data.get("GPSAltitudeRef") in (1, b"\x01") else altitude
+
+
+def _flatten_xmp(data: Any, out: dict[str, Any]) -> None:
+    """Flatten Image.getxmp()'s nested dict into {local tag/attribute name (lowercased): value}."""
+    if isinstance(data, dict):
+        for key, value in data.items():
+            local = str(key).rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower()
+            if isinstance(value, (dict, list)):
+                _flatten_xmp(value, out)
+            else:
+                out.setdefault(local, value)
+    elif isinstance(data, list):
+        for item in data:
+            _flatten_xmp(item, out)
+
+
+# Candidate XMP field names for each heading axis, in priority order: the
+# Google Photo Sphere "GPano" schema (360/panorama cameras) first, then a
+# drone gimbal's own tags.
+_XMP_PITCH_KEYS = ("posepitchdegrees", "gimbalpitchdegree")
+_XMP_ROLL_KEYS = ("poserolldegrees", "gimbalrolldegree")
+
+
+@untrusted_parse("image.exif")
+def extract_gps_orientation(image_file: IO[bytes]) -> tuple[float, float] | None:
+    """Return (pitch, roll) in degrees from a 360/panorama or drone photo's XMP block.
+    Standard camera EXIF carries no such tags - only Google's Photo Sphere "GPano" schema (360/panorama cameras) or a drone's own gimbal metadata do, so this returns None for the overwhelming majority of photos."""
+    try:
+        image_file.seek(0)
+        img = PILImage.open(image_file)
+        xmp = img.getxmp()
+    except Exception as exc:
+        logger.debug("EXIF XMP orientation extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not xmp:
+        return None
+    flat: dict[str, Any] = {}
+    _flatten_xmp(xmp, flat)
+
+    def _first(keys: tuple[str, ...]) -> float | None:
+        for key in keys:
+            if key in flat:
+                try:
+                    return float(flat[key])
+                except (TypeError, ValueError):
+                    continue
+        return None
+
+    pitch, roll = _first(_XMP_PITCH_KEYS), _first(_XMP_ROLL_KEYS)
+    if pitch is None or roll is None:
+        return None
+    if not (math.isfinite(pitch) and math.isfinite(roll)):
+        return None
+    return pitch, roll
+
+
+@untrusted_parse("image.exif")
+def extract_camera_info(image_file: IO[bytes]) -> tuple[str | None, str | None]:
+    """Return (make, model) from EXIF IFD0 tags, or (None, None) if absent."""
+    try:
+        exif = _get_ifd0(image_file)
+    except Exception as exc:
+        logger.debug("EXIF camera info extraction failed: %s", exc)
+        return None, None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif:
+        return None, None
+    make = exif.get(0x010F)
+    model = exif.get(0x0110)
+    make = str(make).strip() if make and str(make).strip() else None
+    model = str(model).strip() if model and str(model).strip() else None
+    return make, model
+
+
+@untrusted_parse("image.exif")
+def extract_lens_model(image_file: IO[bytes]) -> str | None:
+    """Return the EXIF LensModel tag, or None if absent."""
+    try:
+        exif_ifd = _get_exif_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF lens model extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif_ifd:
+        return None
+    lens = exif_ifd.get(0xA434)  # LensModel
+    return str(lens).strip() if lens and str(lens).strip() else None
+
+
+@untrusted_parse("image.exif")
+def extract_shutter_speed(image_file: IO[bytes]) -> str | None:
+    """Return EXIF ExposureTime formatted as a display fraction (e.g. "1/250"), or None if absent."""
+    try:
+        exif_ifd = _get_exif_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF shutter speed extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif_ifd:
+        return None
+    raw = exif_ifd.get(0x829A)  # ExposureTime
+    if raw is None:
+        return None
+    try:
+        seconds = float(raw)
+        numerator = getattr(raw, "numerator", None)
+        denominator = getattr(raw, "denominator", None)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    if not math.isfinite(seconds) or seconds <= 0:
+        return None
+    if seconds >= 1:
+        return f"{seconds:.1f}s" if seconds % 1 else f"{int(seconds)}s"
+    if numerator and denominator:
+        return f"{numerator}/{denominator}"
+    return f"1/{round(1 / seconds)}"
+
+
+@untrusted_parse("image.exif")
+def extract_aperture(image_file: IO[bytes]) -> float | None:
+    """Return the EXIF f-number (FNumber), or None if absent."""
+    try:
+        exif_ifd = _get_exif_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF aperture extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif_ifd:
+        return None
+    raw = exif_ifd.get(0x829D)  # FNumber
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+@untrusted_parse("image.exif")
+def extract_focal_length(image_file: IO[bytes]) -> float | None:
+    """Return the EXIF focal length in millimeters (FocalLength), or None if absent."""
+    try:
+        exif_ifd = _get_exif_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF focal length extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif_ifd:
+        return None
+    raw = exif_ifd.get(0x920A)  # FocalLength
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+@untrusted_parse("image.exif")
 def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
     """Return the EXIF DateTimeOriginal capture time, or None if absent/unparseable.
-
-    EXIF datetimes carry no timezone offset, so the result is made timezone-aware
-    using the server's local time rather than the photo's actual capture location.
-    """
+    EXIF datetimes carry no timezone offset, so the result is made timezone-aware using the server's local time rather than the photo's actual capture location."""
     try:
         exif_ifd = _get_exif_ifd(image_file)
     except Exception as exc:
@@ -245,7 +469,7 @@ def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
     if not raw_value:
         return None
     try:
-        naive = datetime.strptime(str(raw_value), _EXIF_DATETIME_FORMAT)
+        naive = datetime.strptime(str(raw_value), _EXIF_DATETIME_FORMAT)  # noqa: DTZ007  # EXIF carries no zone;...
     except ValueError:
         logger.debug("Unparseable EXIF DateTimeOriginal value: %s", raw_value)
         return None
@@ -259,11 +483,9 @@ _XP_AUTHOR_TAG = 0x9C9D
 _XP_TITLE_TAG = 0x9C9B
 _XP_COMMENT_TAG = 0x9C9C
 
-# Common auto-generated phone/camera filename stems: PXL_ (Pixel),
-# IMG_/IMG- (Android/iPhone, incl. WhatsApp's IMG-YYYYMMDD-WAxxxx), MVIMG_
-# (Google motion photo stills), DSC_/DSCN/DCIM (point-and-shoot cameras). A
-# match indicates the uploader almost certainly took the photo themselves,
-# as opposed to a descriptively-named file sourced from somewhere else.
+# Common auto-generated phone/camera filename stems: PXL_ (Pixel), IMG_/IMG- (Android/iPhone, incl.
+# WhatsApp's IMG-YYYYMMDD-WAxxxx), MVIMG_ (Google motion photo stills), DSC_/DSCN/DCIM
+# (point-and-shoot cameras).
 _CAMERA_FILENAME_RE = re.compile(r"^(pxl|img|mvimg|dscn|dsc|dcim)[-_]?\d{4,}", re.IGNORECASE)
 
 
@@ -287,12 +509,9 @@ def _decode_xp_string(value: Any) -> str | None:
     return text or None
 
 
+@untrusted_parse("image.exif")
 def extract_author(image_file: IO[bytes]) -> str | None:
-    """Return the photo's author/credit from EXIF, or None if absent.
-
-    Prefers the standard ``Artist`` tag; falls back to the Windows-specific
-    ``XPAuthor`` tag written by some cameras and editing tools.
-    """
+    """Return the photo's author/credit from EXIF, or None if absent."""
     try:
         exif = _get_ifd0(image_file)
     except Exception as exc:
@@ -303,12 +522,13 @@ def extract_author(image_file: IO[bytes]) -> str | None:
             image_file.seek(0)
     if not exif:
         return None
-    artist = exif.get(0x013B)  # Artist
+    artist = exif.get(0x013B)
     if artist and str(artist).strip():
         return str(artist).strip()
     return _decode_xp_string(exif.get(_XP_AUTHOR_TAG))
 
 
+@untrusted_parse("image.exif")
 def extract_copyright_notice(image_file: IO[bytes]) -> str | None:
     """Return the photo's EXIF copyright notice, or None if absent."""
     try:
@@ -327,6 +547,7 @@ def extract_copyright_notice(image_file: IO[bytes]) -> str | None:
     return None
 
 
+@untrusted_parse("image.exif")
 def extract_caption_from_metadata(image_file: IO[bytes]) -> str | None:
     """Return a caption sourced from EXIF ``ImageDescription``/``XPTitle``/``XPComment``."""
     try:
@@ -349,19 +570,15 @@ def extract_caption_from_metadata(image_file: IO[bytes]) -> str | None:
     return None
 
 
+@untrusted_parse("image.exif")
 def extract_source_url(image_file: IO[bytes]) -> str | None:
     """Return a source URL embedded in the file's text metadata, if any.
-
-    EXIF has no standard URL tag, but some tools embed one in a PNG text
-    chunk, exposed by Pillow via ``Image.info``, under a key like "url" or
-    "source".
 
     Args:
         image_file: The uploaded file or opened FieldFile to read.
 
     Returns:
-        The URL string, or None when no such metadata is present.
-    """
+        The URL string, or None when no such metadata is present."""
     try:
         image_file.seek(0)
         img = PILImage.open(image_file)
@@ -377,31 +594,57 @@ def extract_source_url(image_file: IO[bytes]) -> str | None:
     return None
 
 
+# Common camera/phone-app filename timestamp conventions: PXL_ (Pixel), IMG_/IMG- (Android/iPhone,
+# incl.
+# WhatsApp's IMG-YYYYMMDD-WAxxxx), MVIMG_ (Google motion photo stills), VID_ (video counterpart to
+# IMG_), DSC_ (some point-and-shoot cameras that do timestamp their files, unlike the
+_FILENAME_TIMESTAMP_RE = re.compile(
+    r"^(?:pxl|img|mvimg|vid|dsc|screenshot|signal)[_-]{1,2}(\d{4})-?(\d{2})-?(\d{2})(?:[_-]?(\d{2})(\d{2})(\d{2}))?",
+    re.IGNORECASE,
+)
+
+# Sanity bound for a parsed filename year - not a date format Y2038 concern,
+# just ruling out a coincidental 8-digit run that happens to match the pattern
+# but obviously isn't a calendar date (e.g. a sequence number).
+_FILENAME_DATE_MIN_YEAR = 1995
+
+
+def extract_filename_taken_at(filename: str) -> datetime | None:
+    """Return a capture date/time parsed from a camera/phone-app filename convention, or None.
+
+    Args:
+        filename: The original upload filename (path or bare name).
+
+    Returns:
+        A timezone-aware datetime (midnight when no time component matched), or None when the name doesn't match a known convention or the parsed value isn't a plausible calendar date."""
+    stem = posixpath.splitext(posixpath.basename(filename))[0]
+    match = _FILENAME_TIMESTAMP_RE.match(stem)
+    if not match:
+        return None
+    year, month, day, hour, minute, second = match.groups()
+    try:
+        naive = datetime(int(year), int(month), int(day), int(hour or 0), int(minute or 0), int(second or 0))  # noqa: DTZ001 - made aware just below
+    except ValueError:
+        return None
+    if not (_FILENAME_DATE_MIN_YEAR <= naive.year <= timezone.now().year + 1):
+        return None
+    return timezone.make_aware(naive) if timezone.is_naive(naive) else naive
+
+
 def is_camera_generated_filename(filename: str) -> bool:
     """Return True when a filename matches common phone/camera auto-naming conventions.
-
-    Used to infer that the uploader is the photo's author when no attribution
-    metadata (author/source URL/caption/copyright) is present at all - a
-    generically-named camera file (e.g. ``PXL_20260709_123456.jpg``) is very
-    unlikely to be a photo sourced from somewhere else.
 
     Args:
         filename: The stored or uploaded filename (path or bare name).
 
     Returns:
-        True when the filename's stem matches a known camera naming pattern.
-    """
+        True when the filename's stem matches a known camera naming pattern."""
     stem = posixpath.splitext(posixpath.basename(filename))[0]
     return bool(_CAMERA_FILENAME_RE.match(stem))
 
 
 def _json_safe(value: Any) -> Any:
-    """Convert an EXIF value into something JSON-serializable.
-
-    PIL yields rationals (IFDRational), bytes, tuples, and nested dicts;
-    everything is reduced to numbers, strings, lists, and dicts. Binary blobs
-    are hex-encoded up to a size cap, then summarized.
-    """
+    """Convert an EXIF value into something JSON-serializable."""
     if value is None or isinstance(value, (bool, int, str)):
         return value
     if isinstance(value, float):
@@ -422,20 +665,16 @@ def _json_safe(value: Any) -> Any:
         return str(value)
 
 
+@untrusted_parse("image.exif")
 def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
     """Snapshot all EXIF metadata from an image file as a JSON-safe dict.
-
-    Captured before any downscaling/re-encoding so nothing is lost if the
-    stored file is converted. Top-level (IFD0) and Exif SubIFD tags are merged
-    by tag name; GPS tags are nested under ``GPSInfo``.
+    Captured before any downscaling/re-encoding so nothing is lost if the stored file is converted.
 
     Args:
         image_file: The uploaded file or opened FieldFile to read.
 
     Returns:
-        The EXIF data keyed by human-readable tag names, or None when the
-        image has no EXIF data or cannot be parsed.
-    """
+        The EXIF data keyed by human-readable tag names, or None when the image has no EXIF data or cannot be parsed."""
     try:
         image_file.seek(0)
         img = PILImage.open(image_file)
@@ -445,7 +684,7 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
         data: dict[str, Any] = {}
         for tag_id, value in exif.items():
             data[str(TAGS.get(tag_id, tag_id))] = _json_safe(value)
-        exif_ifd = exif.get_ifd(0x8769)  # 34665 - Exif SubIFD
+        exif_ifd = exif.get_ifd(0x8769)
         for tag_id, value in exif_ifd.items():
             data[str(TAGS.get(tag_id, tag_id))] = _json_safe(value)
         gps_ifd = exif.get_ifd(0x8825)  # 34853 - GPSInfo IFD
@@ -460,151 +699,549 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
             image_file.seek(0)
 
 
-#: Extensions that reach `_MUST_TRANSCODE_FORMATS`. Used only to decide whether
-#: the downscale pass is worth entering at all - the authoritative check is
-#: Pillow's reported format once the file is open, so a mislabelled file costs
-#: one wasted open and nothing else.
-_MUST_TRANSCODE_EXTENSIONS = {".heic", ".heif"}
-
-
-def stored_file_needs_transcode(name: str) -> bool:
-    """Whether a stored upload must be re-encoded regardless of downscale policy.
-
-    A subscriber with downscaling off, WebP conversion off and location
-    stripping off never entered the downscale pass, so their HEIC was served
-    verbatim to browsers that cannot render it.
+def _xmp_subjects(xmp: dict[str, Any]) -> list[str]:
+    """Pull dc:subject keyword entries out of Pillow's parsed XMP dict.
 
     Args:
-        name: The stored file's name.
+        xmp: The dict returned by ``PIL.Image.Image.getxmp()``.
 
     Returns:
-        True when the file's extension is one that must be transcoded.
+        Keyword strings found in the XMP packet (may be empty).
     """
-    return posixpath.splitext(name or "")[1].lower() in _MUST_TRANSCODE_EXTENSIONS
+    keywords: list[str] = []
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key.lower() == "subject":
+                    _collect(value)
+                else:
+                    _walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    def _collect(value: Any) -> None:
+        # subject is usually {"Bag": {"li": [...]}} but flat forms exist too.
+        if isinstance(value, str):
+            keywords.append(value)
+        elif isinstance(value, list):
+            for item in value:
+                _collect(item)
+        elif isinstance(value, dict):
+            for item in value.values():
+                _collect(item)
+
+    _walk(xmp)
+    return keywords
 
 
-def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> int | None:
-    """Downscale, re-encode, and strip EXIF from an Image's stored file in place.
+@untrusted_parse("image.exif")
+def extract_embedded_keywords(image_file: IO[bytes]) -> list[str] | None:
+    """Read the XMP ``dc:subject`` and IPTC 2:25 keywords a photographer embedded.
 
-    The stored file is replaced when processing shrinks it, when a WebP
-    conversion was requested, **or** when it carries an EXIF block - that last
-    one regardless of the resulting size, since leaving the original in place is
-    exactly the leak. The caller persists ``image.image.name`` and the returned
-    size; this function only touches storage.
+    Read with the EXIF snapshot, before the stored file is rewritten: the rewrite keeps no XMP or IPTC.
 
-    EXIF removal is unconditional and not a setting. The block identifies the
-    camera and often the place, and a stored file is served to everybody who can
-    reach the container it was contributed to. The values are kept on the
-    ``Image`` row (``exif_data``, ``latitude``/``longitude``, ``taken_at``),
-    where the app's own visibility rules apply to them.
+    Args:
+        image_file: The uploaded file or opened FieldFile to read.
+
+    Returns:
+        The normalized keywords, empty when the file carries none, or None when it cannot be parsed.
+    """
+    from PIL import IptcImagePlugin
+
+    from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, normalize_keywords
+
+    found: list[str] = []
+    try:
+        image_file.seek(0)
+        img = PILImage.open(image_file)
+        with contextlib.suppress(Exception):  # Pillow raises varied errors on malformed XMP
+            found.extend(_xmp_subjects(img.getxmp()))
+        with contextlib.suppress(OSError, SyntaxError):
+            entries = (IptcImagePlugin.getiptcinfo(img) or {}).get((2, 25)) or []
+            for entry in entries if isinstance(entries, list) else [entries]:
+                if isinstance(entry, bytes):
+                    found.append(entry.decode("utf-8", errors="replace"))
+                elif isinstance(entry, str):
+                    found.append(entry)
+    except Exception as exc:
+        logger.debug("Embedded keyword read failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    return [result.keyword for result in normalize_keywords([KeywordResult(keyword=keyword) for keyword in found])]
+
+
+def file_still_referenced(field: str, name: str, *, exclude_pks: Collection[int] = ()) -> bool:
+    """Whether any *other* Image row stores *name* in *field*.
+    Pin sharing copies a pin's photos by reusing the same storage key rather than duplicating bytes (``services.sharing.pin_sharing``), and a deduplicated upload reuses both the file and its thumbnail (``services.photos.uploads.attach_deduped_copy``).
+
+    Args:
+        field: Model field holding the storage name - ``image`` or ``thumbnail``.
+        name: The storage name about to be deleted.
+        exclude_pks: Rows that do not count as references, because they are the one doing the replacing or are being deleted in the same operation.
+
+    Returns:
+        True when some other row still needs *name*."""
+    from urbanlens.dashboard.models.images.model import Image as ImageModel
+
+    return ImageModel.objects.filter(**{field: name}).exclude(pk__in=list(exclude_pks)).exists()
+
+
+@dataclass(frozen=True)
+class StoredFileReplacement:
+    """A stored file rewritten under a new name, and the old one still on disk.
+    The superseded file is deliberately *not* deleted by them: ``services.media.access`` authorizes a media request from the row, so between the delete and the row naming its successor every request for the old path is authorized and then fails to open.
+
+    Attributes:
+        size: The new stored size in bytes - what the caller writes to ``Image.file_size``.
+        superseded_name: The stored name the rewrite replaced, or None when it reused the name (same extension, overwritten in place)."""
+
+    size: int
+    superseded_name: str | None
+
+
+def discard_superseded_file(image: Image, superseded_name: str | None) -> None:
+    """Delete the file a rewrite replaced, now that the row names its successor.
+    Call this *after* persisting ``image.image.name``, never before - the ordering is the point, see :class:`StoredFileReplacement`.
+
+    Args:
+        image: The row whose file was rewritten, used for its storage backend and to exclude itself from the reference check.
+        superseded_name: The name to delete, or None for nothing to do."""
+    if not superseded_name or superseded_name == image.image.name:
+        return
+    if file_still_referenced("image", superseded_name, exclude_pks=[image.pk]):
+        return
+    with contextlib.suppress(OSError):
+        image.image.storage.delete(superseded_name)
+
+
+def pixels_only(img: PILImage.Image) -> PILImage.Image:
+    """Copy *img* without anything a Pillow writer would carry into the file it encodes.
+
+    Passing no metadata to ``save`` is not enough: the JPEG and GIF writers copy the source's comment, and the TIFF
+    writer copies XMP, IPTC and Photoshop tags from a TIFF source. The copy is a plain ``Image`` whose ``info`` keeps only
+    ``transparency``, which belongs to the pixels of a palette image.
+
+    Args:
+        img: A decoded image.
+
+    Returns:
+        A copy that is safe to encode.
+    """
+    clean = img.copy()
+    clean.info = {key: value for key, value in img.info.items() if key == "transparency"}
+    return clean
+
+
+def _has_alpha(img: PILImage.Image) -> bool:
+    return "A" in img.mode or "transparency" in img.info
+
+
+def _stored_format(source: PILImage.Image, convert_webp: bool) -> str:
+    if convert_webp:
+        return "WEBP"
+    source_format = (source.format or "").upper()
+    if source_format in _STORED_FORMATS:
+        return source_format
+    return _TRANSCODE_TARGET_WITH_ALPHA if _has_alpha(source) else _TRANSCODE_TARGET
+
+
+def _encodable(frame: PILImage.Image, target_format: str) -> PILImage.Image:
+    if target_format in {"WEBP", "AVIF"} and frame.mode not in ("RGB", "RGBA"):
+        return frame.convert("RGBA" if _has_alpha(frame) else "RGB")
+    if target_format == "JPEG" and frame.mode not in ("RGB", "L"):
+        return frame.convert("RGB")
+    return frame
+
+
+def _stored_frames(source: PILImage.Image, max_dimension: int | None, target_format: str) -> tuple[list[PILImage.Image], list[int]]:
+    """Decode the frames to store: oriented, resized, and holding nothing but pixels.
+
+    An animation is kept only in a format that can carry one, and only while its resized frames fit Pillow's
+    decompression-bomb pixel budget; past that the first frame is stored rather than every frame held in memory.
+
+    Args:
+        source: The opened stored file.
+        max_dimension: Longest-edge cap in pixels, or None.
+        target_format: The format the frames will be encoded in.
+
+    Returns:
+        The frames, and each frame's duration in milliseconds.
+    """
+    width, height = source.size
+    scale = min(1.0, max_dimension / max(width, height)) if max_dimension else 1.0
+    frame_count = getattr(source, "n_frames", 1) if target_format in _ANIMATED_FORMATS else 1
+    budget = PILImage.MAX_IMAGE_PIXELS
+    if budget and frame_count * width * height * scale * scale > budget:
+        frame_count = 1
+
+    frames: list[PILImage.Image] = []
+    durations: list[int] = []
+    for index in range(frame_count):
+        source.seek(index)
+        # The orientation tag is spent on the pixels here, while it can still be read.
+        frame = pixels_only(ImageOps.exif_transpose(source) or source)
+        if max_dimension is not None and max(frame.size) > max_dimension:
+            frame.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+        frames.append(_encodable(frame, target_format))
+        durations.append(int(source.info.get("duration") or 100))
+    return frames, durations
+
+
+@untrusted_parse("image.decode")
+def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> StoredFileReplacement | None:
+    """Re-encode an Image's stored file from its pixels, under the uploader's size and format policy.
+
+    Every photo is rewritten, whatever it carries. Only the pixels and the colour profile reach the new file, so a
+    stored photo can be served to anyone allowed to see it without a metadata check of its own. What the app keeps of
+    the metadata lives on the row (``exif_data``, ``embedded_keywords``, ``latitude``/``longitude``, ``taken_at``),
+    where its visibility rules apply. The caller persists ``image.image.name`` and the returned size; this function
+    only touches storage.
 
     Args:
         image: The Image row whose stored file to process.
         max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
-        convert_webp: Whether to re-encode the file as WebP.
+        convert_webp: Whether to store the photo as WebP rather than in its own format.
 
     Returns:
-        The new stored size in bytes when the file was replaced, else None.
+        The replacement, or None when the row has no stored file. Its ``superseded_name`` is still on disk - see
+        :func:`discard_superseded_file` for why, and when to delete it.
 
     Raises:
-        OSError: When the file cannot be read from or written to storage.
-    """
+        OSError: When the file cannot be read from or written to storage, or is not an image.
+        ValueError: When Pillow cannot decode or encode it."""
     old_name = image.image.name
     if not old_name:
         return None
-    old_size = image.image.size
     with image.image.open("rb") as stored_file:
-        img: PILImage.Image = PILImage.open(stored_file)
-        source_format = (img.format or "").upper()
-        processable = source_format in _PROCESSABLE_FORMATS
-        if not processable and source_format not in _EXIF_REWRITABLE_FORMATS:
-            return None
-        # Resizing/converting stays limited to _PROCESSABLE_FORMATS. A GPS strip
-        # does not: it has to happen for any format we can rewrite at all, since
-        # the alternative is leaving coordinates in a file the user asked us to
-        # scrub. AVIF is the case that matters - phones produce it, it carries a
-        # GPS IFD, and it is not a format this pipeline would otherwise touch.
-        must_transcode = source_format in _MUST_TRANSCODE_FORMATS
-        # A format being re-encoded anyway can be resized in the same pass, so
-        # the resize gate follows "will this file be rewritten", not the narrower
-        # "would the downscaler normally touch this format".
-        rewriting = processable or must_transcode
-        needs_resize = rewriting and max_dimension is not None and max(img.size) > max_dimension
-        needs_convert = (processable and convert_webp and source_format != "WEBP") or must_transcode
-        # Checked off getexif() as well as info["exif"], because TIFF carries EXIF
-        # in its own native IFD and leaves info["exif"] unset - gating on that key
-        # alone meant a tagged TIFF was never even examined.
-        has_exif = bool(img.info.get("exif")) or bool(img.getexif())
-        # A file needing neither a resize nor a conversion is still rewritten when
-        # it carries EXIF, since leaving the original in place is the whole leak.
-        if not needs_resize and not needs_convert and not has_exif:
-            return None
-        icc_profile = img.info.get("icc_profile")
-        img.load()
-        # Orientation is the one tag that changes what the file looks like, so it
-        # is applied to the pixels here - before the block is dropped on save,
-        # and while the tag is still there to read. A no-op when absent.
-        img = ImageOps.exif_transpose(img) or img
-
-    if needs_resize and max_dimension is not None:
-        img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
-
-    target_format = "WEBP" if convert_webp else (_MUST_TRANSCODE_TARGET if must_transcode else source_format)
-    save_kwargs: dict[str, Any] = {}
-    if target_format == "WEBP":
-        if img.mode not in ("RGB", "RGBA"):
-            img = img.convert("RGBA" if "A" in img.mode or img.mode == "P" else "RGB")
-        save_kwargs.update(quality=85, method=4)
-    elif target_format == "JPEG":
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-        save_kwargs.update(quality=85, optimize=True)
-    elif target_format == "PNG":
-        save_kwargs.update(optimize=True)
-    # No `exif=` is ever passed: the block is recorded on the Image row and must
-    # not travel with a file we serve to a whole wiki. Orientation was the reason
-    # it used to be re-attached, and exif_transpose above has already spent it on
-    # the pixels. Note this is an omission that has to stay an omission - Pillow
-    # writes nothing unless asked, but an encoder that carries EXIF through on its
-    # own (pillow-heif does) would need the block cleared rather than merely not
-    # supplied, which is why HEIF is transcoded rather than rewritten in place.
-    if icc_profile:
-        save_kwargs["icc_profile"] = icc_profile
-
-    buffer = io.BytesIO()
-    img.save(buffer, format=target_format, **save_kwargs)
-    new_size = buffer.tell()
-
-    # A pure resize that somehow grew the file is not worth keeping - unless the
-    # EXIF strip was the whole reason we're here, in which case keeping the
-    # smaller-but-still-tagged original would defeat the point.
-    if not needs_convert and not has_exif and new_size >= old_size:
-        return None
+        data, target_format = _encode_stored(stored_file, max_dimension, convert_webp)
 
     from django.core.files.base import ContentFile
 
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
-    image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(buffer.getvalue()), save=False)
-    if image.image.name != old_name:
+    image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(data), save=False)
+    logger.info("Re-encoded image %s: %s bytes (%s)", image.pk, len(data), target_format)
+    return StoredFileReplacement(len(data), old_name if image.image.name != old_name else None)
+
+
+@untrusted_parse("image.decode")
+def reencode_image_file(stored_file: IO[bytes], *, max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:
+    """Re-encode a stored image that is not a library photo (a comment image, an icon, an avatar) from its pixels.
+
+    Args:
+        stored_file: The stored file, open for reading.
+        max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
+        convert_webp: Whether to encode as WebP rather than in the file's own format.
+
+    Returns:
+        The encoded bytes, and the extension of the format they are in.
+
+    Raises:
+        OSError: When the file cannot be read, or is not an image.
+        ValueError: When Pillow cannot decode or encode it.
+    """
+    data, target_format = _encode_stored(stored_file, max_dimension, convert_webp)
+    return data, _FORMAT_EXTENSIONS[target_format]
+
+
+def _encode_stored(stored_file: IO[bytes], max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:
+    """Decode a stored file and encode its pixels, colour profile and animation timing into a new one.
+
+    Returns:
+        The encoded bytes, and the Pillow format they are in.
+    """
+    source: PILImage.Image = PILImage.open(stored_file)
+    target_format = _stored_format(source, convert_webp)
+    icc_profile = source.info.get("icc_profile")
+    loop = source.info.get("loop")
+    frames, durations = _stored_frames(source, max_dimension, target_format)
+
+    save_kwargs: dict[str, Any] = dict(_SAVE_PARAMS.get(target_format, {}))
+    if icc_profile and target_format in _ICC_FORMATS:
+        save_kwargs["icc_profile"] = icc_profile
+    if len(frames) > 1:
+        save_kwargs.update(save_all=True, append_images=frames[1:], duration=durations)
+        if loop is not None:
+            save_kwargs["loop"] = loop
+
+    buffer = io.BytesIO()
+    frames[0].save(buffer, format=target_format, **save_kwargs)
+    return buffer.getvalue(), target_format
+
+
+#: Longest edge of the grid thumbnail written by :func:`write_image_thumbnail`.
+THUMBNAIL_MAX_DIMENSION = 400
+
+#: Photos the periodic backfill hands to a worker per tick. Pillow work is
+#: CPU-heavy and shares the default queue with live uploads, so a large
+#: library drains across hours rather than in one stampede.
+THUMBNAIL_BACKFILL_BATCH = 50
+
+#: How long a sweep leaves an unreadable row alone before trying it again.
+#:
+#: The sweep runs hourly, so this is the difference between one retry a week and
+#: 168 of them. It is a backoff rather than a blacklist because the alternative
+#: fails catastrophically: a boolean "broken" flag set during a storage outage
+#: would mark every row in the library, silently, with nothing that ever
+#: revisits it. Coming back a week later costs one wasted read per genuinely
+#: dead row and makes a restored file heal on its own.
+THUMBNAIL_RETRY_AFTER_UNREADABLE = timedelta(days=7)
+
+
+def _readable_recently_enough(qs: QuerySet[ImageModel]) -> QuerySet[ImageModel]:
+    """Drop rows whose file was found unreadable inside the backoff window.
+
+    Args:
+        qs: An ``Image`` queryset.
+
+    Returns:
+        The subset a sweep should attempt now.
+    """
+    from django.db.models import Q
+
+    return qs.filter(Q(media_unreadable_at__isnull=True) | Q(media_unreadable_at__lt=timezone.now() - THUMBNAIL_RETRY_AFTER_UNREADABLE))
+
+
+def photos_missing_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
+    """Primary keys of photos that still need a grid thumbnail.
+    This queryset is for the periodic backfill of rows that predate that, or whose original processing skipped it - not for page views, which must not do CPU work.
+
+    Args:
+        after_pk: Exclusive lower bound, so a sweep can walk the table in batches without retrying the same unprocessable rows every tick.
+        limit: Maximum ids to return.
+
+    Returns:
+        Image primary keys, ascending."""
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+    qs = _readable_recently_enough(Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(thumbnail="") | Q(thumbnail__isnull=True))).order_by("pk")
+    if after_pk:
+        qs = qs.filter(pk__gt=after_pk)
+    return list(qs.values_list("pk", flat=True)[:limit])
+
+
+@untrusted_parse("image.decode")
+def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
+    """Write a small WebP preview into ``image.thumbnail`` for grid display.
+
+    Args:
+        image: The Image row whose original to preview.
+        max_dimension: Longest-edge cap in pixels.
+        force: Replace an existing thumbnail.
+
+    Returns:
+        True when a thumbnail was written.
+
+    Raises:
+        OSError: When the original cannot be read from or the thumbnail written to storage."""
+    from urbanlens.dashboard.models.images.model import MediaKind
+
+    if image.media_type != MediaKind.PHOTO:
+        return False
+    if image.thumbnail and not force:
+        return False
+    old_name = image.image.name if image.image else ""
+    if not old_name:
+        return False
+    with image.image.open("rb") as stored_file:
+        img: PILImage.Image = PILImage.open(stored_file)
+        img.load()
+        img = ImageOps.exif_transpose(img) or img
+
+    img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA" if "A" in img.mode or img.mode == "P" else "RGB")
+
+    buffer = io.BytesIO()
+    pixels_only(img).save(buffer, format="WEBP", quality=75, method=4)
+
+    from django.core.files.base import ContentFile
+
+    # The original's own (already-anonymized) stem, so a thumbnail's filename both stays opaque and
+    # visibly pairs with the photo it previews - see anonymized_media_stem.
+    # Not re-anonymized here: doing so would spend a second random token indicating the exact same
+    # "this is a smaller version of that other file" fact the shared stem already gives away for
+    stem = posixpath.splitext(posixpath.basename(old_name))[0]
+    previous = image.thumbnail.name if image.thumbnail else ""
+    image.thumbnail.save(f"{stem}-thumb.webp", ContentFile(buffer.getvalue()), save=False)
+    if previous and previous != image.thumbnail.name and not file_still_referenced("thumbnail", previous, exclude_pks=[image.pk]):
         with contextlib.suppress(OSError):
-            image.image.storage.delete(old_name)
-    logger.info("Downscaled image %s: %s -> %s bytes (%s)", image.pk, old_size, new_size, target_format)
-    return new_size
+            image.thumbnail.storage.delete(previous)
+    return True
+
+
+#: Longest edge of the tiny map-marker thumbnail written by :func:`write_image_marker_thumbnail`.
+MARKER_THUMBNAIL_MAX_DIMENSION = 88
+
+#: Aggressive relative to the grid thumbnail's quality=75: a marker this small
+#: hides WebP's compression artifacts almost entirely, so the extra fidelity
+#: buys nothing but bytes on a tile every map page loads dozens of.
+_MARKER_THUMBNAIL_QUALITY = 45
+
+
+def photos_missing_marker_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
+    """Primary keys of photos that still need a map-marker thumbnail.
+
+    Args:
+        after_pk: Exclusive lower bound, so a sweep can walk the table in batches without retrying the same unprocessable rows every tick.
+        limit: Maximum ids to return.
+
+    Returns:
+        Image primary keys, ascending."""
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+    qs = _readable_recently_enough(Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(marker_thumbnail="") | Q(marker_thumbnail__isnull=True))).order_by("pk")
+    if after_pk:
+        qs = qs.filter(pk__gt=after_pk)
+    return list(qs.values_list("pk", flat=True)[:limit])
+
+
+@untrusted_parse("image.decode")
+def write_image_marker_thumbnail(image: Image, *, max_dimension: int = MARKER_THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
+    """Write a tiny WebP preview into ``image.marker_thumbnail`` for map markers.
+
+    Args:
+        image: The Image row whose original to preview.
+        max_dimension: Longest-edge cap in pixels.
+        force: Replace an existing marker thumbnail.
+
+    Returns:
+        True when a marker thumbnail was written.
+
+    Raises:
+        OSError: When the original cannot be read from or the thumbnail written to storage."""
+    from urbanlens.dashboard.models.images.model import MediaKind
+
+    if image.media_type != MediaKind.PHOTO:
+        return False
+    if image.marker_thumbnail and not force:
+        return False
+    old_name = image.image.name if image.image else ""
+    if not old_name:
+        return False
+    with image.image.open("rb") as stored_file:
+        img: PILImage.Image = PILImage.open(stored_file)
+        img.load()
+        img = ImageOps.exif_transpose(img) or img
+
+    img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA" if "A" in img.mode or img.mode == "P" else "RGB")
+
+    buffer = io.BytesIO()
+    pixels_only(img).save(buffer, format="WEBP", quality=_MARKER_THUMBNAIL_QUALITY, method=6)
+
+    from django.core.files.base import ContentFile
+
+    stem = posixpath.splitext(posixpath.basename(old_name))[0]
+    previous = image.marker_thumbnail.name if image.marker_thumbnail else ""
+    image.marker_thumbnail.save(f"{stem}-marker.webp", ContentFile(buffer.getvalue()), save=False)
+    if previous and previous != image.marker_thumbnail.name and not file_still_referenced("marker_thumbnail", previous, exclude_pks=[image.pk]):
+        with contextlib.suppress(OSError):
+            image.marker_thumbnail.storage.delete(previous)
+    return True
+
+
+#: Longest edge of the copy handed to vision models and the image classifier
+#: (:func:`write_image_analysis_thumbnail`).
+ANALYSIS_THUMBNAIL_MAX_DIMENSION = 512
+
+#: JPEG rather than the WebP the two display thumbnails use, deliberately.
+#: Cloudflare Workers AI is the default vision provider and the only source of the image classifier,
+#: and it takes a bare byte array with no format negotiation or documented format list; JPEG is the
+#: one encoding every provider accepts.
+_ANALYSIS_THUMBNAIL_QUALITY = 80
+
+
+def photos_missing_analysis_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
+    """Primary keys of photos that still need an analysis copy.
+
+    Args:
+        after_pk: Exclusive lower bound, so a sweep can walk the table in batches without retrying the same unprocessable rows every tick.
+        limit: Maximum ids to return.
+
+    Returns:
+        Image primary keys, ascending."""
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+    qs = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(analysis_thumbnail="") | Q(analysis_thumbnail__isnull=True)).order_by("pk")
+    if after_pk:
+        qs = qs.filter(pk__gt=after_pk)
+    return list(qs.values_list("pk", flat=True)[:limit])
+
+
+@untrusted_parse("image.decode")
+def write_image_analysis_thumbnail(image: Image, *, max_dimension: int = ANALYSIS_THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
+    """This exists so that nothing outside the sandbox tier ever has to decode an upload.
+
+    Args:
+        image: The Image row whose original to downscale.
+        max_dimension: Longest-edge cap in pixels.
+        force: Replace an existing analysis copy.
+
+    Returns:
+        True when an analysis copy was written.
+
+    Raises:
+        OSError: When the original cannot be read from or the copy written to storage."""
+    from urbanlens.dashboard.models.images.model import MediaKind
+
+    if image.media_type != MediaKind.PHOTO:
+        return False
+    if image.analysis_thumbnail and not force:
+        return False
+    old_name = image.image.name if image.image else ""
+    if not old_name:
+        return False
+    with image.image.open("rb") as stored_file:
+        img: PILImage.Image = PILImage.open(stored_file)
+        img.load()
+        img = ImageOps.exif_transpose(img) or img
+
+    img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+    # JPEG has no alpha channel, so a transparent source must be flattened
+    # rather than converted - RGBA -> RGB alone raises for some modes and
+    # renders transparency as black for the rest.
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        background = PILImage.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[-1])
+        img = background
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+
+    buffer = io.BytesIO()
+    pixels_only(img).save(buffer, format="JPEG", quality=_ANALYSIS_THUMBNAIL_QUALITY)
+
+    from django.core.files.base import ContentFile
+
+    stem = posixpath.splitext(posixpath.basename(old_name))[0]
+    previous = image.analysis_thumbnail.name if image.analysis_thumbnail else ""
+    image.analysis_thumbnail.save(f"{stem}-analysis.jpg", ContentFile(buffer.getvalue()), save=False)
+    if previous and previous != image.analysis_thumbnail.name and not file_still_referenced("analysis_thumbnail", previous, exclude_pks=[image.pk]):
+        with contextlib.suppress(OSError):
+            image.analysis_thumbnail.storage.delete(previous)
+    return True
 
 
 def compute_checksum(image_file: IO[bytes]) -> str:
     """Compute the SHA-256 hex digest of an uploaded image file.
-
-    Used to detect duplicate uploads: two files with the same digest are the
-    same photo. The file position is rewound before and after hashing so the
-    file can still be saved afterwards.
+    The file position is rewound before and after hashing so the file can still be saved afterwards.
 
     Args:
         image_file: The file to hash (an UploadedFile or an opened FieldFile).
 
     Returns:
-        The 64-character lowercase hex digest.
-    """
+        The 64-character lowercase hex digest."""
     image_file.seek(0)
     digest = hashlib.sha256()
     for chunk in iter(lambda: image_file.read(1024 * 1024), b""):
@@ -616,29 +1253,13 @@ def compute_checksum(image_file: IO[bytes]) -> str:
 def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *, skip_malware_scan: bool = False) -> tuple[str, int] | None:
     """Run every pre-storage safety check an uploaded file must pass, in order.
 
-    Every endpoint that creates an ``Image`` row from a user-uploaded file
-    should call this immediately before ``Image.objects.create(...)`` -
-    checks, in order: the site-wide max file size, magic-byte content-type
-    sniffing (catching a mislabeled/spoofed upload before it's trusted as
-    whatever ``declared_media_type`` claims), and antivirus scanning. Quota
-    is deliberately NOT checked here - it's scope-dependent (per-pin,
-    per-wiki, per-profile) and each call site already checks it separately
-    against the right queryset.
-
     Args:
         file_obj: The uploaded file.
-        declared_media_type: The ``MediaKind`` the caller expects/classified
-            this upload as.
-        skip_malware_scan: When True, skips the antivirus scan - only the
-            fast, local size/content-type checks run. For callers that scan
-            asynchronously after accepting the upload (see
-            ``controllers.comments``/``tasks.scan_comment_image``) instead of
-            blocking the request on a clamd round-trip.
+        declared_media_type: The ``MediaKind`` the caller expects/classified this upload as.
+        skip_malware_scan: When True, skips the antivirus scan - only the fast, local size/content-type checks run.
 
     Returns:
-        ``(message, status_code)`` for the first failing check, or ``None``
-        if the file passes every check and is safe to store.
-    """
+        ``(message, status_code)`` for the first failing check, or ``None`` if the file passes every check and is safe to store."""
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.media.storage import file_size_error_for_upload
     from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error, photo_is_not_an_image_error, unsupported_image_extension_error
@@ -655,11 +1276,10 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
         if extension_error:
             return extension_error, 400
 
-        # And the bytes have to actually be an image. The general sniff below
-        # fails open on anything it cannot fingerprint, which is right for
-        # documents and wrong here - a shell script named .png is unrecognisable
-        # rather than mismatched, so it sailed through and was stored, then
-        # served back from this origin as an image.
+        # And the bytes have to actually be an image.
+        # The general sniff below fails open on anything it cannot fingerprint, which is right for
+        # documents and wrong here - a shell script named .png is unrecognisable rather than
+        # mismatched, so it sailed through and was stored, then served back from this origin as an
         not_an_image = photo_is_not_an_image_error(file_obj)
         if not_an_image:
             return not_an_image, 400
@@ -683,124 +1303,231 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
     return None
 
 
-def _visible_uploader_name(img: Image, viewer_profile: Profile | None) -> str:
+def _visible_uploader_name(img: Image, viewer_profile: Profile | None, memo: dict[int, str] | None = None) -> str:
     """The uploader's name as this viewer is allowed to see it.
-
-    A photo can be visible while the identity behind it is not: a profile that
-    has restricted who may see it is masked everywhere else it is named - the
-    external API's ``owner_slug``, wiki edit attribution - and this gallery was
-    printing ``profile.username`` straight off the row.
 
     Args:
         img: The photo.
         viewer_profile: Who is looking, or None for an anonymous request.
+        memo: Optional per-uploader cache for one response. `can_view_profile`
+            at the `COMMON_PIN` setting reads both accounts' whole pin sets, and
+            the answer cannot vary between two photos by the same uploader for
+            the same viewer - so a caller rendering a list passes a fresh dict
+            and pays once per uploader instead of once per photo. Scoped to one
+            response deliberately: a visibility setting a user just changed must
+            take effect on their next page load, not when a TTL expires.
 
     Returns:
-        The username, or the masked placeholder when the viewer may not see the
-        uploader's identity. Empty string when the photo has no uploader.
-    """
+        The username, or the masked placeholder when the viewer may not see the uploader's identity."""
     from urbanlens.dashboard.services.profile.identity_visibility import DEFAULT_MASKED_PLACEHOLDER
 
     if img.profile is None:
         return ""
     if viewer_profile is not None and img.profile_id == viewer_profile.pk:
         return img.profile.username
-    # `can_view_profile` rather than the fuller `resolve_visible_identity`: the
-    # answer wanted here is only the name, and that helper also builds an avatar
-    # and a profile URL, which is work this caller throws away - and a reverse()
-    # a caller holding an unsaved profile cannot satisfy.
-    return img.profile.username if img.profile.can_view_profile(viewer_profile) else DEFAULT_MASKED_PLACEHOLDER
+    if memo is not None and img.profile_id in memo:
+        return memo[img.profile_id]
+    # `can_view_profile` rather than the fuller `resolve_visible_identity`: the answer wanted here
+    # is only the name, and that helper also builds an avatar and a profile URL, which is work this
+    # caller throws away - and a reverse() a caller holding an unsaved profile cannot satisfy.
+    name = img.profile.username if img.profile.can_view_profile(viewer_profile) else DEFAULT_MASKED_PLACEHOLDER
+    if memo is not None and img.profile_id is not None:
+        memo[img.profile_id] = name
+    return name
 
 
-def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:
+def prime_uploader_memo(images: Sequence[Image], viewer_profile: Profile | None, memo: dict[int, str]) -> None:
+    """Fill *memo* for every uploader in *images* in one resolution.
+
+    The memo already stops the same uploader being resolved twice; this stops
+    each *distinct* uploader costing its own pass, which at the ``COMMON_PIN``
+    setting reads both accounts' whole ``Pin`` table. A wiki gallery collects
+    photos from everyone who has been to the place, so distinct uploaders is
+    the axis that grows.
+
+    Args:
+        images: The photos about to be serialized.
+        viewer_profile: Who is looking. None resolves with no queries at all -
+            an anonymous viewer passes only ``ANYONE`` - so there is nothing to
+            batch and the per-photo path is left to it.
+        memo: The dict :func:`image_to_gallery_json` will read, filled in place.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.profile.identity_visibility import DEFAULT_MASKED_PLACEHOLDER
+
+    if viewer_profile is None:
+        return
+    uploaders = {img.profile.pk: img.profile for img in images if img.profile is not None and img.profile_id != viewer_profile.pk}
+    if not uploaders:
+        return
+    visible = Profile.visible_profile_pks(viewer_profile, list(uploaders.values()))
+    for pk, uploader in uploaders.items():
+        memo[pk] = uploader.username if pk in visible else DEFAULT_MASKED_PLACEHOLDER
+
+
+def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None, uploader_memo: dict[int, str] | None = None) -> dict:
     """Serialize an Image to a dict suitable for a photo gallery/map layer.
-
-    Shared by the pin, location wiki, and safety check-in gallery views so
-    the upload response and map layer JSON stay in the same shape everywhere.
+    Shared by the pin, location wiki, and safety check-in gallery views so the upload response and map layer JSON stay in the same shape everywhere.
 
     Args:
         img: The image to serialize.
         request: Current request, used to build an absolute image URL.
         viewer_profile: The requesting profile, if any - used to flag ``is_mine``.
+        uploader_memo: Optional per-uploader cache passed straight to
+            :func:`_visible_uploader_name`; a caller rendering a list should
+            pass one fresh dict for the whole list.
 
     Returns:
-        Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the
-        attribution fields (author/source_url/copyright/taken_at) shown in the
-        lightbox, and the two flags the pin gallery's delete prompt reads.
-    """
-    from urbanlens.dashboard.models.images.model import ImageSource
+        Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the attribution fields (author/source_url/copyright/taken_at) shown in the lightbox, the two flags the pin gallery's delete prompt reads, and ``processing``/``processing_failed``, under which an upload carries no file URLs."""
+    from urbanlens.dashboard.models.images.model import MediaKind
 
+    # The URL properties are empty while the upload is pending (see Image.file_url).
+    thumb = img.thumb_url
+    marker_thumb = img.marker_thumb_url
+    file_url = img.file_url
+    url = request.build_absolute_uri(file_url) if file_url else ("" if img.pending_scan else img.source_url or "")
+    effective_taken_at = img.effective_taken_at
     return {
         "id": img.pk,
-        "url": request.build_absolute_uri(img.image.url),
+        "uuid": str(img.uuid),
+        "url": url,
+        "thumb_url": request.build_absolute_uri(thumb) if thumb else "",
+        "marker_thumb_url": request.build_absolute_uri(marker_thumb) if marker_thumb else "",
+        "processing": img.is_processing,
+        "processing_failed": img.processing_failed,
         "caption": img.caption or "",
         "latitude": float(img.latitude) if img.latitude is not None else None,
         "longitude": float(img.longitude) if img.longitude is not None else None,
-        "uploader": _visible_uploader_name(img, viewer_profile),
+        "uploader": _visible_uploader_name(img, viewer_profile, uploader_memo),
         "is_mine": viewer_profile is not None and img.profile_id == viewer_profile.pk,
         "author": img.author or "",
         "source_url": img.source_url or "",
         "copyright": img.copyright or "",
-        "taken_at": img.taken_at.isoformat() if img.taken_at else None,
+        "copied_from_label": img.copied_from_label or "",
+        "taken_at": effective_taken_at.isoformat() if effective_taken_at else None,
         # What the pin gallery's delete prompt needs to know: whether removing
         # this photo from a pin would also take it off a community wiki, and
         # whether withdrawing it from there is even the owner's to do.
         "on_wiki": img.wiki_id is not None,
-        "uploaded": img.source == ImageSource.UPLOAD,
+        "uploaded": img.is_own_contribution,
+        "map_hidden": bool(getattr(img, "map_hidden", False)),
+        "media_type": img.media_type,
+        # Served rather than re-derived client-side: the icon depends on the
+        # stored filename when a document has no caption, which the client
+        # never sees.
+        "document_icon": img.document_icon if img.media_type == MediaKind.DOCUMENT else "",
     }
+
+
+def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
+    """Describe where *image* is filed and which albums it belongs to, for the lightbox.
+    Owner-only info (see ``PhotoAssociationsView``) - not a general visibility check.
+
+    Args:
+        image: The photo to describe.
+        viewer: The requesting profile - only used for wiki-album concealment.
+
+    Returns:
+        ``{"pin": {"name", "url"} | None, "wiki": {"name", "url"} | None, "albums": [{"name", "url", "owner_label", "owner_name"}, ...]}``."""
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.images.model import MediaKind
+    from urbanlens.dashboard.services.photos.albums import _owner_conceal
+
+    pin_info = None
+    pin = image.pin
+    if pin is not None:
+        pin_info = {"name": pin.effective_name, "url": reverse("pin.details", args=[pin.slug])}
+
+    wiki_info = None
+    wiki = image.wiki
+    if wiki is not None and wiki.location_id and not _owner_conceal(wiki, viewer):
+        wiki_info = {"name": wiki.name or "Untitled wiki", "url": reverse("location.wiki", args=[wiki.location.slug])}
+
+    albums: list[dict[str, str]] = []
+    memberships = image.album_memberships.select_related("album__parent_pin", "album__parent_wiki__location", "album__parent_profile")
+    for item in memberships:
+        album = item.album
+        if album.parent_pin is not None:
+            albums.append(
+                {
+                    "name": album.name,
+                    "owner_label": "Pin album",
+                    "owner_name": album.parent_pin.effective_name,
+                    "url": reverse("pin.albums.detail", args=[album.parent_pin.slug, album.slug]),
+                },
+            )
+        elif album.parent_wiki is not None:
+            if not album.parent_wiki.location_id or _owner_conceal(album.parent_wiki, viewer):
+                continue
+            albums.append(
+                {
+                    "name": album.name,
+                    "owner_label": "Wiki album",
+                    "owner_name": album.parent_wiki.name or "Untitled wiki",
+                    "url": reverse("location.wiki.albums.detail", args=[album.parent_wiki.location.slug, album.slug]),
+                },
+            )
+        elif album.parent_profile is not None:
+            albums.append(
+                {
+                    "name": album.name,
+                    "owner_label": "Vault album",
+                    "owner_name": "",
+                    "url": reverse("vault.photos.albums.detail", args=[album.slug]),
+                },
+            )
+
+    # PhotoActionView refuses create-pin/log-visit/send-to-wiki for a document
+    # (a place's gallery has no way to render one), so the lightbox must not
+    # offer those actions either - the buttons would only ever toast an error.
+    can_file = image.media_type != MediaKind.DOCUMENT
+    return {"pin": pin_info, "wiki": wiki_info, "albums": albums, "can_file": can_file}
 
 
 def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bool:
     """Remove an image's stored file, unless another row still points at it.
-
-    Sharing a pin copies its photos by reusing the *same* storage key rather than
-    duplicating the bytes (see ``services.sharing.pin_sharing.create_pin_from_share``),
-    so one file can back several ``Image`` rows. Deleting the file whenever the first
-    of those rows goes leaves everyone else's copy pointing at nothing - a broken
-    photo, with no error anywhere to explain it.
-
-    The file is still removed as soon as the last row referencing it goes, so this
-    does not trade a broken photo for a storage leak.
+    Sharing a pin copies its photos by reusing the *same* storage key rather than duplicating the bytes (see ``services.sharing.pin_sharing.create_pin_from_share``), so one file can back several ``Image`` rows.
 
     Args:
         image: The ``Image`` whose stored file should go.
-        also_deleting: Primary keys of other rows being deleted in the same
-            operation. They must not count as references, or a bulk delete would
-            never remove anything.
+        also_deleting: Primary keys of other rows being deleted in the same operation.
 
     Returns:
-        True when the file was deleted, False when another row still needs it (or
-        there was no file).
-    """
-    from urbanlens.dashboard.models.images.model import Image as ImageModel
+        True when the file was deleted, False when another row still needs it (or there was no file)."""
+    excluded = [image.pk, *also_deleting]
+    # Before the original's check: a pin share reuses the original without its derived files, so a
+    # shared original must not keep this row's thumbnails alive.
+    for field_name in ("thumbnail", "marker_thumbnail", "analysis_thumbnail"):
+        derived = getattr(image, field_name, None)
+        if derived and derived.name and not file_still_referenced(field_name, derived.name, exclude_pks=excluded):
+            with contextlib.suppress(OSError):
+                derived.delete(save=False)
 
     name = image.image.name if image.image else ""
     if not name:
         return False
 
-    still_referenced = ImageModel.objects.filter(image=name).exclude(pk__in=[image.pk, *also_deleting]).exists()
-    if still_referenced:
+    if file_still_referenced("image", name, exclude_pks=excluded):
         logger.debug("Keeping stored file %s: another image row still references it", name)
         return False
 
-    image.image.delete(save=False)
+    # Suppressed like the derived files below.
+    # A file we cannot unlink is a storage problem to be logged; leaving the row behind because of
+    # it is a worse one, since nothing serves an orphaned file but a stranded pending row is visible
+    # to its uploader forever.
+    try:
+        image.image.delete(save=False)
+    except OSError:
+        logger.warning("Could not remove stored file %s; deleting the row anyway", name, exc_info=True)
     return True
 
 
 def detach_image_from_pin(image: Any) -> None:
-    """Remove ``image`` from its pin - delete the row outright only if nothing
-    else still needs it.
-
-    ``wiki_creation._seed_photos`` and ``PinGalleryBulkView``'s "send to wiki"
-    action both repoint an existing pin photo's ``wiki`` FK rather than copying
-    the row, so one ``Image`` can serve a pin and a wiki at once. A per-photo
-    delete triggered from the pin side must not destroy the wiki's copy just
-    because it shares the row - this mirrors the FK's own ``on_delete=SET_NULL``
-    behavior for whole-pin deletion, applied to a single explicit delete too.
+    """Remove ``image`` from its pin - delete the row outright only if nothing else still needs it.
 
     Args:
-        image: The ``Image`` to remove from its pin.
-    """
+        image: The ``Image`` to remove from its pin."""
     if image.wiki_id is not None:
         image.pin = None
         image.save(update_fields=["pin", "updated"])
@@ -809,15 +1536,76 @@ def detach_image_from_pin(image: Any) -> None:
     image.delete()
 
 
-def detach_image_from_wiki(image: Any) -> None:
+def detach_image_from_wiki(image: Image, *, withdrawn_by_contributor: bool) -> None:
     """The wiki-side mirror of ``detach_image_from_pin``.
 
     Args:
         image: The ``Image`` to remove from its wiki.
-    """
+        withdrawn_by_contributor: Whether the photo's own owner asked for this."""
+    from urbanlens.dashboard.models.images.attachment import ImageAttachment
+    from urbanlens.dashboard.services.media.quota_rewards import revoke_community_quota_bonus
+    from urbanlens.dashboard.services.reputation.scoring import retract_events_for_target
+
+    if withdrawn_by_contributor:
+        # The ledger half of the same withdrawal the quota bonus covers below.
+        # Done before either branch because both are withdrawals - the photo is kept when it is
+        # still on a pin and deleted when it is not, and the contribution has ended either way.
+        retract_events_for_target(image, reason="contribution_withdrawn")
+
+    if image.wiki_id is not None:
+        # The pin side already does this (``PinImageView.delete``).
+        # Leaving the row behind keeps the photo eligible to be made the wiki's cover, since
+        # ``WikiCoverPhotoView`` accepts an attachment as proof the photo is on the wiki, and keeps
+        # it counted by ``reference_count``.
+        ImageAttachment.objects.filter(image=image, wiki_id=image.wiki_id).delete()
     if image.pin_id is not None:
+        if withdrawn_by_contributor:
+            revoke_community_quota_bonus(image)
         image.wiki = None
         image.save(update_fields=["wiki", "updated"])
         return
     delete_stored_file(image)
     image.delete()
+
+
+@dataclass(frozen=True)
+class PreparedUpload:
+    """A photo upload staged for the sandboxed task that reads and strips it."""
+
+    #: What to store: the uploaded bytes, unexamined. The request never decodes
+    #: an upload - see :func:`prepare_photo_upload`.
+    file: Any
+
+    #: Size of :attr:`file` in bytes - what the row's ``file_size`` should be.
+    size: int
+
+    #: ``Image`` field values ready to splat into ``Image.objects.create``.
+    #: Never includes ``caption``: a caller's own caption always wins, so the embedded one (once
+    #: read, in the task) is offered separately.
+    metadata: dict[str, Any]
+
+    #: Always None. Kept on the dataclass so callers built around "an optional
+    #: caption from the file's own metadata" need no change - a caption embedded
+    #: in EXIF is now read in the task, too late to offer here.
+    metadata_caption: str | None
+
+
+def prepare_photo_upload(file_obj: UploadedFile, profile: Profile | None) -> PreparedUpload:
+    """Stage a photo upload for asynchronous metadata reading and stripping.
+
+    Args:
+        file_obj: The uploaded file, already validated by :func:`image_upload_error`.
+        profile: The uploading profile, or None for a system-created row.
+
+    Returns:
+        A :class:`PreparedUpload` whose ``file``/``size`` are the untouched upload and whose ``metadata`` is ``{"pending_scan": True}``."""
+    # UploadedFile.size is typed Optional - some underlying file-like objects never report one - so
+    # a caller that actually needs a real int (the PreparedUpload.size contract) can't trust it
+    # blindly; measure directly when it's missing.
+    file_obj.seek(0)
+    size = file_obj.size
+    if size is None:
+        file_obj.seek(0, io.SEEK_END)
+        size = file_obj.tell()
+    file_obj.seek(0)
+    return PreparedUpload(file=file_obj, size=size, metadata={"pending_scan": True}, metadata_caption=None)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import re
 from typing import Protocol
 
 import requests
@@ -27,7 +26,7 @@ class PlaceNameResolver(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class GooglePlacesNameResolver:
-    """Resolve names from Google Places nearby search results."""
+    """Resolve names from Google Places nearby search."""
 
     radius: int = 50
 
@@ -40,7 +39,7 @@ class GooglePlacesNameResolver:
 
 @dataclass(frozen=True, slots=True)
 class GoogleGeocodingNameResolver:
-    """Fallback resolver using Google Geocoding formatted addresses."""
+    """Fallback resolver using Google Geocoding addresses."""
 
     def resolve(self, latitude: float, longitude: float) -> str | None:
         try:
@@ -52,7 +51,7 @@ class GoogleGeocodingNameResolver:
 
 @dataclass(frozen=True, slots=True)
 class PlaceNameResolverChain:
-    """Try resolvers in order so future fallback strategies can be added cleanly."""
+    """Try resolvers in order so fallback strategies can be added."""
 
     resolvers: tuple[PlaceNameResolver, ...] = (GooglePlacesNameResolver(), GoogleGeocodingNameResolver())
 

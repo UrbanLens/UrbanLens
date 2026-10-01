@@ -1,19 +1,4 @@
-"""A video upload must honour the same location opt-out photos do.
-
-``_process_video_upload`` used to express "strip the location" by passing
-``max_height=None`` to :func:`process_uploaded_video`. That value means "skip
-downscaling entirely", so the request to scrub produced the exact opposite: the
-original file - location tag and all - was stored untouched and served, while
-only the derived ``Image.latitude``/``longitude`` and ``taken_at`` were dropped.
-
-Two things had to change, and both are exercised here against real ffmpeg:
-
-- a small video needing no downscale is now scrubbed by a lossless stream copy;
-- ``_reencode`` clears the location tags too, since ffmpeg copies container
-  metadata across a transcode (verified: the tags survived the old flags).
-
-Skipped when ffmpeg isn't on PATH, so this stays runnable outside the container.
-"""
+"""A stored video never carries the container location tag it arrived with."""
 
 from __future__ import annotations
 
@@ -59,11 +44,20 @@ class VideoLocationStripTests(TestCase):
         out = Path(tempfile.mkdtemp(dir=self._media_root)) / "src.mp4"
         subprocess.run(
             [
-                "ffmpeg", "-v", "error", "-y",
-                "-f", "lavfi", "-i", f"testsrc=size={height * 4 // 3}x{height}:rate=10:duration=1",
-                "-c:v", "libx264",
-                "-metadata", f"location={_COORDS}",
-                "-metadata", f"com.apple.quicktime.location.ISO6709={_COORDS}",
+                "ffmpeg",
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"testsrc=size={height * 4 // 3}x{height}:rate=10:duration=1",
+                "-c:v",
+                "libx264",
+                "-metadata",
+                f"location={_COORDS}",
+                "-metadata",
+                f"com.apple.quicktime.location.ISO6709={_COORDS}",
                 str(out),
             ],
             capture_output=True,
@@ -71,11 +65,11 @@ class VideoLocationStripTests(TestCase):
         )
         return out.read_bytes()
 
-    def _stored_after(self, height: int, *, max_height: int | None, strip: bool) -> Path:
+    def _stored_after(self, height: int, *, max_height: int | None) -> Path:
         image = baker.make(Image, image=None)
         image.image.save("clip.mp4", ContentFile(self._video_with_location(height)), save=True)
 
-        process_uploaded_video(image, max_height, strip_location=strip)
+        process_uploaded_video(image, max_height)
 
         # process_uploaded_video leaves persisting image.image.name to its caller.
         return Path(image.image.path)
@@ -89,36 +83,35 @@ class VideoLocationStripTests(TestCase):
 
     def test_small_video_is_scrubbed_even_though_no_downscale_is_needed(self) -> None:
         """The case the old code could never reach - it skipped processing entirely."""
-        stored = self._stored_after(240, max_height=720, strip=True)
+        stored = self._stored_after(240, max_height=720)
 
         self.assertNotIn("location", _location_tags(stored))
 
     def test_downscaled_video_is_also_scrubbed(self) -> None:
         """ffmpeg copies container metadata across a transcode unless told otherwise."""
-        stored = self._stored_after(480, max_height=240, strip=True)
+        stored = self._stored_after(480, max_height=240)
 
         self.assertNotIn("location", _location_tags(stored))
 
     def test_a_location_tag_we_cannot_parse_is_still_stripped(self) -> None:
         """The scrub must key off the tag's presence, not off it being readable.
 
-        ``extract_video_metadata`` parses ISO 6709; a tag in any other notation
-        yields no coordinates. Gating the strip on parsed *coordinates* - which
-        is how this was first written - leaves exactly those tags in place, and
-        an unreadable tag discloses the location just as well.
-
-        The fixture is Matroska because the MP4 muxer silently refuses to write
-        a non-ISO 6709 ``location`` (verified), while Matroska stores it
-        verbatim - and ``mkv``/``webm`` are both accepted uploads. Under the
-        parse-gated version this file was left untouched, tag intact.
-        """
+        ``extract_video_metadata`` parses ISO 6709; a tag in any other notation yields no coordinates."""
         out = Path(tempfile.mkdtemp(dir=self._media_root)) / "odd.mkv"
         subprocess.run(
             [
-                "ffmpeg", "-v", "error", "-y",
-                "-f", "lavfi", "-i", "testsrc=size=320x240:rate=10:duration=1",
-                "-c:v", "libx264",
-                "-metadata", "location=42 deg 39 min N, 73 deg 45 min W",
+                "ffmpeg",
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=320x240:rate=10:duration=1",
+                "-c:v",
+                "libx264",
+                "-metadata",
+                "location=42 deg 39 min N, 73 deg 45 min W",
                 str(out),
             ],
             capture_output=True,
@@ -129,11 +122,18 @@ class VideoLocationStripTests(TestCase):
         image = baker.make(Image, image=None)
         image.image.save("odd.mkv", ContentFile(out.read_bytes()), save=True)
 
-        process_uploaded_video(image, 720, strip_location=True)
+        process_uploaded_video(image, 720)
 
         self.assertNotIn("location", _location_tags(Path(image.image.path)))
 
-    def test_location_is_kept_when_the_user_has_not_opted_out(self) -> None:
-        stored = self._stored_after(240, max_height=720, strip=False)
+    def test_the_uploaders_visit_tracking_setting_does_not_keep_the_tag(self) -> None:
+        """There is no setting that leaves coordinates in a served file."""
+        stored = self._stored_after(240, max_height=720)
 
-        self.assertIn("location", _location_tags(stored))
+        self.assertNotIn("location", _location_tags(stored))
+
+    def test_a_video_with_no_downscale_policy_is_still_scrubbed(self) -> None:
+        """max_height=None means "do not resize", never "do not scrub"."""
+        stored = self._stored_after(240, max_height=None)
+
+        self.assertNotIn("location", _location_tags(stored))

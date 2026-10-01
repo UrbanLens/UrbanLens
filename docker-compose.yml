@@ -1,53 +1,22 @@
-# Shared build configuration - all three app containers use the same image.
-# UL_ENVIRONMENT is passed as a build arg (not just a runtime env var) so the
-# Dockerfile can `uv sync --no-dev` for staging/production builds instead of
-# `uv sync` (which pulls in the `dev` dependency-group: linters, mypy, pytest, etc).
 x-app-build: &app-build
   context: .
   dockerfile: Dockerfile
   args:
     UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
     UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
-
-# Every UL_* value in the host .env, injected at container start rather than
-# baked into the image. This block is load-bearing, not a convenience: the
-# `environment:` allowlist below covers only some settings, and the rest
-# (UL_EMAIL_PASSWORD, UL_STRIPE_SECRET_KEY, UL_REDATA_API_KEY, UL_TWILIO_*,
-# UL_CLOUDFLARE_*, UL_HUGGINGFACE_*, ...) used to reach containers only because
-# `COPY . /app` baked the .env into an image layer. .dockerignore now excludes
-# it - see the note there for why a baked secret survives its own rotation.
-# `environment:` still wins over these on key collisions, so the explicit
-# in-compose defaults (DB host, valkey URL) keep overriding any host value
-# meant for running outside Docker.
-#
-# The `required: false` long form needs Compose v2.24+ (Jan 2024). It is worth
-# the floor: the short `env_file: .env` aborts outright when the file is absent,
-# which would break any checkout that runs compose before writing one.
 x-app-env-file: &app-env-file
   - path: .env
     required: false
-
-# Full environment for the app server and celery workers (need all API keys).
-# UL_PG_DUMP_BIN bypasses the pg_wrapper dispatcher and calls the versioned
-# binary directly, which avoids the "install postgresql-client-<ver>" error
-# when the wrapper can't find a local cluster matching the remote server.
 x-app-env: &app-env
-  # Read natively by gunicorn (no --workers flag is passed in package.json's
-  # `start` script) - without this, gunicorn defaults to a single worker
-  # process, so every concurrent request across every user shares one gevent
-  # event loop. A handful of slow/hanging external API calls (see
-  # timeout_utils.call_with_deadline) can then wedge that single loop and
-  # freeze the entire site for everyone, not just the request that triggered
-  # them.
   WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
-  UL_DB_USER: ${UL_DB_USER:-postgres}
+  # Each service logs in as ul_<UL_PROCESS_ROLE>; only db-setup is given the owner's credentials (R29).
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
-  UL_DB_PASS: ${UL_DB_PASS:-postgres}
+  UL_DB_PASS: ${UL_DB_APP_PASS:-${UL_DB_PASS:-postgres}}
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_APP_PORT: ${UL_APP_PORT:-21800}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:21080}
+  UL_SITE_URL: ${UL_SITE_URL:-}
   UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
   UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
   UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
@@ -58,39 +27,117 @@ x-app-env: &app-env
   UL_GOOGLE_SEARCH_CX: ${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
   UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
   UL_NPS_API_KEY: ${UL_NPS_API_KEY}
-  UL_OPENAI_API_KEY: ${UL_OPENAI_API_KEY}
-  UL_ANTHROPIC_API_KEY: ${UL_ANTHROPIC_API_KEY}
   UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
-  UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+  UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
+  UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
+  UL_CHANNEL_LAYER_URL: ${UL_CHANNEL_LAYER_URL:-redis://urbanlens_channel_layer:6379/0}
+  UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-  # Independent of DJANGO_SECRET_KEY on purpose: without it, EncryptedTextField
-  # falls back to deriving its Fernet key from SECRET_KEY, which couples routine
-  # signing-key rotation to at-rest data decryptability. Listed explicitly (not
-  # only via env_file) so it is visible as a first-class deployment secret.
-  # Rotating it requires the procedure in docs/DATA_ENCRYPTION.md.
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
   UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
   UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
-
-# Minimal environment for celery-beat - only needs DB + broker to schedule tasks.
-x-beat-env: &beat-env
-  UL_DB_USER: ${UL_DB_USER:-postgres}
+  UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
+  UL_UNTRUSTED_PARSE_POLICY: ${UL_UNTRUSTED_PARSE_POLICY:-warn}
+  UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
+  UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
+  UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
+  UL_METRICS_TOKEN: ${UL_METRICS_TOKEN:-}
+  UL_METRICS_ALLOWED_CIDRS: ${UL_METRICS_ALLOWED_CIDRS:-}
+  PROMETHEUS_MULTIPROC_DIR: /var/run/urbanlens/prometheus
+  UL_AI_INFERENCE_URL: ${UL_AI_INFERENCE_URL:-http://urbanlens_ai_inference:8002}
+  UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
+  UL_DIRECT_INFERENCE_POLICY: ${UL_DIRECT_INFERENCE_POLICY:-warn}
+x-sandbox-env: &sandbox-env
+  UL_DB_USER: ul_sandbox
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
-  UL_DB_PASS: ${UL_DB_PASS:-postgres}
+  UL_DB_PASS: ${UL_DB_APP_PASS:-${UL_DB_PASS:-postgres}}
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+  UL_SITE_URL: ${UL_SITE_URL:-}
+  UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
+  UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
+  UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-  # beat only schedules tasks, but it imports the same settings/models, so the
-  # encryption key must resolve the same way here or an import-time read of an
-  # encrypted field would decrypt under the wrong key.
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
   UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
-
-# Project name is derived from the environment so each of prod/dev/test/staging
-# gets its own Compose namespace - this prefixes default (unnamed) networks and
-# volumes automatically, in addition to the explicit container_names below.
+  UL_CLAMAV_ENABLED: ${UL_CLAMAV_ENABLED:-true}
+  UL_CLAMAV_HOST: ${UL_CLAMAV_HOST:-urbanlens_clamav}
+  UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
+  UL_PROCESS_ROLE: sandbox
+x-sandbox-worker: &sandbox-worker
+  build:
+    <<: *app-build
+  entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
+  restart: on-failure
+  user: "1001:1001"
+  depends_on:
+    db-setup:
+      condition: service_completed_successfully
+    dragonfly:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    app:
+      condition: service_healthy
+  volumes:
+    - logs:/var/log/urbanlens
+    - media_volume:/app/src/urbanlens/media
+  networks:
+    - sandbox_network
+  environment:
+    <<: *sandbox-env
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  pids_limit: 512
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "200k"
+      max-file: "10"
+x-ai-env: &ai-env
+  UL_DB_USER: ul_ai
+  UL_DB_NAME: ${UL_DB_NAME:-postgres}
+  UL_DB_PASS: ${UL_DB_APP_PASS:-${UL_DB_PASS:-postgres}}
+  UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
+  UL_DB_PORT: ${UL_DB_PORT:-5432}
+  UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+  UL_SITE_URL: ${UL_SITE_URL:-}
+  UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
+  UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
+  UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
+  UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
+  UL_AI_INFERENCE_URL: ${UL_AI_INFERENCE_URL:-http://urbanlens_ai_inference:8002}
+  UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
+  UL_AI_INFERENCE_TIMEOUT_SECONDS: ${UL_AI_INFERENCE_TIMEOUT_SECONDS:-90}
+  UL_AI_WORKER_ENABLED: "true"
+  HTTPS_PROXY: http://urbanlens_egress_proxy:8888
+  HTTP_PROXY: http://urbanlens_egress_proxy:8888
+  NO_PROXY: localhost,127.0.0.1,urbanlens_db,urbanlens_dragonfly,urbanlens_rabbitmq,urbanlens_ai_inference
+  UL_PROCESS_ROLE: ai
+  UL_UNTRUSTED_PARSE_POLICY: deny
+x-beat-env: &beat-env
+  UL_DB_NAME: ${UL_DB_NAME:-postgres}
+  UL_DB_PASS: ${UL_DB_APP_PASS:-${UL_DB_PASS:-postgres}}
+  UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
+  UL_DB_PORT: ${UL_DB_PORT:-5432}
+  UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+  UL_SITE_URL: ${UL_SITE_URL:-}
+  UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
+  UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
+  UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
+  UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
+  UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
+  UL_UNTRUSTED_PARSE_POLICY: ${UL_UNTRUSTED_PARSE_POLICY:-warn}
+  UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
+  UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
+  UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
 name: urbanlens-${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
 
 services:
@@ -100,11 +147,18 @@ services:
       <<: *app-build
 
     restart: unless-stopped
+    command: ["python", "/app/src/bin/init.py", "--no-db"]
 
     depends_on:
-      db:
+      db-setup:
+        condition: service_completed_successfully
+      dragonfly:
         condition: service_healthy
-      valkey:
+      channel-layer:
+        condition: service_healthy
+      tile-cache:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
     volumes:
@@ -117,30 +171,41 @@ services:
       app_network:
         aliases:
           - urbanlens_app
+          - urbanlens-app
+      inference_network: {}
 
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: web
+      UL_DB_USER: ul_web
+      UL_METRICS_ENABLED: ${UL_METRICS_ENABLED:-false}
+      # A login costs more CPU than a poll's own Python; each gthread request thread keeps its connection.
+      UL_DB_CONN_MAX_AGE: "300"
+      UL_DB_CONN_HEALTH_CHECKS: "true"
+    labels:
+      prometheus_scrape: "${UL_METRICS_ENABLED:-false}"
+      prometheus_port: "8000"
+      prometheus_path: "/metrics"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 30s
-      timeout: 15s
-      retries: 3
-      start_period: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 300s
 
-    # This is the service that actually logs client IPs (request logging) - the
-    # backend-only services below already had this; app didn't, so its stdout log
-    # grew unbounded on any deployment relying on Docker's default driver.
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
 
-  # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
-  # chat, etc). `app` above keeps serving 100% of normal HTTP via gunicorn+gevent
-  # unchanged - nginx routes just /ws/ to this service (see config/nginx/django.conf).
+    cpus: ${CPU_LIMIT__APP:-${CPU_LIMIT:-2}}
+    cpu_shares: ${CPU_SHARES__APP:-2048}
+    mem_limit: ${MEM_LIMIT__APP:-${MEM_LIMIT:-2g}}
+
+    mem_reservation: ${MEM_RESERVATION__APP:-768m}
   app-ws:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_app_ws
     build:
@@ -149,11 +214,6 @@ services:
     restart: unless-stopped
 
     entrypoint: ["/docker-entrypoint.sh", "daphne"]
-    # Daphne logs an access line to stdout for every request by default (verbosity=1),
-    # including the docker healthcheck hitting /health/ every 30s - that's pure noise
-    # in `docker logs`. Route it to the shared log volume instead so it's still on
-    # disk for debugging WS issues (see channels_redis timeout tuning) without
-    # flooding the console.
     command:
       [
         "-b",
@@ -164,16 +224,14 @@ services:
         "/var/log/urbanlens/daphne-access.log",
         "urbanlens.UrbanLens.asgi:application",
       ]
-
-    # `app`'s own entrypoint runs bin/init.py (migrate + collectstatic) before
-    # its healthcheck can pass - waiting on `app` being healthy, not just
-    # db/valkey, is what actually guarantees the schema and static manifest
-    # this container's WebSocket consumers depend on exist before it serves
-    # any traffic. app-ws never runs migrate/collectstatic itself.
     depends_on:
-      db:
+      db-setup:
+        condition: service_completed_successfully
+      dragonfly:
         condition: service_healthy
-      valkey:
+      channel-layer:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       app:
         condition: service_healthy
@@ -190,38 +248,40 @@ services:
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: websocket
+      UL_DB_USER: ul_websocket
+      UL_METRICS_ENABLED: "false"
+      # Channels makes every database call on one thread, so the connection is kept rather than logged into per call.
+      UL_DB_CONN_MAX_AGE: "300"
+      UL_DB_CONN_HEALTH_CHECKS: "true"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
       interval: 30s
-      timeout: 15s
-      retries: 3
+      timeout: 20s
+      retries: 4
       start_period: 25s
-
-    # Bounds this service's own stdout/stderr (startup, errors) - the per-request
-    # access log is deliberately routed to the logs volume above instead, and
-    # still needs its own rotation (tracked separately, see docs/GOALS_CODE_AUDIT.md
-    # "Backups and logs" - this block does not cover that file).
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
+    cpus: ${CPU_LIMIT__APP_WS:-${CPU_LIMIT:-1}}
+    cpu_shares: ${CPU_SHARES__APP_WS:-2048}
+    mem_limit: ${MEM_LIMIT__APP_WS:-${MEM_LIMIT:-1g}}
 
   nginx:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_nginx
     image: nginxinc/nginx-unprivileged:alpine
-    # Every other front-line/stateless service here (app, app-ws, clamav, valkey)
-    # restarts unless-stopped; this one didn't, so when a bad config once made it
-    # exit on startup (see django.conf's location regex fix) it just stayed down
-    # silently instead of at least crash-looping visibly.
     restart: unless-stopped
     volumes:
       - static_volume:/app/src/urbanlens/frontend/static
       - media_volume:/app/src/urbanlens/media
       - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./src/urbanlens/config/nginx/django.conf:/etc/nginx/conf.d/django.conf:ro
+      - ./src/urbanlens/config/nginx/django.conf.template:/etc/nginx/templates/django.conf.template:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      UL_APP_PORT: ${UL_APP_PORT:-21800}
     ports:
       - "${UL_APP_PORT:-21800}:8080"
     depends_on:
@@ -233,36 +293,107 @@ services:
           - urbanlens_nginx
 
     healthcheck:
-      # 127.0.0.1, not localhost: inside the alpine image localhost resolves
-      # to ::1 first and nginx's `listen 8080` binds IPv4 only, so the check
-      # was connection-refused on every probe (container permanently
-      # "unhealthy" despite serving traffic fine).
       test:
         ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
       interval: 30s
       timeout: 15s
       retries: 3
       start_period: 20s
-
-    # nginx's own access_log is deliberately routed to /tmp (see nginx.conf) rather
-    # than stdout, so this bounds its error log/startup output, not request logs -
-    # the /tmp file still needs its own rotation, tracked separately.
     logging:
       driver: "json-file"
       options:
-        max-size: "200k"
-        max-file: "10"
+        max-size: "20m"
+        max-file: "5"
+    # The spool for request bodies and buffered responses. On the image's
+    # writable layer this is the same filesystem as postgres-data, and nothing
+    # authenticates before a body is written - so it is a tmpfs, sized to hold
+    # one maximum-size upload (client_max_body_size 200m) plus the 64m response
+    # ceiling, with room to spare. Filling it refuses that upload; it cannot
+    # reach the disk. mem_limit must stay above the size: tmpfs pages are
+    # charged to this cgroup, and an OOM-killed nginx is the whole site.
+    tmpfs:
+      - /tmp:size=${TMPFS_SIZE__NGINX:-512m},mode=1777,noexec,nosuid,nodev
+    cpus: ${CPU_LIMIT__NGINX:-${CPU_LIMIT:-2}}
+    cpu_shares: ${CPU_SHARES__NGINX:-1024}
+    mem_limit: ${MEM_LIMIT__NGINX:-768m}
+  media-nginx:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_nginx
+    image: nginxinc/nginx-unprivileged:alpine
+    restart: unless-stopped
+    volumes:
+      - media_volume:/app/src/urbanlens/media:ro
+      - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./src/urbanlens/config/nginx/media.conf.template:/etc/nginx/templates/media.conf.template:ro
+      - /dev/null:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      MEDIA_FRAME_ANCESTORS: ${UL_SITE_URL:-'none'}
+    ports:
+      - "${UL_MEDIA_PORT:-21801}:8080"
+    depends_on:
+      - app
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_media_nginx
+    healthcheck:
+      test:
+        ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    # Same hazard, far smaller appetite: this vhost caps a body at 64k and its
+    # only proxy_pass returns an X-Accel-Redirect header, not a payload.
+    tmpfs:
+      - /tmp:size=${TMPFS_SIZE__MEDIA_NGINX:-64m},mode=1777,noexec,nosuid,nodev
+    cpus: ${CPU_LIMIT__MEDIA_NGINX:-${CPU_LIMIT:-2}}
+    cpu_shares: ${CPU_SHARES__MEDIA_NGINX:-1024}
+    mem_limit: ${MEM_LIMIT__MEDIA_NGINX:-${MEM_LIMIT:-128m}}
 
   db:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db
-    # Pin to the same major version as postgresql-client-17 in the Dockerfile so
-    # the pg_dump binary and server protocol stay in sync.
-    image: postgis/postgis:17-3.5
+    build:
+      context: ./src/urbanlens/config/postgres
     restart: unless-stopped
+    command:
+      - postgres
+      # JIT's compile time outweighs the short statements a web request runs.
+      - "-c"
+      - "jit=off"
+      # Where the time goes is not answerable after the fact without this, and it was reached for
+      # by hand on the perf deployment rather than configured (X27). Preloading costs a little
+      # shared memory whether or not any database has run CREATE EXTENSION (migration 0032_v0_8_0).
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      # Postgres's own default is off, and measuring its cost here was defeated by host noise.
+      # X27's planning figures need it, so a deployment doing that measurement turns it on.
+      - "-c"
+      - "pg_stat_statements.track_planning=${UL_DB_TRACK_PLANNING:-off}"
+      # Stock is 128MB, which is smaller than the database. Sized against MEM_LIMIT__DB, not the host.
+      - "-c"
+      - "shared_buffers=${UL_DB_SHARED_BUFFERS:-512MB}"
+      - "-c"
+      - "effective_cache_size=${UL_DB_EFFECTIVE_CACHE_SIZE:-1536MB}"
+      # Stock 4.0 prices a seek at four sequential reads, which is a spinning disk.
+      - "-c"
+      - "random_page_cost=${UL_DB_RANDOM_PAGE_COST:-1.1}"
+    # Parallel workers pass tuples through /dev/shm, which Docker leaves at 64MB.
+    shm_size: ${UL_DB_SHM_SIZE:-256mb}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
       app_network:
+        aliases:
+          - urbanlens_db
+      sandbox_network:
+        aliases:
+          - urbanlens_db
+      ai_network:
         aliases:
           - urbanlens_db
 
@@ -273,9 +404,9 @@ services:
       - POSTGRES_PORT=${UL_DB_PORT:-5432}
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${UL_DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${UL_DB_USER:-postgres}"]
       interval: 10s
-      timeout: 15s
+      timeout: 20s
       retries: 9
 
     logging:
@@ -283,22 +414,49 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
+    cpus: ${CPU_LIMIT__DB:-${CPU_LIMIT:-2}}
+    cpu_shares: ${CPU_SHARES__DB:-2048}
+    mem_limit: ${MEM_LIMIT__DB:-${MEM_LIMIT:-2g}}
+    mem_reservation: ${MEM_RESERVATION__DB:-1g}
+
+  db-setup:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db_setup
+    build:
+      <<: *app-build
+    # The only service given the owner's credentials: it migrates, converges every tier's login role,
+    # and exits. Everything that connects to the database waits for it.
+    command: ["python", "/app/src/bin/init.py", "--db-only"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log/urbanlens
+    networks:
+      - app_network
+    env_file: *app-env-file
+    environment:
+      <<: *app-env
+      UL_PROCESS_ROLE: setup
+      UL_DB_USER: ${UL_DB_USER:-postgres}
+      UL_DB_PASS: ${UL_DB_PASS:-postgres}
+      UL_DB_APP_PASS: ${UL_DB_APP_PASS:-}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: 1
+    mem_limit: 2g
 
   celery-worker:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_worker
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    # Handles every task EXCEPT external-data panel fetches, which now run on
-    # celery-worker-panels below (see that service's comment for why they're
-    # split out). Concurrency=4 (prefork - one OS process per slot) is plenty
-    # for this queue's remaining traffic: photo/backup/export jobs and the
-    # scheduled housekeeping tasks (safety check-ins, account deletion, etc),
-    # none of which arrive in the same "~10 at once" bursts panel fetches did.
-    # loglevel=warning: info logs a "received"/"succeeded" line for every task,
-    # including the safety-checkin scheduled tasks that fire every 5 minutes -
-    # that drowns out real signal in production. Failures/retries are still
-    # surfaced explicitly via the task_failure/task_retry handlers in celery.py.
+    # Only the interactive class. Everything whose size is set by how much one
+    # account owns goes to celery-worker-bulk, so a library sweep cannot take a
+    # quarter of this pool while a safety escalation waits behind it - D13.
     command:
       [
         "-A",
@@ -306,12 +464,18 @@ services:
         "worker",
         "--loglevel=warning",
         "--concurrency=4",
+        "-Q",
+        "interactive",
       ]
     restart: on-failure
     depends_on:
-      db:
+      db-setup:
+        condition: service_completed_successfully
+      dragonfly:
         condition: service_healthy
-      valkey:
+      channel-layer:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     volumes:
       - logs:/var/log/urbanlens
@@ -319,43 +483,77 @@ services:
       - backups:/app/src/backups
     networks:
       - app_network
+      - inference_network
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: worker
+      UL_DB_USER: ul_worker
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
+    cpus: ${CPU_LIMIT__CELERY_WORKER:-${CPU_LIMIT:-2}}
+    cpu_shares: ${CPU_SHARES__CELERY_WORKER:-256}
+    mem_limit: ${MEM_LIMIT__CELERY_WORKER:-${MEM_LIMIT:-3g}}
+
+  celery-worker-bulk:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_worker_bulk
+    build:
+      <<: *app-build
+    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
+    # Drains `celery` as well as its own classes on purpose: a task added without
+    # a queue then runs slowly rather than accumulating in a queue nothing
+    # consumes. dashboard.checks.check_every_task_declares_a_queue is what stops
+    # that becoming the normal case.
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--concurrency=2",
+        "-Q",
+        "bulk,maintenance,celery",
+      ]
+    restart: on-failure
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+      dragonfly:
+        condition: service_healthy
+      channel-layer:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log/urbanlens
+      - media_volume:/app/src/urbanlens/media
+      - backups:/app/src/backups
+    networks:
+      - app_network
+      - inference_network
+    env_file: *app-env-file
+    environment:
+      <<: *app-env
+      UL_PROCESS_ROLE: bulk
+      UL_DB_USER: ul_bulk
+    stop_grace_period: 120s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__CELERY_WORKER_BULK:-${CPU_LIMIT:-1}}
+    cpu_shares: ${CPU_SHARES__CELERY_WORKER_BULK:-128}
+    mem_limit: ${MEM_LIMIT__CELERY_WORKER_BULK:-${MEM_LIMIT:-3g}}
 
   celery-worker-panels:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_worker_panels
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    # Dedicated queue + worker for external-data panel fetches
-    # (services/external_data.py's fetch_panel_source task, dispatched to the
-    # "panel_fetch" queue via PanelSource.queue). Split out from celery-worker
-    # above because a cold pin detail page enqueues ~10 of these small,
-    # mostly-IO-bound tasks at once, all sharing celery-worker's 4 process
-    # slots - one slow/degraded external API could occupy a slot long enough
-    # that unrelated panels queued behind it were still "Loading..." when the
-    # client's poll budget ran out (see the pin-page bug report this fixed).
-    #
-    # --pool=threads (real OS threads, no extra dependency - built into
-    # Celery) instead of prefork: these tasks are >95% spent waiting on HTTP
-    # responses, so one thread per task costs kilobytes instead of a whole
-    # Python/Django process's worth of memory, letting --concurrency go much
-    # higher for the same resource budget. Deliberately NOT gevent/eventlet:
-    # this app already got burned once by cooperative-scheduling greenlets
-    # (see WEB_CONCURRENCY's comment above) - a CPU-bound unit of work never
-    # yields control in a gevent loop, freezing every other greenlet in that
-    # process indefinitely, whereas the GIL still preempts between OS threads
-    # every few ms regardless. The couple of panels that DO real CPU-bound
-    # work (BoundaryPanelSource, OvertureBuildingAttributesPanelSource -
-    # GeoParquet/Shapely geometry parsing) opt out via PanelSource.queue and
-    # stay on celery-worker's prefork pool instead, so they can't cause GIL
-    # contention here for the panels that are genuinely just waiting on I/O.
     command:
       [
         "-A",
@@ -369,9 +567,13 @@ services:
       ]
     restart: on-failure
     depends_on:
-      db:
+      db-setup:
+        condition: service_completed_successfully
+      dragonfly:
         condition: service_healthy
-      valkey:
+      channel-layer:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       app:
         condition: service_healthy
@@ -382,20 +584,58 @@ services:
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: panels
+      UL_DB_USER: ul_panels
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
+    cpus: ${CPU_LIMIT__CELERY_PANELS:-${CPU_LIMIT:-1}}
+    cpu_shares: ${CPU_SHARES__CELERY_WORKER_PANELS:-256}
+    mem_limit: ${MEM_LIMIT__CELERY_PANELS:-${MEM_LIMIT:-1g}}
+  media-worker:
+    <<: *sandbox-worker
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_worker
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--concurrency=2",
+        "-Q",
+        "sandbox",
+      ]
+    tmpfs:
+      - /tmp:size=1g,mode=1777,noexec,nosuid,nodev
+    cpus: ${CPU_LIMIT__MEDIA_WORKER:-${CPU_LIMIT:-2}}
+    cpu_shares: ${CPU_SHARES__MEDIA_WORKER:-128}
+    mem_limit: ${MEM_LIMIT__MEDIA_WORKER:-3g}
+  media-worker-batch:
+    <<: *sandbox-worker
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_worker_batch
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--concurrency=1",
+        "-Q",
+        "sandbox_batch",
+      ]
+    tmpfs:
+      - /tmp:size=2g,mode=1777,noexec,nosuid,nodev
+    cpus: ${CPU_LIMIT__MEDIA_WORKER_BATCH:-${CPU_LIMIT:-1}}
+    cpu_shares: ${CPU_SHARES__MEDIA_WORKER_BATCH:-64}
+    mem_limit: ${MEM_LIMIT__MEDIA_WORKER_BATCH:-3g}
 
   celery-beat:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_beat
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    # loglevel=warning: info logs "Scheduler: Sending due task ..." on every beat tick
-    # (every 5 minutes for the safety-checkin tasks alone), which is pure noise once
-    # the schedule is known-good.
     command:
       [
         "-A",
@@ -406,9 +646,11 @@ services:
       ]
     restart: on-failure
     depends_on:
-      db:
+      db-setup:
+        condition: service_completed_successfully
+      dragonfly:
         condition: service_healthy
-      valkey:
+      rabbitmq:
         condition: service_healthy
       app:
         condition: service_healthy
@@ -418,44 +660,60 @@ services:
       - app_network
     environment:
       <<: *beat-env
+      UL_PROCESS_ROLE: beat
+      UL_DB_USER: ul_beat
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
-
-  # clamd daemon every upload (photos/videos/documents, article images,
-  # avatars, custom icons, comment/DM attachments) is scanned through before
-  # it's ever written to permanent storage - see services/malware_scan.py.
-  # The image's own baked-in HEALTHCHECK (pings clamd on its TCP port) is
-  # used as-is rather than reimplemented here - deliberately not overriding
-  # it with a guessed script name. The app fails uploads closed (rejects
-  # them, see MalwareScanUnavailableError) if this container is unreachable,
-  # so keep it running in every environment that accepts uploads.
+    cpus: ${CPU_LIMIT__CELERY_BEAT:-${CPU_LIMIT:-0.5}}
+    cpu_shares: ${CPU_SHARES__CELERY_BEAT:-256}
+    mem_limit: ${MEM_LIMIT__CELERY_BEAT:-${MEM_LIMIT:-512m}}
+  celery-metrics:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_metrics
+    build:
+      <<: *app-build
+    entrypoint: ["/docker-entrypoint.sh", "python", "src/urbanlens/manage.py"]
+    command: ["celery_metrics_exporter", "--port", "8002"]
+    restart: unless-stopped
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+      dragonfly:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log/urbanlens
+    networks:
+      - app_network
+    env_file: *app-env-file
+    environment:
+      <<: *app-env
+      UL_PROCESS_ROLE: metrics
+      UL_DB_USER: ul_metrics
+      PROMETHEUS_MULTIPROC_DIR:
+      UL_METRICS_ENABLED: ${UL_METRICS_ENABLED:-false}
+    profiles: ["metrics"]
+    labels:
+      prometheus_scrape: "${UL_METRICS_ENABLED:-false}"
+      prometheus_port: "8002"
+      prometheus_path: "/metrics"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__CELERY_METRICS:-${CPU_LIMIT:-0.5}}
+    cpu_shares: ${CPU_SHARES__CELERY_METRICS:-64}
+    mem_limit: ${MEM_LIMIT__CELERY_METRICS:-${MEM_LIMIT:-512m}}
   clamav:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_clamav
     image: clamav/clamav-debian:stable
     restart: unless-stopped
     environment:
-      # StreamMaxLength is unset by default, which falls back to clamd's own
-      # compiled-in default - observed to be well under SiteSettings'
-      # max_upload_file_size_mb (250MB by default, admin-adjustable up to
-      # 20,000MB), so an upload that passes our own size check could still
-      # be rejected by clamd with a confusing "too large to scan" error.
-      # Pinned explicitly, comfortably above the default site
-      # setting, so clamd is never the surprise bottleneck for a normal-sized
-      # upload - see the image's /init entrypoint script, which turns any
-      # CLAMD_CONF_<Directive> env var into that clamd.conf directive.
       CLAMD_CONF_StreamMaxLength: "1000M"
-      # clamd has no separate log-level control for its own periodic
-      # "SelfCheck: Database status OK." heartbeat - it isn't gated by
-      # LogVerbose (confirmed: it still logs with LogVerbose at its default
-      # of "no"), so the only lever available is how often it runs. Left at
-      # its compiled-in default (600s = every 10 minutes) this floods
-      # `docker compose logs` with a benign, expected message every few
-      # minutes; once a day is still a reasonable cadence for what this
-      # check actually verifies (the virus database directory hasn't gone
-      # stale/corrupted underneath the running daemon).
       CLAMD_CONF_SelfCheck: "86400"
     volumes:
       - clamav-db:/var/lib/clamav
@@ -463,42 +721,49 @@ services:
       app_network:
         aliases:
           - urbanlens_clamav
+      sandbox_network:
+        aliases:
+          - urbanlens_clamav
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
+    cpus: ${CPU_LIMIT__CLAMAV:-${CPU_LIMIT:-2}}
+    cpu_shares: ${CPU_SHARES__CLAMAV:-128}
+    mem_limit: ${MEM_LIMIT__CLAMAV:-${MEM_LIMIT:-2g}}
 
-  valkey:
-    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_valkey
-    image: valkey/valkey:7-alpine
+  dragonfly:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_dragonfly
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
     user: nobody
     restart: unless-stopped
-    # volatile-lru (not allkeys-lru): this instance is shared by the Django cache,
-    # the Channels layer, and the Celery broker/result backend. allkeys-lru can
-    # evict *any* key under memory pressure, including un-expiring Celery queue
-    # lists and channel-layer group membership - silent data loss. volatile-lru
-    # only evicts keys with a TTL (the cache's, and the channel layer's own
-    # expiring keys), so queued Celery tasks are never silently dropped; if
-    # memory is genuinely exhausted, writes fail loudly (OOM) instead.
     command:
       [
-        "valkey-server",
-        "--save",
-        "",
-        "--appendonly",
-        "no",
-        "--maxmemory",
-        "512mb",
-        "--maxmemory-policy",
-        "volatile-lru",
+        # Redis-protocol-compatible. Scaling across cores is the reason to run
+        # this rather than a single-threaded store, so the thread count tracks
+        # the cpu limit below. Raise the two memory knobs with it: maxmemory
+        # must be at least 256MiB per thread or startup refuses outright
+        # ("There are 4 threads, so 1.00GiB are required. Exiting..."), and
+        # mem_limit needs headroom above maxmemory. cache_mode deliberately
+        # left off: it evicts silently instead of raising once full, which is a
+        # materially different failure mode than the raise that
+        # ResilientRedisCache's _REFUSED handling, and its tests, expect.
+        "--maxmemory=${UL_DRAGONFLY_MAXMEMORY:-1gb}",
+        "--proactor_threads=${UL_DRAGONFLY_THREADS:-4}",
       ]
     networks:
       app_network:
         aliases:
-          - urbanlens_valkey
+          - urbanlens_dragonfly
+      sandbox_network:
+        aliases:
+          - urbanlens_dragonfly
+      ai_network:
+        aliases:
+          - urbanlens_dragonfly
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -507,23 +772,273 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
+    cpus: ${CPU_LIMIT__DRAGONFLY:-${CPU_LIMIT:-4}}
+    cpu_shares: ${CPU_SHARES__DRAGONFLY:-1024}
+    mem_limit: ${MEM_LIMIT__DRAGONFLY:-${MEM_LIMIT:-2g}}
 
-  # --- Test topology (opt-in: docker compose --profile test ...) -------------
-  # pytest's LocalhostOnlyNetwork guard (core/tests/testing_network.py) only
-  # permits loopback connections, which the normal service topology can't
-  # satisfy - UL_VALKEY_URL/UL_DB_HOST resolve to container-bridge IPs, so
-  # running pytest inside `app` trips the guard on legitimate same-stack
-  # traffic (docs/PROBLEMS.md; decision 2026-07-23: dedicated topology, do NOT
-  # widen the guard). These three services form a "pod": test-db and
-  # test-valkey join test-runner's network namespace (network_mode:
-  # service:test-runner), so inside test-runner both really are localhost and
-  # the guard stays exactly as strict as written.
-  #
-  # Usage (fresh throwaway DB every time - no volumes are mounted):
-  #   docker compose --profile test up -d --build test-runner test-db test-valkey
-  #   docker compose exec -e UL_TEST_DB_NAME=ul_test_$RANDOM test-runner \
-  #     python -m pytest src/urbanlens/dashboard/tests/
-  #   docker compose --profile test down
+  tile-cache:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_tile_cache
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
+    user: nobody
+    restart: unless-stopped
+    command:
+      [
+        # Bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
+        # previews. A tile is keyed by layer and coordinate, so the keyspace is however many
+        # coordinates anyone has looked at in the entry's week: unbounded by anything this
+        # deployment controls. Keeping that next to the sessions and the Channels layer means
+        # a week of panning decides whether they can be written.
+        #
+        # cache_mode, unlike the instance above: evicting the least recently used tile is what
+        # a full tile cache should do, and nothing here is anything but a cache. The other
+        # instance cannot have it because evicting a Channels key breaks a live socket.
+        "--cache_mode=true",
+        "--maxmemory=${UL_TILE_CACHE_MAXMEMORY:-512mb}",
+        "--proactor_threads=${UL_TILE_CACHE_THREADS:-2}",
+      ]
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_tile_cache
+      sandbox_network:
+        aliases:
+          - urbanlens_tile_cache
+      ai_network:
+        aliases:
+          - urbanlens_tile_cache
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__TILE_CACHE:-1}
+    cpu_shares: ${CPU_SHARES__TILE_CACHE:-512}
+    mem_limit: ${MEM_LIMIT__TILE_CACHE:-1g}
+
+  channel-layer:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_channel_layer
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
+    user: nobody
+    restart: unless-stopped
+    command:
+      [
+        # The Channels layer and nothing else. The shared instance refuses writes once full, and a
+        # refused group_send is a live message nobody receives; here the layer's own capacity and
+        # expiry bound what is held. No cache_mode, for the shared instance's reason: evicting a
+        # Channels key breaks a live socket. 256MiB is Dragonfly's floor per thread.
+        "--maxmemory=${UL_CHANNEL_LAYER_MAXMEMORY:-256mb}",
+        "--proactor_threads=${UL_CHANNEL_LAYER_THREADS:-1}",
+      ]
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_channel_layer
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__CHANNEL_LAYER:-0.5}
+    cpu_shares: ${CPU_SHARES__CHANNEL_LAYER:-512}
+    mem_limit: ${MEM_LIMIT__CHANNEL_LAYER:-384m}
+
+  rabbitmq:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_rabbitmq
+    # 3.13, not 4.x: Celery/kombu's pyamqp transport declares its pidbox control
+    # queue transient and non-exclusive, a combination RabbitMQ 4.0 deprecated
+    # and now refuses outright (INTERNAL_ERROR 541) - crash-looping the worker.
+    # Verified against a real worker before pinning this.
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${UL_RABBITMQ_USER:-urbanlens}
+      RABBITMQ_DEFAULT_PASS: ${UL_RABBITMQ_PASS:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${UL_RABBITMQ_VHOST:-urbanlens}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_rabbitmq
+      sandbox_network:
+        aliases:
+          - urbanlens_rabbitmq
+      ai_network:
+        aliases:
+          - urbanlens_rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__RABBITMQ:-${CPU_LIMIT:-1}}
+    cpu_shares: ${CPU_SHARES__RABBITMQ:-1024}
+    mem_limit: ${MEM_LIMIT__RABBITMQ:-${MEM_LIMIT:-1g}}
+
+  egress-proxy:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_egress_proxy
+    build:
+      context: ./src/urbanlens/config/egress
+    restart: unless-stopped
+    user: "tinyproxy:tinyproxy"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /var/run/tinyproxy:size=1m,mode=1777,noexec,nosuid,nodev
+    networks:
+      proxy_network:
+        aliases:
+          - urbanlens_egress_proxy
+      ai_egress_network: {}
+    healthcheck:
+      # A complete request, not `nc -z`: a bare connect that closes without
+      # sending anything makes tinyproxy log an ERROR every interval, and this
+      # log is where a blocked provider call would show up. The 403 is the
+      # healthy answer - tinyproxy.stats is not in the allowlist on purpose, so
+      # the probe exercises parsing and policy without sending real egress.
+      test:
+        [
+          "CMD-SHELL",
+          "printf 'GET http://tinyproxy.stats/ HTTP/1.0\r\n\r\n' | nc 127.0.0.1 8888 | grep -q '^HTTP/'",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__EGRESS_PROXY:-0.25}
+    cpu_shares: ${CPU_SHARES__EGRESS_PROXY:-256}
+    mem_limit: ${MEM_LIMIT__EGRESS_PROXY:-128m}
+    pids_limit: 32
+  ai-inference:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_ai_inference
+    build:
+      <<: *app-build
+    restart: unless-stopped
+    entrypoint: ["/docker-entrypoint.sh", "gunicorn"]
+    command:
+      [
+        "urbanlens_ai.wsgi:application",
+        "--bind",
+        "0.0.0.0:8002",
+        "-k",
+        "gthread",
+        "--threads",
+        "8",
+        "-w",
+        "1",
+        "-t",
+        "120",
+        # This container is read_only, so gunicorn cannot create its control
+        # socket under $HOME and logs an Errno 30 every boot. Nothing drives
+        # this service through that socket, and refusing it outright suits a
+        # tier whose whole purpose is isolation better than a writable mount.
+        "--no-control-socket",
+      ]
+    user: "1001:1001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      egress-proxy:
+        condition: service_healthy
+    networks:
+      inference_network:
+        aliases:
+          - urbanlens_ai_inference
+      proxy_network: {}
+    env_file:
+      - path: .env.ai
+        required: false
+    environment:
+      UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
+      UL_PROCESS_ROLE: inference
+      HTTPS_PROXY: http://urbanlens_egress_proxy:8888
+      HTTP_PROXY: http://urbanlens_egress_proxy:8888
+      NO_PROXY: localhost,127.0.0.1
+    healthcheck:
+      test:
+        ["CMD", "curl", "-f", "--noproxy", "*", "http://localhost:8002/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__AI_INFERENCE:-0.5}
+    cpu_shares: ${CPU_SHARES__AI_INFERENCE:-512}
+    mem_limit: ${MEM_LIMIT__AI_INFERENCE:-512m}
+    pids_limit: 64
+  ai-worker:
+    <<: *sandbox-worker
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_ai_worker
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--pool=prefork",
+        "--concurrency=2",
+        "-Q",
+        "ai",
+        "--prefetch-multiplier=1",
+      ]
+    depends_on:
+      db-setup:
+        condition: service_completed_successfully
+      dragonfly:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      egress-proxy:
+        condition: service_healthy
+      ai-inference:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log/urbanlens
+    networks:
+      - ai_network
+      - inference_network
+      - proxy_network
+    environment:
+      <<: *ai-env
+    pids_limit: 128
+    cpus: ${CPU_LIMIT__AI_WORKER:-${CPU_LIMIT:-1}}
+    cpu_shares: ${CPU_SHARES__AI_WORKER:-128}
+    mem_limit: ${MEM_LIMIT__AI_WORKER:-${MEM_LIMIT:-1g}}
   test-runner:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_runner
     profiles: ["test"]
@@ -531,32 +1046,31 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # Always a dev-grade build: the runner needs the `dev` dependency
-        # group (pytest, hypothesis, mypy) regardless of the host's
-        # UL_ENVIRONMENT (a staging/production value would `uv sync --no-dev`
-        # them away - see x-app-build's comment).
         UL_ENVIRONMENT: development
         UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test
-    # Bypass /docker-entrypoint.sh: init.py runs migrate+collectstatic against
-    # a DB that pytest hasn't created yet. The runner just stays alive for
-    # `docker compose exec ... pytest` calls.
     entrypoint: ["sleep", "infinity"]
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: worker
+      UL_DB_USER: ${UL_DB_USER:-postgres}
+      UL_DB_PASS: ${UL_DB_PASS:-postgres}
       UL_DB_HOST: localhost
       UL_DB_PORT: "5432"
-      UL_VALKEY_URL: redis://localhost:6379/0
+      UL_DRAGONFLY_URL: redis://localhost:6379/0
+      UL_CHANNEL_LAYER_URL: redis://localhost:6379/0
+      UL_RABBITMQ_URL: amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@localhost:5672/${UL_RABBITMQ_VHOST:-urbanlens}
       UL_ENVIRONMENT: development
     networks:
       - app_network
+    cpus: ${CPU_LIMIT__TEST_RUNNER:-${CPU_LIMIT:-6}}
+    mem_limit: ${MEM_LIMIT__TEST_RUNNER:-${MEM_LIMIT:-6g}}
 
   test-db:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_db
     profiles: ["test"]
-    image: postgis/postgis:17-3.5
-    # Shares test-runner's network namespace so it listens on the runner's
-    # localhost:5432. No data volume on purpose: every `up` starts pristine.
+    build:
+      context: ./src/urbanlens/config/postgres
     network_mode: service:test-runner
     depends_on:
       - test-runner
@@ -565,7 +1079,7 @@ services:
       - POSTGRES_DB=${UL_DB_NAME:-postgres}
       - POSTGRES_PASSWORD=${UL_DB_PASS:-postgres}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${UL_DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${UL_DB_USER:-postgres}"]
       interval: 10s
       timeout: 10s
       retries: 9
@@ -574,29 +1088,24 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
+    cpus: ${CPU_LIMIT__TEST_DB:-${CPU_LIMIT:-2}}
+    mem_limit: ${MEM_LIMIT__TEST_DB:-${MEM_LIMIT:-2g}}
 
-  test-valkey:
-    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_valkey
+  test-dragonfly:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_dragonfly
     profiles: ["test"]
-    image: valkey/valkey:7-alpine
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
     user: nobody
     network_mode: service:test-runner
     depends_on:
       - test-runner
     command:
       [
-        "valkey-server",
-        "--save",
-        "",
-        "--appendonly",
-        "no",
-        "--maxmemory",
-        "256mb",
-        "--maxmemory-policy",
-        "volatile-lru",
+        "--maxmemory=256mb",
+        "--proactor_threads=1",
       ]
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -605,6 +1114,33 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
+    cpus: ${CPU_LIMIT__TEST_DRAGONFLY:-${CPU_LIMIT:-1}}
+    mem_limit: ${MEM_LIMIT__TEST_DRAGONFLY:-${MEM_LIMIT:-512m}}
+
+  test-rabbitmq:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_rabbitmq
+    profiles: ["test"]
+    image: rabbitmq:3.13-management-alpine
+    network_mode: service:test-runner
+    depends_on:
+      - test-runner
+    environment:
+      RABBITMQ_DEFAULT_USER: ${UL_RABBITMQ_USER:-urbanlens}
+      RABBITMQ_DEFAULT_PASS: ${UL_RABBITMQ_PASS:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${UL_RABBITMQ_VHOST:-urbanlens}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__TEST_RABBITMQ:-${CPU_LIMIT:-1}}
+    mem_limit: ${MEM_LIMIT__TEST_RABBITMQ:-${MEM_LIMIT:-512m}}
 
 volumes:
   postgres-data:
@@ -613,13 +1149,27 @@ volumes:
   media_volume:
   backups:
   clamav-db:
+  rabbitmq-data:
 
 networks:
   app_network:
     driver: bridge
-    # Docker defaults new bridge networks to dual-stack, handing containers a ULA
-    # IPv6 address alongside IPv4. Gunicorn only binds 0.0.0.0:8000, so nginx's
-    # proxy_pass DNS lookup for urbanlens_app can resolve the unreachable AAAA
-    # record and log "upstream server temporarily disabled" before falling back
-    # to IPv4. Disable IPv6 here so only the working A record is ever returned.
+    enable_ipv6: false
+  sandbox_network:
+    driver: bridge
+    internal: true
+  ai_network:
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+  inference_network:
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+  proxy_network:
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+  ai_egress_network:
+    driver: bridge
     enable_ipv6: false

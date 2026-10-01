@@ -1,19 +1,5 @@
-"""Integration tests for the trip controller HTTP views.
+"""Integration tests for the trip controller HTTP views."""
 
-Uses Django's test client to exercise:
-- TripCreateView - POST creates trip, re-renders list partial
-- TripDetailView - GET returns 200 for members, 403 for outsiders, 404 for missing
-- TripDeleteView - DELETE only by creator
-- TripActivitiesView - GET/POST activity management with permission levels
-- TripActivityCompleteView - marks activity complete, caps future dates to today
-- TripActivityVoteView - cast/update/clear votes
-- TripMembersView - GET/POST member management
-- TripMemberRemoveView - DELETE self or via creator
-- TripMemberRSVPView - POST RSVP status
-- TripLeaveView - DELETE leave trip
-- TripSettingsView - POST settings by organizer only
-- TripActivityPositionView - POST lat/lng override
-"""
 from __future__ import annotations
 
 import datetime
@@ -29,13 +15,19 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityRSVP, TripActivityVote, TripMembership
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.models.trips.model import (
+    Trip,
+    TripActivity,
+    TripActivityRSVP,
+    TripActivityVote,
+    TripMembership,
+)
 
 #: A rendered CSRF token: exactly 64 characters from Django's 62-character
 #: alphabet. ``{% csrf_token %}`` re-masks the same secret on every call, so a
 #: page embeds several *different* strings (the hidden input, base.html's
-#: ``var csrftoken``, the JS config blob) and two renders never match
+#: csrf-token meta, the JS config blob) and two renders never match
 #: byte-for-byte. Matching on the shape covers all of them at once.
 _CSRF_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
 
@@ -43,16 +35,14 @@ _CSRF_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
 def _without_csrf_tokens(content: bytes) -> bytes:
     """Blank out per-request CSRF tokens so two responses can be compared.
 
-    The masking is random per render and reveals nothing about the page, so
-    normalizing it is what makes an "these two responses are identical" check
-    meaningful rather than flaky.
+    The masking is random per render and reveals nothing about the page, so normalizing it is what makes an
+    "these two responses are identical" check meaningful rather than flaky.
 
     Args:
         content: A rendered response body.
 
     Returns:
-        The body with every CSRF-token-shaped run replaced by a constant.
-    """
+        The body with every CSRF-token-shaped run replaced by a constant."""
     return _CSRF_TOKEN_RE.sub(b"REDACTED", content)
 
 
@@ -104,9 +94,13 @@ class TripListPartialTests(TestCase):
 
     def test_ongoing_multi_day_trip_shows_day_indicator(self):
         today = timezone.now().date()
-        trip = _make_trip(self.profile, start_date=today - datetime.timedelta(days=2), end_date=today + datetime.timedelta(days=5))
+        trip = _make_trip(
+            self.profile, start_date=today - datetime.timedelta(days=2), end_date=today + datetime.timedelta(days=5)
+        )
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertIn("Day 3 of 8", html)
         self.assertIn("trip-card-status--ongoing", html)
@@ -115,16 +109,22 @@ class TripListPartialTests(TestCase):
         today = timezone.now().date()
         trip = _make_trip(self.profile, start_date=today, end_date=today)
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertNotIn("trip-card-status--ongoing", html)
         self.assertIn("In progress", html)
 
     def test_upcoming_multi_day_trip_does_not_show_day_indicator(self):
         today = timezone.now().date()
-        trip = _make_trip(self.profile, start_date=today + datetime.timedelta(days=3), end_date=today + datetime.timedelta(days=10))
+        trip = _make_trip(
+            self.profile, start_date=today + datetime.timedelta(days=3), end_date=today + datetime.timedelta(days=10)
+        )
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertNotIn("trip-card-status--ongoing", html)
         self.assertIn("Upcoming", html)
@@ -132,7 +132,9 @@ class TripListPartialTests(TestCase):
     def test_rsvp_list_shows_member_chip(self):
         trip = _make_trip(self.profile)  # creator membership defaults to rsvp="yes"
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertIn("trip-card-rsvp-row", html)
         self.assertIn("trip-member-rsvp--yes", html)
@@ -142,7 +144,9 @@ class TripListPartialTests(TestCase):
         trip = _make_trip(self.profile)
         trip.pin_count = 3
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertIn("3 pins", html)
 
@@ -150,7 +154,9 @@ class TripListPartialTests(TestCase):
         trip = _make_trip(self.profile)
         trip.pin_count = 0
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertNotIn(" pin", html)
 
@@ -158,7 +164,9 @@ class TripListPartialTests(TestCase):
         trip = _make_trip(self.profile)
         trip.viewer_membership = TripMembership.objects.get(trip=trip, profile=self.profile)
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertIn("Start a check-in", html)
         self.assertIn(f"{reverse('safety.checkin.create')}?trip={trip.slug}", html)
@@ -170,14 +178,18 @@ class TripListPartialTests(TestCase):
         # the real list page, which only shows the viewer's own trips, but
         # covers the template's gating logic in isolation).
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertNotIn("Start a check-in", html)
 
     def test_open_itinerary_button_always_present(self):
         trip = _make_trip(self.profile)
 
-        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+        html = render_to_string(
+            "dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile}
+        )
 
         self.assertIn("Open itinerary", html)
 
@@ -248,11 +260,7 @@ class TripCreateViewTests(TestCase):
     def test_post_without_name_generates_a_placeholder(self):
         """A blank name is accepted and gets a generated one (UL-360).
 
-        This test previously asserted a 400, which stopped being true when the
-        name became optional so a "just start planning" flow needn't invent a
-        title up front - it had been failing ever since. The behavior itself
-        now lives in ``services.trips.trip_crud.create_trip``.
-        """
+        The behavior itself now lives in ``services.trips.trip_crud.create_trip``."""
         before = set(Trip.objects.values_list("pk", flat=True))
         resp = self.client.post(
             reverse("trips.create"),
@@ -290,12 +298,7 @@ class TripCreateViewTests(TestCase):
 
 
 class CreateTripDialogHxTargetTests(SimpleTestCase):
-    """The create-trip dialog's hx-target/hx-swap must match whatever's actually
-    on the page it's opened from - see TripCreateViewTests.
-    test_post_from_overview_redirects_to_new_trip_via_hx_redirect for the
-    backend half of this fix. The overview page has no #trip-list element, so
-    targeting it unconditionally made htmx throw htmx:targetError client-side
-    (before the request was even sent) for every submission from there."""
+    """The create-trip dialog's hx-target/hx-swap must match whatever's actually on the page it's opened from - see TripCreateViewTests. test_post_from_overview_redirects_to_new_trip_via_hx_redirect for the backend half of this fix. The overview page has no #trip-list element, so targeting it unconditionally made htmx throw htmx:targetError client-side (before the request was even sent) for every submission from there."""
 
     def _render(self, source: str) -> str:
         return render_to_string("dashboard/partials/trips/_create_trip_dialog.html", {"source": source})
@@ -355,11 +358,7 @@ class TripDetailViewTests(TestCase):
     def test_outsider_gets_404_indistinguishable_from_a_missing_trip(self):
         """Someone else's trip must look exactly like one that doesn't exist.
 
-        This used to be a 403 while a missing slug was a 404, so the status
-        code alone let anyone enumerate valid private trip slugs - despite both
-        rendering the same "not found" page specifically to prevent that. See
-        ``services.trips.trip_access.get_trip_for_viewer``.
-        """
+        See ``services.trips.trip_access.get_trip_for_viewer``."""
         client = Client()
         client.force_login(self.outsider_user)
         forbidden = client.get(self._url())
@@ -379,10 +378,7 @@ class TripDetailViewTests(TestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_map_default_layer_matches_the_profiles_main_map_setting(self):
-        """The trip map used to always start on window.MapLayers.create()'s own
-        hardcoded default, ignoring the user's actual default_map_view/
-        map_dark_mode settings entirely - now mirrors the main map's own
-        defaultBase/darkMode/storageKey wiring exactly (map/index.html)."""
+        """The trip map used to always start on window.MapLayers.create()'s own hardcoded default, ignoring the user's actual default_map_view/ map_dark_mode settings entirely - now mirrors the main map's own defaultBase/darkMode/storageKey wiring exactly (map/index.html)."""
         self.creator.default_map_view = "topographic"
         self.creator.map_dark_mode = "dark"
         self.creator.save(update_fields=["default_map_view", "map_dark_mode"])
@@ -394,14 +390,12 @@ class TripDetailViewTests(TestCase):
         self.assertEqual(resp.context["default_map_view"], "topographic")
         self.assertEqual(resp.context["map_dark_mode"], "dark")
         content = resp.content.decode()
-        self.assertIn("defaultBase: 'topographic'", content)
-        self.assertIn("darkMode: 'dark'", content)
-        self.assertIn(f"ul_layers_v1_{self.creator.uuid}", content)
+        self.assertIn('data-default-base="topographic"', content)
+        self.assertIn('data-dark-mode="dark"', content)
+        self.assertIn(f'data-layers-storage-key="ul_layers_v1_{self.creator.uuid}"', content)
 
     def test_edit_activity_dialog_matches_add_activity_redesign(self):
-        """Regression guard: the Edit-Activity dialog previously still had the old
-        proposed/confirmed pill toggle, "(optional)" label text, and an always-visible
-        child-trip box - all fixed to match the Add-Activity redesign."""
+        """Regression guard: the Edit-Activity dialog previously still had the old proposed/confirmed pill toggle, "(optional)" label text, and an always-visible child-trip box - all fixed to match the Add-Activity redesign."""
         client = Client()
         client.force_login(self.creator_user)
         html = client.get(self._url()).content.decode()
@@ -420,20 +414,17 @@ class TripDetailViewTests(TestCase):
         self.assertIn('id="edit-activity-child-trip-wrap" hidden', html)
 
     def test_edit_activity_end_date_is_opt_in_like_add_activity(self):
-        """Regression guard: the Edit-Activity dialog's End date used to always be
-        visible, unlike Add-Activity's opt-in "+ Add end date" toggle."""
+        """Regression guard: the Edit-Activity dialog's End date used to always be visible, unlike Add-Activity's opt-in "+ Add end date" toggle."""
         client = Client()
         client.force_login(self.creator_user)
         html = client.get(self._url()).content.decode()
 
         self.assertIn('id="edit-activity-end-date-wrap" hidden', html)
         self.assertIn('id="edit-activity-end-date-toggle-row"', html)
-        self.assertIn('onclick="_revealEditActivityEndDate()"', html)
+        self.assertIn('data-trip-action="reveal-edit-end"', html)
 
     def test_propose_and_hide_location_explainers_are_behind_a_tooltip(self):
-        """Regression guard: these used to be always-visible <p class="form-help">
-        paragraphs in both dialogs instead of a click-to-reveal tooltip icon,
-        matching the rest of the site's explainer convention."""
+        """Regression guard: these used to be always-visible <p class="form-help"> paragraphs in both dialogs instead of a click-to-reveal tooltip icon, matching the rest of the site's explainer convention."""
         client = Client()
         client.force_login(self.creator_user)
         html = client.get(self._url()).content.decode()
@@ -447,9 +438,7 @@ class TripDetailViewTests(TestCase):
         self.assertGreaterEqual(html.count("ul-tooltip-help"), 4)
 
     def test_no_dialog_offers_a_hide_name_control(self):
-        """Regression guard: "Add custom name" used to flip into a "Hide name"
-        collapse-back control once clicked - unnecessary, since clearing the
-        field's text already does the same thing."""
+        """Regression guard: "Add custom name" used to flip into a "Hide name" collapse-back control once clicked - unnecessary, since clearing the field's text already does the same thing."""
         client = Client()
         client.force_login(self.creator_user)
         html = client.get(self._url()).content.decode()
@@ -524,9 +513,33 @@ class TripActivitiesViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(TripActivity.objects.filter(trip=self.trip, title="Visit Factory").exists())
 
+    def test_adding_a_confirmed_activity_outside_the_trip_range_widens_it(self):
+        """Regression guard: create_activity used to never call expand_trip_dates (unlike update_activity/set_activity_status/ complete_activity), so a brand-new confirmed activity dated outside the trip's current range left start_date/end_date stale."""
+        self.trip.start_date = datetime.date(2026, 8, 1)
+        self.trip.end_date = datetime.date(2026, 8, 5)
+        self.trip.save()
+        client = Client()
+        client.force_login(self.creator_user)
+
+        resp = client.post(
+            self._url(),
+            data=json.dumps(
+                {
+                    "title": "Late Add-on",
+                    "status": "confirmed",
+                    "scheduled_date": "2026-08-20",
+                    "scheduled_time": "10:00",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.trip.refresh_from_db()
+        self.assertEqual(self.trip.end_date, datetime.date(2026, 8, 20))
+
     def test_activity_attribution_shows_full_name_not_username(self):
-        """Regression guard: the "Added by" line used to show the raw
-        username even when the adder has a real name set."""
+        """Regression guard: the "Added by" line used to show the raw username even when the adder has a real name set."""
         self.member_user.first_name = "Pat"
         self.member_user.last_name = "Rivera"
         self.member_user.save(update_fields=["first_name", "last_name"])
@@ -540,12 +553,7 @@ class TripActivitiesViewTests(TestCase):
         self.assertNotContains(resp, self.member_user.username)
 
     def test_scheduled_date_only_produces_a_timezone_aware_datetime(self):
-        """Regression guard: _parse_scheduled_at used to build a naive
-        datetime.combine(date, midnight) with no tzinfo, tripping Django's
-        "received a naive datetime while time zone support is active"
-        RuntimeWarning on every date-only activity (repeating in production
-        logs) and silently storing the wrong calendar day for any user not
-        in the server's own timezone."""
+        """Regression guard: _parse_scheduled_at used to build a naive datetime.combine(date, midnight) with no tzinfo, tripping Django's "received a naive datetime while time zone support is active" RuntimeWarning on every date-only activity (repeating in production logs) and silently storing the wrong calendar day for any user not in the server's own timezone."""
         client = Client()
         client.force_login(self.creator_user)
         resp = client.post(
@@ -560,17 +568,20 @@ class TripActivitiesViewTests(TestCase):
 
     def test_post_with_geocoded_location_creates_location(self):
         from urbanlens.dashboard.models.location.model import Location
+
         client = Client()
         client.force_login(self.creator_user)
         initial_count = Location.objects.count()
         resp = client.post(
             self._url(),
-            data=json.dumps({
-                "title": "Rooftop",
-                "geocoded_lat": "51.5",
-                "geocoded_lng": "-0.12",
-                "geocoded_name": "London Bridge",
-            }),
+            data=json.dumps(
+                {
+                    "title": "Rooftop",
+                    "geocoded_lat": "51.5",
+                    "geocoded_lng": "-0.12",
+                    "geocoded_name": "London Bridge",
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 200)
@@ -732,12 +743,11 @@ class TripActivityCompleteViewTests(TestCase):
 
     @override_settings(TIME_ZONE="Pacific/Kiritimati")
     def test_completion_clamps_against_the_configured_timezone_not_the_server_clock(self):
-        """"Today" must mean today in Django's TIME_ZONE, not the host OS's date.
+        """ "Today" must mean today in Django's TIME_ZONE, not the host OS's date.
 
-        At this fixed instant the configured zone (UTC+14) is already on Jan 2
-        while UTC is still on Jan 1, so a `date.today()`-based clamp would reject
-        a legitimately "today" completion as a future date and cap it a day early.
-        """
+        At this fixed instant the configured zone (UTC+14) is already on Jan 2 while UTC is still on Jan 1, so a
+        `date.today()`-based clamp would reject a legitimately "today" completion as a future date and cap it a
+        day early."""
         instant = datetime.datetime(2026, 1, 1, 20, 0, tzinfo=datetime.UTC)
         local_today = timezone.localtime(instant).date()
         self.assertEqual(local_today, datetime.date(2026, 1, 2))
@@ -791,7 +801,9 @@ class TripActivityVoteViewTests(TestCase):
         self.client.post(self._url(), data={"vote": "up"})
         self.assertTrue(
             TripActivityVote.objects.filter(
-                activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP,
+                activity=self.activity,
+                profile=self.creator,
+                vote=TripActivityVote.VOTE_UP,
             ).exists(),
         )
 
@@ -799,13 +811,17 @@ class TripActivityVoteViewTests(TestCase):
         self.client.post(self._url(), data={"vote": "down"})
         self.assertTrue(
             TripActivityVote.objects.filter(
-                activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_DOWN,
+                activity=self.activity,
+                profile=self.creator,
+                vote=TripActivityVote.VOTE_DOWN,
             ).exists(),
         )
 
     def test_empty_vote_clears_existing(self):
         TripActivityVote.objects.create(
-            activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP,
+            activity=self.activity,
+            profile=self.creator,
+            vote=TripActivityVote.VOTE_UP,
         )
         self.client.post(self._url(), data={"vote": ""})
         self.assertFalse(
@@ -824,7 +840,9 @@ class TripActivityVoteViewTests(TestCase):
 
     def test_vote_updated_not_duplicated(self):
         TripActivityVote.objects.create(
-            activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP,
+            activity=self.activity,
+            profile=self.creator,
+            vote=TripActivityVote.VOTE_UP,
         )
         self.client.post(self._url(), data={"vote": "down"})
         votes = TripActivityVote.objects.filter(activity=self.activity, profile=self.creator)
@@ -852,6 +870,7 @@ class TripMembersViewTests(TestCase):
 
     def test_add_member_by_username(self):
         new_user = baker.make("auth.User", username="newmember")
+        Profile.objects.filter(user=new_user).update(profile_visibility=VisibilityChoice.ANYONE)
         resp = self.client.post(
             self._url(),
             data=json.dumps({"username": "newmember"}),
@@ -890,7 +909,11 @@ class TripMembersViewTests(TestCase):
             content_type="application/json",
         )
 
-        self.assertEqual(resp.status_code, 403)
+        # 404, identical to an unknown username - a 403 here would confirm the
+        # account exists and is blocking the caller, which is itself an
+        # enumeration leak.
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("No user found", resp.content.decode())
         self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=blocker).exists())
 
     def test_cannot_add_a_user_the_inviter_blocked(self) -> None:
@@ -904,18 +927,18 @@ class TripMembersViewTests(TestCase):
             content_type="application/json",
         )
 
-        self.assertEqual(resp.status_code, 403)
+        # Same as the reverse-direction block above: 404, not 403.
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("No user found", resp.content.decode())
         self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=target).exists())
 
 
 class TripAddableFriendsPickerTests(TestCase):
     """The add-member dialog's friend picker (trip_members_panel.html/_addable_friends).
 
-    Regression coverage: the dialog used to be a bare "type the exact
-    username" box with no way to browse the creator's friends - the picker
-    lives in trip_members_panel.html (not detail.html) specifically so it
-    stays in sync after an add/remove, rather than showing a stale list.
-    """
+    Regression coverage: the dialog used to be a bare "type the exact username" box with no way to browse the
+    creator's friends - the picker lives in trip_members_panel.html (not detail.html) specifically so it stays
+    in sync after an add/remove, rather than showing a stale list."""
 
     def setUp(self):
         super().setUp()
@@ -939,13 +962,7 @@ class TripAddableFriendsPickerTests(TestCase):
         self.assertContains(resp, "trip-add-friend-btn")
 
     def test_friend_already_on_trip_is_excluded(self):
-        """Regression guard: this used to assert the username never appears
-        anywhere in the response at all, which false-failed the moment the
-        member list itself (a different section of the same page) started
-        legitimately rendering it - being a real trip member is exactly what
-        "already on the trip" means. What actually must exclude them is the
-        add-member dialog's friend picker specifically, checked here via its
-        hidden username input (see the picker's own markup)."""
+        """What actually must exclude them is the add-member dialog's friend picker specifically, checked here via its hidden username input (see the picker's own markup)."""
         friend = self._befriend("already-in")
         TripMembership.objects.create(trip=self.trip, profile=friend)
 
@@ -1009,7 +1026,9 @@ class TripMemberRSVPViewTests(TestCase):
 
     def test_invalid_rsvp_value_returns_400(self):
         resp = self.client.post(
-            self._url(), data=json.dumps({"rsvp": "absolutely"}), content_type="application/json",
+            self._url(),
+            data=json.dumps({"rsvp": "absolutely"}),
+            content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)
 
@@ -1063,7 +1082,9 @@ class TripActivityRSVPViewTests(TestCase):
         response = self.client.post(self._url(), {"rsvp": ""})
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(TripActivityRSVP.objects.filter(activity=self.activity, membership__profile=self.profile).exists())
+        self.assertFalse(
+            TripActivityRSVP.objects.filter(activity=self.activity, membership__profile=self.profile).exists()
+        )
         self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_YES)
         self.assertContains(response, "From trip RSVP")
 
@@ -1089,7 +1110,9 @@ class TripActivityRSVPViewTests(TestCase):
         response = self.client.post(self._url(), {"rsvp": "absolutely"})
 
         self.assertEqual(response.status_code, 400)
-        self.assertFalse(TripActivityRSVP.objects.filter(activity=self.activity, membership__profile=self.profile).exists())
+        self.assertFalse(
+            TripActivityRSVP.objects.filter(activity=self.activity, membership__profile=self.profile).exists()
+        )
 
 
 class TripLeaveViewTests(TestCase):
@@ -1147,12 +1170,15 @@ class TripSettingsViewTests(TestCase):
     def test_organizer_can_save_settings(self):
         client = Client()
         client.force_login(self.creator_user)
-        resp = client.post(self._url(), data={
-            "allow_add_members": "everyone",
-            "allow_add_activities": "organizers",
-            "allow_edit_activities": "none",
-            "allow_comments": "everyone",
-        })
+        resp = client.post(
+            self._url(),
+            data={
+                "allow_add_members": "everyone",
+                "allow_add_activities": "organizers",
+                "allow_edit_activities": "none",
+                "allow_comments": "everyone",
+            },
+        )
         self.assertEqual(resp.status_code, 200)
         self.trip.refresh_from_db()
         self.assertEqual(self.trip.allow_add_members, Trip.PERM_EVERYONE)
@@ -1162,17 +1188,23 @@ class TripSettingsViewTests(TestCase):
     def test_member_cannot_save_settings(self):
         client = Client()
         client.force_login(self.member_user)
-        resp = client.post(self._url(), data={
-            "allow_add_members": "everyone",
-        })
+        resp = client.post(
+            self._url(),
+            data={
+                "allow_add_members": "everyone",
+            },
+        )
         self.assertEqual(resp.status_code, 403)
 
     def test_invalid_perm_value_falls_back_to_default(self):
         client = Client()
         client.force_login(self.creator_user)
-        client.post(self._url(), data={
-            "allow_add_members": "INVALID_VALUE",
-        })
+        client.post(
+            self._url(),
+            data={
+                "allow_add_members": "INVALID_VALUE",
+            },
+        )
         self.trip.refresh_from_db()
         # Invalid value falls back to the hardcoded default "none"
         self.assertEqual(self.trip.allow_add_members, Trip.PERM_NONE)
@@ -1286,3 +1318,56 @@ class TripActivityMoveViewTests(TestCase):
         self.activity.refresh_from_db()
         self.assertTrue(timezone.is_aware(self.activity.scheduled_at))
         self.assertEqual(self.activity.scheduled_at.date(), datetime.date(2026, 8, 10))
+
+    def test_member_blocked_when_edit_activities_is_organizers_only(self):
+        """Regression guard: this endpoint used to check only trip membership (Trip.PERM_EVERYONE, hardcoded) rather than the trip's own configurable allow_edit_activities setting - see services.trips.trip_activities.move_activity, which now shares the same require_perform check as every other activity-editing path (set_activity_position, update_activity)."""
+        self.trip.allow_edit_activities = Trip.PERM_ORGANIZERS
+        self.trip.save()
+        member_user = baker.make("auth.User")
+        member = member_user.profile
+        TripMembership.objects.create(trip=self.trip, profile=member)
+        client = Client()
+        client.force_login(member_user)
+
+        resp = client.post(
+            self._url(),
+            data=json.dumps({"date": "2026-08-10"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 403)
+        self.activity.refresh_from_db()
+        self.assertIsNone(self.activity.scheduled_at)
+
+    def test_organizer_can_still_move_activities_when_restricted(self):
+        self.trip.allow_edit_activities = Trip.PERM_ORGANIZERS
+        self.trip.save()
+
+        resp = self.client.post(
+            self._url(),
+            data=json.dumps({"date": "2026-08-10"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.activity.refresh_from_db()
+        self.assertEqual(self.activity.scheduled_at.date(), datetime.date(2026, 8, 10))
+
+    def test_moving_a_confirmed_activity_outside_the_trip_range_widens_it(self):
+        """Regression guard: moving an activity used to never call expand_trip_dates, so the trip's own start_date/end_date (and the header/calendar's date-range display) stayed stuck at the old range."""
+        self.trip.start_date = datetime.date(2026, 8, 1)
+        self.trip.end_date = datetime.date(2026, 8, 5)
+        self.trip.save()
+        self.activity.status = TripActivity.STATUS_CONFIRMED
+        self.activity.scheduled_at = timezone.make_aware(datetime.datetime(2026, 8, 2, 10, 0))
+        self.activity.save()
+
+        resp = self.client.post(
+            self._url(),
+            data=json.dumps({"date": "2026-08-20"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.trip.refresh_from_db()
+        self.assertEqual(self.trip.end_date, datetime.date(2026, 8, 20))

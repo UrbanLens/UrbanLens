@@ -56,17 +56,23 @@ class NominatimFetchAddsOsmLinkTests(TestCase):
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Summit Behavioral Center")
 
     def _fetch(self) -> None:
-        with patch.object(NominatimGateway, "reverse_geocode", return_value=NominatimGateway._normalise(_RAW_NOMINATIM_RESPONSE)):
+        with patch.object(
+            NominatimGateway, "reverse_geocode", return_value=NominatimGateway._normalise(_RAW_NOMINATIM_RESPONSE)
+        ):
             NominatimPanelSource().fetch(self.pin)
 
     def test_adds_pin_link(self) -> None:
         self._fetch()
-        self.assertTrue(PinLink.objects.filter(pin=self.pin, url="https://www.openstreetmap.org/way/141919400").exists())
+        self.assertTrue(
+            PinLink.objects.filter(pin=self.pin, url="https://www.openstreetmap.org/way/141919400").exists()
+        )
 
     def test_does_not_duplicate_link_on_repeated_fetch(self) -> None:
         self._fetch()
         self._fetch()
-        self.assertEqual(PinLink.objects.filter(pin=self.pin, url="https://www.openstreetmap.org/way/141919400").count(), 1)
+        self.assertEqual(
+            PinLink.objects.filter(pin=self.pin, url="https://www.openstreetmap.org/way/141919400").count(), 1
+        )
 
     def test_adds_wiki_link_when_wiki_exists(self) -> None:
         wiki = baker.make("dashboard.Wiki", location=self.location)

@@ -1,29 +1,28 @@
 /**
- * The `test` object every spec imports.
- *
- * Specs should not construct clients, attach listeners, or remember to clean
- * up. Everything a spec needs arrives as a fixture, and everything a spec
- * creates is torn down whether it passed, failed, or timed out. That is what
- * makes it cheap to add the hundredth test rather than only the tenth.
- *
- * ```ts
- * import { expect, test } from "../../lib/fixtures.js";
- *
- * test("a pin the API created is visible on the map", async ({ page, api }) => {
- *     const pin = await api.createPin();          // deleted automatically
- *     await page.goto("/dashboard/map/");         // already signed in
- *     await expect(page.getByText(pin.name)).toBeVisible();
- * });                                             // console errors asserted here
- * ```
+ * The `test` object every spec imports. Specs should not construct clients, attach listeners, or
+ * remember to clean up.
  */
 
-import { test as base, expect, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import { test as base, expect, type APIRequestContext, type Browser, type Page, type TestInfo } from "@playwright/test";
 
-import { optionalAccount, PRIMARY_ROLE, requireAccount, SECONDARY_ROLE, storageStatePath, type IntegrationAccount } from "./accounts.js";
+import {
+    hasFeature,
+    HEAVY_ROLE,
+    optionalAccount,
+    PRIMARY_ROLE,
+    PROPERTY_OWNERS_FEATURE,
+    requireAccount,
+    SECONDARY_ROLE,
+    SHAREE_ROLE,
+    SHARER_ROLE,
+    storageStatePath,
+    SUBSCRIBER_ROLE,
+    type IntegrationAccount,
+} from "./accounts.js";
 import { ApiClient } from "./api-client.js";
-import { env } from "./env.js";
+import { ConfigurationError, env } from "./env.js";
 import { installHtmxTracking } from "./htmx.js";
-import { PageGuard } from "./page-guard.js";
+import { PageGuard, reportCspViolations } from "./page-guard.js";
 
 export interface IntegrationOptions {
     /**
@@ -73,6 +72,25 @@ export interface IntegrationFixtures {
      * {@link ifSecondaryAccount}, as for {@link IntegrationFixtures.secondaryApi}.
      */
     secondaryPage: Page;
+    /**
+     * A signed-in page as the `heavy` account - the one seeded with a realistic
+     * number of pins by `provision_integration_env --heavy-pins`.
+     *
+     * For the specs whose subject is size. Gate with {@link ifHeavyAccount}.
+     */
+    heavyPage: Page;
+    /** External-API client as the `subscriber` account, which holds `property_owners`. Gate with {@link ifSubscriberAccount}. */
+    subscriberApi: ApiClient;
+    /** A signed-in page as the `subscriber` account. Gate with {@link ifSubscriberAccount}. */
+    subscriberPage: Page;
+    /** External-API client as `sharer`, always friends with `sharee`. Gate with {@link ifSharingPair}. */
+    sharerApi: ApiClient;
+    /** External-API client as `sharee`. Gate with {@link ifSharingPair}. */
+    shareeApi: ApiClient;
+    /** A signed-in page as `sharer`. Gate with {@link ifSharingPair}. */
+    sharerPage: Page;
+    /** A signed-in page as `sharee`. Gate with {@link ifSharingPair}. */
+    shareePage: Page;
 }
 
 export interface IntegrationWorkerFixtures {
@@ -96,6 +114,46 @@ export interface IntegrationWorkerFixtures {
  * anyone asking for it.
  */
 const guards = new WeakMap<Page, PageGuard>();
+
+/** Hands `use` a page signed in as `role`, and closes its context afterwards. */
+async function withSignedInPage(browser: Browser, role: string, use: (page: Page) => Promise<void>): Promise<void> {
+    const context = await browser.newContext({
+        baseURL: env.baseUrl,
+        storageState: storageStatePath(role),
+        ignoreHTTPSErrors: env.ignoreHttpsErrors,
+    });
+    try {
+        await installHtmxTracking(context);
+        await use(await context.newPage());
+    } finally {
+        await context.close();
+    }
+}
+
+/** Hands `use` an API client for `account` and reports anything it could not clean up. */
+async function withAccountApi(request: APIRequestContext, account: IntegrationAccount, use: (client: ApiClient) => Promise<void>, testInfo: TestInfo): Promise<void> {
+    const client = new ApiClient(request, account.apiKey);
+    await use(client);
+    const leaks = await client.cleanup();
+    if (leaks.length > 0) {
+        await testInfo.attach(`cleanup-failures-${account.role}.txt`, {
+            body: `Could not remove ${leaks.length} resource(s):\n  ${leaks.join("\n  ")}`,
+            contentType: "text/plain",
+        });
+    }
+}
+
+/** The subscriber account, refusing one the manifest says lacks the feature - that is a provisioning error, not a finding. */
+function requireSubscriber(): IntegrationAccount {
+    const account = requireAccount(SUBSCRIBER_ROLE);
+    if (!hasFeature(account, PROPERTY_OWNERS_FEATURE)) {
+        throw new ConfigurationError(
+            `the "${SUBSCRIBER_ROLE}" account does not hold ${PROPERTY_OWNERS_FEATURE} (features: ${account.features.join(", ") || "none"}). ` +
+                `Re-run "manage.py provision_integration_env" with --subscriber-roles ${SUBSCRIBER_ROLE}.`,
+        );
+    }
+    return account;
+}
 
 export const test = base.extend<IntegrationOptions & IntegrationFixtures, IntegrationWorkerFixtures>({
     strictConsole: [env.strictConsole, { option: true }],
@@ -148,21 +206,16 @@ export const test = base.extend<IntegrationOptions & IntegrationFixtures, Integr
     },
 
     secondaryApi: async ({ apiRequestContext }, use, testInfo) => {
-        const secondary = requireAccount(SECONDARY_ROLE);
-        const client = new ApiClient(apiRequestContext, secondary.apiKey);
-        await use(client);
+        await withAccountApi(apiRequestContext, requireAccount(SECONDARY_ROLE), use, testInfo);
+    },
 
-        const leaks = await client.cleanup();
-        if (leaks.length > 0) {
-            await testInfo.attach("cleanup-failures-secondary.txt", {
-                body: `Could not remove ${leaks.length} resource(s):\n  ${leaks.join("\n  ")}`,
-                contentType: "text/plain",
-            });
-        }
+    subscriberApi: async ({ apiRequestContext }, use, testInfo) => {
+        await withAccountApi(apiRequestContext, requireSubscriber(), use, testInfo);
     },
 
     context: async ({ context }, use) => {
         await installHtmxTracking(context);
+        await reportCspViolations(context, (page, violation) => guards.get(page)?.recordCspViolation(violation));
         await use(context);
     },
 
@@ -185,7 +238,9 @@ export const test = base.extend<IntegrationOptions & IntegrationFixtures, Integr
         }
         // Only raised when the test otherwise passed. A test that already failed
         // has a better error, and burying it under a console dump helps nobody.
-        if (testInfo.status === testInfo.expectedStatus) {
+        // A skipped test's status equals its expected status too, and raising
+        // there turned a skip into a failure that its retry then called flaky.
+        if (testInfo.status === "passed") {
             throw new Error(`${report}\n\nSet test.use({ strictConsole: false }) or call guard.allow(...) if this is expected.`);
         }
         await testInfo.attach("page-problems.txt", { body: report, contentType: "text/plain" });
@@ -199,24 +254,39 @@ export const test = base.extend<IntegrationOptions & IntegrationFixtures, Integr
         await use(guard);
     },
 
+    heavyPage: async ({ browser }, use) => {
+        requireAccount(HEAVY_ROLE);
+        await withSignedInPage(browser, HEAVY_ROLE, use);
+    },
+
     secondaryPage: async ({ browser }, use) => {
         // Specs gate themselves with `ifSecondaryAccount()`; this is the
         // backstop for one that forgot, and says what to do about it.
         requireAccount(SECONDARY_ROLE);
+        await withSignedInPage(browser, SECONDARY_ROLE, use);
+    },
 
-        let context: BrowserContext | null = null;
-        try {
-            context = await browser.newContext({
-                baseURL: env.baseUrl,
-                storageState: storageStatePath(SECONDARY_ROLE),
-                ignoreHTTPSErrors: env.ignoreHttpsErrors,
-            });
-            await installHtmxTracking(context);
-            const page = await context.newPage();
-            await use(page);
-        } finally {
-            await context?.close();
-        }
+    subscriberPage: async ({ browser }, use) => {
+        requireSubscriber();
+        await withSignedInPage(browser, SUBSCRIBER_ROLE, use);
+    },
+
+    sharerApi: async ({ apiRequestContext }, use, testInfo) => {
+        await withAccountApi(apiRequestContext, requireAccount(SHARER_ROLE), use, testInfo);
+    },
+
+    shareeApi: async ({ apiRequestContext }, use, testInfo) => {
+        await withAccountApi(apiRequestContext, requireAccount(SHAREE_ROLE), use, testInfo);
+    },
+
+    sharerPage: async ({ browser }, use) => {
+        requireAccount(SHARER_ROLE);
+        await withSignedInPage(browser, SHARER_ROLE, use);
+    },
+
+    shareePage: async ({ browser }, use) => {
+        requireAccount(SHAREE_ROLE);
+        await withSignedInPage(browser, SHAREE_ROLE, use);
     },
 });
 
@@ -241,6 +311,35 @@ export function ifSecondaryAccount(): typeof test | typeof test.skip {
     return hasAccountFor(SECONDARY_ROLE) ? test : test.skip;
 }
 
+/**
+ * `test`, or a skipped `test`, depending on whether a seeded heavy account exists.
+ *
+ * Provision one with
+ * `manage.py provision_integration_env --roles primary,secondary,heavy --heavy-pins 30000`.
+ * Seeding takes minutes, so ordinary runs skip these rather than paying for them.
+ */
+export function ifHeavyAccount(): typeof test | typeof test.skip {
+    return hasAccountFor(HEAVY_ROLE) ? test : test.skip;
+}
+
+/**
+ * `test`, or a skipped `test`, depending on whether a `subscriber` account exists.
+ *
+ * Provision one with `--roles primary,secondary,subscriber --subscriber-roles subscriber`.
+ */
+export function ifSubscriberAccount(): typeof test | typeof test.skip {
+    return hasAccountFor(SUBSCRIBER_ROLE) ? test : test.skip;
+}
+
+/**
+ * `test`, or a skipped `test`, depending on whether the `sharer`/`sharee` friend pair exists.
+ *
+ * Provision it with `--roles sharer,sharee`; {@link ensureFriends} makes them friends.
+ */
+export function ifSharingPair(): typeof test | typeof test.skip {
+    return hasAccountFor(SHARER_ROLE) && hasAccountFor(SHAREE_ROLE) ? test : test.skip;
+}
+
 export { expect };
-export { PRIMARY_ROLE, SECONDARY_ROLE, STAFF_ROLE } from "./accounts.js";
+export { HEAVY_ROLE, PRIMARY_ROLE, PROPERTY_OWNERS_FEATURE, SECONDARY_ROLE, SHAREE_ROLE, SHARER_ROLE, STAFF_ROLE, SUBSCRIBER_ROLE } from "./accounts.js";
 export { env } from "./env.js";

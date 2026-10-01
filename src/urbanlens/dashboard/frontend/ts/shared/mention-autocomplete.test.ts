@@ -218,9 +218,7 @@ describe("when responses arrive out of order", () => {
     }
 
     test("a slow earlier response does not overwrite the newer one", async () => {
-        // Typing "@mil" then "@mill" on a slow connection: if the first lookup lands
-        // last, the dropdown would offer results for a fragment the box no longer
-        // contains, and picking one inserts a location the user never searched for.
+        // Typing "@mil" then "@mill" on a slow connection.
         const { resolveFor } = deferredFetch();
 
         await type("@mil");

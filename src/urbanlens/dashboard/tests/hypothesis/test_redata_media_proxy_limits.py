@@ -1,0 +1,214 @@
+"""Four unauthenticated proxies wrote third-party bytes into the shared Dragonfly.
+
+`RedataMediaProxyMixin.serve_media` downloads a file from REData and does
+`cache.set(cache_key, original, 3600)` with no size bound, into the same shared
+instance that holds sessions and the Channels layer - a full store there raises
+rather than evicting to make room, so a large enough body does not merely waste
+space, it can turn an unrelated cache write into a refused one for everyone
+sharing the store. None of the four views requires a login, and the cache
+key is built from path parameters the caller chooses, so the number of distinct
+entries is the caller's to decide as well (N21 H14).
+
+Two bounds, because one without the other does nothing:
+
+* a per-entry ceiling, so a single body cannot be arbitrarily large - documents
+  here, not thumbnails, so the ceiling is larger than `bounded_cache`'s default
+  and named at the call site rather than inherited by accident;
+* a rate, so the *number* of entries one caller can mint is bounded too. These
+  are GETs, and `throttled` counted only unsafe methods - which was right for the
+  signup and demo POSTs it was written for and wrong here, where GET is the
+  expensive method.
+
+Refusing to cache must never mean refusing to answer: the body is served either
+way, which is `bounded_cache.set_if_small`'s contract and is asserted below.
+"""
+
+from __future__ import annotations
+
+from unittest import mock
+
+from django.core.cache import cache
+from django.urls import resolve, reverse
+
+from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.services.core import bounded_cache
+from urbanlens.dashboard.services.security import throttle
+
+_CACHE_KEY = "ul_loopnet_photo_abc_1"
+
+
+class TheProxyCachesOnlyWhatItShouldTests(TestCase):
+    """The per-entry half."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.url = reverse("pin.loopnet.photo", kwargs={"listing_uuid": "abc", "photo_id": 1})
+
+    def _serve(self, body: bytes) -> object:
+        """Fetch the proxy with a stubbed REData download returning *body*."""
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway.download_listing_photo",
+            return_value=(body, "image/jpeg"),
+        ):
+            return self.client.get(self.url)
+
+    def test_an_ordinary_photo_is_served_and_cached(self) -> None:
+        """The positive half. Without it, the refusal test below would pass just
+        as well against a proxy that had stopped caching altogether."""
+        # Read back rather than mocking `set`: the download is kept by the thread that fetched it, and
+        # `caches[...]` hands each thread its own client over the same store.
+        response = self._serve(b"x" * 1024)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(bytes(response.content), b"x" * 1024)
+        self.assertEqual(bounded_cache.get_or_none(_CACHE_KEY, label="test"), (b"x" * 1024, "image/jpeg"))
+
+    def test_an_oversized_body_is_still_served(self) -> None:
+        """The failure that would be worse than the bug: bounding the cache by
+        refusing the request."""
+        from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_MAX_CACHED_BYTES
+
+        body = b"x" * (REDATA_MEDIA_MAX_CACHED_BYTES + 1)
+
+        response = self._serve(body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.content), len(body))
+
+    def test_an_oversized_body_is_not_cached(self) -> None:
+        from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_MAX_CACHED_BYTES
+
+        response = self._serve(b"x" * (REDATA_MEDIA_MAX_CACHED_BYTES + 1))
+
+        self.assertEqual(response.status_code, 200, "the anti-vacuity half: the download happened")
+        self.assertIsNone(bounded_cache.get_or_none(_CACHE_KEY, label="test"))
+
+    def test_the_ceiling_is_larger_than_the_thumbnail_default(self) -> None:
+        """These are scanned PDFs and TIFFs. Inheriting the thumbnail ceiling
+        would refuse to cache almost all of them, turning every view into a
+        fresh REData download - a different resource spent, not a saving."""
+        from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_MAX_CACHED_BYTES
+        from urbanlens.dashboard.services.core.bounded_cache import MAX_CACHED_BODY_BYTES
+
+        self.assertGreater(REDATA_MEDIA_MAX_CACHED_BYTES, MAX_CACHED_BODY_BYTES)
+
+
+class TheProxyIsRateLimitedTests(TestCase):
+    """The how-many half. Without it the per-entry ceiling bounds one entry.
+
+    Asserted off the URLconf rather than by making six hundred requests: a
+    behavioural test at this limit is slow, and - worse - a route somebody
+    forgot to wrap would make it pass by never reaching the limit at all.
+    """
+
+    #: Every REData proxy route, by name. Listed rather than discovered, so
+    #: adding a fifth one without a limiter fails here.
+    ROUTES = (
+        ("pin.loopnet.photo", {"listing_uuid": "abc", "photo_id": 1}),
+        ("pin.cris.attachment", {"resource_uuid": "abc", "attachment_id": 1}),
+        ("pin.cris.extracted_image", {"resource_uuid": "abc", "attachment_id": 1, "image_id": 2}),
+        ("pin.place_cid.media", {"cid": 1, "media_id": 2}),
+    )
+
+    def test_every_proxy_route_is_guarded(self) -> None:
+        from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_RATE
+
+        for name, kwargs in self.ROUTES:
+            with self.subTest(name):
+                view = resolve(reverse(name, kwargs=kwargs)).func
+                self.assertEqual(
+                    getattr(view, "throttle_scope", None), "redata.media", f"{name} is not behind a throttle"
+                )
+                self.assertEqual(getattr(view, "throttle_rate", None), REDATA_MEDIA_RATE)
+
+    def test_a_get_is_counted(self) -> None:
+        """`throttled` counted only unsafe methods, which for a download proxy
+        is every method but the one that matters."""
+        for name, kwargs in self.ROUTES:
+            with self.subTest(name):
+                self.assertIn(
+                    "GET", getattr(resolve(reverse(name, kwargs=kwargs)).func, "throttle_methods", frozenset())
+                )
+
+    def test_the_rate_is_generous_enough_for_a_gallery(self) -> None:
+        """A page of photos is many requests. A limit tight enough to break
+        ordinary browsing would be reverted, not tuned."""
+        from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_RATE
+
+        self.assertGreaterEqual(REDATA_MEDIA_RATE.limit, 300)
+
+
+class TheDecoratorCanCountSafeMethodsTests(TestCase):
+    """The mechanism the above rests on, tested where it lives."""
+
+    def test_the_default_still_ignores_a_get(self) -> None:
+        """Throttling every GET by default would put a limiter in front of every
+        page on the site."""
+        self.assertNotIn("GET", throttle.COUNTED_METHODS)
+
+    def test_a_caller_can_ask_for_get_to_be_counted(self) -> None:
+        calls = []
+
+        @throttle.throttled("probe.scope", throttle.Rate(limit=1, window_seconds=60), methods=frozenset({"GET"}))
+        def view(request):  # noqa: ANN001, ANN202
+            calls.append(1)
+            from django.http import HttpResponse
+
+            return HttpResponse("ok")
+
+        from django.test import RequestFactory
+
+        factory = RequestFactory()
+        self.assertEqual(view(factory.get("/probe/")).status_code, 200)
+        self.assertEqual(view(factory.get("/probe/")).status_code, 429)
+        self.assertEqual(len(calls), 1)
+
+
+class TheBudgetIsChargedPerAccountTests(TestCase):
+    """An address is a poor identity and a poor isolation boundary.
+
+    Behind NAT one office shares one budget, so a limit sized for a person
+    refuses a team. And the requirement these limits exist for is that one
+    *account* cannot spend everyone else's - which a per-address budget does not
+    express at all.
+    """
+
+    def test_a_signed_in_caller_is_charged_to_their_account(self) -> None:
+        from django.contrib.auth.models import User
+        from django.test import RequestFactory
+        from model_bakery import baker
+
+        from urbanlens.dashboard.services.security.throttle import account_or_address
+
+        user = baker.make(User)
+        request = RequestFactory().get("/anything/")
+        request.user = user
+
+        self.assertEqual(account_or_address(request), f"user:{user.pk}")
+
+    def test_an_anonymous_caller_is_charged_to_their_address(self) -> None:
+        from django.contrib.auth.models import AnonymousUser
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.services.security.throttle import account_or_address
+
+        request = RequestFactory().get("/anything/", REMOTE_ADDR="203.0.113.7")
+        request.user = AnonymousUser()
+
+        self.assertEqual(account_or_address(request), "203.0.113.7")
+
+    def test_the_two_namespaces_cannot_collide(self) -> None:
+        """A budget shared by accident between an account and an address would
+        be one that could be spent on the other's behalf."""
+        from django.contrib.auth.models import User
+        from django.test import RequestFactory
+        from model_bakery import baker
+
+        from urbanlens.dashboard.services.security.throttle import account_or_address
+
+        user = baker.make(User)
+        signed_in = RequestFactory().get("/anything/")
+        signed_in.user = user
+
+        self.assertTrue(account_or_address(signed_in).startswith("user:"))

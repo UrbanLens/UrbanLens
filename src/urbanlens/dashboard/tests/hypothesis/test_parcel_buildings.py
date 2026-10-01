@@ -1,14 +1,9 @@
-"""Tests for the parcel-buildings plugin.
-
-Covers the REData-then-Overpass provider order, the panel's gate, the row
-builder that pairs each building with the child marker covering it, and the
-"Buildings on this Property" panel endpoint on both the pin and wiki pages.
-Both gateways are mocked - no network access occurs.
-"""
+"""Tests for the parcel-buildings plugin."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
@@ -16,7 +11,6 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
@@ -29,7 +23,10 @@ from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
     fetch_parcel_buildings,
 )
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    PropertyRecordsUnavailableError,
+    RedataGateway,
+)
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 
@@ -38,8 +35,22 @@ from .place_helpers import official_geometry
 _coord_counter = 0
 
 _REDATA_BUILDINGS = [
-    {"source": "cris", "name": "Tool Shed", "building_number": "154", "year_built": 1937, "latitude": 41.73320, "longitude": -73.93040},
-    {"source": "cris", "name": "Main Hall", "building_number": "9", "year_built": 1892, "latitude": 41.73300, "longitude": -73.93000},
+    {
+        "source": "cris",
+        "name": "Tool Shed",
+        "building_number": "154",
+        "year_built": 1937,
+        "latitude": 41.73320,
+        "longitude": -73.93040,
+    },
+    {
+        "source": "cris",
+        "name": "Main Hall",
+        "building_number": "9",
+        "year_built": 1892,
+        "latitude": 41.73300,
+        "longitude": -73.93000,
+    },
 ]
 
 
@@ -49,6 +60,26 @@ def _make_location(**kwargs) -> Location:
     kwargs.setdefault("latitude", 41.733 + _coord_counter * 0.001)
     kwargs.setdefault("longitude", -73.930 - _coord_counter * 0.001)
     return baker.make(Location, google_place=None, **kwargs)
+
+
+class _FakeMarker:
+    """A lightweight stand-in for a child Pin/Wiki - enough of the surface unpinned_building_child_rows/child_pin_rows read (pin_type, uuid, slug, effective_name/effective_latitude/effective_longitude) without touching the database, matching this module's other SimpleTestCase-friendly helpers."""
+
+    def __init__(
+        self, *, name: str, pin_type: str, latitude: float | None = None, longitude: float | None = None
+    ) -> None:
+        self.effective_name = name
+        self.pin_type = pin_type
+        self.effective_latitude = latitude
+        self.effective_longitude = longitude
+        self.uuid = uuid4()
+        self.slug = ""
+
+
+def _fake_marker(
+    *, name: str, pin_type: str, latitude: float | None = None, longitude: float | None = None
+) -> _FakeMarker:
+    return _FakeMarker(name=name, pin_type=pin_type, latitude=latitude, longitude=longitude)
 
 
 def _square_around(latitude: float, longitude: float, size: float = 0.002) -> MultiPolygon:
@@ -65,6 +96,18 @@ def _square_around(latitude: float, longitude: float, size: float = 0.002) -> Mu
         ),
         srid=4326,
     )
+
+
+def _box(latitude: float, longitude: float, half_lat: float, half_lng: float) -> dict:
+    """A GeoJSON rectangle centred on a coordinate, as a building footprint."""
+    ring = [
+        [longitude - half_lng, latitude - half_lat],
+        [longitude + half_lng, latitude - half_lat],
+        [longitude + half_lng, latitude + half_lat],
+        [longitude - half_lng, latitude + half_lat],
+        [longitude - half_lng, latitude - half_lat],
+    ]
+    return {"type": "Polygon", "coordinates": [ring]}
 
 
 class FetchParcelBuildingsTests(TestCase):
@@ -95,9 +138,20 @@ class FetchParcelBuildingsTests(TestCase):
         mock_overpass.assert_not_called()
 
     def test_falls_back_to_overpass_inside_the_property_boundary(self) -> None:
-        official_geometry(self.location, _square_around(float(self.location.latitude), float(self.location.longitude)),
+        official_geometry(
+            self.location,
+            _square_around(float(self.location.latitude), float(self.location.longitude)),
         )
-        osm = [{"name": "Powerhouse", "building_number": "", "latitude": 41.7331, "longitude": -73.9301, "osm_id": 5, "source": "osm"}]
+        osm = [
+            {
+                "name": "Powerhouse",
+                "building_number": "",
+                "latitude": 41.7331,
+                "longitude": -73.9301,
+                "osm_id": 5,
+                "source": "osm",
+            }
+        ]
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
@@ -122,12 +176,16 @@ class FetchParcelBuildingsTests(TestCase):
     def test_redata_failure_falls_through_rather_than_raising(self) -> None:
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
+            patch.object(
+                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
+            ),
         ):
             self.assertEqual(fetch_parcel_buildings(self.location), {})
 
     def test_overpass_failure_is_swallowed(self) -> None:
-        official_geometry(self.location, _square_around(float(self.location.latitude), float(self.location.longitude)),
+        official_geometry(
+            self.location,
+            _square_around(float(self.location.latitude), float(self.location.longitude)),
         )
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
@@ -187,7 +245,11 @@ class MatchChildMarkerTests(TestCase):
         self.profile = baker.make("dashboard.Profile")
 
     def _pin_at(self, latitude: float, longitude: float) -> Pin:
-        return baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=latitude, longitude=longitude, google_place=None))
+        return baker.make(
+            Pin,
+            profile=self.profile,
+            location=baker.make(Location, latitude=latitude, longitude=longitude, google_place=None),
+        )
 
     def test_matches_a_marker_standing_on_the_building(self) -> None:
         pin = self._pin_at(41.733200, -73.930400)
@@ -217,7 +279,11 @@ class BuildingRowsTests(TestCase):
 
     def test_rows_sort_numerically_by_building_number(self) -> None:
         """'Building 9' must precede 'Building 10' - the identifiers people navigate by."""
-        buildings = [{"building_number": "10", "name": "Ten"}, {"building_number": "9", "name": "Nine"}, {"building_number": "100", "name": "Hundred"}]
+        buildings = [
+            {"building_number": "10", "name": "Ten"},
+            {"building_number": "9", "name": "Nine"},
+            {"building_number": "100", "name": "Hundred"},
+        ]
         self.assertEqual([row["building_number"] for row in building_rows(buildings, [])], ["9", "10", "100"])
 
     def test_unnumbered_buildings_sort_last_by_name(self) -> None:
@@ -237,13 +303,31 @@ class BuildingRowsTests(TestCase):
 
     def test_one_child_can_only_claim_one_building(self) -> None:
         """Otherwise a single pin on a dense campus would mark several footprints as done."""
+        # Two blocks sharing a party wall, their centres 40 m apart; the pin stands on the wall, on both.
+        west = {
+            "name": "A",
+            "latitude": 41.73320,
+            "longitude": -73.93064,
+            "geometry": _box(41.73320, -73.93064, 0.00012, 0.00024),
+        }
+        east = {
+            "name": "B",
+            "latitude": 41.73320,
+            "longitude": -73.93016,
+            "geometry": _box(41.73320, -73.93016, 0.00012, 0.00024),
+        }
+        child = self._pin_at(41.733200, -73.930400, name="Only One")
+        rows = building_rows([west, east], [child])
+        self.assertEqual(sum(1 for row in rows if row["child_name"]), 1)
+
+    def test_records_a_metre_apart_are_one_building_and_share_its_child(self) -> None:
         near_pair = [
             {"name": "A", "latitude": 41.73320, "longitude": -73.93040},
             {"name": "B", "latitude": 41.733205, "longitude": -73.930405},
         ]
         child = self._pin_at(41.733200, -73.930400, name="Only One")
         rows = building_rows(near_pair, [child])
-        self.assertEqual(sum(1 for row in rows if row["child_name"]), 1)
+        self.assertEqual([row["child_name"] for row in rows], ["Only One", "Only One"])
 
     def test_source_labels_are_humanized(self) -> None:
         rows = building_rows([{"name": "X", "source": "cris"}, {"name": "Y", "source": "osm"}], [])
@@ -285,7 +369,9 @@ class BuildingRowsTests(TestCase):
             "longitude": -73.930,
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [[[-73.950, 41.750], [-73.949, 41.750], [-73.949, 41.751], [-73.950, 41.751], [-73.950, 41.750]]],
+                "coordinates": [
+                    [[-73.950, 41.750], [-73.949, 41.750], [-73.949, 41.751], [-73.950, 41.751], [-73.950, 41.750]]
+                ],
             },
         }
         rows = building_rows([misleading_centroid], [], boundary_polygon=boundary)
@@ -299,7 +385,7 @@ class BuildingRowsTests(TestCase):
 
 
 class ParcelBuildingsPanelViewTests(TestCase):
-    """The pin detail page's "Buildings on this Property" endpoint."""
+    """The Private Pin page's "Buildings on this Property" endpoint."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -316,7 +402,9 @@ class ParcelBuildingsPanelViewTests(TestCase):
         self.assertEqual(self.client.get(self._url()).status_code, 204)
 
     def test_cached_buildings_render_with_their_numbers(self) -> None:
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"}
+        )
         response = self.client.get(self._url())
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
@@ -333,20 +421,32 @@ class ParcelBuildingsPanelViewTests(TestCase):
             slug="tool-shed",
             location=baker.make(Location, latitude="41.733200", longitude="-73.930400", google_place=None),
         )
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"}
+        )
         response = self.client.get(self._url())
         self.assertContains(response, reverse("pin.details", kwargs={"pin_slug": child.slug}))
 
     def test_another_users_pin_is_not_reachable(self) -> None:
         other = baker.make(Pin, profile=baker.make(User).profile, location=_make_location(), slug="not-mine")
-        self.assertEqual(self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": other.slug})).status_code, 404)
+        self.assertEqual(
+            self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": other.slug})).status_code, 404
+        )
 
     def test_a_building_outside_the_parcel_boundary_is_dropped(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         official_geometry(self.location, _square_around(lat, lng))
         inside = {"source": "cris", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
-        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"})
+        outside = {
+            "source": "cris",
+            "name": "Outside Shed",
+            "building_number": "2",
+            "latitude": lat + 1,
+            "longitude": lng + 1,
+        }
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"}
+        )
         body = self.client.get(self._url()).content.decode()
         self.assertIn("Inside Hall", body)
         self.assertNotIn("Outside Shed", body)
@@ -354,7 +454,13 @@ class ParcelBuildingsPanelViewTests(TestCase):
     def test_an_out_of_boundary_building_with_a_child_pin_still_shows(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         official_geometry(self.location, _square_around(lat, lng))
-        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
+        outside = {
+            "source": "cris",
+            "name": "Outside Shed",
+            "building_number": "2",
+            "latitude": lat + 1,
+            "longitude": lng + 1,
+        }
         baker.make(
             Pin,
             profile=self.user.profile,
@@ -369,9 +475,178 @@ class ParcelBuildingsPanelViewTests(TestCase):
     def test_without_a_real_boundary_nothing_is_filtered(self) -> None:
         """No Boundary row exists at all - only the synthesized fallback circle - so nothing is dropped."""
         lat, lng = float(self.location.latitude), float(self.location.longitude)
-        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
+        outside = {
+            "source": "cris",
+            "name": "Outside Shed",
+            "building_number": "2",
+            "latitude": lat + 1,
+            "longitude": lng + 1,
+        }
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "redata"})
         self.assertContains(self.client.get(self._url()), "Outside Shed")
+
+
+class UnpinnedBuildingChildRowsTests(SimpleTestCase):
+    """unpinned_building_child_rows: BUILDING-typed children no external record covers."""
+
+    def test_a_building_typed_child_gets_a_row(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import unpinned_building_child_rows
+
+        child = _fake_marker(name="Hand-Pinned Shed", pin_type=PinType.BUILDING)
+        rows = unpinned_building_child_rows([child], url_for=lambda c: f"/pins/{c.uuid}/")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "Hand-Pinned Shed")
+        self.assertEqual(rows[0]["child_name"], "Hand-Pinned Shed")
+        self.assertEqual(rows[0]["origin"], "pin")
+        self.assertEqual(rows[0]["child_url"], f"/pins/{child.uuid}/")
+
+    def test_a_parcel_typed_child_is_excluded(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import unpinned_building_child_rows
+
+        child = _fake_marker(name="The Grounds", pin_type=PinType.PARCEL)
+        self.assertEqual(unpinned_building_child_rows([child]), [])
+
+    def test_rows_sort_by_name(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import unpinned_building_child_rows
+
+        children = [
+            _fake_marker(name="Zed Hall", pin_type=PinType.BUILDING),
+            _fake_marker(name="Alpha Hall", pin_type=PinType.BUILDING),
+        ]
+        rows = unpinned_building_child_rows(children)
+        self.assertEqual([row["name"] for row in rows], ["Alpha Hall", "Zed Hall"])
+
+
+class ChildPinRowsTests(SimpleTestCase):
+    """child_pin_rows: every direct child, of any type, for the panel's Child pins tab."""
+
+    def test_every_type_gets_a_row_with_its_label(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import child_pin_rows
+
+        entrance = _fake_marker(name="North Door", pin_type=PinType.ENTRANCE)
+        rows = child_pin_rows([entrance], url_for=lambda c: f"/pins/{c.uuid}/")
+        self.assertEqual(
+            (rows[0]["name"], rows[0]["pin_type"], rows[0]["type_label"], rows[0]["child_url"]),
+            ("North Door", PinType.ENTRANCE, "Entrance", f"/pins/{entrance.uuid}/"),
+        )
+
+    def test_rows_group_by_type_then_name(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import child_pin_rows
+
+        children = [
+            _fake_marker(name="Zed Hall", pin_type=PinType.BUILDING),
+            _fake_marker(name="Well", pin_type=PinType.DANGER),
+            _fake_marker(name="Alpha Hall", pin_type=PinType.BUILDING),
+            _fake_marker(name="The Grounds", pin_type=PinType.PARCEL),
+        ]
+        rows = child_pin_rows(children)
+        self.assertEqual([row["name"] for row in rows], ["The Grounds", "Alpha Hall", "Zed Hall", "Well"])
+
+
+class ParcelBuildingsTabsTests(TestCase):
+    """The pin page's one list of buildings and child pins (PinController.parcel_buildings, P172)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
+
+    def _url(self, pin: Pin | None = None) -> str:
+        return reverse("pin.parcel_buildings", kwargs={"pin_slug": (pin or self.pin).slug})
+
+    def _child(self, pin_type: str, name: str, **fields) -> Pin:
+        fields.setdefault("location", _make_location())
+        return baker.make(Pin, profile=self.user.profile, parent_pin=self.pin, pin_type=pin_type, name=name, **fields)
+
+    def test_a_hand_created_building_with_no_external_record_still_shows(self) -> None:
+        """The reported bug: an empty external cache used to 204 the whole panel."""
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        self._child(PinType.BUILDING, "Hand-Pinned Shed")
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Hand-Pinned Shed")
+
+    def test_every_child_pin_is_listed_whatever_its_type(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        self._child(PinType.ENTRANCE, "North Door")
+        self._child(PinType.DANGER, "Open Shaft")
+        self._child(PinType.PARCEL, "The Grounds")
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-pb-panel="children"')
+        for name in ("North Door", "Open Shaft", "The Grounds"):
+            self.assertContains(response, name)
+        self.assertContains(response, "<h3>Child pins</h3>", html=False)
+
+    def test_buildings_and_child_pins_are_one_card_with_two_tabs(self) -> None:
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"}
+        )
+        shed = self._child(
+            PinType.BUILDING,
+            "Tool Shed",
+            slug="tool-shed",
+            location=baker.make(Location, latitude="41.733200", longitude="-73.930400", google_place=None),
+        )
+        self._child(PinType.ENTRANCE, "North Door")
+
+        response = self.client.get(self._url())
+
+        self.assertContains(response, 'data-pb-panel="buildings"')
+        self.assertContains(response, 'data-pb-panel="children" hidden')
+        self.assertContains(response, 'title="Pinned as Tool Shed"')
+        self.assertContains(response, f'hx-get="{reverse("pin.child_building", args=[shed.slug])}"', count=2)
+        self.assertNotContains(response, 'data-pb-panel="mine"')
+        self.assertNotContains(response, 'data-pb-panel="parcels"')
+
+    def test_only_a_building_child_opens_in_place(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        door = self._child(PinType.ENTRANCE, "North Door", slug="north-door")
+
+        response = self.client.get(self._url())
+
+        self.assertNotContains(response, reverse("pin.child_building", args=[door.slug]))
+        self.assertContains(response, reverse("pin.details", kwargs={"pin_slug": door.slug}))
+
+    def test_a_child_pin_lists_its_own_children(self) -> None:
+        building = self._child(PinType.BUILDING, "Main Block", slug="main-block")
+        baker.make(
+            Pin,
+            profile=self.user.profile,
+            parent_pin=building,
+            pin_type=PinType.STAIR,
+            name="East Stair",
+            location=_make_location(),
+        )
+
+        response = self.client.get(self._url(building))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "East Stair")
+        self.assertNotContains(response, 'data-pb-panel="buildings"')
+
+    def test_the_wiki_pull_is_offered_only_when_there_is_a_wiki(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        self._child(PinType.ENTRANCE, "North Door")
+        pull = reverse("pin.detail_pins.pull_from_wiki", args=[self.pin.slug])
+
+        self.assertNotContains(self.client.get(self._url()), pull)
+        baker.make(Wiki, location=self.location)
+        self.assertContains(self.client.get(self._url()), pull)
+
+    def test_still_204s_with_nothing_at_all(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        self.assertEqual(self.client.get(self._url()).status_code, 204)
+
+    def test_a_child_pin_with_no_children_204s(self) -> None:
+        building = self._child(PinType.BUILDING, "Main Block", slug="main-block")
+        self.assertEqual(self.client.get(self._url(building)).status_code, 204)
 
 
 class WikiParcelBuildingsPanelViewTests(TestCase):
@@ -392,8 +667,16 @@ class WikiParcelBuildingsPanelViewTests(TestCase):
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         official_geometry(self.location, _square_around(lat, lng))
         inside = {"source": "cris", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
-        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"})
+        outside = {
+            "source": "cris",
+            "name": "Outside Shed",
+            "building_number": "2",
+            "latitude": lat + 1,
+            "longitude": lng + 1,
+        }
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"}
+        )
         body = self.client.get(self._url()).content.decode()
         self.assertIn("Inside Hall", body)
         self.assertNotIn("Outside Shed", body)
@@ -401,7 +684,13 @@ class WikiParcelBuildingsPanelViewTests(TestCase):
     def test_an_out_of_boundary_building_with_a_child_wiki_still_shows(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
         official_geometry(self.location, _square_around(lat, lng))
-        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
+        outside = {
+            "source": "cris",
+            "name": "Outside Shed",
+            "building_number": "2",
+            "latitude": lat + 1,
+            "longitude": lng + 1,
+        }
         baker.make(
             Wiki,
             parent_wiki=self.wiki,
@@ -423,6 +712,10 @@ class PluginContributionsTests(SimpleTestCase):
         self.assertEqual([type(s) for s in self.plugin.get_enrichment_sources()], [ParcelBuildingsEnrichmentSource])
 
 
+#: An element's extent as `out tags geom` reports it, centred on 41.7331, -73.9301.
+_BOUNDS = {"minlat": 41.7330, "minlon": -73.9302, "maxlat": 41.7332, "maxlon": -73.9300}
+
+
 class OverpassBuildingsWithinTests(SimpleTestCase):
     """The Overpass fallback's query construction and result shaping."""
 
@@ -442,17 +735,24 @@ class OverpassBuildingsWithinTests(SimpleTestCase):
         self.assertIn("41.7310000 -73.9320000", query)
 
     def test_elements_become_building_records(self) -> None:
-        elements = [{"id": 7, "center": {"lat": 41.7331, "lon": -73.9301}, "tags": {"name": "Powerhouse", "ref": "12"}}]
+        elements = [{"id": 7, "bounds": _BOUNDS, "tags": {"name": "Powerhouse", "ref": "12"}}]
         with patch.object(OverpassGateway, "elements_for_query", return_value=elements):
-            buildings = self.gateway.buildings_within(_square_around(41.733, -73.930))
-        self.assertEqual(buildings, [{"name": "Powerhouse", "building_number": "12", "latitude": 41.7331, "longitude": -73.9301, "osm_id": 7, "source": "osm"}])
+            (building,) = self.gateway.buildings_within(_square_around(41.733, -73.930))
+        self.assertEqual(
+            {key: building[key] for key in ("name", "building_number", "osm_id", "source")},
+            {"name": "Powerhouse", "building_number": "12", "osm_id": 7, "source": "osm"},
+        )
+        self.assertAlmostEqual(building["latitude"], 41.7331)
+        self.assertAlmostEqual(building["longitude"], -73.9301)
 
     def test_elements_without_a_centre_are_skipped(self) -> None:
-        with patch.object(OverpassGateway, "elements_for_query", return_value=[{"id": 7, "tags": {"name": "No centre"}}]):
+        with patch.object(
+            OverpassGateway, "elements_for_query", return_value=[{"id": 7, "tags": {"name": "No centre"}}]
+        ):
             self.assertEqual(self.gateway.buildings_within(_square_around(41.733, -73.930)), [])
 
     def test_untagged_elements_still_produce_a_record(self) -> None:
-        with patch.object(OverpassGateway, "elements_for_query", return_value=[{"id": 7, "center": {"lat": 41.7331, "lon": -73.9301}}]):
+        with patch.object(OverpassGateway, "elements_for_query", return_value=[{"id": 7, "bounds": _BOUNDS}]):
             buildings = self.gateway.buildings_within(_square_around(41.733, -73.930))
         self.assertEqual(buildings[0]["name"], "")
 

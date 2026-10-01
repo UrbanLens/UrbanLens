@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -16,8 +17,23 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip
-from urbanlens.dashboard.services.messaging.direct_message_shares import ShareTargetPermissionError, ShareValidationError, invite_to_trip_in_message, recommend_friend_in_message, share_pin_in_message
+from urbanlens.dashboard.services.messaging.direct_message_shares import (
+    CannotRecommendSelfError,
+    FriendRecommendationUnavailableError,
+    NotATripMemberError,
+    RecommendedProfileNotConnectedError,
+    ShareTargetPermissionError,
+    ShareValidationError,
+    TripInviteNotConnectedError,
+    invite_to_trip_in_message,
+    recommend_friend_in_message,
+    share_pin_in_message,
+)
+from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError
 from urbanlens.dashboard.services.social.connections import get_connections
+from urbanlens.dashboard.services.trips.trip_errors import TripQuotaError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -45,8 +61,7 @@ class MessageSharePinView(LoginRequiredMixin, View):
         """Create the PinShare + chat message and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``pin_slug``, ``body``, and
-                optional ``markup_map_uuid``.
+            request: The incoming request.
             profile_slug: Slug of the conversation partner.
 
         Returns:
@@ -59,10 +74,19 @@ class MessageSharePinView(LoginRequiredMixin, View):
 
         try:
             share_pin_in_message(profile, partner, pin, body, markup_map_uuid=request.POST.get("markup_map_uuid") or None)
+        except PinSharePermissionError as exc:
+            logger.info("pin share in message rejected: %s", exc)
+            return HttpResponseForbidden("Pins can only be shared with connected friends.")
         except ShareTargetPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            # share_pin_in_message doesn't raise this itself; caught here only
+            # as a defensive fallback should that ever change.
+            logger.warning("pin share in message rejected: %s", exc)
+            return HttpResponseForbidden("That pin can't be shared with this recipient.")
         except ShareValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            # share_pin_in_message doesn't raise this itself - it's raised only by send_message_with_share,
+            # which this view doesn't call - caught here only as a defensive fallback should that ever change.
+            logger.warning("pin share in message rejected: %s", exc)
+            return HttpResponseBadRequest("That share request is invalid.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
@@ -116,18 +140,19 @@ def _toast_response(request: HttpRequest, template: str, context: dict, *, level
 
 
 class MessageShareRespondPinView(LoginRequiredMixin, View):
-    """POST /messages/<profile_slug>/share/pin/<message_id>/respond/ - accept/reject a `@pin` share in place.
+    """POST /messages/<profile_slug>/share/pin/<message_id>/respond/ - accept/reject a `@pin` share in
+    place.
 
-    Mirrors `PinShareRespondView` but stays inside the DM thread: no page
-    navigation, buttons replaced by the resulting status, and a toast instead
-    of a Django message (there's no next page load to carry it to).
+    Mirrors `PinShareRespondView` but stays inside the DM thread: no page navigation, buttons replaced
+    by the resulting status, and a toast instead of a Django message (there's no next page load to carry
+    it to).
     """
 
     def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
         """Apply the accept/reject decision and return the refreshed share card.
 
         Args:
-            request: The incoming request. Reads ``action`` (``accept``/``reject``).
+            request: The incoming request.
             profile_slug: Slug of the conversation partner (the sharer).
             message_id: PK of the message carrying the pin share.
 
@@ -160,10 +185,10 @@ class MessageMentionAddPinView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/mention/<mention_id>/add-pin/ - "Add to map" on a detected location.
 
     Accepts the DM_DETECTED share behind a coordinates/address mention (see
-    ``services.messaging.dm_location_detection``), creating the recipient's pin at the
-    shared location, and swaps the mention footer to the "On your map as …"
-    reference in place. Recipient-only: the mention footer never renders for
-    the sender, and this endpoint 404s for anyone but the message recipient.
+    ``services.messaging.dm_location_detection``), creating the recipient's pin at the shared location,
+    and swaps the mention footer to the "On your map as …" reference in place.
+    Recipient-only: the mention footer never renders for the sender, and this endpoint 404s for anyone
+    but the message recipient.
     """
 
     def post(self, request: HttpRequest, profile_slug: str, mention_id: int) -> HttpResponse:
@@ -175,8 +200,7 @@ class MessageMentionAddPinView(LoginRequiredMixin, View):
             mention_id: PK of the location mention being added.
 
         Returns:
-            The re-rendered `_message_location_mention_item.html` fragment
-            with a toast trigger.
+            The re-rendered `_message_location_mention_item.html` fragment with a toast trigger.
         """
         from urbanlens.dashboard.controllers.pin_sharing import apply_pin_share_response
         from urbanlens.dashboard.models.direct_messages.location_mention import DirectMessageLocationMention
@@ -258,7 +282,7 @@ class MessageShareTripView(LoginRequiredMixin, View):
         """Create the trip invite + chat message and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``trip_slug`` and ``body``.
+            request: The incoming request.
             profile_slug: Slug of the conversation partner.
 
         Returns:
@@ -266,19 +290,28 @@ class MessageShareTripView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        # Scoped to the caller's own trips (like the GET picker above) rather
-        # than any slug: the service re-checks membership anyway, but an
-        # unscoped lookup let a non-member distinguish "trip exists" (403)
+        # Scoped to the caller's own trips (like the GET picker above) rather than any slug: the service
+        # re-checks membership anyway, but an unscoped lookup let a non-member distinguish "trip exists" (403)
         # from "doesn't exist" (404) - a slug-probing existence oracle.
         trip = get_object_or_404(Trip, slug=request.POST.get("trip_slug"), memberships__profile=profile)
         body = request.POST.get("body", "").strip() or f'I invited you to "{trip.name}"!'
 
         try:
             invite_to_trip_in_message(profile, partner, trip, body)
-        except ShareTargetPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+        except TripInviteNotConnectedError as exc:
+            logger.info("trip invite in message rejected: %s", exc)
+            return HttpResponseForbidden("You can only invite connected friends to a trip.")
+        except NotATripMemberError as exc:
+            logger.info("trip invite in message rejected: %s", exc)
+            return HttpResponseForbidden("You aren't a member of that trip.")
+        except TripQuotaError as exc:
+            logger.info("trip invite in message rejected: %s", exc)
+            return HttpResponseBadRequest(exc.message)
         except ShareValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            # invite_to_trip_in_message doesn't raise this itself - see the
+            # matching comment in MessageSharePinView.post.
+            logger.warning("trip invite in message rejected: %s", exc)
+            return HttpResponseBadRequest("That share request is invalid.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
@@ -306,7 +339,7 @@ class MessageShareFriendView(LoginRequiredMixin, View):
         """Create the friend recommendation + chat message and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``recommended_slug`` and ``body``.
+            request: The incoming request.
             profile_slug: Slug of the conversation partner.
 
         Returns:
@@ -314,15 +347,29 @@ class MessageShareFriendView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        recommended = get_object_or_404(Profile, slug=request.POST.get("recommended_slug"))
+        recommended = Profile.objects.filter(slug=request.POST.get("recommended_slug")).first()
+        if recommended is None:
+            return HttpResponseForbidden("You can only recommend your own connected friends.")
         body = request.POST.get("body", "").strip() or f"I think you and {recommended.username} should connect!"
 
         try:
             recommend_friend_in_message(profile, partner, recommended, body)
-        except ShareTargetPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+        except CannotRecommendSelfError as exc:
+            logger.info("friend recommendation in message rejected: %s", exc)
+            return HttpResponseForbidden("Choose a different friend to recommend.")
+        except RecommendedProfileNotConnectedError as exc:
+            logger.info("friend recommendation in message rejected: %s", exc)
+            return HttpResponseForbidden("You can only recommend your own connected friends.")
+        except FriendRecommendationUnavailableError as exc:
+            # Deliberately one generic message for both the opt-out and the
+            # blocked case - see FriendRecommendationUnavailableError.
+            logger.info("friend recommendation in message rejected: %s", exc)
+            return HttpResponseForbidden(f"{recommended.username} doesn't allow friend recommendations.")
         except ShareValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            # recommend_friend_in_message doesn't raise this itself - see the
+            # matching comment in MessageSharePinView.post.
+            logger.warning("friend recommendation in message rejected: %s", exc)
+            return HttpResponseBadRequest("That share request is invalid.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)

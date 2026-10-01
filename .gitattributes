@@ -1,0 +1,37 @@
+# Line endings. UrbanLens is deployed on Linux. `text=auto` normalizes on the way 
+# *in*, and `eol=lf` checks out LF on every platform, so a Windows editor that
+# saves CRLF still commits LF and a `core.autocrlf=true` setting cannot
+# reintroduce it. T
+* text=auto eol=lf
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+
+# Fonts
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# Archives and documents
+*.gz binary
+*.zip binary
+*.pdf binary
+
+# ESRI shapefile components (sample_data/sample_shapefile). Only .prj and .cpg
+# are text; the rest are binary and a normalization pass would corrupt them.
+*.shp binary
+*.shx binary
+*.dbf binary
+
+# Geometry fixtures are hex-encoded ASCII rather than real binary, so they
+# normalize safely - but they are read with read_bytes() by
+# test_import_wkt_wkb.py, so they are called out here as files whose exact
+# bytes a test does look at.
+*.wkb text eol=lf
+*.wkt text eol=lf

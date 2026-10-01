@@ -1,12 +1,4 @@
-"""Tests for georeferenced map image overlays.
-
-Covers the model's corner handling, the three ways an image reaches an overlay
-(upload / Media-gallery pick / external URL), the pin-vs-wiki permission split
-those routes inherit from ``custom_layers``, and the corner-drag endpoint that
-fires on every alignment nudge.
-
-No real network access occurs - the gallery-pick path's download is mocked.
-"""
+"""Tests for georeferenced map image overlays."""
 
 from __future__ import annotations
 
@@ -66,11 +58,13 @@ class CornerHandlingTests(SimpleTestCase):
             overlay.set_corners(_CORNERS[:3])
 
     def test_to_json_exposes_what_the_renderer_needs(self) -> None:
-        overlay = MapImageOverlay(name="Sanborn 1897", image_url="https://example.test/sheet.jpg", opacity=55, locked=True)
+        overlay = MapImageOverlay(
+            name="Sanborn 1897", tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png", opacity=55, locked=True
+        )
         overlay.set_corners(_CORNERS)
         payload = overlay.to_json()
         self.assertEqual(payload["corners"], _CORNERS)
-        self.assertEqual(payload["url"], "https://example.test/sheet.jpg")
+        self.assertEqual(payload["tile_url_template"], "/map/historical-tiles/x/{z}/{x}/{y}.png")
         self.assertEqual(payload["opacity"], 55)
         self.assertTrue(payload["locked"])
         self.assertIsNone(payload["layer_uuid"])
@@ -89,16 +83,16 @@ class OverlayOwnerTests(TestCase):
     def _create(self, **extra):
         """POST a pasted-external-URL overlay with DNS and the download stubbed.
 
-        A pasted URL is resolved (the SSRF guard) and then downloaded, so
-        without both stubs the request does a real lookup and reaches out to
-        the real host.
-        """
+        A pasted URL is resolved (the SSRF guard) and then downloaded, so without both stubs the request does a
+        real lookup and reaches out to the real host."""
         from urbanlens.dashboard.models.images.model import Image
 
         materialized = baker.make(Image, profile=self.user.profile, pin=self.pin)
         with (
             patch("socket.getaddrinfo", return_value=_PUBLIC_DNS_RESULT),
-            patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=materialized),
+            patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=materialized
+            ),
         ):
             return self.client.post(
                 reverse("pin.overlays", args=[self.pin.slug]),
@@ -116,28 +110,30 @@ class OverlayOwnerTests(TestCase):
     def test_a_pasted_external_url_is_downloaded_not_referenced(self) -> None:
         """The stored column must never hold the foreign URL.
 
-        An overlay's URL is handed to every viewer's browser as an ``<img
-        src>``. On a wiki, anyone who can see the place can add an overlay, so
-        a referenced URL would report each viewer's IP, User-Agent and timing
-        back to whoever planted it.
-        """
+        An overlay's URL is handed to every viewer's browser as an ``<img src>``."""
         from urbanlens.dashboard.models.images.model import Image
 
         materialized = baker.make(Image, profile=self.user.profile, pin=self.pin)
         with (
             patch("socket.getaddrinfo", return_value=_PUBLIC_DNS_RESULT),
-            patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=materialized) as mock_materialize,
+            patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=materialized
+            ) as mock_materialize,
         ):
             response = self.client.post(
                 reverse("pin.overlays", args=[self.pin.slug]),
-                {"corners": json.dumps(_CORNERS), "name": "Sanborn 1897", "image_url": "https://tracker.example/beacon.jpg"},
+                {
+                    "corners": json.dumps(_CORNERS),
+                    "name": "Sanborn 1897",
+                    "image_url": "https://tracker.example/beacon.jpg",
+                },
             )
 
         self.assertEqual(response.status_code, 200)
         mock_materialize.assert_called_once()
         overlay = MapImageOverlay.objects.for_pin(self.pin).get()
         self.assertEqual(overlay.image_id, materialized.pk)
-        self.assertNotIn("tracker.example", overlay.image_url)
+        self.assertNotIn("tracker.example", str(overlay.to_json()))
 
     def test_an_uploaded_image_overlay_is_created(self) -> None:
         upload = SimpleUploadedFile("sheet.png", _png_bytes(), content_type="image/png")
@@ -156,10 +152,16 @@ class OverlayOwnerTests(TestCase):
         from urbanlens.dashboard.models.images.model import Image
 
         materialized = baker.make(Image, profile=self.user.profile, pin=self.pin)
-        with patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=materialized) as mock_materialize:
+        with patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=materialized
+        ) as mock_materialize:
             response = self.client.post(
                 reverse("pin.overlays", args=[self.pin.slug]),
-                {"corners": json.dumps(_CORNERS), "media_url": "https://tile.loc.gov/sanborn.jpg", "media_source": "library_of_congress"},
+                {
+                    "corners": json.dumps(_CORNERS),
+                    "media_url": "https://tile.loc.gov/sanborn.jpg",
+                    "media_source": "library_of_congress",
+                },
             )
         self.assertEqual(response.status_code, 200)
         mock_materialize.assert_called_once()
@@ -171,7 +173,12 @@ class OverlayOwnerTests(TestCase):
         or duplicated the way a transient gallery item is."""
         from urbanlens.dashboard.models.images.model import Image
 
-        existing = baker.make(Image, profile=self.user.profile, pin=self.pin)
+        existing = baker.make(
+            Image,
+            profile=self.user.profile,
+            pin=self.pin,
+            image=SimpleUploadedFile("sheet.png", _png_bytes(), content_type="image/png"),
+        )
         with patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as mock_materialize:
             response = self.client.post(
                 reverse("pin.overlays", args=[self.pin.slug]),
@@ -180,6 +187,102 @@ class OverlayOwnerTests(TestCase):
         self.assertEqual(response.status_code, 200)
         mock_materialize.assert_not_called()
         self.assertEqual(MapImageOverlay.objects.for_pin(self.pin).get().image_id, existing.pk)
+
+    def test_reuploading_a_file_already_in_the_gallery_creates_the_overlay(self) -> None:
+        """The gallery refuses duplicate bytes; the overlay dialog must still
+        place that photo rather than resetting with nothing to show."""
+        from io import BytesIO
+
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.media.images import compute_checksum
+
+        png = _png_bytes()
+        existing = baker.make(
+            Image,
+            profile=self.user.profile,
+            pin=self.pin,
+            checksum=compute_checksum(BytesIO(png)),
+            image=SimpleUploadedFile("already.png", png, content_type="image/png"),
+        )
+        response = self.client.post(
+            reverse("pin.overlays", args=[self.pin.slug]),
+            {"name": "Blueprint", "image": SimpleUploadedFile("again.png", png, content_type="image/png")},
+        )
+        self.assertEqual(response.status_code, 200)
+        overlay = MapImageOverlay.objects.for_pin(self.pin).get()
+        self.assertEqual(overlay.image_id, existing.pk)
+        trigger = json.loads(response["HX-Trigger"])
+        self.assertEqual(trigger["showToast"]["level"], "success")
+        self.assertEqual(trigger["ul:map-overlays-changed"]["align"], str(overlay.uuid))
+
+    def test_missing_corners_still_place_the_overlay_on_the_pin(self) -> None:
+        """Keyboard-submit used to skip the viewport hook and fail silently."""
+        from urbanlens.dashboard.models.images.model import Image
+
+        existing = baker.make(
+            Image,
+            profile=self.user.profile,
+            pin=self.pin,
+            image=SimpleUploadedFile("sheet.png", _png_bytes(), content_type="image/png"),
+        )
+        response = self.client.post(
+            reverse("pin.overlays", args=[self.pin.slug]),
+            {"image_id": str(existing.pk), "name": "Blueprint"},
+        )
+        self.assertEqual(response.status_code, 200)
+        overlay = MapImageOverlay.objects.for_pin(self.pin).get()
+        self.assertEqual(len(overlay.corners()), 4)
+
+    def test_a_failed_add_toasts_through_the_sitewide_handler(self) -> None:
+        response = self.client.post(reverse("pin.overlays", args=[self.pin.slug]), {"corners": json.dumps(_CORNERS)})
+        self.assertEqual(response.status_code, 200)
+        trigger = json.loads(response["HX-Trigger"])
+        self.assertEqual(trigger["showToast"]["level"], "error")
+        self.assertIn("image", trigger["showToast"]["message"].lower())
+
+    def test_json_create_returns_the_floorplan_editor_url(self) -> None:
+        """The pin-detail lightbox posts here with Accept: application/json."""
+        from urbanlens.dashboard.models.images.model import Image
+
+        existing = baker.make(
+            Image,
+            profile=self.user.profile,
+            pin=self.pin,
+            image=SimpleUploadedFile("sheet.png", _png_bytes(), content_type="image/png"),
+        )
+        response = self.client.post(
+            reverse("pin.overlays", args=[self.pin.slug]),
+            {"image_id": str(existing.pk), "name": "Blueprint"},
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        overlay = MapImageOverlay.objects.for_pin(self.pin).get()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["uuid"], str(overlay.uuid))
+        self.assertIn(f"align={overlay.uuid}", body["floorplan_url"])
+
+    def test_reusing_a_photo_that_is_already_an_overlay_does_not_duplicate_it(self) -> None:
+        from urbanlens.dashboard.models.images.model import Image
+
+        existing = baker.make(
+            Image,
+            profile=self.user.profile,
+            pin=self.pin,
+            image=SimpleUploadedFile("sheet.png", _png_bytes(), content_type="image/png"),
+        )
+        first = self.client.post(
+            reverse("pin.overlays", args=[self.pin.slug]),
+            {"corners": json.dumps(_CORNERS), "image_id": str(existing.pk)},
+        )
+        self.assertEqual(first.status_code, 200)
+        second = self.client.post(
+            reverse("pin.overlays", args=[self.pin.slug]),
+            {"corners": json.dumps(_CORNERS), "image_id": str(existing.pk)},
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(MapImageOverlay.objects.for_pin(self.pin).count(), 1)
+        self.assertEqual(second.json()["uuid"], str(MapImageOverlay.objects.for_pin(self.pin).get().uuid))
 
     def test_another_pins_photo_cannot_be_picked(self) -> None:
         """A posted image_id is scoped to this owner - it isn't a free-form
@@ -234,10 +337,14 @@ class OverlayOwnerTests(TestCase):
         self.assertFalse(MapImageOverlay.objects.for_pin(self.pin).exists())
 
     def test_the_per_map_limit_is_enforced(self) -> None:
-        from urbanlens.dashboard.controllers.map_overlays import MAX_OVERLAYS_PER_MAP
+        from urbanlens.dashboard.services.map.image_overlays import MAX_OVERLAYS_PER_MAP
 
-        for index in range(MAX_OVERLAYS_PER_MAP):
-            overlay = MapImageOverlay(parent_pin=self.pin, profile=self.user.profile, image_url=f"https://example.test/{index}.jpg")
+        for _index in range(MAX_OVERLAYS_PER_MAP):
+            overlay = MapImageOverlay(
+                parent_pin=self.pin,
+                profile=self.user.profile,
+                tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png",
+            )
             overlay.set_corners(_CORNERS)
             overlay.save()
         self._create()
@@ -252,7 +359,9 @@ class OverlayCornersEndpointTests(TestCase):
         self.client = Client()
         self.user = baker.make(User)
         self.pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
-        self.overlay = MapImageOverlay(parent_pin=self.pin, profile=self.user.profile, image_url="https://example.test/sheet.jpg")
+        self.overlay = MapImageOverlay(
+            parent_pin=self.pin, profile=self.user.profile, tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png"
+        )
         self.overlay.set_corners(_CORNERS)
         self.overlay.save()
         self.client.force_login(self.user)
@@ -294,7 +403,9 @@ class OverlaySettingsTests(TestCase):
         self.client = Client()
         self.user = baker.make(User)
         self.pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
-        self.overlay = MapImageOverlay(parent_pin=self.pin, profile=self.user.profile, image_url="https://example.test/sheet.jpg")
+        self.overlay = MapImageOverlay(
+            parent_pin=self.pin, profile=self.user.profile, tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png"
+        )
         self.overlay.set_corners(_CORNERS)
         self.overlay.save()
         self.client.force_login(self.user)
@@ -330,23 +441,97 @@ class OverlaySettingsTests(TestCase):
         from urbanlens.dashboard.models.images.model import Image
 
         image = baker.make(Image, profile=self.user.profile, pin=self.pin)
-        MapImageOverlay.objects.filter(pk=self.overlay.pk).update(image=image)
+        MapImageOverlay.objects.filter(pk=self.overlay.pk).update(image=image, tile_url_template="")
         self.client.delete(reverse("pin.overlays.delete", args=[self.pin.slug, self.overlay.uuid]))
         self.assertFalse(MapImageOverlay.objects.filter(pk=self.overlay.pk).exists())
         self.assertTrue(Image.objects.filter(pk=image.pk).exists())
 
 
-class RenderableQuerySetTests(TestCase):
-    """An overlay whose image was deleted keeps its georeferencing but can't draw."""
+class OverlayMediaPickerTests(TestCase):
+    """The add-overlay picker must list every usable photo on this pin."""
 
-    def test_an_overlay_with_no_image_is_excluded(self) -> None:
-        user = baker.make(User)
-        pin = baker.make_recipe("dashboard.pin", profile=user.profile)
-        drawable = MapImageOverlay(parent_pin=pin, profile=user.profile, image_url="https://example.test/a.jpg")
-        drawable.set_corners(_CORNERS)
-        drawable.save()
-        orphan = MapImageOverlay(parent_pin=pin, profile=user.profile)
-        orphan.set_corners(_CORNERS)
-        orphan.save()
+    def setUp(self) -> None:
+        super().setUp()
+        self.client = Client()
+        self.user = baker.make(User)
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
+        self.client.force_login(self.user)
 
-        self.assertEqual([overlay.pk for overlay in MapImageOverlay.objects.for_pin(pin).renderable()], [drawable.pk])
+    def _photo(self, **extra):
+        from urbanlens.dashboard.models.images.model import Image
+
+        return baker.make(
+            Image,
+            profile=self.user.profile,
+            pin=self.pin,
+            image=SimpleUploadedFile(f"{extra.pop('name', 'photo')}.png", _png_bytes(), content_type="image/png"),
+            **extra,
+        )
+
+    def test_every_uploaded_photo_is_listed(self) -> None:
+        photos = [self._photo(name=f"p{index}") for index in range(61)]
+        response = self.client.get(reverse("pin.overlays.media", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        listed = {entry["id"] for entry in response.json()["images"]}
+        self.assertEqual(listed, {photo.pk for photo in photos})
+
+    def test_child_pin_photos_are_listed(self) -> None:
+        child = baker.make_recipe("dashboard.pin", profile=self.user.profile, parent_pin=self.pin)
+        from urbanlens.dashboard.models.images.model import Image
+
+        child_photo = baker.make(
+            Image,
+            profile=self.user.profile,
+            pin=child,
+            image=SimpleUploadedFile("child.png", _png_bytes(), content_type="image/png"),
+        )
+        parent_photo = self._photo(name="parent")
+        listed = {
+            entry["id"]
+            for entry in self.client.get(reverse("pin.overlays.media", args=[self.pin.slug])).json()["images"]
+        }
+        self.assertEqual(listed, {parent_photo.pk, child_photo.pk})
+
+    def test_videos_are_not_offered_as_overlays(self) -> None:
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+        photo = self._photo(name="still")
+        baker.make(
+            Image,
+            profile=self.user.profile,
+            pin=self.pin,
+            media_type=MediaKind.VIDEO,
+            image=SimpleUploadedFile("clip.mp4", b"not-an-image", content_type="video/mp4"),
+        )
+        listed = {
+            entry["id"]
+            for entry in self.client.get(reverse("pin.overlays.media", args=[self.pin.slug])).json()["images"]
+        }
+        self.assertEqual(listed, {photo.pk})
+
+    def test_a_photo_still_being_processed_is_listed_without_its_file(self) -> None:
+        pending = self._photo(name="fresh", pending_scan=True)
+        ready = self._photo(name="settled")
+
+        entries = {
+            entry["id"]: entry
+            for entry in self.client.get(reverse("pin.overlays.media", args=[self.pin.slug])).json()["images"]
+        }
+
+        self.assertIsNone(entries[pending.pk]["url"])
+        self.assertIs(entries[pending.pk]["processing"], True)
+        self.assertNotIn(pending.image.name, json.dumps(entries[pending.pk]))
+        self.assertTrue(entries[ready.pk]["url"].endswith(ready.image.url))
+        self.assertIs(entries[ready.pk]["processing"], False)
+
+    def test_a_photo_still_being_processed_cannot_be_placed_yet(self) -> None:
+        pending = self._photo(name="fresh", pending_scan=True)
+
+        response = self.client.post(
+            reverse("pin.overlays", args=[self.pin.slug]),
+            {"corners": json.dumps(_CORNERS), "image_id": str(pending.pk)},
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertFalse(MapImageOverlay.objects.for_pin(self.pin).exists())
+        self.assertIn("processed", response.content.decode())

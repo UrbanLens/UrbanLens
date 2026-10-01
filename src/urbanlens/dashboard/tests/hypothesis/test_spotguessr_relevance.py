@@ -10,7 +10,13 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import (
+    GamePhotoFeedback,
+    GamePhotoFeedbackKind,
+    GameRound,
+    GameSession,
+    SpotGuessrMode,
+)
 from urbanlens.dashboard.services.spotguessr.relevance import backfill_no_reaction, record_feedback
 
 _coordinate_counter = count()
@@ -70,11 +76,7 @@ class RecordFeedbackTests(TestCase):
         self.assertFalse(GamePhotoFeedback.objects.filter(round=round_).exists())
 
     def test_a_street_view_round_with_no_image_row_still_records_feedback(self) -> None:
-        """Regression guard: Street View shows real imagery (fetched live,
-        never stored as an Image row) - gating on `round.image_id is None`
-        wrongly treated it the same as Named Place's "no photo" case,
-        producing a false "no photo to react to" 400 for a round that
-        clearly did show a photo."""
+        """Regression guard: Street View shows real imagery (fetched live, never stored as an Image row) - gating on `round.image_id is None` wrongly treated it the same as Named Place's "no photo" case, producing a false "no photo to react to" 400 for a round that clearly did show a photo."""
         round_ = _make_street_view_round()
         profile = _make_profile()
         feedback = record_feedback(round_, profile, GamePhotoFeedbackKind.THUMBS_DOWN)

@@ -1,11 +1,4 @@
-"""``Image.exif_data`` is encrypted at rest, and is now the only copy.
-
-The upload pipeline strips the EXIF block out of the stored file, so this column
-holds what the photo no longer carries. That makes two things matter more than
-they would for an ordinary encrypted field: the plaintext must genuinely not be
-in the database, and a key mismatch must not destroy the row - there is nothing
-to re-derive it from once the file has been scrubbed.
-"""
+"""``Image.exif_data`` is encrypted at rest, and is now the only copy."""
 
 from __future__ import annotations
 
@@ -86,10 +79,8 @@ class UndecryptableExifDataTests(TestCase):
     def test_saving_the_row_does_not_destroy_the_ciphertext(self) -> None:
         """The gap UndecryptableValue leaves for nullable fields, closed for this one.
 
-        Without it, any save for an unrelated reason overwrites the still-
-        recoverable ciphertext with the degraded default - and for this column
-        there is no file left to re-extract it from.
-        """
+        Without it, any save for an unrelated reason overwrites the still- recoverable ciphertext with the
+        degraded default - and for this column there is no file left to re-extract it from."""
         image = self._row_with_bad_ciphertext()
         image.refresh_from_db()
         before = _raw_column(image.pk)

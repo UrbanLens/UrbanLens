@@ -1,22 +1,49 @@
 /**
- * Watches a page for the failures an assertion never looks at.
- *
- * "The heading rendered" is a weak claim when a script threw before it could
- * wire up the page's behaviour, when the JavaScript bundle 404'd, or when an
- * HTMX swap came back 500 and the only trace is a toast that has since faded.
- * Every one of those leaves the page looking approximately right, and every one
- * is exactly the regression a staging run exists to catch.
- *
- * The `page` fixture attaches one of these to every UI test and asserts on it
- * during teardown, so a spec gets the check without opting in. A spec that
- * legitimately provokes an error calls {@link PageGuard.allow} to narrow it.
+ * Watches a page for the failures an assertion never looks at. "The heading rendered" is a weak
+ * claim when a script threw before it could wire up the page's behaviour, when the JavaScript
+ * bundle 404'd, or when an HTMX swap came back 500 and the only trace is a toast that has since
+ * faded.
  */
 
-import type { Page, Request, Response, ConsoleMessage } from "@playwright/test";
+import type { BrowserContext, Page, Request, Response, ConsoleMessage } from "@playwright/test";
+
+/** What a `securitypolicyviolation` event carries, as the page reports it. */
+export interface CspViolation {
+    disposition: string;
+    directive: string;
+    blockedUri: string;
+    source: string;
+}
+
+const CSP_BINDING = "__ulReportCspViolation";
+
+/**
+ * Forwards the Content-Security-Policy violations raised in `context`'s documents, frames
+ * included, to `onViolation`.
+ *
+ * The console handler only sees violations that surface as a logged error; the event is raised for
+ * every one, enforced or report-only. A violation inside a worker fires on the worker's own scope
+ * and is not seen here - creating a worker the policy refuses is, since that fires on the page.
+ * Call before the context opens a page.
+ */
+export async function reportCspViolations(context: BrowserContext, onViolation: (page: Page, violation: CspViolation) => void): Promise<void> {
+    await context.exposeBinding(CSP_BINDING, ({ page }, violation: CspViolation) => onViolation(page, violation));
+    await context.addInitScript((binding: string) => {
+        document.addEventListener("securitypolicyviolation", (event) => {
+            const report = (window as unknown as Record<string, (violation: unknown) => void>)[binding];
+            report?.({
+                disposition: event.disposition,
+                directive: event.effectiveDirective,
+                blockedUri: event.blockedURI,
+                source: `${event.sourceFile}:${event.lineNumber}`,
+            });
+        });
+    }, CSP_BINDING);
+}
 
 /** One thing that went wrong on the page, in the order it happened. */
 export interface PageProblem {
-    kind: "console" | "pageerror" | "requestfailed" | "http";
+    kind: "console" | "pageerror" | "requestfailed" | "http" | "csp";
     detail: string;
     url: string;
 }
@@ -106,6 +133,18 @@ export class PageGuard {
         return `${failures.length} page problem(s) on ${this.page.url()}:\n${lines.join("\n")}`;
     }
 
+    /** Records a violation `reportCspViolations` forwarded for this page. */
+    recordCspViolation(violation: CspViolation): void {
+        if (this.detached) {
+            return;
+        }
+        this.problems.push({
+            kind: "csp",
+            detail: `${violation.disposition} ${violation.directive} refused ${violation.blockedUri || "(inline)"} at ${violation.source}`,
+            url: this.page.url(),
+        });
+    }
+
     // Bound properties rather than methods, so `page.off` can remove the exact
     // same function reference `page.on` was given.
 
@@ -152,6 +191,10 @@ export class PageGuard {
         // it should own that assertion rather than having it duplicated here.
         const isDocument = response.request().resourceType() === "document";
         if (status < 500 && isDocument) {
+            return;
+        }
+        // Back-pressure the client is told to retry (the tile proxy's full upstream slots), not a failure.
+        if (status === 503 && !isDocument && response.headers()["retry-after"] !== undefined) {
             return;
         }
         this.problems.push({

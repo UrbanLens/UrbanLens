@@ -1,9 +1,4 @@
-"""Tests for REData historical-map tile overlays (2026-08-15).
-
-Covers the tile proxy's status-contract caching (200/404 cached, 503 never),
-the browse/add flow creating a locked tile overlay whose template points at
-UrbanLens's own proxy, and the model changes that let a tile overlay render.
-"""
+"""Tests for REData historical-map tile overlays (2026-08-15)."""
 
 from __future__ import annotations
 
@@ -23,10 +18,16 @@ _GATEWAY_PATH = "urbanlens.dashboard.services.apis.locations.redata_historical_m
 _CONFIGURED_PATH = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 
-def _match(georeference_uuid: str, *, title: str = "Sanborn Fire Insurance Map", bounds: list[float] | None = None) -> dict:
+def _match(
+    georeference_uuid: str, *, title: str = "Sanborn Fire Insurance Map", bounds: list[float] | None = None
+) -> dict:
     return {
         "sheet": {"title": title, "date_text": "1893", "kind": "fire_insurance", "attribution": "Library of Congress"},
-        "georeference": {"uuid": georeference_uuid, "bounds": bounds or [-71.06, 42.35, -71.05, 42.36], "tile_url_template": "https://redata.example/t/{z}/{x}/{y}.png"},
+        "georeference": {
+            "uuid": georeference_uuid,
+            "bounds": bounds or [-71.06, 42.35, -71.05, 42.36],
+            "tile_url_template": "https://redata.example/t/{z}/{x}/{y}.png",
+        },
         "contains_point": True,
         "distance_meters": 0.0,
     }
@@ -35,12 +36,9 @@ def _match(georeference_uuid: str, *, title: str = "Sanborn Fire Insurance Map",
 class GeoreferenceAccuracyTests(TestCase):
     """How well a sheet is placed - reported only where the number means something.
 
-    `rmse_meters` is the fit's own residual, and REData's model docstring warns
-    that a thin-plate spline interpolates its control points *by construction*,
-    so its residual is ~0 whatever the placement is actually like. Printing
-    "±0 m" for one would advertise a perfect fit for what may be the worst sheet
-    in the list, which is worse than printing nothing.
-    """
+    `rmse_meters` is the fit's own residual, and REData's model docstring warns that a thin-plate spline
+    interpolates its control points *by construction*, so its residual is ~0 whatever the placement is actually
+    like."""
 
     def test_a_loose_polynomial_fit_reports_its_error(self) -> None:
         from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
@@ -53,13 +51,17 @@ class GeoreferenceAccuracyTests(TestCase):
         """Its residual is ~0 by construction, not because the placement is good."""
         from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
 
-        self.assertEqual(georeference_accuracy({"transformation": "thinPlateSpline", "rmse_meters": 0.0, "gcp_count": 30}), "")
+        self.assertEqual(
+            georeference_accuracy({"transformation": "thinPlateSpline", "rmse_meters": 0.0, "gcp_count": 30}), ""
+        )
 
     def test_a_tight_fit_is_not_worth_the_pixels(self) -> None:
         """A few metres on a scanned historical map is noise, not information."""
         from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
 
-        self.assertEqual(georeference_accuracy({"transformation": "polynomial", "rmse_meters": 3.0, "gcp_count": 8}), "")
+        self.assertEqual(
+            georeference_accuracy({"transformation": "polynomial", "rmse_meters": 3.0, "gcp_count": 8}), ""
+        )
 
     def test_a_missing_or_malformed_figure_reports_nothing(self) -> None:
         from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
@@ -113,6 +115,23 @@ class HistoricalMapTileProxyTests(TestCase):
         self.assertEqual(second.status_code, 503)
         self.assertEqual(download.call_count, 2)
 
+    def test_a_rate_limited_tile_is_a_503_and_not_cached(self) -> None:
+        """Panning past the tile budget must degrade like an outage, not raise out of the view."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            download = gateway_cls.return_value.download_tile
+            download.side_effect = RateLimitExceededError("redata_historical_maps")
+            first = self.client.get(self.url)
+            second = self.client.get(self.url)
+
+        self.assertEqual(first.status_code, 503)
+        self.assertEqual(second.status_code, 503)
+        self.assertEqual(download.call_count, 2)
+
     def test_login_is_required(self) -> None:
         self.client.logout()
         response = self.client.get(self.url)
@@ -150,12 +169,8 @@ class HistoricalMapBrowseTests(TestCase):
     def test_the_sheet_thumbnail_and_catalogue_link_are_offered(self) -> None:
         """Choosing between a dozen scans of one neighbourhood is a visual task.
 
-        REData caches the institution's own thumbnail and catalogue page, and
-        the picker showed neither - eleven rows reading "Sanborn Map of ..." is
-        not a way to pick one. Both are the *institution's* public URLs, not
-        REData-authenticated ones, so unlike the tile template they need no
-        proxy.
-        """
+        REData caches the institution's own thumbnail and catalogue page, and the picker showed neither - eleven
+        rows reading "Sanborn Map of ..." is not a way to pick one."""
         match = _match(self.georeference_uuid)
         match["sheet"]["thumbnail_url"] = "https://tile.loc.gov/thumb/sanborn-1893.jpg"
         match["sheet"]["landing_page_url"] = "https://www.loc.gov/item/sanborn01234_001/"
@@ -167,7 +182,19 @@ class HistoricalMapBrowseTests(TestCase):
             gateway_cls.return_value.get_maps_covering.return_value = [match]
             body = self.client.get(self.url).content.decode()
 
-        self.assertIn("https://tile.loc.gov/thumb/sanborn-1893.jpg", body)
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        copy = RemoteImageCopy.objects.get()
+        self.assertEqual(
+            (copy.source_url, copy.provider, copy.page_url),
+            (
+                "https://tile.loc.gov/thumb/sanborn-1893.jpg",
+                "redata_historical_sheet",
+                "https://www.loc.gov/item/sanborn01234_001/",
+            ),
+        )
+        self.assertIn(f'src="{reverse("media.remote_copy", args=[copy.url_digest])}"', body)
+        self.assertNotIn("tile.loc.gov", body, "the institution's thumbnail is shown from this site's copy")
         self.assertIn("https://www.loc.gov/item/sanborn01234_001/", body)
 
     def test_a_sheet_without_a_thumbnail_still_lists(self) -> None:
@@ -208,7 +235,11 @@ class HistoricalMapBrowseTests(TestCase):
         self.assertTrue(overlay.locked, "a pre-georeferenced overlay must not offer corner dragging")
         self.assertIn(self.georeference_uuid, overlay.tile_url_template)
         self.assertTrue(overlay.tile_url_template.endswith("/{z}/{x}/{y}.png"))
-        self.assertNotIn("redata.example", overlay.tile_url_template, "REData's own tile URL (whose fetches need the API key) must never be stored for the browser")
+        self.assertNotIn(
+            "redata.example",
+            overlay.tile_url_template,
+            "REData's own tile URL (whose fetches need the API key) must never be stored for the browser",
+        )
         # Corners record the georeference bounds: NW, NE, SE, SW.
         self.assertEqual(overlay.corners(), [[42.36, -71.06], [42.36, -71.05], [42.35, -71.05], [42.35, -71.06]])
         self.assertEqual(overlay.name, "Sanborn Fire Insurance Map - 1893")
@@ -238,7 +269,7 @@ class HistoricalMapBrowseTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(MapImageOverlay.objects.filter(parent_pin=self.pin).exists())
 
-    def test_tile_overlays_are_renderable_and_serialized(self) -> None:
+    def test_tile_overlays_are_serialized(self) -> None:
         overlay = MapImageOverlay(
             tile_url_template="/dashboard/map/historical-tiles/abc/{z}/{x}/{y}.png",
             profile=self.profile,
@@ -247,5 +278,4 @@ class HistoricalMapBrowseTests(TestCase):
         overlay.set_corners([[42.36, -71.06], [42.36, -71.05], [42.35, -71.05], [42.35, -71.06]])
         overlay.save()
 
-        self.assertIn(overlay.pk, MapImageOverlay.objects.renderable().values_list("pk", flat=True))
         self.assertEqual(overlay.to_json()["tile_url_template"], overlay.tile_url_template)

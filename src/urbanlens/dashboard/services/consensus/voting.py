@@ -1,13 +1,5 @@
 """Competitive-mode vote tallying for a round's disagreement sub-phase.
-
-When a competitive round's submitted answers don't all agree,
-``services.consensus.session`` opens a vote (``open_vote``) so every
-participant can pick which of the distinct submitted values is actually
-correct. ``tally_votes`` groups votes by the field kind's own agreement rule
-(so two votes for equivalent-but-not-identical submissions count together),
-and reports whether a majority (per the session's configured
-``vote_threshold``) formed.
-"""
+When a competitive round's submitted answers don't all agree, ``services.consensus.session`` opens a vote (``open_vote``) so every participant can pick which of the distinct submitted values is actually correct."""
 
 from __future__ import annotations
 
@@ -25,14 +17,15 @@ if TYPE_CHECKING:
 
 
 class ConsensusVotingError(Exception):
-    """Raised for invalid vote operations.
+    """Raised when ``record_vote`` can't cast a vote."""
 
-    ``safe_message`` is always safe to surface to the caller verbatim.
-    """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+class AnswerNotInRoundError(ConsensusVotingError):
+    """``chosen_answer`` doesn't belong to the round being voted on."""
+
+
+class DuplicateVoteError(ConsensusVotingError):
+    """``profile`` already cast a vote for this round."""
 
 
 @dataclass(frozen=True)
@@ -40,12 +33,8 @@ class VoteTally:
     """The result of tallying a round's votes.
 
     Attributes:
-        winning_answers: Every answer tied to the winning (agreeing) cluster
-            - the "correct" value's original submitter(s) - empty when no
-            consensus formed.
-        consensus_reached: Whether the winning cluster's vote share strictly
-            exceeded the session's configured threshold.
-    """
+        winning_answers: Every answer tied to the winning (agreeing) cluster - the "correct" value's original submitter(s) - empty when no consensus formed.
+        consensus_reached: Whether the winning cluster's vote share strictly exceeded the session's configured threshold."""
 
     winning_answers: list[ConsensusAnswer]
     consensus_reached: bool
@@ -62,14 +51,14 @@ def record_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
     """Cast ``profile``'s vote for ``chosen_answer`` (not necessarily their own submission).
 
     Raises:
-        ConsensusVotingError: if ``chosen_answer`` isn't part of this round,
-            or ``profile`` already voted this round.
+        AnswerNotInRoundError: ``chosen_answer`` isn't part of this round.
+        DuplicateVoteError: ``profile`` already voted this round.
     """
     if chosen_answer.round_id != round_.pk:
-        raise ConsensusVotingError("That answer isn't part of this round.")
+        raise AnswerNotInRoundError(f"answer {chosen_answer.pk} belongs to round {chosen_answer.round_id}, not round {round_.pk}")
     vote, created = ConsensusVote.objects.get_or_create(round=round_, profile=profile, defaults={"chosen_answer": chosen_answer})
     if not created:
-        raise ConsensusVotingError("You've already voted this round.")
+        raise DuplicateVoteError(f"profile {profile.pk} already voted in round {round_.pk}")
     return vote
 
 
@@ -79,13 +68,7 @@ def value_of(answer: ConsensusAnswer):
 
 
 def cluster_answers(strategy, answers: list[ConsensusAnswer]) -> list[list[ConsensusAnswer]]:
-    """Group ``answers`` into clusters of mutually-agreeing submissions, per ``strategy.agrees``.
-
-    Shared by ``tally_votes`` (grouping votes by which cluster they favor)
-    and ``services.consensus.session._finish_round`` (checking whether every
-    submission already agreed, before ever opening a vote) - one clustering
-    implementation, not two copies to keep in sync.
-    """
+    """Group ``answers`` into clusters of mutually-agreeing submissions, per ``strategy.agrees``."""
     clusters: list[list[ConsensusAnswer]] = []
     for answer in answers:
         for cluster in clusters:
@@ -102,14 +85,10 @@ def tally_votes(round_: ConsensusRound, *, vote_threshold: float) -> VoteTally:
 
     Args:
         round_: The round whose votes to tally.
-        vote_threshold: The vote share (of votes actually cast, not of the
-            full roster - an abstention isn't a "no") a cluster must
-            strictly exceed to count as consensus.
+        vote_threshold: The vote share (of votes actually cast, not of the full roster - an abstention isn't a "no") a cluster must strictly exceed to count as consensus.
 
     Returns:
-        The tally. Fewer than 2 votes cast, or no answers to cluster,
-        always reports no consensus.
-    """
+        The tally."""
     strategy = get_strategy(round_.field_kind)
     answers = list(round_.answers.all())
     votes = list(ConsensusVote.objects.for_round(round_).select_related("chosen_answer"))

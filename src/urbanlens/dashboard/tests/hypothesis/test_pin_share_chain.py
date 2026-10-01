@@ -1,12 +1,4 @@
-"""Tests for pin-share lineage tracking and the Memories → Sharing page.
-
-Covers:
-- PinShare.chain_share_count - transitive reshare counting (the spec example:
-  A→B, B→C and B→D, D→E and D→F counts 5 shares for A's pin)
-- _create_pin_from_share - stamps the new pin's source_share
-- PinShareCreateView - links a reshare to the share the pin came from
-- MemoriesSharingView - groups shares by pin with chain totals
-"""
+"""Tests for pin-share lineage tracking and the Memories → Sharing page."""
 
 from __future__ import annotations
 
@@ -15,6 +7,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.controllers.memories import _SHARE_GROUPS_PER_PAGE
 from urbanlens.dashboard.controllers.pin_sharing import _create_pin_from_share
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
@@ -146,13 +139,7 @@ class MemoriesSharingPageTests(_ShareChainTestCase):
 
 
 class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
-    """The received side of the Sharing page must not read the sharer's live pin for a
-    DETECTED-status share (auto-recorded from a shared map, a DM, or a trip activity - see
-    PinShareStatus.DETECTED's docstring: "never actionable"). Unlike an EXPLICIT share
-    awaiting accept/reject, the recipient never consented to see anything about these, so
-    unconditionally reading share.pin/share.place_label - which the goal's own litmus test
-    flags as a live reference - was a real leak. See docs/GOALS_CODE_AUDIT.md
-    ("Trip activities sourcing")."""
+    """The received side of the Sharing page must not read the sharer's live pin for a DETECTED-status share (auto-recorded from a shared map, a DM, or a trip activity - see PinShareStatus.DETECTED's docstring: "never actionable"). Unlike an EXPLICIT share awaiting accept/reject, the recipient never consented to see anything about these, so unconditionally reading share.pin/share.place_label - which the goal's own litmus test flags as a live reference - was a real leak."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -172,18 +159,29 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
         self._detected_share(origin=PinShareOrigin.TRIP_ACTIVITY)
         self.client.force_login(self.users["b"])
 
-        response = self.client.get(reverse("memories.sharing"))
+        response = self.client.get(reverse("memories.sharing.received"))
 
         groups = response.context["incoming_share_groups"]
         self.assertEqual(len(groups), 1)
         self.assertIsNone(groups[0]["pin"])
         self.assertNotIn("Sender's Private Cabin", response.content.decode())
 
+    def test_the_sharing_page_itself_never_carries_the_name_either(self):
+        # The received half is fetched separately now. Kept as its own
+        # assertion so re-inlining it cannot quietly reopen the leak.
+        self._detected_share(origin=PinShareOrigin.TRIP_ACTIVITY)
+        self.client.force_login(self.users["b"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Sender's Private Cabin", response.content.decode())
+
     def test_a_map_detected_share_does_not_expose_the_pin(self):
         self._detected_share(origin=PinShareOrigin.MAP_DETECTED)
         self.client.force_login(self.users["b"])
 
-        response = self.client.get(reverse("memories.sharing"))
+        response = self.client.get(reverse("memories.sharing.received"))
 
         groups = response.context["incoming_share_groups"]
         self.assertIsNone(groups[0]["pin"])
@@ -193,17 +191,22 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
         self._detected_share(origin=PinShareOrigin.TRIP_ACTIVITY)
         self.client.force_login(self.users["b"])
 
-        response = self.client.get(reverse("memories.sharing"))
+        response = self.client.get(reverse("memories.sharing.received"))
 
         groups = response.context["incoming_share_groups"]
         self.assertEqual(groups[0]["place_label"], "Old Mill")
 
     def test_an_explicit_pending_share_still_shows_the_pin(self):
         """The fix must not hide a share the recipient actually needs to decide on."""
-        share = PinShare.objects.create(pin=self.pin_a, from_profile=self.profiles["a"], to_profile=self.profiles["b"], status=PinShareStatus.PENDING)
+        share = PinShare.objects.create(
+            pin=self.pin_a,
+            from_profile=self.profiles["a"],
+            to_profile=self.profiles["b"],
+            status=PinShareStatus.PENDING,
+        )
         self.client.force_login(self.users["b"])
 
-        response = self.client.get(reverse("memories.sharing"))
+        response = self.client.get(reverse("memories.sharing.received"))
 
         groups = response.context["incoming_share_groups"]
         self.assertEqual(groups[0]["pin"], self.pin_a)
@@ -215,11 +218,16 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
     def test_a_mixed_group_with_one_actionable_share_still_shows_the_pin(self):
         """A DETECTED share for a pin the recipient ALSO has a real (pending/accepted) share
         for must not lose the pin - there's a legitimate share justifying the reveal."""
-        PinShare.objects.create(pin=self.pin_a, from_profile=self.profiles["a"], to_profile=self.profiles["b"], status=PinShareStatus.PENDING)
+        PinShare.objects.create(
+            pin=self.pin_a,
+            from_profile=self.profiles["a"],
+            to_profile=self.profiles["b"],
+            status=PinShareStatus.PENDING,
+        )
         self._detected_share(origin=PinShareOrigin.MAP_DETECTED)
         self.client.force_login(self.users["b"])
 
-        response = self.client.get(reverse("memories.sharing"))
+        response = self.client.get(reverse("memories.sharing.received"))
 
         groups = response.context["incoming_share_groups"]
         self.assertEqual(len(groups), 1)
@@ -232,8 +240,12 @@ class MemoriesSharingMapsPageTests(_ShareChainTestCase):
 
     def test_page_groups_map_shares_by_map(self):
         markup_map = MarkupMap.objects.create(profile=self.profiles["a"], title="Old Mill route")
-        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["b"])
-        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["c"])
+        MarkupMapShare.objects.create(
+            markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["b"]
+        )
+        MarkupMapShare.objects.create(
+            markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["c"]
+        )
         self.client.force_login(self.users["a"])
 
         response = self.client.get(reverse("memories.sharing"))
@@ -242,14 +254,127 @@ class MemoriesSharingMapsPageTests(_ShareChainTestCase):
         groups = response.context["map_share_groups"]
         self.assertEqual(len(groups), 1)
         self.assertEqual(groups[0]["map"], markup_map)
-        self.assertEqual({share.to_profile_id for share in groups[0]["shares"]}, {self.profiles["b"].pk, self.profiles["c"].pk})
+        self.assertEqual(
+            {share.to_profile_id for share in groups[0]["shares"]}, {self.profiles["b"].pk, self.profiles["c"].pk}
+        )
 
     def test_page_only_shows_own_map_shares(self):
         markup_map = MarkupMap.objects.create(profile=self.profiles["b"], title="Not mine")
-        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["b"], to_profile=self.profiles["c"])
+        MarkupMapShare.objects.create(
+            markup_map=markup_map, from_profile=self.profiles["b"], to_profile=self.profiles["c"]
+        )
         self.client.force_login(self.users["a"])
 
         response = self.client.get(reverse("memories.sharing"))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["map_share_groups"], [])
+
+
+class SharingPagePaginationTests(_ShareChainTestCase):
+    """P69: the Sharing page rendered both halves of its toggle, unbounded.
+
+    The two halves are a client-side toggle, so the received half was queried, grouped and rendered on every
+    load for a panel nobody had opened - and neither half had a slice, so both grew with the account."""
+
+    def _pins_shared_to_b(self, count: int) -> list[Pin]:
+        made = []
+        for index in range(count):
+            location = baker.make(
+                Location,
+                latitude=f"42.{index + 200:06d}"[:9],
+                longitude="-73.900000",
+                official_name=f"Place {index:03d}",
+            )
+            pin = Pin.objects.create(profile=self.profiles["a"], location=location)
+            PinShare.objects.create(
+                pin=pin, from_profile=self.profiles["a"], to_profile=self.profiles["b"], status=PinShareStatus.PENDING
+            )
+            made.append(pin)
+        return made
+
+    def test_the_page_renders_one_page_of_sent_groups(self):
+        self._pins_shared_to_b(_SHARE_GROUPS_PER_PAGE + 3)
+        self.client.force_login(self.users["a"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        self.assertEqual(len(response.context["share_groups"]), _SHARE_GROUPS_PER_PAGE)
+        self.assertEqual(response.context["sent_pins_page_obj"].paginator.count, _SHARE_GROUPS_PER_PAGE + 3)
+
+    def test_the_rest_are_on_the_next_page(self):
+        self._pins_shared_to_b(_SHARE_GROUPS_PER_PAGE + 3)
+        self.client.force_login(self.users["a"])
+
+        response = self.client.get(reverse("memories.sharing.sent"), {"sent_pins_page": 2})
+
+        self.assertEqual(len(response.context["share_groups"]), 3)
+
+    def test_the_page_does_not_render_the_received_half(self):
+        self._pins_shared_to_b(2)
+        self.client.force_login(self.users["b"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("incoming_share_groups", response.context)
+        # It is fetched by the toggle button instead.
+        self.assertContains(response, reverse("memories.sharing.received"))
+
+    def test_the_toggle_still_names_the_totals_not_the_page(self):
+        # The counts gate the empty state and label both buttons, so they have
+        # to survive the lists being sliced.
+        self._pins_shared_to_b(_SHARE_GROUPS_PER_PAGE + 3)
+        self.client.force_login(self.users["a"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        self.assertEqual(response.context["sent_count"], _SHARE_GROUPS_PER_PAGE + 3)
+        self.assertTrue(response.context["has_any_shares"])
+
+    def test_groups_are_ordered_by_their_most_recent_share(self):
+        pins = self._pins_shared_to_b(3)
+        # Reshare the oldest place, which should pull it back to the top.
+        PinShare.objects.create(
+            pin=pins[0], from_profile=self.profiles["a"], to_profile=self.profiles["c"], status=PinShareStatus.PENDING
+        )
+        self.client.force_login(self.users["a"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        groups = response.context["share_groups"]
+        self.assertEqual(groups[0]["pin"], pins[0])
+
+    def test_a_share_with_no_pin_groups_by_its_location(self):
+        # Coordinates typed into a DM the sender never pinned. Without their own
+        # group key these all collapse into one bucket.
+        for index in range(2):
+            location = baker.make(
+                Location,
+                latitude="42.200000",
+                longitude=f"-73.{index + 800:06d}"[:10],
+                official_name=f"Unpinned {index}",
+            )
+            PinShare.objects.create(
+                pin=None,
+                location=location,
+                from_profile=self.profiles["a"],
+                to_profile=self.profiles["b"],
+                status=PinShareStatus.PENDING,
+            )
+        self.client.force_login(self.users["a"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        self.assertEqual(len(response.context["share_groups"]), 2)
+
+    def test_the_received_partial_pages_on_its_own_parameter(self):
+        # Four lists render across this page; a shared `page` would move them
+        # all with one click.
+        self._pins_shared_to_b(_SHARE_GROUPS_PER_PAGE + 3)
+        self.client.force_login(self.users["b"])
+
+        response = self.client.get(reverse("memories.sharing.received"), {"received_pins_page": 2})
+
+        self.assertEqual(len(response.context["incoming_share_groups"]), 3)
+        self.assertContains(response, "received_pins_page=1")

@@ -1,21 +1,16 @@
-
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable
 import logging
-import traceback
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 import unittest
 
 from urbanlens.core.tests.testcase import TestCase
 
 logger = logging.getLogger(__name__)
 
-class MessageResult(unittest.TextTestResult):
 
-    def getDescription(self, test : TestCase) -> str:
-        """
-        Override the default getDescription method to include the class name and method name of the code we're testing
+class MessageResult(unittest.TextTestResult):
+    def getDescription(self, test: TestCase) -> str:
+        """Include the class and method name in the test description.
 
         Args:
             test (TestCase): The test case instance
@@ -27,5 +22,7 @@ class MessageResult(unittest.TextTestResult):
         try:
             return test.create_message(message)
         except AttributeError as e:
-            logger.error("TestCase instance %s does not inherit from urbanlens.core.tests.testcase.TestCase: %s", test, e)
+            logger.exception(
+                "TestCase instance %s does not inherit from urbanlens.core.tests.testcase.TestCase: %s", test, e
+            )
             return message

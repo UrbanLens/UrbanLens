@@ -1,41 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if production code attaches a pin-owned row to a wiki in the same breath.
-
-``services/photos/uploads.py`` built a photo's ownership like this::
-
-    return {"pin": owner, "wiki": Wiki.objects.get_for_location(location), "location": location}
-
-so every photo uploaded to somebody's own pin was also published to that place's
-community wiki, where other people could see it and vote on its relevance. The
-uploader never chose to contribute it. Their ``photo_upload_visibility`` narrowed
-who saw the result, which is a control over the audience for things you have
-shared - not consent to share.
-
-Seven models carry both a ``pin`` and a ``wiki`` foreign key (Image, Comment,
-Link, Alias, Boundary, Floorplan, AutoRemoval). For all of them the two columns
-are alternatives: a row belongs to somebody's pin, *or* it is on the shared wiki.
-Setting both at once is what publishes private content, and it is invisible in
-review precisely because it reads as ordinary bookkeeping.
-
-So this check does not care about ``wiki=`` on its own - that is how a genuine
-wiki row is made, and there are over a hundred legitimate ones. It flags a single
-construction that names *both*, which is the shape of the bug and almost never
-the shape of anything else.
-
-Sharing is a deliberate act with a place of its own:
-``services.photos.attachment.attach_to_wiki`` records who chose it. A path that
-must set both - a migration repairing old rows, a service that has just taken the
-user's decision - marks itself, next to the code, with:
-
-    # pin-to-wiki-ok: <why>
-
-Tests, migrations and baker recipes are exempt: a test constructing an
-inconsistent row is being specific on purpose, and several assert exactly that
-this pairing does not happen by itself.
-
-Exits non-zero listing each offending construction. Safe to run from the repo
-root.
-"""
+"""Fail if production code attaches a pin-owned row to a wiki in the same breath."""
 
 from __future__ import annotations
 
@@ -65,17 +29,8 @@ def _is_none(node: ast.expr) -> bool:
 def _offending_keys(keys: list[str | None], values: list[ast.expr]) -> bool:
     """Whether this construction names a pin and *derives* a wiki on the spot.
 
-    Passing both along is not the bug - ``upload_photo(..., pin=pin, wiki=wiki)``
-    is a signature whose callers supply what they mean, and usually one of them
-    is None. The bug is working the wiki out from the pin's own location while
-    building a pin-owned row, which is how a private upload ends up on a shared
-    page without anybody deciding it should::
-
-        {"pin": owner, "wiki": Wiki.objects.get_for_location(location), ...}
-
-    So a wiki value that is a *call* alongside a pin is what gets flagged; a
-    plain name, attribute or None is left alone.
-    """
+    Passing both along is not the bug - ``upload_photo(..., pin=pin, wiki=wiki)`` is a signature whose callers
+    supply what they mean, and usually one of them is None."""
     named = {key: value for key, value in zip(keys, values, strict=False) if key is not None}
     pin = next((named[k] for k in _PIN_KEYS if k in named), None)
     wiki = next((named[k] for k in _WIKI_KEYS if k in named), None)

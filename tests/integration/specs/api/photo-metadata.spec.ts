@@ -1,16 +1,6 @@
 /**
- * What can be attached to a photo once it is stored.
- *
- * `services/media-storage.spec.ts` proves the bytes survive leaving the
- * process. This is the other half: the row that describes them. Labels, votes
- * and the pin association are each written through a different endpoint and
- * read back through the photo serializer, so each is a place where a write can
- * succeed and simply not show up.
- *
- * Every upload here embeds the run id in its bytes. The store detects duplicates
- * by content, so a reused payload answers 409 on the second test - which reads
- * as a refusal and is really the store recognising a file it already has. That
- * trap is recorded in docs/PROBLEMS.md; it has now caught two specs.
+ * What can be attached to a photo once it is stored. `services/media-storage.spec.ts` proves the
+ * bytes survive leaving the process.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

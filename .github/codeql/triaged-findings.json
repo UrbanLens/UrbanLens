@@ -1,0 +1,296 @@
+[
+  {
+    "rule": "js/incomplete-multi-character-sanitization",
+    "path": "src/urbanlens/dashboard/frontend/browser/harness-parity.test.ts",
+    "fingerprint": "7e2abb6f3f604ed6:1",
+    "language": "javascript",
+    "reason": "Strips tags to measure a button's visible text in a test, not a sanitizer."
+  },
+  {
+    "rule": "js/xss-through-dom",
+    "path": "src/urbanlens/dashboard/frontend/ts/entries/floorplan-editor.ts",
+    "fingerprint": "f914cf03be246823:1",
+    "language": "javascript",
+    "reason": "photo.url comes from the server-rendered floorplan-photos JSON and is assigned to an <img src>."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/lib/api-client.ts",
+    "fingerprint": "53635a0de18232d1:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/lib/api-client.ts",
+    "fingerprint": "e1459b25acc68944:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/specs/location/hrsh-boundary-provenance.spec.ts",
+    "fingerprint": "14237f42850c57f4:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/specs/location/hrsh-boundary-provenance.spec.ts",
+    "fingerprint": "b4c9b621bef17653:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/incomplete-url-substring-sanitization",
+    "path": "tests/integration/specs/location/hrsh-property-data.spec.ts",
+    "fingerprint": "55bb63deffd31f61:1",
+    "language": "javascript",
+    "reason": "A test assertion that a link points at echo.epa.gov, not a sanitizer."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "bin/check_bem_modifiers.py",
+    "fingerprint": "86c3f8577362f717:1",
+    "language": "python",
+    "reason": "Strips <script> blocks from templates before linting class names; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/url-redirection",
+    "path": "src/urbanlens/dashboard/controllers/api_keys.py",
+    "fingerprint": "b2c6a5e0c3e9625b:1",
+    "language": "python",
+    "reason": "The user's value only becomes a ?page= query on reverse('settings.view'), so the redirect cannot leave the site."
+  },
+  {
+    "rule": "py/path-injection",
+    "path": "src/urbanlens/dashboard/controllers/media.py",
+    "fingerprint": "2a362e4fb8807ac3:1",
+    "language": "python",
+    "reason": "resolve_media_path only returns a path that resolves inside MEDIA_ROOT and is not the root itself; every open and stat happens after that check."
+  },
+  {
+    "rule": "py/path-injection",
+    "path": "src/urbanlens/dashboard/controllers/media.py",
+    "fingerprint": "7d25d1c4dbc223c6:1",
+    "language": "python",
+    "reason": "resolve_media_path only returns a path that resolves inside MEDIA_ROOT and is not the root itself; every open and stat happens after that check."
+  },
+  {
+    "rule": "py/path-injection",
+    "path": "src/urbanlens/dashboard/controllers/media.py",
+    "fingerprint": "9d551f62aec62e3e:1",
+    "language": "python",
+    "reason": "resolve_media_path only returns a path that resolves inside MEDIA_ROOT and is not the root itself; every open and stat happens after that check."
+  },
+  {
+    "rule": "py/clear-text-storage-sensitive-data",
+    "path": "src/urbanlens/dashboard/management/commands/export_public_locations.py",
+    "fingerprint": "6a7d7ce05172b995:1",
+    "language": "python",
+    "reason": "The command exports locations that passed the public vote; publishing them is its purpose."
+  },
+  {
+    "rule": "py/weak-sensitive-data-hashing",
+    "path": "src/urbanlens/dashboard/services/apis/security/hibp.py",
+    "fingerprint": "530480af10b86cc4:1",
+    "language": "python",
+    "reason": "HIBP's k-anonymity range API is defined over SHA-1, and only a five-character prefix of the digest leaves the process."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_additional_details.py",
+    "fingerprint": "ea2d8c7849f72366:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_hero_meta_editable.py",
+    "fingerprint": "f39c47985fb3267e:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_identity_editable.py",
+    "fingerprint": "f7458b85798dc13d:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_preview.py",
+    "fingerprint": "24db4a4907d7d6f1:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_profile_social_inline.py",
+    "fingerprint": "7257f505aefd6e17:1",
+    "language": "python",
+    "reason": "A test strips <script> blocks from rendered HTML before an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/stack-trace-exposure",
+    "path": "src/urbanlens/dashboard/controllers/userprofile.py",
+    "fingerprint": "186d1eaeaba9079:1",
+    "language": "python",
+    "reason": "Returns EmailClaimError's message, written for the user (\"Enter a valid email address.\"); no trace, and none says whether another account holds the address."
+  },
+  {
+    "rule": "py/stack-trace-exposure",
+    "path": "src/urbanlens/dashboard/external_api/views_wiki.py",
+    "fingerprint": "294320ecd77e5575:1",
+    "language": "python",
+    "reason": "Returns the wiki edit validation or conflict message, written for the client; no trace."
+  },
+  {
+    "rule": "py/insecure-cookie",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_basemap_tile_shared_cache.py",
+    "fingerprint": "f88f405d607b3ad8:1",
+    "language": "python",
+    "reason": "A test builds a redirect response carrying a session cookie to check the tile cache keeps it; no server sets it."
+  },
+  {
+    "rule": "py/weak-sensitive-data-hashing",
+    "path": "src/urbanlens/dashboard/services/auth/api_keys.py",
+    "fingerprint": "b17b450b903b48ef:1",
+    "language": "python",
+    "reason": "SHA-256 of a random API key secret at least MIN_FAST_HASH_SECRET_LENGTH long; a slow password hash buys nothing against a high-entropy secret and would cost every API request."
+  },
+  {
+    "rule": "py/weak-sensitive-data-hashing",
+    "path": "src/urbanlens/dashboard/services/auth/api_keys.py",
+    "fingerprint": "f9fd9d05997fc72c:1",
+    "language": "python",
+    "reason": "SHA-256 of a random API key secret at least MIN_FAST_HASH_SECRET_LENGTH long; a slow password hash buys nothing against a high-entropy secret and would cost every API request."
+  },
+  {
+    "rule": "py/weak-sensitive-data-hashing",
+    "path": "src/urbanlens/dashboard/services/auth/api_keys.py",
+    "fingerprint": "e3a0f0f4952db4d1:1",
+    "language": "python",
+    "reason": "SHA-256 of a random API key secret at least MIN_FAST_HASH_SECRET_LENGTH long; a slow password hash buys nothing against a high-entropy secret and would cost every API request."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/core/tests/inline_scripts.py",
+    "fingerprint": "b7bfed56927d35cf:1",
+    "language": "python",
+    "reason": "A test helper finds inline <script> blocks to measure them; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/bad-tag-filter",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_boundary_vote_dialog_markup.py",
+    "fingerprint": "d397ad1348a881bc:1",
+    "language": "python",
+    "reason": "A test lists <script> tags in rendered HTML for an assertion; nothing it produces reaches a browser."
+  },
+  {
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "src/urbanlens/dashboard/services/core/coalesce.py",
+    "fingerprint": "e6c693e9fa0ec9e8:1",
+    "language": "python",
+    "reason": "Logs a coalescing cache key - a hash, a UUID, or coordinates rounded to about 1 km - and only when the cache fails."
+  },
+  {
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "src/urbanlens/dashboard/services/core/coalesce.py",
+    "fingerprint": "9b65006db7e042de:1",
+    "language": "python",
+    "reason": "Logs a coalescing cache key - a hash, a UUID, or coordinates rounded to about 1 km - and only when the cache fails."
+  },
+  {
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "src/urbanlens/dashboard/services/auth/credential_revocation.py",
+    "fingerprint": "326c87182d37fadf:1",
+    "language": "python",
+    "reason": "Logs the user's pk and how many tokens and keys a password change revoked; the kind is why the password changed, not the password."
+  },
+  {
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "src/urbanlens/dashboard/services/core/locks.py",
+    "fingerprint": "af297b6d05a35b85:1",
+    "language": "python",
+    "reason": "Logs a lock's cache key, a constant name per job."
+  },
+  {
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "src/urbanlens/dashboard/services/core/locks.py",
+    "fingerprint": "8cc4c65c16197442:1",
+    "language": "python",
+    "reason": "Logs a lock's cache key, a constant name per job."
+  },
+  {
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "src/urbanlens/dashboard/services/core/locks.py",
+    "fingerprint": "c75da7d43967e992:1",
+    "language": "python",
+    "reason": "Logs a lock's cache key, a constant name per job."
+  },
+  {
+    "rule": "py/clear-text-storage-sensitive-data",
+    "path": "src/urbanlens/dashboard/services/import_export/export.py",
+    "fingerprint": "cb0ffdb7d814822:1",
+    "language": "python",
+    "reason": "Writes the user's own data export, which is what they asked to download."
+  },
+  {
+    "rule": "py/client-exposed-cookie",
+    "path": "src/urbanlens/dashboard/tests/hypothesis/test_basemap_tile_shared_cache.py",
+    "fingerprint": "f88f405d607b3ad8:1",
+    "language": "python",
+    "reason": "A test builds a redirect response carrying a session cookie to check the tile cache keeps it; no server sets it."
+  },
+  {
+    "rule": "js/incomplete-multi-character-sanitization",
+    "path": "src/urbanlens/dashboard/frontend/ts/shared/map-layers.ts",
+    "fingerprint": "d8f5c9862d997455:1",
+    "language": "javascript",
+    "reason": "Strips markup from a tile attribution for setAttribution, which writes textContent; the result never reaches an HTML sink."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/specs/ui/map-controls.spec.ts",
+    "fingerprint": "f17d044c44a0f757:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/specs/ui/map-controls.spec.ts",
+    "fingerprint": "6952e3ab2f0d93c5:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/specs/smoke/detail-pages.spec.ts",
+    "fingerprint": "f17d044c44a25a34:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/insecure-randomness",
+    "path": "tests/integration/specs/smoke/detail-pages.spec.ts",
+    "fingerprint": "692ebca8581513a5:1",
+    "language": "javascript",
+    "reason": "Math.random() scatters test pin coordinates in an integration spec."
+  },
+  {
+    "rule": "js/clear-text-storage-of-sensitive-data",
+    "path": "src/urbanlens/dashboard/frontend/ts/entries/map-page.ts",
+    "fingerprint": "b05414508c79448:1",
+    "language": "javascript",
+    "reason": "Caches the viewer's own device location in their own localStorage for the map's starting view, expiring after _USER_LOC_MAX_AGE; it never leaves the browser."
+  },
+  {
+    "rule": "js/xss-through-dom",
+    "path": "src/urbanlens/dashboard/frontend/ts/shared/declarative-actions.ts",
+    "fingerprint": "f526a6335eec7a28:1",
+    "language": "javascript",
+    "reason": "A data-navigate select's value is followed only when it resolves to this origin (isSameOrigin), so no javascript: or off-site address runs; the options are {% url %} values."
+  }
+]

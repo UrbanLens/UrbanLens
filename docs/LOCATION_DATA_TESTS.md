@@ -11,10 +11,13 @@ It is off by default. Turning it on costs real money and real time.
 
 ```bash
 # The account must be able to make outbound calls, or every spec is a no-op.
-python src/urbanlens/manage.py provision_integration_env --external-apis --out /tmp/e2e.json
+# `subscriber` holds property_owners, for the ownership specs; see INTEGRATION_TESTS.md.
+# `neighbour` holds the courtyard HRSH pin, so primary and secondary stay strangers for the social specs.
+python src/urbanlens/manage.py provision_integration_env --roles primary,secondary,subscriber,neighbour \
+    --subscriber-roles subscriber --external-apis --out /tmp/e2e.json
 
-cd tests/integration
-UL_E2E_LOCATION_DATA=1 npx playwright test --project=location
+UL_E2E_ACCOUNTS_FILE=/tmp/e2e.json bin/run_integration_tests.sh --url http://localhost:21810 --project location
+# or, from tests/integration with UL_E2E_LOCATION_DATA=1 exported: npm run test:location
 ```
 
 ## Why a separate project
@@ -66,16 +69,70 @@ application at all; "the last sale" is whatever sorts first under
 assert the *ordering contract* and that nothing is dated in the future. A deed
 recorded tomorrow satisfies both.
 
+## The campus pin, and the courtyard pin
+
+`specs/location/fixtures.ts` builds one fixture per *site* (`SiteConfig`). Two sites stand on the same
+tax parcel (3532 North Rd):
+
+| fixture | account | point | private name |
+|---|---|---|---|
+| `campus` | `primary` | `HRSH_PIN` (41.73328, -73.92812) | "e2e private campus notes" |
+| `courtyard` | `secondary` | `COURTYARD_PIN` (41.73266, -73.92736) | "e2e private courtyard notes" |
+
+The courtyard is the point Jess pinned on k3s-staging, where it got a circle, a road for a title and one
+building in the CRIS card (P145). It needs a second account because an account holds one root pin per
+property; a second root pin on the parcel would be nested or refused. `hrsh-naming.spec.ts` runs every
+test at both points: the parcel polygon, one shared wiki, the exact National Register title (D20), the
+register and Wikipedia titles as aliases with no building or road names, BLDG 45 among the building child
+pins, the Wikipedia link and article, and the CRIS card's campus heading and roster.
+
+Each site is set up once per run:
+
+1. With `UL_E2E_HRSH_FRESH=1`, deletes the account's root pins on the campus and
+   their child pins (`DELETE pins/<slug>/?children=delete`). The Location, and with
+   it the boundary and the wiki, survives: this retests the pin, not the place.
+2. Adopts the account's root pin nearest the site's point, or creates one there
+   with the site's private name.
+   That name holds no real name, so a wiki titled from it has copied private data.
+   `campus.nameIsPrivate` is false for a pin adopted from an older run with a real
+   name; run with FRESH to get a private one.
+3. Starts enrichment the way a user does: opens `/dashboard/map/pin/<slug>/` signed
+   in as the owner, and waits for the page's own `/boundary/` request, which
+   schedules the boundary chain. The external API's `panels/boundary/` is never
+   called. `campus.visit` and `campus.log` record what the visit saw.
+4. Polls `GET pins/<slug>/` (a pure read) for up to ten minutes for a parcel.
+
+The pin, the name at setup, the visit and the verdict are kept in
+`reports/run-state/hrsh-campus.json` (the courtyard's under its own key), keyed on the run (`lib/run.ts`), so a worker
+restarted after a failure resumes instead of waiting again. Waits that ran out
+(`waitForWiki`, `waitForChildPins`) are remembered the same way, so a stalled
+pipeline costs one timeout per run, not one per test.
+
 ## Reading a failure
 
 The directory is arranged so a broken pipeline produces **one** red, not thirty.
-`specs/location/fixtures.ts` provisions the campus pin once per worker and never
-throws; it carries either the geometry or a diagnosis. `hrsh-boundary.spec.ts` is
-the single spec that reports missing geometry as a failure. Everything else calls
-`campus.requireBoundary()` and skips with a pointer to it.
+The campus fixture never throws once it has a pin; it carries either the geometry
+or a diagnosis. `hrsh-boundary.spec.ts` is the single spec that reports missing
+geometry as a failure. Everything else calls `campus.requireBoundary()` and skips
+with a pointer to it.
 
 So: **read the boundary failure first.** If it is red, the skips below it are
 consequences, not separate problems.
+
+## Metrics
+
+Recorded through `lib/metrics.ts` and compared by `npm run metrics:report` (see
+`INTEGRATION_TESTS.md`, "Metrics"):
+
+| Metric | Unit | Recorded by |
+| --- | --- | --- |
+| `hrsh.boundary.parcel_arrived` | 0/1 | campus setup |
+| `hrsh.boundary.seconds_to_parcel` | s, from the pin page visit | campus setup, when it waited |
+| `hrsh.boundary.area_sqm` | m² | campus setup |
+| `hrsh.pin_page.setup_visit.{ttfb,dom_content_loaded,load}_ms` | ms | the triggering visit |
+| `hrsh.pin_page.{ttfb,dom_content_loaded,load}_ms` | ms | `openPrivatePin` |
+| `hrsh.child_pins.count`, `hrsh.child_pins.seconds_to_min` | count, s | `waitForChildPins` |
+| `hrsh.wiki.available`, `hrsh.wiki.seconds_to_available` | 0/1, s | `waitForCampusWiki` |
 
 ## Waiting
 
@@ -152,9 +209,10 @@ Two further things worth knowing before trusting a green run here:
   down - the template hardcodes the threshold as a literal while
   `MIN_VISIBLE_PIN_COUNT` lives in Python - but it is not evidence the masking
   logic works.
-- **The wiki is "created automatically" in a sense nobody can observe.** The
-  draft is real (`ensure_draft_wiki_for_location`) but carries
-  `officially_created=False`, and every visible surface treats that as "no wiki".
-  The testable claim is not that the wiki appears, but that it is *already
-  populated* the moment a user creates it - which is the only external evidence
-  the background draft did its work.
+- **The wiki is created automatically, and there is no draft state.**
+  `tasks.ensure_wiki_for_location` creates it through
+  `get_or_create_for_location` when its location gains a pin, and it is visible
+  to anyone with access once that task has run; `GET wikis/<location_slug>/`
+  answers 404 until then. `waitForCampusWiki` waits up to five minutes for it.
+  Enrichment (`enrich_wiki_location`, the Wikipedia seed) runs later still, so
+  assertions on the wiki's content must wait for it too.

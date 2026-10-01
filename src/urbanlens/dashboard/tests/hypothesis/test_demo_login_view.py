@@ -1,12 +1,4 @@
-"""The demo instance's one-click login, and its absence everywhere else.
-
-The route is registered conditionally at URLconf import time, so these tests
-reload the URLconf under an explicit ``demo_mode`` rather than trusting whatever
-value happened to be in force when Django first resolved a URL. Without that,
-the result depends on test ordering: any earlier test that reverses a URL inside
-a ``demo_mode=True`` patch imports the URLconf *with the demo route registered*,
-and it stays registered for the rest of the process.
-"""
+"""The demo instance's one-click login, and its absence everywhere else."""
 
 from __future__ import annotations
 
@@ -15,9 +7,9 @@ from unittest import mock
 
 from django.urls import NoReverseMatch, clear_url_caches, reverse
 
-import urbanlens.UrbanLens.urls as root_urls
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
+import urbanlens.UrbanLens.urls as root_urls
 
 
 def _reload_urlconf_with_demo_mode(*, enabled: bool) -> None:

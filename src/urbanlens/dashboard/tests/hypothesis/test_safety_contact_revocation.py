@@ -1,23 +1,4 @@
-"""Removing an emergency contact must cut off their already-open chat socket.
-
-``SafetyCheckinChatConsumer`` resolves authority once, at ``connect()``. For
-partners that has always been paired with a revocation path - an immediate
-``partner_access_revoked`` broadcast, plus periodic re-validation as a backstop
-for a broadcast lost in transit (see ``test_safety_partners``). The contact
-route had neither, on the stated reasoning that a magic-link token "is either
-valid or it isn't".
-
-A contact token is in fact revoked by *deleting the row*, and
-``set_checkin_contacts`` deletes every contact missing from a resubmitted list.
-So a contact removed while their portal was open kept receiving the check-in's
-chat indefinitely - while the HTTP fallback serving the same data correctly
-refused them, since it re-resolves the token on every request.
-
-These mirror the partner tests one-for-one, including their two delivery
-concerns: the broadcast is enqueued rather than performed (hence
-``broadcasts_delivered_inline``), and it is best-effort (hence a separate test
-that the periodic backstop closes the socket with no broadcast at all).
-"""
+"""Removing an emergency contact must cut off their already-open chat socket."""
 
 from __future__ import annotations
 
@@ -25,15 +6,16 @@ import json
 from unittest.mock import patch
 
 from channels.db import database_sync_to_async
-from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.dashboard.models.safety.model import SafetyCheckinContact
-from urbanlens.dashboard.tests.hypothesis.test_safety_chat import _IN_MEMORY_CHANNEL_LAYERS, SafetyCheckinChatConsumerTests, _run
+from urbanlens.dashboard.tests.hypothesis.test_safety_chat import (
+    SafetyCheckinChatConsumerTests,
+    _run,
+)
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class ContactAccessRevocationTests(SafetyCheckinChatConsumerTests):
     """The contact route's mirror of the partner-revocation guarantees."""
 
@@ -116,6 +98,8 @@ class ContactAccessRevocationTests(SafetyCheckinChatConsumerTests):
             contact_comm = self._contact_communicator(self.contact.token)
             self.assertTrue((await contact_comm.connect())[0])
 
-            self.assertTrue(await contact_comm.receive_nothing(timeout=0.5), "a contact still on the list must stay connected")
+            self.assertTrue(
+                await contact_comm.receive_nothing(timeout=0.5), "a contact still on the list must stay connected"
+            )
 
         await contact_comm.disconnect()

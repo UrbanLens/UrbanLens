@@ -1,11 +1,4 @@
-"""Tests for services.spotguessr.modes - the per-mode strategy registry.
-
-Round generation (services.spotguessr.session), round serialization
-(services.spotguessr.serializers), and the photo-feedback gate
-(services.spotguessr.relevance) all read this registry instead of each
-keeping their own copy of "which modes exist" / "which modes show imagery" -
-these tests guard the registry's own contract directly.
-"""
+"""Tests for services.spotguessr.modes - the per-mode strategy registry."""
 
 from __future__ import annotations
 
@@ -69,7 +62,14 @@ class BuildRoundTests(TestCase):
     def test_photos_strategy_returns_content_with_a_usable_photo(self) -> None:
         location = _make_location()
         profile = _make_profile()
-        baker.make(Image, location=location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=location))
+        baker.make(
+            Image,
+            location=location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=location),
+        )
         strategy = modes.get_strategy(SpotGuessrMode.PHOTOS)
         assert strategy is not None
         content = strategy.build_round(location, GameConfig(), [profile])
@@ -131,7 +131,9 @@ class SerializeStreetViewTests(TestCase):
 
     @patch("urbanlens.dashboard.services.spotguessr.street_view.candidate_street_view_for_location")
     def test_includes_the_panoramas_own_coordinates_and_fallback_image(self, mock_candidate) -> None:
-        mock_candidate.return_value = StreetViewPanorama(latitude=42.65, longitude=-73.76, image="data:image/jpeg;base64,abc123")
+        mock_candidate.return_value = StreetViewPanorama(
+            latitude=42.65, longitude=-73.76, image="data:image/jpeg;base64,abc123"
+        )
         data: dict = {}
         self.strategy.serialize_round(self.round, data)
         self.assertEqual(data["street_view_lat"], 42.65)

@@ -1,30 +1,14 @@
 """Built-in photo keywording plugins.
-
-Three independent strategies, each storing its own ``ImageKeyword`` rows so
-they coexist and can be regenerated separately:
-
-- **Embedded metadata** (:class:`PhotoMetadataKeywordsPlugin`): the established
-  way - XMP ``dc:subject`` and IPTC keyword tags photographers embed via
-  Lightroom/digiKam etc. Local, free, always on.
-- **AI vision** (:class:`AiVisionKeywordsPlugin`): asks the site's AI provider
-  to describe the photo. Costs real money per call, so it requires the
-  ``AI_PHOTO_PROCESSING`` subscription feature (deliberately separate from the
-  cheaper text-only ``AI`` feature) plus the user's AI toggles. Images are
-  downscaled before being sent.
-- **Content classifier** (:class:`ClassifierKeywordsPlugin`): Cloudflare
-  Workers AI ResNet-50 image classification - near-free label+confidence
-  pairs, no subscription needed, but still an external call so it respects the
-  user's external-APIs toggle.
-"""
+Three independent strategies, each storing its own ``ImageKeyword`` rows so they coexist and can be regenerated separately:"""
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, downscaled_jpeg_bytes
+from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, analysis_jpeg_bytes
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -35,85 +19,39 @@ logger = logging.getLogger(__name__)
 CLASSIFIER_MIN_CONFIDENCE = 0.15
 
 
-def _xmp_subjects(xmp: dict[str, Any]) -> list[str]:
-    """Pull dc:subject keyword entries out of Pillow's parsed XMP dict.
-
-    Args:
-        xmp: The dict returned by ``PIL.Image.Image.getxmp()``.
-
-    Returns:
-        Keyword strings found in the XMP packet (may be empty).
-    """
-    keywords: list[str] = []
-
-    def _walk(node: Any) -> None:
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key.lower() == "subject":
-                    _collect(value)
-                else:
-                    _walk(value)
-        elif isinstance(node, list):
-            for item in node:
-                _walk(item)
-
-    def _collect(value: Any) -> None:
-        # subject is usually {"Bag": {"li": [...]}} but flat forms exist too.
-        if isinstance(value, str):
-            keywords.append(value)
-        elif isinstance(value, list):
-            for item in value:
-                _collect(item)
-        elif isinstance(value, dict):
-            for item in value.values():
-                _collect(item)
-
-    _walk(xmp)
-    return keywords
-
-
 class MetadataKeywordProvider(PhotoKeywordProvider):
-    """Reads keywords the photographer embedded in the file (XMP/IPTC)."""
+    """Keywords the photographer embedded in the file (XMP/IPTC), as the upload task read them in the sandbox."""
 
     slug = "photo_keywords_metadata"
     label = "Embedded metadata keywords"
 
-    def generate(self, image: Image) -> list[KeywordResult]:
-        """Extract XMP dc:subject and IPTC 2:25 keyword tags from the stored file.
+    def is_available_for(self, image: Image) -> bool:
+        """Only when the upload task recorded keywords.
+
+        An empty record cannot tell a file with none from one rewritten before it was read, so it never
+        replaces the keywords a photo already has.
 
         Args:
             image: The uploaded image.
 
         Returns:
-            Embedded keywords; empty when the file carries none.
+            True when ``Image.embedded_keywords`` holds at least one keyword.
         """
-        from PIL import Image as PILImage, IptcImagePlugin
+        return bool(image.embedded_keywords)
 
-        keywords: list[str] = []
-        with image.image.open("rb") as stored_file:
-            pil_image = PILImage.open(stored_file)
+    def generate(self, image: Image) -> list[KeywordResult]:
+        """Return the keywords recorded on the row; the stored file is never opened here.
 
-            try:
-                xmp = pil_image.getxmp()
-            except Exception:  # Pillow raises varied errors on malformed XMP
-                xmp = {}
-            if xmp:
-                keywords.extend(_xmp_subjects(xmp))
+        Args:
+            image: The uploaded image.
 
-            try:
-                iptc = IptcImagePlugin.getiptcinfo(pil_image) or {}
-            except (OSError, SyntaxError):
-                iptc = {}
-            raw_iptc = iptc.get((2, 25))
-            if raw_iptc:
-                entries = raw_iptc if isinstance(raw_iptc, list) else [raw_iptc]
-                for entry in entries:
-                    if isinstance(entry, bytes):
-                        keywords.append(entry.decode("utf-8", errors="replace"))
-                    elif isinstance(entry, str):
-                        keywords.append(entry)
-
-        return [KeywordResult(keyword=keyword) for keyword in keywords]
+        Returns:
+            Embedded keywords; empty when the file carried none.
+        """
+        recorded = image.embedded_keywords
+        if not isinstance(recorded, list):
+            return []
+        return [KeywordResult(keyword=keyword) for keyword in recorded if isinstance(keyword, str)]
 
 
 class PhotoMetadataKeywordsPlugin(UrbanLensPlugin):
@@ -137,11 +75,6 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
 
     def is_available_for(self, image: Image) -> bool:
         """Gate on the AI photo processing subscription and every AI toggle.
-
-        Requires: site-wide AI enabled, an uploader with AI and external APIs
-        enabled on their profile, and the uploader holding the
-        ``AI_PHOTO_PROCESSING`` subscription feature (vision calls cost more
-        than the text features the plain ``AI`` feature covers).
 
         Args:
             image: The uploaded image.
@@ -170,7 +103,7 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
         """
         from urbanlens.dashboard.services.ai.vision import describe_photo_keywords
 
-        small = downscaled_jpeg_bytes(image)
+        small = analysis_jpeg_bytes(image)
         if small is None:
             return []
         return [KeywordResult(keyword=keyword) for keyword in describe_photo_keywords(small)]
@@ -227,9 +160,6 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
     def generate(self, image: Image) -> list[KeywordResult]:
         """Downscale the photo and classify its content into keyword labels.
 
-        ImageNet-style labels often bundle synonyms ("castle, fortress"); each
-        synonym becomes its own keyword sharing the label's confidence.
-
         Args:
             image: The uploaded image.
 
@@ -238,7 +168,7 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
         """
         from urbanlens.dashboard.services.ai.vision import classify_photo
 
-        small = downscaled_jpeg_bytes(image)
+        small = analysis_jpeg_bytes(image)
         if small is None:
             return []
         results: list[KeywordResult] = []

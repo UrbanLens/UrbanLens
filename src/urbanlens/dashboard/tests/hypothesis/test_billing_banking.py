@@ -8,9 +8,9 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.billing import RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
@@ -26,7 +26,9 @@ class AdvanceUsageLedgerTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
         self.start = timezone.now() - timedelta(days=200)
         _set_created(self.sub, self.start)
@@ -91,10 +93,31 @@ class AdvanceUsageLedgerTests(TestCase):
         self.assertEqual(sub.amount_used_cents, 0)
         self.assertIsNone(sub.usage_covered_until)
 
+    def test_period_start_exactly_at_as_of_is_entered(self) -> None:
+        """cursor <= as_of, not cursor < as_of - a period counts as started the instant as_of reaches its start, not only strictly after. Balance is ample, so only this comparison decides whether the second period (starting exactly at as_of) is entered."""
+        RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=100_000)
+        self.sub.refresh_from_db()
+        banking.advance_usage_ledger(self.sub, as_of=self.start + timedelta(days=30))
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.amount_used_cents, 1000)
+        self.assertEqual(self.sub.usage_covered_until, self.start + timedelta(days=60))
+
+    def test_period_starting_one_instant_after_as_of_is_not_entered(self) -> None:
+        """One microsecond before the same boundary, that second period must not be
+        entered yet - pins the other side of the cutoff pinned above."""
+        RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=100_000)
+        self.sub.refresh_from_db()
+        banking.advance_usage_ledger(self.sub, as_of=self.start + timedelta(days=30) - timedelta(microseconds=1))
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.amount_used_cents, 500)
+        self.assertEqual(self.sub.usage_covered_until, self.start + timedelta(days=30))
+
     def test_price_change_only_affects_periods_ticked_after_the_change(self) -> None:
         """A dynamic-threshold role's cost can move between periods - each period is priced
         as of its own start, not the price in effect when advance_usage_ledger is finally called."""
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         sub = baker.make(RoleSubscription, user=baker.make(User), role=role, total_paid_cents=2000)
         _set_created(sub, self.start)
 
@@ -102,7 +125,9 @@ class AdvanceUsageLedgerTests(TestCase):
             # $5/mo for the first period, $10/mo from the second period onward.
             return 500 if as_of is not None and as_of < self.start + timedelta(days=30) else 1000
 
-        with mock.patch("urbanlens.dashboard.services.billing.banking.pricing.role_pwyw_threshold_cents", side_effect=fake_threshold):
+        with mock.patch(
+            "urbanlens.dashboard.services.billing.banking.pricing.role_pwyw_threshold_cents", side_effect=fake_threshold
+        ):
             banking.advance_usage_ledger(sub, as_of=self.start + timedelta(days=90))
         sub.refresh_from_db()
         # Period 1 costs 500 (total used 500, balance 1500 remaining), period 2 costs 1000 at
@@ -115,7 +140,9 @@ class ApplyPaymentTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
         _set_created(self.sub, timezone.now() - timedelta(days=1))
 
@@ -160,7 +187,9 @@ class ApplyPaymentTests(TestCase):
 
     def test_zero_threshold_pwyw_role_always_affords_once_paid(self) -> None:
         """A plain PWYW role with no minimum ticks for free every period once any payment lands."""
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=None
+        )
         sub = baker.make(RoleSubscription, user=self.user, role=role)
         _set_created(sub, timezone.now() - timedelta(days=31))
         banking.apply_payment(sub, 1)
@@ -173,7 +202,9 @@ class ApplyRefundTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role, total_paid_cents=2000)
         _set_created(self.sub, timezone.now() - timedelta(days=1))
 
@@ -207,14 +238,8 @@ class ApplyRefundTests(TestCase):
     def test_two_refunds_from_stale_instances_both_land(self) -> None:
         """Stripe delivers concurrently, and both handlers hold their own instance.
 
-        Two partial refunds on one charge arrive at once, each handler having
-        read ``total_paid_cents`` before the other wrote. Subtracting from that
-        in-memory value made the second write erase the first - while the
-        webhook's StripeProcessedRefund row still committed, so the lost debit
-        was never retried and access stayed funded by refunded money. Both
-        instances here are deliberately stale, which is what that looks like
-        without needing real threads.
-        """
+        Two partial refunds on one charge arrive at once, each handler having read ``total_paid_cents`` before
+        the other wrote."""
         first = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
         second = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
 
@@ -258,7 +283,9 @@ class RefundRoundTripPropertyTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
         _set_created(self.sub, timezone.now() - timedelta(days=45))
 

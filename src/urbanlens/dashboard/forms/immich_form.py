@@ -23,18 +23,14 @@ class ImmichAccountForm(forms.ModelForm):
     def clean_server_url(self) -> str:
         """Strip a trailing slash and reject a server that isn't publicly reachable.
 
-        A self-hosted Immich server is fetched from server-side code (both a
-        live ``ping()`` on connect and every subsequent asset/thumbnail
-        proxy), so an unvalidated ``server_url`` would let any authenticated
-        user direct those requests at internal infrastructure (SSRF) - e.g.
-        cloud metadata endpoints or services on UrbanLens's own network. This
-        reuses the shared ``url_safety`` guard, which resolves the hostname
-        and rejects anything that lands on a loopback/private/link-local/
-        reserved address, not just an internal-looking literal.
+        A self-hosted Immich server is fetched from server-side code (both a live ``ping()`` on connect and
+        every subsequent asset/thumbnail proxy), so an unvalidated ``server_url`` would let any
+        authenticated user direct those requests at internal infrastructure (SSRF) - e.g. cloud metadata
+        endpoints or services on UrbanLens's own network.
 
         Returns:
-            The validated url, with any trailing slash stripped so
-            ``asset_web_url``/API paths never double up on ``//``.
+            The validated url, with any trailing slash stripped so ``asset_web_url``/API paths never double
+            up on ``//``.
 
         Raises:
             forms.ValidationError: If the url isn't publicly reachable.

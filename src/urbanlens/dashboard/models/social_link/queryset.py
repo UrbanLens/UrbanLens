@@ -2,25 +2,20 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.social_link.model import SocialLink  # noqa: F401 - mypy needs these; ruff does not
 
 
-class SocialLinkQuerySet(abstract.DashboardQuerySet):
-    def for_profile(self, profile: Profile | int) -> Self:
-        """Return all links belonging to a given profile."""
-        if isinstance(profile, int):
-            return self.filter(profile_id=profile)
-        return self.filter(profile=profile)
-
-    def platform(self, platform: str) -> Self:
-        """Filter to a specific platform key."""
-        return self.filter(platform=platform)
+class SocialLinkQuerySet(abstract.DashboardQuerySet["SocialLink"]):
+    """QuerySet for SocialLink."""
 
 
-class SocialLinkManager(abstract.DashboardManager.from_queryset(SocialLinkQuerySet)):
+_SocialLinkManagerBase = abstract.DashboardManager.from_queryset(SocialLinkQuerySet)
+
+
+class SocialLinkManager(_SocialLinkManagerBase["SocialLink"]):
     pass

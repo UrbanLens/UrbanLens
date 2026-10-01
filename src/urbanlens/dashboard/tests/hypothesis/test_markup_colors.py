@@ -1,21 +1,11 @@
-"""Tests that PinMarkup colours cannot be stored as arbitrary strings.
-
-``color`` and ``border_color`` are interpolated into markup that reaches
-``innerHTML`` on the client (text-label spans, arrowhead SVG), and every write
-path builds the model directly from a JSON body rather than through a Form, so
-the restriction is enforced in ``PinMarkup.save()``. These tests pin that down
-at the model - which covers the create/edit endpoints, snapshot imports, and
-map clones alike - plus the pure helpers the renderers share.
-
-Model tests require the database; the helper tests do not.
-"""
+"""Tests that PinMarkup colours cannot be stored as arbitrary strings."""
 
 from __future__ import annotations
 
 from django.test import SimpleTestCase
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup
 from urbanlens.dashboard.services.core.colors import sanitize_hex_color, sanitize_optional_color
@@ -74,16 +64,14 @@ class SanitizeOptionalColorTests(SimpleTestCase):
     @given(st.text())
     def test_output_is_always_hex_none_or_empty(self, value: str):
         result = sanitize_optional_color(value)
-        self.assertTrue(result == "" or result == "none" or len(result) == 7, result)
+        self.assertTrue(result in {"", "none"} or len(result) == 7, result)
 
 
 class PinMarkupBulkCreateColorTests(TestCase):
     """bulk_create never calls save(), so the coercion has to reach it separately.
 
-    The undo restore rebuilds a deleted map's annotations this way, from a
-    payload captured at delete time - which is precisely where a value stored
-    before this validation existed would still be sitting.
-    """
+    The undo restore rebuilds a deleted map's annotations this way, from a payload captured at delete time -
+    which is precisely where a value stored before this validation existed would still be sitting."""
 
     def setUp(self):
         self.user = baker.make("auth.User")

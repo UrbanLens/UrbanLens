@@ -1,12 +1,4 @@
-"""Tests for the LoopNet commercial-listings plugin.
-
-Retrieval calls REData's parcel-uuid and listings endpoints (see the module
-docstring in plugins.builtin.loopnet) - RedataGateway itself is mocked, so no
-real network access occurs. Covers address gating, fetch()'s parcel-uuid ->
-listings pipeline (and its graceful degradation when REData is unconfigured/
-unavailable/has no parcel), and media_items() building proxy URLs for each
-listing's photos.
-"""
+"""Tests for the LoopNet commercial-listings plugin."""
 
 from __future__ import annotations
 
@@ -19,7 +11,10 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.plugins.builtin.loopnet import LoopnetPanelSource, LoopnetPlugin
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    PropertyRecordsUnavailableError,
+    RedataGateway,
+)
 
 
 def _make_profile():
@@ -33,7 +28,10 @@ _LISTING = {
     "uuid": "listing-1",
     "loopnet_url": "https://www.loopnet.com/Listing/123",
     "title": "123 Main St - Retail Building",
-    "photos": [{"id": 1, "position": 0, "content_type": "image/jpeg"}, {"id": 2, "position": 1, "content_type": "image/jpeg"}],
+    "photos": [
+        {"id": 1, "position": 0, "content_type": "image/jpeg"},
+        {"id": 2, "position": 1, "content_type": "image/jpeg"},
+    ],
 }
 
 
@@ -71,14 +69,24 @@ class GateTests(TestCase):
 class FetchTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.location = baker.make(Location, latitude="42.650000", longitude="-73.750000", street_number="123", route="Main St", locality="Anytown", google_place=None)
+        self.location = baker.make(
+            Location,
+            latitude="42.650000",
+            longitude="-73.750000",
+            street_number="123",
+            route="Main St",
+            locality="Anytown",
+            google_place=None,
+        )
         self.pin = baker.make(Pin, profile=_make_profile(), location=self.location)
 
     def test_fetch_stores_listings_from_the_resolved_parcel(self) -> None:
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1") as mock_uuid,
-            patch.object(RedataGateway, "lookup_listings", return_value={"results": [_LISTING], "refresh_queued": False}) as mock_listings,
+            patch.object(
+                RedataGateway, "lookup_listings", return_value={"results": [_LISTING], "refresh_queued": False}
+            ) as mock_listings,
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             LoopnetPanelSource().fetch(self.pin)
@@ -112,7 +120,9 @@ class FetchTests(TestCase):
     def test_unavailable_gracefully_persists_empty(self) -> None:
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
+            patch.object(
+                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
+            ),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             LoopnetPanelSource().fetch(self.pin)
@@ -122,15 +132,11 @@ class FetchTests(TestCase):
     def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
         """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
-        The unconfigured state is forced rather than assumed. This relied on the
-        machine running the tests having no REData credentials, so wherever they
-        *are* configured - the test container included - the gateway constructed
-        happily and went on to make a real call, which the suite's network guard
-        blocked. Same fix, and the same reasoning, as the sibling tests in
-        test_pin_redata_media_proxy.py.
-        """
+        The unconfigured state is forced rather than assumed."""
         with (
-            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            patch.object(
+                RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
+            ),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             LoopnetPanelSource().fetch(self.pin)

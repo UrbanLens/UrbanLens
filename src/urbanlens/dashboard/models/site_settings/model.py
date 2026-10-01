@@ -61,6 +61,45 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
     )
 
+    # --- Per-account limits (enforced by services.core.capacity) ---
+
+    max_saved_filters_per_user = IntegerField(
+        default=100,
+        help_text="Maximum number of saved filters a user may keep. Set to 0 for unlimited.",
+        verbose_name="Max saved filters per user",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+    max_pin_lists_per_user = IntegerField(
+        default=500,
+        help_text="Maximum number of pin lists a user may own. Set to 0 for unlimited.",
+        verbose_name="Max lists per user",
+        validators=[MinValueValidator(0), MaxValueValidator(100_000)],
+    )
+    max_labels_per_user = IntegerField(
+        default=2_000,
+        help_text="Maximum number of personal labels (of every kind) a user may own. Site-wide labels do not count. Set to 0 for unlimited.",
+        verbose_name="Max labels per user",
+        validators=[MinValueValidator(0), MaxValueValidator(100_000)],
+    )
+    max_custom_fields_per_user = IntegerField(
+        default=100,
+        help_text="Maximum number of custom fields a user may define, across every entity type. Set to 0 for unlimited.",
+        verbose_name="Max custom fields per user",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+    max_push_devices_per_user = IntegerField(
+        default=10,
+        help_text="Maximum number of active push devices a user may register. Set to 0 for unlimited.",
+        verbose_name="Max push devices per user",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000)],
+    )
+    max_photos_per_album = IntegerField(
+        default=5_000,
+        help_text="Maximum number of photos one album may hold. Set to 0 for unlimited.",
+        verbose_name="Max photos per album",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
+    )
+
     # --- Friendships ---
 
     max_friends_per_user = IntegerField(
@@ -76,6 +115,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=20,
         help_text="Maximum number of members allowed in a direct message group chat. Set to 0 for unlimited.",
         verbose_name="Max group chat members",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+    max_group_chats_per_user = IntegerField(
+        default=100,
+        help_text="Maximum number of group chats one user may belong to at once. Nobody can add them to another past this. Set to 0 for unlimited.",
+        verbose_name="Max group chats per user",
         validators=[MinValueValidator(0), MaxValueValidator(10_000)],
     )
 
@@ -254,10 +299,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=250,
         help_text="Maximum size (MB) for a single photo, video, or document upload. Enforced on both the frontend and backend.",
         verbose_name="Max upload file size (MB)",
-        # Capped comfortably under clamd's StreamMaxLength (docker-compose.yml's
-        # clamav service, currently 1000M) - a value above that lets an upload
-        # pass this check and then fail the malware scan with a confusing
-        # "too large to scan" error instead of a clean upfront rejection.
+        # Capped comfortably under clamd's StreamMaxLength (docker-compose.yml's clamav service,
+        # currently 1000M) - a value above that lets an upload pass this check and then fail the
+        # malware scan with a confusing "too large to scan" error instead of a clean upfront
+        # rejection.
         validators=[MinValueValidator(1), MaxValueValidator(900)],
     )
     video_downscale_enabled = BooleanField(
@@ -298,11 +343,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Name source priority",
     )
 
-    # --- Background enrichment ---
-    # Hourly Celery task (tasks.run_scheduled_enrichment) that proactively
-    # backfills high-value external data (official names, aliases, addresses,
-    # boundaries) for every pinned/wiki'd Location, spending only the API
-    # budget left over after organic traffic. See services.locations.enrichment.
+    # --- Background enrichment --- Hourly Celery task (tasks.run_scheduled_enrichment) that
+    # proactively backfills high-value external data (official names, aliases, addresses,
+    # boundaries) for every pinned/wiki'd Location, spending only the API budget left over after
+    # organic traffic.
 
     enrichment_enabled = BooleanField(
         default=True,
@@ -340,7 +384,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
         max_length=20,
         choices=EnvironmentOverrideChoice.choices,
         default=EnvironmentOverrideChoice.DEFAULT,
-        help_text=("Override the deployment environment. Default uses the UL_ENVIRONMENT variable (or local when unset)."),
+        help_text=("Override the deployment environment. Default uses the UL_ENVIRONMENT variable (production when unset)."),
         verbose_name="Environment",
     )
 
@@ -392,15 +436,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Base URL of a Gotify server (e.g. https://gotify.example.com) used to push critical site notifications. Defaults to the UL_GOTIFY_URL environment variable.",
         verbose_name="Gotify server URL",
     )
-    # fail_soft despite being a credential: the usual "fail loud so the caller
-    # drops the row and the user reconnects" rule needs a caller that can do
-    # that, and there isn't one - SiteSettings is a singleton three context
-    # processors load on every render, for anonymous visitors too. Raising here
-    # 500s every page *and* the styled 500 page, which runs the same context
-    # processors. The token is unusable either way once it can't be decrypted,
-    # so Gotify pushes stop regardless; the only choice is whether the site
-    # stays up while an admin re-enters it. The read is still logged loudly with
-    # the field name and the setting to check (see EncryptedTextField).
+    # fail_soft despite being a credential: the usual "fail loud so the caller drops the row and the
+    # user reconnects" rule needs a caller that can do that, and there isn't one - SiteSettings is a
+    # singleton three context processors load on every render, for anonymous visitors too.
+    # Raising here 500s every page *and* the styled 500 page, which runs the same context
     notify_gotify_token = EncryptedTextField(
         blank=True,
         default=os.getenv("UL_GOTIFY_TOKEN", ""),
@@ -409,9 +448,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Gotify app token",
     )
 
-    # --- Notification routing ---
-    # Each critical-issue notification type has its own per-channel toggle so the
-    # admin can route different events to different channels (e.g. email only for
+    # --- Notification routing --- Each critical-issue notification type has its own per-channel
+    # toggle so the admin can route different events to different channels (e.g. email only for
     # low-urgency events, email + Gotify push for anything needing prompt attention).
 
     notify_pin_import_errors_email = BooleanField(
@@ -433,6 +471,16 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=False,
         help_text="Send a Gotify push notification when a safety check-in gives up on archival after repeated failures.",
         verbose_name="Safety check-in archival failures (Gotify)",
+    )
+    notify_stuck_uploads_email = BooleanField(
+        default=True,
+        help_text="Email the admin notification address when an upload has kept failing for a day while storage accepts others.",
+        verbose_name="Stuck uploads (email)",
+    )
+    notify_stuck_uploads_gotify = BooleanField(
+        default=False,
+        help_text="Send a Gotify push notification when an upload has kept failing for a day while storage accepts others.",
+        verbose_name="Stuck uploads (Gotify)",
     )
 
     # --- Google Places layer ---
@@ -478,10 +526,19 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(1), MaxValueValidator(1000)],
     )
 
-    # --- Outbound email limits ---
-    # Caps on user-triggered emails to third parties (friend/visit invites).
-    # Subscription roles can raise these per-tier; the largest applicable
-    # limit wins and 0 means unlimited (see services.security.email_safety).
+    # --- Data retention --- 0 keeps rows forever. See services/core/retention.py.
+
+    notification_retention_days = IntegerField(
+        default=365,
+        help_text="Delete notifications a user has read once they are this many days old. Unread ones are kept. 0 keeps them forever.",
+        verbose_name="Read notification retention (days)",
+        validators=[MinValueValidator(0), MaxValueValidator(36_500)],
+    )
+
+    # --- Outbound email limits --- Caps on user-triggered emails to third parties (friend/visit
+    # invites).
+    # Subscription roles can raise these per-tier; the largest applicable limit wins and 0 means
+    # unlimited (see services.security.email_safety).
 
     email_limit_per_hour = IntegerField(
         default=5,
@@ -502,10 +559,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(100_000)],
     )
 
-    # --- Subscription features (site-wide default) ---
-    # Features granted to every user, including those with no active subscription
-    # role. Subscription roles can only add features on top of this baseline, never
-    # take one away - see SubscriptionRole.features and user_has_feature().
+    # --- Subscription features (site-wide default) --- Features granted to every user, including
+    # those with no active subscription role.
+    # Subscription roles can only add features on top of this baseline, never take one away - see
+    # SubscriptionRole.features and user_has_feature().
 
     default_features = CharField(
         max_length=500,
@@ -585,9 +642,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     def get_effective_environment_type(self) -> EnvironmentTypes:
         """Return the active environment type, honoring admin override when set.
-
-        When ``environment_override`` is ``default``, the value comes from
-        ``UL_ENVIRONMENT`` (falling back to local when unset).
+        When ``environment_override`` is ``default``, the value comes from ``UL_ENVIRONMENT`` (production when unset).
 
         Returns:
             The resolved ``EnvironmentTypes`` value for this site.
@@ -614,19 +669,13 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
         Returns:
             True when the effective environment type is ``development`` or ``local``.
-            ``local`` is the default when ``UL_ENVIRONMENT`` is unset, and is treated
-            as a development environment for toolbar and debug-feature purposes.
+            ``local`` is treated as a development environment for toolbar and debug-feature purposes.
         """
         return self.get_effective_environment_type() in {EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL}
 
     def show_dev_admin_features(self, user) -> bool:
         """Return whether dev-only admin UI (e.g. the developer toolbar) should be visible to ``user``.
-
         Site admins see it whenever the effective environment is development or local.
-        Non-admin users can also see it, but only when the ``UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS``
-        env var is enabled AND the effective environment is development, local, testing, or
-        staging - this lets QA/test accounts exercise dev tooling without granting them
-        site-admin permission, while staying off by default and never active in production.
 
         Args:
             user: The current request user.
@@ -634,10 +683,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
         Returns:
             True when dev-only admin UI should be shown to ``user``.
         """
+        from urbanlens.dashboard.models.subscriptions.access_state import access_state
+
         if not user.is_authenticated:
             return False
 
-        if user.has_perm("dashboard.view_site_admin"):
+        if access_state(user).admin:
             return self.is_development_environment()
 
         from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -666,6 +717,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(login_lockout_minutes__gte=1), name="login_lockout_minutes_gte_1"),
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
+            CheckConstraint(condition=Q(notification_retention_days__gte=0), name="notification_retention_days_gte_0"),
             CheckConstraint(condition=Q(google_places_cache_days__gte=1), name="google_places_cache_days_gte_1"),
             CheckConstraint(condition=Q(external_data_cache_days__gte=1), name="external_data_cache_days_gte_1"),
             CheckConstraint(condition=Q(boundary_cache_days__gte=1), name="boundary_cache_days_gte_1"),
@@ -679,8 +731,15 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(max_trip_activities__gte=0), name="max_trip_activities_gte_0"),
             CheckConstraint(condition=Q(max_upcoming_trips_per_user__gte=0), name="max_upcoming_trips_per_user_gte_0"),
             CheckConstraint(condition=Q(max_pins_per_list__gte=0), name="max_pins_per_list_gte_0"),
+            CheckConstraint(condition=Q(max_saved_filters_per_user__gte=0), name="max_saved_filters_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_pin_lists_per_user__gte=0), name="max_pin_lists_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_labels_per_user__gte=0), name="max_labels_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_custom_fields_per_user__gte=0), name="max_custom_fields_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_push_devices_per_user__gte=0), name="max_push_devices_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_photos_per_album__gte=0), name="max_photos_per_album_gte_0"),
             CheckConstraint(condition=Q(max_friends_per_user__gte=0), name="max_friends_per_user_gte_0"),
             CheckConstraint(condition=Q(max_group_chat_members__gte=0), name="max_group_chat_members_gte_0"),
+            CheckConstraint(condition=Q(max_group_chats_per_user__gte=0), name="max_group_chats_per_user_gte_0"),
             CheckConstraint(condition=Q(max_safety_checkin_contacts__gte=0), name="max_safety_checkin_contacts_gte_0"),
             CheckConstraint(condition=Q(max_safety_checkin_partners__gte=0), name="max_safety_checkin_partners_gte_0"),
         ]

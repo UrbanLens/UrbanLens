@@ -1,17 +1,4 @@
-"""Building places follow the nesting REData reports, not a flat parcel list.
-
-REData's reconciled `/parcels/{uuid}/buildings/` reports structure: a coarse
-footprint enclosing finer ones becomes their ``parent_ref`` rather than a
-duplicate of them (its ``docs/buildings-dedup-spec.md``). `parcel_buildings`
-already reads that for display order and counting.
-
-`ensure_building_places` did not: every building was created with
-``parent=parcel``, so a Kirkbride block and the wings inside it became
-*siblings* whose footprints overlap. The Place tree then asserts two peers
-occupy the same ground - which is exactly the ambiguity the reconciliation
-exists to remove, and the shape `resolve_locations_in` then has to guess at when
-a pin lands inside both.
-"""
+"""Building places follow the nesting REData reports, not a flat parcel list."""
 
 from __future__ import annotations
 
@@ -20,14 +7,19 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.services.places.provisioning import ensure_building_places
 
 from .place_helpers import make_place
 
+#: Fixture units to degrees: the parcel is 1 unit (111 m) across, so every outline is a plausible size.
+_SCALE = 0.001
+
 
 def _square(x: float, y: float, size: float) -> dict:
     """A GeoJSON polygon, in the shape the building records carry."""
+    x, y, size = x * _SCALE, y * _SCALE, size * _SCALE
     return {
         "type": "Polygon",
         "coordinates": [[[x, y], [x + size, y], [x + size, y + size], [x, y + size], [x, y]]],
@@ -35,7 +27,7 @@ def _square(x: float, y: float, size: float) -> dict:
 
 
 def _parcel():
-    outline = MultiPolygon(Polygon(((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0))))
+    outline = MultiPolygon(Polygon(((0.0, 0.0), (_SCALE, 0.0), (_SCALE, _SCALE), (0.0, _SCALE), (0.0, 0.0))))
     return make_place(PlaceKind.PARCEL, outline, name="Hospital parcel")
 
 
@@ -53,12 +45,32 @@ class BuildingPlaceNestingTests(TestCase):
         places = self._places(
             [
                 {"ref": "osm:way/1", "name": "Kirkbride", "geometry": _square(0.1, 0.1, 0.6), "child_refs": ["cris:1"]},
-                {"ref": "cris:1", "name": "North Wing", "parent_ref": "osm:way/1", "geometry": _square(0.15, 0.15, 0.08)},
+                {
+                    "ref": "cris:1",
+                    "name": "North Wing",
+                    "parent_ref": "osm:way/1",
+                    "geometry": _square(0.15, 0.15, 0.08),
+                },
             ],
         )
 
         self.assertEqual(places["cris:1"].parent_id, places["osm:way/1"].pk)
         self.assertEqual(places["osm:way/1"].parent_id, self.parcel.pk)
+
+    def test_a_pin_already_resolved_to_the_parcel_moves_onto_the_new_building(self) -> None:
+        """The bug this whole module exists to fix.
+
+        Before REData had described this footprint, the coordinate could only resolve to the parcel - that is
+        how 124 pins on one campus each ended up claiming the whole property."""
+        location = baker.make(Location, latitude=0.19 * _SCALE, longitude=0.19 * _SCALE)
+        self.assertEqual(
+            location.place_id, self.parcel.pk, "only the parcel exists yet, so that is the only possible answer"
+        )
+
+        places = self._places([{"ref": "osm:way/1", "name": "Kirkbride", "geometry": _square(0.1, 0.1, 0.5)}])
+
+        location.refresh_from_db()
+        self.assertEqual(location.place_id, places["osm:way/1"].pk)
 
     def test_nesting_deeper_than_one_level_is_followed(self) -> None:
         """A campus block parenting a wing parenting an annex."""
@@ -88,17 +100,17 @@ class BuildingPlaceNestingTests(TestCase):
 
     def test_a_parent_outside_the_list_falls_back_to_the_parcel(self) -> None:
         """Its parent may have been dropped as off-property; the child is not lost."""
-        places = self._places([{"ref": "cris:1", "name": "Orphan", "parent_ref": "gone", "geometry": _square(0.2, 0.2, 0.1)}])
+        places = self._places(
+            [{"ref": "cris:1", "name": "Orphan", "parent_ref": "gone", "geometry": _square(0.2, 0.2, 0.1)}]
+        )
 
         self.assertEqual(places["cris:1"].parent_id, self.parcel.pk)
 
     def test_a_parent_ref_cycle_does_not_hang_and_loses_no_building(self) -> None:
         """Two buildings each claiming the other as parent.
 
-        Resolved by repeated passes rather than recursion precisely so this
-        terminates - and both still become places, because the import already
-        told the user it would create them.
-        """
+        Resolved by repeated passes rather than recursion precisely so this terminates - and both still become
+        places, because the import already told the user it would create them."""
         places = self._places(
             [
                 {"ref": "a", "name": "A", "parent_ref": "b", "geometry": _square(0.15, 0.15, 0.08)},
@@ -114,7 +126,10 @@ class BuildingPlaceNestingTests(TestCase):
         """Overpass-shaped records carry no ref/parent_ref at all."""
         created = ensure_building_places(
             self.parcel,
-            [{"name": "Shed", "geometry": _square(0.2, 0.2, 0.1)}, {"name": "Barn", "geometry": _square(0.5, 0.5, 0.1)}],
+            [
+                {"name": "Shed", "geometry": _square(0.2, 0.2, 0.1)},
+                {"name": "Barn", "geometry": _square(0.5, 0.5, 0.1)},
+            ],
             provider="",
         )
 
@@ -130,14 +145,8 @@ class BuildingPlaceNestingTests(TestCase):
 class DistinctRecordsStayDistinctTests(TestCase):
     """A stable id the provider gave is stronger evidence than overlapping shapes.
 
-    `find_matching_place` falls back to mutual centroid containment when no
-    place carries the record's id - sensible for providers that publish no id,
-    and how two sources' views of one parcel get merged. But it applied to
-    *identified* records too, and nested buildings are exactly where that goes
-    wrong: an L-shaped block can contain a wing's centroid while the wing
-    contains the block's. The two would then collapse into one place, undoing
-    the reconciliation REData did to keep them apart.
-    """
+    `find_matching_place` falls back to mutual centroid containment when no place carries the record's id -
+    sensible for providers that publish no id, and how two sources' views of one parcel get merged."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -161,13 +170,21 @@ class DistinctRecordsStayDistinctTests(TestCase):
 
     def test_a_record_without_an_id_can_still_match_by_geometry(self) -> None:
         """The fallback is the whole reason two sources' parcels merge; keep it."""
-        first = ensure_building_places(self.parcel, [{"name": "Shed", "geometry": _square(0.20, 0.20, 0.10)}], provider="")
-        second = ensure_building_places(self.parcel, [{"name": "Shed", "geometry": _square(0.201, 0.201, 0.10)}], provider="")
+        first = ensure_building_places(
+            self.parcel, [{"name": "Shed", "geometry": _square(0.20, 0.20, 0.10)}], provider=""
+        )
+        second = ensure_building_places(
+            self.parcel, [{"name": "Shed", "geometry": _square(0.201, 0.201, 0.10)}], provider=""
+        )
 
         self.assertEqual(first[0].pk, second[0].pk)
 
     def test_the_same_id_still_matches_itself(self) -> None:
-        first = ensure_building_places(self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.40)}], provider="redata")
-        second = ensure_building_places(self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.41)}], provider="redata")
+        first = ensure_building_places(
+            self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.40)}], provider="redata"
+        )
+        second = ensure_building_places(
+            self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.41)}], provider="redata"
+        )
 
         self.assertEqual(first[0].pk, second[0].pk)

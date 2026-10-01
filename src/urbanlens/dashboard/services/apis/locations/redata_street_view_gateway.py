@@ -1,23 +1,4 @@
-"""Gateway for REData's ``/street-view/`` endpoints.
-
-See ``../REData/docs/api-reference.md``, "GET /street-view/ - dated
-street-level photographs of a point" and "GET /street-view/timeline/".
-Unlike ``/media/lookup/`` (which returns each network's *current* nearby
-photos), these return **every capture at the point across every date** -
-Mapillary back to 2013 in most cities - with a real capture timestamp and
-compass heading per image. For an app about documenting decay, the dated
-history is the product: the timeline shows what a site looked like on every
-date a camera passed it.
-
-``download_url`` on a capture is REData's permanently archived copy - what
-still resolves after a contributor deletes the sequence - but it requires
-REData API auth, so browser-facing consumers use ``image_url``/
-``thumbnail_url`` (the network's own copy, which attribution links to).
-
-Google Street View is deliberately not a source here: its historical
-panoramas are only reachable through the browser Maps JavaScript API, so the
-direct Google provider remains alongside this in the carousel.
-"""
+"""Gateway for REData's ``/street-view/`` endpoints."""
 
 from __future__ import annotations
 
@@ -46,10 +27,7 @@ class RedataStreetViewGateway(RedataLocationContextGateway):
         until: datetime.date | None = None,
     ) -> dict[str, Any]:
         """Fetch the capture-date timeline for a point.
-
-        One entry per capture *date* rather than per frame (a vehicle records
-        dozens of frames in seconds); each entry's ``representative`` is the
-        frame taken nearest the query point, preferring a panorama on a tie.
+        One entry per capture *date* rather than per frame (a vehicle records dozens of frames in seconds); each entry's ``representative`` is the frame taken nearest the query point, preferring a panorama on a tie.
 
         Args:
             latitude: WGS-84 latitude.
@@ -61,14 +39,10 @@ class RedataStreetViewGateway(RedataLocationContextGateway):
             until: Only dates on or before this.
 
         Returns:
-            The raw timeline body: ``dates`` (each with ``captured_on``,
-            ``count``, ``is_panoramic`` and a full ``representative`` capture
-            row), ``years``, ``earliest``, ``latest``,
-            ``providers_timeline``, and the standard ``providers`` block.
+            The raw timeline body: ``dates`` (each with ``captured_on``, ``count``, ``is_panoramic`` and a full ``representative`` capture row), ``years``, ``earliest``, ``latest``, ``providers_timeline``, and the standard ``providers`` block.
 
         Raises:
-            LocationContextUnavailableError: The request failed or REData
-                rejected a parameter.
+            LocationContextUnavailableError: The request failed or REData rejected a parameter.
         """
         params: dict[str, Any] = {"lat": latitude, "lng": longitude}
         if provider:

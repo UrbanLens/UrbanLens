@@ -16,21 +16,14 @@ from urbanlens.dashboard.services.auth.email_normalization import normalize_emai
 
 class ProfileEmail(abstract.DashboardModel):
     """An extra email address a user has added to their profile.
-
-    Lets other users find this profile via the invite-friend feature using an
-    address other than the account's primary login email. Only ``is_verified``
-    rows count for matching (invite-friend lookup, duplicate checks, and
-    username-or-email login) - an unverified row is inert so a user can't add
-    someone else's address to hijack invites or logins meant for them.
-
-    ``email`` is encrypted at rest (display copy only); matching always goes
-    through ``normalized_email``, which stays plaintext and indexed since Fernet
-    ciphertext can't be queried or uniqueness-constrained.
+    Lets other users find this profile via the invite-friend feature using an address other than the account's primary login email.
+    Only ``is_verified`` rows count for matching (invite-friend lookup, duplicate checks, and username-or-email login) - an unverified row is inert so a user can't add someone else's address to hijack invites or logins meant for them.
     """
 
     email = EncryptedTextField(validators=[validate_email], fail_soft=True)
     normalized_email = CharField(max_length=254, db_index=True)
     is_verified = BooleanField(default=False)
+    promote_on_verify = BooleanField(default=False)
     verification_token = UUIDField(default=uuid.uuid4, editable=False)
     verified_at = DateTimeField(null=True, blank=True)
 

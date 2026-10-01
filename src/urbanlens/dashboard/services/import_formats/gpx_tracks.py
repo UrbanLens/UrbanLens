@@ -1,22 +1,19 @@
-"""GPX track/route import - the Route counterpart to gpx.py's waypoint-only pin import.
-
-gpx.py intentionally ignores ``<trk>``/``<rte>`` content when producing pins (see
-its module docstring). This module handles that content instead, turning each
-track/route into a Route record rather than a flood of individual pins.
-"""
+"""GPX track/route import - the Route counterpart to gpx.py's waypoint-only pin import."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 import logging
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from defusedxml.ElementTree import fromstring as parse_xml_defused
+from django.contrib.gis.geos import LineString
 import gpxpy
 import gpxpy.gpx
 
 from urbanlens.dashboard.models.routes.model import Route, RouteSource
 from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -42,6 +39,77 @@ class ParsedRoute(NamedTuple):
 
     route: Route
     raw_points: list[RawTrackPoint]
+
+    def to_json(self) -> dict[str, Any]:
+        """A JSON-serialisable form, without the profile, for :meth:`from_json` to rebuild.
+
+        Raw points are kept only when one carries a timestamp, since dwell detection needs nothing else.
+
+        Returns:
+            The route's fields, its simplified path as ``[lng, lat]`` pairs, and ``points`` as
+            ``[lat, lng, iso-timestamp | None]`` triples.
+        """
+        route = self.route
+        timed = any(point.time is not None for point in self.raw_points)
+        return {
+            "name": route.name,
+            "source": route.source,
+            "source_filename": route.source_filename,
+            "path": [list(coordinate) for coordinate in route.path.coords],
+            "raw_point_count": route.raw_point_count,
+            "simplified_point_count": route.simplified_point_count,
+            "distance_meters": route.distance_meters,
+            "elevation_gain_meters": route.elevation_gain_meters,
+            "elevation_loss_meters": route.elevation_loss_meters,
+            "started_at": _isoformat(route.started_at),
+            "ended_at": _isoformat(route.ended_at),
+            "points": [[point.latitude, point.longitude, _isoformat(point.time)] for point in self.raw_points] if timed else [],
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any], profile: Profile) -> ParsedRoute:
+        """Rebuild an unsaved Route for *profile* from :meth:`to_json`'s output.
+
+        Args:
+            data: One serialised route.
+            profile: The route's owner.
+
+        Returns:
+            The route and its raw points.
+
+        Raises:
+            ValueError: *data* is not a serialised route.
+            TypeError: *data* is not a serialised route.
+            KeyError: *data* is not a serialised route.
+        """
+        route = Route(
+            profile=profile,
+            name=str(data["name"])[:255],
+            source=RouteSource(data["source"]),
+            source_filename=str(data["source_filename"])[:255],
+            path=LineString([(float(lng), float(lat)) for lng, lat in data["path"]], srid=4326),
+            raw_point_count=int(data["raw_point_count"]),
+            simplified_point_count=int(data["simplified_point_count"]),
+            distance_meters=float(data["distance_meters"]),
+            elevation_gain_meters=_optional_float(data["elevation_gain_meters"]),
+            elevation_loss_meters=_optional_float(data["elevation_loss_meters"]),
+            started_at=_parse_datetime(data["started_at"]),
+            ended_at=_parse_datetime(data["ended_at"]),
+        )
+        points = [RawTrackPoint(float(lat), float(lng), _parse_datetime(time)) for lat, lng, time in data["points"]]
+        return cls(route=route, raw_points=points)
+
+
+def _isoformat(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value is not None else None
+
+
+def _optional_float(value: float | None) -> float | None:
+    return float(value) if value is not None else None
 
 
 def _track_points(track: gpxpy.gpx.GPXTrack) -> list[RawTrackPoint]:
@@ -121,6 +189,7 @@ def _build_route(
     return ParsedRoute(route=route, raw_points=points)
 
 
+@untrusted_parse("geo.gpx")
 def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_filename: str) -> list[ParsedRoute]:
     """Parse every ``<trk>`` and ``<rte>`` in a GPX file into unsaved Route instances.
 
@@ -130,24 +199,19 @@ def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_fil
         source_filename: Original upload filename, stored as Route.source_filename.
 
     Returns:
-        List of ParsedRoute (unsaved Route + its raw points) - one per
-        ``<trk>``/``<rte>`` element with at least 2 points.
+        List of ParsedRoute (unsaved Route + its raw points) - one per ``<trk>``/``<rte>`` element with at least 2 points.
 
     Raises:
         gpxpy.gpx.GPXException: If the file is not valid GPX.
         UnicodeDecodeError: If the file is not UTF-8 text.
         defusedxml.ElementTree.ParseError: If the file is not well-formed XML.
-        ValueError: If the XML attempts a forbidden DTD/entity-expansion/
-            external-entity reference (an XXE attempt).
-    """
+        ValueError: If the XML attempts a forbidden DTD/entity-expansion/ external-entity reference (an XXE attempt)."""
     text = file_contents.decode("utf-8")
 
-    # See gpx.py's gpx_to_dict for why this pre-parse exists: gpxpy has no way
-    # to accept a hardened parser, so defusedxml validates the same text first
-    # purely to reject XXE-style payloads (DTDs/entity expansion/external
-    # entity references) before gpxpy ever builds its own (unhardened) tree
-    # from it. The parsed tree here is discarded - gpxpy still does the real,
-    # GPX-aware parse immediately below.
+    # See gpx.py's gpx_to_dict for why this pre-parse exists: gpxpy has no way to accept a hardened
+    # parser, so defusedxml validates the same text first purely to reject XXE-style payloads
+    # (DTDs/entity expansion/external entity references) before gpxpy ever builds its own
+    # (unhardened) tree from it.
     parse_xml_defused(text)
 
     gpx = gpxpy.parse(text)
@@ -192,28 +256,13 @@ def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_fil
 def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint], profile: Profile) -> int:
     """Scan a route's raw points for dwells near the profile's own pins and create visits.
 
-    A bounded scan, not a clustering algorithm: the profile's pins near the
-    route's path are found once, then the raw points are walked a single time
-    checking whether any contiguous run stays within DWELL_RADIUS_M of a
-    candidate pin for at least DWELL_MINIMUM_MINUTES.
-
-    Gated on the profile's visit-logging setting, not only on route import: the
-    route itself is the user's own track (``track_routes``), but a dwell writes a
-    PinVisit, which is what ``track_pin_visits`` governs - and its help text
-    already tells the user it covers imports. The gate lives here rather than in
-    the caller so any future caller inherits it. The sibling Takeout importers
-    (``google/location_history.py``, ``google/my_activity.py``) check the same
-    setting; this path was the lone exception.
-
     Args:
         route: The already-saved Route these points belong to.
         raw_points: The route's raw (pre-simplification) points, in order.
         profile: Owning profile - only this profile's own pins are candidates.
 
     Returns:
-        Number of PinVisit(source=HISTORY) rows created. Zero when visit logging
-        is turned off, even though the route itself still saves.
-    """
+        Zero when visit logging is turned off, even though the route itself still saves."""
     from django.contrib.gis.measure import D
     from django.db import transaction
     from geopy.distance import geodesic
@@ -232,7 +281,7 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
     candidate_pins = list(
         Pin.objects.filter(
             profile=profile,
-            location__point__distance_lte=(route.path, D(m=DWELL_RADIUS_M)),
+            location__point__dwithin=(route.path, D(m=DWELL_RADIUS_M)),
         ).select_related("location"),
     )
     if not candidate_pins:
@@ -267,19 +316,7 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
             qualified = True
 
         if qualified and dwell_start is not None:
-            # HISTORY, not GEOLOCATION: this visit was derived from a track file
-            # the user uploaded, which is what the enum documents HISTORY as
-            # ("imported from the user's location history") and what the sibling
-            # Google Takeout importer already records. GEOLOCATION means "the
-            # user's device provided a geolocation" - a live ping, gated by
-            # track_geolocation, which does not gate this path. Stamping an
-            # import as GEOLOCATION both mislabelled it in the UI ("Geolocation"
-            # rather than "Imported") and claimed a provenance whose own setting
-            # had no say over it.
-            # Locks the candidate pin so two concurrent imports of the same track (the
-            # same GPX file uploaded twice) can't both pass get_or_create's SELECT
-            # before either commits its INSERT - same "lock parent, re-check inside"
-            # idiom as pin_sharing.apply_pin_share_response.
+            # GEOLOCATION means "the user's device provided a geolocation" - a live ping, gated by
             with transaction.atomic():
                 Pin.objects.select_for_update().get(pk=pin.pk)
                 _, was_created = PinVisit.objects.get_or_create(

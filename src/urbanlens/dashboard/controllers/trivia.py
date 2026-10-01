@@ -1,24 +1,17 @@
-"""Trivia controller - solo and multiplayer gameplay, lobby, and chat.
-
-See ``services.trivia.session`` for the orchestration this module only
-adapts to HTTP: request parsing, participant/ownership checks, JSON
-serialization (an answer is never serialized until it reveals it; real-time
-fan-out to other participants happens over
-``consumers.TriviaSessionConsumer``, not here). Mirrors
-``controllers.spotguessr`` throughout.
-"""
+"""Trivia controller - solo and multiplayer gameplay, lobby, and chat."""
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import Http404, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, rating_stats
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, rating_stats, refuse_unless_joined
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
     PlayerTriviaRating,
@@ -26,14 +19,14 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaPreference,
     TriviaQuestion,
     TriviaRound,
-    TriviaSession,
-    TriviaSessionParticipant,
 )
-from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.trivia import chat as trivia_chat, eligibility, serializers, session as trivia_session, social, submission, voting
+from urbanlens.dashboard.services.trivia.access import session_access
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
+
+logger = logging.getLogger(__name__)
 
 
 def _current_profile(request: HttpRequest) -> Profile:
@@ -41,21 +34,9 @@ def _current_profile(request: HttpRequest) -> Profile:
     return profile
 
 
-def _participant_session(profile: Profile, session_id: int) -> TriviaSession:
-    """The session, only if ``profile`` participates in it (any status) - 404 otherwise.
-
-    404 (not 403) mirrors ``controllers.spotguessr``'s convention: a session
-    another profile is playing shouldn't even reveal that it exists.
-    """
-    participant = TriviaSessionParticipant.objects.filter(session_id=session_id, profile=profile).select_related("session").first()
-    if participant is None:
-        raise Http404("No such session for this profile.")
-    return participant.session
-
-
-#: Placeholder ids reversed into the URL templates handed to the frontend -
-#: mirrors ``controllers.spotguessr``'s ``_url_templates``, needed because
-#: ``{% url %}`` can't emit a JS template directly for ``<int:...>`` converters.
+#: Placeholder ids reversed into the URL templates handed to the frontend - mirrors ``controllers.spotguessr``'s
+#: ``_url_templates``, needed because ``{% url %}`` can't emit a JS template directly for ``<int:...>``
+#: converters.
 _SESSION_ID_SENTINEL = 999999999
 _ROUND_ID_SENTINEL = 888888888
 _QUESTION_ID_SENTINEL = 777777777
@@ -66,7 +47,7 @@ def _url_templates() -> dict[str, str]:
     session_kwargs = {"session_id": _SESSION_ID_SENTINEL}
     return {
         "start": reverse("trivia.start"),
-        "friends": reverse("trivia.friends"),
+        "friends": reverse("games.friends"),
         "settings": reverse("trivia.settings"),
         "lobby": reverse("trivia.lobby", kwargs=session_kwargs),
         "invite": reverse("trivia.invite", kwargs=session_kwargs),
@@ -97,10 +78,7 @@ class TriviaHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         preference = getattr(profile, "trivia_preference", None)
         own_rating = PlayerTriviaRating.objects.filter(profile=profile).first()
 
-        raw_session_id = request.GET.get("session")
-        initial_session_id = None
-        if raw_session_id and TriviaSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
-            initial_session_id = raw_session_id
+        initial_session_id = deep_link_session_id(session_access, profile, request.GET.get("session"))
 
         friend_ratings = social.visible_friend_ratings(profile)
 
@@ -129,16 +107,12 @@ class TriviaHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
 
-    POST /games/trivia/start/   body: ``difficulty``, ``total_rounds``,
-    optional ``invite_profile_ids`` (repeated) to start a multiplayer lobby
-    instead of solo play.
+    POST /games/trivia/start/ body: ``difficulty``, ``total_rounds``,
 
-    A solo start whose config has no eligible questions at all (e.g. the
-    profile hasn't pinned anything with an in-rotation question yet) never
-    creates a TriviaSession - it responds with
-    ``{"error_code": "no_eligible_questions"}`` instead. Multiplayer can't be
-    pre-checked this way (invitees haven't joined yet) - see
-    ``TriviaBeginView`` for that case.
+    optional ``invite_profile_ids`` (repeated) to start a multiplayer lobby instead of solo play.
+    A solo start whose config has no eligible questions at all (e.g. the profile hasn't pinned anything
+    with an in-rotation question yet) never creates a TriviaSession - it responds with ``{"error_code":
+    "no_eligible_questions"}`` instead.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -165,8 +139,12 @@ class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             invitees = list(Profile.objects.filter(pk__in=invite_ids))
             try:
                 game_session = trivia_session.start_multiplayer_session(profile, config, invitees, total_rounds=total_rounds)
+            except trivia_session.InviteeNotFriendError as exc:
+                logger.info("trivia multiplayer start rejected: %s", exc)
+                return JsonResponse({"error": "You can only invite friends to a Trivia game."}, status=400)
             except trivia_session.TriviaError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=400)
+                logger.info("trivia multiplayer start rejected: %s", exc)
+                return JsonResponse({"error": "That Trivia session couldn't be started."}, status=400)
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
         if not eligibility.has_eligible_questions([profile]):
@@ -179,18 +157,6 @@ class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             return JsonResponse({"session_id": game_session.pk, "finished": True, "summary": trivia_session.session_summary(game_session)})
 
         return JsonResponse({"session_id": game_session.pk, "finished": False, "round": serializers.serialize_round(round_)})
-
-
-class TriviaFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The profile's friends, for the multiplayer invite picker.
-
-    GET /games/trivia/friends/
-    """
-
-    def get(self, request: HttpRequest) -> HttpResponse:
-        profile = _current_profile(request)
-        friends = get_connections(profile)
-        return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
 
 
 class TriviaSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
@@ -215,7 +181,7 @@ class TriviaLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(serializers.serialize_session(game_session))
 
 
@@ -227,7 +193,7 @@ class TriviaInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             invitee = Profile.objects.get(pk=request.POST.get("profile_id"))
@@ -236,8 +202,18 @@ class TriviaInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             participant = trivia_session.invite_to_session(game_session, profile, invitee)
+        except trivia_session.InviteNotHostError as exc:
+            logger.info("trivia invite rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can invite players to this session."}, status=400)
+        except trivia_session.InviteAfterLobbyClosedError as exc:
+            logger.info("trivia invite rejected: %s", exc)
+            return JsonResponse({"error": "This game has already started - no more invites can go out."}, status=400)
+        except trivia_session.InviteeNotFriendError as exc:
+            logger.info("trivia invite rejected: %s", exc)
+            return JsonResponse({"error": "You can only invite friends."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia invite rejected: %s", exc)
+            return JsonResponse({"error": "That invite couldn't be sent."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -249,12 +225,19 @@ class TriviaJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             participant = trivia_session.join_session(game_session, profile)
+        except trivia_session.NotInvitedError as exc:
+            logger.info("trivia join rejected: %s", exc)
+            return JsonResponse({"error": "You were not invited to this session."}, status=400)
+        except trivia_session.JoinAfterLobbyClosedError as exc:
+            logger.info("trivia join rejected: %s", exc)
+            return JsonResponse({"error": "This game has already started - you can no longer join."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia join rejected: %s", exc)
+            return JsonResponse({"error": "You couldn't be added to this session."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -266,12 +249,19 @@ class TriviaBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             round_ = trivia_session.begin_session(game_session, profile)
+        except trivia_session.BeginNotHostError as exc:
+            logger.info("trivia begin rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can start the game."}, status=400)
+        except trivia_session.SessionAlreadyBegunError as exc:
+            logger.info("trivia begin rejected: %s", exc)
+            return JsonResponse({"error": "This session has already started."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia begin rejected: %s", exc)
+            return JsonResponse({"error": "This game couldn't be started."}, status=400)
 
         if round_ is None:
             if trivia_session.rounds_played(game_session) == 0:
@@ -286,21 +276,27 @@ class TriviaEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     POST /games/trivia/session/<session_id>/end/
 
-    Unlike waiting out the stall-sweep Celery task
-    (``tasks.sweep_stalled_trivia_sessions``), this lets the host end the
-    game the moment they decide it's not going anywhere. Any in-flight round
-    is revealed first with whatever answers already exist (see
+    Unlike waiting out the stall-sweep Celery task (``tasks.sweep_stalled_trivia_sessions``), this lets
+    the host end the game the moment they decide it's not going anywhere.
+    Any in-flight round is revealed first with whatever answers already exist (see
     ``services.trivia.session.end_session_now``).
     """
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             trivia_session.end_session_now(game_session, profile)
+        except trivia_session.EndSessionNotHostError as exc:
+            logger.info("trivia end rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can end the game."}, status=400)
+        except trivia_session.SessionAlreadyEndedError as exc:
+            logger.info("trivia end rejected: %s", exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia end rejected: %s", exc)
+            return JsonResponse({"error": "This game couldn't be ended."}, status=400)
         return JsonResponse({"finished": True, "summary": trivia_session.session_summary(game_session)})
 
 
@@ -312,12 +308,19 @@ class TriviaLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             trivia_session.leave_session(game_session, profile)
+        except trivia_session.SessionAlreadyEndedError as exc:
+            logger.info("trivia leave rejected: %s", exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
+        except trivia_session.NotASessionParticipantError as exc:
+            logger.info("trivia leave rejected: %s", exc)
+            return JsonResponse({"error": "You are not part of this session."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia leave rejected: %s", exc)
+            return JsonResponse({"error": "You couldn't be removed from this session."}, status=400)
         return JsonResponse({"left": True})
 
 
@@ -329,7 +332,7 @@ class TriviaKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, V
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             target = Profile.objects.get(pk=request.POST.get("profile_id"))
@@ -338,8 +341,21 @@ class TriviaKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, V
 
         try:
             trivia_session.kick_participant(game_session, profile, target)
+        except trivia_session.KickNotHostError as exc:
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can remove a player."}, status=400)
+        except trivia_session.CannotKickHostError as exc:
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "The host can't remove themselves - use End game instead."}, status=400)
+        except trivia_session.SessionAlreadyEndedError as exc:
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
+        except trivia_session.TargetNotAParticipantError as exc:
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "That profile is not part of this session."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "That player couldn't be removed."}, status=400)
         return JsonResponse({"kicked": True})
 
 
@@ -351,7 +367,7 @@ class TriviaChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View)
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         messages = trivia_chat.recent_messages(game_session)
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
@@ -364,7 +380,9 @@ class TriviaRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
+        if refusal := refuse_unless_joined(session_access, game_session, profile):
+            return refusal
 
         round_ = trivia_session.get_or_create_round(game_session)
         if round_ is None:
@@ -384,7 +402,7 @@ class TriviaAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         round_ = get_object_or_404(TriviaRound, pk=round_id, session=game_session)
 
         raw_answer = request.POST.get("answer", "")
@@ -393,8 +411,15 @@ class TriviaAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             answer = trivia_session.submit_answer(round_, profile, raw_answer)
+        except trivia_session.NotJoinedParticipantError as exc:
+            logger.info("trivia answer rejected: %s", exc)
+            return JsonResponse({"error": "You must join this session before submitting an answer."}, status=400)
+        except trivia_session.DuplicateAnswerError as exc:
+            logger.info("trivia answer rejected: %s", exc)
+            return JsonResponse({"error": "You've already answered this round."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia answer rejected: %s", exc)
+            return JsonResponse({"error": "That answer couldn't be submitted."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse(serializers.serialize_reveal(round_, answer))
@@ -408,18 +433,17 @@ class TriviaSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(trivia_session.session_summary(game_session))
 
 
 class TriviaQuestionVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Upvote, downvote, or report the question just answered. Host-agnostic - any participant may vote.
 
-    POST /games/trivia/questions/<question_id>/vote/   body: ``kind``
+    POST /games/trivia/questions/<question_id>/vote/ body: ``kind``
 
-    Restricted to a question the profile has actually been asked at least
-    once, mirroring ``SpotGuessrPhotoFeedbackView``'s "you can only react to
-    a round you've guessed on" rule.
+    Restricted to a question the profile has actually been asked at least once, mirroring
+    ``SpotGuessrPhotoFeedbackView``'s "you can only react to a round you've guessed on" rule.
     """
 
     def post(self, request: HttpRequest, question_id: int) -> HttpResponse:
@@ -439,12 +463,11 @@ class TriviaQuestionVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
 class TriviaQuestionSubmitView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Submit a user-written trivia question about a location the profile has pinned.
 
-    POST /games/trivia/questions/submit/   body: ``location_id``, ``prompt``, ``answer``
+    POST /games/trivia/questions/submit/ body: ``location_id``, ``prompt``, ``answer``
 
-    The question is created PENDING_REVIEW and classified asynchronously -
-    the response never indicates whether it will ultimately be
-    approved or rejected (see services.trivia.classifier's module docstring
-    for why the submitter is deliberately never told).
+    The question is created PENDING_REVIEW and classified asynchronously - the response never indicates
+    whether it will ultimately be approved or rejected (see services.trivia.classifier's module
+    docstring for why the submitter is deliberately never told).
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:

@@ -1,4 +1,5 @@
 """Tests for the site-admin subscription role create/rename/delete actions."""
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -22,7 +23,9 @@ class RoleCreateActionTests(TestCase):
         self.client.force_login(self.admin)
 
     def test_creates_a_role_with_a_derived_slug(self) -> None:
-        response = self.client.post(_SUBSCRIPTIONS_URL, {"action": "role_create", "name": "Gold Tier", "description": "Top donors"})
+        response = self.client.post(
+            _SUBSCRIPTIONS_URL, {"action": "role_create", "name": "Gold Tier", "description": "Top donors"}
+        )
         self.assertEqual(response.status_code, 302)
         role = SubscriptionRole.objects.get(slug="gold-tier")
         self.assertEqual(role.name, "Gold Tier")
@@ -78,7 +81,9 @@ class RoleRenameActionTests(TestCase):
         self.assertEqual(self.role.name, "VIP")
 
     def test_unknown_role_is_a_no_op(self) -> None:
-        response = self.client.post(_SUBSCRIPTIONS_URL, {"action": "role_rename", "role_slug": "does-not-exist", "name": "Whatever"})
+        response = self.client.post(
+            _SUBSCRIPTIONS_URL, {"action": "role_rename", "role_slug": "does-not-exist", "name": "Whatever"}
+        )
         self.assertEqual(response.status_code, 302)
         self.assertIn("error", response.headers["Location"])
 

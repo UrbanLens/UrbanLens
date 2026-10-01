@@ -199,7 +199,8 @@
         border-color: $color-blue-300;
     }
 
-    &.dp-icon-btn--active {
+    &.dp-icon-btn--active,
+    &[aria-pressed="true"] {
         background: $color-blue-100;
         border-color: $color-blue-600;
 
@@ -229,7 +230,8 @@
         transform: scale(1.15);
     }
 
-    &.dp-color-swatch--active {
+    &.dp-color-swatch--active,
+    &[aria-pressed="true"] {
         border-color: var(--ul-grey-8);
         box-shadow: 0 0 0 2px #fff inset;
     }
@@ -324,12 +326,7 @@
         margin: .5rem 1rem 0;
     }
 
-    // .card-header is a named-area CSS grid (see panel-header-grid) that places
-    // items by grid-area, not DOM order - an element with no explicit grid-area
-    // (like .ul-explainer-anchor) falls back to auto-placement in whatever cell
-    // is first free, which lands it *after* the title here. This panel wants the
-    // explainer to the left of "Aliases" instead, so it gets its own column
-    // between the icon and the title rather than relying on source order.
+    // .card-header is a named-area CSS grid that places items by grid-area, not DOM order.
     .card-header {
         grid-template-columns: auto auto minmax(0, 1fr) auto auto;
         grid-template-areas: 'header-icon header-explainer header-title header-meta header-actions';
@@ -592,9 +589,7 @@
     }
 }
 // -- Buildings on this property ------------------------------------------------
-// Every structure known to stand on the parcel (see plugins.builtin.parcel_buildings),
-// on both the pin detail page and the wiki. Rows that already have a child pin are
-// linked and flagged; the rest are what the import button below the list creates.
+// Every structure known to stand on the parcel, on both the Private Pin page and the wiki.
 .parcel-buildings {
     .card__body {
         padding: 0;
@@ -616,6 +611,7 @@
 .parcel-building {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: .75rem;
     padding: .5rem 1.25rem;
     border-bottom: 1px solid rgba(128, 128, 128, .15);
@@ -623,6 +619,70 @@
     &:last-child {
         border-bottom: none;
     }
+}
+
+.child-building-detail {
+    flex: 1 0 100%;
+    padding: 0 0 .35rem 2.5rem;
+
+    .card,
+    .card--secondary {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        margin: 0;
+    }
+
+    .card-header {
+        display: none;
+    }
+
+    .card__body {
+        padding: .25rem 0 0;
+    }
+}
+
+.child-building-detail-links {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: .35rem;
+}
+
+// A building or child pin that a child pin covers opens that pin's card in place.
+.parcel-building-opens {
+    flex: 1 1 100%;
+    min-width: 0;
+
+    > summary {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        cursor: pointer;
+        list-style: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+    }
+
+    &[open] > summary .parcel-building-chevron {
+        transform: rotate(180deg);
+    }
+}
+
+.parcel-building-chevron {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    color: var(--ul-grey-6);
+    transition: transform .15s ease;
+}
+
+.parcel-building-type {
+    flex: 0 0 2.75rem;
+    text-align: right;
+    font-size: 1.1rem;
+    color: var(--ul-grey-7);
 }
 
 // Building numbers are the identifiers people navigate a campus by, so they get
@@ -676,9 +736,7 @@
     }
 }
 
-// Selectable building import shared by the parcel panel and the one-time
-// restructure offer. The list and preview sit side-by-side when space permits,
-// then stack into a comfortable mobile sheet.
+// Selectable building import shared by the parcel panel and the one-time restructure offer.
 .building-import-dialog {
     width: min(58rem, calc(100vw - 2rem));
     max-width: 58rem;
@@ -749,7 +807,7 @@
     }
     // Set by JS when the corresponding map shape is hovered (see
     // setBuildingHover() in map-annotations.ts) - a ring rather than a
-    
+
     // background swap so it stays visible on top of the checked/hover states above.
     &.is-hovered {
         box-shadow: inset 0 0 0 2px $color-blue-500;
@@ -825,25 +883,133 @@
     font-size: .66rem;
 }
 
-.building-import-nesting-note {
-    display: flex;
-    align-items: center;
-    gap: .45rem;
-    margin: 0 1.25rem .85rem;
-    padding: .65rem .8rem;
-    border-radius: .6rem;
-    background: color-mix(in srgb, var(--ul-primary-color) 9%, transparent);
-    color: var(--ul-grey-8);
-    font-size: .85rem;
-
-    i {
-        color: var(--ul-primary-color);
-    }
-}
-
 .building-import-empty {
     margin: 0;
     color: var(--ul-grey-7);
+}
+
+.building-import-section-title {
+    margin: 0 0 .35rem;
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: var(--ul-grey-6);
+
+    & + .building-import-section-hint {
+        margin-top: -.2rem;
+    }
+}
+
+.building-import-section-hint {
+    margin: 0 0 .5rem;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+}
+
+.building-import-choices > .building-import-section-title:not(:first-child) {
+    margin-top: 1rem;
+}
+
+// A pin candidate's row carries more than a checkbox.
+.building-import-pin-row {
+    padding: .5rem .75rem;
+
+    .building-import-item {
+        padding: .15rem 0;
+
+        &:hover {
+            background: none;
+        }
+    }
+}
+
+.nest-mode-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: .15rem 0 .3rem 1.75rem;
+}
+
+.nest-mode-option {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .82rem;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+
+    input {
+        accent-color: var(--ul-primary-color);
+    }
+}
+
+.building-import-merge-conflicts {
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
+    margin: 0 0 0 1.75rem;
+    padding: $space-sm;
+    border-radius: $radius-sm;
+    background: rgba(255, 152, 0, .08);
+    border: 1px solid rgba(255, 152, 0, .3);
+}
+
+.building-import-merge-warning {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0;
+    font-size: .8rem;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined {
+        font-size: 16px;
+        color: #f57c00;
+    }
+}
+
+.building-import-merge-note {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0 0 0 1.75rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 15px;
+        color: #f57c00;
+    }
+}
+
+.building-import-map-legend {
+    display: flex;
+    gap: 1rem;
+    padding-top: .4rem;
+    font-size: .76rem;
+    color: var(--ul-grey-6);
+
+    span {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+    }
+}
+
+.building-import-legend-swatch {
+    width: .7rem;
+    height: .7rem;
+    border-radius: 50%;
+    display: inline-block;
+
+    &--building {
+        background: #3b82f6;
+    }
+
+    &--pin {
+        background: #a78bfa;
+    }
 }
 
 // Normalized onto the shared breakpoint token - a raw 720px here disagreed

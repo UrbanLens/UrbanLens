@@ -1,9 +1,6 @@
 // -- Tooltip system -------------------------------------------------------------
 //
-// Attribute-based (CSS-only, no JS required):
-//   data-tooltip="Hint text"
-//   data-tooltip-pos="above|below|left|right"   (default: above)
-//   data-tooltip-wide                            (280px bubble for longer copy)
+// Attribute-based (CSS-only, no JS required): data-tooltip="Hint text" data-tooltip-pos="above|below|left|right".
 //
 // JS-portal (escapes overflow:hidden parents - add data-tooltip-float="true"):
 //   Uses .ul-tooltip-float element appended to <body> by _tooltips_script.html
@@ -178,12 +175,7 @@
     }
 }
 
-// UL-280: the CSS-only bubble above is positioned `absolute` on the trigger, so any
-// ancestor with `overflow: hidden`/`auto` (dialogs, scrollable lists, etc.) clips it.
-// The JS float portal (_tooltips_script.html) appends its bubble to <body> with
-// `position: fixed`, so it can never be clipped. Make it the default for every
-// [data-tooltip] trigger - opt out per-trigger with data-tooltip-float="false" for
-// the rare case a CSS-only bubble is actually wanted.
+// UL-280: the CSS-only bubble above is positioned `absolute` on the trigger, so any ancestor with `overflow.
 [data-tooltip]:not([data-tooltip-float='false']) {
     &::before,
     &::after {
@@ -195,9 +187,7 @@
 
 .ul-tooltip-help {
     @include icon-btn(18px);
-    // inline-flex overrides the block-level `flex` from icon-btn so the button
-    // participates in the inline flow of its parent (e.g. headings) and sits
-    // visually beside the label text rather than dropping to a new line.
+    // inline-flex overrides the block-level `flex` from icon-btn so the button participates in the inline flow of its parent (e.g. headings).
     display: inline-flex;
     flex-shrink: 0;
     vertical-align: middle;
@@ -249,12 +239,7 @@
 }
 
 // -- Privacy hint trigger --------------------------------------------------------
-// Marks a piece of data with the privacy setting that governs who else can see
-// it (e.g. "Visible to: Friends Only"). Deliberately near-invisible until
-// hovered/focused - unlike .ul-tooltip-help (a help affordance meant to be
-// noticed), this is a passive annotation that shouldn't compete for attention
-// with the data itself. Wrap the data + icon in .ul-privacy-hint-row so hovering
-// anywhere on the row (not just the tiny icon) partially reveals it first.
+// Marks a piece of data with the privacy setting that governs who else can see it (e.g.
 .ul-privacy-hint {
     @include icon-btn(16px);
     display: inline-flex;
@@ -304,9 +289,7 @@
 }
 
 // -- Editable privacy hint (click the icon to change the setting inline) ------
-// Same near-invisible-until-hovered treatment as .ul-privacy-hint above, just
-// as a real <button> (so it's keyboard/click-activatable) plus a sibling
-// <select> that's swapped in on click - see _privacy_hint.html.
+// Same near-invisible-until-hovered treatment as.ul-privacy-hint above, just as a real <button> (so it's keyboard/click-activatable).
 .ul-privacy-hint--editable {
     display: inline-flex;
     align-items: center;

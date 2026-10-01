@@ -1,18 +1,8 @@
-"""Tests for the SearXNG image-search media provider's relevance query builder.
-
-The value of this provider is the shape of its query: three ``OR``-groups that
-a general image engine reads as required, disambiguating clauses. These cover:
-
-* ``assemble_image_query`` - the pure string assembly (aliases · area · subject),
-  including dedup, quote-stripping, and the "no alias -> no query" rule.
-* ``build_image_query`` - pulling aliases (nickname-excluded) and area terms off
-  a real ``Pin``/``Location``, including the US-state vs country choice.
-"""
+"""Tests for the SearXNG image-search media provider's relevance query builder."""
 
 from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.searxng_images import (
     SUBJECT_TERMS,
@@ -32,7 +22,7 @@ class AssembleImageQueryTests(SimpleTestCase):
         self.assertEqual(
             query,
             '("Hudson River State Hospital" OR "HRSH") ("New York" OR "Poughkeepsie") '
-            + "(" + " OR ".join(f'"{t}"' for t in SUBJECT_TERMS) + ")",
+            "(" + " OR ".join(f'"{t}"' for t in SUBJECT_TERMS) + ")",
         )
 
     def test_no_aliases_yields_none(self):
@@ -63,15 +53,40 @@ class AssembleImageQueryTests(SimpleTestCase):
         for term in SUBJECT_TERMS:
             self.assertIn(f'"{term}"', query)
 
-    # "(" is excluded from the generated terms alongside '"' because this test
-    # counts group delimiters by counting "(" characters: a generated term that
-    # itself contains a parenthesis is indistinguishable from a group opener and
-    # made the count read one too high. Whether a paren *inside* a quoted term
-    # is handled correctly is a separate question from how many groups there
-    # are, and is not what this property is about.
+    def test_ancestor_group_is_inserted_between_aliases_and_area(self):
+        query = assemble_image_query(
+            ["Superintendent's Cottage"], ["New York"], ["Hudson River State Hospital", "HRSH"]
+        )
+        self.assertEqual(
+            query,
+            '("Superintendent\'s Cottage") ("Hudson River State Hospital" OR "HRSH") ("New York") '
+            "(" + " OR ".join(f'"{t}"' for t in SUBJECT_TERMS) + ")",
+        )
+
+    def test_ancestor_group_is_omitted_when_empty(self):
+        query = assemble_image_query(["Foo"], ["NY"], [])
+        assert query is not None
+        self.assertEqual(query.count("("), 3)  # aliases, area, subject - no ancestor group
+
+    def test_ancestor_group_is_omitted_when_not_passed(self):
+        """Existing callers that don't pass ancestor_terms see no behavior change."""
+        with_none = assemble_image_query(["Foo"], ["NY"])
+        with_empty = assemble_image_query(["Foo"], ["NY"], [])
+        self.assertEqual(with_none, with_empty)
+
     @given(
-        st.lists(st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s), min_size=1, max_size=5, unique_by=lambda s: s.strip().casefold()),
-        st.lists(st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s), min_size=0, max_size=3, unique_by=lambda s: s.strip().casefold()),
+        st.lists(
+            st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s),
+            min_size=1,
+            max_size=5,
+            unique_by=lambda s: s.strip().casefold(),
+        ),
+        st.lists(
+            st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s),
+            min_size=0,
+            max_size=3,
+            unique_by=lambda s: s.strip().casefold(),
+        ),
     )
     @_hyp
     def test_group_count_matches_present_components(self, aliases: list[str], area: list[str]):
@@ -84,7 +99,9 @@ class AssembleImageQueryTests(SimpleTestCase):
 class BuildImageQueryTests(TestCase):
     """build_image_query gathers nickname-excluded aliases and area terms off a Pin."""
 
-    def _pin(self, *, pin_name: str = "", locality: str = "", state: str = "", country: str = "", official_name: str = ""):
+    def _pin(
+        self, *, pin_name: str = "", locality: str = "", state: str = "", country: str = "", official_name: str = ""
+    ):
         from model_bakery import baker
 
         from urbanlens.dashboard.models.location.model import Location
@@ -132,3 +149,38 @@ class BuildImageQueryTests(TestCase):
         assert query is not None
         self.assertIn('"Official Alt"', query)
         self.assertNotIn("Secret Nick", query)
+
+    def test_child_pin_includes_ancestor_group(self):
+        from model_bakery import baker
+
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        parent_location = baker.make(
+            Location,
+            official_name="Hudson River State Hospital",
+            locality="Poughkeepsie",
+            administrative_area_level_1="New York",
+            country="USA",
+        )
+        parent = baker.make(Pin, location=parent_location, name="Hudson River State Hospital")
+        child_location = baker.make(
+            Location,
+            official_name="Superintendent's Cottage",
+            locality="Poughkeepsie",
+            administrative_area_level_1="New York",
+            country="USA",
+        )
+        child = baker.make(Pin, location=child_location, name="Superintendent's Cottage", parent_pin=parent)
+
+        query = build_image_query(child)
+        assert query is not None
+        self.assertIn('"Superintendent\'s Cottage"', query)
+        self.assertIn('"Hudson River State Hospital"', query)
+
+    def test_top_level_pin_has_no_ancestor_group(self):
+        pin = self._pin(pin_name="Old Mill", locality="Troy", state="New York", country="USA")
+        query = build_image_query(pin)
+        assert query is not None
+        # Three groups only: aliases, area, subject - no ancestor group.
+        self.assertEqual(query.count("("), 3)

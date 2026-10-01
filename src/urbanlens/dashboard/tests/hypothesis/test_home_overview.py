@@ -1,24 +1,22 @@
-"""Tests for the logged-in homepage dashboard.
-
-The profile page's private-activity section moved to a new homepage
-(``/dashboard/home/``, the authenticated landing page) and was rebuilt as a
-customizable widget dashboard: no more "only visible to you" framing, an
-empty subnav matching other pages, and per-user widget selection/ordering
-persisted via ``Profile.home_widget_layout`` (see services.home.home_widgets).
-"""
+"""Tests for the logged-in homepage dashboard."""
 
 from __future__ import annotations
 
 import json
+import re
+import tempfile
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
 from django.db import connection
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.home.home_widgets import HOME_WIDGETS, effective_widget_layout, home_dashboard_context
 
@@ -70,6 +68,14 @@ class HomeOverviewPageTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], reverse("home.view"))
 
+    def test_recently_viewed_widgets_name_the_keys_their_writers_use(self) -> None:
+        """The map page keys recent pins by profile uuid, the wiki page keys recent wikis by profile id."""
+        html = self.client.get(reverse("home.view")).content.decode()
+        self.assertIn(f'data-recent-key="ul_recent_pins_v1_{self.profile.uuid}"', html)
+        self.assertIn(f'data-recent-key="ul_recent_wikis_v1_{self.profile.id}"', html)
+        self.assertIn("dashboard/js/home.js", html)
+        self.assertNotRegex(html, r"\bonclick=\"home")
+
     def test_nav_bar_home_link_is_active_on_the_homepage(self) -> None:
         response = self.client.get(reverse("home.view"))
         self.assertContains(response, ">Home</a>")
@@ -80,6 +86,71 @@ class HomeOverviewPageTests(TestCase):
         response = self.client.get(reverse("home.view"))
         self.assertContains(response, "Recently created pins")
         self.assertContains(response, "Old Asylum")
+
+
+#: The widget renders ``img.image.url``, so the fixture needs a real file - and
+#: writing it anywhere but a throwaway root would leave litter in MEDIA_ROOT.
+_PHOTO_MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-home-photos-")
+
+
+@override_settings(MEDIA_ROOT=_PHOTO_MEDIA_ROOT)
+class RecentPhotosAccessibleNameTests(TestCase):
+    """Every photo tile carries a name a screen reader can announce.
+
+    axe reports a missing or blank one as ``image-alt``/``button-name``, both critical, and both have been real
+    here: the button lost its name when the thumbnail 404'd (fixed by moving the label onto the button), and the
+    ``alt`` is only non-empty because of a ``|default:`` that truthiness alone does not make safe."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _photo_tile_images(self, caption: str | None) -> list[str]:
+        """Render the homepage with one photo and return its tile ``alt`` values."""
+        photo = baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO, caption=caption)
+        photo.image.save("tile.jpg", ContentFile(b"jpeg-bytes"), save=True)
+        response = self.client.get(reverse("home.view"))
+        self.assertEqual(response.status_code, 200)
+        strip = re.search(r'<ul class="home-photo-strip.*?</ul>', response.content.decode(), re.DOTALL)
+        self.assertIsNotNone(strip, "the recent-photos widget did not render, so this asserts nothing")
+        assert strip is not None
+        return re.findall(r'<img[^>]*\salt="([^"]*)"', strip.group(0))
+
+    def test_recent_photos_open_in_the_lightbox_as_yours(self) -> None:
+        """The lightbox reads a tile without ``data-mine="true"`` as someone else's and hides Share."""
+        photo = baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO, caption="Stairs")
+        photo.image.save("tile.jpg", ContentFile(b"jpeg-bytes"), save=True)
+        html = self.client.get(reverse("home.view")).content.decode()
+        tiles = re.findall(r'<li class="photo-tile"[^>]*>', html)
+        self.assertEqual(len(tiles), 1)
+        self.assertIn('data-mine="true"', tiles[0])
+
+    def test_a_captioned_photo_is_announced_by_its_caption(self) -> None:
+        self.assertEqual(self._photo_tile_images("Rooftop at dusk"), ["Rooftop at dusk"])
+
+    def test_an_uncaptioned_photo_still_has_a_name(self) -> None:
+        self.assertEqual(self._photo_tile_images(""), ["Photo"])
+
+    def test_a_whitespace_caption_does_not_become_a_blank_name(self) -> None:
+        """A caption of spaces is truthy, so ``|default:`` does not replace it."""
+        for alt in self._photo_tile_images("   "):
+            self.assertTrue(alt.strip(), "alt is whitespace only, which axe reports as image-alt")
+
+    def test_a_photo_row_with_no_file_does_not_take_the_page_down(self) -> None:
+        """The widget renders ``img.image.url``, which raises when the field is blank.
+
+        Such rows are a known condition, not a hypothetical - the wiki gallery endpoint carries an explicit
+        ``exclude(image="")`` for them."""
+        baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO, image="", caption="no file")
+
+        self.assertEqual(self.client.get(reverse("home.view")).status_code, 200)
+
+    def test_display_caption_treats_blank_and_missing_alike(self) -> None:
+        """The single place the rule lives, so ~30 template tags do not each need it."""
+        for stored, expected in ((None, ""), ("", ""), ("   ", ""), (" Rooftop ", "Rooftop")):
+            with self.subTest(stored=stored):
+                self.assertEqual(baker.prepare(Image, caption=stored).display_caption, expected)
 
 
 class EffectiveWidgetLayoutTests(TestCase):
@@ -175,11 +246,7 @@ class HomeWidgetLayoutSaveViewTests(TestCase):
 class DisabledWidgetsCostNothingTests(TestCase):
     """Most homepage entries are lazy querysets, so a disabled widget is free.
 
-    Two were not. The ten counts behind `home_stats` execute as the context dict
-    is built, and `home_recent_comments` is forced by the `sorted()` that merges
-    pin and trip comments. A user who turned both widgets off still paid for a
-    dozen queries on every homepage load.
-    """
+    Two were not."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -216,7 +283,11 @@ class DisabledWidgetsCostNothingTests(TestCase):
         self._layout("recent_photos")
         without = len(self._queries())
 
-        self.assertLess(without, with_both - 8, f"{with_both} queries with both widgets, {without} without - the counts are still running")
+        self.assertLess(
+            without,
+            with_both - 8,
+            f"{with_both} queries with both widgets, {without} without - the counts are still running",
+        )
 
     def test_recent_comments_are_built_when_the_widget_is_on(self) -> None:
         self._layout("recent_comments")

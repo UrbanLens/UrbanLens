@@ -1,28 +1,5 @@
 """Creating, refreshing and removing the integration suite's accounts.
-
-Kept out of the management command so the behaviour that matters - what an
-account has to look like for a headless browser to sign in as it, and what
-``--purge`` is allowed to select - is testable without a subprocess.
-
-An account provisioned here differs from a registered one in four ways, each
-because a browser driving the deployment cannot supply what registration
-normally waits for:
-
-- **Active and verified.** Registration leaves ``is_active`` False pending an
-  emailed link. Nothing here can click one.
-- **Past onboarding.** ``PostLoginRedirectView`` sends a profile that has not
-  finished the welcome flow to ``onboarding.welcome``, and one that has not
-  finished profile setup to ``profile.edit``. A suite that expects to land on
-  the map would fail on its first navigation for a reason that has nothing to do
-  with the map.
-- **No second factor, and no derived-auth enrolment.** A passkey or TOTP prompt
-  is unanswerable headlessly; an ``AccountKdf`` salt makes the login form derive
-  its credential in the browser, which works but means the plaintext in the
-  manifest is no longer what the form posts.
-- **Outbound APIs and AI off, notifications on-site only.** These accounts are
-  driven hard and repeatedly. Every provider outside REData bills per call, and
-  every email would be addressed to an undeliverable domain.
-"""
+Kept out of the management command so the behaviour that matters - what an account has to look like for a headless browser to sign in as it, and what ``--purge`` is allowed to select - is testable without a subprocess."""
 
 from __future__ import annotations
 
@@ -36,20 +13,21 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope, EmailVerification
+from urbanlens.dashboard.models.subscriptions.model import SiteFeature, SubscriptionRole, UserSubscription, grant_subscription, user_features_from_database
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_EMAIL_DOMAIN, INTEGRATION_USERNAME_PREFIX
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Collection, Iterable, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
-#: Roles provisioned when the caller does not name any. Two, because a large
-#: share of this application is about what one account can see of another's -
-#: sharing, friendships, messages, wiki visibility - and none of that is
-#: testable with a single account.
+#: Roles provisioned when the caller does not name any.
+#: Two, because a large share of this application is about what one account can see of another's -
+#: sharing, friendships, messages, wiki visibility - and none of that is testable with a single
+#: account.
 DEFAULT_ROLES: tuple[str, ...] = ("primary", "secondary")
 
 #: Password length in bytes of entropy. These accounts are reachable on a
@@ -64,6 +42,12 @@ _FULL_SCOPES: tuple[str, ...] = tuple(scope.value for scope in ApiKeyScope)
 #: valid but insufficient is the only way to test that scope enforcement is
 #: actually wired up, as opposed to being merely declared.
 _RESTRICTED_SCOPES: tuple[str, ...] = (ApiKeyScope.PROFILE_READ.value,)
+
+#: A role of the suite's own, so an admin editing a real role's features or price cannot change a spec's premise.
+SUBSCRIBER_ROLE_SLUG = "e2e-subscriber"
+
+#: What a subscriber account is granted: only the feature the subscription-gated specs compare.
+SUBSCRIBER_FEATURES: tuple[str, ...] = (SiteFeature.PROPERTY_OWNERS.value,)
 
 
 @dataclass(frozen=True)
@@ -81,6 +65,8 @@ class ProvisionedAccount:
     profile_uuid: str | None
     profile_slug: str | None
     is_staff: bool = False
+    #: Effective ``SiteFeature`` values, so a spec can assert its subscriber/non-subscriber precondition.
+    features: list[str] = field(default_factory=list)
 
     def redacted(self) -> dict[str, object]:
         """This account with its secrets replaced, for logging."""
@@ -99,16 +85,17 @@ class ProvisionResult:
     created_roles: list[str] = field(default_factory=list)
     refreshed_roles: list[str] = field(default_factory=list)
 
-    def manifest(self, *, site_url: str, environment: str) -> dict[str, object]:
+    def manifest(self, *, site_url: str, environment: str, seeds: dict[str, object] | None = None) -> dict[str, object]:
         """The JSON document ``UL_E2E_ACCOUNTS_FILE`` points at.
-
-        Keys are snake_case to match the rest of this codebase; the TypeScript
-        loader in ``tests/integration/lib/accounts.ts`` maps them to camelCase
-        rather than having Python emit a foreign convention.
+        Keys are snake_case to match the rest of this codebase; the TypeScript loader in ``tests/integration/lib/accounts.ts`` maps them to camelCase rather than having Python emit a foreign convention.
 
         Args:
             site_url: Absolute URL the accounts were provisioned on.
             environment: ``UL_ENVIRONMENT`` of the provisioning instance.
+            seeds: What was seeded into which role, keyed by role name. The
+                load harness reads label ids and row counts out of here, so a
+                run against an unseeded target can say so rather than measuring
+                an empty account and passing.
 
         Returns:
             A JSON-serialisable manifest.
@@ -118,21 +105,19 @@ class ProvisionResult:
             "site_url": site_url,
             "environment": environment,
             "accounts": [asdict(account) for account in self.accounts],
+            "seeds": seeds or {},
         }
 
 
 def username_for(role: str) -> str:
     """The username an account for ``role`` always has.
-
-    Deterministic rather than random, so re-running provisioning refreshes the
-    same accounts instead of leaving a new pair behind on every run.
+    Deterministic rather than random, so re-running provisioning refreshes the same accounts instead of leaving a new pair behind on every run.
 
     Args:
         role: Role name, e.g. ``primary``.
 
     Returns:
-        The prefixed username.
-    """
+        The prefixed username."""
     return f"{INTEGRATION_USERNAME_PREFIX}{role}"
 
 
@@ -155,14 +140,10 @@ def generate_password() -> str:
 
 def integration_users() -> Iterable[User]:
     """Every account this module is allowed to touch.
-
-    Both conventions are required, and staff accounts are excluded outright.
-    ``--purge`` deletes what this returns, so the query is the safety boundary:
-    widening it is how a manual staging account gets destroyed by a test run.
+    ``--purge`` deletes what this returns, so the query is the safety boundary: widening it is how a manual staging account gets destroyed by a test run.
 
     Returns:
-        A queryset of provisioned integration accounts, ordered by id.
-    """
+        A queryset of provisioned integration accounts, ordered by id."""
     return (
         User.objects.filter(
             username__startswith=INTEGRATION_USERNAME_PREFIX,
@@ -176,26 +157,26 @@ def integration_users() -> Iterable[User]:
 
 
 @transaction.atomic
-def provision_account(role: str, *, password: str, with_api_keys: bool = True, external_apis: bool = False) -> tuple[ProvisionedAccount, bool]:
+def provision_account(
+    role: str,
+    *,
+    password: str,
+    with_api_keys: bool = True,
+    external_apis: bool = False,
+    subscriber: bool = False,
+) -> tuple[ProvisionedAccount, bool]:
     """Create or refresh the account for ``role``.
-
-    Idempotent on the username: a second call resets the password, re-applies
-    every precondition, and mints fresh keys, rather than creating a duplicate.
-    Existing keys are revoked in the same transaction so an interrupted run
-    cannot leave a live credential nobody holds.
+    Idempotent on the username: a second call resets the password, re-applies every precondition, and mints fresh keys, rather than creating a duplicate.
 
     Args:
         role: Role name the suite refers to this account by.
         password: Plaintext password to set.
         with_api_keys: Whether to mint external-API keys as well.
         external_apis: Whether to leave outbound providers and AI enabled.
-            False by default because every provider outside REData bills per
-            call and this account is driven hard; turn it on only for a run
-            that is specifically exercising the enrichment panels.
+        subscriber: Whether the account holds the suite's subscriber role. False revokes an earlier grant of it.
 
     Returns:
-        Tuple of the provisioned account and whether the user row was created.
-    """
+        Tuple of the provisioned account and whether the user row was created."""
     username = username_for(role)
     user, created = User.objects.get_or_create(
         username=username,
@@ -204,19 +185,18 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
 
     user.email = email_for(role)
     user.is_active = True
+    # password-change-ok: re-provisioning a suite fixture account, whose keys this resets below on request.
     user.set_password(password)
     user.save(update_fields=["email", "is_active", "password"])
 
-    _mark_email_verified(user)
-    _clear_second_factors(user)
-
-    profile = _prepare_profile(user, external_apis=external_apis)
+    profile = prepare_signed_in_account(user, external_apis=external_apis)
+    _reconcile_subscription(user, subscriber=subscriber)
 
     api_key = restricted_key = None
     if with_api_keys:
-        # Revoked, not deleted: ApiKeyUsageLog rows hang off the key, and the
-        # settings page shows a revoked key so its owner can see it went away.
-        ApiKey.objects.for_user(user).active().update(revoked_at=timezone.now())
+        from urbanlens.dashboard.services.auth.api_keys import revoke_all_api_keys
+
+        revoke_all_api_keys(user)
         api_key = _mint_key(user, name=f"integration-suite-{role}", scopes=_FULL_SCOPES)
         restricted_key = _mint_key(user, name=f"integration-suite-{role}-restricted", scopes=_RESTRICTED_SCOPES)
 
@@ -232,27 +212,41 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
         profile_uuid=str(profile.uuid),
         profile_slug=profile.slug,
         is_staff=user.is_staff,
+        features=sorted(user_features_from_database(user)),
     )
     logger.info("integration: provisioned %s", account.redacted())
     return account, created
 
 
-def provision(roles: Sequence[str] = DEFAULT_ROLES, *, password: str | None = None, with_api_keys: bool = True, external_apis: bool = False) -> ProvisionResult:
+def provision(
+    roles: Sequence[str] = DEFAULT_ROLES,
+    *,
+    password: str | None = None,
+    with_api_keys: bool = True,
+    external_apis: bool = False,
+    subscriber_roles: Collection[str] = (),
+) -> ProvisionResult:
     """Provision every role in ``roles``.
 
     Args:
         roles: Role names to provision.
-        password: Shared plaintext password. Generated when omitted.
+        password: Shared plaintext password.
         with_api_keys: Whether to mint external-API keys.
         external_apis: Whether to leave outbound providers and AI enabled.
+        subscriber_roles: Roles that hold the suite's subscriber role; every other role has it revoked.
 
     Returns:
-        The accounts, plus which roles were newly created.
-    """
+        The accounts, plus which roles were newly created."""
     shared_password = password or generate_password()
     result = ProvisionResult()
     for role in roles:
-        account, created = provision_account(role, password=shared_password, with_api_keys=with_api_keys, external_apis=external_apis)
+        account, created = provision_account(
+            role,
+            password=shared_password,
+            with_api_keys=with_api_keys,
+            external_apis=external_apis,
+            subscriber=role in subscriber_roles,
+        )
         result.accounts.append(account)
         (result.created_roles if created else result.refreshed_roles).append(role)
     return result
@@ -260,14 +254,10 @@ def provision(roles: Sequence[str] = DEFAULT_ROLES, *, password: str | None = No
 
 def purge() -> list[str]:
     """Delete every provisioned integration account and everything it owns.
-
-    Reuses ``hard_delete_profile`` rather than cascading from ``User.delete()``:
-    that is the path that also removes the profile's stored files, and a purge
-    that leaves uploaded media behind is not a purge.
+    Reuses ``hard_delete_profile`` rather than cascading from ``User.delete()``: that is the path that also removes the profile's stored files, and a purge that leaves uploaded media behind is not a purge.
 
     Returns:
-        Usernames that were deleted.
-    """
+        Usernames that were deleted."""
     from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
 
     deleted: list[str] = []
@@ -286,17 +276,62 @@ def purge() -> list[str]:
     return deleted
 
 
+def subscriber_role() -> SubscriptionRole:
+    """The suite's subscriber role, created or reset to exactly :data:`SUBSCRIBER_FEATURES`.
+
+    Returns:
+        The role. It has no price, so it is never offered for purchase.
+    """
+    role, _ = SubscriptionRole.objects.update_or_create(
+        slug=SUBSCRIBER_ROLE_SLUG,
+        defaults={
+            "name": "Integration suite subscriber",
+            "description": "Granted by provision_integration_env --subscriber-roles. Not for real accounts.",
+            "features": ",".join(SUBSCRIBER_FEATURES),
+        },
+    )
+    return role
+
+
+def prepare_signed_in_account(user: User, *, external_apis: bool = False) -> Profile:
+    """Put *user* past everything that stands between a session and the application.
+
+    Args:
+        user: An integration account.
+        external_apis: Whether to leave outbound providers and AI enabled.
+
+    Returns:
+        The account's profile.
+    """
+    _mark_email_verified(user)
+    _clear_second_factors(user)
+    return _prepare_profile(user, external_apis=external_apis)
+
+
 # -- internals -------------------------------------------------------------
 
 
 def _mark_email_verified(user: User) -> None:
-    """Ensure the account has a verified ``EmailVerification`` row.
+    """Ensure the account has a verified ``EmailVerification`` row."""
+    from urbanlens.dashboard.services.auth.email_claims import mark_primary_verified
 
-    ``CustomLoginView.form_invalid`` looks for this row to tell an unverified
-    account apart from a wrong password, and an unverified one is refused at
-    login with an offer to resend an email nobody can receive.
-    """
     EmailVerification.objects.update_or_create(user=user, defaults={"verified_at": timezone.now()})
+    mark_primary_verified(user)
+
+
+def _reconcile_subscription(user: User, *, subscriber: bool) -> None:
+    """Grant or revoke the suite's subscriber role, leaving any other grant alone.
+
+    Revoking matters as much as granting: a non-subscriber spec reads an account that an earlier run may have made a subscriber.
+    """
+    if subscriber:
+        grant_subscription(user, subscriber_role(), granted_by=user, months=None)
+        return
+    role = SubscriptionRole.objects.get_by_slug(SUBSCRIBER_ROLE_SLUG)
+    if role is None:
+        return
+    for subscription in UserSubscription.objects.not_revoked().filter(user=user, role=role):
+        subscription.revoke()
 
 
 def _clear_second_factors(user: User) -> None:
@@ -341,16 +376,10 @@ def _prepare_profile(user: User, *, external_apis: bool) -> Profile:
 
 def _silence_email_delivery(profile: Profile) -> None:
     """Set every notification type to on-site delivery only.
-
-    Iterates the model's fields rather than naming them, so a notification type
-    added later is covered without anyone remembering to come back here. On-site
-    rather than off entirely, because a test may well want to assert that a
-    notification was raised - it just must never be posted to an address on a
-    domain that cannot receive it.
+    Iterates the model's fields rather than naming them, so a notification type added later is covered without anyone remembering to come back here.
 
     Args:
-        profile: The profile whose preferences to rewrite.
-    """
+        profile: The profile whose preferences to rewrite."""
     from urbanlens.dashboard.models.notifications.meta.delivery_preference import DeliveryPreference
     from urbanlens.dashboard.models.notifications.model import NotificationPreference
 
@@ -372,13 +401,7 @@ def _silence_email_delivery(profile: Profile) -> None:
 
 def _mint_key(user: User, *, name: str, scopes: Sequence[str]) -> str:
     """Issue one API key with an explicit scope grant, returning its plaintext.
-
-    ``generate_api_key`` writes the default four-scope grant, which is what a
-    user gets from the settings page - there is no scope picker there yet. The
-    grant is widened here by a direct update because ``ApiKey.scopes`` is
-    ``editable=False``: not writable through a form, which is the point, but
-    perfectly writable by code that has decided what the grant should be.
-    """
+    The grant is widened here by a direct update because ``ApiKey.scopes`` is ``editable=False``: not writable through a form, which is the point, but perfectly writable by code that has decided what the grant should be."""
     api_key, raw = generate_api_key(user, name)
     ApiKey.objects.filter(pk=api_key.pk).update(scopes=list(scopes))
     return raw

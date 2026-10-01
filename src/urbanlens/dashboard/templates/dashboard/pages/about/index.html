@@ -26,7 +26,7 @@
         </div>
     </div>
     <div class="about-hero-visual" aria-hidden="true">
-        <img src="{% static 'dashboard/images/help/urbanlens/pin-details__map-markup--raw.png' %}" alt="UrbanLens Pin Details Page">
+        <img src="{% static 'dashboard/images/help/urbanlens/pin-details__map-markup--raw.png' %}" alt="UrbanLens Private Pin page">
     </div>
 </section>
 
@@ -41,8 +41,8 @@
             scattered notes, private DMs, and memory. UrbanLens gives it a permanent, organised home.
         </p>
         <p class="about-section-body">
-            Every pin you drop is yours, and stays that way until you act to share it. You decide what 
-            to share, who can see it, and how much detail is visible. The platform is built around the 
+            Every pin you drop is yours, and stays that way until you act to share it. You decide what
+            to share, who can see it, and how much detail is visible. The platform is built around the
             understanding that some places deserve to be documented without being advertised.
         </p>
 
@@ -67,7 +67,7 @@
 </section>
 
 {# -- Team --------------------------------------------------------------- #}
-{# -- Team --------------------------------------------------------------- #}
+{# Team #}
 <section class="about-section about-team-section">
     <div class="about-section-inner">
         <div class="about-section-label">Who built it?</div>
@@ -244,7 +244,7 @@
                         <li>Per-photo visibility controls</li>
                     </ul>
                     {% if user.is_authenticated %}
-                    <a href="{% url 'memories.photos' %}" class="about-btn btn btn--primary">
+                    <a href="{% url 'vault.photos' %}" class="about-btn btn btn--primary">
                         <i class="material-symbols-outlined">photo_library</i> Open my photo library
                     </a>
                     {% endif %}

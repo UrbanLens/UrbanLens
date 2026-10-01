@@ -1,14 +1,4 @@
-"""Tests for the external API's label priority-reorder and bulk delete/edit/convert endpoints.
-
-Unlike the internal ``LabelBulk*View`` family (route-scoped to one kind at a
-time via a ``label_kind`` URL segment), these endpoints resolve a uuid batch
-that may span kinds - see ``serializers_labels_bulk``'s docstring. The
-behavior most worth pinning down: a global or protected label named in the
-request is silently dropped rather than refused, matching the pin-bulk
-endpoints' "not yours, not fatal" philosophy, while an unresolvable
-parent/child uuid is a 400 - the caller asked for something specific and
-impossible.
-"""
+"""Tests for the external API's label priority-reorder and bulk delete/edit/convert endpoints."""
 
 from __future__ import annotations
 
@@ -38,12 +28,16 @@ class LabelBulkTestCase(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         _api_key, self.raw_key = generate_api_key(self.user, "Label bulk client")
-        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value])
+        ApiKey.objects.filter(user=self.user).update(
+            scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value]
+        )
         self.label_a = ensure_label(profile=self.profile, name="Rusty", kind=KIND_TAG)
         self.label_b = ensure_label(profile=self.profile, name="Overgrown", kind=KIND_TAG)
 
     def _post(self, path: str, payload: dict):
-        return self.client.post(f"{_BASE}{path}", data=payload, content_type="application/json", **_bearer(self.raw_key))
+        return self.client.post(
+            f"{_BASE}{path}", data=payload, content_type="application/json", **_bearer(self.raw_key)
+        )
 
 
 class LabelReorderTests(LabelBulkTestCase):
@@ -104,7 +98,10 @@ class LabelBulkDeleteTests(LabelBulkTestCase):
 
 class LabelBulkEditTests(LabelBulkTestCase):
     def test_sets_icon_and_color_on_every_label(self) -> None:
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "icon": "star", "color": "#F44336"})
+        response = self._post(
+            "bulk/edit/",
+            {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "icon": "star", "color": "#F44336"},
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["count"], 2)
         self.label_a.refresh_from_db()
@@ -112,20 +109,17 @@ class LabelBulkEditTests(LabelBulkTestCase):
         self.assertEqual(self.label_a.icon, "star")
         self.assertEqual(self.label_b.color, "#F44336")
 
-    def test_a_named_css_colour_is_not_stored(self) -> None:
-        """This test previously posted "red" and asserted it round-tripped.
+    def test_a_named_css_colour_is_refused(self) -> None:
+        """This test posted "red" and asserted it round-tripped, then that it was silently dropped. It is now refused.
 
-        It never was a valid label colour: `Label.color` declares `choices` that are
-        all hex, and the renderers append an alpha suffix ("red33"), which is not a
-        colour and paints nothing. Since colours are validated on write, a non-hex
-        value now falls back to the field's default instead of being stored and
-        silently breaking the chip.
-        """
+        It never was a valid label colour: `Label.color` declares `choices` that are all hex, and the renderers
+        append an alpha suffix ("red33"), which is not a colour and paints nothing."""
+        original = self.label_b.color
         response = self._post("bulk/edit/", {"uuids": [str(self.label_b.uuid)], "color": "red"})
 
-        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.status_code, 400, response.content)
         self.label_b.refresh_from_db()
-        self.assertIsNone(self.label_b.color)
+        self.assertEqual(self.label_b.color, original)
 
     def test_explicit_null_description_clears_it(self) -> None:
         Label.objects.filter(pk=self.label_a.pk).update(description="Old")
@@ -143,18 +137,26 @@ class LabelBulkEditTests(LabelBulkTestCase):
 
     def test_adds_a_parent_to_every_label(self) -> None:
         parent = ensure_label(profile=self.profile, name="Structures", kind=KIND_TAG)
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "add_parent_uuids": [str(parent.uuid)]})
+        response = self._post(
+            "bulk/edit/",
+            {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "add_parent_uuids": [str(parent.uuid)]},
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(self.label_a.parents.filter(pk=parent.pk).exists())
         self.assertTrue(self.label_b.parents.filter(pk=parent.pk).exists())
 
     def test_unresolvable_parent_uuid_is_a_400(self) -> None:
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid)], "add_parent_uuids": ["00000000-0000-0000-0000-000000000000"]})
+        response = self._post(
+            "bulk/edit/",
+            {"uuids": [str(self.label_a.uuid)], "add_parent_uuids": ["00000000-0000-0000-0000-000000000000"]},
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_a_parent_assignment_that_would_cycle_is_skipped(self) -> None:
         self.label_a.parents.add(self.label_b)
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_b.uuid)], "add_parent_uuids": [str(self.label_a.uuid)]})
+        response = self._post(
+            "bulk/edit/", {"uuids": [str(self.label_b.uuid)], "add_parent_uuids": [str(self.label_a.uuid)]}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertFalse(self.label_b.parents.filter(pk=self.label_a.pk).exists())
 
@@ -187,7 +189,9 @@ class LabelBulkEditTests(LabelBulkTestCase):
 
 class LabelBulkConvertTests(LabelBulkTestCase):
     def test_converts_tags_to_categories(self) -> None:
-        response = self._post("bulk/convert/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "target_kind": KIND_CATEGORY})
+        response = self._post(
+            "bulk/convert/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "target_kind": KIND_CATEGORY}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["converted"], 2)
         self.label_a.refresh_from_db()

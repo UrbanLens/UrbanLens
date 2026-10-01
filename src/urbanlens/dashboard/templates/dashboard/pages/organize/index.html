@@ -3,19 +3,7 @@
 {% load static %}
 
 {% block hero %}
-{% if standalone_mode %}
-    {% if active_tab == 'tags' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="label" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% elif active_tab == 'categories' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="category" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% elif active_tab == 'status' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="flag_circle" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% elif active_tab == 'people' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="people" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% elif active_tab == 'media' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="perm_media" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% endif %}
-{% elif active_section == 'lists' %}
+{% if active_section == 'lists' %}
     {% include "dashboard/partials/ui/_page_hero.html" with icon="bookmarks" title="Lists" subtitle="Group your pins into curated collections you can browse, share, and filter by." modifier="top" %}
 {% elif active_section == 'filters' %}
     {% include "dashboard/partials/ui/_page_hero.html" with icon="filter_alt" title="Filters" subtitle="Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." modifier="top" %}
@@ -25,7 +13,6 @@
 {% endblock %}
 
 {% block subnav %}
-{% if not standalone_mode %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
         <nav class="ul-subnav-tabs organize-section-tabs" aria-label="Organize sections">
@@ -47,7 +34,6 @@
         </nav>
     </div>
 </div>
-{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -56,19 +42,13 @@
      data-rows-url-category="{% url 'label.rows' label_kind='category' %}"
      data-rows-url-status="{% url 'label.rows' label_kind='status' %}">
     <div id="organize-onboarding" class="page-onboarding" aria-live="polite"
-         data-standalone-mode="{{ standalone_mode|yesno:'1,' }}"
          data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# LABELS SECTION: Tags/Categories/Statuses/People/Display Order, all inside  #}
-    {# one visually distinct container so it doesn't read as a second subnav      #}
-    {# stacked under the page's own Labels|Lists|Filters tabs above.              #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# LABELS SECTION: Tags/Categories/Statuses/People/Display Order, all inside one visually distinct container so it doesn't read. #}
     <div class="organize-section-panel" id="panel-labels" role="tabpanel"
-         {% if not standalone_mode and active_section != 'labels' %}hidden{% endif %}>
+         {% if active_section != 'labels' %}hidden{% endif %}>
     <div class="organize-labels-container">
         <div class="organize-labels-container-header">
-            {% if not standalone_mode %}
             <div class="organize-tab-bar" role="tablist">
                 <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
                         role="tab" data-tab="tags" aria-controls="panel-tags" data-filter-ns="tag">
@@ -100,7 +80,6 @@
                     <i class="material-symbols-outlined">low_priority</i> Display Order
                 </button>
             </div>
-            {% endif %}
 
             <div class="organize-page-header-actions">
                 <div class="btn-group" id="org-header-actions">
@@ -124,7 +103,7 @@
                         <i class="material-symbols-outlined">filter_list</i> Filter
                         <span class="org-filter-active-dot"></span>
                     </button>
-                    <button type="button" class="btn btn--primary btn--sm" id="org-header-create-btn" type="button" title="Create">
+                    <button type="button" class="btn btn--primary btn--sm" id="org-header-create-btn" title="Create">
                         <i class="material-symbols-outlined">add</i>
                     </button>
                 </div>
@@ -132,15 +111,15 @@
         </div>
 
         <div class="organize-labels-container-body">
-            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' label_url_kind='category' kind='category' singular_title='Category' plural_lower='categories' labels=categories rows_id='category-rows' rows_target='#category-rows' select_class='cat-select-cb' select_data_name='cat' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' parent_items=priority_items selectable=True editable=True deletable=True stats_pending=stats_pending %}
+            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' label_url_kind='category' kind='category' singular_title='Category' plural_lower='categories' labels=categories rows_id='category-rows' rows_target='#category-rows' select_class='cat-select-cb' select_data_name='cat' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' candidates_from='priority' selectable=True editable=True deletable=True rows_deferred=categories_deferred %}
 
-            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' label_url_kind='tag' kind='tag' singular_title='Tag' plural_lower='tags' labels=tags rows_id='tag-rows' rows_target='#tag-rows' select_class='tag-select-cb' select_data_name='tag' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' parent_items=priority_items selectable=True editable=True deletable=True stats_pending=stats_pending %}
+            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' label_url_kind='tag' kind='tag' singular_title='Tag' plural_lower='tags' labels=tags rows_id='tag-rows' rows_target='#tag-rows' select_class='tag-select-cb' select_data_name='tag' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' candidates_from='priority' selectable=True editable=True deletable=True rows_deferred=tags_deferred %}
 
-            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' label_url_kind='status' kind='status' singular_title='Status' plural_lower='statuses' labels=statuses rows_id='status-rows' rows_target='#status-rows' select_class='status-select-cb' select_data_name='status' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' parent_items=priority_items selectable=True editable=True deletable=True stats_pending=stats_pending %}
+            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' label_url_kind='status' kind='status' singular_title='Status' plural_lower='statuses' labels=statuses rows_id='status-rows' rows_target='#status-rows' select_class='status-select-cb' select_data_name='status' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' candidates_from='priority' selectable=True editable=True deletable=True rows_deferred=statuses_deferred %}
 
-            {% if not standalone_mode %}
             <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
-                 {% if active_tab != 'priority' %}hidden{% endif %}>
+                 {% if active_tab != 'priority' %}hidden{% endif %}
+                 {% if priority_deferred %}hx-get="{% url 'organize.priority.list' %}" hx-trigger="revealed" hx-target="#priority-list-wrap" hx-swap="innerHTML"{% endif %}>
 
                 <div class="label-header">
                     <div>
@@ -152,23 +131,23 @@
 
                 {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent pins with multiple labels." visual_template="dashboard/partials/ui/_priority_visual.html" %}
 
+                <div id="priority-list-wrap">
+                {% if priority_deferred %}
+                <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading&hellip;</div>
+                {% else %}
                 {% include "dashboard/partials/labels/_priority_list.html" with priority_items=priority_items %}
-            </div>{# end #panel-priority #}
-            {% endif %}
+                {% endif %}
+                </div>
+            </div>
 
-            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' label_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' labels=user_labels parent_items=user_labels rows_id='people-label-rows' rows_target='#people-label-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-label-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
+            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' label_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' labels=user_labels candidates_from='people' rows_id='people-label-rows' rows_target='#people-label-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-label-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True rows_deferred=people_deferred %}
 
-            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='media' ns='media' form_id='new-media-form' filter_ns='media' label_url_kind='media' kind='media' singular_title='Media Label' plural_lower='labels' labels=media_labels parent_items=media_labels rows_id='media-label-rows' rows_target='#media-label-rows' select_class='media-sel-cb' select_data_name='media' edit_target='#media-label-edit-dialog-body' empty_icon='perm_media' name_placeholder='e.g. Interior, Drone Shot' desc_placeholder='What kind of media does this describe?' empty_message='No media labels yet. Create one to help you find your photos, videos, and documents in search.' selectable=True editable=True deletable=True %}
-        </div>{# end .organize-labels-container-body #}
-    </div>{# end .organize-labels-container #}
-    </div>{# end #panel-labels #}
+            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='media' ns='media' form_id='new-media-form' filter_ns='media' label_url_kind='media' kind='media' singular_title='Media Label' plural_lower='labels' labels=media_labels candidates_from='media' rows_id='media-label-rows' rows_target='#media-label-rows' select_class='media-sel-cb' select_data_name='media' edit_target='#media-label-edit-dialog-body' empty_icon='perm_media' name_placeholder='e.g. Interior, Drone Shot' desc_placeholder='What kind of media does this describe?' empty_message='No media labels yet. Create one to help you find your photos, videos, and documents in search.' selectable=True editable=True deletable=True rows_deferred=media_deferred %}
+        </div>
+    </div>
+    </div>
 
-    {% if not standalone_mode %}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# LISTS / FILTERS SECTIONS: lazy-loaded via HTMX the first time each tab is  #}
-    {# shown (see PinListsIndexView.get) - reuses the same content/JS that used   #}
-    {# to live at /lists/, which now redirects here for direct navigation.       #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# LISTS / FILTERS SECTIONS: lazy-loaded via HTMX the first time each tab is shown. #}
     <div class="organize-section-panel" id="panel-lists" role="tabpanel" {% if active_section != 'lists' %}hidden{% endif %}
          hx-get="{% url 'lists.list' %}?tab=lists" hx-trigger="revealed" hx-swap="innerHTML">
         <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading your lists&hellip;</div>
@@ -178,9 +157,8 @@
          hx-get="{% url 'lists.list' %}?tab=filters" hx-trigger="revealed" hx-swap="innerHTML">
         <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading your filters&hellip;</div>
     </div>
-    {% endif %}
 
-</div>{# end .organize-page #}
+</div>
 
 {# -- Floating bulk action toolbar ------------------------------------------- #}
 <div id="org-bulk-bar" class="org-bulk-bar" aria-live="polite">
@@ -213,7 +191,13 @@
 {% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='tag' title='Merge Tags' %}
 {% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='cat' title='Merge Categories' %}
 {% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='status' title='Merge Statuses' %}
-{% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='people' title='Merge Labels' %}
+{% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='people' title='Merge Labels' without_edit=True %}
+{% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='media' title='Merge Media Labels' without_edit=True %}
+
+{# -- Parent/child candidates, cloned into a picker's popup when it first opens. #}
+<template id="label-rel-candidates-priority">{% for b in priority_items %}{% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=b show_kind=True %}{% endfor %}</template>
+<template id="label-rel-candidates-people">{% for b in people_parent_items %}{% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=b show_kind=False %}{% endfor %}</template>
+<template id="label-rel-candidates-media">{% for b in media_parent_items %}{% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=b show_kind=True %}{% endfor %}</template>
 
 {# -- Label bulk-edit dialogs use the shared edit field structure. ----------- #}
 {% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='tag' title='Edit Tags' picker_id='tag-bulk-edit' %}
@@ -222,7 +206,9 @@
 
 {% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='status' title='Edit Statuses' picker_id='status-bulk-edit' %}
 
-{% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='people' title='Edit Labels' picker_id='people-bulk-edit' parent_items=user_labels %}
+{% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='people' title='Edit Labels' picker_id='people-bulk-edit' candidates_from='people' %}
+
+{% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='media' title='Edit Media Labels' picker_id='media-bulk-edit' candidates_from='media' %}
 {% endblock %}
 
 {% block scripts %}

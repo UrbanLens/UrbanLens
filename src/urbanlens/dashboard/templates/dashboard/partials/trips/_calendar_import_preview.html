@@ -1,5 +1,4 @@
 {# Google Calendar import dialog, page 2: review what will be created before importing. #}
-{# Context: account, previews, importable_count, profile #}
 {% include "dashboard/partials/ui/_dialog_header.html" with title="Review calendar import" %}
 
 <div class="ul-dialog-body">
@@ -7,10 +6,10 @@
         Review what will be created. Uncheck anything you don't want.
     </p>
 
+    <div id="calendar-import-progress"></div>
     <form hx-post="{% url 'trips.calendar.import' %}"
-        hx-target="#trip-list"
+        hx-target="#calendar-import-progress"
         hx-swap="innerHTML"
-        hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
         class="calendar-import-form">
         {% csrf_token %}
 
@@ -93,7 +92,7 @@
                 <i class="material-symbols-outlined">arrow_back</i>
                 Back
             </button>
-            <button type="button" class="btn btn--secondary" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--secondary" data-dialog-close>Cancel</button>
         </div>
     </form>
 </div>

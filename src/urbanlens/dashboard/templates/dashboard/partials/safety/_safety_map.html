@@ -1,0 +1,50 @@
+{% comment %}Compact map for safety check-in pages: a draggable destination marker, the shared "jump to" search bar.{% endcomment %}
+{% load map_components %}
+<div class="safety-map-wrapper" data-safety-map
+     data-readonly="{{ readonly|yesno:'true,false' }}"
+     data-center-lat="{{ map_center_lat|default:'39.8283' }}" data-center-lng="{{ map_center_lng|default:'-98.5795' }}"
+     data-zoom="{{ destination_lat|yesno:'13,4' }}"
+     data-dest-lat="{{ destination_lat|default:'' }}" data-dest-lng="{{ destination_lng|default:'' }}"
+     data-layer-mode="{{ map_layer_mode|default:'street' }}" data-show-borders="{{ map_show_borders|yesno:'true,false' }}"
+     data-map-view-url-template="{{ markup_map_view_url_template|default:'' }}"
+     data-markup-json-url="{{ markup_json_url|default:'' }}"
+     {% if not readonly %}
+     data-markup-create-url="{{ markup_create_url|default:'' }}"
+     data-markup-edit-url-template="{{ markup_edit_url_template|default:'' }}"
+     data-markup-map-create-url="{{ markup_map_create_url|default:'' }}"
+     data-markup-map-uuid="{{ markup_map_uuid|default:'' }}"
+     data-markup-map-json-url-template="{{ markup_map_json_url_template|default:'' }}"
+     data-markup-map-markup-url-template="{{ markup_map_markup_url_template|default:'' }}"
+     data-markup-map-markup-edit-url-template="{{ markup_map_markup_edit_url_template|default:'' }}"
+     data-markup-map-field-id="{{ markup_map_field_id|default:'markup-map-uuid-field' }}"
+     data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}" data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
+     data-line-tip-dismissed="{{ request.user.profile.show_onboarding_tips|yesno:'false,true' }}"
+     data-profile-uuid="{{ request.user.profile.uuid|default:'' }}"
+     data-local-pins-url="{% url 'map.autocomplete.local' %}" data-places-url="{% url 'map.autocomplete.places' %}"
+     data-resolve-place-url="{% url 'map.resolve_place' %}"
+     {% endif %}>
+    {% if not readonly %}
+    {% map_search_bar prefix="safety-map" %}
+    {% endif %}
+    <div id="safety-map"></div>
+    {# Map toolbar (tools only; shared component - same as the main map). #}
+    {% if not readonly and markup_json_url or not readonly and markup_map_create_url %}
+    {% map_toolbar "markup_line,markup_freehand,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,screenshot" panel_id="safety-map-buttons" %}
+    {% else %}
+    {% map_toolbar "screenshot" panel_id="safety-map-buttons" %}
+    {% endif %}
+    <div class="map-bottom-controls">
+        {% map_layers_panel "street,terrain,satellite,borders" panel_id="safety-map-layers" extra_class="map-layers-panel--inline" %}
+    </div>
+</div>
+{% if not readonly %}{% if markup_json_url or markup_map_create_url %}
+{# Unified draw/edit panel this dropdown opens. #}
+{% include "dashboard/partials/layout/_markup_panel_dialog.html" %}
+{% endif %}{% endif %}
+{% if not readonly %}
+<input type="hidden" id="safety-destination-lat" name="destination_latitude" value="{{ destination_lat|default:'' }}">
+<input type="hidden" id="safety-destination-lng" name="destination_longitude" value="{{ destination_lng|default:'' }}">
+{% if markup_map_create_url %}
+<input type="hidden" id="markup-map-uuid-field" name="markup_map" value="{{ markup_map_uuid|default:'' }}">
+{% endif %}
+{% endif %}

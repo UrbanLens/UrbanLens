@@ -1,17 +1,13 @@
-"""Property-based database tests for the Pin model.
+"""Property-based database tests for the Pin model."""
 
-Covers PinManager.get_nearby_or_create and the major PinQuerySet filters.
-Each @given example runs inside its own atomic savepoint (rolled back
-automatically by hypothesis.extra.django.TestCase).
-"""
 from __future__ import annotations
 
 import math
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -20,8 +16,6 @@ from urbanlens.dashboard.tests.hypothesis.strategies import (
     lat_float,
     lon_float,
     nonempty_name,
-    priority,
-    reasonable_datetime,
     two_distant_coord_pairs,
 )
 
@@ -38,6 +32,7 @@ def _make_location(lat: float = 40.0, lon: float = -74.0) -> Location:
 
 
 # -- PinManager.get_nearby_or_create -------------------------------------------
+
 
 class GetNearbyOrCreateNullGuardsTests(TestCase):
     """get_nearby_or_create must return (None, False) for degenerate inputs."""
@@ -160,6 +155,7 @@ class GetNearbyOrCreateCreationTests(TestCase):
 
 # -- PinQuerySet structural filters --------------------------------------------
 
+
 class PinQuerySetRootPinsTests(TestCase):
     """root_pins() must exclude all child-pin variants."""
 
@@ -200,6 +196,7 @@ class PinQuerySetRootPinsTests(TestCase):
 
 # -- PinQuerySet visit filters -------------------------------------------------
 
+
 class PinQuerySetVisitFiltersTests(TestCase):
     """never_visited() and related visit filters."""
 
@@ -235,10 +232,11 @@ class PinQuerySetVisitFiltersTests(TestCase):
         self.assertFalse(qs.filter(last_visited__isnull=False).exists())
 
 
-# -- PinQuerySet name filter ---------------------------------------------------
+# -- Name criterion ------------------------------------------------------------
 
-class PinQuerySetByNameTests(TestCase):
-    """by_name() performs a case-insensitive substring search on name."""
+
+class PinNameCriterionTests(TestCase):
+    """The map search's name criterion finds a pin by its stored name, whatever the case."""
 
     profile: Profile
 
@@ -257,7 +255,7 @@ class PinQuerySetByNameTests(TestCase):
         assume(len(name.strip()) >= 1)
         pin = baker.make(Pin, profile=self.profile, name=name)
         assume(pin.name)
-        qs = Pin.objects.filter(profile=self.profile).by_name(pin.name)
+        qs = Pin.objects.filter(profile=self.profile).filter_by_criteria({"name": pin.name})
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
     @given(nonempty_name)
@@ -266,7 +264,7 @@ class PinQuerySetByNameTests(TestCase):
         assume(len(name.strip()) >= 1)
         pin = baker.make(Pin, profile=self.profile, name=name)
         assume(pin.name)
-        qs = Pin.objects.filter(profile=self.profile).by_name(pin.name.lower())
+        qs = Pin.objects.filter(profile=self.profile).filter_by_criteria({"name": pin.name.lower()})
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
     @given(nonempty_name)
@@ -275,33 +273,5 @@ class PinQuerySetByNameTests(TestCase):
         assume(len(name.strip()) >= 1)
         pin = baker.make(Pin, profile=self.profile, name=name)
         assume(pin.name)
-        qs = Pin.objects.filter(profile=self.profile).by_name(pin.name.upper())
+        qs = Pin.objects.filter(profile=self.profile).filter_by_criteria({"name": pin.name.upper()})
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
-
-
-
-# -- PinQuerySet priority filter -----------------------------------------------
-
-class PinQuerySetPriorityTests(TestCase):
-    """by_priority() is an exact-match filter."""
-
-    profile: Profile
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.profile = baker.make(User).profile
-
-    @given(priority)
-    @_db_settings
-    def test_by_priority_returns_only_matching_pins(self, prio: int) -> None:
-        target = baker.make(Pin, profile=self.profile, priority=prio)
-        # Decoy with a different priority value.
-        decoy_prio = prio + 1
-        baker.make(Pin, profile=self.profile, priority=decoy_prio)
-        qs = Pin.objects.filter(profile=self.profile).by_priority(prio)
-        self.assertIn(target.pk, qs.values_list("pk", flat=True))
-        self.assertNotIn(
-            decoy_prio,
-            qs.values_list("priority", flat=True),
-            "by_priority must not return pins with a different priority",
-        )

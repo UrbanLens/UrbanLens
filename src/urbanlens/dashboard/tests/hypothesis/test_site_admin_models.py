@@ -1,18 +1,4 @@
-"""The site-admin view onto REData's two suggestion models.
-
-Two questions this deployment could not answer about itself: whether a trained
-model or the hand-weighted heuristic is answering, and how well the thing that
-is answering scored against the alternatives it was promoted over. Both matter
-now that auto-tagging applies suggestions above a fixed confidence floor
-without distinguishing which ranker produced the number.
-
-The constraint that shapes the tests: **nothing here may be about a person.**
-REData's per-contributor reputation endpoint is not consumed anywhere, and the
-view scrubs personal keys out of the model payload before rendering rather than
-trusting the upstream shape to stay aggregate. That guard exists precisely
-because "this response is aggregate" is a property of today's contract, not
-something this codebase controls.
-"""
+"""The site-admin view onto REData's two suggestion models."""
 
 from __future__ import annotations
 
@@ -29,6 +15,8 @@ from urbanlens.dashboard.controllers.site_admin_models import scrub_personal_key
 _LABELS = "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway.get_model"
 _PHOTOS = "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway.get_model"
 _CONFIGURED = "urbanlens.dashboard.services.labels.redata_suggestions.redata_labels_configured"
+_LABELS_GATEWAY = "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway"
+_PHOTOS_GATEWAY = "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway"
 
 #: The envelope REData returns before any model has been promoted.
 _HEURISTIC = {"active": None, "ranker": "heuristic"}
@@ -86,7 +74,11 @@ class SiteAdminModelsViewTests(TestCase):
 
     def test_no_promoted_model_is_reported_as_the_heuristic_answering(self) -> None:
         """`active: null` is a normal state, not a failure."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=_HEURISTIC), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=_HEURISTIC),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         summary = response.context["models"][0]["summary"]
@@ -97,11 +89,20 @@ class SiteAdminModelsViewTests(TestCase):
     def test_a_promoted_model_shows_its_version_and_metrics(self) -> None:
         """Metrics live on the serialized model version, not at the envelope's top level."""
         body = {
-            "active": {"version": 12, "algorithm": "logreg", "metrics": {"brier": 0.081}, "baseline_metrics": {"heuristic": {"brier": 0.14}}},
+            "active": {
+                "version": 12,
+                "algorithm": "logreg",
+                "metrics": {"brier": 0.081},
+                "baseline_metrics": {"heuristic": {"brier": 0.14}},
+            },
             "ranker": "model",
         }
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=body),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         summary = response.context["models"][0]["summary"]
@@ -115,21 +116,33 @@ class SiteAdminModelsViewTests(TestCase):
         """REData states which ranker answered; inferring it would disagree the moment they differ."""
         body = {"active": {"version": 3}, "ranker": "heuristic"}
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=body),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.context["models"][0]["summary"]["ranker"], "heuristic")
 
     def test_the_photo_models_scorer_field_is_read_too(self) -> None:
         """The same fact is named `ranker` for labels and `scorer` for photos."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=_HEURISTIC), mock.patch(_PHOTOS, return_value={"active": {"version": 9}, "scorer": "model"}):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=_HEURISTIC),
+            mock.patch(_PHOTOS, return_value={"active": {"version": 9}, "scorer": "model"}),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.context["models"][1]["summary"]["ranker"], "model")
 
     def test_a_malformed_active_renders_rather_than_500ing(self) -> None:
         """A diagnostics page that dies on an unexpected shape hides what it was reporting."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value={"active": 12}), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value={"active": 12}),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -139,7 +152,11 @@ class SiteAdminModelsViewTests(TestCase):
         """A diagnostics page that dies when the thing it diagnoses is down is useless."""
         from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, side_effect=GatewayRequestError("down")), mock.patch(_PHOTOS, side_effect=GatewayRequestError("down")):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, side_effect=GatewayRequestError("down")),
+            mock.patch(_PHOTOS, side_effect=GatewayRequestError("down")),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -147,31 +164,41 @@ class SiteAdminModelsViewTests(TestCase):
 
     def test_a_personal_field_never_reaches_the_page(self) -> None:
         """The whole constraint, asserted end to end."""
-        body = {"active": {"version": 3, "metrics": {"brier": 0.1}}, "ranker": "model", "uploader": "jess@example.test", "reputation": 0.9}
+        body = {
+            "active": {"version": 3, "metrics": {"brier": 0.1}},
+            "ranker": "model",
+            "uploader": "jess@example.test",
+            "reputation": 0.9,
+        }
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=body),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         self.assertNotContains(response, "jess@example.test")
         self.assertNotIn("uploader", response.context["models"][0]["summary"])
 
     def test_both_models_are_reported(self) -> None:
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value={"active": {"version": 1}}), mock.patch(_PHOTOS, return_value={"active": {"version": 2}}):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value={"active": {"version": 1}}),
+            mock.patch(_PHOTOS, return_value={"active": {"version": 2}}),
+        ):
             response = self.client.get(self.url)
 
-        self.assertEqual([entry["title"] for entry in response.context["models"]], ["Label suggestion", "Photo relevance"])
+        self.assertEqual(
+            [entry["title"] for entry in response.context["models"]], ["Label suggestion", "Photo relevance"]
+        )
 
 
 class ReputationIsNotConsumedTests(SimpleTestCase):
     """The per-contributor endpoint must stay unused, not merely unwired today.
 
-    The first version of this guard could not fail: it globbed a directory that
-    does not exist, so it reported success with a real consumer present. It now
-    proves it is looking at the right tree before drawing any conclusion, and
-    matches *executable* references rather than the substring - two docstrings
-    document the deliberate non-use, and a guard that trips on its own
-    explanation gets deleted rather than heeded.
-    """
+    The first version of this guard could not fail: it globbed a directory that does not exist, so it reported
+    success with a real consumer present."""
 
     def _source_root(self) -> Path:
 
@@ -210,10 +237,17 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
             for node in ast.walk(tree):
                 # Only strings *used in code* count - a docstring saying the
                 # endpoint is deliberately unused is not a call to it.
-                if isinstance(node, ast.Constant) and isinstance(node.value, str) and "photos/reputation" in node.value and id(node) not in docstring_nodes:
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and "photos/reputation" in node.value
+                    and id(node) not in docstring_nodes
+                ):
                     offenders.append(f"{path.name}:{node.lineno}")
 
-        self.assertEqual(offenders, [], "a per-contributor reputation score is not something this application has a use for")
+        self.assertEqual(
+            offenders, [], "a per-contributor reputation score is not something this application has a use for"
+        )
 
     def test_the_guard_catches_a_real_consumer(self) -> None:
         """Proves the matcher fires, since a guard is only worth its false-negative rate."""
@@ -230,7 +264,14 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
             and isinstance(node.body[0].value, ast.Constant)
             and isinstance(node.body[0].value.value, str)
         }
-        hits = [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and "photos/reputation" in n.value and id(n) not in docstring_nodes]
+        hits = [
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Constant)
+            and isinstance(n.value, str)
+            and "photos/reputation" in n.value
+            and id(n) not in docstring_nodes
+        ]
 
         self.assertEqual(len(hits), 1)
 
@@ -241,6 +282,52 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
         source = '"""Deliberately does not wrap GET /api/v1/photos/reputation/."""\n'
         tree = ast.parse(source)
         docstring_nodes = {id(tree.body[0].value)}
-        hits = [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and "photos/reputation" in n.value and id(n) not in docstring_nodes]
+        hits = [
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Constant)
+            and isinstance(n.value, str)
+            and "photos/reputation" in n.value
+            and id(n) not in docstring_nodes
+        ]
 
         self.assertEqual(hits, [])
+
+
+class TheDiagnosticsPageSurvivesAnUnconfiguredRedataTests(SiteAdminModelsViewTests):
+    """Constructing the gateway raises before anything can report on it.
+
+    ``_model_summary`` is careful to report an unreachable REData rather than
+    raise - "a diagnostics page that 500s when the thing it diagnoses is down is
+    the least useful moment to lose it". But the gateways are *built* in the
+    argument list, outside that guard, and their ``__post_init__`` raises
+    ``ValueError`` when ``UL_REDATA_API_URL`` is unset. Any deployment without
+    REData configured got a 500 on this page.
+    """
+
+    #: What ``RedataJsonGateway.__post_init__`` raises with no URL configured.
+    REFUSAL = ValueError("UL_REDATA_API_URL must be configured.")
+
+    def test_a_gateway_that_refuses_to_build_is_reported_rather_than_raised(self) -> None:
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS_GATEWAY, side_effect=self.REFUSAL),
+            mock.patch(_PHOTOS_GATEWAY, side_effect=self.REFUSAL),
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200, "the models page 500s wherever REData is not configured")
+        for model in response.context["models"]:
+            self.assertFalse(model["summary"]["available"])
+
+    def test_a_configured_gateway_is_still_reported_as_available(self) -> None:
+        """The half that stops the test above passing against a page that reports nothing."""
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value={"active": {"version": 1}}),
+            mock.patch(_PHOTOS, return_value={"active": {"version": 2}}),
+        ):
+            response = self.client.get(self.url)
+
+        for model in response.context["models"]:
+            self.assertTrue(model["summary"]["available"])

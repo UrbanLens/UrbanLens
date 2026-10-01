@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import random
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -10,9 +9,6 @@ from django.core.exceptions import FieldDoesNotExist
 
 # Django Imports
 from django.db import IntegrityError, models as django_models, transaction
-from django.db.models import UUIDField
-from django.db.models.fields import SlugField
-from django.utils.text import slugify
 
 # App Imports
 from urbanlens.dashboard.models.abstract.queryset import DashboardManager, FrontendDashboardManager, PublicDashboardManager
@@ -24,15 +20,7 @@ _DEFAULT_MAX_SLUG_LENGTH = 255
 
 def _is_slug_collision(error: IntegrityError) -> bool:
     """Whether an IntegrityError is a *slug* unique-constraint violation.
-
-    The retry loops below regenerate the slug and try again - which only helps
-    when the slug was the colliding column. Matching any "duplicate key"
-    message (as this used to) meant a violation of some other constraint
-    (e.g. Pin's one-pin-per-location-per-profile) burned 20 slug
-    regenerations before surfacing, and the save() fallback then masked the
-    real conflict behind a uuid slug. Postgres includes the constraint/index
-    name in the message, and every slug uniqueness constraint in this app has
-    "slug" in its name (a naming rule this check makes load-bearing).
+    The retry loops below regenerate the slug and try again - which only helps when the slug was the colliding column.
     """
     message = str(error)
     return "duplicate key value violates unique constraint" in message and "slug" in message
@@ -45,18 +33,14 @@ class DashboardModel(django_models.Model):
 
     created = django_models.DateTimeField(auto_now_add=True)
     updated = django_models.DateTimeField(auto_now=True)
-    objects: DashboardManager = DashboardManager()
+    objects = DashboardManager()
 
     if TYPE_CHECKING:
         id: int
 
     class Meta:
-        """
-        Base Meta options shared by every dashboard model.
-
-        This class only sets ``abstract``/``app_label`` - it does not itself define
-        ``db_table``, ``unique_together``, or ``indexes``. Concrete subclasses are free to
-        add any of those in their own ``Meta`` (which should inherit from this one).
+        """Base Meta options shared by every dashboard model.
+        This class only sets ``abstract``/``app_label`` - it does not itself define ``db_table``, ``unique_together``, or ``indexes``.
 
         Attributes:
             abstract (bool): Always True - this class is never instantiated directly.
@@ -73,30 +57,21 @@ class FrontendDashboardModel(DashboardModel):
     """
 
     uuid = django_models.UUIDField(default=uuid4, unique=True, editable=False)
-    objects: FrontendDashboardManager = FrontendDashboardManager()
+    objects = FrontendDashboardManager()
 
     class Meta(DashboardModel.Meta):
         abstract = True
 
 
 class PublicDashboardModel(FrontendDashboardModel):
-    """
-    A base model that users can visit on the frontend.
-
-    Concrete models must implement ``_slugify_base()`` returning the raw text
-    from which the slug is derived, and may override ``_slugify_qs()`` to
-    scope uniqueness checks (e.g. per-user instead of globally).
-
-    The ``slug`` field intentionally has no ``unique=True`` here - models that
-    need global uniqueness (Location, Profile) should override the field.
-    Models that need scoped uniqueness (Pin, unique per-profile) rely on a
-    ``UniqueConstraint`` in their Meta instead.
+    """A base model that users can visit on the frontend.
+    Concrete models must implement ``_slugify_base()`` returning the raw text from which the slug is derived, and may override ``_slugify_qs()`` to scope uniqueness checks (e.g. per-user instead of globally).
     """
 
     # URL slug - uniqueness constraints are set on each concrete model.
     slug = django_models.SlugField(max_length=_DEFAULT_MAX_SLUG_LENGTH, null=True, blank=True)
 
-    objects: PublicDashboardManager = PublicDashboardManager()
+    objects = PublicDashboardManager()
 
     def _slug_max_length(self) -> int:
         """Return the max_length of the slug field as declared on this model."""
@@ -109,10 +84,7 @@ class PublicDashboardModel(FrontendDashboardModel):
             return _DEFAULT_MAX_SLUG_LENGTH
 
     def _slugify_qs(self):
-        """Return the queryset used to check for slug uniqueness.
-
-        Override to scope uniqueness checks (e.g. ``filter(profile=self.profile)``).
-        """
+        """Return the queryset used to check for slug uniqueness. Override to scope uniqueness checks (e.g."""
         qs = self.__class__.objects.all()
         if self.pk:
             qs = qs.exclude(pk=self.pk)
@@ -128,36 +100,44 @@ class PublicDashboardModel(FrontendDashboardModel):
             f"{type(self).__name__} must implement _slugify_base().",
         )
 
+    def _slug_parent_prefix(self) -> str:
+        """Short parent-derived prefix for a child entity's slug, or empty.
+
+        Child pins and child wikis override this so a building at Hudson River
+        State Hospital is addressed as ``hrsh-powerhouse`` rather than a
+        disconnected clip of the building name. Root entities leave it empty.
+        """
+        return ""
+
+    def _slug_preferred_length(self) -> int:
+        """Soft cap for the ideal slug; uniqueness may grow toward ``max_length``.
+
+        Child pins and child wikis use a shorter preferred length so trailing
+        words (including hyphenated compounds) drop as a unit instead of being
+        clipped mid-word. Everyone else prefers the full column width.
+        """
+        return self._slug_max_length()
+
     def _generate_slug(self) -> str:
         """Derive a unique slug for this instance.
-
-        Runs inside an atomic block so concurrent writers see each other's
-        reservations and cannot claim the same candidate simultaneously.
-        Automatically truncates the base so appending a numeric suffix never
-        exceeds the field's declared ``max_length``.
+        Truncates at a word boundary so a too-long name loses whole trailing tokens (``non-contributing`` as a unit) rather than a mid-word clip.
         """
+        from urbanlens.dashboard.services.core.slugs import unique_slug
+
         max_len = self._slug_max_length()
-        raw_base = slugify(self._slugify_base()) or "item"
-
         qs = self._slugify_qs()
-        # Reserve room for the longest suffix we might need.
-        # Start with the full (possibly truncated) base and walk up.
-        base = raw_base[:max_len]
-        candidate = base
-        while qs.filter(slug=candidate).exists():
-            # Not used for cryptographic purposes
-            n = random.randint(2, 90_000)  # noqa: S311 # nosec: B311 - Used for slug generation
-            suffix = f"-{n}"
-            candidate = raw_base[: max_len - len(suffix)] + suffix
-
-        return candidate
+        return unique_slug(
+            self._slugify_base(),
+            is_taken=lambda candidate: qs.filter(slug=candidate).exists(),
+            prefix=self._slug_parent_prefix(),
+            max_length=max_len,
+            preferred_length=self._slug_preferred_length(),
+        )
 
     def ensure_slug(self) -> str:
         """Ensure this instance has a URL slug, generating one if needed.
-
-        Persists the slug immediately when the instance already exists in the
-        database (``self.pk`` is set). For unsaved instances, only sets the
-        attribute - the caller is responsible for saving.
+        Persists the slug immediately when the instance already exists in the database (``self.pk`` is set).
+        For unsaved instances, only sets the attribute - the caller is responsible for saving.
 
         Returns:
             The instance slug (never empty).
@@ -168,9 +148,7 @@ class PublicDashboardModel(FrontendDashboardModel):
 
     def regenerate_slug(self) -> str:
         """Force a new slug to be generated and persisted, replacing any existing one.
-
-        Useful when the source field (e.g. name or username) has changed and
-        the old slug is stale. Always saves when ``self.pk`` is set.
+        Useful when the source field (e.g. name or username) has changed and the old slug is stale.
 
         Returns:
             The new slug.
@@ -196,6 +174,9 @@ class PublicDashboardModel(FrontendDashboardModel):
         if self.slug:
             super().save(*args, **kwargs)
             return
+
+        if kwargs.get("update_fields") is not None and "slug" not in kwargs["update_fields"]:
+            kwargs["update_fields"] = [*kwargs["update_fields"], "slug"]
 
         # Handle the race condition where another writer claims our candidate
         # slug between generation and insert: retry with a fresh candidate.

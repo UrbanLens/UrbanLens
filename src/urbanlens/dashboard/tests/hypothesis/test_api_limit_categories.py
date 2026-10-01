@@ -1,16 +1,4 @@
-"""Every REData service key reaches a tab on the API limits page.
-
-``_API_LIMIT_CATEGORIES`` is a hand-curated map, and its own comment records
-that anything absent falls into "Other" so a new service is never hidden. That
-fallback is deliberate and worth keeping - but it stops being graceful once a
-family outgrows it. As REData added a domain per pin-detail panel, 18 of its 32
-service keys ended up in the catch-all tab at once, which is not a tab so much
-as a second, unsorted list.
-
-Scoped to ``redata_*`` on purpose. The rest of the map covers vendors added one
-at a time, where "Other" really is a reasonable landing spot until someone
-looks; REData grows in batches and is the family that actually drifted.
-"""
+"""Every REData service key reaches a tab on the API limits page."""
 
 from __future__ import annotations
 

@@ -1,23 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if the committed tree would import a module the committed tree lacks.
-
-On 2026-08-13 a commit landed 139 files while leaving five modules untracked, and
-19 of the committed files imported them. One - ``models/abstract/labelled.py`` -
-sits on Django's model-loading path, so a fresh checkout raised
-``ModuleNotFoundError`` while importing models: the web app, every management
-command, both Celery workers and the whole test suite failed before doing
-anything. Nothing caught it, because it is invisible from any working copy that
-still has the files on disk, which is every machine the work was done on.
-
-This checks the property directly: every ``urbanlens.*`` import in a tracked (or
-newly staged) Python file must resolve to a file git will actually have. It is
-deliberately structural rather than behavioural - importing the app to find out
-would only prove the *working copy* is intact, which is exactly the thing that
-was never in doubt.
-
-Exits non-zero listing each offending import. Run by pre-commit; safe to run by
-hand from the repo root.
-"""
+"""Fail if the committed tree would import a module the committed tree lacks."""
 
 from __future__ import annotations
 
@@ -52,10 +34,8 @@ def _git(*args: str) -> set[str]:
 def _visible_paths() -> set[str]:
     """Every path a fresh checkout of the resulting commit would contain.
 
-    Tracked files plus anything newly staged, minus anything staged for deletion -
-    the last matters because a commit that removes a module while leaving its
-    importers behind fails identically.
-    """
+    Tracked files plus anything newly staged, minus anything staged for deletion - the last matters because a
+    commit that removes a module while leaving its importers behind fails identically."""
     tracked = _git("ls-files")
     added = _git("diff", "--cached", "--name-only", "--diff-filter=A")
     deleted = _git("diff", "--cached", "--name-only", "--diff-filter=D")
@@ -65,10 +45,9 @@ def _visible_paths() -> set[str]:
 def _module_candidates(module: str) -> list[str]:
     """Paths that would satisfy ``import module`` - a module file or a package.
 
-    Returned as posix-style strings since that's what ``git ls-files`` emits
-    (even on Windows) - comparing against ``str(Path(...))`` here would compare
-    backslash-joined paths against forward-slash ones and never match.
-    """
+    Returned as posix-style strings since that's what ``git ls-files`` emits (even on Windows) - comparing
+    against ``str(Path(...))`` here would compare backslash-joined paths against forward-slash ones and never
+    match."""
     relative = module.replace(".", "/")
     return [
         (_PACKAGE_ROOT / f"{relative}.py").as_posix(),
@@ -105,15 +84,8 @@ _TEMPLATE_NAMES = ("template_name", "_TEMPLATE", "_PARTIAL")
 def _referenced_templates(source: str) -> set[str]:
     """Template paths this source actually renders.
 
-    Restricted to literals passed to a known template callable or assigned to a
-    template-shaped name, rather than every ``.html`` string in the file. A
-    broader rule flags things like ``Takeout/My Activity/Maps/MyActivity.html`` -
-    a path *inside a Google Takeout archive fixture* - and a hook that blocks
-    commits cannot afford a false positive.
-
-    Runtime-built names are deliberately not resolved; guessing them would fail
-    commits over templates that are perfectly fine.
-    """
+    Restricted to literals passed to a known template callable or assigned to a template-shaped name, rather
+    than every ``.html`` string in the file."""
     try:
         tree = ast.parse(source)
     except SyntaxError:

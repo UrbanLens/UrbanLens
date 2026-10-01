@@ -1,27 +1,17 @@
 import { getCsrfToken } from "./csrf";
 import { toast, confirmAction } from "./dialogs";
-import { safeColor } from "./markup-engine";
+import { KeyedDebounce } from "./keyed-debounce";
+import { reportMarkupTruncation, safeColor } from "./markup-engine";
 import type { ShapeSpec } from "./markup-engine";
+import { markupItemToShapeSpec } from "./markup-shape";
+import { wireMarkupPanel, wireMarkupTools } from "./markup-panel";
+import { escHtml } from "./escape-html";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
 
 /**
- * Shared map markup drawing/editing toolbar - lines, arrows, shapes, and text
- * labels drawn on a Leaflet map via window.MarkupEngine. Used identically by
- * the pin detail page, the Location wiki page, and the safety check-in map; a
- * fix here lands on all three.
- *
- * Ported from the old `_markup_toolbar_script.html` text fragment (which
- * relied on being spliced into the including page's own script scope to read
- * bare `map`/`_markupLayer` identifiers) into an explicit factory - the host
- * page now passes `map`/`markupLayer` and a config object instead. The draw
- * tools themselves are plain top-right toolbar icons (see map_toolbar() /
- * `markup_pin`+`markup_line`+... in dashboard/templatetags/map_components.py)
- * whose onclick attributes call the functions this module exposes
- * (startMarkupDraw, startShapeDraw, startTextPlacement, closeOrFinishDraw,
- * deleteMarkupEdit) as `window` globals - see ts/entries/map-annotations.ts
- * and _safety_map_script.html for the two ways that's done.
+ * Shared map markup drawing/editing toolbar - lines, arrows, shapes, and text labels drawn on a Leaflet map via window.MarkupEngine.
  */
 
 export interface MarkupItem {
@@ -52,69 +42,6 @@ export interface MarkupItem {
     /** The LayerGroup this item is currently rendered into - tracked so a
      * layer move can cleanly remove it before re-rendering into the new group. */
     _group?: L.LayerGroup;
-}
-
-const METERS_PER_DEGREE_LAT = 111_320;
-
-/**
- * Converts a stored MarkupItem (DB GeoJSON-ish geometry) into the snapshot
- * ShapeSpec format (`latlngs` as [lat,lng] pairs) MapExport/MarkupEngine
- * consume - the client-side mirror of `PinMarkup.to_snapshot_shape()`
- * (models/markup/model.py), kept in lockstep with it.
- */
-export function markupItemToShapeSpec(item: MarkupItem): ShapeSpec | null {
-    const geometry = item.geometry;
-    const coordinates = geometry?.coordinates;
-    if (coordinates == null) return null;
-
-    const shape: ShapeSpec = {
-        type: item.markup_type === "square" ? "rect" : (item.markup_type as ShapeSpec["type"]),
-        latlngs: [],
-        color: item.color,
-        stroke_width: item.stroke_width,
-        fill_opacity: item.fill_opacity,
-        border_opacity: item.border_opacity,
-    };
-    if (item.border_color) shape.border_color = item.border_color;
-    if (item.label) shape.label = item.label;
-
-    try {
-        if (item.markup_type === "line" || item.markup_type === "arrow") {
-            shape.latlngs = (coordinates as [number, number][]).map((c) => [c[1], c[0]]);
-        } else if (item.markup_type === "text") {
-            const latlngs: [number, number][] = [[coordinates[1], coordinates[0]]];
-            const boxCorner = geometry.box_corner;
-            if (boxCorner) latlngs.push([boxCorner[1], boxCorner[0]]);
-            shape.latlngs = latlngs;
-            shape.label = item.label || "";
-        } else if (item.markup_type === "circle") {
-            const [lng, lat] = coordinates as [number, number];
-            const radius = geometry.radius || 0;
-            const dlng = radius / (METERS_PER_DEGREE_LAT * Math.max(Math.cos((lat * Math.PI) / 180), 1e-6));
-            shape.latlngs = [
-                [lat, lng],
-                [lat, lng + dlng],
-            ];
-        } else if (item.markup_type === "square") {
-            const ring = (coordinates as [number, number][][])[0]!;
-            shape.latlngs = [
-                [ring[0]![1], ring[0]![0]],
-                [ring[2]![1], ring[2]![0]],
-            ];
-        } else if (item.markup_type === "polygon") {
-            const ring = (coordinates as [number, number][][])[0]!;
-            const first = ring[0]!;
-            const last = ring[ring.length - 1]!;
-            const points = ring.length > 1 && first[0] === last[0] && first[1] === last[1] ? ring.slice(0, -1) : ring;
-            shape.latlngs = points.map((c) => [c[1], c[0]]);
-        } else {
-            return null;
-        }
-    } catch {
-        return null;
-    }
-    if (!shape.latlngs.length) return null;
-    return shape;
 }
 
 export interface MarkupToolbarConfig {
@@ -165,8 +92,7 @@ export interface MarkupToolbar {
     deleteMarkupEdit: () => Promise<void>;
     openMarkupEditDialog: (item: MarkupItem) => void;
     /** Applies every edit-panel field (including the Layer picker) to the
-     * currently-editing item and schedules an autosave. Exposed as
-     * window._liveApplyMarkupEdit for the dialog's inline oninput/onchange handlers. */
+     * currently-editing item and schedules an autosave. */
     liveApplyMarkupEdit: () => void;
     /** Moves an existing item onto (or off, with null) a custom layer without
      * recreating it - used by the sidebar list's inline per-item Layer picker. */
@@ -174,10 +100,9 @@ export interface MarkupToolbar {
     getMarkupItems: () => MarkupItem[];
     /** Current items converted to the snapshot ShapeSpec format, for MapExport. */
     getShapesForExport: () => ShapeSpec[];
-    /** True while a draw tool is armed - hosts with their own map-click handlers
-     * (detail-pin placement, the boundary editor's polygon-click menu) should
-     * skip their own logic while this is true, so a click used to draw doesn't
-     * also trigger them. */
+    /**
+ * True while a draw tool is armed - hosts with their own map-click handlers.
+ */
     isDrawBusy: () => boolean;
 }
 
@@ -197,9 +122,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         markupEditBase = (config.markupMapMarkupEditUrlTemplate ?? "").replaceAll(MARKUP_MAP_UUID_PLACEHOLDER, uuid).replace("00000000-0000-0000-0000-000000000000/", "");
     }
 
-    // Resolves once markup endpoints exist, creating the draft MarkupMap on
-    // first use. Static-URL pages (pin detail, wiki, check-in detail) resolve
-    // immediately; only lazy mode ever hits the network here.
+    // Resolves once markup endpoints exist, creating the draft MarkupMap on first use.
     function ensureMarkupTarget(): Promise<void> {
         if (markupPostUrl) return Promise.resolve();
         if (!markupMapCreateUrl) return Promise.reject(new Error("No markup endpoints configured"));
@@ -231,11 +154,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
 
     const markupDefaultFillOpacity = (config.markupFillOpacity ?? 87) / 100;
     const markupDefaultBorderOpacity = (config.markupBorderOpacity ?? 100) / 100;
-    // Referenced only to keep the profile-default constants from being flagged
-    // unused - the actual per-item opacity always falls back to these same
-    // 87/100 defaults inline (see _shapeOptions/_renderMarkupItem below),
-    // matching the original file's behavior of computing them but only ever
-    // consulting the item's own stored value.
+    // Referenced only to keep the profile-default constants from being flagged unused.
     void markupDefaultFillOpacity;
     void markupDefaultBorderOpacity;
 
@@ -244,20 +163,13 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     let editingMarkupItem: MarkupItem | null = null;
 
     const markupPalette = ["#e53e3e", "#1d4ed8", "#16a34a", "#d97706", "#7c3aed", "#0f172a", "#f8fafc"];
-    // A shape/arrow/line's own Border Color is restricted to black/white/none - it's
-    // just an outline for legibility, not a design choice like a dedicated Text
-    // item's fully user-controlled color+background.
+    // A shape/arrow/line's own Border Color is restricted to black/white/none.
     const borderOnlyPalette = ["#0f172a", "#f8fafc"];
 
     function arrowheadSize(): number {
         return window.MarkupEngine.arrowheadSize(map.getZoom());
     }
 
-    function escapeMarkupLabel(s: string): string {
-        const div = document.createElement("div");
-        div.textContent = s || "";
-        return div.innerHTML;
-    }
 
     function textFontSize(item: MarkupItem): number {
         const base = item.stroke_width || 16;
@@ -307,15 +219,13 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         const label = overrideLabel !== undefined ? overrideLabel : item.label || "";
         const bg = textBackground(item);
         const rect = textBoxPixelRect(item);
-        // The Font Size slider (item.stroke_width) always drives the rendered size -
-        // for a drag-created box, the box just defines a fixed wrap/clip region
-        // around that text instead of the box height dictating the font size.
+        // The Font Size slider (item.stroke_width) always drives the rendered size.
         const sz = textFontSize(item);
         const color = itemColor(item);
         if (rect) {
-            return `<span class="map-text-label map-text-label--box" style="color:${color};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+            return `<span class="map-text-label map-text-label--box" style="color:${color};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escHtml(label) || "&nbsp;"}</span>`;
         }
-        return `<span class="map-text-label" style="color:${color};font-size:${sz}px;background:${bg}">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+        return `<span class="map-text-label" style="color:${color};font-size:${sz}px;background:${bg}">${escHtml(label) || "&nbsp;"}</span>`;
     }
 
     function textIcon(item: MarkupItem): L.DivIcon {
@@ -381,10 +291,8 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 const mid = latlngs[Math.floor(latlngs.length / 2)]!;
                 layers.push(
                     L.marker(mid, {
-                        // Shape/arrow/line names always render as black-on-white, regardless
-                        // of the shape's own color - unlike a dedicated Text markup item
-                        // (which the user fully controls), this is just a readable caption.
-                        icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label map-text-label--line">${escapeMarkupLabel(item.label)}</span>` }),
+                        // Shape/arrow/line names always render as black-on-white, regardless of the shape's own color.
+                        icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label map-text-label--line">${escHtml(item.label)}</span>` }),
                         interactive: false,
                     }),
                 );
@@ -397,7 +305,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 const center = polygon.getBounds().getCenter();
                 layers.push(
                     L.marker(center, {
-                        icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label">${escapeMarkupLabel(item.label)}</span>` }),
+                        icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label">${escHtml(item.label)}</span>` }),
                         interactive: false,
                     }),
                 );
@@ -413,30 +321,30 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         item._layers = layers;
         item._group = targetGroup;
 
-        // Clicking any interactive layer opens the edit dialog; also bind a
-        // tooltip showing the label (if any) on hover. Markup belonging to a
-        // child pin (owner_name) is display-only here - no edit on click, and
-        // the tooltip says which child pin it comes from.
+        // Clicking any interactive layer opens the edit dialog; also bind a tooltip showing the label (if any) on hover.
         layers.forEach((l) => {
             const interactive = l as L.Layer & { on?: L.Evented["on"]; bindTooltip?: L.Layer["bindTooltip"] };
             if (!interactive.on) return;
             if (!item.owner_name) interactive.on!("click", () => openMarkupEditDialog(item));
             const tooltip = item.owner_name ? `${item.label ? `${item.label} — ` : ""}inside ${item.owner_name}` : item.label || "";
             if (tooltip && interactive.bindTooltip) {
-                interactive.bindTooltip!(escapeMarkupLabel(tooltip), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+                interactive.bindTooltip!(escHtml(tooltip), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
             }
         });
     }
 
-    // Clears every LayerGroup any current item is actually rendered into -
-    // not just the base markupLayer - so a full reload also wipes items that
-    // were routed into a custom layer's own group via config.layerGroupFor.
+    // Clears every LayerGroup any current item is actually rendered into - not just the base markupLayer.
     function clearRenderedMarkup(): void {
         const groups = new Set<L.LayerGroup>([markupLayer]);
         markupItems.forEach((item) => {
             if (item._group) groups.add(item._group);
         });
         groups.forEach((g) => g.clearLayers());
+    }
+
+    // Every host mounts its map in one of these; the notes this toolbar owns attach there.
+    function mapWrapper(): Element | null {
+        return document.querySelector(".map-wrapper") || document.querySelector(".safety-map-wrapper");
     }
 
     function loadMarkup(): void {
@@ -450,15 +358,14 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                     renderMarkupItem(item);
                     markupItems.push(item);
                 });
+                reportMarkupTruncation(mapWrapper(), data);
                 config.onBuildDetailList?.();
             })
             .catch((err) => console.warn("Could not load markup:", err));
     }
 
     // -- One-time tip: how to finish a multi-point line/arrow -------------------
-    // Shown once ever (not per-page) the first time a user places a 2nd point on
-    // a line/arrow - non-blocking (pointer-events: none on the wrapper) so it
-    // never steals the click the user is mid-gesture on.
+    // Shown once ever (not per-page) the first time a user places a 2nd point on a line/arrow - non-blocking.
     const lineFinishTipKey = "ul_onboarding_v1_markup_line_finish_tip_dismissed";
     function lineFinishTipDismissed(): boolean {
         if (config.lineFinishTipDismissed?.()) return true;
@@ -478,7 +385,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     }
     function maybeShowLineFinishTip(): void {
         if (lineFinishTipDismissed() || document.getElementById("markup-line-finish-tip")) return;
-        const wrapper = document.querySelector(".map-wrapper") || document.querySelector(".safety-map-wrapper");
+        const wrapper = mapWrapper();
         if (!wrapper) return;
         const el = document.createElement("div");
         el.id = "markup-line-finish-tip";
@@ -517,9 +424,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     });
 
     // -- Markup drawing - engine-backed -----------------------------------------
-    // One panel (#markup-panel) is used for both drawing a new item and editing
-    // an existing one - only its title, hint, and action row change between the
-    // two modes, so the user only ever learns a single set of controls.
+    // One panel (#markup-panel) is used for both drawing a new item and editing an existing one.
     const MARKUP_TOOL_TITLES: Record<string, string> = {
         line: "Draw Line",
         freehand: "Draw Freehand",
@@ -545,9 +450,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         document.getElementById("markup-panel-width-label-text")!.textContent = isText ? "Font Size" : "Width";
         (document.getElementById("markup-panel-security-row") as HTMLElement).hidden = isText;
         rebuildEditSwatch("markup-panel-border-swatches", "markup-panel-border", true, isText ? markupPalette : borderOnlyPalette);
-        // Layer assignment only makes sense once an item exists to move - a
-        // freshly-drawn item reopens straight into edit mode (see
-        // reloadMarkupAndOpenEdit) where the row becomes available.
+        // Layer assignment only makes sense once an item exists to move.
         const layerRow = document.getElementById("markup-panel-layer-row") as HTMLElement | null;
         if (layerRow) layerRow.hidden = true;
 
@@ -655,6 +558,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                     renderMarkupItem(item);
                     markupItems.push(item);
                 });
+                reportMarkupTruncation(mapWrapper(), markupData);
                 config.onBuildDetailList?.();
                 const newItem = markupItems.find((i) => i.uuid === newUuid);
                 if (newItem) openMarkupEditDialog(newItem);
@@ -679,10 +583,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         editingMarkupItem = null;
     }
 
-    // Single "Close" action for draw mode: finishes a valid in-progress shape
-    // (the old Finish button), or just abandons the tool if there's nothing
-    // to finish yet (the old Cancel button) - autosave means there's never a
-    // saved-but-unconfirmed state to explicitly "cancel" once a shape exists.
+    // Single "Close" action for draw mode: finishes a valid in-progress shape (the old Finish button), or just abandons the tool if there's.
     function closeOrFinishDraw(): void {
         if (drawSession?.canFinish()) {
             drawSession.finishCurrent();
@@ -725,10 +626,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         });
     }
 
-    // Applies every edit-panel field to the map instantly, then schedules a
-    // debounced save - so annotations update in realtime as the user drags a
-    // slider or picks a color, without needing an explicit Save button, and
-    // without hammering the server on every single input event.
+    // Applies every edit-panel field to the map instantly, then schedules a debounced save.
     function liveApplyMarkupEdit(): void {
         if (!editingMarkupItem) return;
         const item = editingMarkupItem;
@@ -744,67 +642,41 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         const layerSelect = document.getElementById("markup-panel-layer") as HTMLSelectElement | null;
         if (layerSelect) item.layer_uuid = layerSelect.value || null;
 
-        // Re-render in place: the item object's identity is preserved (same
-        // reference in markupItems / editingMarkupItem), only its layers change,
-        // so this reuses renderMarkupItem as the single source of truth for how
-        // every shape type looks rather than hand-rolling per-type restyle logic.
-        // Removed from its *current* group (item._group), not always markupLayer -
-        // a layer_uuid change above may be about to move it to a different one.
+        // Re-render in place: the item object's identity is preserved (same reference in markupItems / editingMarkupItem), only its layers.
         item._layers?.forEach((l) => (item._group ?? markupLayer).removeLayer(l));
         renderMarkupItem(item);
 
         scheduleMarkupAutoSave(item);
     }
 
-    // Keyed by item uuid, not a single shared slot: setItemLayer() (the
-    // sidebar's inline per-item layer picker) can schedule a save for an item
-    // that isn't even open in the edit panel, independently of whatever the
-    // panel itself just edited. A single slot meant scheduling either one
-    // cancelled and discarded whichever edit was already pending for the
-    // other - editing item A, then moving item B's layer from the sidebar
-    // before A's 500ms debounce fired, silently lost A's change forever.
-    const markupAutoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    const markupAutoSaveItems = new Map<string, MarkupItem>();
-    function scheduleMarkupAutoSave(item: MarkupItem): void {
-        const existingTimer = markupAutoSaveTimers.get(item.uuid);
-        if (existingTimer) clearTimeout(existingTimer);
-        markupAutoSaveItems.set(item.uuid, item);
-        markupAutoSaveTimers.set(
-            item.uuid,
-            setTimeout(() => flushMarkupAutoSave(item.uuid), 500),
-        );
-    }
-    /** Flush one item's pending save, or every pending item when no uuid is given. */
-    function flushMarkupAutoSave(uuid?: string): void {
-        const uuids = uuid ? [uuid] : Array.from(markupAutoSaveItems.keys());
-        for (const id of uuids) {
-            const timer = markupAutoSaveTimers.get(id);
-            if (timer) clearTimeout(timer);
-            markupAutoSaveTimers.delete(id);
-            const item = markupAutoSaveItems.get(id);
-            markupAutoSaveItems.delete(id);
-            if (!item) continue;
-            fetch(`${markupEditBase}${item.uuid}/`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                body: JSON.stringify({
-                    label: item.label,
-                    color: item.color,
-                    border_color: item.border_color,
-                    stroke_width: item.stroke_width,
-                    fill_opacity: item.fill_opacity,
-                    border_opacity: item.border_opacity,
-                    security_indicator: item.security_indicator,
-                    layer_uuid: item.layer_uuid,
-                }),
+    const markupAutoSaves = new KeyedDebounce<MarkupItem>(500, (uuid, item) => {
+        fetch(`${markupEditBase}${uuid}/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+            body: JSON.stringify({
+                label: item.label,
+                color: item.color,
+                border_color: item.border_color,
+                stroke_width: item.stroke_width,
+                fill_opacity: item.fill_opacity,
+                border_opacity: item.border_opacity,
+                security_indicator: item.security_indicator,
+                layer_uuid: item.layer_uuid,
+            }),
+            keepalive: true,
+        })
+            .then((r) => {
+                // fetch only rejects on a network failure - a 400 (e.g. an
+                // over-long label) resolved here and reported nothing.
+                if (!r.ok) toast.error("Failed to save annotation changes.");
             })
-                .then((r) => {
-                    // fetch only rejects on a network failure - a 400 (e.g. an
-                    // over-long label) resolved here and reported nothing.
-                    if (!r.ok) toast.error("Failed to save annotation changes.");
-                })
-                .catch(() => toast.error("Failed to save annotation changes."));
-        }
+            .catch(() => toast.error("Failed to save annotation changes."));
+    });
+    function scheduleMarkupAutoSave(item: MarkupItem): void {
+        markupAutoSaves.schedule(item.uuid, item);
+    }
+    function flushMarkupAutoSave(): void {
+        markupAutoSaves.flush();
     }
 
     function openMarkupEditDialog(item: MarkupItem): void {
@@ -860,10 +732,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         if (!editingMarkupItem) return;
         if (!(await confirmAction({ title: "Delete Annotation", message: "Delete this annotation?", confirmLabel: "Delete" }))) return;
         // Drop any pending autosave for this item - it no longer exists to save.
-        const pendingTimer = markupAutoSaveTimers.get(editingMarkupItem.uuid);
-        if (pendingTimer) clearTimeout(pendingTimer);
-        markupAutoSaveTimers.delete(editingMarkupItem.uuid);
-        markupAutoSaveItems.delete(editingMarkupItem.uuid);
+        markupAutoSaves.cancel(editingMarkupItem.uuid);
         fetch(`${markupEditBase}${editingMarkupItem.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
             .then((r) => {
                 if (!r.ok) throw new Error();
@@ -874,10 +743,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
             .catch(() => toast.error("Failed to delete annotation."));
     }
 
-    // Reassigns an existing item to a different custom layer (or back to the
-    // base Markup layer, with layerUuid=null) in place - no delete+recreate.
-    // Used by the sidebar list's inline per-item Layer picker, so a move
-    // doesn't require opening the full edit panel.
+    // Reassigns an existing item to a different custom layer (or back to the base Markup layer, with layerUuid=null) in place.
     function setItemLayer(uuid: string, layerUuid: string | null): void {
         const item = markupItems.find((i) => i.uuid === uuid);
         if (!item) return;
@@ -913,6 +779,10 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     loadMarkup();
 
     void markupDrawType; // read only via closures above; kept for parity with the original state var
+
+    const panel = document.getElementById("markup-panel");
+    if (panel) wireMarkupPanel(panel, { liveApply: liveApplyMarkupEdit, closePanel: closeMarkupPanel, closeOrFinish: closeOrFinishDraw, deleteEdit: deleteMarkupEdit });
+    wireMarkupTools({ startMarkupDraw, startShapeDraw, startTextPlacement });
 
     return {
         loadMarkup,

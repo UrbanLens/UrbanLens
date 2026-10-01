@@ -1,10 +1,4 @@
-{% comment %}
-One conversation thread: header, message bubbles, composer. Context:
-`partner`, `thread_messages`, `can_message_partner`, `max_message_length`.
-Swapped into #dm-thread-pane by HTMX; the page's WebSocket JS (see
-pages/messages/index.html) reads the data attributes off #dm-thread to route
-live messages and fall back to the plain POST endpoint when the socket is down.
-{% endcomment %}
+{% comment %}One conversation thread: header, message bubbles, composer.{% endcomment %}
 {% load dashboard_tags %}
 <div class="dm-thread" id="dm-thread"
      data-partner-slug="{{ partner.slug }}"
@@ -59,13 +53,12 @@ live messages and fall back to the plain POST endpoint when the socket is down.
           <i class="material-symbols-outlined">{% if image_permission_status == 'rejected' %}image{% else %}hide_image{% endif %}</i>
           {% if image_permission_status == 'rejected' %}Allow images{% else %}Block images{% endif %}
         </button>
-        <form method="post" action="{% url 'friend.block' partner.id %}"
-              onsubmit="return confirm('Block {{ display_name }}? They will not be able to see your profile or message you.')">
-          {% csrf_token %}
-          <button type="submit" class="dm-bubble-menu__item dm-bubble-menu__item--danger">
-            <i class="material-symbols-outlined">block</i> Block
-          </button>
-        </form>
+        <button type="button" class="dm-bubble-menu__item dm-bubble-menu__item--danger"
+                hx-post="{% url 'friend.block' partner.id %}"
+                hx-target="#dm-thread-pane" hx-swap="innerHTML"
+                hx-confirm="Block {{ display_name }}? They will not be able to see your profile or message you.">
+          <i class="material-symbols-outlined">block</i> Block
+        </button>
       </div>
     </div>
     <button type="button" class="dm-thread__search-btn" id="dm-thread-search-btn"
@@ -95,7 +88,7 @@ live messages and fall back to the plain POST endpoint when the socket is down.
     <button type="button" id="dm-locked-unlock-btn">Unlock</button>
   </div>
 
-  <ul class="dm-messages" id="dm-messages" role="list">
+  <ul class="dm-messages" id="dm-messages" role="list" data-processing-url="{% url 'vault.photos.processing' %}">
     {% if has_more_older %}
     <li class="dm-load-older" id="dm-load-older-sentinel"
         hx-get="{% url 'messages.older' partner.slug %}?before={{ oldest_message_id }}"

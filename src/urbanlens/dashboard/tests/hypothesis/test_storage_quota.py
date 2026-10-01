@@ -1,27 +1,19 @@
-"""Tests for the storage quota service and upload downscale policy.
-
-Covers:
-- get_quota_bytes() - site default, role overrides, largest-wins, 0 = unlimited
-- get_storage_used_bytes() - sums file_size, skipping unmeasured rows
-- quota_error_for_upload() - boundary behaviour at the quota edge
-- get_downscale_policy() / get_entitled_policy() - site policy, subscriber
-  exemption, and the user's voluntary cap (which can only tighten)
-- estimate_bytes_per_photo() / estimate_photos_remaining() - monotonicity
-- allowed_user_dimension_values() - only caps below the entitlement
-"""
+"""Tests for the storage quota service and upload downscale policy."""
 
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.media.storage import (
     DOWNSCALE_DIMENSION_CHOICES,
     GIB,
+    StorageQuotaExceededError,
     allowed_user_dimension_values,
     estimate_bytes_per_photo,
     estimate_photos_remaining,
@@ -29,7 +21,7 @@ from urbanlens.dashboard.services.media.storage import (
     get_entitled_policy,
     get_quota_bytes,
     get_storage_used_bytes,
-    quota_error_for_upload,
+    reserve_upload,
 )
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
@@ -40,8 +32,6 @@ def _make_profile():
 
 
 def _grant_role(profile, **role_fields):
-    # Bakery's default unique-value sequencing keeps repeated calls collision-free;
-    # avoid a fixed default slug since "vip" is now seeded as baseline data by migration 0019.
     role = baker.make(SubscriptionRole, **role_fields)
     granter = baker.make(User)
     grant_subscription(profile.user, role, granter, months=None)
@@ -107,26 +97,59 @@ class StorageUsageTests(TestCase):
         self.assertEqual(get_storage_used_bytes(_make_profile()), 0)
 
 
-class QuotaErrorTests(TestCase):
-    """quota_error_for_upload() rejects only uploads that would exceed the quota."""
+class UploadReservationQuotaTests(TestCase):
+    """reserve_upload() admits only uploads that fit what the profile's rows already use."""
 
     def test_allows_upload_exactly_at_quota(self):
         profile = _make_profile()
         baker.make("dashboard.Image", profile=profile, file_size=10 * GIB - 5)
-        self.assertIsNone(quota_error_for_upload(profile, 5))
+        with reserve_upload(profile, 5) as reservation:
+            self.assertEqual(reservation.reserved, 5)
 
     def test_rejects_upload_past_quota(self):
         profile = _make_profile()
         baker.make("dashboard.Image", profile=profile, file_size=10 * GIB - 5)
-        error = quota_error_for_upload(profile, 6)
-        self.assertIsNotNone(error)
-        self.assertIn("storage quota", error)
+        with self.assertRaises(StorageQuotaExceededError) as caught, reserve_upload(profile, 6):
+            pass
+        self.assertIn("storage quota", caught.exception.message)
+        self.assertEqual(caught.exception.status, 413)
 
     def test_unlimited_never_rejects(self):
         profile = _make_profile()
         _grant_role(profile, storage_quota_gb=0)
         baker.make("dashboard.Image", profile=profile, file_size=50 * GIB)
-        self.assertIsNone(quota_error_for_upload(profile, 10 * GIB))
+        with reserve_upload(profile, 10 * GIB):
+            pass
+
+    def test_reservations_in_one_block_accumulate(self):
+        """Rows stored under the reservation are counted from what was reserved, before any is re-read."""
+        profile = _make_profile()
+        baker.make("dashboard.Image", profile=profile, file_size=10 * GIB - 10)
+        with reserve_upload(profile, None) as reservation:
+            reservation.reserve(6)
+            with self.assertRaises(StorageQuotaExceededError):
+                reservation.reserve(6)
+            reservation.reserve(4)
+
+    def test_exempt_rows_do_not_count(self):
+        from urbanlens.dashboard.models.images.model import QuotaExemption
+
+        profile = _make_profile()
+        baker.make(
+            "dashboard.Image", profile=profile, file_size=10 * GIB, quota_exempt_reason=QuotaExemption.SHARED_COPY
+        )
+        with reserve_upload(profile, 1):
+            pass
+
+    def test_a_deleted_row_frees_its_bytes_at_once(self):
+        """Nothing to release or recount: the check reads the rows themselves."""
+        profile = _make_profile()
+        image = baker.make(Image, profile=profile, file_size=10 * GIB)
+        with self.assertRaises(StorageQuotaExceededError), reserve_upload(profile, 1):
+            pass
+        image.delete()
+        with reserve_upload(profile, 1):
+            pass
 
 
 class DownscalePolicyTests(TestCase):

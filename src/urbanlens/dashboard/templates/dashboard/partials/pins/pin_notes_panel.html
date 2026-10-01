@@ -24,7 +24,7 @@
                     hx-target="#pin-note-{{ note.id }}"
                     hx-swap="outerHTML"
                     hx-confirm="Delete this note?"
-                    hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                    data-ul-before-request="mark-deleting">
                 <i class="material-symbols-outlined">delete_outline</i>
             </button>
         </li>
@@ -36,7 +36,7 @@
     <form hx-post="{% url 'pin.notes' pin.slug %}"
           hx-target="#pin-notes-panel"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){this.reset()}"
+          data-ul-on-success="reset"
           class="pin-note-form">
         {% csrf_token %}
         <textarea name="text" rows="2" placeholder="Add a note..." required

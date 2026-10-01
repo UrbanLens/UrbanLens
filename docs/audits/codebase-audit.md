@@ -139,7 +139,7 @@ manual-add path enforces. Real N+1 in `PinList.pin_count` on every list-index re
    filter/boundary resync can `bulk_create` unboundedly past the site's configured per-list cap.
 2. **[bug]** `services/pins/pin_list_membership.py:43-49` (`sync_pin_against_smart_lists`) uses a
    check-then-`create()` pattern against a table with `UniqueConstraint(fields=["pin_list",
-   "pin"])` (`models/pin_list/model.py:131`) — overlapping `Pin.save()` transactions can race this
+   "pin"])` (`models/pin_list/model.py`) — overlapping `Pin.save()` transactions can race this
    and raise an unhandled `IntegrityError` in the `transaction.on_commit` callback instead of using
    `get_or_create`/catching the violation.
 3. **[inefficiency]** `models/pin_list/model.py:78-81` (`PinList.pin_count`) always issues a fresh
@@ -291,7 +291,7 @@ defensive, `Gateway`/rate-limiter pattern gives every integration rate limiting 
 sane timeouts nearly for free. Real issues: an SSRF gap in Immich, a rate-limiter race condition,
 and several dead/duplicated gateway files from an earlier layout.
 
-1. **[bug/security]** `services/apis/immich/gateway.py` + `models/immich/model.py:83` +
+1. **[bug/security]** `services/apis/immich/gateway.py` + `models/immich/model.py` +
    `controllers/immich.py:108-110` — SSRF via user-controlled Immich `server_url` (plain
    `URLField`, no loopback/private/link-local restriction); `ImmichSettingsView.post` pings it
    server-side before saving, later flows proxy responses back through the app — a semi-blind
@@ -328,7 +328,7 @@ regression with an already-fixed sibling sitting right next to it in the same co
    every reconnect; if Google's response omits a refresh token (common on reconnect without fresh
    consent), the previously-valid token is wiped, permanently breaking auto-refresh. The sibling
    `controllers/calendar_sync.py:167-171` already has the correct fix (only overwrite if present) — a one-line port.
-2. **[bug/security]** `models/immich/model.py:83` + `forms/immich_form.py` — same Immich SSRF gap
+2. **[bug/security]** `models/immich/model.py` + `forms/immich_form.py` — same Immich SSRF gap
    independently found in unit 07 above (no private-IP/scheme guard on `server_url`, server-side
    ping + proxying). Low urgency (self-hosted, single-tenant) but worth documenting/guarding.
 3. **[improvement, fixed]** `_immich_account.html` — a 30-line `<style>` block was embedded in an
@@ -483,7 +483,7 @@ fuzzy-coordinate Location dedup.
    sites: `controllers/pin_edit.py:496,618,653`, `controllers/pin_bulk.py:144,158,192,231` — external
    sync clients silently miss these edits (correct pattern used elsewhere: `models/pin/model.py:424,471,473`).
 3. **[bug]** Race condition in coordinate-based dedup — `models/location/queryset.py:133-167` and
-   `models/pin/queryset.py:510-583` (`get_nearby_or_create`) both do unlocked check-then-create;
+   `models/pin/queryset.py` (`get_nearby_or_create`) both do unlocked check-then-create;
    `PinManager`'s version has no `try/except IntegrityError` against the per-profile unique
    constraint, so a genuine race surfaces as a 500.
 4. **[bug]** `models/pin/queryset.py:205-217` (`nearby_pins`) and `models/location/queryset.py:44-59`
@@ -636,7 +636,7 @@ still hand-rolled at 10+ call sites, several of which never check the user's pre
    with no model field.
 7. **[improvement]** `models/notifications/serializer.py` — dead code, zero consumers (same
    deleted-viewset pattern seen in units 03/08).
-8. **[improvement]** `models/notifications/meta/status.py:30` — `Status.DISMISSED` defined but
+8. **[improvement]** `models/notifications/meta/status.py:26` — `Status.DISMISSED` defined but
    never set anywhere in application code; no dismiss affordance exists.
 9. **[improvement]** Duplicated `_send_email` helpers across `services/notifications/notifications.py`,
    `safety.py`, `account_deletion.py`; combined with findings #1/#2, preference-branch logic is
@@ -955,7 +955,7 @@ Clean: authentication precedence/revocation checks, key storage/verification, th
 
 **Health**: Unusually mature — E2EE key management (opportunistic per-pair/per-group encryption,
 canonical-ordered conversation keys, opaque rotation tokens, atomic reset-with-rewrap) is carefully
-reasoned and cross-referenced with docs/e2ee.md; most tricky concerns (masking on live WS payloads,
+reasoned and cross-referenced with docs/designs/e2ee.md; most tricky concerns (masking on live WS payloads,
 existence-oracle prevention, ReDoS-safe regexes, disappearing-message hard-delete) already have
 documented fixes from a prior audit pass. Remaining gaps are N+1s concentrated in the group-chat
 notification/broadcast path — ironic since a neighboring function in the same file explicitly
@@ -1161,7 +1161,7 @@ spec feature scaffolded in the schema but never implemented.
    `revealed` before all actually-joined players answer. Untested (the existing test builds the
    scenario but never has the never-joined participant call `submit_answer`). **Identical gap
    exists in `services/spotguessr/session.py:submit_guess`** — a shared architectural hole, not Trivia-specific.
-2. **[bug/gap]** `models/trivia/model.py:105-107` (`wiki_incorporated_at`) — docs/prompts/todo.md
+2. **[bug/gap]** `models/trivia/model.py:105-107` (`wiki_incorporated_at`) — docs/notes/ai/todo.md (untracked)
    specifies AI should incorporate upvoted trivia into wiki articles; the field exists in the
    schema for this purpose but is never read/set anywhere outside `model.py` and its migration —
    entirely unimplemented, just looks done because the column exists.
@@ -1247,7 +1247,7 @@ synchronous LLM calls violating the project's non-instant-operation rule.
    `receive_tokens` itself, then the base `send_prompt`/`send_prompt_list` calls it again on the
    same string) — Cloudflare's parser correctly doesn't double-call, proving this is a regression.
    Roughly doubles every cost/token estimate for Anthropic and OpenAI calls.
-2. **[bug]** `services/ai/openai.py:100-102` — `_get_response` only catches `openai.BadRequestError`;
+2. **[bug]** `services/ai/openai.py` (lines 100-102 as audited) — `_get_response` only catches `openai.BadRequestError`;
    `RateLimitError`/`AuthenticationError`/`InternalServerError`/`APIConnectionError` are siblings
    under `APIError`, not subclasses of `BadRequestError`, so none are caught — a routine OpenAI rate
    limit surfaces as an unhandled 500 instead of degrading gracefully like the Anthropic path does.
@@ -1264,7 +1264,7 @@ synchronous LLM calls violating the project's non-instant-operation rule.
    unconditionally with genuine setup code sitting dead below the raise; not wired into
    `factory.py`'s dispatch or `AiProviderChoice` at all — pure dead code suggesting a 4th provider
    that doesn't actually work.
-7. **[bug]** `services/ai/assistant.py:283` (docstring at line 40) — loop runs
+7. **[bug]** `services/ai/assistant.py` (line 283 as audited, docstring at line 40) — loop runs
    `range(MAX_TOOL_CALLS + 1)`, an off-by-one letting 7 tool executions occur when 6 is documented
    as the budget — including side-effecting `create_trip`/`add_trip_activity`.
 8. **[bug]** `services/ai/link_extraction.py:390-403,504-519` + `assistant.py:165-178`
@@ -1315,7 +1315,7 @@ external service whose rate limit makes it non-functional under real multiplayer
 7. **[improvement]** `tests/hypothesis/test_spotguessr_photos.py` — zero `@given` tests despite the
    directory name; the purest-math modules in this slice (`glicko2.py`, `scoring.py`, `geo_bonus.py`)
    have no tests at all despite being ideal Hypothesis candidates.
-8. **[improvement]** `services/photos/photo_coordinates.py:58-61` (`recompute_estimated_coordinates()`) —
+8. **[improvement]** `services/photos/photo_coordinates.py:26-35` (`recompute_estimated_coordinates()`) —
    re-reads the entire correct-guess history for a photo on every new correct guess with no
    windowing/cap, run synchronously inline with the guess request (acknowledged as a deliberate,
    currently-cheap trade-off, but unbounded over the game's lifetime).
@@ -1399,7 +1399,7 @@ simple log fingerprinting.
    pattern is copy-pasted verbatim in 3 places (`media_materialize.py`, `pin_suggestions.py`,
    `ai/link_extraction.py`) instead of one shared helper in `url_safety.py` — any future caller who
    forgets the manual-redirect dance reopens the DNS-rebind gap.
-5. **[improvement]** `timeout_utils.py:69-85` (`call_with_deadline`) always returns `default` and
+5. **[improvement]** `timeout_utils.py:26-61` (`call_with_deadline`) always returns `default` and
    never raises, making caller-side exception handling around it dead code (`controllers/pin.py:825-844`'s
    `except` clauses can never fire).
 6. **[improvement]** `json_safety.py:24-34` (`safe_json_for_script`) has no handling for

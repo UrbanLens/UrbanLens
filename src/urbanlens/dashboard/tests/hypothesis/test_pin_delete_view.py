@@ -1,10 +1,4 @@
-"""Tests for pin deletion via ``DELETE /rest/pins/<uuid>/``.
-
-Covers ownership scoping, the child-pin decision handshake (409 until the
-client says whether children are deleted or kept), keep-mode promotion
-(including root-slot conflicts), and undo restoration of full subtrees at
-arbitrary nesting depth.
-"""
+"""Tests for pin deletion via ``DELETE /rest/pins/<uuid>/``."""
 
 from __future__ import annotations
 
@@ -17,7 +11,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.undo.service import restore_undo_action
 
-_LOCMEM_CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "pin-delete-tests"}}
+_LOCMEM_CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "pin-delete-tests"}
+}
 
 
 def _delete_url(pin: Pin) -> str:
@@ -100,7 +96,9 @@ class PinDeleteChildrenDecisionTests(TestCase):
     def test_children_keep_handles_shared_location_root_conflict(self) -> None:
         # A child at the parent's exact Location can only become top-level once
         # the parent's row is gone (top-level pins are unique per Location).
-        conflicted = baker.make(Pin, profile=self.profile, name="Same Spot", parent_pin=self.parent, location=self.parent.location)
+        conflicted = baker.make(
+            Pin, profile=self.profile, name="Same Spot", parent_pin=self.parent, location=self.parent.location
+        )
         response = self.client.delete(_delete_url(self.parent) + "?children=keep")
         self.assertEqual(response.status_code, 204)
         conflicted.refresh_from_db()

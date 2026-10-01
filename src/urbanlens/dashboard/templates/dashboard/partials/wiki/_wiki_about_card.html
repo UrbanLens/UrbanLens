@@ -1,20 +1,4 @@
-{% comment %}
-Wiki "About" card - description, dates, and security indicators.
-
-Context:
-  wiki - Wiki instance
-
-Rendered both on the initial wiki page load and, after a "Suggest Edits" save,
-as a fresh HTML fragment swapped in by the client (see wiki.html's
-wiki-edit-form submit handler) so edited description/dates/security chips
-show up immediately instead of only after a reload.
-
-Always renders: the links row below always offers "add a link" (see
-`_pin_links_row.html`'s `dialog_id`) even with zero links, and a wiki that has
-never had a description, dates, security indicators, or a link would
-otherwise have no way to add its first one - the only entry point lives
-inside this card.
-{% endcomment %}
+{% comment %}Wiki "About" card - description, identity fields, coordinates, dates, and security indicators.{% endcomment %}
 <div class="card wiki-card wiki-meta" id="wiki-about-card" data-collapse-scope="wiki" data-collapse-section="about">
     <div class="card-header">
         <i class="material-symbols-outlined">info</i>
@@ -24,7 +8,24 @@ inside this card.
         {% if wiki.description %}
         <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
         {% endif %}
-        {% include "dashboard/partials/pins/_pin_links_row.html" with wiki=wiki links=wiki.links.all delete_url_name="location.wiki.link.delete" row_id="wiki-links-row" owner_slug=wiki.location.slug dialog_id="wiki-link-add-dialog" show_label=True %}
+        {% if wiki.deduplicated_identity_fields or wiki.latitude and wiki.longitude %}
+        <div class="wiki-meta-facts">
+            {% for label, value in wiki.deduplicated_identity_fields %}
+            <div class="detail-item {% if label == 'Place Name' %}detail-item--place{% elif label == 'Official Name' %}detail-item--official{% else %}detail-item--address{% endif %}">
+                <span class="field-label">{{ label }}</span>
+                <span class="field-value">{{ value }}</span>
+            </div>
+            {% endfor %}
+            {% if wiki.latitude and wiki.longitude %}
+            <div class="detail-item detail-item--coordinates">
+                <span class="field-label">Coordinates</span>
+                <span class="field-value">{{ wiki.latitude|floatformat:5 }}, {{ wiki.longitude|floatformat:5 }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        {# wiki_links: passed in by the caller (LocationWikiEditView.post / LocationWikiView.get), already narrowed by concealment.visible_rows. #}
+        {% include "dashboard/partials/pins/_pin_links_row.html" with wiki=wiki links=wiki_links delete_url_name="location.wiki.link.delete" row_id="wiki-links-row" owner_slug=wiki.location.slug dialog_id="wiki-link-add-dialog" show_label=True %}
         {% if wiki.date_abandoned or wiki.effective_date_last_active %}
         <div class="wiki-meta-dates">
             {% if wiki.date_abandoned %}

@@ -1,24 +1,18 @@
 /**
  * Consensus - wiki-data-completion game: gameplay, competitive lobby, and chat.
- *
- * Server-authoritative: this file never decides whether an answer is
- * correct, computes points, or resolves a vote itself - it only collects an
- * answer/skip/vote/photo, posts it, and renders whatever
- * `services.consensus.session` decided. Solo sessions apply an answer
- * immediately and have no reveal step worth showing (there's only one
- * player, so there's nothing to agree/disagree with) - after answering or
- * skipping, a solo session just fetches the next round directly via
- * `consensus.round` (no WebSocket). Competitive sessions open a WebSocket
- * (`consumers.ConsensusSessionConsumer`) for lobby updates, round
- * advancement, the reveal/vote sub-phase, and chat - mirrors
- * spotguessr.ts/trivia.ts's shape, trimmed to Consensus's simpler loop (no
- * ratings, no distance/date scoring, no photo-feedback thumbs).
  */
-import { getCsrfToken } from "../shared/csrf";
+import { getJson, postForm, postMultipart } from "../shared/session-request";
+import { clearFriendSelection, installFriendPicker, pickFriendsToInvite, selectedFriendIds } from "../shared/friend-picker";
 import { confirmAction, toast } from "../shared/dialogs";
+import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
-import { createMapLayers } from "../shared/map-layers";
+import { createMapLayers, registerRedataLayers } from "../shared/map-layers";
+
+// Fired now rather than awaited at ensureRoundMap()'s first call: the round map is created
+// lazily, well after this module has finished loading, so this deployment's REData tile
+// catalogue fetch has almost always already resolved by then.
+void registerRedataLayers();
 
 declare const L: typeof import("leaflet");
 
@@ -56,10 +50,7 @@ const FIELD_KIND = {
     PHOTO_COORDINATES: "photo_coordinates",
 } as const;
 
-// Mirrors IndoorOutdoor (models/abstract/choices.py) - a closed vocabulary,
-// rendered as a <select> rather than free text. No context variable carries
-// this from the server today, so it's transcribed here; keep in sync if the
-// model choices ever change.
+// Mirrors IndoorOutdoor (models/abstract/choices.py) - a closed vocabulary, rendered as a <select> rather than free text.
 const INDOOR_OUTDOOR_CHOICES: [string, string][] = [
     ["inside", "Inside"],
     ["outside", "Outside"],
@@ -138,11 +129,6 @@ interface SummaryPayload {
     participants: ParticipantPayload[];
 }
 
-interface FriendOption {
-    profile_id: number;
-    username: string;
-}
-
 interface ChatMessagePayload {
     message_id: number;
     profile_id: number;
@@ -176,8 +162,6 @@ interface ConsensusState {
     roundMap: L.Map | null;
     contextMarker: L.Marker | null;
     answerMarker: L.Marker | null;
-    friendOptions: FriendOption[];
-    selectedInviteIds: Set<number>;
     participants: ParticipantPayload[];
     scoreboard: ScoreboardEntry[];
     answeredProfileIds: Set<number>;
@@ -195,8 +179,6 @@ const state: ConsensusState = {
     roundMap: null,
     contextMarker: null,
     answerMarker: null,
-    friendOptions: [],
-    selectedInviteIds: new Set<number>(),
     participants: [],
     scoreboard: [],
     answeredProfileIds: new Set<number>(),
@@ -248,23 +230,6 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
     return resolved;
 }
 
-async function postForm(url: string, data: Record<string, string> | URLSearchParams): Promise<any> {
-    const body = data instanceof URLSearchParams ? data : new URLSearchParams(data);
-    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
-    // template with only numeric ids substituted, never an arbitrary/external url.
-    const response = await fetch(url, {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-    });
-    return response.json();
-}
-
-async function getJson(url: string): Promise<any> {
-    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-    return response.json();
-}
-
 /** Runs `action` with `button` disabled and spinning, so no round-trip is silent. */
 async function withBusy<T>(button: HTMLButtonElement | null, action: () => Promise<T>): Promise<T> {
     if (button) {
@@ -288,12 +253,7 @@ function optionalEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
 // ---------------------------------------------------------------------------
 // Lifetime progression (the HUD level badge / points / meter)
 //
-// The level curve mirrors services.consensus.points -
-// `threshold(n) = round(LEVEL_SCALE_K * n * ln(n + 1))`. It is transcribed here
-// for the same reason INDOOR_OUTDOOR_CHOICES above is: no endpoint returns a
-// refreshed profile summary, so without it the badge would show the values the
-// page loaded with for the rest of the session. Keep in sync if the curve moves.
-// ---------------------------------------------------------------------------
+// The level curve mirrors services.consensus.points - `threshold(n) = round(LEVEL_SCALE_K * n * ln(n + 1))`.
 
 const LEVEL_SCALE_K = 100;
 const MAX_LEVEL = 500;
@@ -309,19 +269,10 @@ function levelForPoints(points: number): number {
     return level;
 }
 
-// basePoints is the server-rendered lifetime total; sessionPoints is whatever
-// the current session has added on top and is *set*, never accumulated blindly,
-// so a reveal-by-reveal running total and the authoritative summary figure
-// cannot double-count each other.
+// basePoints is the server-rendered lifetime total.
 const progression = { basePoints: 0, sessionPoints: 0 };
 
-// A competitive round's disagreement sub-phase broadcasts round.revealed
-// *twice* for the same round_id by design (see services/consensus/session.py's
-// _finish_round/resolve_vote): once with resolution "vote_open" and zero
-// points while the tiebreak vote is pending, again with the real points once
-// it resolves - so the guard has to be "same round AND same resolution
-// already credited", not just "same round", or a genuine reconnect-replay
-// duplicate would be indistinguishable from that legitimate second stage.
+// A competitive round's disagreement sub-phase broadcasts round.revealed *twice* for the same round_id by design.
 let lastCreditedReveal: { roundId: number; resolution: string } | null = null;
 
 function renderProgression(): void {
@@ -369,128 +320,22 @@ function initProgression(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Friend invite picker (mirrors spotguessr.ts/trivia.ts)
+// Friend invite picker
 // ---------------------------------------------------------------------------
-
-async function loadFriendOptions(): Promise<FriendOption[]> {
-    if (state.friendOptions.length) return state.friendOptions;
-    const data = await getJson(urls.friends);
-    state.friendOptions = data.friends ?? [];
-    return state.friendOptions;
-}
-
-function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>, targetSet: Set<number> = state.selectedInviteIds): void {
-    container.innerHTML = "";
-    const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
-    if (!available.length) {
-        container.innerHTML = '<p class="consensus-panel-hint">No friends available to invite.</p>';
-        return;
-    }
-    for (const friend of available) {
-        const label = document.createElement("label");
-        const wrap = document.createElement("span");
-        wrap.className = "ul-checkbox-wrap";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = String(friend.profile_id);
-        checkbox.checked = targetSet.has(friend.profile_id);
-        checkbox.addEventListener("change", () => {
-            if (checkbox.checked) targetSet.add(friend.profile_id);
-            else targetSet.delete(friend.profile_id);
-        });
-        const box = document.createElement("span");
-        box.className = "ul-checkbox";
-        wrap.append(checkbox, box);
-        const nameSpan = document.createElement("span");
-        nameSpan.textContent = friend.username;
-        label.append(wrap, nameSpan);
-        container.appendChild(label);
-    }
-}
-
-async function fetchFriendsEagerly(): Promise<void> {
-    const loadingEl = el("cs-friend-list-loading");
-    const errorEl = el("cs-friend-list-error");
-    const listEl = el("cs-friend-list");
-    loadingEl.hidden = false;
-    errorEl.hidden = true;
-    listEl.hidden = true;
-    try {
-        await loadFriendOptions();
-    } catch {
-        loadingEl.hidden = true;
-        errorEl.hidden = false;
-        toast.error("Couldn't load your friends list.");
-        return;
-    }
-    loadingEl.hidden = true;
-    listEl.hidden = false;
-    renderFriendCheckboxes(listEl, state.friendOptions, new Set());
-}
-
-// Builds a small checkbox-picker dialog on the fly and resolves with the
-// chosen profile ids (empty if cancelled) - see spotguessr.ts's
-// pickFriendsToInvite() for the original of this pattern.
-function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
-    return new Promise((resolve) => {
-        const chosen = new Set<number>();
-        const dialog = document.createElement("dialog");
-        dialog.className = "ul-dialog ul-game-dialog consensus-invite-more-dialog";
-
-        const header = document.createElement("div");
-        header.className = "dialog-header";
-        const heading = document.createElement("h3");
-        heading.textContent = "Invite more players";
-        header.appendChild(heading);
-
-        const list = document.createElement("div");
-        list.className = "consensus-friend-list";
-        renderFriendCheckboxes(list, available, new Set(), chosen);
-
-        const actions = document.createElement("div");
-        actions.className = "dialog-footer";
-        const cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.className = "btn btn--ghost";
-        cancelBtn.textContent = "Cancel";
-        const inviteBtn = document.createElement("button");
-        inviteBtn.type = "button";
-        inviteBtn.className = "btn btn--primary";
-        inviteBtn.textContent = "Invite";
-        actions.append(cancelBtn, inviteBtn);
-
-        dialog.append(header, list, actions);
-        // Into the shell, not document.body: a node outside the fullscreen
-        // element is not painted at all.
-        if (gameShell) gameShell.mountOverlay(dialog);
-        else document.body.appendChild(dialog);
-
-        const cleanup = (result: Set<number>) => {
-            dialog.close();
-            dialog.remove();
-            resolve(result);
-        };
-        cancelBtn.addEventListener("click", () => cleanup(new Set()));
-        inviteBtn.addEventListener("click", () => cleanup(chosen));
-        dialog.addEventListener("cancel", () => cleanup(new Set()));
-
-        dialog.showModal();
-    });
-}
 
 async function handleInviteMore(): Promise<void> {
     if (state.sessionId === null) return;
-    const friends = await loadFriendOptions();
     const lobby: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
-    const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
-    const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
-    if (!available.length) {
-        toast.error("Everyone on your friends list is already in this game.");
-        return;
-    }
-
-    const chosenIds = await pickFriendsToInvite(available);
-    if (!chosenIds.size) return;
+    const chosenIds = await pickFriendsToInvite({
+        url: urls.friends,
+        exclude: lobby.participants.map((participant) => participant.profile_id),
+        // Into the shell, not document.body: a node outside the fullscreen element is not painted at all.
+        mount: (dialog) => {
+            if (gameShell) gameShell.mountOverlay(dialog);
+            else document.body.appendChild(dialog);
+        },
+    });
+    if (!chosenIds.length) return;
 
     for (const profileId of chosenIds) {
         const response = await postForm(urlFor(urls.invite, state.sessionId), { profile_id: String(profileId) });
@@ -570,11 +415,7 @@ async function beginGame(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Round map - a small context map centered on the wiki's location, and (for
-// PHOTO_COORDINATES rounds only) click-to-place-a-marker for the answer.
-// Mirrors spotguessr.ts's guess-map click pattern; not imported directly
-// since spotguessr.ts doesn't export it as a reusable module.
-// ---------------------------------------------------------------------------
+// Round map - a small context map centered on the wiki's location, and (for PHOTO_COORDINATES rounds only) click-to-place-a-marker.
 
 function ensureRoundMap(): L.Map {
     if (state.roundMap) return state.roundMap;
@@ -636,21 +477,10 @@ function resetRoundMap(latitude: number | null, longitude: number | null): void 
 }
 
 // ---------------------------------------------------------------------------
-// Round rendering - the answer widget shown depends on field_kind; every
-// possible widget is pre-rendered in the template and toggled via
-// [data-field-only], mirroring spotguessr.ts's [data-mode-only] pattern.
-// ---------------------------------------------------------------------------
+// Round rendering - the answer widget shown depends on field_kind.
 
 /**
  * Shows only the stage columns this round needs.
- *
- * `#cs-round-map` itself is never hidden, re-parented or destroyed - Leaflet is
- * handed the id string once and keeps the instance - so the wrapper carries the
- * visibility instead.
- *
- * Args:
- *     showPhoto: Whether this round has a photo to display.
- *     showMap: Whether the map is part of answering this round.
  */
 function setStageLayout(showPhoto: boolean, showMap: boolean): void {
     const media = optionalEl("cs-stage-media");
@@ -757,9 +587,7 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
         photo.removeAttribute("src");
     }
 
-    // The map only answers a question on coordinate rounds; on the others it was
-    // a 260px inert decoration. Visibility is settled before resetRoundMap() so
-    // Leaflet is never constructed inside a display:none box.
+    // The map only answers a question on coordinate rounds; on the others it was a 260px inert decoration.
     setStageLayout(showPhoto, isPhotoRound);
 
     updateAnswerAreaVisibility(round.field_kind);
@@ -785,16 +613,13 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
 }
 
 // ---------------------------------------------------------------------------
-// Answer / skip / photo upload
-// ---------------------------------------------------------------------------
+// Answer / skip / photo upload ---------------------------------------------------------------------------
 
 async function afterAnswerOrSkip(): Promise<void> {
     el<HTMLButtonElement>("cs-submit-answer-btn").hidden = true;
     el<HTMLButtonElement>("cs-skip-btn").hidden = true;
     if (!state.isMultiplayer) {
-        // Solo sessions never open a WebSocket and have nothing to agree/
-        // disagree with - the answer already applied server-side, so just
-        // advance straight to the next round (or the summary).
+        // Solo sessions never open a WebSocket and have nothing to agree/ disagree.
         await goToNextRound();
         return;
     }
@@ -815,9 +640,7 @@ async function submitAnswer(): Promise<void> {
         payload = { value };
     }
 
-    // Busy state is applied here rather than through withBusy: the success path
-    // hands off to renderRound, which deliberately re-disables this button for
-    // the next round, so only the failure path may re-enable it.
+    // Busy state is applied here rather than through withBusy.
     const button = el<HTMLButtonElement>("cs-submit-answer-btn");
     button.classList.add("is-loading");
     button.disabled = true;
@@ -864,15 +687,9 @@ async function uploadPhoto(): Promise<void> {
     }
     const formData = new FormData();
     formData.append("image", file);
-    // Same-origin urlFor(...) path template - see postForm's note above.
-    const response = await fetch(urlFor(urls.photo, state.sessionId, state.currentRoundId), {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken() },
-        body: formData,
-    });
-    const data = await response.json();
-    if (!response.ok || data.error) {
-        toast.error(data.error ?? "Couldn't upload that photo.");
+    const data = await postMultipart(urlFor(urls.photo, state.sessionId, state.currentRoundId), formData);
+    if (data.error) {
+        toast.error(data.error);
         return;
     }
     toast.success("Photo uploaded - thanks for helping out!");
@@ -905,8 +722,7 @@ async function goToNextRound(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Reveal + vote (competitive only - arrives over the WebSocket)
-// ---------------------------------------------------------------------------
+// Reveal + vote (competitive only - arrives over the WebSocket).
 
 function formatAnswerValue(value: unknown): string {
     if (value && typeof value === "object" && "latitude" in (value as Record<string, unknown>) && "longitude" in (value as Record<string, unknown>)) {
@@ -916,10 +732,7 @@ function formatAnswerValue(value: unknown): string {
     return value === null || value === undefined || value === "" ? "(skipped)" : String(value);
 }
 
-// Deliberately identical text/markup whether resolution is "agreed" or a
-// trust-check outcome ("check_passed"/"check_failed") - the client must
-// never surface a check round as anything other than an ordinary one (see
-// services.consensus.serializers's module docstring).
+// Deliberately identical text/markup whether resolution is "agreed" or a trust-check outcome ("check_passed"/"check_failed").
 function revealTitle(resolution: string): string {
     switch (resolution) {
         case "agreed":
@@ -1087,9 +900,7 @@ function renderReveal(data: RevealBroadcast): void {
 }
 
 // ---------------------------------------------------------------------------
-// Live "someone answered/voted" indicator - purely cosmetic, driven by the
-// answer.submitted/vote.submitted broadcasts (which carry only a profile_id).
-// ---------------------------------------------------------------------------
+// Live "someone answered/voted" indicator - purely cosmetic, driven by the answer.submitted/vote.submitted broadcasts.
 
 function markAnswered(profileId: number): void {
     state.answeredProfileIds.add(profileId);
@@ -1159,8 +970,7 @@ function showSummary(summary: SummaryPayload): void {
 }
 
 // ---------------------------------------------------------------------------
-// Real-time (multiplayer only)
-// ---------------------------------------------------------------------------
+// Real-time (multiplayer only) ---------------------------------------------------------------------------
 
 function connectSessionSocket(): void {
     if (state.ws || state.sessionId === null) return;
@@ -1169,9 +979,9 @@ function connectSessionSocket(): void {
     state.ws = openLiveSocket({
         path: `/ws/consensus/session/${state.sessionId}/`,
         onMessage: handleSocketMessage,
-        // 4404 here means the host removed this player, or the entitlement went
-        // away - nothing more is coming, so drop the handle rather than leave a
-        // dead one blocking a later join.
+        // Every open, reconnects included: a dropped connection takes the acknowledgement with it, and an entry left in the composer's queue.
+        onOpen: () => chatComposer?.reset(),
+        // 4404 here means the host removed this player, or the entitlement went away.
         onPermanentClose: () => {
             state.ws = null;
         },
@@ -1206,6 +1016,11 @@ function handleSocketMessage(data: any): void {
         case "chat.message":
             appendChatMessage(data.message as ChatMessagePayload);
             break;
+        case "error":
+            // The consumer refuses a frame with an error rather than a close - an out-of-scope credential, a failed write, or a volume limit.
+            if (chatComposer) chatComposer.reportRefusal(data.detail);
+            else toastRefusal(data.detail);
+            break;
         default:
             break;
     }
@@ -1216,6 +1031,9 @@ function handleSocketMessage(data: any): void {
 // ---------------------------------------------------------------------------
 
 function appendChatMessage(message: ChatMessagePayload): void {
+    // Our own message coming back on the broadcast is the acknowledgement, so
+    // it stops being a candidate for a later refusal to hand back.
+    if (message.profile_id === myProfileId) chatComposer?.confirm(message.body);
     const log = el("cs-chat-log");
     const line = document.createElement("div");
     const nameSpan = document.createElement("span");
@@ -1234,15 +1052,16 @@ async function loadChatHistory(): Promise<void> {
     for (const message of (data.messages ?? []) as ChatMessagePayload[]) appendChatMessage(message);
 }
 
+/** Holds what has been sent and not yet acknowledged - see shared/chat-composer.ts. */
+let chatComposer: ChatComposer | null = null;
+
 function initChat(): void {
+    // Resolved on each send rather than captured: the socket is replaced on
+    // every reconnect, and send() returns false while there isn't one.
+    chatComposer = new ChatComposer(el<HTMLInputElement>("cs-chat-input"), (payload) => state.ws?.send(payload) ?? false);
     el("cs-chat-form").addEventListener("submit", (event) => {
         event.preventDefault();
-        const input = el<HTMLInputElement>("cs-chat-input");
-        const body = input.value.trim();
-        // send() is false while the socket is reconnecting - leave what they
-        // typed in the box rather than clearing it for a message that never left.
-        if (!body || !state.ws?.send({ body })) return;
-        input.value = "";
+        chatComposer?.submit();
     });
 }
 
@@ -1258,7 +1077,7 @@ function _resetSessionState(): void {
     state.hostProfileId = null;
     state.scoreboard = [];
     state.participants = [];
-    state.selectedInviteIds.clear();
+    clearFriendSelection(el("cs-friend-list"));
     if (state.ws) {
         state.ws.close();
         state.ws = null;
@@ -1278,7 +1097,7 @@ function showNoEligibleWikis(): void {
 async function startGame(): Promise<void> {
     state.scoreboard = [];
     const body = new URLSearchParams({ total_rounds: el<HTMLInputElement>("cs-rounds").value });
-    for (const profileId of state.selectedInviteIds) body.append("invite_profile_ids", String(profileId));
+    for (const profileId of selectedFriendIds(el("cs-friend-list"))) body.append("invite_profile_ids", String(profileId));
 
     const response = await postForm(urls.start, body);
     if (response.error) {
@@ -1326,8 +1145,7 @@ async function endGameNow(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Deep link from an invite notification (?session=<id>)
-// ---------------------------------------------------------------------------
+// Deep link from an invite notification (?session=<id>) ---------------------------------------------------------------------------
 
 async function loadInitialSession(): Promise<void> {
     const raw = pageEl?.dataset.initialSessionId;
@@ -1351,6 +1169,7 @@ async function loadInitialSession(): Promise<void> {
     // Already active - join the game in progress at its current round.
     connectSessionSocket();
     const data = await getJson(urlFor(urls.round, state.sessionId));
+    if (data.error) return;
     if (data.no_eligible_wikis) {
         showNoEligibleWikis();
     } else if (data.finished) {
@@ -1399,13 +1218,12 @@ function init(): void {
     el("cs-end-game-btn").addEventListener("click", () => void endGameNow());
     el("cs-play-again-btn").addEventListener("click", resetToSettings);
     el("cs-empty-state-settings-btn").addEventListener("click", resetToSettings);
-    el("cs-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
     el<HTMLInputElement>("cs-answer-text-input").addEventListener("input", updateSubmitEnabled);
     el<HTMLTextAreaElement>("cs-answer-textarea-input").addEventListener("input", updateSubmitEnabled);
     el<HTMLSelectElement>("cs-answer-select-input").addEventListener("change", updateSubmitEnabled);
 
     initChat();
-    void fetchFriendsEagerly();
+    installFriendPicker();
     void loadInitialSession();
 }
 

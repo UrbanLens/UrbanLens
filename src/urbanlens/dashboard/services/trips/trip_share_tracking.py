@@ -1,20 +1,5 @@
 """Share-chain tracking for places revealed through trip activities.
-
-Adding a pin/location to a trip as an activity reveals that place to every
-other member of the trip - which is a share, and must count in the sharer's
-reshare chain exactly like an explicit pin share (see
-``services.sharing.share_provenance``). Two symmetric entry points:
-
-- :func:`record_trip_activity_shares` - a new activity was added; record a
-  detected share to every member who has already joined.
-- :func:`record_trip_shares_for_member` - a profile joined the trip; record a
-  detected share for every place already on the itinerary.
-
-Both create ``PinShare`` rows with ``origin=TRIP_ACTIVITY`` and
-``status=DETECTED`` (never actionable, never materializes a Pin), then record
-the recipient's ``LocationExposure`` so future pins they drop at the place
-chain back correctly.
-"""
+Both create ``PinShare`` rows with ``origin=TRIP_ACTIVITY`` and ``status=DETECTED`` (never actionable, never materializes a Pin), then record the recipient's ``LocationExposure`` so future pins they drop at the place chain back correctly."""
 
 from __future__ import annotations
 
@@ -42,16 +27,13 @@ logger = logging.getLogger(__name__)
 
 
 def _activity_place(activity: TripActivity) -> tuple[Pin | None, Location | None]:
-    """The (pin, location) pair an activity reveals, or ``(None, None)``.
-
-    Hidden-location activities ("Secret Location") reveal nothing.
+    """The (pin, location) pair an activity could reveal, or ``(None, None)``.
 
     Args:
         activity: The activity to inspect.
 
     Returns:
-        The pin (when linked) and the effective Location.
-    """
+        The pin (when linked) and the effective Location."""
     if activity.location_hidden:
         return None, None
     pin = activity.pin
@@ -59,12 +41,23 @@ def _activity_place(activity: TripActivity) -> tuple[Pin | None, Location | None
     return pin, location
 
 
+def _hidden_from(activities: list[TripActivity], viewer: Profile) -> set[int]:
+    """IDs of *activities* whose location ``viewer`` is not shown.
+
+    Args:
+        activities: The activities to test.
+        viewer: The member doing the viewing.
+
+    Returns:
+        The subset of activity IDs this viewer may not see the location of.
+    """
+    from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
+
+    return viewer_hidden_activity_ids(activities, viewer)
+
+
 def _record_detected_trip_share(sharer: Profile, recipient: Profile, pin: Pin | None, location: Location) -> PinShare | None:
     """Create one TRIP_ACTIVITY detected share, applying the shared dedup rules.
-
-    Skipped when it wouldn't be the recipient's initial information about the
-    place: they already have their own pin there, they already carry an
-    exposure for it, or a share of this exact pin already reached them.
 
     Args:
         sharer: The member who put the place on the itinerary.
@@ -73,8 +66,7 @@ def _record_detected_trip_share(sharer: Profile, recipient: Profile, pin: Pin | 
         location: The place's Location.
 
     Returns:
-        The newly created share, or None when skipped.
-    """
+        The newly created share, or None when skipped."""
     if recipient.pk == sharer.pk:
         return None
     # An activity may link a pin the sharer doesn't own (e.g. re-linked after
@@ -137,6 +129,8 @@ def record_trip_activity_shares(activity: TripActivity) -> list[PinShare]:
         return []
     shares = []
     for member in _joined_member_profiles(activity.trip):
+        if activity.id in _hidden_from([activity], member):
+            continue
         share = _record_detected_trip_share(sharer, member, pin, location)
         if share is not None:
             shares.append(share)
@@ -153,8 +147,12 @@ def record_trip_shares_for_member(trip: Trip, profile: Profile) -> list[PinShare
     Returns:
         The newly created shares (may be empty).
     """
+    activities = list(trip.activities.select_related("pin__location", "location", "added_by", "trip__creator"))
+    hidden = _hidden_from(activities, profile)
     shares = []
-    for activity in trip.activities.select_related("pin__location", "location", "added_by", "trip__creator"):
+    for activity in activities:
+        if activity.id in hidden:
+            continue
         pin, location = _activity_place(activity)
         if location is None:
             continue

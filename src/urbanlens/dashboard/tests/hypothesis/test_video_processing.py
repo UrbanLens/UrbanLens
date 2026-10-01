@@ -1,9 +1,4 @@
-"""Unit tests for services.media.videos - ffmpeg/ffprobe-backed video processing.
-
-External binaries (ffmpeg/ffprobe) are mocked throughout: these tests verify
-the Python-side logic (JSON parsing, ISO 6709 parsing, decision-making about
-whether to re-encode), not the actual media processing, which needs Docker.
-"""
+"""Unit tests for services.media.videos - ffmpeg/ffprobe-backed video processing."""
 
 from __future__ import annotations
 
@@ -49,7 +44,10 @@ class ParseIso6709Tests(SimpleTestCase):
 
 class ExtractVideoMetadataTests(SimpleTestCase):
     def test_no_ffmpeg_returns_empty(self) -> None:
-        with patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=False):
+        with (
+            patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=False),
+            patch("urbanlens.dashboard.services.media.videos.ffprobe_path", return_value=None),
+        ):
             self.assertEqual(extract_video_metadata("video.mp4"), {})
 
     def test_parses_creation_time_location_and_dimensions(self) -> None:
@@ -78,10 +76,13 @@ class ProcessUploadedVideoTests(TestCase):
         )
 
     def test_no_ffmpeg_returns_no_metadata_no_resize(self) -> None:
-        with patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=False):
-            metadata, new_size = process_uploaded_video(self.image, 1080)
+        with (
+            patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=False),
+            patch("urbanlens.dashboard.services.media.videos.ffprobe_path", return_value=None),
+        ):
+            metadata, replacement = process_uploaded_video(self.image, 1080)
         self.assertEqual(metadata, {})
-        self.assertIsNone(new_size)
+        self.assertIsNone(replacement)
 
     def test_already_within_max_height_skips_reencode(self) -> None:
         with (
@@ -89,10 +90,10 @@ class ProcessUploadedVideoTests(TestCase):
             patch("urbanlens.dashboard.services.media.videos.extract_video_metadata", return_value={"height": 720}),
             patch("urbanlens.dashboard.services.media.videos._reencode") as mock_reencode,
         ):
-            metadata, new_size = process_uploaded_video(self.image, 1080)
+            metadata, replacement = process_uploaded_video(self.image, 1080)
         mock_reencode.assert_not_called()
         self.assertEqual(metadata["height"], 720)
-        self.assertIsNone(new_size)
+        self.assertIsNone(replacement)
 
     def test_oversized_video_triggers_reencode(self) -> None:
         def fake_reencode(src_path: str, out_path: str, max_height: int, *, strip_location: bool = False) -> bool:
@@ -105,17 +106,18 @@ class ProcessUploadedVideoTests(TestCase):
             patch("urbanlens.dashboard.services.media.videos.extract_video_metadata", return_value={"height": 2160}),
             patch("urbanlens.dashboard.services.media.videos._reencode", side_effect=fake_reencode) as mock_reencode,
         ):
-            metadata, new_size = process_uploaded_video(self.image, 1080)
+            metadata, replacement = process_uploaded_video(self.image, 1080)
         mock_reencode.assert_called_once()
         self.assertEqual(metadata["height"], 2160)
-        self.assertEqual(new_size, 1)
+        assert replacement is not None
+        self.assertEqual(replacement.size, 1)
 
-    def test_reencode_failure_returns_no_new_size(self) -> None:
+    def test_reencode_failure_returns_no_replacement(self) -> None:
         with (
             patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=True),
             patch("urbanlens.dashboard.services.media.videos.extract_video_metadata", return_value={"height": 2160}),
             patch("urbanlens.dashboard.services.media.videos._reencode", return_value=False),
         ):
-            metadata, new_size = process_uploaded_video(self.image, 1080)
+            metadata, replacement = process_uploaded_video(self.image, 1080)
         self.assertEqual(metadata["height"], 2160)
-        self.assertIsNone(new_size)
+        self.assertIsNone(replacement)

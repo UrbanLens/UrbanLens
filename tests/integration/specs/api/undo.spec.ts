@@ -1,18 +1,6 @@
 /**
- * Undo, end to end: delete something, find it, put it back.
- *
- * Worth a deployed test rather than a unit one because undo is the only feature
- * that spans every domain at once. The feed aggregates across each undoable
- * model, and each entry is filtered by whether the *calling credential* holds
- * the paired domain-read scope - so what a client sees depends on the
- * intersection of real rows, real scopes and a real restore path. A fixture
- * proves the aggregation function; only this proves that deleting a pin through
- * the API puts a restorable entry in the feed.
- *
- * It also pins the response envelope. `undo/` was published as a bare array
- * while returning `{entries, omitted}`, so a generated client iterated an
- * object (docs/PROBLEMS.md, 2026-08-24). The shape assertions below are what
- * notice if the two drift apart again.
+ * Undo, end to end: delete something, find it, put it back. Worth a deployed test rather than a
+ * unit one because undo is the only feature that spans every domain at once.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

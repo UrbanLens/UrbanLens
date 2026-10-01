@@ -1,11 +1,4 @@
-"""Tests for services.apis.weather.forecast's provider-shape converters.
-
-Each converter must also honor the ``ForecastSlot`` timezone contract:
-``date`` keeps the provider's own wall clock for display, while ``date_utc``
-is the same instant as aware UTC (OpenWeatherMap naive = UTC, REData naive
-assumed UTC / aware converted, Open-Meteo local anchored by the response's
-``utc_offset_seconds``).
-"""
+"""Tests for services.apis.weather.forecast's provider-shape converters."""
 
 from __future__ import annotations
 
@@ -13,13 +6,18 @@ from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import Mock
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.weather.forecast import owm_item_to_slot, redata_forecast_to_slots, redata_sun_to_sun_times
+from urbanlens.dashboard.services.apis.weather.forecast import (
+    owm_item_to_slot,
+    redata_forecast_to_slots,
+    redata_sun_to_sun_times,
+)
 from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
 
 #: Fixed-offset zones covering the real UTC-14..UTC+14 range, whole minutes.
-_fixed_offsets = st.integers(min_value=-14 * 60, max_value=14 * 60).map(lambda minutes: timezone(timedelta(minutes=minutes)))
+_fixed_offsets = st.integers(min_value=-14 * 60, max_value=14 * 60).map(
+    lambda minutes: timezone(timedelta(minutes=minutes))
+)
 
 
 class OwmItemToSlotTests(SimpleTestCase):
@@ -97,7 +95,14 @@ class RedataForecastToSlotsTests(SimpleTestCase):
         self.assertEqual(slot["precipitation_probability"], 30)
 
     def test_daily_entry_uses_temperature_max(self) -> None:
-        forecast = [{"granularity": "daily", "starts_at": "2026-06-16T00:00:00", "temperature_max_c": 25.0, "condition": "overcast"}]
+        forecast = [
+            {
+                "granularity": "daily",
+                "starts_at": "2026-06-16T00:00:00",
+                "temperature_max_c": 25.0,
+                "condition": "overcast",
+            }
+        ]
 
         slots = redata_forecast_to_slots(forecast)
 
@@ -116,14 +121,18 @@ class RedataForecastToSlotsTests(SimpleTestCase):
         self.assertEqual(slots[0]["condition"], "Hail")
 
     def test_naive_starts_at_is_assumed_utc(self) -> None:
-        slots = redata_forecast_to_slots([{"starts_at": "2026-06-15T09:00:00", "temperature_c": 10.0, "condition": "clear"}])
+        slots = redata_forecast_to_slots(
+            [{"starts_at": "2026-06-15T09:00:00", "temperature_c": 10.0, "condition": "clear"}]
+        )
 
         self.assertEqual(slots[0]["date_utc"], datetime(2026, 6, 15, 9, 0, tzinfo=UTC))
         self.assertIsNone(slots[0]["date"].tzinfo, "the display date stays as REData sent it")
 
     @given(st.datetimes(min_value=datetime(1980, 1, 1), max_value=datetime(2100, 1, 1), timezones=_fixed_offsets))
     def test_aware_starts_at_round_trips_to_the_same_utc_instant(self, moment: datetime) -> None:
-        slots = redata_forecast_to_slots([{"starts_at": moment.isoformat(), "temperature_c": 10.0, "condition": "clear"}])
+        slots = redata_forecast_to_slots(
+            [{"starts_at": moment.isoformat(), "temperature_c": 10.0, "condition": "clear"}]
+        )
 
         self.assertEqual(len(slots), 1)
         self.assertEqual(slots[0]["date_utc"], moment.astimezone(UTC))
@@ -181,11 +190,8 @@ class OpenMeteoDateUtcTests(SimpleTestCase):
     def test_each_slot_uses_its_own_dates_offset_across_a_dst_transition(self) -> None:
         """One fixed offset cannot anchor a five-day window that crosses a transition.
 
-        US DST ends 2026-11-01, so 10-30 is UTC-4 and 11-02 is UTC-5. Applying
-        the single reported ``utc_offset_seconds`` to both put half the
-        forecast an hour out, which is enough for ``_build_activity_forecasts``
-        to pick the wrong morning or evening slot.
-        """
+        Applying the single reported ``utc_offset_seconds`` to both put half the forecast an hour out, which is
+        enough for ``_build_activity_forecasts`` to pick the wrong morning or evening slot."""
         payload = self._payload(-14400)
         payload["timezone"] = "America/New_York"
         payload["hourly"]["time"] = ["2026-10-30T09:00", "2026-11-02T09:00"]

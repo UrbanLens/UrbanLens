@@ -1,16 +1,4 @@
-"""Tests for the Flickr photo-import integration.
-
-Covers:
-- oauth.py - request-token/access-token exchange (OAuth1Session mocked).
-- FlickrGateway - per-request OAuth1 signing, geo search (no local distance
-  filtering needed - Flickr filters server-side), error mapping.
-- Settings connect/callback/disconnect views.
-- PinFlickrSearchView - radius passthrough, "during my visits"/"all photos"
-  mode branching, and already-imported flagging.
-- import_flickr_photos task - new-photo happy path and checksum dedupe.
-
-All HTTP/OAuth calls are mocked; no real network access occurs.
-"""
+"""Tests for the Flickr photo-import integration."""
 
 from __future__ import annotations
 
@@ -33,9 +21,12 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.flickr import oauth as flickr_oauth
 from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway, FlickrPhoto
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.media.storage import lock_profile_uploads
 
 
-def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b"", headers: dict | None = None):
+def _mock_response(
+    *, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b"", headers: dict | None = None
+):
     resp = mock.MagicMock()
     resp.ok = ok
     resp.status_code = status_code
@@ -47,7 +38,12 @@ def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, c
 
 
 def _account(**kwargs) -> FlickrAccount:
-    defaults = {"oauth_token": "token", "oauth_token_secret": "secret", "flickr_user_id": "12345@N00", "flickr_username": "tester"}
+    defaults = {
+        "oauth_token": "token",
+        "oauth_token_secret": "secret",
+        "flickr_user_id": "12345@N00",
+        "flickr_username": "tester",
+    }
     defaults.update(kwargs)
     user = baker.make(User)
     return FlickrAccount(profile=user.profile, **defaults)
@@ -64,8 +60,13 @@ class FlickrOAuthFlowTests(SimpleTestCase):
     def test_start_authorization_returns_pending_state(self, mock_settings) -> None:
         self._configure_settings(mock_settings)
         with mock.patch.object(flickr_oauth, "OAuth1Session") as session_cls:
-            session_cls.return_value.fetch_request_token.return_value = {"oauth_token": "req-token", "oauth_token_secret": "req-secret"}
-            session_cls.return_value.authorization_url.return_value = "https://www.flickr.com/services/oauth/authorize?oauth_token=req-token"
+            session_cls.return_value.fetch_request_token.return_value = {
+                "oauth_token": "req-token",
+                "oauth_token_secret": "req-secret",
+            }
+            session_cls.return_value.authorization_url.return_value = (
+                "https://www.flickr.com/services/oauth/authorize?oauth_token=req-token"
+            )
 
             pending = flickr_oauth.start_authorization("https://example.com/callback")
 
@@ -82,7 +83,9 @@ class FlickrOAuthFlowTests(SimpleTestCase):
                 "user_nsid": "12345@N00",
                 "username": "tester",
             }
-            grant = flickr_oauth.finish_authorization(oauth_token="req-token", oauth_token_secret="req-secret", oauth_verifier="verifier")
+            grant = flickr_oauth.finish_authorization(
+                oauth_token="req-token", oauth_token_secret="req-secret", oauth_verifier="verifier"
+            )
 
         self.assertEqual(grant.oauth_token, "final-token")
         self.assertEqual(grant.user_nsid, "12345@N00")
@@ -111,29 +114,56 @@ class FlickrGatewayTests(TestCase):
                 "stat": "ok",
                 "photos": {
                     "photo": [
-                        {"id": "1", "url_s": "https://example.com/1_s.jpg", "url_o": "https://example.com/1_o.jpg", "latitude": "40.0", "longitude": "-74.0"},
+                        {
+                            "id": "1",
+                            "url_s": "https://example.com/1_s.jpg",
+                            "url_o": "https://example.com/1_o.jpg",
+                            "latitude": "40.0",
+                            "longitude": "-74.0",
+                        },
                         {"id": "2", "url_s": "https://example.com/2_s.jpg", "latitude": "0", "longitude": "0"},
                     ],
                 },
             },
         )
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")
+        ):
             photos = gw.search_near(40.0, -74.0, 0.5)
 
-        self.assertEqual(photos[0], FlickrPhoto(id="1", thumbnail_url="https://example.com/1_s.jpg", original_url="https://example.com/1_o.jpg", lat=40.0, lon=-74.0))
+        self.assertEqual(
+            photos[0],
+            FlickrPhoto(
+                id="1",
+                thumbnail_url="https://example.com/1_s.jpg",
+                original_url="https://example.com/1_o.jpg",
+                lat=40.0,
+                lon=-74.0,
+            ),
+        )
         # latitude/longitude of "0"/"0" mean "no geo" per Flickr's convention.
         self.assertIsNone(photos[1].lat)
 
     def test_flickr_error_status_raises(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(json_data={"stat": "fail", "message": "Invalid auth token"})
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")), self.assertRaises(GatewayRequestError):
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")
+            ),
+            self.assertRaises(GatewayRequestError),
+        ):
             gw.search_near(40.0, -74.0, 0.5)
 
     def test_http_error_status_raises(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(ok=False, status_code=500)
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")), self.assertRaises(GatewayRequestError):
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")
+            ),
+            self.assertRaises(GatewayRequestError),
+        ):
             gw.search_near(40.0, -74.0, 0.5)
 
     def test_get_original_uses_fallback_url_without_extra_call(self) -> None:
@@ -147,23 +177,36 @@ class FlickrGatewayTests(TestCase):
     def test_search_by_dates_issues_one_call_per_date_and_dedupes(self) -> None:
         gw = self._gateway()
         gw.session.get.side_effect = [
-            _mock_response(json_data={"stat": "ok", "photos": {"photo": [{"id": "1", "url_s": "https://example.com/1_s.jpg"}]}}),
+            _mock_response(
+                json_data={"stat": "ok", "photos": {"photo": [{"id": "1", "url_s": "https://example.com/1_s.jpg"}]}}
+            ),
             _mock_response(
                 json_data={
                     "stat": "ok",
-                    "photos": {"photo": [{"id": "1", "url_s": "https://example.com/1_s.jpg"}, {"id": "2", "url_s": "https://example.com/2_s.jpg"}]},
+                    "photos": {
+                        "photo": [
+                            {"id": "1", "url_s": "https://example.com/1_s.jpg"},
+                            {"id": "2", "url_s": "https://example.com/2_s.jpg"},
+                        ]
+                    },
                 },
             ),
         ]
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")
+        ):
             results = gw.search_by_dates([datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)])
         self.assertEqual(gw.session.get.call_count, 2)
         self.assertEqual({photo.id for photo in results}, {"1", "2"})
 
     def test_list_recent_sorts_by_date_taken_desc(self) -> None:
         gw = self._gateway()
-        gw.session.get.return_value = _mock_response(json_data={"stat": "ok", "photos": {"photo": [{"id": "1", "url_s": "https://example.com/1_s.jpg"}]}})
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")):
+        gw.session.get.return_value = _mock_response(
+            json_data={"stat": "ok", "photos": {"photo": [{"id": "1", "url_s": "https://example.com/1_s.jpg"}]}}
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")
+        ):
             results = gw.list_recent(limit=50)
         self.assertEqual([photo.id for photo in results], ["1"])
         _args, kwargs = gw.session.get.call_args
@@ -182,12 +225,16 @@ class FlickrSettingsViewTests(TestCase):
         self.client.force_login(self.user)
 
     def test_disconnect_removes_the_account(self) -> None:
-        FlickrAccount.objects.create(profile=self.user.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00")
+        FlickrAccount.objects.create(
+            profile=self.user.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00"
+        )
         self.client.post(reverse("settings.flickr.disconnect"))
         self.assertFalse(FlickrAccount.objects.filter(profile=self.user.profile).exists())
 
     def test_callback_with_bad_state_does_not_create_account(self) -> None:
-        response = self.client.get(reverse("settings.flickr.callback"), {"oauth_token": "unknown", "oauth_verifier": "v"})
+        response = self.client.get(
+            reverse("settings.flickr.callback"), {"oauth_token": "unknown", "oauth_verifier": "v"}
+        )
         self.assertEqual(response.status_code, 302)
         self.assertFalse(FlickrAccount.objects.filter(profile=self.user.profile).exists())
 
@@ -195,13 +242,31 @@ class FlickrSettingsViewTests(TestCase):
         cache.set("ul_flickr_request_token_req-token", {"secret": "req-secret", "pid": self.user.profile.id}, 600)
         with mock.patch(
             "urbanlens.dashboard.controllers.flickr.finish_authorization",
-            return_value=flickr_oauth.FlickrAccessGrant(oauth_token="final", oauth_token_secret="final-secret", user_nsid="1@N00", username="tester"),
+            return_value=flickr_oauth.FlickrAccessGrant(
+                oauth_token="final", oauth_token_secret="final-secret", user_nsid="1@N00", username="tester"
+            ),
         ):
-            response = self.client.get(reverse("settings.flickr.callback"), {"oauth_token": "req-token", "oauth_verifier": "v"})
+            response = self.client.get(
+                reverse("settings.flickr.callback"), {"oauth_token": "req-token", "oauth_verifier": "v"}
+            )
         self.assertEqual(response.status_code, 302)
         account = FlickrAccount.objects.get(profile=self.user.profile)
         self.assertEqual(account.oauth_token, "final")
         self.assertEqual(account.flickr_user_id, "1@N00")
+
+    def test_successful_connect_redirects_to_the_connections_tab(self) -> None:
+        """Regression guard: the success path used to redirect to the bare settings URL (no #hash), unlike every error branch in the same view - settings/index.html's tab-switch JS only activates a non-default tab when the URL carries a fragment, so this silently landed the user on the default Privacy tab instead of Connections."""
+        cache.set("ul_flickr_request_token_req-token", {"secret": "req-secret", "pid": self.user.profile.id}, 600)
+        with mock.patch(
+            "urbanlens.dashboard.controllers.flickr.finish_authorization",
+            return_value=flickr_oauth.FlickrAccessGrant(
+                oauth_token="final", oauth_token_secret="final-secret", user_nsid="1@N00", username="tester"
+            ),
+        ):
+            response = self.client.get(
+                reverse("settings.flickr.callback"), {"oauth_token": "req-token", "oauth_verifier": "v"}
+            )
+        self.assertEqual(response["Location"], f"{reverse('settings.view')}#flickr-settings-section")
 
 
 # -- Pin detail: search -------------------------------------------------------------
@@ -216,10 +281,18 @@ class PinFlickrSearchViewTests(TestCase):
         self.client.force_login(self.user)
         self.location = baker.make("dashboard.Location", latitude=Decimal("40.000000"), longitude=Decimal("-74.000000"))
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
-        self.account = FlickrAccount.objects.create(profile=self.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00")
+        self.account = FlickrAccount.objects.create(
+            profile=self.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00"
+        )
 
     def test_search_returns_photos_and_flags_already_imported(self) -> None:
-        photo = FlickrPhoto(id="42", thumbnail_url="https://example.com/42_s.jpg", original_url="https://example.com/42_o.jpg", lat=40.0, lon=-74.0)
+        photo = FlickrPhoto(
+            id="42",
+            thumbnail_url="https://example.com/42_s.jpg",
+            original_url="https://example.com/42_o.jpg",
+            lat=40.0,
+            lon=-74.0,
+        )
         baker.make(Image, pin=self.pin, profile=self.profile, source_url=self.account.photo_web_url("42"))
         with mock.patch.object(FlickrGateway, "search_near", return_value=[photo]):
             response = self.client.get(reverse("pin.flickr.search", args=[self.pin.slug]))
@@ -242,7 +315,9 @@ class PinFlickrSearchViewTests(TestCase):
 
     def test_visits_mode_searches_by_recorded_visit_dates(self) -> None:
         baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, 5)))
-        photo = FlickrPhoto(id="v1", thumbnail_url="https://example.com/v1_s.jpg", original_url=None, lat=None, lon=None)
+        photo = FlickrPhoto(
+            id="v1", thumbnail_url="https://example.com/v1_s.jpg", original_url=None, lat=None, lon=None
+        )
         with mock.patch.object(FlickrGateway, "search_by_dates", return_value=[photo]) as search_by_dates:
             response = self.client.get(reverse("pin.flickr.search", args=[self.pin.slug]), {"mode": "visits"})
         asset_ids = [a["id"] for a in response.context["assets"]]
@@ -251,7 +326,9 @@ class PinFlickrSearchViewTests(TestCase):
         self.assertEqual(list(dates_arg), [datetime.date(2024, 1, 5)])
 
     def test_all_mode_calls_list_recent(self) -> None:
-        photo = FlickrPhoto(id="r1", thumbnail_url="https://example.com/r1_s.jpg", original_url=None, lat=None, lon=None)
+        photo = FlickrPhoto(
+            id="r1", thumbnail_url="https://example.com/r1_s.jpg", original_url=None, lat=None, lon=None
+        )
         with mock.patch.object(FlickrGateway, "list_recent", return_value=[photo]) as list_recent:
             response = self.client.get(reverse("pin.flickr.search", args=[self.pin.slug]), {"mode": "all"})
         asset_ids = [a["id"] for a in response.context["assets"]]
@@ -270,7 +347,9 @@ class ImportFlickrPhotosTaskTests(TestCase):
         self.profile = self.user.profile
         self.location = baker.make("dashboard.Location", latitude=Decimal("40.000000"), longitude=Decimal("-74.000000"))
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
-        self.account = FlickrAccount.objects.create(profile=self.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00")
+        self.account = FlickrAccount.objects.create(
+            profile=self.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00"
+        )
 
     def _run(self, photo_ids, downloads):
         def fake_get_original(self_gw, photo_id):
@@ -304,28 +383,24 @@ class ImportFlickrPhotosTaskTests(TestCase):
             counts = tasks.import_flickr_photos(self.pin.pk, self.profile.pk, ["42"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
-        with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
+        with mock.patch(
+            "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+        ) as lock:
             self._run(["42"], {"42": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
 
 class GetFlickrAccountTests(TestCase):
-    """FlickrAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
-
-    Unlike the equivalent Immich/GoogleCalendar/GooglePhotos lookups, nothing
-    here ever caught InvalidToken before this - every page or task touching a
-    Flickr connection after a field_encryption_key rotation would 500 outright
-    instead of treating it as "never connected" and offering reconnection.
-    """
+    """FlickrAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.account = FlickrAccount.objects.create(profile=self.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00")
+        self.account = FlickrAccount.objects.create(
+            profile=self.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00"
+        )
 
     def _corrupt_stored_oauth_token(self) -> None:
         """Write a ciphertext-shaped value directly to the DB that Fernet cannot decrypt."""
@@ -340,10 +415,10 @@ class GetFlickrAccountTests(TestCase):
     def test_returns_account_when_decryptable(self) -> None:
         self.assertEqual(FlickrAccount.objects.get_for_profile(self.profile), self.account)
 
-    def test_undecryptable_account_is_healed_to_none(self) -> None:
+    def test_undecryptable_account_reads_as_none_and_is_kept(self) -> None:
         self._corrupt_stored_oauth_token()
         self.assertIsNone(FlickrAccount.objects.get_for_profile(self.profile))
-        self.assertFalse(FlickrAccount.objects.filter(profile=self.profile).exists())
+        self.assertTrue(FlickrAccount.objects.filter(profile=self.profile).exists())
 
     def test_settings_page_does_not_500_with_undecryptable_account(self) -> None:
         self._corrupt_stored_oauth_token()

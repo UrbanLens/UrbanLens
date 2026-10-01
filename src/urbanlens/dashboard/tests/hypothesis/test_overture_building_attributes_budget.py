@@ -1,12 +1,4 @@
-"""Tests for OvertureBuildingAttributesPanelSource.fetch()'s latency budget.
-
-get_building_attributes() and get_nearby_places() are each independent S3
-GeoParquet range reads; observed in production taking ~50s+ each back-to-back
-(105.8s total for one fetch() call), on the same small prefork queue as
-BoundaryPanelSource. get_nearby_places() is skipped once get_building_attributes()
-has already eaten most of a reasonable total budget, rather than always paying
-for both regardless of how slow the first one was.
-"""
+"""Tests for OvertureBuildingAttributesPanelSource.fetch()'s latency budget."""
 
 from __future__ import annotations
 

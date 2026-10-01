@@ -1,10 +1,6 @@
 """Per-user Flickr OAuth 1.0a connection.
-
-Each user connects *their own* Flickr account via OAuth 1.0a - there is no
-site-wide Flickr account. ``oauth_token``/``oauth_token_secret`` are the
-long-lived credential pair Flickr issues after the user authorizes the app;
-together they're equivalent in sensitivity to a Google OAuth refresh token,
-so both are stored encrypted at rest.
+Each user connects *their own* Flickr account via OAuth 1.0a - there is no site-wide Flickr account.
+``oauth_token``/``oauth_token_secret`` are the long-lived credential pair Flickr issues after the user authorizes the app; together they're equivalent in sensitivity to a Google OAuth refresh token, so both are stored encrypted at rest.
 """
 
 from __future__ import annotations
@@ -15,7 +11,6 @@ from django.db.models import CASCADE, CharField, DateTimeField, OneToOneField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.fields import EncryptedTextField
-from urbanlens.dashboard.models.flickr.queryset import FlickrAccountManager
 
 
 class FlickrAccount(abstract.DashboardModel):
@@ -40,14 +35,11 @@ class FlickrAccount(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int
 
-    objects = FlickrAccountManager()
+    objects = abstract.ProfileConnectionManager()
 
     def photo_web_url(self, photo_id: str) -> str:
         """Return the Flickr web URL for one photo.
-
-        Used both as the "view on Flickr" attribution link and as the de-dup
-        key stored on ``Image.source_url`` - a photo already imported to a
-        pin is recognised by matching this URL, without re-downloading it.
+        Used both as the "view on Flickr" attribution link and as the de-dup key stored on ``Image.source_url`` - a photo already imported to a pin is recognised by matching this URL, without re-downloading it.
 
         Args:
             photo_id: The Flickr photo id.

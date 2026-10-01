@@ -4,7 +4,7 @@ Thanks for your interest in UrbanLens. This document covers the project's licens
 
 ## License
 
-UrbanLens is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. The full text is in [`LICENSE`](./LICENSE).
+UrbanLens is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. The full text is in [`LICENSE.md`](./LICENSE.md).
 
 ### Why AGPL instead of MIT/Apache/GPL?
 
@@ -49,6 +49,9 @@ UrbanLens's codebase is open under AGPL, but location data, coordinates, and sit
    uv run pytest src/urbanlens/dashboard/tests   # set a unique UL_TEST_DB_NAME
    bun run typecheck && bun run test:ts     # the TypeScript suite
    python3 bin/check_imports_tracked.py     # every committed import must resolve in the committed tree
+   python3 bin/check_template_comments.py   # {# comments must close on the line they open
+   python bin/run_codeql.py                 # optional local CodeQL; broader than the GitHub job
+
    ```
 
    `pre-commit` runs the lint, typecheck and TypeScript tests for you if you have it installed.

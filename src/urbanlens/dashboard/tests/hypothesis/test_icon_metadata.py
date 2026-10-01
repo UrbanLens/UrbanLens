@@ -1,10 +1,4 @@
-"""Consistency tests for the icon picker's emoji metadata.
-
-``ICON_KEYWORDS`` supplies the extra search terms rendered into each icon
-button's ``data-keywords`` attribute; a keyword entry whose emoji key is not
-actually offered by ``ICON_CATEGORIES`` can never match anything, so these
-tests keep the two structures in sync.
-"""
+"""Consistency tests for the icon picker's emoji metadata."""
 
 from __future__ import annotations
 
@@ -25,7 +19,9 @@ class IconKeywordConsistencyTests(TestCase):
     def test_every_keyword_key_is_a_picker_icon(self) -> None:
         icons = _all_picker_icons()
         orphans = sorted(k for k in ICON_KEYWORDS if k not in icons)
-        self.assertEqual(orphans, [], f"ICON_KEYWORDS entries for emojis missing from ICON_CATEGORIES: {[ascii(o) for o in orphans]}")
+        self.assertEqual(
+            orphans, [], f"ICON_KEYWORDS entries for emojis missing from ICON_CATEGORIES: {[ascii(o) for o in orphans]}"
+        )
 
     def test_keywords_are_lowercase_space_separated(self) -> None:
         for icon, keywords in ICON_KEYWORDS.items():

@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.urls import reverse
-from hypothesis import given, settings, strategies as st
 import pytest
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.auth.passphrases import generate_passphrases
 from urbanlens.dashboard.validators.password import ComplexityValidator, HaveIBeenPwnedValidator
@@ -152,12 +152,11 @@ class SuggestPassphrasesViewTests(TestCase):
             ComplexityValidator().validate(phrase)
 
     def test_rate_limit_returns_429(self) -> None:
-        from urbanlens.dashboard.controllers import account as account_controller
+        from urbanlens.dashboard.controllers.account import PASSPHRASE_SUGGEST_RATE
 
-        with patch.object(account_controller, "_PASSPHRASE_RATE_LIMIT", 2):
+        for _ in range(PASSPHRASE_SUGGEST_RATE.limit):
             self.assertEqual(self.client.get(reverse("suggest_passphrases")).status_code, 200)
-            self.assertEqual(self.client.get(reverse("suggest_passphrases")).status_code, 200)
-            self.assertEqual(self.client.get(reverse("suggest_passphrases")).status_code, 429)
+        self.assertEqual(self.client.get(reverse("suggest_passphrases")).status_code, 429)
 
 
 class SignupPasswordValidationIntegrationTests(TestCase):
@@ -214,26 +213,16 @@ class SignupPasswordValidationIntegrationTests(TestCase):
 class ValidatePasswordPolicyViewTests(TestCase):
     """POST /accounts/validate-password/ - the E2EE flows' pre-derive policy check.
 
-    The client derives the login credential before submit, so this endpoint is
-    the only place the configured AUTH_PASSWORD_VALIDATORS ever see the real
-    password (docs/PROBLEMS.md, decision 2026-07-23).
-    """
-
-    def setUp(self) -> None:
-        super().setUp()
-        # The per-IP rate key is shared cache state - every test in this class
-        # posts from the same test-client IP, so without a reset the rate-limit
-        # test inherits the hit count from whichever tests ran before it.
-        from django.core.cache import cache
-
-        from urbanlens.dashboard.controllers.account import _PASSWORD_CHECK_RATE_KEY
-
-        cache.delete(_PASSWORD_CHECK_RATE_KEY.format(ip="127.0.0.1"))
+    The client derives the login credential before submit, so this endpoint is the only place the configured
+    AUTH_PASSWORD_VALIDATORS ever see the real password (docs/NOTES.md, "Decisions from the 2026-07-23
+    session")."""
 
     def _post(self, body: dict):
         import json as jsonlib
 
-        return self.client.post(reverse("validate_password_policy"), jsonlib.dumps(body), content_type="application/json")
+        return self.client.post(
+            reverse("validate_password_policy"), jsonlib.dumps(body), content_type="application/json"
+        )
 
     def test_strong_password_is_valid(self) -> None:
         with patch(_HIBP_PATCH, return_value=False):
@@ -290,9 +279,9 @@ class ValidatePasswordPolicyViewTests(TestCase):
     def test_rate_limit_returns_429(self) -> None:
         from urbanlens.dashboard.controllers import account as account_controller
 
-        with patch(_HIBP_PATCH, return_value=False), patch.object(account_controller, "_PASSWORD_CHECK_RATE_LIMIT", 2):
-            self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 200)
-            self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 200)
+        with patch(_HIBP_PATCH, return_value=False):
+            for _ in range(account_controller.PASSWORD_POLICY_CHECK_RATE.limit):
+                self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 200)
             self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 429)
 
     def test_password_never_appears_in_the_response(self) -> None:

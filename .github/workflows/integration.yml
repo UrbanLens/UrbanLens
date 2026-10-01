@@ -30,9 +30,15 @@ on:
         required: false
         default: "4"
         type: string
+      run_nuclei:
+        description: "Also run a Nuclei scan against the same deployment"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
+  security-events: write
 
 concurrency:
   # One run at a time per target. Two concurrent runs share the staging
@@ -45,10 +51,7 @@ jobs:
   integration:
     name: Integration suite
     runs-on: ubuntu-latest
-    # Holds UL_E2E_ACCOUNTS_JSON (the manifest written by
-    # `manage.py provision_integration_env`) and, optionally, UL_E2E_REDATA_URL.
-    # Environment rather than repository secrets so the credentials for a
-    # staging instance stay scoped to it.
+    # Holds UL_E2E_ACCOUNTS_JSON
     environment: staging
     timeout-minutes: 45
 
@@ -57,20 +60,16 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 
       - name: Install suite dependencies
         working-directory: tests/integration
-        # `npm ci` once a package-lock.json is committed; until then the direct
-        # dependencies are pinned exactly and only transitives float.
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
+        # `npm ci`: the lockfile is committed now. It was not, and the floating
+        # transitives resolved a second playwright-core beside the one
+        # `playwright` bundles, whose `Page` type is not the same type.
+        run: npm ci --no-audit --no-fund
 
       - name: Type-check the suite
         working-directory: tests/integration
@@ -136,3 +135,16 @@ jobs:
           path: tests/integration/reports/artifacts
           retention-days: 7
           if-no-files-found: ignore
+
+  nuclei:
+    name: Nuclei scan
+    if: inputs.run_nuclei
+    # Independent of the `integration` job above rather than chained after it -
+    # a template-driven scan of the same deployment doesn't need Playwright to
+    # have finished, or to have passed, first.
+    uses: ./.github/workflows/nuclei.yml
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      base_url: ${{ inputs.base_url }}

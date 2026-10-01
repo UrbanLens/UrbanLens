@@ -1,11 +1,4 @@
-"""Tests for the profile page's "Additional Details" section and privacy hints.
-
-Covers the gap found in an audit of the FAQ/Values claim "any data we store
-about you is visible on your own profile page": birth_date and secondary
-emails were collected but never displayed anywhere. This adds a compact
-own-profile-only section for them, plus a hover-reveal privacy hint icon next
-to data governed by a VisibilityChoice setting.
-"""
+"""Tests for the profile page's "Additional Details" section and privacy hints."""
 
 from __future__ import annotations
 
@@ -19,7 +12,6 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
-from urbanlens.dashboard.models.profile.model import Profile
 
 
 def _strip_scripts(html: str) -> str:
@@ -76,7 +68,9 @@ class AdditionalDetailsSectionTests(TestCase):
         self.profile.save(update_fields=["birth_date", "profile_visibility"])
         other = baker.make(User)
         self.client.force_login(other)
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         content = _strip_scripts(response.content.decode())
         self.assertNotIn(">Birthday: ", content)
         self.assertNotIn(">Additional Details<", content)
@@ -100,5 +94,7 @@ class ProfilePrivacyHintTests(TestCase):
         self.profile.save(update_fields=["profile_visibility"])
         other = baker.make(User)
         self.client.force_login(other)
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertNotContains(response, "ul-privacy-hint")

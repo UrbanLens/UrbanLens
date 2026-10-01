@@ -1,23 +1,4 @@
-"""Tests for the E2EE endpoints' conversion to dual (session-or-credential) auth.
-
-The endpoints in ``controllers.e2ee`` used to be plain Django ``View``s behind
-``LoginRequiredMixin``. They are now DRF ``APIView``s so an OAuth2-consented
-mobile client can reach the same URLs the web client uses.
-
-What these tests pin down:
-
-- The web client's existing session access still works (the conversion must be
-  invisible to it).
-- An OAuth2 token bearing the right scope now works too.
-- A PAT-style ``ApiKey`` never works, even when its ``scopes`` list names the
-  messaging scopes - ``permissions.OAUTH2_ONLY_SCOPES`` is enforced by
-  credential *kind*, and this is the end-to-end proof of that.
-- ``current_password`` is still demanded on the three key-replacing endpoints
-  **under credential auth**. This is the critical regression guard: without it
-  a stolen ``messages:write`` token could re-key a victim's account and lock
-  them out of their own history.
-- ``E2EEChangePasswordView`` was deliberately NOT converted.
-"""
+"""Tests for the E2EE endpoints' conversion to dual (session-or-credential) auth."""
 
 from __future__ import annotations
 
@@ -115,12 +96,12 @@ class OwnKeysDualAuthTests(TestCase):
     def test_pat_api_key_is_refused_even_holding_the_scope(self) -> None:
         """OAUTH2_ONLY_SCOPES is about the credential *kind*, end to end.
 
-        A bearer API key tends to end up in CI configs and screenshots; it must
-        never be a route into someone's messages, even if something wrote the
-        messaging scopes onto it.
-        """
+        A bearer API key tends to end up in CI configs and screenshots; it must never be a route into someone's
+        messages, even if something wrote the messaging scopes onto it."""
         key, raw = generate_api_key(self.profile.user, "leaky-ci-key")
-        ApiKey.objects.filter(pk=key.pk).update(scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value])
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value]
+        )
         self.assertEqual(self.client.get(self.url, **_bearer(raw)).status_code, 403)
 
 
@@ -146,16 +127,15 @@ class ScopeSeparationTests(TestCase):
 class CurrentPasswordProofUnderCredentialAuthTests(TestCase):
     """The three key-replacing endpoints still demand the account password.
 
-    The whole point of the proof under credential auth: an OAuth2 token grants
-    "send and read messages", not "replace this account's key material". A
-    stolen token must not be sufficient on its own to re-key the account.
-    """
+    A stolen token must not be sufficient on its own to re-key the account."""
 
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)
         self.profile = _profile_with_password()
-        self.token = _token_for(self.profile.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}")
+        self.token = _token_for(
+            self.profile.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
+        )
 
     def _post(self, url_name: str, payload: dict):
         return self.client.post(
@@ -194,7 +174,11 @@ class CurrentPasswordProofUnderCredentialAuthTests(TestCase):
         _enroll(self.profile)
         response = self._post(
             "e2ee.rewrap",
-            {"password_wrapped_secret": _b64(os.urandom(72)), "password_wrap_salt": _b64(os.urandom(16)), "current_password": "wrong"},
+            {
+                "password_wrapped_secret": _b64(os.urandom(72)),
+                "password_wrap_salt": _b64(os.urandom(16)),
+                "current_password": "wrong",
+            },
         )
         self.assertEqual(response.status_code, 403)
 
@@ -264,18 +248,9 @@ class ErrorBodyShapeTests(TestCase):
     def test_malformed_json_from_a_credential_is_still_a_json_400(self) -> None:
         """Credential callers get the package's ``{"error": ...}`` here too.
 
-        django-oauth-toolkit's authenticator reads the request body while
-        verifying the token, so a malformed body raises DRF's ParseError
-        during authentication - before any handler in this module runs and
-        could substitute its own error shape. This used to be the one path
-        that escaped as DRF's ``{"detail": ...}``; now that
-        ``DualAuthJsonView`` inherits ``errors.ErrorEnvelopeMixin``, the
-        view-level exception handler catches it on the way out and the caller
-        sees the same envelope as every other failure. Worth asserting rather
-        than assuming: authentication-time exceptions are raised outside the
-        handler methods, which is exactly where a per-view override is easiest
-        to get wrong.
-        """
+        django-oauth-toolkit's authenticator reads the request body while verifying the token, so a malformed
+        body raises DRF's ParseError during authentication - before any handler in this module runs and could
+        substitute its own error shape."""
         response = self.client.post(
             reverse("e2ee.enroll"),
             data="{not json",
@@ -306,7 +281,9 @@ class GroupKeyTokenContractTests(TestCase):
         from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.group = create_group_chat(self.creator, "Trip crew", [self.member])
-        self.token = _token_for(self.creator.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}")
+        self.token = _token_for(
+            self.creator.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
+        )
         self.url = reverse("e2ee.group_key", kwargs={"group_uuid": self.group.uuid})
 
     def test_get_issues_opaque_member_ids_not_slugs(self) -> None:
@@ -346,11 +323,7 @@ class GroupKeyTokenContractTests(TestCase):
 class ChangePasswordStaysSessionOnlyTests(TestCase):
     """``E2EEChangePasswordView`` must never accept a credential.
 
-    It calls ``user.set_password()`` on the *login* credential. Reaching it
-    with a scoped messaging token would turn the compromise of one narrow,
-    revocable token into permanent account takeover, so it is deliberately the
-    one endpoint in the module left as a session-only Django view.
-    """
+    It calls ``user.set_password()`` on the *login* credential."""
 
     def test_it_is_not_a_dual_auth_view(self) -> None:
         self.assertFalse(issubclass(e2ee_controllers.E2EEChangePasswordView, DualAuthJsonView))

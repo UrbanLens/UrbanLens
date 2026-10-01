@@ -1,12 +1,4 @@
-"""Tests for the profile page's click-to-edit-in-place bio.
-
-Covers:
-- Own-profile view renders the bio as an editable element (even with no bio
-  yet, so there's something to click to add one) - other viewers see plain text.
-- ProfileFieldUpdateView's field="bio" POST path, previously untested despite
-  already existing (used by the full Edit Profile page) - now exercised more,
-  via the profile view page's inline editor.
-"""
+"""Tests for the profile page's click-to-edit-in-place bio."""
 
 from __future__ import annotations
 
@@ -50,7 +42,9 @@ class ProfileBioEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertContains(response, "Urban explorer since 2015.")
         # The wiring script's `querySelector('.profile-bio-full--editable')`
         # legitimately contains this class name as inert text on every render
@@ -65,7 +59,9 @@ class ProfileBioEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         # Same caveat: the wiring script hardcodes 'Add a bio...' as its
         # revert-to-placeholder fallback string, present in every render
         # regardless of viewer - check for the text as actual element content.

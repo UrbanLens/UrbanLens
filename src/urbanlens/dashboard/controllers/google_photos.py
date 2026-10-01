@@ -3,13 +3,9 @@
 Two groups of views:
 
 - Settings ("Connect Google Photos"): ``GooglePhotosSettingsView``,
-  ``GooglePhotosConnectView``/``GooglePhotosCallbackView`` (OAuth2, mirrors
-  Calendar's flow but a separate account/scope), ``GooglePhotosDisconnectView``.
-- Pin detail ("Import from Google Photos"): create a picker session, poll it
-  until the user finishes picking in Google's own UI, then the same
-  thumbnail-proxy / Celery-import / progress-polling shape as the other
-  providers. Every picked item is a candidate - there is no coordinate filter
-  to apply here.
+  ``GooglePhotosConnectView``/``GooglePhotosCallbackView`` (OAuth2, mirrors Calendar's flow b...
+- Pin detail ("Import from Google Photos"): create a picker session, poll it until the user finishes
+  picking in Google's own UI, then the same thumbnail-proxy ...
 """
 
 from __future__ import annotations
@@ -43,8 +39,10 @@ from urbanlens.dashboard.services.apis.photos.google import (
     session_items_cache_key,
 )
 from urbanlens.dashboard.services.auth.google_oauth import extract_email_from_id_token, revoke_token
+from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -143,22 +141,21 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
             return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
         expires_in = int(tokens.get("expires_in") or 3600)
-        account, _created = GooglePhotosAccount.objects.update_or_create(
-            profile=profile,
+        account, _created = GooglePhotosAccount.objects.connect_for_profile(
+            profile,
             defaults={
                 "google_email": extract_email_from_id_token(tokens.get("id_token")),
                 "access_token": tokens["access_token"],
                 "token_expiry": timezone.now() + datetime.timedelta(seconds=expires_in),
             },
         )
-        # A refresh token is only issued on fresh consent; keep the old one
-        # when Google omits it on a re-connect (see calendar_sync.py's
-        # GoogleCalendarAccount callback for the same pattern).
+        # A refresh token is only issued on fresh consent; keep the old one when Google omits it on a re-connect
+        # (see calendar_sync.py's GoogleCalendarAccount callback for the same pattern).
         if tokens.get("refresh_token"):
             account.refresh_token = tokens["refresh_token"]
             account.save(update_fields=["refresh_token", "updated"])
         messages.success(request, "Google Photos connected.")
-        return redirect("settings.view")
+        return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
 
 class GooglePhotosDisconnectView(LoginRequiredMixin, View):
@@ -205,7 +202,8 @@ class PinGooglePhotosSessionCreateView(LoginRequiredMixin, View):
         try:
             picker_session = GooglePhotosGateway(account=account).create_session()
         except GatewayRequestError as exc:
-            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": str(exc)})
+            logger.warning("Google Photos session create failed for pin %s: %s", pin.slug, exc)
+            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": "Couldn't start a Google Photos picker session right now."})
 
         cache.set(_session_owner_cache_key(picker_session.id), profile.id, picker_session.timeout_s + 60)
         return render(
@@ -230,7 +228,8 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
         try:
             picker_session = gateway.get_session(session_id)
         except GatewayRequestError as exc:
-            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": str(exc)})
+            logger.warning("Google Photos session status failed for pin %s: %s", pin.slug, exc)
+            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": "Couldn't check your Google Photos picker session right now."})
 
         if not picker_session.media_items_set:
             return render(
@@ -242,7 +241,8 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
         try:
             items = gateway.list_session_media_items(session_id)
         except GatewayRequestError as exc:
-            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": str(exc)})
+            logger.warning("Google Photos session media list failed for pin %s: %s", pin.slug, exc)
+            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": "Couldn't load the items you picked."})
 
         cache.set(
             session_items_cache_key(session_id),
@@ -257,19 +257,18 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
 class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
     """GET pin/<slug>/google-photos/thumbnail/<session_id>/<item_id>/ - proxies one picked item's preview.
 
-    The Bearer token must never reach the browser, and Google's ``baseUrl``
-    requires it - this view fetches the preview server-side, same reasoning
-    as the Immich thumbnail proxy.
+    The Bearer token must never reach the browser, and Google's ``baseUrl`` requires it - this view
+    fetches the preview server-side, same reasoning as the Immich thumbnail proxy.
     """
 
     def get(self, request: HttpRequest, pin_slug: str, session_id: str, item_id: str) -> HttpResponse:
         profile = _request_profile(request)
         _require_session_owner(session_id, profile)
         cache_key = f"ul_gphotos_thumb_{session_id}_{item_id}"
-        cached = cache.get(cache_key)
+        cached = bounded_cache.get_or_none(cache_key, label=f"Google Photos preview {item_id}")
         if cached is not None:
             content, content_type = cached
-            return mark_private_media(HttpResponse(content, content_type=content_type))
+            return mark_private_media(proxied_media_response(content, content_type))
 
         items = cache.get(session_items_cache_key(session_id)) or {}
         item = items.get(item_id)
@@ -284,8 +283,10 @@ class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
         except GatewayRequestError:
             return HttpResponse(status=502)
         content_type = item.get("mime_type", "image/jpeg")
-        cache.set(cache_key, (content, content_type), _SESSION_ITEMS_CACHE_TTL)
-        return mark_private_media(HttpResponse(content, content_type=content_type))
+        # A backstop, not the mechanism: the gateway now asks Google for a thumbnail, so an oversized body here
+        # means the provider ignored the size hint.
+        bounded_cache.set_if_small(cache_key, content, content_type, _SESSION_ITEMS_CACHE_TTL, label=f"Google Photos preview {item_id}")
+        return mark_private_media(proxied_media_response(content, content_type))
 
 
 class PinGooglePhotosImportView(LoginRequiredMixin, View):
@@ -300,12 +301,12 @@ class PinGooglePhotosImportView(LoginRequiredMixin, View):
             _require_session_owner(session_id, profile)
         if not media_item_ids:
             return HttpResponse('<p class="immich-import-error">Select at least one photo to import.</p>', status=400)
-        if not GooglePhotosAccount.objects.filter(profile=profile).exists():
+        if GooglePhotosAccount.objects.get_for_profile(profile) is None:
             return HttpResponse('<p class="immich-import-error">Google Photos is not connected.</p>', status=400)
 
         from urbanlens.dashboard.tasks import import_google_photos
 
-        result = safely_enqueue_task(import_google_photos, pin.pk, profile.pk, session_id, media_item_ids)
+        result = safely_enqueue_task(import_google_photos, pin.pk, profile.pk, session_id, media_item_ids, durable=False)
         if result is None:
             return render(request, _PROGRESS_PARTIAL, {"pin": pin, "state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
         return render(request, _PROGRESS_PARTIAL, {"pin": pin, "task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting import..."})

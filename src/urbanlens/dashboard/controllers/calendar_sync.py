@@ -21,29 +21,34 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
-from urbanlens.dashboard.controllers.trip import _apply_trip_list_identity_masking, _trips_for_list, trip_or_not_found
+from urbanlens.dashboard.controllers.trip import trip_or_not_found
 from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarNotConfiguredError,
     build_authorization_url,
     exchange_code_for_tokens,
-    extract_email_from_id_token,
     revoke_token,
 )
-from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError, extract_email_from_id_token
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.trips.calendar_sync import (
+    MAX_IMPORTABLE_EVENTS,
+    TooManyEventsError,
     build_import_preview,
     export_trip_to_calendar,
-    import_events_as_trips,
     list_importable_events,
+    normalize_event_ids,
     remove_trip_from_calendar,
 )
 
 logger = logging.getLogger(__name__)
 
 _STATE_SALT = "google-calendar-connect"
+_IMPORT_PROGRESS_SALT = "google-calendar-import-progress"
+_IMPORT_PROGRESS_MAX_AGE_SECONDS = 24 * 60 * 60
+_IMPORT_PROGRESS_PARTIAL = "dashboard/partials/trips/_calendar_import_progress.html"
+_TOO_MANY_EVENTS_MESSAGE = f"Select at most {MAX_IMPORTABLE_EVENTS} events to import at once."
 _STATE_MAX_AGE_SECONDS = 600
 #: Named views the connect flow may return to via ``?next=`` - never redirect
 #: to an arbitrary value from user input, only one of these known routes.
@@ -53,6 +58,19 @@ _ALLOWED_NEXT_VIEW_NAMES = {"trips.list", "settings.view"}
 def _resolve_next_view_name(name: str | None) -> str:
     """Return `name` if it's an allowed post-connect redirect target, else the default."""
     return name if name in _ALLOWED_NEXT_VIEW_NAMES else "trips.list"
+
+
+def _next_url(next_name: str) -> str:
+    """The actual redirect target for an already-resolved next-view name.
+
+    ``settings.view`` specifically returns to its Connections tab (matching every other integration's
+    connect/callback flow - see flickr.py, google_photos.py) rather than the bare settings URL, which
+    would silently leave the default Privacy tab active: settings/index.html's ``activateFromHash()``
+    only switches tabs when the URL carries a ``#...`` fragment.
+    """
+    if next_name == "settings.view":
+        return f"{reverse('settings.view')}#google-calendar-settings-section"
+    return reverse(next_name)
 
 
 def _callback_uri(request: HttpRequest) -> str:
@@ -75,8 +93,7 @@ def calendar_context(profile: Profile, trip=None) -> dict:
         trip: Optional trip, to include that trip's export link for this user.
 
     Returns:
-        Dict with ``calendar_account`` and (when a trip is given)
-        ``calendar_link`` keys.
+        Dict with ``calendar_account`` and (when a trip is given) ``calendar_link`` keys.
     """
     account = GoogleCalendarAccount.objects.get_for_profile(profile)
     context: dict = {"calendar_account": account}
@@ -87,23 +104,17 @@ def calendar_context(profile: Profile, trip=None) -> dict:
 
 _RECONNECT_MESSAGE = "Your Google Calendar connection has expired. Please reconnect below to keep importing and exporting."
 
-#: GatewayRequestError is shared across every gateway integration
-#: (Calendar, Flickr, Immich, REData, ...); some of them build its message
-#: from an upstream response's own error text, which is not safe to return
-#: verbatim to a caller. Never surface it - log it and answer with this
-#: fixed message instead.
+#: GatewayRequestError is shared across every gateway integration (Calendar, Flickr, Immich, REData, ...); some
+#: of them build its message from an upstream response's own error text, which is not safe to return verbatim to
+#: a caller. Never surface it - log it and answer with this fixed message instead.
 _GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try again shortly."
 
 
 def _drop_expired_account(account: GoogleCalendarAccount) -> None:
     """Delete a connection Google has already rejected.
 
-    Called when a gateway call raises ``GoogleAuthExpiredError`` - the stored
-    tokens are dead, so keeping the row around would just repeat the same
-    failure on every next attempt. No revoke call is made: an already-invalid
-    token has nothing left to revoke. Deleting it also makes every template
-    that branches on ``calendar_account``/``account`` fall back to its
-    existing "not connected" state, which already offers a reconnect link.
+    Called when a gateway call raises ``GoogleAuthExpiredError`` - the stored tokens are dead, so
+    keeping the row around would just repeat the same failure on every next attempt.
 
     Args:
         account: The connection to discard.
@@ -125,7 +136,7 @@ class GoogleCalendarConnectView(LoginRequiredMixin, View):
             url = build_authorization_url(_callback_uri(request), state)
         except CalendarNotConfiguredError:
             messages.error(request, "Google Calendar integration is not configured on this server.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
         return redirect(url)
 
 
@@ -147,23 +158,23 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
 
         if request.GET.get("error"):
             messages.error(request, "Google Calendar access was not granted.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         code = request.GET.get("code") or ""
         if payload.get("pid") != profile.id or not code:
             messages.error(request, "The calendar connection request was invalid or expired. Please try again.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         try:
             tokens = exchange_code_for_tokens(code, _callback_uri(request))
         except (CalendarNotConfiguredError, GatewayRequestError):
             logger.exception("Google Calendar token exchange failed for profile %s", profile.id)
             messages.error(request, "Connecting to Google Calendar failed. Please try again.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         expires_in = int(tokens.get("expires_in") or 3600)
-        account, _created = GoogleCalendarAccount.objects.update_or_create(
-            profile=profile,
+        account, _created = GoogleCalendarAccount.objects.connect_for_profile(
+            profile,
             defaults={
                 "access_token": tokens["access_token"],
                 "token_expiry": timezone.now() + datetime.timedelta(seconds=expires_in),
@@ -178,7 +189,7 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
             account.save(update_fields=["refresh_token", "updated"])
 
         messages.success(request, "Google Calendar connected. You can now import events and export trips.")
-        return redirect(next_name)
+        return redirect(_next_url(next_name))
 
 
 class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
@@ -192,7 +203,7 @@ class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
         account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is not None:
             revoke_token(account.refresh_token or account.access_token)
-            account.delete()
+        GoogleCalendarAccount.objects.delete_for_profile(profile)
         messages.info(request, "Google Calendar disconnected.")
         response = HttpResponse("", status=200)
         response["HX-Redirect"] = reverse("trips.list")
@@ -213,10 +224,9 @@ class GoogleCalendarSettingsSectionView(LoginRequiredMixin, View):
 class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
     """POST /settings/google-calendar/disconnect/ - disconnect and re-render the settings subsection.
 
-    Separate from ``GoogleCalendarDisconnectView`` because that view always
-    issues an ``HX-Redirect`` to the trips list (matching where its only other
-    caller - the calendar import dialog - lives); redirecting away would be a
-    jarring way to leave the Settings page after clicking "Disconnect" here.
+    Separate from ``GoogleCalendarDisconnectView`` because that view always issues an ``HX-Redirect`` to
+    the trips list (matching where its only other caller - the calendar import dialog - lives);
+    redirecting away would be a jarring way to leave the Settings page after clicking "Disconnect" here.
     """
 
     def post(self, request):
@@ -224,7 +234,7 @@ class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
         account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is not None:
             revoke_token(account.refresh_token or account.access_token)
-            account.delete()
+        GoogleCalendarAccount.objects.delete_for_profile(profile)
         response = render(request, _SETTINGS_PARTIAL, {"calendar_account": None})
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "info", "message": "Google Calendar disconnected."}})
         return response
@@ -234,7 +244,7 @@ class CalendarImportView(LoginRequiredMixin, View):
     """Import dialog and import action for the user's calendar events.
 
     GET  /trips/calendar/import/  → dialog listing upcoming events
-    POST /trips/calendar/import/  → create trips from selected events
+    POST /trips/calendar/import/  → queue the import of the selected events, answering with a progress fragment
     """
 
     def get(self, request):
@@ -245,8 +255,9 @@ class CalendarImportView(LoginRequiredMixin, View):
 
         error = ""
         entries: list[dict] = []
+        truncated = False
         try:
-            entries = list_importable_events(account)
+            entries, truncated = list_importable_events(account)
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             account = None
@@ -261,6 +272,8 @@ class CalendarImportView(LoginRequiredMixin, View):
             {
                 "account": account,
                 "entries": entries,
+                "truncated": truncated,
+                "max_events": MAX_IMPORTABLE_EVENTS,
                 "error": error,
                 "profile": profile,
             },
@@ -273,7 +286,10 @@ class CalendarImportView(LoginRequiredMixin, View):
             # Plain-text 4xx bodies surface via the global htmx:responseError toast.
             return HttpResponse("Connect your Google Calendar first.", status=400)
 
-        event_ids = [eid for eid in request.POST.getlist("event_ids") if eid.strip()]
+        try:
+            event_ids = normalize_event_ids(request.POST.getlist("event_ids"))
+        except TooManyEventsError:
+            return HttpResponse(_TOO_MANY_EVENTS_MESSAGE, status=400)
         if not event_ids:
             return HttpResponse("Select at least one event to import.", status=400)
 
@@ -287,38 +303,60 @@ class CalendarImportView(LoginRequiredMixin, View):
             for event_id in event_ids
         ]
 
-        try:
-            created, skipped, invited = import_events_as_trips(account, selections)
-        except GoogleAuthExpiredError:
-            _drop_expired_account(account)
-            return HttpResponse(_RECONNECT_MESSAGE, status=502)
-        except GatewayRequestError as exc:
-            logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
-            return HttpResponse(_GATEWAY_FAILURE_MESSAGE, status=502)
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import import_calendar_events
 
-        trips = list(_trips_for_list(profile))
-        _apply_trip_list_identity_masking(profile, trips)
-        response = render(request, "dashboard/partials/trips/trip_list_partial.html", {"trips": trips, "profile": profile})
-        if created:
-            message = f"Imported {len(created)} event{'s' if len(created) != 1 else ''} as trips."
-            level = "success"
-            if invited:
-                message += f" Invited {invited} participant{'s' if invited != 1 else ''}."
-        else:
-            message = "No events were imported."
-            level = "warning"
-        if skipped:
-            message += f" {skipped[0]}" if len(skipped) == 1 else f" {len(skipped)} items were skipped."
-        response["HX-Trigger"] = json.dumps({"showToast": {"level": level, "message": message}})
+        result = safely_enqueue_task(import_calendar_events, profile.pk, selections, durable=False)
+        if result is None:
+            return render(request, _IMPORT_PROGRESS_PARTIAL, {"state": "FAILURE", "error": "The import queue is unavailable. Please try again later."}, status=503)
+        token = signing.dumps({"task": result.id, "profile": profile.pk}, salt=_IMPORT_PROGRESS_SALT)
+        progress_url = reverse("trips.calendar.import.progress", kwargs={"token": token})
+        return render(request, _IMPORT_PROGRESS_PARTIAL, {"progress_url": progress_url, "state": "PENDING", "percent": 0, "message": "Starting import..."}, status=202)
+
+
+class CalendarImportProgressView(LoginRequiredMixin, View):
+    """GET /trips/calendar/import/progress/<token>/ - the polled progress of one calendar import.
+
+    The token signs the task id together with the importing profile: the result backend records no owner,
+    and a result names the importer's own events.
+    """
+
+    def get(self, request: HttpRequest, token: str) -> HttpResponse:
+        from urbanlens.dashboard.services.core.celery import get_task_progress
+
+        try:
+            claims = signing.loads(token, salt=_IMPORT_PROGRESS_SALT, max_age=_IMPORT_PROGRESS_MAX_AGE_SECONDS)
+        except signing.BadSignature:
+            return HttpResponse(status=404)
+        profile = Profile.objects.filter(user=request.user).first()
+        if profile is None or claims.get("profile") != profile.pk:
+            return HttpResponse(status=404)
+
+        progress = get_task_progress(str(claims.get("task", "")))
+        outcome = progress.result if isinstance(progress.result, dict) else {}
+        context = {
+            "progress_url": request.path,
+            "state": progress.state,
+            "percent": progress.percent,
+            "message": outcome.get("message") or progress.message,
+            "error": progress.error,
+            "created": outcome.get("created", 0),
+        }
+        response = render(request, _IMPORT_PROGRESS_PARTIAL, context)
+        if progress.state == "SUCCESS":
+            response["HX-Trigger"] = json.dumps({"showToast": {"level": outcome.get("level", "info"), "message": outcome.get("message", "Import finished.")}})
+        elif progress.state in {"FAILURE", "REVOKED"}:
+            response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "The calendar import failed."}})
         return response
 
 
 class CalendarImportPreviewView(LoginRequiredMixin, View):
     """Second page of the import dialog: review trips, activities, and invitations.
 
-    POST /trips/calendar/import/preview/  → render the review step for the
-    events selected on page one. Nothing is created here - the user can still
-    uncheck activities and participants before confirming.
+    POST /trips/calendar/import/preview/ → render the review step for the
+
+    events selected on page one.
+    Nothing is created here - the user can still uncheck activities and participants before confirming.
     """
 
     def post(self, request):
@@ -327,7 +365,10 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
         if account is None:
             return HttpResponse("Connect your Google Calendar first.", status=400)
 
-        event_ids = [eid for eid in request.POST.getlist("event_ids") if eid.strip()]
+        try:
+            event_ids = normalize_event_ids(request.POST.getlist("event_ids"))
+        except TooManyEventsError:
+            return HttpResponse(_TOO_MANY_EVENTS_MESSAGE, status=400)
         if not event_ids:
             return HttpResponse("Select at least one event to import.", status=400)
 
@@ -356,8 +397,9 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
 class TripCalendarExportView(LoginRequiredMixin, View):
     """Export a trip to (or remove it from) the user's own Google Calendar.
 
-    POST   /trips/<slug>/calendar/export/  → create/update the event
-    DELETE /trips/<slug>/calendar/export/  → delete the event
+    POST /trips/<slug>/calendar/export/ → create/update the event
+    DELETE /trips/<slug>/calendar/export/ → delete the event
+
     Both re-render the trip's calendar-button partial.
     """
 
@@ -395,7 +437,8 @@ class TripCalendarExportView(LoginRequiredMixin, View):
         try:
             link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
         except ValueError as exc:
-            return self._render_button(request, trip, profile, toast=("warning", str(exc)))
+            logger.info("calendar export rejected for trip %s: %s", trip.pk, exc)
+            return self._render_button(request, trip, profile, toast=("warning", "That trip couldn't be exported to your calendar."))
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))
@@ -440,9 +483,9 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 class TripCalendarAutoSyncView(LoginRequiredMixin, View):
     """Toggle whether an already-exported trip keeps pushing future edits to its calendar event.
 
-    POST /trips/<slug>/calendar/auto-sync/  → flip TripCalendarLink.auto_sync for the
-    viewing profile's export link. Does not touch the calendar itself - it only
-    changes whether *later* saves trigger a push. Re-renders the calendar button.
+    POST /trips/<slug>/calendar/auto-sync/ → flip TripCalendarLink.auto_sync for the
+
+    Does not touch the calendar itself - it only changes whether *later* saves trigger a push.
     """
 
     def post(self, request, trip_slug):

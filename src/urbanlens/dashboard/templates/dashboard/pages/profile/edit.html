@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with id="profile-hero" modifier="profile" body_template="dashboard/partials/profile/_profile_hero_body.html" edit_mode=True %}
@@ -7,31 +8,34 @@
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" profile_slug=profile.slug %}
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" profile_slug=profile.slug has_achievements=has_achievements %}
     </div>
 </div>
 {% endblock %}
 
 {% block content %}
 {% with date_errors=form.birth_date.errors|add:form.started_exploring.errors %}
-{% if date_errors %}
-<div class="dialog-overlay" id="date-error-overlay"></div>
-<div class="dialog" id="date-error-dialog" role="alertdialog" aria-modal="true" aria-labelledby="date-error-title">
-    <button class="btn-close" id="date-error-close" aria-label="Close">x</button>
-    <h2 id="date-error-title"><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</h2>
-    <ul class="date-error-list">
-        {% for error in form.birth_date.errors %}<li>{{ error }}</li>{% endfor %}
-        {% for error in form.started_exploring.errors %}<li>{{ error }}</li>{% endfor %}
-    </ul>
-    <p class="date-error-hint">Please choose a different date.</p>
-    <div style="margin-top:16px;text-align:right;">
-        <button type="button" class="settings-save-btn" onclick="closeDateErrorDialog()">OK</button>
+<dialog id="date-error-dialog" class="confirm-dialog ul-dialog" aria-labelledby="date-error-title"{% if date_errors %} data-open-on-load{% endif %}>
+    <div class="dialog-header">
+        <span id="date-error-title"><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</span>
+        <button type="button" class="dialog-close" aria-label="Close" data-dialog-close>
+            <i class="material-symbols-outlined">close</i>
+        </button>
     </div>
-</div>
-{% endif %}
+    <div class="confirm-dialog-body">
+        <ul class="date-error-list">
+            {% for error in form.birth_date.errors %}<li>{{ error }}</li>{% endfor %}
+            {% for error in form.started_exploring.errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+        <p class="date-error-hint">Please choose a different date.</p>
+    </div>
+    <div class="confirm-dialog-footer">
+        <button type="button" class="btn btn--primary" data-dialog-close>OK</button>
+    </div>
+</dialog>
 {% endwith %}
 
-<div class="edit-profile-page page-content">
+<div class="edit-profile-page page-content" data-save-url="{% url 'profile.field.update' %}" data-map-url="{% url 'map.view' %}">
 
     {# -- Setup / welcome banner (shown to all new users until they complete setup) -- #}
     {% if not form.instance.profile_setup_complete %}
@@ -51,7 +55,6 @@
     <section class="edit-card ul-section">
         <h2 class="edit-card-title">Profile Info</h2>
 
-        {# Username #}
         <div class="edit-field">
             <label class="edit-label">
                 Username
@@ -67,7 +70,6 @@
             <p class="edit-field-hint" id="username-requirements-hint" style="display:none">3-30 characters: letters, numbers, and underscores only.</p>
         </div>
 
-        {# Avatar #}
         <div class="edit-field edit-avatar-field">
             <label class="edit-label">Profile Photo</label>
             <div class="edit-avatar-layout">
@@ -119,7 +121,6 @@
             </div>
         </div>
 
-        {# Name #}
         <div class="edit-field-row">
             <div class="edit-field">
                 <label class="edit-label">
@@ -314,269 +315,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-function closeDateErrorDialog() {
-    var overlay = document.getElementById('date-error-overlay');
-    var dialog  = document.getElementById('date-error-dialog');
-    if (overlay) overlay.remove();
-    if (dialog)  dialog.remove();
-}
-
-(function () {
-    var SAVE_URL = '{% url "profile.field.update" %}';
-    var MAP_URL = '{% url "map.view" %}';
-
-    // -- date error dialog (created dynamically for auto-save errors) ----------
-    function showDateDialog(message) {
-        closeDateErrorDialog();
-        var overlay = document.createElement('div');
-        overlay.className = 'dialog-overlay';
-        overlay.id = 'date-error-overlay';
-        overlay.addEventListener('click', closeDateErrorDialog);
-
-        var dialog = document.createElement('div');
-        dialog.className = 'dialog';
-        dialog.id = 'date-error-dialog';
-        dialog.setAttribute('role', 'alertdialog');
-        dialog.innerHTML =
-            '<button class="btn-close" aria-label="Close" onclick="closeDateErrorDialog()">x</button>' +
-            '<h2><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</h2>' +
-            '<ul class="date-error-list"><li>' + message + '</li></ul>' +
-            '<p class="date-error-hint">Please choose a different date.</p>' +
-            '<div style="margin-top:16px;text-align:right;"><button type="button" class="settings-save-btn" onclick="closeDateErrorDialog()">OK</button></div>';
-
-        document.body.appendChild(overlay);
-        document.body.appendChild(dialog);
-    }
-
-    // -- per-field status indicator --------------------------------------------
-    function setStatus(field, state, text) {
-        var el = document.querySelector('[data-field-status="' + field + '"]');
-        if (!el) return;
-        el.className = 'field-status' + (state ? ' field-status--' + state : '');
-        el.textContent = text;
-        if (state === 'saved') {
-            setTimeout(function () { setStatus(field, '', ''); }, 2500);
-        }
-    }
-
-    // -- core save -------------------------------------------------------------
-    function saveField(field, value, isFile) {
-        if (window.autosaveGuard) window.autosaveGuard.markDirty();
-        setStatus(field, 'saving', 'Saving...');
-        var guard = window.autosaveGuard;
-        if (guard) guard.saveStarted();
-        var fd = new FormData();
-        fd.append('csrfmiddlewaretoken', csrftoken);
-        fd.append('field', field);
-        if (isFile) {
-            fd.append('file_value', value);
-        } else {
-            fd.append('value', value);
-        }
-        fetch(SAVE_URL, { method: 'POST', body: fd })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (data.ok) {
-                    if (guard) guard.markClean();
-                    setStatus(field, 'saved', '✓ Saved');
-                    if (data.avatar_url) {
-                        updateAvatarPreview(data.avatar_url);
-                    }
-                } else {
-                    var msg = data.error || 'Save failed.';
-                    // Clear the field value and show a red X indicator
-                    var input = document.querySelector('[data-autosave="' + field + '"]');
-                    if (input && input.type !== 'file') { input.value = ''; }
-                    setStatus(field, 'error', '✗');
-                    // Full message via toastr
-                    toastr.error(msg);
-                    if (field === 'birth_date' || field === 'started_exploring') {
-                        showDateDialog(msg);
-                    }
-                }
-            })
-            .catch(function () { setStatus(field, 'error', 'Save failed.'); })
-            .finally(function () { if (guard) guard.saveFinished(); });
-    }
-
-    // -- wire up all autosave inputs -------------------------------------------
-    document.querySelectorAll('[data-autosave]').forEach(function (el) {
-        var field = el.getAttribute('data-autosave');
-        if (el.type === 'file') {
-            el.addEventListener('change', function () {
-                if (el.files.length > 0) saveField(field, el.files[0], true);
-            });
-        } else {
-            el.addEventListener('change', function () { saveField(field, el.value, false); });
-        }
-    });
-
-    // -- interaction preferences: show the "specify" field only when "Other" is picked --
-    document.querySelectorAll('[data-preference-toggle]').forEach(function (select) {
-        var wrap = document.querySelector('[data-preference-other-for="' + select.dataset.preferenceToggle + '"]');
-        if (!wrap) return;
-        select.addEventListener('change', function () {
-            wrap.style.display = select.value === 'other' ? '' : 'none';
-        });
-    });
-
-    // -- username field: debounced availability check + save on blur -----------
-    var usernameInput = document.getElementById('username-input');
-    var usernameHint  = document.getElementById('username-hint');
-    var usernameRequirementsHint = document.getElementById('username-requirements-hint');
-    var _unameCheckTimer;
-    var _lastChecked = '';
-
-    function toggleUsernameRequirementsHint(username) {
-        if (!usernameRequirementsHint) return;
-        var valid = /^[a-zA-Z0-9_]{3,30}$/.test(username);
-        usernameRequirementsHint.style.display = valid ? 'none' : '';
-    }
-
-    function checkUsername(username) {
-        if (!username || username === _lastChecked) return;
-        _lastChecked = username;
-        usernameHint.textContent = '';
-        if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
-            usernameHint.className = 'edit-username-hint edit-username-hint--bad';
-            usernameHint.textContent = '3-30 chars: letters, numbers, underscores';
-            return;
-        }
-        fetch(SAVE_URL + '?field=username&value=' + encodeURIComponent(username))
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-                if (d.available) {
-                    usernameHint.className = 'edit-username-hint edit-username-hint--ok';
-                    usernameHint.textContent = '✓ Available';
-                } else {
-                    usernameHint.className = 'edit-username-hint edit-username-hint--bad';
-                    usernameHint.textContent = d.reason || 'Unavailable';
-                }
-            })
-            .catch(function () {});
-    }
-
-    if (usernameInput) {
-        toggleUsernameRequirementsHint(usernameInput.value.trim());
-
-        usernameInput.addEventListener('input', function () {
-            var v = usernameInput.value.trim();
-            toggleUsernameRequirementsHint(v);
-            clearTimeout(_unameCheckTimer);
-            _unameCheckTimer = setTimeout(function () { checkUsername(v); }, 400);
-        });
-
-        usernameInput.addEventListener('blur', function () {
-            var v = usernameInput.value.trim();
-            if (!v || !/^[a-zA-Z0-9_]{3,30}$/.test(v)) return;
-            saveField('username', v, false);
-        });
-    }
-
-    // -- gravatar button -------------------------------------------------------
-    var gravatarBtn = document.getElementById('avatar-gravatar-btn');
-    if (gravatarBtn) {
-        gravatarBtn.addEventListener('click', function () {
-            setStatus('avatar', 'saving', 'Saving...');
-            var fd = new FormData();
-            fd.append('csrfmiddlewaretoken', csrftoken);
-            fd.append('field', 'avatar_gravatar');
-            fetch(SAVE_URL, { method: 'POST', body: fd })
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (d.ok) {
-                        setStatus('avatar', 'saved', '✓ Saved');
-                        updateAvatarPreview(d.avatar_url);
-                    } else {
-                        setStatus('avatar', 'error', '✗');
-                        toastr.error(d.error || 'Could not load Gravatar.');
-                    }
-                })
-                .catch(function () { setStatus('avatar', 'error', 'Failed'); });
-        });
-    }
-
-    // -- emoji circle buttons --------------------------------------------------
-    document.querySelectorAll('.edit-avatar-emoji-opt').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var animal = btn.dataset.animal;
-            var color  = btn.dataset.color;
-            setStatus('avatar', 'saving', 'Saving...');
-            var fd = new FormData();
-            fd.append('csrfmiddlewaretoken', csrftoken);
-            fd.append('field', 'avatar_emoji');
-            fd.append('animal', animal);
-            fd.append('color', color);
-            fetch(SAVE_URL, { method: 'POST', body: fd })
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (d.ok) {
-                        setStatus('avatar', 'saved', '✓ Saved');
-                        updateAvatarPreview(d.avatar_url);
-                    } else {
-                        setStatus('avatar', 'error', '✗');
-                        toastr.error(d.error || 'Could not save avatar.');
-                    }
-                })
-                .catch(function () { setStatus('avatar', 'error', 'Failed'); });
-        });
-    });
-
-    function updateAvatarPreview(url) {
-        if (!url) return;
-        var cacheBusted = url + '?' + Date.now();
-        var el = document.getElementById('avatar-preview');
-        if (el) {
-            if (el.tagName === 'IMG') {
-                el.src = cacheBusted;
-            } else {
-                var img = document.createElement('img');
-                img.src = cacheBusted;
-                img.className = 'edit-avatar-preview';
-                img.id = 'avatar-preview';
-                img.alt = 'Avatar';
-                el.parentNode.replaceChild(img, el);
-            }
-        }
-        // The page hero (_profile_hero_body.html) renders a separate <img>/
-        // placeholder for the same avatar - without this it stayed stale
-        // until a full page reload, since this whole flow is a plain fetch()
-        // JSON response, not an HTMX swap the hero could OOB-update itself.
-        var hero = document.getElementById('profile-hero-avatar');
-        if (hero) {
-            if (hero.tagName === 'IMG') {
-                hero.src = cacheBusted;
-            } else {
-                var heroImg = document.createElement('img');
-                heroImg.src = cacheBusted;
-                heroImg.className = 'profile-avatar-img';
-                heroImg.id = 'profile-hero-avatar';
-                heroImg.alt = 'Avatar';
-                hero.parentNode.replaceChild(heroImg, hero);
-            }
-        }
-    }
-
-    // -- setup banner skip -----------------------------------------------------
-    var skipBtn = document.getElementById('setup-skip-btn');
-    var banner  = document.getElementById('setup-banner');
-    if (skipBtn && banner) {
-        skipBtn.addEventListener('click', function () {
-            var fd = new FormData();
-            fd.append('csrfmiddlewaretoken', csrftoken);
-            fd.append('field', 'setup_complete');
-            fetch(SAVE_URL, { method: 'POST', body: fd })
-                .then(function () { window.location.href = MAP_URL; })
-                .catch(function () { window.location.href = MAP_URL; });
-        });
-    }
-
-    // -- server-rendered date dialog close wiring ------------------------------
-    var overlay = document.getElementById('date-error-overlay');
-    var closeBtn = document.getElementById('date-error-close');
-    if (overlay) overlay.addEventListener('click', closeDateErrorDialog);
-    if (closeBtn) closeBtn.addEventListener('click', closeDateErrorDialog);
-}());
-</script>
+<script type="module" src="{% static 'dashboard/js/profile-edit.js' %}"></script>
 {% endblock %}

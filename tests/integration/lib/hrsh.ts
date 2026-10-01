@@ -1,39 +1,8 @@
 /**
- * Hudson River State Hospital, as a test subject.
- *
- * This one place has been the development reference for the whole application,
- * so the specs under `specs/location/` ask of it the questions that are hard to
- * ask of a synthetic fixture: does a coordinate resolve to the right *property*,
- * does the parcel line look like a parcel, do buildings become child pins, does
- * the wiki fill itself in. None of that can be answered by a pin dropped in a
- * field - the answers come from county assessor data, NY SHPO's CRIS inventory,
- * EPA ECHO and Wikipedia, and those only exist for somewhere real.
- *
- * ## What is asserted, and what is deliberately not
- *
- * These tests run against live third-party data, which moves. A test that
- * hardcodes what the data said on the day it was written starts failing for the
- * wrong reason, and the person who sees it fail has no way to tell "the app
- * broke" from "the county recorded a sale". So the rule here is:
- *
- * - **Assert the invariant, not the value.** "Every one of these coordinates
- *   resolves to the same property" is a property of the app. "The parcel is
- *   4.2 hectares" is a property of the county's GIS file this week.
- * - **Bound, don't equal.** Where a number has to be checked, check that it is
- *   in a range wide enough to survive a data revision and narrow enough to catch
- *   the failure that actually happens - see {@link EXPECTED_PARCEL_AREA_SQM}.
- * - **Order, don't pin.** For the sale history, assert that the most recent sale
- *   is the newest one on file and is not in the future, never that it is a
- *   particular date. A new sale must not turn this suite red.
- *
- * ## The values below are expectations, not measurements
- *
- * Everything here that is not a coordinate came from either the requirements
- * this suite was written to or from public reporting, **not** from reading it
- * out of a running instance. That is deliberate: reading the expected value out
- * of the system under test is how a suite ends up certifying whatever it
- * happens to do. Each one carries where it came from, so a failure can be
- * argued with rather than just re-pointed at the app.
+ * Hudson River State Hospital, as a test subject. This one place has been the development reference
+ * for the whole application, so the specs under `specs/location/` ask of it the questions that are
+ * hard to ask of a synthetic fixture: does a coordinate resolve to the right *property*, does the
+ * parcel line look like a parcel, do buildings become child pins, does the wiki fill itself in.
  */
 
 /** A coordinate, as the API takes it. */
@@ -108,6 +77,42 @@ export const OUTSIDE_BOUNDARY: readonly Coordinate[] = [
  */
 export const BUILDING_COORDINATE: Coordinate = { label: "building with a known footprint", latitude: 41.733147, longitude: -73.928536 };
 
+/** The owner's canonical coordinate for the property; the campus pin is placed here. */
+export const HRSH_PIN: Coordinate = { label: "requirement pin", latitude: 41.73328, longitude: -73.92812 };
+
+/**
+ * The point Jess pinned on k3s-staging, in the courtyard south-east of the Kirkbride.
+ *
+ * On the same county tax parcel as {@link HRSH_PIN} (3532 North Rd, 116.9 acres) and inside the same National
+ * Register listing, but 90 m from the nearest CRIS building and 130 m or more from every edge of the OSM campus
+ * polygon. Staging drew a circle here, titled the wiki "Courtyard Drive" and aliased the parcel with that
+ * building's name (P145).
+ */
+export const COURTYARD_PIN: Coordinate = { label: "courtyard pin", latitude: 41.73266, longitude: -73.92736 };
+
+/** The National Register listing whose boundary contains both pins: an alias, ranked below {@link WIKIPEDIA_TITLE} (D20). */
+export const NRHP_TITLE = "Hudson River State Hospital, Main Building";
+
+/** The Wikipedia article for the property, and the wiki title the naming metric picks (D20). */
+export const WIKIPEDIA_TITLE = "Hudson River State Hospital";
+export const WIKIPEDIA_URL_FRAGMENT = "wikipedia.org/wiki/Hudson_River_State_Hospital";
+
+/**
+ * The CRIS building nearest {@link COURTYARD_PIN} (survey subject "BLDG 45/MORTUARY & LAB (1896)"), which must be a
+ * building child pin rather than the parcel's alias. Its pin takes the building's public name; the number and year
+ * are separate fields.
+ */
+export const BLDG45_NAME = "MORTUARY & LAB";
+
+/** The service road Nominatim reverse-geocodes {@link COURTYARD_PIN} to (OSM way/352353227). Never a name for the place. */
+export const COURTYARD_ROAD = "Courtyard Drive";
+
+/** CRIS lists 42 buildings inside the parcel; well under that still proves the campus roster rather than one building. */
+export const MIN_CAMPUS_BUILDINGS = 20;
+
+/** Names the requirement accepts as an appropriate title for the parcel ("Hudson River State Hospital", "HRSH", etc). */
+export const HRSH_NAME_PATTERN = /hudson\s+river\s+(state\s+hospital|psychiatric)|\bhrsh\b/i;
+
 /** Mean of {@link INSIDE_BOUNDARY}, for distance assertions. */
 export const CAMPUS_CENTRE: Coordinate = { label: "campus centre", latitude: 41.733159, longitude: -73.926273 };
 
@@ -165,21 +170,11 @@ export const COUNTY_PARCEL_COVERS = { of: 5, contains: 3, missing: ["north east"
 export const REPORTED_PROJECT_ACREAGE = 156;
 
 /**
- * Owner name expected on the current record.
- *
- * **Treat as unconfirmed.** It is the name given in this suite's requirements,
- * and public reporting is not unambiguous about it: "Hudson Heritage" is
- * certainly the redevelopment's name and was the 2005 purchaser, while more
- * recent coverage names EFG-Saber Heritage SC, LLC as the entity running the
- * project. Those are not necessarily in conflict - a deed holder and a
- * developer are different things - but it does mean a mismatch here is a
- * question for a human, not automatically an application defect.
- *
- * The specs therefore report a mismatch with both names in the message rather
- * than asserting equality, and assert only that *an* official owner record
- * exists. See `specs/location/hrsh-property-data.spec.ts`.
+ * Owner name fragment expected on the current record. The deed and public reporting name the same
+ * entity several ways ("Hudson Heritage", "EFG/DRA Heritage LLC", "EFG-Saber Heritage SC, LLC"), all
+ * confirmed as one owner, so the shared word is what is asserted.
  */
-export const EXPECTED_OWNER_FRAGMENT = "Hudson Heritage";
+export const EXPECTED_OWNER_FRAGMENT = "Heritage";
 
 /** Names seen in public reporting, listed in failure messages to aid triage. */
 export const KNOWN_OWNER_CANDIDATES = ["Hudson Heritage", "EFG-Saber Heritage", "Diversified Realty", "Saber Real Estate"] as const;

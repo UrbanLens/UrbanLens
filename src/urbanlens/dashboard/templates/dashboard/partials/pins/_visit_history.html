@@ -5,7 +5,7 @@
         <h3>Visit History</h3>
         {% if page_obj.paginator.count %}<span class="visit-count badge">{{ page_obj.paginator.count }}</span>{% endif %}
         <button type="button" class="btn btn--icon-sm"
-                onclick="document.getElementById('visit-add-dialog-{{ pin.slug }}').showModal()"
+                data-dialog-open="visit-add-dialog-{{ pin.slug }}"
                 title="Log a visit">
             <i class="material-symbols-outlined">add</i>
         </button>
@@ -50,6 +50,8 @@
         </li>
         {% endfor %}
     </ul>
+    {% url "pin.visits" pin.slug as suggestions_page_url %}
+    {% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=suggestions_page page_param="suggestions_page" page_url=suggestions_page_url adaptive_pagination=False page_noun="pending visits" %}
     {% endif %}
 
     {% if visits %}
@@ -118,8 +120,8 @@
                     <i class="material-symbols-outlined">person_outline</i>
                     <span class="visit-external-names">
                         {% for ext in external_participants %}
-                        <span class="visit-external-name" title="{% if ext.matched_profile %}Joined as {{ ext.matched_profile.username }}{% elif ext.invite_sent %}Invited to join UrbanLens{% else %}Not on UrbanLens{% endif %}">
-                            {{ ext.display_name }}{% if ext.invite_sent and not ext.matched_profile %} <i class="material-symbols-outlined visit-external-invited-icon">outgoing_mail</i>{% endif %}
+                        <span class="visit-external-name"{% if ext.invite_sent %} title="Invited"{% endif %}>
+                            {{ ext.display_name }}{% if ext.invite_sent %} <i class="material-symbols-outlined visit-external-invited-icon">outgoing_mail</i>{% endif %}
                         </span>{% if not forloop.last %}, {% endif %}
                         {% endfor %}
                     </span>
@@ -132,26 +134,32 @@
                 {% if visit_images %}
                 <div class="visit-photos">
                     {% for img in visit_images %}
-                    <a href="{{ img.image.url }}" class="visit-photo-thumb"
-                       data-full="{{ img.image.url }}" data-caption="{{ img.caption|default:'' }}"
-                       title="{{ img.caption|default:'Photo' }}"
-                       onclick="visitOpenLightbox(event, this)">
-                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+                    {% if img.pending_scan %}
+                    <a class="visit-photo-thumb" data-caption="{{ img.display_caption|default:'' }}"
+                       title="{{ img.display_caption|default:'Photo' }}"{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=img %}>
+                        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}
                     </a>
+                    {% else %}
+                    <a href="{{ img.display_url }}" class="visit-photo-thumb"
+                       data-full="{{ img.display_url }}" data-caption="{{ img.display_caption|default:'' }}"
+                       title="{{ img.display_caption|default:'Photo' }}">
+                        <img src="{{ img.display_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy">
+                    </a>
+                    {% endif %}
                     {% endfor %}
                 </div>
                 {% endif %}
                 {% endwith %}
 
                 {# -- Attached map snapshot: small live preview, click to enlarge -- #}
-                {# Custom compact preview (badge trigger) + the shared viewer dialog. #}
+                {# Custom compact preview (badge trigger) + the shared viewer dialog #}
                 {% if visit.map_data %}
                 <div class="comment-map-preview visit-map-preview" data-comment-id="visit-{{ visit.id }}"
                      data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
                      data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}">
                     <div class="comment-map-thumb" id="comment-map-thumb-visit-{{ visit.id }}"></div>
                     <button type="button" class="visit-map-open" aria-label="Enlarge map"
-                            onclick="_expandCommentMap('visit-{{ visit.id }}')">
+                            data-comment-map-expand="visit-{{ visit.id }}">
                         <span class="visit-map-open-badge"><i class="material-symbols-outlined">open_in_full</i></span>
                     </button>
                 </div>
@@ -173,7 +181,7 @@
                         hx-get="{% url 'pin.visit.edit' pin.slug visit.id %}"
                         hx-target="#visit-edit-body-{{ pin.slug }}"
                         hx-swap="innerHTML"
-                        onclick="document.getElementById('visit-edit-dialog-{{ pin.slug }}').showModal()"
+                        data-dialog-open="visit-edit-dialog-{{ pin.slug }}"
                         class="icon-btn visit-edit-btn"
                         title="Edit visit">
                     <i class="material-symbols-outlined">edit</i>
@@ -211,70 +219,4 @@
         </div>
     </dialog>
 
-    {# -- Shared lightbox for photos attached to a visit ------------------ #}
-    <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog" aria-label="Visit photo viewer">
-        <div class="lightbox-inner">
-            <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()" aria-label="Close">
-                <i class="material-symbols-outlined">close</i>
-            </button>
-            <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)" aria-label="Previous">
-                <i class="material-symbols-outlined">chevron_left</i>
-            </button>
-            <img class="lightbox-img" src="" alt="">
-            <button type="button" class="lightbox-nav lightbox-next" onclick="visitLightboxNav(1)" aria-label="Next">
-                <i class="material-symbols-outlined">chevron_right</i>
-            </button>
-            <p class="lightbox-caption"></p>
-        </div>
-    </dialog>
 </div>
-
-<script>
-(function () {
-    var LB = document.getElementById('visit-photo-lightbox-{{ pin.slug }}');
-    if (!LB) return;
-    var imgEl = LB.querySelector('.lightbox-img');
-    var capEl = LB.querySelector('.lightbox-caption');
-    var set = [];
-    var idx = 0;
-
-    function _show() {
-        var it = set[idx];
-        if (!it) return;
-        imgEl.src = it.url;
-        capEl.textContent = it.caption || '';
-    }
-
-    // Open the lightbox on the photo the user clicked, navigating within the
-    // photos of that same visit row.
-    window.visitOpenLightbox = function (evt, el) {
-        if (evt) evt.preventDefault();
-        var container = el.closest('.visit-photos');
-        if (!container) return;
-        set = Array.prototype.map.call(container.querySelectorAll('.visit-photo-thumb'), function (a) {
-            return { url: a.dataset.full, caption: a.dataset.caption || '' };
-        });
-        idx = set.findIndex(function (it) { return it.url === el.dataset.full; });
-        if (idx < 0) idx = 0;
-        _show();
-        LB.showModal();
-    };
-
-    window.visitLightboxNav = function (dir) {
-        if (!set.length) return;
-        idx = (idx + dir + set.length) % set.length;
-        _show();
-    };
-
-    // Arrow-key navigation, registered once regardless of HTMX re-swaps.
-    if (!window._visitLightboxKeys) {
-        window._visitLightboxKeys = true;
-        document.addEventListener('keydown', function (e) {
-            var open = document.querySelector('.visit-photo-lightbox[open]');
-            if (!open) return;
-            if (e.key === 'ArrowLeft') window.visitLightboxNav(-1);
-            else if (e.key === 'ArrowRight') window.visitLightboxNav(1);
-        });
-    }
-})();
-</script>

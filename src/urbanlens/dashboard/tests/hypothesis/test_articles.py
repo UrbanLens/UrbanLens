@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.location.model import Location
@@ -18,12 +18,7 @@ from urbanlens.dashboard.services.wiki.articles import diff_revisions, render_ar
 
 
 class EditorDisplayNameTests(SimpleTestCase):
-    """ArticleRevision.editor_display_name - regression coverage for the
-    "'Deleted user' shown for a Wikipedia-seeded starting article" report:
-    a null ``editor`` means either a genuinely
-    deleted account or a system-initiated seed (services.wiki.wiki_seed passes
-    editor=None on purpose) - these must not both show "Deleted user".
-    """
+    """ArticleRevision.editor_display_name - regression coverage for the "'Deleted user' shown for a Wikipedia-seeded starting article" report: a null ``editor`` means either a genuinely deleted account or a system-initiated seed (services.wiki.wiki_seed passes editor=None on purpose) - these must not both show "Deleted user"."""
 
     def test_editor_present_returns_username(self) -> None:
         profile = Profile(user=User(username="alice"))
@@ -161,6 +156,15 @@ class SaveArticleTests(TestCase):
         with self.assertRaises(ValueError):
             save_article(editor=self.profile, content="x")
 
+    def test_rejects_both_hosts_at_once(self) -> None:
+        """The neither- and both-hosts branches share one condition (`(pin is None) == (wiki
+        is None)`) - a regression that only checked for "neither" would still pass the test
+        above while silently accepting a pin+wiki call it should reject."""
+        location = baker.make(Location)
+        wiki = baker.make(Wiki, location=location, name="Both Mill")
+        with self.assertRaises(ValueError):
+            save_article(editor=self.profile, content="x", pin=self.pin, wiki=wiki)
+
     def test_wiki_article_save(self) -> None:
         location = baker.make(Location)
         wiki = baker.make(Wiki, location=location, name="Mill Wiki")
@@ -207,6 +211,10 @@ class PinArticleViewTests(TestCase):
 
     def test_other_users_cannot_see_pin_article(self) -> None:
         save_article(editor=self.profile, content="secret notes", pin=self.pin)
+        response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200, "the owner must still be able to see it")
+        self.assertContains(response, "secret notes")
+
         self.client.force_login(self.other_user)
         response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 404)
@@ -247,7 +255,7 @@ class PinArticleViewTests(TestCase):
 
     def test_meta_bar_is_gone(self) -> None:
         """The privacy/word-count/last-edited/revision-count meta bar was removed
-        as redundant now the pin detail page always shows an Edit History tab."""
+        as redundant now the Private Pin page always shows an Edit History tab."""
         save_article(editor=self.profile, content="Built in 1900. Some history here.", pin=self.pin)
         response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
@@ -264,7 +272,6 @@ class PinArticleViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-article-editor")
         self.assertContains(response, "data-article-canvas")
-        self.assertContains(response, "data-article-mode-toggle")
         self.assertContains(response, "data-article-textarea")
         self.assertContains(response, 'name="content"')
         self.assertNotContains(response, "article-edit-btn")
@@ -273,6 +280,14 @@ class PinArticleViewTests(TestCase):
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "dashboard/js/article-wysiwyg.js")
+
+    def test_pin_detail_page_offers_source_and_clear_via_the_actions_menu(self) -> None:
+        """Source/Clear live in the pin-detail actions menu (_hierarchy_actions_fab.html), not a floating toolbar inside the article panel itself - see editorRootForControl() in article-wysiwyg.ts for how they still reach the editor from outside its own DOM subtree."""
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-article-mode-toggle")
+        self.assertContains(response, "data-article-clear")
+        self.assertContains(response, 'id="pin-actions-fab"')
 
 
 class WikiArticleViewTests(TestCase):
@@ -284,7 +299,9 @@ class WikiArticleViewTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.location = baker.make(Location)
         self.wiki = baker.make(Wiki, location=self.location, name="Mill Wiki")
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="My Mill Pin", name_is_user_provided=True)
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="My Mill Pin", name_is_user_provided=True
+        )
         self.outsider = baker.make("auth.User")
         self.client.force_login(self.user)
 
@@ -298,6 +315,9 @@ class WikiArticleViewTests(TestCase):
         self.assertTrue(Article.objects.filter(wiki=self.wiki).exists())
 
     def test_unpinned_user_gets_404(self) -> None:
+        response = self.client.get(reverse("location.wiki.article", args=[self.location.slug]))
+        self.assertEqual(response.status_code, 200, "a pinned user must still be able to see it")
+
         self.client.force_login(self.outsider)
         response = self.client.get(reverse("location.wiki.article", args=[self.location.slug]))
         self.assertEqual(response.status_code, 404)
@@ -364,3 +384,122 @@ class ArticleSearchTests(TestCase):
         response = GlobalSearchEngine().search(self.profile, "articles about turbine")
         slugs = [group.meta.slug for group in response.groups]
         self.assertEqual(slugs, ["articles"])
+
+
+class ArticleImagesAreLocalTests(TestCase):
+    """An image written into an article is shown from this site's copy, never its host (P165; Jess, 2026-09-29)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin = baker.make_recipe("dashboard.pin")
+
+    def _copy(self, url: str) -> str:
+        from urbanlens.dashboard.services.media.remote_copies import url_digest
+
+        return reverse("media.remote_copy", args=[url_digest(url)])
+
+    def test_rendering_shows_copies_for_markdown_and_html_images(self) -> None:
+        html = render_article(
+            '![Mill](https://img.example/mill.jpg?a=1&b=2)\n\n<img src="https://img.example/raw.png" alt="raw">\n\n![Local](/media/x.jpg)'
+        ).html
+
+        self.assertNotIn("img.example", html)
+        self.assertIn(f'src="{self._copy("https://img.example/mill.jpg?a=1&b=2")}"', html)
+        self.assertIn(f'src="{self._copy("https://img.example/raw.png")}"', html)
+        self.assertIn('src="/media/x.jpg"', html)
+
+    def test_saving_stores_the_copy_in_the_source_the_editor_loads(self) -> None:
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        article, _revision = save_article(
+            content='Intro\n\n![Mill](https://img.example/mill.jpg "The mill")\n\n<img src="https://img.example/raw.png">',
+            pin=self.pin,
+            editor=self.pin.profile,
+        )
+
+        self.assertNotIn("img.example", article.content)
+        self.assertIn(f'![Mill]({self._copy("https://img.example/mill.jpg")} "The mill")', article.content)
+        self.assertIn(f'<img src="{self._copy("https://img.example/raw.png")}">', article.content)
+        self.assertEqual(
+            set(RemoteImageCopy.objects.values_list("source_url", "provider")),
+            {("https://img.example/mill.jpg", "article"), ("https://img.example/raw.png", "article")},
+        )
+
+    def test_code_that_shows_image_syntax_is_left_as_written(self) -> None:
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        sample = (
+            "Write it like this:\n\n```\n![Mill](https://img.example/fenced.jpg)\n```\n\n"
+            '    <img src="https://img.example/indented.png">\n\n'
+            "Or inline: `![x](https://img.example/inline.jpg)`, then ![Real](https://img.example/real.jpg)"
+        )
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        for literal in ("fenced.jpg", "indented.png", "inline.jpg"):
+            self.assertIn(f"https://img.example/{literal}", article.content)
+        self.assertNotIn("https://img.example/real.jpg", article.content)
+        self.assertEqual(
+            list(RemoteImageCopy.objects.values_list("source_url", flat=True)), ["https://img.example/real.jpg"]
+        )
+
+    def test_code_spans_follow_their_own_backtick_count(self) -> None:
+        sample = "``a ` ![x](https://img.example/inside.jpg)`` and ` then ![Real](https://img.example/real.jpg)"
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertIn("https://img.example/inside.jpg", article.content)
+        self.assertNotIn("https://img.example/real.jpg", article.content)
+
+    def test_a_link_to_an_image_stays_a_link(self) -> None:
+        article, _revision = save_article(
+            content="[the photo](https://img.example/mill.jpg)", pin=self.pin, editor=self.pin.profile
+        )
+
+        self.assertEqual(article.content, "[the photo](https://img.example/mill.jpg)")
+
+    def test_the_command_moves_existing_articles_onto_copies_as_a_new_revision(self) -> None:
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        article = Article.objects.create(pin=self.pin, content="![Mill](https://img.example/mill.jpg)")
+        Article.objects.create(pin=baker.make_recipe("dashboard.pin"), content="No pictures here.")
+
+        out = StringIO()
+        call_command("localize_article_images", "--dry-run", stdout=out)
+        self.assertIn("1 article(s) would change", out.getvalue())
+        article.refresh_from_db()
+        self.assertIn("img.example", article.content)
+
+        call_command("localize_article_images", stdout=StringIO())
+        article.refresh_from_db()
+        self.assertEqual(article.content, f"![Mill]({self._copy('https://img.example/mill.jpg')})")
+        self.assertNotIn("img.example", article.content_html)
+        self.assertEqual(article.revisions.get().edit_summary, "Images stored on this site")
+
+
+class ArticleImageScanIsLinearTests(SimpleTestCase):
+    """Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
+    worker. Before the fix 1,000 backticks took thirteen seconds, 2,000 four minutes, 20,000 ``<img `` fifty, and
+    50,000 ``![`` ten."""
+
+    def _assert_fast(self, content: str) -> None:
+        import time
+
+        from urbanlens.dashboard.services.wiki.articles import localize_article_images
+
+        started = time.perf_counter()
+        localize_article_images(content)
+        self.assertLess(time.perf_counter() - started, 2.0)
+
+    def test_a_long_run_of_backticks(self) -> None:
+        self._assert_fast("`" * 1000)
+
+    def test_backtick_runs_of_every_length(self) -> None:
+        self._assert_fast(" ".join("`" * n for n in range(1, 600)))
+
+    def test_many_unclosed_img_tags(self) -> None:
+        self._assert_fast("<img " * 20000)
+
+    def test_many_unclosed_image_brackets(self) -> None:
+        self._assert_fast("![" * 50000)

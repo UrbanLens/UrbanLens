@@ -6,7 +6,7 @@ four community mirrors and the canonical instance currently configured in
 
 **Run date**: 2026-07-22, ~17:45-18:40 UTC
 **Client**: Windows dev workstation, single client, residential/office uplink
-**Method**: [`docs/reports/overpass_bench.py`](reports/overpass_bench.py) - 10 Overpass QL programs x 1-3 rounds x 6 endpoints,
+**Method**: [`docs/reports/overpass_bench.py`](overpass_bench.py) - 10 Overpass QL programs x 1-3 rounds x 6 endpoints,
 120 measurements. Endpoints are queried **concurrently** within a round (they are independent
 servers, so queue wait on one cannot perturb another); the one multi-megabyte-payload query runs
 serially so concurrent transfers do not contend for client bandwidth. Endpoint order is shuffled
@@ -177,7 +177,7 @@ like missing OSM data rather than a broken mirror. Filed as UL-355 in `docs/PROB
 - `kumi.systems`: **19/20 failed**; the single success took 55 s.
 
 Both fail by queueing, not erroring, so they burn the full client timeout before failing over.
-The code comment at [`overpass.py:28-30`](../src/urbanlens/dashboard/services/apis/locations/boundaries/overpass.py#L28-L30)
+The code comment at [`overpass.py:28-30`](../../src/urbanlens/dashboard/services/apis/locations/boundaries/overpass.py#L28-L30)
 claims these mirrors "routinely answer the same query in well under a second" — that is no
 longer true.
 
@@ -231,7 +231,7 @@ of 429/504s.
   self-hosted box.
 - `buildings_city_geom` ran only 1 round (it is the serial, multi-megabyte query); its numbers
   are single measurements, not best-of-N.
-- Raw measurements: [`docs/reports/overpass_mirror_results.json`](reports/overpass_mirror_results.json)
+- Raw measurements: [`docs/reports/overpass_mirror_results.json`](overpass_mirror_results.json)
   (120 rows: query, endpoint, round, status, TTFB, total, bytes, element count).
-  Harness: [`docs/reports/overpass_bench.py`](reports/overpass_bench.py) - re-run with
+  Harness: [`docs/reports/overpass_bench.py`](overpass_bench.py) - re-run with
   `.venv_windows\Scripts\python.exe docs/reports/overpass_bench.py --only all --out results.json`.

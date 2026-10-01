@@ -1,16 +1,10 @@
-"""Tests for the Consensus trust-scoring formulas (services.consensus.trust).
-
-Pure math over a ConsensusProfile-shaped object, no DB - see
-``services.consensus.trust``'s module docstring for the Beta-Bernoulli-
-with-forgetting rationale.
-"""
+"""Tests for the Consensus trust-scoring formulas (services.consensus.trust)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.consensus.trust import (
     CHECK_PROBABILITY_MAX,
@@ -62,16 +56,14 @@ class TrustScoreBoundsTests(SimpleTestCase):
 class RecordCheckResultTests(SimpleTestCase):
     @given(alpha=st.floats(min_value=0.5, max_value=100), beta=st.floats(min_value=0.5, max_value=100))
     @settings(**_HYP)
-    def test_a_correct_check_always_scores_higher_than_an_incorrect_one_would_have(self, alpha: float, beta: float) -> None:
+    def test_a_correct_check_always_scores_higher_than_an_incorrect_one_would_have(
+        self, alpha: float, beta: float
+    ) -> None:
         """From the same starting profile, passing a check must always beat failing it.
 
-        Not "a correct check never lowers trust" in absolute terms - the
-        decay-toward-prior step (applied identically either way) can itself
-        nudge a near-certain profile's score down by a hair even on a pass,
-        which is intentional (see the module docstring: scores must stay
-        adaptive, not calcify at the extremes). What must always hold is the
-        *relative* comparison between the two possible outcomes.
-        """
+        Not "a correct check never lowers trust" in absolute terms - the decay-toward-prior step (applied
+        identically either way) can itself nudge a near-certain profile's score down by a hair even on a pass,
+        which is intentional (see the module docstring: scores must stay adaptive, not calcify at the extremes)."""
         starting = _FakeConsensusProfile(trust_alpha=alpha, trust_beta=beta)
         after_correct = _apply_check(_FakeConsensusProfile(trust_alpha=alpha, trust_beta=beta), correct=True)
         after_incorrect = _apply_check(starting, correct=False)
@@ -80,14 +72,10 @@ class RecordCheckResultTests(SimpleTestCase):
     def test_a_run_of_failures_drags_a_trusted_profile_down(self) -> None:
         """A previously-trusted profile that starts failing checks should visibly lose trust.
 
-        Values verified numerically (not just asserted on faith): starting
-        at alpha=20/beta=2 (trust_score ~0.909, a solidly-trusted profile),
-        20 consecutive failures land at ~0.429 - a real, substantial drop
-        that crosses below the neutral 0.5 midpoint within a few dozen
-        checks, satisfying "a trusted player who starts answering wrong
-        should lose trust" without requiring an unrealistically long losing
-        streak.
-        """
+        Values verified numerically (not just asserted on faith): starting at alpha=20/beta=2 (trust_score
+        ~0.909, a solidly-trusted profile), 20 consecutive failures land at ~0.429 - a real, substantial drop
+        that crosses below the neutral 0.5 midpoint within a few dozen checks, satisfying "a trusted player who
+        starts answering wrong should lose trust" without requiring an unrealistically long losing streak."""
         profile = _FakeConsensusProfile(trust_alpha=20.0, trust_beta=2.0)
         starting_score = profile.trust_score
         self.assertGreater(starting_score, 0.9)

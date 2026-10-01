@@ -1,18 +1,4 @@
-"""The historic-register panel reaches REData's whole registry, not one inventory.
-
-REData registers 25 historic inventories - the nationwide National Register plus
-state SHPO layers and city/county registers - and UrbanLens read exactly one of
-them, New York's CRIS, inside New York only. That was not curation: the CRIS
-panel renders CRIS's own raw ArcGIS column names, so it *has* to name its
-provider, and restricting the request left everything else unread.
-
-What is worth testing here is not that a card renders. It is that the provider
-list is arrived at from REData rather than written down, that the rows are read
-from the fields REData standardizes rather than any one provider's, and that a
-register with no display name still appears - the exact mistake that made
-REData's `s2cloudless` invisible in the satellite carousel, where a name map was
-doubling as a permission list.
-"""
+"""The historic-register panel reaches REData's whole registry, not one inventory."""
 
 from __future__ import annotations
 
@@ -62,7 +48,10 @@ class ProviderDiscoveryTests(TestCase):
     def test_the_registers_asked_come_from_redatas_capability_index(self) -> None:
         with (
             mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["nps_nrhp", "md_mihp"]) as tags,
-            mock.patch(f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(39.3, -76.6)
 
@@ -72,7 +61,10 @@ class ProviderDiscoveryTests(TestCase):
     def test_a_register_redata_added_yesterday_is_asked_without_a_code_change(self) -> None:
         with (
             mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["some_register_added_yesterday"]),
-            mock.patch(f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(39.3, -76.6)
 
@@ -82,7 +74,10 @@ class ProviderDiscoveryTests(TestCase):
         """Including it would show the same USN record twice, the second time vaguer."""
         with (
             mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["ny_cris", "nps_nrhp"]),
-            mock.patch(f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(42.7, -73.8)
 
@@ -114,9 +109,31 @@ class ProviderDiscoveryTests(TestCase):
 
     def test_only_the_standardized_fields_are_cached(self) -> None:
         """`attributes`/`detail_payload`/`geometry` are per-provider, large, or both."""
-        stored = self.source.transform_rows([{**_resource(), "attributes": {"USNNum": "x"}, "detail_payload": {"big": "blob"}, "geometry": {"type": "Polygon"}}])
+        stored = self.source.transform_rows(
+            [
+                {
+                    **_resource(),
+                    "attributes": {"USNNum": "x"},
+                    "detail_payload": {"big": "blob"},
+                    "geometry": {"type": "Polygon"},
+                }
+            ]
+        )
 
-        self.assertEqual(set(stored[0]), {"provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type"})
+        self.assertEqual(
+            set(stored[0]),
+            {
+                "provider",
+                "resource_type",
+                "scope",
+                "name",
+                "status",
+                "year_built",
+                "architectural_style",
+                "use_type",
+                "contains_point",
+            },
+        )
 
 
 class RegisterLabelTests(SimpleTestCase):
@@ -195,7 +212,13 @@ class RenderTests(TestCase):
         context = self.source.render_context(self.pin, {"resources": [_resource()]})
 
         assert context is not None
-        self.assertEqual(context["meta"][0], {"label": "Maryland MIHP", "value": "Hutzler Brothers Palace - 1888, Commercial, Romanesque Revival, Listed"})
+        self.assertEqual(
+            context["meta"][0],
+            {
+                "label": "Maryland MIHP",
+                "value": "Hutzler Brothers Palace - 1888, Commercial, Romanesque Revival, Listed",
+            },
+        )
 
     def test_nothing_found_renders_nothing(self) -> None:
         self.assertIsNone(self.source.render_context(self.pin, {"resources": []}))

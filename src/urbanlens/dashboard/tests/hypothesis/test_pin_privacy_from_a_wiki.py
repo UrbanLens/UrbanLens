@@ -1,22 +1,4 @@
-"""What a wiki co-editor can and cannot see of somebody else's pin.
-
-A wiki is shared by everyone with a pin at its place, so "another user with wiki
-access" is not an attacker - it is the ordinary situation, and it is the one in
-which private pin data is most likely to be exposed by accident. Two defects of
-exactly that shape were found and fixed while this file was being written:
-uploading to your own pin published the photo to the location's wiki, and photo
-search returned other people's photos along with the *name of the pin* they
-belong to.
-
-Each test drives the app's own entry point - the view, or the exact queryset a
-view uses - rather than asserting on the model layer. A rule enforced in a
-queryset nobody calls protects nobody.
-
-The suite deliberately carries positive controls: for every "the neighbour must
-not see this" there is a "and the owner still can", or "and a deliberately shared
-one still appears". Without them the whole file could pass by breaking the
-feature it guards.
-"""
+"""What a wiki co-editor can and cannot see of somebody else's pin."""
 
 from __future__ import annotations
 
@@ -60,24 +42,49 @@ class WikiNeighbourTestCase(TestCase):
         self.neighbour = self.neighbour_user.profile
 
         self.location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
-        self.owner_pin = baker.make(Pin, profile=self.owner, location=self.location, parent_pin=None, name=PRIVATE_PIN_NAME)
+        self.owner_pin = baker.make(
+            Pin, profile=self.owner, location=self.location, parent_pin=None, name=PRIVATE_PIN_NAME
+        )
         self.neighbour_pin = baker.make(Pin, profile=self.neighbour, location=self.location, parent_pin=None)
         self.wiki = baker.make(Wiki, location=self.location)
 
+    def _processed(self, image: Image, **fields) -> Image:
+        """Finish a fixture upload the way ``tasks.process_image_upload`` would.
+
+        A fresh upload is stored raw and gated to its uploader until that task runs (see
+        ``Image.pending_scan``).
+
+        Args:
+            image: The freshly uploaded row. **fields: Any other columns to stamp in the same write.
+
+        Returns:
+            The same row, re-read."""
+        Image.objects.filter(pk=image.pk).update(pending_scan=False, **fields)
+        image.refresh_from_db()
+        return image
+
     def _private_photo(self) -> Image:
         """A photo uploaded to the owner's own pin, never contributed anywhere."""
-        result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("private.jpg", _jpeg_bytes(), content_type="image/jpeg"), PRIVATE_CAPTION)
+        result = upload_photo_for_owner(
+            self.owner_pin,
+            self.owner,
+            SimpleUploadedFile("private.jpg", _jpeg_bytes(), content_type="image/jpeg"),
+            PRIVATE_CAPTION,
+        )
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
-        return result
+        return self._processed(result)
 
     def _shared_photo(self) -> Image:
         """A photo the owner deliberately contributed to the wiki."""
-        result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("shared.jpg", _jpeg_bytes((30, 20, 10)), content_type="image/jpeg"), "deliberately shared")
+        result = upload_photo_for_owner(
+            self.owner_pin,
+            self.owner,
+            SimpleUploadedFile("shared.jpg", _jpeg_bytes((30, 20, 10)), content_type="image/jpeg"),
+            "deliberately shared",
+        )
         assert isinstance(result, Image)
         attach_to_wiki(result, self.wiki, added_by=self.owner)
-        Image.objects.filter(pk=result.pk).update(wiki=self.wiki)
-        result.refresh_from_db()
-        return result
+        return self._processed(result, wiki=self.wiki)
 
     def _as_neighbour(self) -> None:
         self.client.force_login(self.neighbour_user)
@@ -131,7 +138,9 @@ class PrivatePinPhotoIsNotOnTheWikiTests(WikiNeighbourTestCase):
 
         from django.urls import reverse
 
-        response = self.client.get(reverse("location.wiki.overlays.media", kwargs={"location_slug": self.location.slug}))
+        response = self.client.get(
+            reverse("location.wiki.overlays.media", kwargs={"location_slug": self.location.slug})
+        )
 
         self.assertEqual(response.status_code, 200, "the wiki overlay picker was not reachable")
         listed = {entry["id"] for entry in response.json()["images"]}
@@ -149,12 +158,16 @@ class PrivatePinDataIsNotReachableTests(WikiNeighbourTestCase):
 
         response = self.client.get(f"/dashboard/map/pin/{self.owner_pin.slug}/gallery/")
 
-        self.assertIn(response.status_code, (403, 404), f"a neighbour read another user's pin gallery ({response.status_code})")
+        self.assertIn(
+            response.status_code, (403, 404), f"a neighbour read another user's pin gallery ({response.status_code})"
+        )
 
     def test_the_child_pin_subtree_is_not_readable_by_a_neighbour(self) -> None:
         """Child pins are entrances, hazards and stairs - the most operationally
         sensitive thing a pin carries."""
-        baker.make(Pin, profile=self.owner, location=self.location, parent_pin=self.owner_pin, name="zzq-hidden-entrance")
+        baker.make(
+            Pin, profile=self.owner, location=self.location, parent_pin=self.owner_pin, name="zzq-hidden-entrance"
+        )
         self._as_neighbour()
 
         response = self.client.get(f"/dashboard/map/pin/{self.owner_pin.slug}/gallery/?children=1")
@@ -181,11 +194,7 @@ class PrivatePhotoBytesTests(WikiNeighbourTestCase):
     def test_an_unshared_pin_photo_is_refused_whatever_the_setting_says(self) -> None:
         """A photo on your pin is your record of a place, not a publication.
 
-        `photo_upload_visibility` decides who may see a photo you have *shared*.
-        It used to decide who may see an unshared one too, and its default
-        (`ANYTHING_IN_COMMON`) accepts `common_pin` - so pinning the same place
-        as somebody was enough to read their pin photos.
-        """
+        `photo_upload_visibility` decides who may see a photo you have *shared*."""
         private = self._private_photo()
         self._as_neighbour()
 
@@ -193,7 +202,9 @@ class PrivatePhotoBytesTests(WikiNeighbourTestCase):
             with self.subTest(setting=setting):
                 self.owner.photo_upload_visibility = setting
                 self.owner.save(update_fields=["photo_upload_visibility"])
-                self.assertEqual(self._fetch_bytes(private), 404, f"a co-pinner fetched an unshared pin photo under {setting}")
+                self.assertEqual(
+                    self._fetch_bytes(private), 404, f"a co-pinner fetched an unshared pin photo under {setting}"
+                )
 
     def test_once_shared_the_setting_decides_again(self) -> None:
         """The other half: sharing is what hands the setting its job back."""

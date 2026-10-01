@@ -1,22 +1,18 @@
-"""Tests for services.memories.aggregator.get_memory_events() date-range filtering.
+"""Tests for services.memories.aggregator.get_memory_events() date-range filtering."""
 
-All tests require the database - records are created with model_bakery.
-PinVisit is used as the representative source for the boundary-inclusion
-property test since every _x_for_range() function applies the same
-``__date__range`` filtering pattern against its own model's timestamp field.
-"""
 from __future__ import annotations
 
 import datetime
 
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.memories.aggregator import get_memory_events
+from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 
 _hyp = hyp_settings(max_examples=30, deadline=None)
 
@@ -29,7 +25,7 @@ class MemoryEventsDateRangeTests(TestCase):
     """get_memory_events() only returns events whose date falls within [start, end]."""
 
     def setUp(self):
-        self.profile =  _make_profile()
+        self.profile = _make_profile()
         self.location = baker.make_recipe("dashboard.location")
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
 
@@ -97,3 +93,75 @@ class MemoryEventsDateRangeTests(TestCase):
 
         expected_included = start <= visit_day <= end
         self.assertEqual(len(events) == 1, expected_included)
+
+
+class PhotoMemoryEventTests(TestCase):
+    """get_memory_events() must surface geotagged photos, not silently drop them.
+
+    Regression test: _photos_for_range annotated a queryset field named ``effective_taken_at``, colliding with
+    the real read-only ``Image.effective_taken_at`` property - Django raised AttributeError trying to setattr
+    the annotated value onto that name during row materialization, and get_memory_events' broad exception guard
+    (see MemorySourceIsolationTests) swallowed it every time, for every profile with any photo in range."""
+
+    def setUp(self):
+        self.profile = _make_profile()
+
+    def _make_photo(self, **kwargs) -> Image:
+        kwargs.setdefault("latitude", 40.0)
+        kwargs.setdefault("longitude", -74.0)
+        kwargs.setdefault("map_hidden", False)
+        return baker.make(Image, profile=self.profile, **kwargs)
+
+    def test_a_geotagged_photo_within_range_is_included(self):
+        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 15, 12, 0, 0))
+        self._make_photo(taken_at=taken_at)
+
+        events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30))
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].type, "photo")
+        self.assertEqual(events[0].occurred_at, taken_at)
+
+    def test_a_photo_with_no_exif_time_falls_back_to_filename_taken_at(self):
+        """Matches Image.effective_taken_at's own fallback chain exactly - a
+        photo with no EXIF time but a filename-parsed date still counts."""
+        filename_taken_at = timezone.make_aware(datetime.datetime(2024, 6, 10, 9, 0, 0))
+        self._make_photo(taken_at=None, filename_taken_at=filename_taken_at)
+
+        events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30))
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].occurred_at, filename_taken_at)
+
+    def test_a_photo_with_no_known_time_at_all_is_excluded_not_erroring(self):
+        self._make_photo(taken_at=None, filename_taken_at=None)
+
+        events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30))
+
+        self.assertEqual(events, [])
+
+
+class VisitBoundingBoxTests(TestCase):
+    """A map-scoped timeline keeps the visits inside its viewport.
+
+    The filter once named ``pin__latitude``, which Pin does not have; the aggregator swallowed the
+    FieldError, so every bbox'd timeline silently lost all its visits.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.profile = _make_profile()
+        self.location = baker.make_recipe("dashboard.location", latitude=42.26, longitude=-73.476)
+        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+        _make_visit(self.pin, timezone.make_aware(datetime.datetime(2024, 6, 15, 12, 0, 0)))
+
+    def _visits(self, bbox: BBox) -> list:
+        events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30), bbox=bbox)
+        return [e for e in events if e.type == "visit"]
+
+    def test_a_visit_inside_the_viewport_is_included(self):
+        self.assertEqual(len(self._visits(BBox(42.259, -73.477, 42.261, -73.475))), 1)
+
+    def test_a_visit_outside_the_viewport_is_excluded(self):
+        """Anti-vacuity: the box must actually filter, not merely stop failing."""
+        self.assertEqual(self._visits(BBox(40.0, -75.0, 40.1, -74.9)), [])

@@ -1,21 +1,8 @@
 /**
- * Screenshot comparison, opt-in.
- *
- * Off by default (`UL_E2E_VISUAL=1` registers this project) for a reason worth
- * stating rather than rediscovering: these run against a live deployment whose
- * data changes, whose map tiles arrive from a third party at their own pace,
- * and whose relative timestamps ("2 days ago") differ from one day to the next.
- * A baseline taken under those conditions goes stale on its own, and a suite
- * that cries wolf on every run stops being read.
- *
- * What makes them worth having anyway is the class of regression nothing else
- * catches: a stylesheet that failed to build, a layout that collapsed at one
- * breakpoint, a dark-mode palette applied to half a page. Run them deliberately
- * - before and after a front-end change - rather than continuously.
- *
- * Baselines live next to this file and are committed. Refresh them with
- * `UL_E2E_VISUAL=1 npx playwright test --project=visual --update-snapshots`,
- * and read the diff before accepting it.
+ * Screenshot comparison, opt-in. Off by default (`UL_E2E_VISUAL=1` registers this project) for a
+ * reason worth stating rather than rediscovering: these run against a live deployment whose data
+ * changes, whose map tiles arrive from a third party at their own pace, and whose relative
+ * timestamps ("2 days ago") differ from one day to the next.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

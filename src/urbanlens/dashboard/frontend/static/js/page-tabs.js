@@ -1,24 +1,13 @@
 /*
- * Wikipedia-style page tabs (Overview / Article / Comments / Edit History).
- *
- * Markup contract (attribute-driven - the classnames are cosmetic; pin
- * details and wiki both use the shared .ul-subnav-tabs/.ul-subnav-tab look):
+ * Wikipedia-style page tabs. Attribute-driven markup (classnames are cosmetic):
  *   <nav data-page-tabs>
- *     <button type="button" data-tab="overview">...</button>
+ *     <a href="#tab-overview" data-tab="overview">...</a>
  *     ...
  *   </nav>
  *   <section data-tab-panel="overview">...</section>
  *
- * Behavior:
- *   - Clicking a tab shows its panel and hides the rest.
- *   - The active tab is deep-linkable via the URL hash (#tab-article,
- *     #tab-comments, #tab-history); "overview" is the default and keeps the
- *     hash clean. The "tab-" prefix keeps tab hashes from colliding with
- *     in-article heading anchors (an article section named "History" owns
- *     the bare #history anchor).
- *   - Showing a tab dispatches a window resize (so Leaflet maps and other
- *     measure-on-show widgets recover from having been display:none) and a
- *     "ul:tabShown" event for anything else that wants to react.
+ * Behavior: real links (middle-click works; plain left-click swaps in-page); active tab deep-linkable via
+ * #tab-<name> ("overview" keeps the hash clean); showing a tab fires resize + "ul:tabShown".
  */
 (function () {
     'use strict';
@@ -52,8 +41,7 @@
             }
         }
 
-        // Leaflet (and the adaptive pagination system) both re-measure on
-        // window resize; fire one so content hidden at init renders correctly.
+        // Fire one resize so content hidden at init renders correctly.
         window.setTimeout(function () {
             window.dispatchEvent(new Event('resize'));
         }, 30);
@@ -71,9 +59,14 @@
         nav.setAttribute('role', 'tablist');
         nav.querySelectorAll('[data-tab]').forEach(function (btn) {
             btn.setAttribute('role', 'tab');
-            btn.addEventListener('click', function () { activate(btn.dataset.tab); });
+            btn.addEventListener('click', function (event) {
+                // Leave modifier-clicks to native <a href> behavior.
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                activate(btn.dataset.tab);
+            });
         });
-        // Arrow-key navigation between tabs, per the WAI-ARIA tabs pattern.
+        // Arrow-key navigation, per the WAI-ARIA tabs pattern.
         nav.addEventListener('keydown', function (event) {
             if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
             var buttons = Array.prototype.slice.call(nav.querySelectorAll('[data-tab]'));
@@ -94,7 +87,7 @@
         });
     }
 
-    // Expose for anything that wants to switch tabs programmatically.
+    // Public: switch tabs programmatically.
     window.ulActivatePageTab = activate;
 
     if (document.readyState === 'loading') {

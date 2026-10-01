@@ -1,22 +1,17 @@
-"""Tests for area-suffixed unnamed-location display names.
-
-Covers:
-- Location.area_label - [City, State] in the USA, [City, Country] elsewhere,
-  with graceful fallbacks when components are missing (property-based)
-- Location.display_name - "Unnamed Location in {area}" fallback
-- is_meaningful_name - the area-suffixed placeholder stays non-meaningful so
-  it never leaks into external API queries or saved names
-"""
+"""Tests for area-suffixed unnamed-location display names."""
 
 from __future__ import annotations
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
-_NAME_PART = st.text(alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ", min_size=1, max_size=20).map(str.strip).filter(bool)
+_NAME_PART = (
+    st.text(alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ", min_size=1, max_size=20)
+    .map(str.strip)
+    .filter(bool)
+)
 
 
 def _location(**kwargs) -> Location:

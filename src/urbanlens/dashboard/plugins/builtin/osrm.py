@@ -1,10 +1,5 @@
 """OSRM plugin: free, open-source routing gateway registration.
-
-No pin-detail UI of its own - a routing engine is a utility other features
-(trip planning, "distance to nearest pin") call into, not a per-location info
-card. Registers rate-limit defaults so admins can see/throttle it like any
-other external call; see ``services.apis.routing.osrm`` for the gateway.
-"""
+Registers rate-limit defaults so admins can see/throttle it like any other external call; see ``services.apis.routing.osrm`` for the gateway."""
 
 from __future__ import annotations
 
@@ -20,7 +15,7 @@ class OSRMPlugin(UrbanLensPlugin):
     name: ClassVar[str] = "osrm"
     verbose_name: ClassVar[str] = "OSRM"
     description: ClassVar[str] = (
-        "Free, open-source routing engine (project-osrm.org) over OpenStreetMap data. Uses the public demo server by default - point OSRMGateway.base_url at a self-hosted instance for production load, per the OSRM project's own guidance."
+        "Free, open-source routing engine (project-osrm.org) over OpenStreetMap data. Uses the public demo server unless UL_OSRM_BASE_URL points at a self-hosted instance, which is what the OSRM project's own guidance asks for under production load."
     )
     author: ClassVar[str] = "UrbanLens"
 

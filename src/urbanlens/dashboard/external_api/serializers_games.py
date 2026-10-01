@@ -1,22 +1,10 @@
 """Request validation and wire shapes for the external API's games domain.
 
-Two rules shape everything here, and both exist because of specific defects
-this surface is built to avoid.
-
 **Round payloads are whitelists, never passthroughs.** The internal
-``services.spotguessr.serializers.serialize_round`` dict is built for the web
-client and grows whenever a mode gains a field. Forwarding it wholesale is how
-``image_caption`` - EXIF-derived text that routinely names the place - ended up
-in a payload a player receives *before* guessing. :func:`build_round_payload`
-therefore copies an explicit list of keys, so the next field somebody adds to a
-mode strategy cannot silently become part of the question.
-
-**Identities go out as slugs, never primary keys.** ``GameSession`` extends
-``DashboardModel``, which has no uuid, so session ids on this surface are
-sequential global integers (acceptable: a non-participant gets an
-indistinguishable 404 either way). Profiles are a different matter - they do
-have slugs, and leaking their sequential pks would hand a caller a way to count
-and probe accounts it was never shown.
+``services.spotguessr.serializers.serialize_round`` dict is built for the web client and grows
+whenever a mode gains a field.
+Profiles are a different matter - they do have slugs, and leaking their sequential pks would hand a
+caller a way to count and probe accounts it was never shown.
 """
 
 from __future__ import annotations
@@ -31,18 +19,9 @@ from urbanlens.dashboard.services.spotguessr import relevance as spotguessr_rele
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.spotguessr.model import GameRound, GameSession, Guess
 
-#: Exactly the keys an external client may see for an unguessed round. Anything
-#: ``serialize_round`` adds that is not listed here is dropped - see the module
-#: docstring for the leak that motivates the whitelist rather than a blocklist.
-#:
-#: ``image_url`` is the media-gate URL for the round's photo; fetching it needs
-#: ``media:read`` in addition to ``games:read``, exactly as any other photo does.
-#:
-#: ``street_view_lat``/``street_view_lng`` are a deliberate exception to "never
-#: the answer before a guess" - see ``services.spotguessr.street_view.StreetViewPanorama``'s
-#: docstring. A native client renders its own interactive panorama from them the
-#: same way the web client does; ``street_view_image`` stays listed alongside as
-#: a fallback for a client that would rather not embed a Maps SDK at all.
+#: Exactly the keys an external client may see for an unguessed round. Anything ``serialize_round`` adds that is
+#: not listed here is dropped - see the module docstring for the leak that motivates the whitelist rather than a
+#: blocklist.
 ROUND_PAYLOAD_FIELDS: tuple[str, ...] = (
     "round_id",
     "session_id",
@@ -59,10 +38,9 @@ ROUND_PAYLOAD_FIELDS: tuple[str, ...] = (
     "street_view_lng",
 )
 
-#: Exactly the keys an external client may see for its own guess's result. The
-#: answer fields (``actual_latitude``/``actual_longitude``/``location_name``/
-#: ``image_caption``) are only ever present in the source dict once the round is
-#: genuinely revealed - listing them here does not make them appear early.
+#: Exactly the keys an external client may see for its own guess's result. The answer fields
+#: (``actual_latitude``/``actual_longitude``/``location_name``/ ``image_caption``) are only ever present in the
+#: source dict once the round is genuinely revealed - listing them here does not make them appear early.
 REVEAL_PAYLOAD_FIELDS: tuple[str, ...] = (
     "round_id",
     "distance_meters",
@@ -83,15 +61,11 @@ def build_round_payload(round_: GameRound) -> dict[str, Any]:
     """Whitelist the internal round payload down to what an external client may see.
 
     Args:
-        round_: The round to describe. Must not be relied upon to be
-            unrevealed - the payload is answer-free either way, because the
-            internal serializer never puts the answer in it.
+        round_: The round to describe.
 
     Returns:
-        A dict holding only the keys in :data:`ROUND_PAYLOAD_FIELDS` that the
-        internal serializer actually produced for this round's mode. Absent
-        keys are omitted rather than nulled, so a Named Place round carries no
-        ``image_url`` key at all.
+        A dict holding only the keys in: data:`ROUND_PAYLOAD_FIELDS` that the internal serializer
+        actually produced for this round's mode.
     """
     from urbanlens.dashboard.services.spotguessr import serializers as spotguessr_serializers
 
@@ -105,15 +79,14 @@ def build_reveal_payload(round_: GameRound, guess: Guess, bonus_tiers: list[str]
     Args:
         round_: The round just guessed, re-read so ``revealed_at`` is current.
         guess: The saved guess.
-        bonus_tiers: Which country/state/city tiers the guess matched - not
-            persisted on ``Guess``, so it only exists on the return of
-            ``submit_guess``.
-        rating_change: The guesser's own Glicko-2 change for this round, or
-            None when the reveal is still withheld.
+        bonus_tiers: Which country/state/city tiers the guess matched - not persisted on ``Guess``, so
+        it only exists on the return of ``submit_guess``.
+        rating_change: The guesser's own Glicko-2 change for this round, or None when the reveal is
+        still withheld.
 
     Returns:
-        A dict holding only the keys in :data:`REVEAL_PAYLOAD_FIELDS` that the
-        internal serializer produced.
+        A dict holding only the keys in: data:`REVEAL_PAYLOAD_FIELDS` that the internal serializer
+        produced.
     """
     from urbanlens.dashboard.services.spotguessr import serializers as spotguessr_serializers
 
@@ -142,9 +115,9 @@ class FriendRatingSerializer(serializers.Serializer):
     """One friend's visible rating, with their identity already resolved for the viewer.
 
     ``display_name`` and ``profile_slug`` come from
-    ``services.profile.identity_visibility.resolve_visible_identity``, so a friend who
-    restricts profile visibility is masked here exactly as they are everywhere
-    else rather than being named because they happen to play a game.
+    ``services.profile.identity_visibility.resolve_visible_identity``, so a friend who restricts profile
+    visibility is masked here exactly as they are everywhere else rather than being named because they
+    happen to play a game.
     """
 
     profile_slug = serializers.CharField(read_only=True, allow_null=True)
@@ -171,15 +144,15 @@ class SpotGuessrOverviewSerializer(serializers.Serializer):
 class SpotGuessrSessionCreateSerializer(serializers.Serializer):
     """The body of a solo session start.
 
-    Deliberately has no ``invite_profile_ids``: multiplayer is web-only on this
-    surface (see ``views_games.SoloSessionOnlyMixin``), and accepting the field
-    would let a client create a lobby it can then never play.
+    Deliberately has no ``invite_profile_ids``: multiplayer is web-only on this surface (see
+    ``views_games.SoloSessionOnlyMixin``), and accepting the field would let a client create a lobby it
+    can then never play.
     """
 
     mode = serializers.ChoiceField(choices=SpotGuessrMode.choices, default=SpotGuessrMode.PHOTOS)
-    #: Not bounded by the field itself: the service clamps into
-    #: ``[MIN_ROUNDS_PER_SESSION, MAX_ROUNDS_PER_SESSION]`` and clamping is
-    #: friendlier than a 400 for a client that guessed the limits wrong.
+    #: Not bounded by the field itself: the service clamps into ``[MIN_ROUNDS_PER_SESSION,
+    #: MAX_ROUNDS_PER_SESSION]`` and clamping is friendlier than a 400 for a client that guessed the limits
+    #: wrong.
     total_rounds = serializers.IntegerField(required=False, min_value=1, max_value=1000)
     difficulty = serializers.FloatField(required=False, min_value=0.0, max_value=1.0)
     allow_arbitrary_external_photos = serializers.BooleanField(required=False, default=False)
@@ -191,24 +164,18 @@ class SpotGuessrSessionCreateSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
-    #: A GeoJSON *object*, not the JSON-encoded string the HTML form posts. A
-    #: JSON API client already has a parsed object; making it re-encode one only
-    #: to have the server parse it again is a needless round trip and an easy
-    #: source of double-encoding bugs.
+    #: A GeoJSON *object*, not the JSON-encoded string the HTML form posts. A JSON API client already has a
+    #: parsed object; making it re-encode one only to have the server parse it again is a needless round trip
+    #: and an easy source of double-encoding bugs.
     geo_bounds = serializers.JSONField(required=False, allow_null=True)
     label_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
     def validate_label_id(self, value: int | None) -> int | None:
         """Reject a label id the caller's own profile can't actually use.
 
-        Mirrors ``controllers.spotguessr._validate_label_id``: an unresolvable id
-        (nonexistent, or someone else's private label) reads as the same 400 either
-        way, so this can't be used to probe for the existence of another profile's
-        labels.
-
         Raises:
-            rest_framework.serializers.ValidationError: When the id doesn't resolve to
-                a label visible to the requesting profile.
+            rest_framework.serializers.ValidationError: When the id doesn't resolve to a label visible to
+            the requesting profile.
         """
         from urbanlens.dashboard.models.labels.model import Label
 
@@ -222,9 +189,8 @@ class SpotGuessrSessionCreateSerializer(serializers.Serializer):
     def validate_geo_bounds(self, value: Any) -> dict | None:
         """Reject anything that isn't a GEOS-parseable GeoJSON geometry.
 
-        Parsing is forced here rather than left lazy so a malformed area comes
-        back as a 400 naming the field, instead of a 500 from deep inside round
-        generation minutes later.
+        Parsing is forced here rather than left lazy so a malformed area comes back as a 400 naming the
+        field, instead of a 500 from deep inside round generation minutes later.
 
         Args:
             value: The submitted ``geo_bounds`` value.
@@ -233,8 +199,8 @@ class SpotGuessrSessionCreateSerializer(serializers.Serializer):
             The value unchanged when it parses, or None when it was null.
 
         Raises:
-            rest_framework.serializers.ValidationError: When the value is not a
-                JSON object or does not parse as a geometry.
+            rest_framework.serializers.ValidationError: When the value is not a JSON object or does not
+            parse as a geometry.
         """
         from django.contrib.gis.gdal.error import GDALException
         from django.contrib.gis.geos import GEOSException
@@ -253,9 +219,8 @@ class SpotGuessrSessionCreateSerializer(serializers.Serializer):
 class SpotGuessrRoundSerializer(serializers.Serializer):
     """One round as an external client sees it, before the answer is known.
 
-    Documentation of :data:`ROUND_PAYLOAD_FIELDS` for the generated schema; the
-    payload itself is built by :func:`build_round_payload`, which is the code
-    that actually enforces the whitelist.
+    Documentation of :data:`ROUND_PAYLOAD_FIELDS` for the generated schema; the payload itself is built
+    by :func:`build_round_payload`, which is the code that actually enforces the whitelist.
     """
 
     round_id = serializers.IntegerField(read_only=True)
@@ -310,10 +275,9 @@ class SpotGuessrSummarySerializer(serializers.Serializer):
 class SpotGuessrRoundResponseSerializer(serializers.Serializer):
     """The current-round response, which is one of three mutually exclusive states.
 
-    ``no_eligible_locations`` is its own state rather than a finished game with
-    zero rounds: a client that renders "Game over, 0 points" for a player who
-    simply has nothing pinned in the chosen area is showing them a result they
-    never earned.
+    ``no_eligible_locations`` is its own state rather than a finished game with zero rounds: a client
+    that renders "Game over, 0 points" for a player who simply has nothing pinned in the chosen area is
+    showing them a result they never earned.
     """
 
     finished = serializers.BooleanField(read_only=True)
@@ -352,10 +316,10 @@ class SpotGuessrGuessResponseSerializer(serializers.Serializer):
 class SpotGuessrSessionSerializer(serializers.Serializer):
     """One row of the session list, and the whole body of the session detail.
 
-    ``is_multiplayer`` is derived from the roster size rather than from the
-    status, because a multiplayer game that has already begun is ACTIVE exactly
-    like a solo one. Clients use it to know which sessions this API will refuse
-    to play (see ``views_games.SoloSessionOnlyMixin``).
+    ``is_multiplayer`` is derived from the roster size rather than from the status, because a
+    multiplayer game that has already begun is ACTIVE exactly like a solo one.
+    Clients use it to know which sessions this API will refuse to play (see
+    ``views_games.SoloSessionOnlyMixin``).
     """
 
     session_id = serializers.IntegerField(read_only=True)
@@ -396,9 +360,8 @@ class SpotGuessrFeedbackResponseSerializer(serializers.Serializer):
 class SpotGuessrPreferencesUpdateSerializer(serializers.Serializer):
     """The one genuinely user-editable SpotGuessr preference.
 
-    ``last_config`` is deliberately absent - it is auto-managed by
-    ``remember_last_config`` on every session start, never directly
-    user-writable (see ``services.spotguessr.overview``).
+    ``last_config`` is deliberately absent - it is auto-managed by ``remember_last_config`` on every
+    session start, never directly user-writable (see ``services.spotguessr.overview``).
     """
 
     show_ratings_to_friends = serializers.BooleanField()
@@ -413,10 +376,8 @@ class SpotGuessrPreferencesResponseSerializer(serializers.Serializer):
 class SpotGuessrEligibleCountQuerySerializer(serializers.Serializer):
     """Query parameters for the eligible-pin-count pre-check."""
 
-    #: A GeoJSON-encoded string, matching the internal
-    #: ``SpotGuessrAreaPinCountView`` query param exactly - unlike the session
-    #: create body, this travels in a query string, which has no native JSON
-    #: type.
+    #: A GeoJSON-encoded string, matching the internal ``SpotGuessrAreaPinCountView`` query param exactly -
+    #: unlike the session create body, this travels in a query string, which has no native JSON type.
     geo_bounds = serializers.CharField()
 
 
@@ -446,13 +407,12 @@ def build_session_payload(session: GameSession, *, host_slug: str | None) -> dic
     """Describe one session for the list and detail endpoints.
 
     Reads the ``rounds_played``/``participant_count`` annotations
-    ``services.spotguessr.overview.participated_sessions`` attaches, so a page
-    of rows costs one query rather than two per row.
+    ``services.spotguessr.overview.participated_sessions`` attaches, so a page of rows costs one query
+    rather than two per row.
 
     Args:
         session: An annotated session row.
-        host_slug: The host's profile slug, resolved by the caller in bulk. The
-            host's primary key is deliberately never sent.
+        host_slug: The host's profile slug, resolved by the caller in bulk.
 
     Returns:
         The session's wire payload.

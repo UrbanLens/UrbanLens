@@ -1,15 +1,4 @@
-"""Tests for ApiKeyAuthMiddleware - PAT/OAuth2 fallback auth for Channels sockets.
-
-Covers *authentication* only - whether a ``?key=`` credential resolves to a
-user at all. What that credential is then allowed to reach is a separate
-concern, tested in ``test_websocket_credential_scopes.py``; the credentials
-minted here are given ``notifications:read`` purely so the consumer used as a
-test harness (``UserNotificationConsumer``) lets a successfully authenticated
-connection through to the assertion being made.
-
-Uses TransactionTestCase, same as test_safety_chat.py, since consumers touch
-the database from a background thread via ``database_sync_to_async``.
-"""
+"""Tests for ApiKeyAuthMiddleware - PAT/OAuth2 fallback auth for Channels sockets."""
 
 from __future__ import annotations
 
@@ -18,7 +7,7 @@ from datetime import timedelta
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser, User
-from django.test import TransactionTestCase, override_settings
+from django.test import TransactionTestCase
 from django.utils import timezone
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model, get_application_model
@@ -27,8 +16,6 @@ from urbanlens.dashboard.consumers import UserNotificationConsumer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
-
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 Application = get_application_model()
 AccessToken = get_access_token_model()
@@ -48,14 +35,12 @@ def _notification_key(user) -> tuple[ApiKey, str]:
         user: The account the key belongs to.
 
     Returns:
-        Tuple of (the ``ApiKey`` row, its one-time plaintext).
-    """
+        Tuple of (the ``ApiKey`` row, its one-time plaintext)."""
     api_key, raw_key = generate_api_key(user, "Mobile app")
     ApiKey.objects.filter(pk=api_key.pk).update(scopes=[ApiKeyScope.NOTIFICATIONS_READ.value])
     return api_key, raw_key
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class ApiKeyWebSocketAuthTests(TransactionTestCase):
     """A ``?key=`` query param authenticates a socket exactly like a session would."""
 

@@ -14,7 +14,9 @@ from urbanlens.dashboard.services.apis.photos.redata_photos_gateway import Redat
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
-def _response(status_code: int, *, json_body: dict | None = None, text: str = "", raise_on_json: bool = False) -> MagicMock:
+def _response(
+    status_code: int, *, json_body: dict | None = None, text: str = "", raise_on_json: bool = False
+) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status_code
     resp.text = text
@@ -26,7 +28,9 @@ def _response(status_code: int, *, json_body: dict | None = None, text: str = ""
 
 
 def _gateway(session: MagicMock | None = None) -> RedataPhotosGateway:
-    return RedataPhotosGateway(base_url="https://redata.example.test", api_key="test-key", session=session or MagicMock())
+    return RedataPhotosGateway(
+        base_url="https://redata.example.test", api_key="test-key", session=session or MagicMock()
+    )
 
 
 class ConstructionTests(SimpleTestCase):
@@ -68,7 +72,14 @@ class SubmitPhotosTests(SimpleTestCase):
 
     def test_parses_confidence_results(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"count": 1, "results": {"abc": {"confidence": 0.87, "scorer": "model", "model_version": 7}}, "unknown": []})
+        session.post.return_value = _response(
+            200,
+            json_body={
+                "count": 1,
+                "results": {"abc": {"confidence": 0.87, "scorer": "model", "model_version": 7}},
+                "unknown": [],
+            },
+        )
         gateway = _gateway(session)
         result = gateway.submit_photos([{"photo_id": "abc", "location_latitude": 1.0, "location_longitude": 2.0}])
         self.assertEqual(result["results"]["abc"]["confidence"], 0.87)
@@ -109,7 +120,9 @@ class SubmitVotesTests(SimpleTestCase):
 
     def test_posts_to_the_votes_endpoint(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"recorded": 1, "unknown_photo_ids": [], "updated_photos": 1})
+        session.post.return_value = _response(
+            200, json_body={"recorded": 1, "unknown_photo_ids": [], "updated_photos": 1}
+        )
         gateway = _gateway(session)
         result = gateway.submit_votes([{"photo_id": "abc", "is_relevant": True, "voter_id": "5"}])
         args, kwargs = session.post.call_args
@@ -119,7 +132,9 @@ class SubmitVotesTests(SimpleTestCase):
 
     def test_reports_unknown_photo_ids(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"recorded": 0, "unknown_photo_ids": ["abc"], "updated_photos": 0})
+        session.post.return_value = _response(
+            200, json_body={"recorded": 0, "unknown_photo_ids": ["abc"], "updated_photos": 0}
+        )
         gateway = _gateway(session)
         result = gateway.submit_votes([{"photo_id": "abc", "is_relevant": True}])
         self.assertEqual(result["unknown_photo_ids"], ["abc"])
@@ -135,7 +150,9 @@ class GetConfidenceBatchTests(SimpleTestCase):
 
     def test_posts_to_the_confidence_endpoint(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"count": 1, "results": {"abc": {"confidence": 0.5}}, "unknown": []})
+        session.post.return_value = _response(
+            200, json_body={"count": 1, "results": {"abc": {"confidence": 0.5}}, "unknown": []}
+        )
         gateway = _gateway(session)
         result = gateway.get_confidence_batch(["abc"])
         args, kwargs = session.post.call_args

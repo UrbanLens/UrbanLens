@@ -1,13 +1,12 @@
-{% comment %}
-Pin List items panel - sortable rows, swapped in after add/remove/reorder.
-Context: pin_list, items (page-1 slice of PinListItem, already ordered),
-         page_obj (Django Page - drives the "load more" sentinel further
-         pages are lazy-loaded through, see _items_rows.html),
-         items_map_data (every pin on the list, regardless of pagination -
-         see pin_lists.py's _pin_map_marker_data).
-{% endcomment %}
+{% comment %}Pin List items panel - sortable rows, swapped in after add/remove/reorder.{% endcomment %}
 <div class="pin-list-items" id="pin-list-items" data-save-url="{% url 'lists.items.reorder' pin_list.slug %}">
     {{ items_map_data|json_script:"pin-list-items-map-data" }}
+    {% if items_map_truncated %}
+    <p class="pin-list-map-truncated settings-help">
+        <i class="material-symbols-outlined">info</i>
+        Showing {{ map_pin_limit }} of {{ items_map_total }} pins on the map, spread across the area. Every pin is still listed below.
+    </p>
+    {% endif %}
     {% if items %}
     {% include "dashboard/partials/pin_lists/_items_rows.html" %}
     {% else %}

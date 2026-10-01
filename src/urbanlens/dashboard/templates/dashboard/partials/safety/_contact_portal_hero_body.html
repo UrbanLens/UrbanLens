@@ -1,8 +1,4 @@
-{% comment %}
-Hero body for safety/contact_portal.html. Expects `checkin` in context.
-The #safety-status-badge id is updated live by contact_portal.html's
-safetyStatusUpdate listener.
-{% endcomment %}
+{% comment %}Hero body for safety/contact_portal.html.{% endcomment %}
 <h1 class="ul-page-hero__title">
     <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
     {{ checkin.profile.username }} - {{ checkin.title }}

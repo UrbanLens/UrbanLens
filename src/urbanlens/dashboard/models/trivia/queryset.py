@@ -1,6 +1,6 @@
 """QuerySets/Managers for Trivia models.
 
-Glicko-2 rating math lives in ``services.spotguessr.glicko2`` (reused
+Glicko-2 rating math lives in ``services.games.glicko2`` (reused
 directly); eligibility, question selection, and vote scoring live in
 ``services.trivia.eligibility``/``selection``/``voting``. These classes only
 scope and fetch rows.
@@ -15,9 +15,8 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.trivia.model import (
+    from urbanlens.dashboard.models.trivia.model import (  # noqa: F401 - mypy needs these; ruff does not
         PlayerTriviaRating,
         TriviaAnswer,
         TriviaQuestion,
@@ -33,10 +32,6 @@ if TYPE_CHECKING:
 class TriviaQuestionQuerySet(abstract.DashboardQuerySet["TriviaQuestion"]):
     """QuerySet for TriviaQuestion."""
 
-    def for_location(self, location: Location) -> TriviaQuestionQuerySet:
-        """Restrict to questions about ``location``."""
-        return self.filter(location=location)
-
     def approved(self) -> TriviaQuestionQuerySet:
         """Restrict to questions that passed moderation and are eligible for rotation."""
         from urbanlens.dashboard.models.trivia.model import TriviaQuestionStatus
@@ -44,7 +39,10 @@ class TriviaQuestionQuerySet(abstract.DashboardQuerySet["TriviaQuestion"]):
         return self.filter(status=TriviaQuestionStatus.APPROVED)
 
 
-class TriviaQuestionManager(abstract.DashboardManager.from_queryset(TriviaQuestionQuerySet)):
+_TriviaQuestionManagerBase = abstract.DashboardManager.from_queryset(TriviaQuestionQuerySet)
+
+
+class TriviaQuestionManager(_TriviaQuestionManagerBase):
     """Manager for TriviaQuestion."""
 
 
@@ -56,19 +54,21 @@ class TriviaQuestionVoteQuerySet(abstract.DashboardQuerySet["TriviaQuestionVote"
         return self.filter(question=question)
 
 
-class TriviaQuestionVoteManager(abstract.DashboardManager.from_queryset(TriviaQuestionVoteQuerySet)):
+_TriviaQuestionVoteManagerBase = abstract.DashboardManager.from_queryset(TriviaQuestionVoteQuerySet)
+
+
+class TriviaQuestionVoteManager(_TriviaQuestionVoteManagerBase):
     """Manager for TriviaQuestionVote."""
 
 
 class PlayerTriviaRatingQuerySet(abstract.DashboardQuerySet["PlayerTriviaRating"]):
     """QuerySet for PlayerTriviaRating."""
 
-    def for_profile(self, profile: Profile) -> PlayerTriviaRatingQuerySet:
-        """Restrict to ``profile``'s own rating row."""
-        return self.filter(profile=profile)
+
+_PlayerTriviaRatingManagerBase = abstract.DashboardManager.from_queryset(PlayerTriviaRatingQuerySet)
 
 
-class PlayerTriviaRatingManager(abstract.DashboardManager.from_queryset(PlayerTriviaRatingQuerySet)):
+class PlayerTriviaRatingManager(_PlayerTriviaRatingManagerBase["PlayerTriviaRating"]):
     """Manager for PlayerTriviaRating."""
 
     def get_or_create_for(self, profile: Profile) -> PlayerTriviaRating:
@@ -80,12 +80,11 @@ class PlayerTriviaRatingManager(abstract.DashboardManager.from_queryset(PlayerTr
 class TriviaQuestionRatingQuerySet(abstract.DashboardQuerySet["TriviaQuestionRating"]):
     """QuerySet for TriviaQuestionRating."""
 
-    def for_question(self, question: TriviaQuestion) -> TriviaQuestionRatingQuerySet:
-        """Restrict to ``question``'s own difficulty rating row."""
-        return self.filter(question=question)
+
+_TriviaQuestionRatingManagerBase = abstract.DashboardManager.from_queryset(TriviaQuestionRatingQuerySet)
 
 
-class TriviaQuestionRatingManager(abstract.DashboardManager.from_queryset(TriviaQuestionRatingQuerySet)):
+class TriviaQuestionRatingManager(_TriviaQuestionRatingManagerBase["TriviaQuestionRating"]):
     """Manager for TriviaQuestionRating."""
 
     def get_or_create_for(self, question: TriviaQuestion) -> TriviaQuestionRating:
@@ -97,34 +96,19 @@ class TriviaQuestionRatingManager(abstract.DashboardManager.from_queryset(Trivia
 class TriviaSessionQuerySet(abstract.DashboardQuerySet["TriviaSession"]):
     """QuerySet for TriviaSession."""
 
-    def active(self) -> TriviaSessionQuerySet:
-        """Restrict to sessions still in progress (lobby or active)."""
-        from urbanlens.dashboard.models.trivia.model import TriviaSessionStatus
-
-        return self.filter(status__in=[TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE])
-
-    def for_profile(self, profile: Profile) -> TriviaSessionQuerySet:
-        """Restrict to sessions ``profile`` is (or was) a participant in, any status."""
-        return self.filter(participants__profile=profile).distinct()
-
     def stalled(self, *, cutoff: datetime) -> TriviaSessionQuerySet:
         """ACTIVE sessions whose current round was created before ``cutoff`` and still isn't revealed.
-
-        ``get_or_create_round`` never creates a session's next round until
-        its prior one is fully revealed, so at most one round per session
-        can ever match "unrevealed" at a time - this is always that
-        session's current round. Used by the stall-sweep Celery task
-        (``tasks.sweep_stalled_trivia_sessions``) to find sessions a
-        participant walked away from mid-round (see
-        ``services.trivia.session.force_reveal_round``). Mirrors
-        ``GameSessionQuerySet.stalled()``.
+        ``get_or_create_round`` never creates a session's next round until its prior one is fully revealed, so at most one round per session can ever match "unrevealed" at a time - this is always that session's current round.
         """
         from urbanlens.dashboard.models.trivia.model import TriviaSessionStatus
 
         return self.filter(status=TriviaSessionStatus.ACTIVE, rounds__revealed_at__isnull=True, rounds__created__lte=cutoff).distinct()
 
 
-class TriviaSessionManager(abstract.DashboardManager.from_queryset(TriviaSessionQuerySet)):
+_TriviaSessionManagerBase = abstract.DashboardManager.from_queryset(TriviaSessionQuerySet)
+
+
+class TriviaSessionManager(_TriviaSessionManagerBase):
     """Manager for TriviaSession."""
 
 
@@ -137,8 +121,17 @@ class TriviaSessionParticipantQuerySet(abstract.DashboardQuerySet["TriviaSession
 
         return self.filter(status=TriviaSessionParticipantStatus.JOINED)
 
+    def active(self) -> TriviaSessionParticipantQuerySet:
+        """Participants who still have access to their session: invited or joined, not departed."""
+        from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipantStatus
 
-class TriviaSessionParticipantManager(abstract.DashboardManager.from_queryset(TriviaSessionParticipantQuerySet)):
+        return self.exclude(status=TriviaSessionParticipantStatus.LEFT)
+
+
+_TriviaSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(TriviaSessionParticipantQuerySet)
+
+
+class TriviaSessionParticipantManager(_TriviaSessionParticipantManagerBase):
     """Manager for TriviaSessionParticipant."""
 
 
@@ -150,7 +143,10 @@ class TriviaRoundQuerySet(abstract.DashboardQuerySet["TriviaRound"]):
         return self.filter(session=session).order_by("sequence_index")
 
 
-class TriviaRoundManager(abstract.DashboardManager.from_queryset(TriviaRoundQuerySet)):
+_TriviaRoundManagerBase = abstract.DashboardManager.from_queryset(TriviaRoundQuerySet)
+
+
+class TriviaRoundManager(_TriviaRoundManagerBase):
     """Manager for TriviaRound."""
 
 
@@ -162,7 +158,10 @@ class TriviaAnswerQuerySet(abstract.DashboardQuerySet["TriviaAnswer"]):
         return self.filter(round=round_)
 
 
-class TriviaAnswerManager(abstract.DashboardManager.from_queryset(TriviaAnswerQuerySet)):
+_TriviaAnswerManagerBase = abstract.DashboardManager.from_queryset(TriviaAnswerQuerySet)
+
+
+class TriviaAnswerManager(_TriviaAnswerManagerBase):
     """Manager for TriviaAnswer."""
 
 
@@ -174,5 +173,8 @@ class TriviaSessionChatMessageQuerySet(abstract.DashboardQuerySet["TriviaSession
         return self.filter(session=session).order_by("created")
 
 
-class TriviaSessionChatMessageManager(abstract.DashboardManager.from_queryset(TriviaSessionChatMessageQuerySet)):
+_TriviaSessionChatMessageManagerBase = abstract.DashboardManager.from_queryset(TriviaSessionChatMessageQuerySet)
+
+
+class TriviaSessionChatMessageManager(_TriviaSessionChatMessageManagerBase):
     """Manager for TriviaSessionChatMessage."""

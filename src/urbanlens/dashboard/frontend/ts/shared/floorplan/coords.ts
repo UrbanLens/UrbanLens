@@ -1,15 +1,5 @@
 /**
  * Plan-local metric coordinates, and the conversion to/from WGS-84.
- *
- * Floorplan geometry is authored and stored in metres east/north of a single
- * per-plan origin, not in lat/lng. Degrees are the wrong space to compute in:
- * a degree of longitude is ~74 km at 42 degrees N but 111 km at the equator, so
- * lengths, angles, right-angle snapping and area all come out wrong unless
- * every operation carries a latitude correction. Metres also make the tolerances
- * the editor cares about ("within 0.15 m") expressible as themselves.
- *
- * The origin is shared by every floor of a plan, which is what lets floors be
- * stacked and aligned at all.
  */
 
 /** A point in plan-local space: metres east (x) and north (y) of the origin. */
@@ -31,12 +21,6 @@ const toRad = (deg: number): number => (deg * Math.PI) / 180;
 
 /**
  * Converter between plan-local metres and WGS-84 for one plan origin.
- *
- * Uses an equirectangular approximation about the origin, with the longitude
- * scale taken at the origin's latitude. Over the extent of a single building
- * (hundreds of metres) its error is far below the precision anyone drawing from
- * memory can supply; it buys exactly the property the editor needs, which is
- * that x and y are the same unit and that unit is a metre.
  */
 export class PlanProjection {
     readonly origin: LatLng;
@@ -67,8 +51,7 @@ export class PlanProjection {
 }
 
 // ---------------------------------------------------------------------------
-// Vector helpers. All operate in plan-local metres.
-// ---------------------------------------------------------------------------
+// Vector helpers.
 
 export const sub = (a: Pt, b: Pt): Pt => ({ x: a.x - b.x, y: a.y - b.y });
 export const add = (a: Pt, b: Pt): Pt => ({ x: a.x + b.x, y: a.y + b.y });
@@ -84,9 +67,6 @@ export const angleOf = (a: Pt, b: Pt): number => Math.atan2(b.y - a.y, b.x - a.x
 
 /**
  * Closest point to *p* on segment ab, and how far along ab it lies.
- *
- * Returns the parameter `t` clamped to [0, 1], so `t` doubles as the position
- * of an opening along a wall.
  */
 export function projectOnSegment(p: Pt, a: Pt, b: Pt): { point: Pt; t: number; distance: number } {
     const ab = sub(b, a);
@@ -132,16 +112,6 @@ export function rotate(point: Pt, radians: number, about: Pt = { x: 0, y: 0 }): 
 
 /**
  * The area-weighted centre of a ring.
- *
- * Not the average of the corners, which is pulled toward whichever side has
- * more of them - an L-shaped room with a finely divided long wall has its
- * vertex average sitting well away from its middle.
- *
- * Args:
- *     ring: The polygon's corners, in order.
- *
- * Returns:
- *     The centroid, which for a concave ring may lie outside it.
  */
 export function polygonCentroid(ring: readonly Pt[]): Pt {
     if (!ring.length) return { x: 0, y: 0 };
@@ -167,27 +137,12 @@ export function polygonCentroid(ring: readonly Pt[]): Pt {
 
 /**
  * A point guaranteed to lie inside a ring.
- *
- * Used to place a room's seed when the author names a region by clicking it.
- * A centroid is the natural choice and is wrong for an L-shaped room, where it
- * can fall in the notch - outside the room it is supposed to identify, so the
- * seed binds to nothing or, worse, to the neighbour it landed in.
- *
- * Args:
- *     ring: The polygon's corners, in order.
- *
- * Returns:
- *     The centroid when it is inside, and otherwise the middle of the widest
- *     part of the ring along the line through it.
  */
 export function interiorPoint(ring: readonly Pt[]): Pt {
     const centre = polygonCentroid(ring);
     if (ring.length < 3 || pointInRing(centre, ring)) return centre;
 
-    // Cast a horizontal line through the centroid and collect where it crosses
-    // the ring. Sorted, those crossings pair off into spans that alternate
-    // outside/inside, so the widest odd-indexed span is the roomiest part of
-    // the polygon at that height.
+    // Cast a horizontal line through the centroid and collect where it crosses the ring.
     const crossings: number[] = [];
     for (let i = 0; i < ring.length; i++) {
         const a = ring[i] as Pt;

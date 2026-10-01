@@ -6,11 +6,10 @@ Each link may carry a Wayback Machine snapshot url, filled in asynchronously
 
 from __future__ import annotations
 
+import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
@@ -20,13 +19,19 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, Wiki
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink, WikiLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.pins.pin_subresources import InvalidLinkError, LinkExistsError, create_pin_link, delete_pin_link
+from urbanlens.dashboard.services.pins.pin_subresources import (
+    InvalidLinkUrlFormatError,
+    LinkExistsError,
+    LinkUrlTooLongError,
+    MissingLinkUrlError,
+    create_pin_link,
+    delete_pin_link,
+)
+from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
-
-_validate_url = URLValidator(schemes=["http", "https"])
 
 
 def _clean_link_input(request) -> tuple[str, str] | HttpResponse:
@@ -42,10 +47,16 @@ def _clean_link_input(request) -> tuple[str, str] | HttpResponse:
     if len(url) > MAX_LINK_URL_LENGTH:
         return HttpResponse(f"That url is too long (max {MAX_LINK_URL_LENGTH:,} characters).", status=400)
     try:
-        _validate_url(url)
-    except ValidationError:
+        url = clean_link_url(url, max_length=MAX_LINK_URL_LENGTH)
+    except InvalidLinkUrlError:
         return HttpResponse("That doesn't look like a valid http(s) url.", status=400)
     return name, url
+
+
+def _with_links_changed(response: HttpResponse) -> HttpResponse:
+    """Tell every links list on the page to reload."""
+    response["HX-Trigger"] = json.dumps({"pinLinksChanged": True})
+    return response
 
 
 def _render_pin_links(request, pin: Pin) -> HttpResponse:
@@ -58,7 +69,7 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
             "pin": pin,
             "links": pin.links.all(),
             "delete_url_name": "pin.link.delete",
-            "row_id": "pin-links-row",
+            "row_id": request.GET.get("row") or "pin-links-row",
             "owner_slug": pin.slug,
             "show_badge": True,
             **ai_extract_button_context(pin.profile.user, pin.profile, pin),
@@ -104,9 +115,19 @@ class PinLinksView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         try:
             create_pin_link(pin, name=(request.POST.get("name") or ""), url=(request.POST.get("url") or ""))
-        except (InvalidLinkError, LinkExistsError) as exc:
-            return HttpResponse(exc.safe_message, status=400)
-        return _render_pin_links(request, pin)
+        except MissingLinkUrlError as exc:
+            logger.info("pin link creation rejected: %s", exc)
+            return HttpResponse("A url is required.", status=400)
+        except LinkUrlTooLongError as exc:
+            logger.info("pin link creation rejected: %s", exc)
+            return HttpResponse(f"That url is too long (max {MAX_LINK_URL_LENGTH:,} characters).", status=400)
+        except InvalidLinkUrlFormatError as exc:
+            logger.info("pin link creation rejected: %s", exc)
+            return HttpResponse("That doesn't look like a valid http(s) url.", status=400)
+        except LinkExistsError as exc:
+            logger.info("pin link creation rejected: %s", exc)
+            return HttpResponse("That link is already on this pin.", status=400)
+        return _with_links_changed(_render_pin_links(request, pin))
 
 
 class PinLinkDeleteView(LoginRequiredMixin, View):
@@ -114,7 +135,7 @@ class PinLinkDeleteView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         link = get_object_or_404(PinLink, id=link_id, pin=pin)
         delete_pin_link(pin, link)
-        return _render_pin_links(request, pin)
+        return _with_links_changed(_render_pin_links(request, pin))
 
 
 class LocationLinksView(LoginRequiredMixin, View):
@@ -131,11 +152,8 @@ class LocationLinksView(LoginRequiredMixin, View):
             return cleaned
         name, url = cleaned
         try:
-            # A wiki is edited by many people at once, so two of them adding the
-            # same url is ordinary rather than exceptional. The unique constraint
-            # decides; a duplicate is reported as a 400, and notably writes no
-            # WikiEdit - recording an edit that changed nothing would put a
-            # phantom entry in the wiki's revision history.
+            # A wiki is edited by many people at once, so two of them adding the same url is ordinary rather
+            # than exceptional.
             with transaction.atomic():
                 WikiLink.objects.create(wiki=wiki, name=name, url=url, created_by=profile)
         except IntegrityError:

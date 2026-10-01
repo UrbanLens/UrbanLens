@@ -1,12 +1,4 @@
-"""One plugin's broken gate must not empty the whole panel list.
-
-The internal pin page loads panels one HTMX request each, so a raising
-``gate()`` costs exactly that panel. The external API's list endpoint
-evaluates *every* source in one comprehension - so before ``gate_allows``,
-a single misbehaving plugin (a missing related row, a provider config change,
-a third-party bug) answered a native client with zero panels rather than one
-fewer. Suppression here matches ``run_panel_fetch``'s existing stance.
-"""
+"""One plugin's broken gate must not empty the whole panel list."""
 
 from __future__ import annotations
 
@@ -46,14 +38,17 @@ class GateAllowsTests(TestCase):
 
     def test_the_api_list_survives_one_broken_source(self) -> None:
         """The regression that matters: a client must still get every healthy panel."""
-        from urbanlens.dashboard.external_api.views_panels import PinPanelsListView
 
-        healthy = {key: source for key, source in panel_sources().items()}
+        healthy = dict(panel_sources())
         broken = dict(healthy)
         broken["exploding_test_source"] = _ExplodingSource()
 
         with mock.patch("urbanlens.dashboard.external_api.views_panels.panel_sources", return_value=broken):
-            exposed = [source for source in broken.values() if getattr(source, "api_kinds", None) and gate_allows(source, self.pin)]
+            exposed = [
+                source
+                for source in broken.values()
+                if getattr(source, "api_kinds", None) and gate_allows(source, self.pin)
+            ]
 
         self.assertNotIn("exploding_test_source", [getattr(s, "key", "") for s in exposed])
         self.assertGreaterEqual(len(exposed), 0, "evaluation must complete rather than raising")

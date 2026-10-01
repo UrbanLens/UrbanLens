@@ -1,57 +1,48 @@
 # See https://pre-commit.com for more information
 default_language_version:
-    python: python3.12
+  python: python3.12
 
-default_install_hook_types: [pre-commit, pre-push]
-files: '^(.+\.(py|ts|js|tsx|jsx|yaml|toml))$'
-exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
+default_install_hook_types: [pre-commit]
+files: '^(.+\.(py|ts|js|tsx|jsx|json|sh|yaml|yml|toml|html|txt))$'
+exclude: "(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)"
 
-# GITHUB
-# See https://pre-commit.com/hooks.html for more hooks
+# deliberately leaves a partially staged file (`git add -p`) untouched:
+# staging a fix into one turns pre-commit's stash rollback into data loss.
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: local
+    hooks:
+      - id: autofix
+        name: auto-fix formatting, whitespace and safe lint fixes
+        entry: python3 bin/precommit_autofix.py
+        language: system
+        types_or: [python, javascript, ts, tsx, jsx, yaml, toml, html, text]
+
+  # GITHUB
+  # See https://pre-commit.com/hooks.html for more hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-    -   id: check-yaml
-    -   id: check-added-large-files
-    -   id: check-ast
-    -   id: check-json
-    -   id: check-case-conflict
-    -   id: check-merge-conflict
-    -   id: check-toml
-    -   id: detect-private-key
-    -   id: end-of-file-fixer
-    -   id: trailing-whitespace
-    -   id: mixed-line-ending
-        args: [--fix=lf]
-    -   id: debug-statements
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-ast
+      - id: check-json
+        # pyright's config format is JSONC - the `//` comments in this one are
+        # deliberate and pyright reads them. check-json only parses strict JSON.
+        exclude: '^pyrightconfig\.json$'
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: detect-private-key
+      - id: debug-statements
 
-# RUFF
--   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.20
+  # REPOSITORY CONSISTENCY - fast enough to run on every commit
+  - repo: local
     hooks:
-      # Run the linter.
-      - id: ruff
-        args: [ --fix ]
-      # Run the formatter.
-      - id: ruff-format
+      - id: line-endings
+        name: every tracked text file is stored with LF
+        entry: python3 bin/check_line_endings.py
+        language: system
         always_run: true
-        pass_filenames: false
-
-# REPOSITORY CONSISTENCY
--   repo: local
-    hooks:
-      - id: imports-tracked
-        name: every urbanlens.* import resolves to a committed file
-        entry: python3 bin/check_imports_tracked.py
-        language: system
-        files: '\.py$'
-        pass_filenames: false
-      - id: outage-not-cached
-        name: no fetch caches a swallowed failure as a result
-        entry: python3 bin/check_outage_not_cached.py
-        language: system
-        files: '\.py$'
         pass_filenames: false
       - id: notification-choke-point
         name: every notification write honours the mute preference
@@ -59,37 +50,198 @@ repos:
         language: system
         files: '\.py$'
         pass_filenames: false
+      - id: password-change-revokes
+        name: every password change decides what it revokes
+        entry: python3 bin/check_password_change_revokes.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+      - id: css-variables
+        name: every var() names a custom property something defines
+        entry: python3 bin/check_css_variables.py
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: typescript-coverage
+        name: every TypeScript file belongs to a tsconfig project
+        entry: python3 bin/check_typescript_coverage.py
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: template-comments
+        name: "Django {# comments close on the line they open"
+        entry: python3 bin/check_template_comments.py
+        language: system
+        files: '\.(html|txt)$'
+        pass_filenames: false
+      - id: nginx-config
+        # always_run, not files: - the top-level `files` filter above admits no
+        # .conf extension, so a path-scoped hook on these would never fire. That
+        # filter is why a broken nginx.conf reached staging in the first place.
+        name: nginx would load the config it is given
+        entry: bash bin/check_nginx_config.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+
+  # REPOSITORY CONSISTENCY
+  # re-reads all tracked files regardless of what changed
+  # Run them yourself with:  bun run check   (or: pre-commit run --hook-stage manual --all-files)
+  - repo: local
+    hooks:
+      - id: imports-tracked
+        name: every urbanlens.* import resolves to a committed file
+        entry: python3 bin/check_imports_tracked.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: outage-not-cached
+        name: no fetch caches a swallowed failure as a result
+        entry: python3 bin/check_outage_not_cached.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: enqueue-durability
+        name: a caller that inspects an enqueue's result chooses durable=
+        entry: python3 bin/check_enqueue_durability.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: versioned-writes
         name: a model that versions fields records every write path
         entry: python3 bin/check_versioned_writes.py
         language: system
-        files: '\.py$'
         pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: signal-reachable
         name: no post_save subscription waits on a field only update() sets
         entry: python3 bin/check_signal_reachable.py
         language: system
-        files: '\.py$'
         pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: concealed-writes
         name: a wiki resolved for reading is never saved
         entry: python3 bin/check_concealed_writes.py
         language: system
-        files: '\.py$'
         pass_filenames: false
+        always_run: true
+        stages: [manual]
+      # The three below existed in bin/ but were registered nowhere at all.
+      - id: pin-not-published-to-wiki
+        name: a private pin's fields never reach a community wiki
+        entry: python3 bin/check_pin_not_published_to_wiki.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: migration-graph
+        name: no migration depends on one the committed tree will not have
+        entry: python3 bin/check_migration_graph.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: image-file-reads
+        name: no template reads a photo's file without checking it is there
+        entry: python3 bin/check_image_file_reads.py
+        language: system
+        pass_filenames: false
+        # always_run, and manual: the guard that makes a read safe can sit any
+        # distance above it, and can be in a `{% with %}` a `files:` pattern
+        # would not connect to the read it protects.
+        always_run: true
+        stages: [manual]
+      - id: canonical-creates
+        name: Location and Label rows are created only through their get-or-create helpers
+        entry: python3 bin/check_canonical_creates.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
 
-# TYPESCRIPT
--   repo: local
+      - id: static-url-literals
+        name: every /static/ URL a template writes goes through {% static %}
+        entry: python3 bin/check_static_url_literals.py
+        language: system
+        pass_filenames: false
+        # always_run, and manual: it reads every template, and a literal is
+        # equally wrong before and after any single edit.
+        always_run: true
+        stages: [manual]
+
+      - id: bem-modifiers
+        name: every BEM modifier a template applies has a rule that styles it
+        entry: python3 bin/check_bem_modifiers.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: doc-line-refs
+        name: no documentation citation points past the end of its file
+        entry: python3 bin/check_doc_line_refs.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: docs-refs
+        name: code never cites a docs/ path that does not exist
+        entry: python3 bin/check_docs_refs.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: docs-index
+        name: docs/INDEX.md and the entries it indexes agree
+        entry: python3 bin/check_docs_index.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: ruff-format-check
+        name: the whole tree matches the formatter
+        entry: python3 bin/precommit_autofix.py --check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+
+  # CODEQL
+  # Manual-only, and automatic on every PR (.github/workflows/security.yml).
+  # Run it with: bun run codeql:gate   (or python bin/run_codeql.py --gate)
+  - repo: local
+    hooks:
+      - id: codeql
+        name: CodeQL analysis (manual)
+        entry: python3 bin/run_codeql.py --gate
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+        verbose: true
+
+  # TYPESCRIPT
+  # Manual-only. Run with: bun run typecheck / bun run test:ts
+  # (or `pre-commit run --hook-stage manual --all-files tsc`/`bun-test`).
+  - repo: local
     hooks:
       - id: tsc
-        name: tsc (typescript typecheck)
+        name: tsc (typescript typecheck, manual)
         entry: bun run typecheck
         language: system
         files: '\.tsx?$'
         pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: bun-test
-        name: bun test (typescript unit tests)
+        name: bun test (typescript unit tests, manual)
         entry: bun run test:ts
         language: system
         files: '\.tsx?$'
         pass_filenames: false
+        always_run: true
+        stages: [manual]

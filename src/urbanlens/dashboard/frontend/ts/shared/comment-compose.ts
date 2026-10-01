@@ -1,13 +1,9 @@
 /**
- * Small comment-composer behaviours: the reply form toggle, the attached-image
- * filename preview, and hover-syncing an activity mention with the trip map.
- *
- * ``tripHighlightMarker`` is consumed here but owned by the trip detail page - the
- * guard is what keeps these mentions inert on the pin and wiki pages, where the same
- * comment markup renders but no trip map exists.
- *
- * Ported out of ``base.html``'s inline script unchanged.
+ * Small comment-composer behaviours: the reply form toggle, the attached-image filename preview, hover-syncing an activity
+ * mention, and swapping in a comment image (or a "Choose Existing" photo) once its re-encode lands.
  */
+
+import { type ProcessingItem, settleProcessingThumb, watchProcessing } from "./photo-processing";
 
 /** Show or hide a comment's reply form, focusing the textarea when it opens. */
 export function toggleReplyForm(id: string): void {
@@ -38,19 +34,72 @@ function highlightFromEvent(event: Event, on: boolean): void {
     if (id) window.tripHighlightMarker(id, on);
 }
 
+/** Swap a comment image's placeholder for the image, which the link then opens. */
+export function settleCommentImage(el: HTMLElement, item: ProcessingItem | null): void {
+    settleProcessingThumb(el, item, "comment-image", "full");
+    if (el instanceof HTMLAnchorElement && el.dataset.url) el.href = el.dataset.url;
+}
+
+const COMMENT_TILES = '.comment-image-link[data-processing="pending"][data-id]';
+const PICKER_TILES = '.cip-picker-item[data-processing="pending"][data-id]';
+
+/** Watch the pending comment images and picker photos under *root*; other surfaces' tiles are theirs to watch. */
+export function watchCommentImages(root: ParentNode): void {
+    const watch = (el: HTMLElement, onSettled: (item: ProcessingItem | null) => void): void => {
+        const url = el.closest<HTMLElement>("[data-processing-url]")?.dataset.processingUrl;
+        const id = Number(el.dataset.id);
+        if (url && id) watchProcessing(url, id, el, onSettled);
+    };
+    root.querySelectorAll<HTMLElement>(COMMENT_TILES).forEach((el) => watch(el, (item) => settleCommentImage(el, item)));
+    root.querySelectorAll<HTMLElement>(PICKER_TILES).forEach((el) => watch(el, (item) => settleProcessingThumb(el, item, "cip-picker-thumb")));
+}
+
+/**
+ * ``data-reply-form="<id>"`` toggles that reply form; ``data-comment-map="open"`` / ``"clear"`` open or clear the map
+ * composer for the enclosing form or ``.comment-compose``, ``data-default-lat``/``-lng`` giving where it starts.
+ */
+function onClick(event: MouseEvent): void {
+    const target = event.target instanceof Element ? event.target : null;
+    const reply = target?.closest<HTMLElement>("[data-reply-form]");
+    if (reply) toggleReplyForm(reply.dataset.replyForm ?? "");
+    const mapButton = target?.closest<HTMLElement>("[data-comment-map]");
+    const form = mapButton?.closest<HTMLElement>("form, .comment-compose");
+    if (!mapButton || !form) return;
+    if (mapButton.dataset.commentMap === "clear") {
+        window._clearCommentMap?.(form);
+        return;
+    }
+    if (mapButton.dataset.defaultLat !== undefined) {
+        // A pin with no position resets the default, so the composer does not open on the last pin's.
+        const lat = Number.parseFloat(mapButton.dataset.defaultLat);
+        const lng = Number.parseFloat(mapButton.dataset.defaultLng ?? "");
+        const known = Number.isFinite(lat) && Number.isFinite(lng);
+        window._commentMapDefaultLat = known ? lat : undefined;
+        window._commentMapDefaultLng = known ? lng : undefined;
+    }
+    window._openCommentMapComposer?.(form);
+}
+
 declare global {
     interface Window {
-        toggleReplyForm?: typeof toggleReplyForm;
         /** Owned by the trip detail page; absent everywhere else. */
         tripHighlightMarker?: (activityId: string, on: boolean) => void;
     }
 }
 
-export function installGlobalCommentCompose(): void {
-    // Called from inline onclick= in the comment partials.
-    window.toggleReplyForm = toggleReplyForm;
+let installed = false;
 
+export function installGlobalCommentCompose(): void {
+    // The listeners are delegated from document, so a second install would fire every one twice.
+    if (installed) return;
+    installed = true;
+    document.addEventListener("click", onClick);
     document.addEventListener("change", onFileChange);
+    // Comment panels and the picker arrive by htmx swap; htmx:load also fires for the initial page.
+    document.addEventListener("htmx:load", (event) => {
+        if (event.target instanceof HTMLElement) watchCommentImages(event.target);
+    });
+    document.addEventListener("DOMContentLoaded", () => watchCommentImages(document));
     document.addEventListener("mouseover", (e) => highlightFromEvent(e, true));
     document.addEventListener("mouseout", (e) => highlightFromEvent(e, false));
 }

@@ -2,15 +2,7 @@
 #
 # Run the OpenAPI conformance suite (tests/contract).
 #
-# Two modes, and they answer different questions:
-#
-#   in-process (default) - generate the schema from the urlconf and drive
-#       Django's WSGI callable directly. Needs a database, needs no deployment.
-#       This is the mode to run before merging a serializer change.
-#
-#   live (--url) - fetch the schema from a deployment and call it over HTTP.
-#       Needs no database and no container. This is the mode that answers
-#       "does what we shipped still match its published contract".
+# Two modes: in-process (default, needs a DB) and live (--url, over HTTP).
 #
 # Usage:
 #   bin/run_contract_tests.sh                        # in-process, safe methods
@@ -20,9 +12,7 @@
 #   bin/run_contract_tests.sh --local                # host venv, not the container
 #   bin/run_contract_tests.sh -- -k pins -x          # pass through to pytest
 #
-# --methods all makes the run create, modify and delete data as the account it
-# holds a key for. That is fine against a test database or a provisioned
-# throwaway account, and is why `safe` is the default.
+# --methods all creates/modifies/deletes data; only run it against a test DB or throwaway account.
 #
 # Environment:
 #   UL_TEST_CONTAINER   test-runner container (default urbanlens_development_main_test_runner)
@@ -71,27 +61,21 @@ if [ -n "$URL" ]; then
             ;;
     esac
     env_args+=("UL_CONTRACT_BASE_URL=$URL")
-    # Live mode reaches a remote host on purpose. tests/contract does not load
-    # src/urbanlens/conftest.py - the localhost-only network guard lives there
-    # and is not in effect - but say so explicitly so the run does not depend on
-    # that staying true.
+    # tests/contract skips conftest.py's localhost-only guard; allow internet explicitly.
     env_args+=("UL_ALLOW_TEST_INTERNET=True")
     [ -n "${UL_CONTRACT_API_KEY:-}" ] && env_args+=("UL_CONTRACT_API_KEY=$UL_CONTRACT_API_KEY")
     [ -n "${UL_E2E_ACCOUNTS_FILE:-}" ] && env_args+=("UL_E2E_ACCOUNTS_FILE=$UL_E2E_ACCOUNTS_FILE")
     echo "==> live mode against $URL (methods: $METHODS)"
 else
-    # A unique name by default, for the same reason bin/run_tests.sh does it:
-    # two runs sharing a test database corrupt each other's fixtures.
+    # Unique DB per run so concurrent runs do not share fixtures.
     env_args+=("UL_TEST_DB_NAME=${UL_TEST_DB_NAME:-ctr_$(date +%s)_$$}")
-    # Several endpoints enqueue work; without eager mode they fail against a
-    # broker that is not running rather than exercising the endpoint.
+    # Eager Celery so endpoints do not fail against a missing broker.
     env_args+=("UL_CELERY_TASK_ALWAYS_EAGER=True")
     echo "==> in-process mode (methods: $METHODS)"
 fi
 
 if [ "$LOCAL" -eq 1 ] || [ -n "$URL" ]; then
-    # Live mode needs neither the container nor a database, so it runs wherever
-    # it was invoked - which is also what makes it usable from CI.
+    # Live mode needs no container or DB, so it runs where invoked.
     exec env "${env_args[@]}" python -m pytest tests/contract "${passthrough[@]}"
 fi
 
@@ -100,8 +84,7 @@ if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     exit 2
 fi
 
-# bin/run_tests.sh syncs src/ only; this suite lives outside it, so its own copy
-# has to happen here. Both are copied because the tests import the application.
+# Suite lives outside src/, so sync it separately.
 echo "==> syncing into $CONTAINER"
 docker cp src/. "$CONTAINER":/app/src/
 docker exec -u root "$CONTAINER" mkdir -p /app/tests

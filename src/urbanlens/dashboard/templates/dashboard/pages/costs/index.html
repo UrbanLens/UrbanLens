@@ -1,6 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 
-{% load vendor_assets %}
+{% load vendor_assets static %}
 {% block page_title %}Costs - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block hero %}
@@ -83,7 +83,8 @@
                 <span>Effective monthly cost - last 12 months</span>
             </div>
             <div class="stats-chart-wrap">
-                <canvas id="chart-public-cost-monthly"></canvas>
+                <canvas id="chart-public-cost-monthly" data-bar-chart data-source="cost-chart-data"
+                        data-series='[{"key": "total", "label": "Total cost", "color": "#3949ab"}]'></canvas>
             </div>
         </div>
         <script type="application/json" id="cost-chart-data">
@@ -96,46 +97,5 @@
 
 {% block scripts %}
 {% vendor_asset "chartjs_js" %}
-<script>
-(function () {
-    var canvas = document.getElementById('chart-public-cost-monthly');
-    var dataEl = document.getElementById('cost-chart-data');
-    if (!canvas || !dataEl) return;
-
-    var data;
-    try {
-        data = JSON.parse(dataEl.textContent);
-    } catch (e) {
-        return;
-    }
-
-    var isDark = document.getElementById('html-root').getAttribute('data-theme') === 'dark';
-    var gridColor = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
-    var labelColor = isDark ? '#94a3b8' : '#64748b';
-    var tooltipBg = isDark ? '#1e293b' : '#fff';
-    var tooltipFg = isDark ? '#f1f5f9' : '#0f172a';
-
-    new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: data.labels,
-            datasets: [
-                { label: 'Total cost', data: data.total, backgroundColor: '#3949ab99', borderColor: '#3949ab', borderWidth: 1.5 },
-            ],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: { backgroundColor: tooltipBg, titleColor: tooltipFg, bodyColor: tooltipFg, borderColor: gridColor, borderWidth: 1 },
-            },
-            scales: {
-                x: { ticks: { color: labelColor, maxRotation: 45 }, grid: { color: gridColor } },
-                y: { beginAtZero: true, ticks: { color: labelColor }, grid: { color: gridColor } },
-            },
-        },
-    });
-}());
-</script>
+<script type="module" src="{% static 'dashboard/js/charts.js' %}"></script>
 {% endblock %}

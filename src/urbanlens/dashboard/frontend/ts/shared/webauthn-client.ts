@@ -1,15 +1,5 @@
 /**
  * Passkey (WebAuthn) registration and login-time authentication ceremonies.
- *
- * Mirrors e2ee-client.ts's shape: this module owns every fetch to the
- * passkey endpoints and every navigator.credentials.* call; templates only
- * wire DOM events to the functions exposed on window.UrbanLensWebAuthn (see
- * entries-classic/webauthn.ts). The option/verification JSON shapes are the
- * standard WebAuthn base64url encoding produced by py_webauthn's
- * options_to_json() and expected by its verify_*_response() (see
- * services/webauthn.py) - hand-rolled here (rather than relying on
- * PublicKeyCredential.parseCreationOptionsFromJSON()/toJSON()) for broader
- * browser support.
  */
 
 function base64urlToBuffer(value: string): ArrayBuffer {
@@ -33,16 +23,7 @@ function bufferToBase64url(buffer: ArrayBuffer): string {
 }
 
 function csrfToken(): string {
-    // window.csrftoken is set by a page-level <script> on most dashboard pages,
-    // but not on the minimal auth_base.html layout the 2FA login challenge
-    // (login_2fa.html) uses - falling back to the csrftoken cookie directly
-    // (Django's own documented AJAX pattern) means this works regardless of
-    // which layout the calling page happens to use. Without this fallback,
-    // runLogin()'s fetch calls here sent an empty X-CSRFToken header on that
-    // page, which Django's CSRF middleware always rejected with a 403 HTML
-    // error page - silently swallowed by safeJson() into the generic
-    // "Could not start passkey sign-in." message, since there was no JSON
-    // body to read an error out of.
+    // window.csrftoken is set by a page-level <script> on most dashboard pages, but not on the minimal auth_base.html layout the 2FA login.
     if (window.csrftoken) return window.csrftoken;
     const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
     return match ? decodeURIComponent(match[1]!) : "";
@@ -164,10 +145,8 @@ interface PrfExtensionResults {
 
 /**
  * Extract the prf extension's first evaluation result from a credential.
- *
  * @param credential - The credential returned by create()/get().
  * @returns The 32-byte PRF output, or null when the authenticator did not
- *   evaluate the extension (unsupported, or no input was supplied).
  */
 export function getPrfResult(credential: PublicKeyCredential): Uint8Array | null {
     const results = (credential.getClientExtensionResults() as { prf?: PrfExtensionResults }).prf?.results;
@@ -180,7 +159,6 @@ export function getPrfResult(credential: PublicKeyCredential): Uint8Array | null
 
 /**
  * Report whether a registration enabled PRF on the new credential.
- *
  * @param credential - The credential returned by create().
  * @returns True when the authenticator confirmed PRF support.
  */
@@ -194,18 +172,6 @@ export type PrfAssertionResult = { status: "ok"; credentialId: string; prf: Uint
 
 /**
  * Run a client-challenged assertion purely to evaluate the PRF extension.
- *
- * The signature is discarded and nothing is sent to the server - the PRF
- * output is the entire point (it authenticates nothing; the wrapped blob it
- * opens is already served to any authenticated session, exactly like
- * password_wrapped_secret). The challenge is random-local because nobody
- * verifies it.
- *
- * The two failure cases are kept apart because callers act on them
- * differently: an authenticator that answered but has no PRF means "this key
- * can never unlock, offer another route", while a cancel or error means "the
- * user did not choose anything, leave them where they were".
- *
  * @param evalByCredential - base64url credential id -> base64url PRF input.
  * @returns The credential id used and its PRF output, or why it produced none.
  */
@@ -280,8 +246,7 @@ function isCancellation(err: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Registration (Settings > Security)
-// ---------------------------------------------------------------------------
+// Registration (Settings > Security) ---------------------------------------------------------------------------
 
 export interface RegisterConfig {
     optionsUrl: string;
@@ -290,10 +255,9 @@ export interface RegisterConfig {
     name?: string;
     /** "unlock" registers an E2EE-unlock-only key (is_login_factor=False server-side). */
     purpose?: "unlock";
-    /** base64 PRF input to evaluate during creation, when the caller intends
-     * to wrap a key under this credential. Some browsers return the result at
-     * create time, saving the follow-up assertion; others only enable PRF and
-     * the caller falls back to assertForPrf(). */
+    /**
+ * base64 PRF input to evaluate during creation, when the caller intends to wrap a key under this credential.
+ */
     prfInput?: string;
 }
 
@@ -364,20 +328,16 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
 }
 
 // ---------------------------------------------------------------------------
-// Login-time authentication (accounts/login/2fa/)
-// ---------------------------------------------------------------------------
+// Login-time authentication (accounts/login/2fa/) ---------------------------------------------------------------------------
 
 export interface LoginConfig {
     optionsUrl: string;
     verifyUrl: string;
     retryButtonId: string;
     statusElId: string;
-    /** Runs after the server accepts the assertion (session established) and
-     * before the redirect. The 2FA options may carry PRF inputs for wrap-bearing
-     * credentials (see services/auth/webauthn.py), so this is where the E2EE
-     * layer harvests the PRF output and unlocks - one tap does both jobs.
-     * Failures are swallowed: key handling must never block getting the user
-     * into the app. */
+    /**
+ * Runs after the server accepts the assertion (session established) and before the redirect.
+ */
     beforeRedirect?: (credential: PublicKeyCredential) => Promise<void>;
 }
 

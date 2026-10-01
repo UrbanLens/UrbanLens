@@ -1,23 +1,11 @@
-"""One failing contributor must not take down an aggregate it belongs to.
-
-Three user-facing aggregates fan out to independently-registered contributors:
-the Memories feed (covered in ``test_memories_source_isolation``), the Journal,
-and the pin detail page's panel readiness map. Each is an advertised
-extensibility seam - "add one function/plugin and nothing else changes" - which
-is exactly what makes unguarded fan-out expensive: a bug in one contributor takes
-out every other contributor's output along with the page.
-
-The panel one matters most. ``panel_readiness`` builds the pin detail page's tab
-strip, and panels are the plugin surface, so a single plugin raising in
-``is_ready()`` returned a 500 for the app's busiest page rather than affecting its
-own tab.
-"""
+"""One failing contributor must not take down an aggregate it belongs to."""
 
 from __future__ import annotations
 
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -25,6 +13,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.memories import journal
+from urbanlens.dashboard.services.memories.journal import JournalEntry
 from urbanlens.dashboard.services.pins.external_data import PanelSource, panel_readiness
 
 
@@ -51,8 +40,34 @@ class JournalSourceIsolationTests(TestCase):
 
         self.assertIn("review", {entry.kind for entry in entries}, "a healthy source must still contribute")
 
+    def test_a_source_that_fails_midway_keeps_what_it_already_yielded(self) -> None:
+        """Sources are generators - ``get_journal_entries`` extends its result list
+        incrementally, so a failure partway through a source must not discard the
+        entries that source had already produced, nor the other sources' entries."""
+
+        # Sources take (profile, limit) since the journal started paging; a stub with the old signature would
+        # raise TypeError inside the same `except` this test is about, and look like the failure it is staging.
+        def half_boom(profile, limit=None):
+            yield JournalEntry(
+                kind="comment",
+                occurred_at=timezone.now(),
+                icon="forum",
+                title="salvaged before the crash",
+                subtitle="Comment",
+                body="",
+                url="/",
+            )
+            raise ValueError("corrupt row after the first")
+
+        with mock.patch.dict(journal.JOURNAL_SOURCES, {"comments": half_boom}):
+            entries = journal.get_journal_entries(self.profile)
+
+        titles = {entry.title for entry in entries}
+        self.assertIn("salvaged before the crash", titles, "entries yielded before the failure must survive")
+        self.assertIn("review", {entry.kind for entry in entries}, "other sources must still contribute")
+
     def test_every_source_failing_yields_an_empty_journal_rather_than_an_error(self) -> None:
-        def boom(profile):
+        def boom(profile, limit=None):
             raise RuntimeError("boom")
             yield  # pragma: no cover - generator marker
 

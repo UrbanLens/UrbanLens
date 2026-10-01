@@ -1,18 +1,4 @@
-"""Reordering a trip's activities pushes the change to its synced calendar.
-
-``sync_trip_on_activity_save`` calls ``queue_calendar_push`` so an auto-synced
-calendar event follows the trip. It is a ``post_save`` receiver, and
-``reorder_activities`` writes each position through ``queryset.update()``, which
-fires no ``post_save`` - so the one operation whose entire purpose is changing
-activity order never reached the calendar.
-
-Same shape as the label-reorder cache bug: a reorder loop using the one write form
-that skips the sync its own model depends on.
-
-The push is queued once per reorder rather than once per row. The receiver fires per
-saved activity and ``queue_calendar_push`` takes a trip id, so a row-by-row form
-would queue the same trip N times for a single drag.
-"""
+"""Reordering a trip's activities pushes the change to its synced calendar."""
 
 from __future__ import annotations
 
@@ -35,7 +21,9 @@ class TripReorderSyncsCalendarTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.trip = baker.make(Trip, creator=self.profile, allow_edit_activities="everyone")
-        self.activities = [baker.make(TripActivity, trip=self.trip, title=f"Stop {i}", order=i, scheduled_at=None) for i in range(3)]
+        self.activities = [
+            baker.make(TripActivity, trip=self.trip, title=f"Stop {i}", order=i, scheduled_at=None) for i in range(3)
+        ]
 
     def test_reordering_queues_exactly_one_calendar_push(self) -> None:
         new_order = [self.activities[2].pk, self.activities[0].pk, self.activities[1].pk]
@@ -64,7 +52,10 @@ class TripReorderSyncsCalendarTests(TestCase):
             with CaptureQueriesContext(connection) as small_ctx:
                 reorder_activities(self.trip, self.profile, small)
 
-            extra = [baker.make(TripActivity, trip=self.trip, title=f"Extra {i}", order=10 + i, scheduled_at=None) for i in range(3)]
+            extra = [
+                baker.make(TripActivity, trip=self.trip, title=f"Extra {i}", order=10 + i, scheduled_at=None)
+                for i in range(3)
+            ]
             allsix = [a.pk for a in reversed(self.activities + extra)]
             with CaptureQueriesContext(connection) as large_ctx:
                 reorder_activities(self.trip, self.profile, allsix)

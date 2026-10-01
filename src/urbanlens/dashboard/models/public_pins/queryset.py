@@ -10,7 +10,7 @@ from django.db.models import Count, Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.public_pins.model import PublicPinCandidate, PublicPinVote
+    from urbanlens.dashboard.models.public_pins.model import PublicPinCandidate, PublicPinVote  # noqa: F401 - mypy needs these; ruff does not
 
 
 @dataclass(slots=True, frozen=True)
@@ -55,7 +55,10 @@ class PublicPinCandidateQuerySet(abstract.DashboardQuerySet["PublicPinCandidate"
         return self.filter(status__in=[PublicPinCandidateStatus.OPEN, PublicPinCandidateStatus.SUSPENDED])
 
 
-class PublicPinCandidateManager(abstract.DashboardManager.from_queryset(PublicPinCandidateQuerySet)):
+_PublicPinCandidateManagerBase = abstract.DashboardManager.from_queryset(PublicPinCandidateQuerySet)
+
+
+class PublicPinCandidateManager(_PublicPinCandidateManagerBase):
     """Manager for PublicPinCandidate."""
 
 
@@ -71,5 +74,8 @@ class PublicPinVoteQuerySet(abstract.DashboardQuerySet["PublicPinVote"]):
         return PublicVoteTally(yes=agg["yes"] or 0, no=agg["no"] or 0)
 
 
-class PublicPinVoteManager(abstract.DashboardManager.from_queryset(PublicPinVoteQuerySet)):
+_PublicPinVoteManagerBase = abstract.DashboardManager.from_queryset(PublicPinVoteQuerySet)
+
+
+class PublicPinVoteManager(_PublicPinVoteManagerBase):
     """Manager for PublicPinVote."""

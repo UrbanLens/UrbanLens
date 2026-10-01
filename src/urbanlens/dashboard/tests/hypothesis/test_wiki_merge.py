@@ -1,13 +1,4 @@
-"""Tests for automatic wiki parent/child nesting on boundary containment (services.wiki.wiki_merge).
-
-Two independently-created community wikis - a campus and one of its own
-buildings - should read as parent/child once both have a real property
-boundary, without asking anyone. Covers both directions reconciliation checks
-(a wiki finding a bigger container; a wiki absorbing smaller wikis already
-inside it), the circle-fallback guard that must never drive a merge, and that
-reconciliation only ever touches ``parent_wiki`` - never Pins, Articles, or
-edit history, since ``Wiki.location`` never moves.
-"""
+"""Tests for automatic wiki parent/child nesting on boundary containment (services.wiki.wiki_merge)."""
 
 from __future__ import annotations
 
@@ -17,7 +8,6 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
@@ -32,19 +22,17 @@ from .place_helpers import nest_by_containment, official_geometry
 _coord_counter = 0
 
 #: Sizes (degrees, half-width of the square boundary) used throughout this
-#: file, largest first - each roughly 5x the next, so a small wiki's own
+#: file, largest first - each larger than the next, so a small wiki's own
 #: boundary can never accidentally reach back and "contain" its container.
-CAMPUS_SIZE = 0.05
-WING_SIZE = 0.01
+#: The campus stays under ``MAX_PLAUSIBLE_AREA_SQM`` (about 8 km² here).
+CAMPUS_SIZE = 0.015
+WING_SIZE = 0.005
 BUILDING_SIZE = 0.001
 TINY_SIZE = 0.0001
 
-#: Default offset (degrees) between a wiki and whatever it's placed "near" -
-#: must sit strictly between the two boundary sizes in play, so the container
-#: really contains the point while the (much smaller) nested wiki's own
+#: Default offset (degrees) between a wiki and whatever it's placed "near" - must sit strictly between the two
+#: boundary sizes in play, so the container really contains the point while the (much smaller) nested wiki's own
 #: boundary does not reach back and contain the container's point in turn.
-#: Works for any BUILDING_SIZE/TINY_SIZE-vs-CAMPUS_SIZE pairing; the WING_SIZE
-#: pairings need their own explicit, tighter offset (see call sites).
 _NEAR_OFFSET = 0.01
 
 
@@ -72,21 +60,12 @@ def _square(latitude: float, longitude: float, size: float) -> MultiPolygon:
     )
 
 
-def _make_wiki_with_boundary(*, size: float | None, near: Wiki | None = None, near_offset: float = _NEAR_OFFSET) -> Wiki:
+def _make_wiki_with_boundary(
+    *, size: float | None, near: Wiki | None = None, near_offset: float = _NEAR_OFFSET
+) -> Wiki:
     """A wiki anchored to a place whose official outline is a square of ``size``.
 
-    ``size=None`` leaves the wiki placeless, exercising ``resolve_for_wiki``'s
-    circle fallback. ``near`` places the new wiki ``near_offset`` degrees from
-    another wiki's own coordinate (never identical - Location's (lat, lng) pair
-    must be unique) - a "building" passed the "campus" it should nest inside
-    of, for example. Callers pairing two boundary sizes closer together than
-    the default (e.g. WING_SIZE as the container) must pass a tighter
-    ``near_offset`` themselves - see the module-level size/offset comments.
-
-    The place lineage is built from containment here (see
-    ``place_helpers.nest_by_containment``), standing in for what the provider
-    chain produces for real. Nesting reads that lineage, not the geometry.
-    """
+    ``size=None`` leaves the wiki placeless, exercising ``resolve_for_wiki``'s circle fallback."""
     if near is not None:
         location = baker.make(
             Location,
@@ -148,20 +127,14 @@ class ReconcileWikiNestingTests(TestCase):
     def test_the_tightest_fitting_container_wins_not_the_outermost(self) -> None:
         """A building inside a wing inside a campus becomes the wing's child, not the campus's.
 
-        One reconciliation call handles both hops: direction 1 (on wing) finds
-        campus as wing's own container, and direction 2 (also on wing, using
-        wing's own polygon) finds building already sitting inside it - both in
-        the single call triggered by wing's own boundary generation. Real
-        usage never reconciles two different wikis' Python objects in the same
-        process without reloading, so this mirrors that rather than calling
-        reconcile a second time on a stale in-memory ``building``.
-        """
+        One reconciliation call handles both hops: direction 1 (on wing) finds campus as wing's own container,
+        and direction 2 (also on wing, using wing's own polygon) finds building already sitting inside it - both
+        in the single call triggered by wing's own boundary generation."""
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE)
-        # WING_SIZE (0.01) is close enough to the default offset (0.01) that a
-        # wider offset is needed here so wing's own boundary can't reach back
-        # and "contain" campus in turn - see the module-level offset comment.
-        wing = _make_wiki_with_boundary(size=WING_SIZE, near=campus, near_offset=0.02)
-        building = _make_wiki_with_boundary(size=BUILDING_SIZE, near=wing, near_offset=0.005)
+        # An offset between WING_SIZE and CAMPUS_SIZE - WING_SIZE keeps the wing wholly inside the campus
+        # without its own boundary reaching back to contain the campus's point.
+        wing = _make_wiki_with_boundary(size=WING_SIZE, near=campus, near_offset=0.008)
+        building = _make_wiki_with_boundary(size=BUILDING_SIZE, near=wing, near_offset=0.002)
 
         merged = reconcile_wiki_nesting(wing)
 
@@ -169,7 +142,9 @@ class ReconcileWikiNestingTests(TestCase):
         building.refresh_from_db()
         wing.refresh_from_db()
         self.assertEqual(wing.parent_wiki_id, campus.pk)
-        self.assertEqual(building.parent_wiki_id, wing.pk, "the building's immediate parent is the wing, not the campus")
+        self.assertEqual(
+            building.parent_wiki_id, wing.pk, "the building's immediate parent is the wing, not the campus"
+        )
 
     def test_unrelated_wikis_are_never_merged(self) -> None:
         a = _make_wiki_with_boundary(size=WING_SIZE)
@@ -221,7 +196,7 @@ class ReconcileWikiNestingTests(TestCase):
     def test_a_child_wiki_keeps_its_own_children_when_absorbed(self) -> None:
         """Multi-level nesting: absorbing a wiki must not disturb its own subtree."""
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE)
-        wing = _make_wiki_with_boundary(size=WING_SIZE, near=campus, near_offset=0.02)
+        wing = _make_wiki_with_boundary(size=WING_SIZE, near=campus, near_offset=0.008)
         room = baker.make(Wiki, location=_make_location(), parent_wiki=wing, name="Room")
 
         reconcile_wiki_nesting(campus)
@@ -279,7 +254,10 @@ class GenerateLocationBoundariesIntegrationTests(TestCase):
         location = _make_location()
         baker.make(Wiki, location=location, name="Some Wiki")
         with (
-            patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=ResolvedBoundaries()),
+            patch(
+                "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+                return_value=ResolvedBoundaries(),
+            ),
             patch("urbanlens.dashboard.services.wiki.wiki_merge.reconcile_wiki_nesting_for_location") as mock_reconcile,
         ):
             generate_location_boundaries(location)

@@ -1,19 +1,8 @@
-{% comment %}
-Group members dialog: list the active members; the creator can remove members
-and add new ones (search reuses the group member-search endpoint). Injected
-into #dm-share-dialog-host by the messages page JS. Context: `group`,
-`memberships`, `is_manager`, `viewer_id`.
-
-Each membership.profile has been run through resolve_visible_identities
-(controllers/group_chats.py), which sets display_name/display_avatar_url/
-is_masked/avatar_color_class directly on it - a member added by someone
-else may not be friends with everyone here, so their real name/avatar only
-shows when their own privacy settings permit this viewer to see it.
-{% endcomment %}
+{% comment %}Group members dialog: list the active members.{% endcomment %}
 <dialog id="dm-group-members-dialog" class="dm-share-dialog ul-dialog" aria-labelledby="dm-group-members-dialog-title">
   <div class="dialog-header">
     <span id="dm-group-members-dialog-title">Members of {{ group.name }}</span>
-    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close">
+    <button type="button" class="dialog-close" data-dialog-close aria-label="Close">
       <i class="material-symbols-outlined">close</i>
     </button>
   </div>
@@ -39,7 +28,7 @@ shows when their own privacy settings permit this viewer to see it.
                 hx-vals='{"profile_id": "{{ membership.profile_id }}"}'
                 hx-target="#dm-thread-pane" hx-swap="innerHTML"
                 hx-confirm="Remove {{ membership.profile.display_name }} from “{{ group.name }}”?"
-                onclick="this.closest('dialog').close()">
+                data-dialog-close>
           <i class="material-symbols-outlined">person_remove</i> Remove
         </button>
         {% endif %}
@@ -62,7 +51,7 @@ shows when their own privacy settings permit this viewer to see it.
       <div id="dm-group-add-member-results" class="dm-recipient-results"></div>
       <div id="dm-group-add-member-picked" class="dm-group-picked-chips"></div>
       <button type="submit" class="btn btn--primary btn--sm" id="dm-group-add-members-submit" disabled
-              onclick="this.closest('dialog').close()">Add to group</button>
+              data-dialog-close>Add to group</button>
     </form>
     {% endif %}
   </div>

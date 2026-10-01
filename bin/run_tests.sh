@@ -2,23 +2,9 @@
 #
 # Run pytest inside the test container, with the sync this repo requires.
 #
-# Syncs all of src/, not just src/urbanlens: src/bin/init.py is the container's
-# entrypoint and is real, imported code. Syncing only the package meant a change
-# there was tested against the image's stale copy - which is exactly the failure
-# this script exists to prevent, and it had this bug until 2026-08-17.
+# Syncs all of src/ (init.py is real imported code, not just the package).
 #
-# The container's /app/src is baked into the image, not bind-mounted, so it
-# reflects whenever the image was last built. Every run therefore has to copy
-# the working tree in first - and `docker cp` preserves *source* ownership, so
-# the copy must be chowned back to the container's app user or Django's logging
-# config raises PermissionError and the process dies before binding anything.
-#
-# Getting that sequence wrong is not loud. A file restored on the host but not
-# re-copied leaves the container running the previous version, and the suite
-# reports on code that is not the code under test - which is how the one red
-# consolidation run of the 2026-08-17 audit happened. This script exists so the
-# sequence cannot be typed wrong, and verifies parity afterwards rather than
-# assuming the copy landed.
+# /app/src is baked into the image, so copy in and verify parity rather than assuming it.
 #
 # Usage:
 #   bin/run_tests.sh [pytest args...]           # sync, then run
@@ -27,52 +13,41 @@
 #   bin/run_tests.sh --allow-drift ...          # run despite drift, on purpose
 #   bin/run_tests.sh --fast [pytest args...]    # reuse a persistent database
 #   bin/run_tests.sh --fresh-db [pytest args...]# rebuild it (needed after a migration)
+#   bin/run_tests.sh --force --fresh-db ...     # rebuild even if something is connected
 #   bin/run_tests.sh --parallel[=N] [args...]   # N xdist workers (default: auto)
 #   bin/run_tests.sh --shuffle [pytest args...] # randomise test order
+#   bin/run_tests.sh --no-venv-fix ...          # do not install missing dev deps
 #
-# --fast is worth knowing about. A unique database per run is what keeps
-# parallel sessions from colliding, but building one costs about three minutes,
-# which dwarfs the tests themselves: the consensus field-scope file takes 188
-# seconds cold and 3.5 seconds against a database that already exists. For a
-# tight edit-run loop, or anything that runs the same tests hundreds of times
-# (mutation testing), reuse the database and rebuild it when the schema moves.
+# --fast reuses a persistent DB (rebuild after migrations); set UL_TEST_DB_NAME per session on shared hosts.
 #
-# --parallel is the other half of that arithmetic, and it cuts the opposite way:
-# pytest-django gives every xdist worker its own database (`..._gw0`, `_gw1`,
-# ...), so N workers means N database builds before any test runs. It pays off
-# on a large selection or against --fast, and loses badly on a single file.
-# Combined with --fast each worker reuses its own database, which is the
-# configuration worth having. Deliberately not the default: this multiplies
-# concurrent load on Postgres, which is exactly what has been observed to take
-# the local instance down (it shows up as mass "ERROR at setup" in files that
-# have nothing to do with each other).
+# --parallel gives each xdist worker its own DB; wins on large selections, loses on single files.
 #
-# --shuffle turns on pytest-randomly, which is installed but disabled in
-# `addopts`. Shuffling found no order dependence when it was probed across three
-# seeds, but only over a subset - so it is opt-in until a full shuffled run has
-# been green, and a failure under it is worth reproducing with the seed pytest
-# prints before assuming the plugin is at fault.
+# --shuffle is opt-in; reproduce failures with the printed seed.
 #
 # Environment:
 #   UL_TEST_CONTAINER   test-runner container name (default urbanlens_development_main_test_runner)
-#   UL_TEST_DB_NAME     test database name; a unique one is generated when unset,
-#                       because parallel runs collide otherwise - and the test
-#                       channel-layer prefix is derived from it, so websocket
-#                       tests in overlapping runs would consume each other's
-#                       messages without it.
+#   UL_TEST_DB_NAME     test database name. Without --fast/--fresh-db, a unique one is
+#                       generated when unset (parallel runs collide otherwise, and the
+#                       channel-layer prefix derives from it). With --fast/--fresh-db the
+#                       default is the fixed name 'ul_fast' for reuse - so on a shared host
+#                       always set this explicitly.
 set -euo pipefail
 
 CONTAINER="${UL_TEST_CONTAINER:-urbanlens_development_main_test_runner}"
+VENV_FIX=1
 SYNC=1
 VERIFY_ONLY=0
 FAST=0
 FRESH_DB=0
-# Verifying a fix by breaking it means deliberately editing the container's copy
-# and expecting the tests to fail. That is drift on purpose, so it needs a way
-# past the guard - named so it cannot be reached by accident or by habit.
+FORCE_DROP=0
+# Deliberate container drift needs a way past the guard; named to avoid accidents.
 ALLOW_DRIFT=0
 PARALLEL=""
 SHUFFLE=0
+
+# The copy-into-a-container sequence is shared with bin/sync_app.sh.
+# shellcheck source=bin/lib/container_sync.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/container_sync.sh"
 
 args=()
 for arg in "$@"; do
@@ -81,10 +56,12 @@ for arg in "$@"; do
         --allow-drift) ALLOW_DRIFT=1 ;;
         --fast) FAST=1 ;;
         --fresh-db) FAST=1; FRESH_DB=1 ;;
+        --force) FORCE_DROP=1 ;;
         --verify-only) VERIFY_ONLY=1 ;;
         --parallel) PARALLEL="auto" ;;
         --parallel=*) PARALLEL="${arg#*=}" ;;
         --shuffle) SHUFFLE=1 ;;
+        --no-venv-fix) VENV_FIX=0 ;;
         *) args+=("$arg") ;;
     esac
 done
@@ -105,68 +82,100 @@ if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     exit 2
 fi
 
-sync_tree() {
-    echo "==> syncing working tree into $CONTAINER"
-    docker cp src/. "$CONTAINER":/app/src/
-    # bin/ is not synced: nothing under tests/ imports from it anymore now that
-    # bin/opslib and the ops-tooling tests that reached it by path have moved to
-    # the separate `infrastructure` repo (see docs/PROBLEMS.md's history of this
-    # sync, and that repo's tests/test_ops_tooling.py for where those tests live
-    # now). If a future test starts importing something under bin/ again, restore
-    # this the same way src/ is handled below.
-    # Not optional: docker cp preserves host ownership, and the app runs as appuser.
-    docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src
+sync_tree() { sync_tree_into "$CONTAINER"; }
+verify_parity() { verify_parity_with "$CONTAINER"; }
 
-    # `docker cp` only ever adds and overwrites - a Python file deleted on the host
-    # stays in the container forever. That is not cosmetic: a scratch test file
-    # deleted after use is still collected there, and a module deleted in a refactor
-    # still satisfies the import that should have broken.
-    #
-    # Only `.py` files are pruned, and never `__pycache__`. The container's tree
-    # legitimately holds artefacts the host does not - compiled bytecode, collected
-    # and compressed static assets - and an early version of this that pruned every
-    # extra file removed ~19,700 of them. Nothing broke, because those regenerate,
-    # but deleting build output is not this script's job.
-    local host_list container_list
-    host_list=$(mktemp); container_list=$(mktemp)
-    (cd src && find . -name '*.py' -not -path '*/__pycache__/*' | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' -not -path '*/__pycache__/*' | sort" > "$container_list"
-    local stale
-    stale=$(comm -13 "$host_list" "$container_list" || true)
-    rm -f "$host_list" "$container_list"
-    if [ -n "$stale" ]; then
-        echo "    pruning $(echo "$stale" | wc -l) stale .py file(s) the host no longer has:"
-        echo "$stale" | sed 's|^|      |'
-        echo "$stale" | sed 's|^|/app/src/|' | tr '\n' '\0' | xargs -0 -r docker exec -u root "$CONTAINER" rm -f
+verify_frontend_build() {
+    # The compiled bundles are not in git, so a host that never built hands the
+    # container bundles that do not match the templates. Warn rather than fail
+    # mysteriously in test_compiled_js_references_resolve.py.
+    local js_dir="src/urbanlens/dashboard/frontend/static/dashboard/js"
+    local ts_dir="src/urbanlens/dashboard/frontend/ts"
+    [ -d "$ts_dir" ] || return 0
+
+    local newest
+    # `|| true`: under pipefail a missing $js_dir (a fresh worktree) fails find and would end the script.
+    newest=$(find "$js_dir" -name '*.js' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)
+    if [ -z "$newest" ]; then
+        echo "warning: no compiled JS bundles in $js_dir - the frontend has never been built here." >&2
+        echo "    test_compiled_js_references_resolve.py skips rather than passing vacuously. Build: bun run build" >&2
+        return 0
+    fi
+
+    # Test sources aren't bundle inputs; a newer one is not staleness.
+    if [ -n "$(find "$ts_dir" \( -name '*.ts' -o -name '*.tsx' \) -not -name '*.test.ts' -not -name '*.spec.ts' -newer "$newest" -print -quit 2>/dev/null)" ]; then
+        echo "warning: TypeScript sources are newer than the compiled bundles being synced." >&2
+        echo "    A template naming a new entry point fails as a missing bundle. Rebuild: bun run build" >&2
     fi
 }
 
-verify_parity() {
-    echo "==> verifying host and container agree"
-    local host_list container_list
-    host_list=$(mktemp)
-    container_list=$(mktemp)
-    trap 'rm -f "$host_list" "$container_list"' RETURN
+verify_venv() {
+    # Deps aren't synced, so a post-build addition surfaces as a collection error. Checked against uv's full install set.
+    local missing
+    # -i, or the heredoc never reaches the interpreter.
+    missing=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - <<'PY' 2>/dev/null
+import re
+import tomllib
+from importlib.metadata import PackageNotFoundError, version
 
-    (cd src && find . -name '*.py' | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' | sort" > "$container_list"
+with open("/app/pyproject.toml", "rb") as handle:
+    config = tomllib.load(handle)
 
-    if ! diff -q "$host_list" "$container_list" >/dev/null; then
-        echo "error: host and container differ - the run would test the wrong code:" >&2
-        diff "$host_list" "$container_list" | head -20 >&2
-        return 1
+specs = list(config.get("project", {}).get("dependencies", []))
+specs += config.get("dependency-groups", {}).get("dev", [])
+
+for spec in specs:
+    name = re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip()
+    if not name:
+        continue
+    try:
+        version(name)
+    except PackageNotFoundError:
+        print(name)
+PY
+)
+    [ -n "$missing" ] || return 0
+
+    echo "==> the container's venv predates these dependencies:" >&2
+    echo "$missing" | sed 's|^|      |' >&2
+
+    if [ "$VENV_FIX" -eq 0 ]; then
+        echo "    --no-venv-fix: a test importing one will fail at collection, naming the module" >&2
+        echo "    rather than the cause. Rebuild: docker compose --profile test up -d --build test-runner" >&2
+        return 0
     fi
 
-    # File lists matching is not enough: a stale *content* copy has the same
-    # names. Compare a checksum of the tree, which is what actually gets run.
-    local host_sum container_sum
-    host_sum=$( (cd src && find . -name '*.py' -exec md5sum {} +) | sort -k2 | md5sum | cut -d' ' -f1)
-    container_sum=$(docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' -exec md5sum {} +" | sort -k2 | md5sum | cut -d' ' -f1)
-    if [ "$host_sum" != "$container_sum" ]; then
-        echo "error: host and container file lists match but contents differ - re-run without --no-sync." >&2
-        return 1
+    # Installing them beats warning about them: a rebuild is an operator action
+    # on a container other sessions may share, so the warning kept not working.
+    # Installs exactly what pyproject declares, constraints included.
+    echo "==> installing them from pyproject (--no-venv-fix to skip)" >&2
+    local specs
+    specs=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - "$missing" <<'SPECS' 2>/dev/null
+import re
+import sys
+import tomllib
+
+wanted = set(sys.argv[1].split())
+with open("/app/pyproject.toml", "rb") as handle:
+    config = tomllib.load(handle)
+
+specs = list(config.get("project", {}).get("dependencies", []))
+specs += config.get("dependency-groups", {}).get("dev", [])
+for spec in specs:
+    if re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip() in wanted:
+        print(spec)
+SPECS
+)
+    if [ -z "$specs" ]; then
+        echo "    could not resolve their specs from pyproject.toml; skipping" >&2
+        return 0
     fi
-    echo "    tree matches ($host_sum)"
+    # shellcheck disable=SC2086
+    if ! docker exec -e VIRTUAL_ENV=/app/.venv "$CONTAINER" /app/.venv/bin/uv pip install --quiet $specs >&2; then
+        echo "    install failed - the run continues, and a test importing one of these will fail" >&2
+        echo "    at collection naming the module rather than the cause." >&2
+        echo "    Rebuild: docker compose --profile test up -d --build test-runner" >&2
+    fi
 }
 
 [ "$SYNC" -eq 1 ] && sync_tree
@@ -175,6 +184,8 @@ if [ "$ALLOW_DRIFT" -eq 1 ]; then
 else
     verify_parity
 fi
+verify_venv
+verify_frontend_build
 [ "$VERIFY_ONLY" -eq 1 ] && exit 0
 
 if [ "$FAST" -eq 1 ]; then
@@ -183,16 +194,9 @@ if [ "$FAST" -eq 1 ]; then
     if [ "$FRESH_DB" -eq 1 ]; then
         DB_FLAG="--create-db"
         echo "==> rebuilding the reusable database '$DB_NAME'"
-        # --create-db alone cannot recover a half-built database. Interrupt a
-        # run mid-migration and the schema change is applied but unrecorded, and
-        # the killed process leaves a session holding the database open - so the
-        # drop fails, the rebuild silently becomes a reuse, and every subsequent
-        # run dies in fixture setup with "column ... already exists" wearing a
-        # pytest internal assertion as its error. That was misfiled as a flaky
-        # transient once already. Terminate and drop first, so "fresh" is true.
-        # -i, or the heredoc never reaches python's stdin and it exits 0 having
-        # read nothing - a silent no-op that looks exactly like success.
-        docker exec -i -e DJANGO_SETTINGS_MODULE=urbanlens.UrbanLens.settings.test "$CONTAINER" /app/.venv/bin/python - "$DB_NAME" <<'DROP_DB'
+        # Terminate and drop first so "fresh" is actually fresh; -i or the heredoc is a silent no-op.
+        # Refuses with live connections (likely another session); --force overrides for your own abandoned run.
+        docker exec -i -e DJANGO_SETTINGS_MODULE=urbanlens.UrbanLens.settings.test "$CONTAINER" /app/.venv/bin/python - "$DB_NAME" "$FORCE_DROP" <<'DROP_DB'
 import sys
 
 import django
@@ -201,17 +205,34 @@ django.setup()
 from django.db import connection
 
 name = sys.argv[1]
+force = sys.argv[2] == "1"
 params = connection.get_connection_params()
-# psycopg2 spells it "dbname"; Django's params carry the test database, and
-# a session cannot drop the database it is connected to.
-params.pop("database", None)
+# Django's params carry the test database, and a session cannot drop the
+# database it is connected to.
 params["dbname"] = "postgres"
-# Not `with connection.Database.connect(...)`: in psycopg2 that context
-# manager opens a *transaction*, and DROP DATABASE cannot run inside one.
+# Not `with connection.Database.connect(...)`: that context manager leaves the
+# connection in a *transaction*, and DROP DATABASE cannot run inside one.
 maintenance = connection.Database.connect(**params)
 try:
     maintenance.autocommit = True
     with maintenance.cursor() as cursor:
+        cursor.execute(
+            "SELECT pid, state, query_start, left(query, 80) FROM pg_stat_activity WHERE datname = %s",
+            [name],
+        )
+        active = cursor.fetchall()
+        if active and not force:
+            print(f"error: '{name}' has {len(active)} active connection(s) - refusing to drop it:", file=sys.stderr)
+            for pid, state, query_start, query in active:
+                print(f"    pid={pid} state={state} since={query_start} query={query!r}", file=sys.stderr)
+            print(
+                "This is more likely another session's in-progress run than a leftover from an "
+                "interrupted one of yours - on a shared host, assume it is someone else's until "
+                "proven otherwise. Pick a different UL_TEST_DB_NAME, or pass --force only if you "
+                "are certain this is your own abandoned session.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         cursor.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s", [name])
         cursor.execute(f'DROP DATABASE IF EXISTS "{name}"')
 finally:
@@ -220,9 +241,8 @@ print(f"    dropped '{name}' if it existed", flush=True)
 DROP_DB
     else
         DB_FLAG="--reuse-db"
-        # --reuse-db does not apply new migrations to an existing database, so a
-        # schema change shows up as a confusing column error rather than as a
-        # missing migration. Rebuild with --fresh-db when models move.
+        # --reuse-db does not apply new migrations, so rebuild with --fresh-db
+        # when models move.
         echo "==> reusing database '$DB_NAME' (run --fresh-db after any migration)"
     fi
 else

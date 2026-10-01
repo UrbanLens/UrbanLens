@@ -11,9 +11,10 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion  # noqa: F401 - mypy needs these; ruff does not
 
 
-class VisitSuggestionQuerySet(abstract.DashboardQuerySet):
+class VisitSuggestionQuerySet(abstract.DashboardQuerySet["VisitSuggestion"]):
     """QuerySet for VisitSuggestion records."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -29,10 +30,7 @@ class VisitSuggestionQuerySet(abstract.DashboardQuerySet):
 
     def for_place(self, *, location: Location | None, latitude: Decimal | float | None, longitude: Decimal | float | None) -> Self:
         """Filter to suggestions for a specific place.
-
-        Matches on the shared Location when one is given, otherwise falls back
-        to an exact latitude/longitude match (mirrors how ``find_pin_at``
-        resolves a profile's own pin for a place with no Location).
+        Matches on the shared Location when one is given, otherwise falls back to an exact latitude/longitude match (mirrors how ``find_pin_at`` resolves a profile's own pin for a place with no Location).
 
         Args:
             location: Shared Location identifying the place, if one exists.
@@ -57,5 +55,8 @@ class VisitSuggestionQuerySet(abstract.DashboardQuerySet):
         return self.filter(status=VisitSuggestionStatus.PENDING)
 
 
-class VisitSuggestionManager(abstract.DashboardManager.from_queryset(VisitSuggestionQuerySet)):
+_VisitSuggestionManagerBase = abstract.DashboardManager.from_queryset(VisitSuggestionQuerySet)
+
+
+class VisitSuggestionManager(_VisitSuggestionManagerBase):
     """Manager for VisitSuggestion."""

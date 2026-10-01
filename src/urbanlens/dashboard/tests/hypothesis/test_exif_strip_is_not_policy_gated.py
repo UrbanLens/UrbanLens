@@ -1,12 +1,5 @@
 """Stripping EXIF does not depend on the uploader's downscale policy.
 
-``_process_photo_upload`` only called ``downscale_stored_image`` when there was a
-resize, a WebP conversion, a location opt-out, or a HEIC to transcode. That was
-right while the function existed to resize; it is wrong now that the same
-function is what removes EXIF, because a profile whose policy is "no cap, no
-conversion" never reached it - and that policy is what a downscale-exempt
-subscriber gets. The people paying us kept the leak.
-
 Driven through ``_process_photo_upload`` rather than the queryset beneath it, so
 the gate itself is what is under test.
 """

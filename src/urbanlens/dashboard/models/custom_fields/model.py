@@ -1,14 +1,6 @@
 """Custom field models - user-defined fields attachable to pins, photos, people, and maps.
-
-A :class:`CustomField` is a private, per-user field *definition* (e.g. "Gate code",
-text, for pins). A :class:`CustomFieldValue` stores that field's value for one
-specific target object. Both are only ever visible to the field's owner - custom
-fields are a personal organization tool, never shared or community data.
-
-Adding support for a new target entity requires:
-    1. A new :class:`CustomFieldEntity` choice.
-    2. A new nullable FK on :class:`CustomFieldValue` (plus the constraint updates).
-    3. An entry in :data:`CustomFieldValue.TARGET_FIELD_BY_ENTITY`.
+A :class:`CustomField` is a private, per-user field *definition* (e.g.
+Both are only ever visible to the field's owner - custom fields are a personal organization tool, never shared or community data.
 """
 
 from __future__ import annotations
@@ -19,8 +11,6 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
-from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
 from django.db.models import (
     CASCADE,
     BooleanField,
@@ -78,7 +68,7 @@ class CustomFieldType(TextChoices):
 
 
 class CustomFieldDisplay(TextChoices):
-    """Where a field appears on the pin detail page.
+    """Where a field appears on the Private Pin page.
 
     Only meaningful for pin fields today - other entity types render in
     compact strips with no section layout to place a field into.
@@ -158,9 +148,7 @@ ENTITY_ICONS: dict[str, str] = {
 
 class CustomField(abstract.FrontendDashboardModel):
     """A user-defined field definition for one entity type.
-
-    Custom fields are private to their owning profile: only the owner sees
-    them, their values, and the filter controls they add to the map.
+    Custom fields are private to their owning profile: only the owner sees them, their values, and the filter controls they add to the map.
 
     Attributes:
         profile: The owning profile. Fields (and their values) are deleted
@@ -173,7 +161,7 @@ class CustomField(abstract.FrontendDashboardModel):
         style: Presentation style for the value input (:class:`CustomFieldStyle`);
             blank means the type's default. Only meaningful for types listed in
             :data:`STYLES_BY_TYPE`.
-        display: Where the field appears on the pin detail page
+        display: Where the field appears on the Private Pin page
             (:class:`CustomFieldDisplay`). Only meaningful for pin fields.
         config: Type/style-specific configuration: ``{"choices": [...]}`` for
             select fields, optional ``{"min": ..., "max": ...}`` for sliders,
@@ -195,7 +183,7 @@ class CustomField(abstract.FrontendDashboardModel):
     config = JSONField(default=dict, blank=True)
     order = PositiveSmallIntegerField(default=0)
 
-    objects: CustomFieldManager = CustomFieldManager()
+    objects = CustomFieldManager()
 
     if TYPE_CHECKING:
         profile_id: int
@@ -342,7 +330,6 @@ class CustomField(abstract.FrontendDashboardModel):
             return Decimal(default)
 
 
-#: The reference FK columns on CustomFieldValue, used to build the constraint.
 _REF_COLUMNS: tuple[str, ...] = ("ref_pin", "ref_wiki", "ref_markup_map", "ref_trip", "ref_image", "ref_pin_list", "ref_profile")
 
 
@@ -358,26 +345,59 @@ def _at_most_one_of(columns: tuple[str, ...]) -> Q:
 
 class CustomFieldValueError(ValueError):
     """A raw value could not be parsed/stored for a custom field.
-
-    ``safe_message`` is safe to surface directly to the caller - every raise
-    site either uses a static string or echoes back the value the caller
-    itself submitted.
+    The message here is for logs, not a response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class EmptyValueError(CustomFieldValueError):
+    """The submitted value was blank; the row should be deleted, not stored empty."""
+
+
+class InvalidNumberError(CustomFieldValueError):
+    """The submitted value doesn't parse as a NUMBER field's value."""
+
+
+class InvalidDateError(CustomFieldValueError):
+    """The submitted value doesn't parse as a DATE field's value (YYYY-MM-DD)."""
+
+
+class InvalidTimeError(CustomFieldValueError):
+    """The submitted value doesn't parse as a TIME field's value (HH:MM)."""
+
+
+class InvalidCheckboxValueError(CustomFieldValueError):
+    """The submitted value isn't a recognized checkbox truthy/falsy token."""
+
+
+class InvalidSelectOptionError(CustomFieldValueError):
+    """The submitted value isn't one of this SELECT field's configured choices."""
+
+
+class InvalidUrlError(CustomFieldValueError):
+    """The submitted value doesn't parse as a valid http(s) link."""
+
+
+class CustomFieldTextTooLongError(CustomFieldValueError):
+    """The submitted text is longer than ``MAX_CUSTOM_FIELD_TEXT_LENGTH``."""
+
+
+class ReferenceKindNotConfiguredError(CustomFieldValueError):
+    """This REFERENCE field's ``config["ref_type"]`` is missing or invalid.
+
+    A configuration bug on the field definition, not a bad submission - every
+    reference field is supposed to have a valid ``ref_type`` from the moment
+    it's created as one.
+    """
+
+
+class ReferenceTargetNotFoundError(CustomFieldValueError):
+    """``resolve_reference`` found no match - the target doesn't exist, or isn't visible to this field's owner."""
 
 
 class CustomFieldValue(abstract.DashboardModel):
     """The value of one custom field on one target object.
-
-    Exactly one target FK is set, matching ``field.entity_type``. The value is
-    stored in the typed column matching ``field.field_type`` so numbers and
-    dates filter/sort correctly in SQL.
-
-    Values are private to ``field.profile``. Deleting the field, the target,
-    or the owning profile deletes the value.
+    Exactly one target FK is set, matching ``field.entity_type``.
+    The value is stored in the typed column matching ``field.field_type`` so numbers and dates filter/sort correctly in SQL.
     """
 
     field = ForeignKey(
@@ -423,10 +443,9 @@ class CustomFieldValue(abstract.DashboardModel):
     value_time = TimeField(null=True, blank=True)
     value_boolean = BooleanField(null=True, blank=True)
 
-    # -- Reference value FKs (at most one set, matching field.config ref_type) --
-    # Deleting the referenced object deletes the value row: a reference to a
-    # gone object carries no information, unlike SET_NULL which would leave an
-    # invalid "value with nothing in it" row behind.
+    # -- Reference value FKs (at most one set, matching field.config ref_type) -- Deleting the
+    # referenced object deletes the value row: a reference to a gone object carries no information,
+    # unlike SET_NULL which would leave an invalid "value with nothing in it" row behind.
     ref_pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
     ref_wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
     ref_markup_map = ForeignKey("dashboard.MarkupMap", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
@@ -435,7 +454,7 @@ class CustomFieldValue(abstract.DashboardModel):
     ref_pin_list = ForeignKey("dashboard.PinList", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
     ref_profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
 
-    objects: CustomFieldValueManager = CustomFieldValueManager()
+    objects = CustomFieldValueManager()
 
     #: Maps entity type -> the FK attribute holding that entity's target.
     TARGET_FIELD_BY_ENTITY: dict[str, str] = {
@@ -566,6 +585,18 @@ class CustomFieldValue(abstract.DashboardModel):
         return str(raw)
 
     @property
+    def link_href(self) -> str:
+        """``value_text`` when it is an http(s) link safe to put in an ``href``, else ``""``.
+
+        ``set_value`` already refuses anything else; this also covers a row written some other way.
+        """
+        from urbanlens.dashboard.services.security.link_urls import is_link_url
+
+        if self.field.field_type != CustomFieldType.URL:
+            return ""
+        return self.value_text if is_link_url(self.value_text) else ""
+
+    @property
     def input_value(self) -> str:
         """The value formatted for an HTML input's ``value`` attribute."""
         raw = self.value
@@ -580,12 +611,18 @@ class CustomFieldValue(abstract.DashboardModel):
             raw: User-entered value. Whitespace is stripped.
 
         Raises:
-            ValueError: When the raw value cannot be parsed as the field's type,
-                or when it is empty (callers should delete the row instead).
+            CustomFieldValueError: When the raw value cannot be parsed as the field's type, is longer than
+                ``MAX_CUSTOM_FIELD_TEXT_LENGTH``, or is empty (callers should delete the row instead).
         """
+        from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
+        from urbanlens.dashboard.services.core.text_limits import MAX_CUSTOM_FIELD_TEXT_LENGTH
+        from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
+
         raw = (raw or "").strip()
         if not raw:
-            raise CustomFieldValueError("Empty value - delete the row instead of storing a blank.")
+            raise EmptyValueError(f"custom field {self.field_id}: empty value submitted; delete the row instead of storing blank on it")
+        if len(raw) > MAX_CUSTOM_FIELD_TEXT_LENGTH:
+            raise CustomFieldTextTooLongError(f"custom field {self.field_id}: {len(raw)} chars, over {MAX_CUSTOM_FIELD_TEXT_LENGTH}")
 
         field_type = self.field.field_type
         self.value_text = ""
@@ -600,17 +637,17 @@ class CustomFieldValue(abstract.DashboardModel):
             try:
                 self.value_number = Decimal(raw)
             except InvalidOperation as e:
-                raise CustomFieldValueError(f"{raw!r} is not a valid number.") from e
+                raise InvalidNumberError(f"custom field {self.field_id}: {raw!r} failed Decimal parsing for a NUMBER field") from e
         elif field_type == CustomFieldType.DATE:
             try:
-                self.value_date = datetime.strptime(raw, "%Y-%m-%d").date()
+                self.value_date = datetime.strptime(raw, "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; value_date is a DateField
             except ValueError as e:
-                raise CustomFieldValueError(f"{raw!r} is not a valid date (expected YYYY-MM-DD).") from e
+                raise InvalidDateError(f"custom field {self.field_id}: {raw!r} failed strptime('%Y-%m-%d') for a DATE field") from e
         elif field_type == CustomFieldType.TIME:
             try:
                 self.value_time = time.fromisoformat(raw)
             except ValueError as e:
-                raise CustomFieldValueError(f"{raw!r} is not a valid time (expected HH:MM).") from e
+                raise InvalidTimeError(f"custom field {self.field_id}: {raw!r} failed time.fromisoformat for a TIME field") from e
         elif field_type == CustomFieldType.CHECKBOX:
             lowered = raw.lower()
             if lowered in ("1", "true", "on", "yes", "checked"):
@@ -618,29 +655,27 @@ class CustomFieldValue(abstract.DashboardModel):
             elif lowered in ("0", "false", "off", "no", "unchecked"):
                 self.value_boolean = False
             else:
-                raise CustomFieldValueError(f"{raw!r} is not a valid checkbox value.")
+                raise InvalidCheckboxValueError(f"custom field {self.field_id}: {raw!r} is not a recognized checkbox token for a CHECKBOX field")
         elif field_type == CustomFieldType.SELECT:
             choices = self.field.select_choices
             if raw not in choices:
-                raise CustomFieldValueError(f"{raw!r} is not one of this field's options.")
+                raise InvalidSelectOptionError(f"custom field {self.field_id}: {raw!r} not in configured choices {choices!r} for a SELECT field")
             self.value_text = raw
         elif field_type == CustomFieldType.URL:
-            candidate = raw if "://" in raw else f"https://{raw}"
             try:
-                URLValidator(schemes=["http", "https"])(candidate)
-            except ValidationError as e:
-                raise CustomFieldValueError(f"{raw!r} is not a valid link.") from e
-            self.value_text = candidate
+                self.value_text = clean_link_url(raw, max_length=MAX_LINK_URL_LENGTH)
+            except InvalidLinkUrlError as e:
+                raise InvalidUrlError(f"custom field {self.field_id}: {raw!r} is not an http(s) link") from e
         elif field_type == CustomFieldType.REFERENCE:
             from urbanlens.dashboard.services.custom_fields.custom_field_references import resolve_reference
 
             kind = self.field.reference_kind
             ref_field = self.REF_FIELD_BY_KIND.get(kind)
             if ref_field is None:
-                raise CustomFieldValueError("This reference field has no target kind configured.")
+                raise ReferenceKindNotConfiguredError(f"custom field {self.field_id}: reference_kind resolved to {kind!r}, no matching REF_FIELD_BY_KIND entry")
             target = resolve_reference(kind, raw, self.field.profile)
             if target is None:
-                raise CustomFieldValueError("That item wasn't found (or you can't reference it).")
+                raise ReferenceTargetNotFoundError(f"custom field {self.field_id}: resolve_reference(kind={kind!r}, raw={raw!r}, profile={self.field.profile_id}) found no match")
             setattr(self, ref_field, target)
         else:
             self.value_text = raw

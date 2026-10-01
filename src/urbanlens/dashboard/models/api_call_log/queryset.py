@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Self
+from typing import TYPE_CHECKING, Any, Self
 
 from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
-class ApiCallLogQuerySet(abstract.DashboardQuerySet):
+    from urbanlens.dashboard.models.api_call_log.model import ApiCallLog  # noqa: F401 - mypy needs these; ruff does not
+
+
+class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
     """QuerySet for ApiCallLog."""
 
     def for_service(self, service: str) -> Self:
@@ -23,12 +28,21 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         return self.filter(created__gte=timezone.now() - delta)
 
     def today(self) -> Self:
-        """Filter to calls made today (UTC calendar day)."""
-        return self.filter(created__date=timezone.now().date())
+        """Filter to calls made today (UTC calendar day).
 
-    def this_week(self) -> Self:
-        """Filter to calls made in the last 7 days."""
-        return self.since(timedelta(days=7))
+        A half-open range over the stored column rather than ``created__date``.
+        The two ask the same question - TIME_ZONE is UTC, so the extraction
+        compared against these same instants - but a date extracted from the
+        column is a function of it, which ``idxdb_apilog_svc_cdt`` cannot
+        answer. This runs inside ``check_rate_limit`` on every outbound call,
+        against an append-only log kept for 400 days, so the scan it degraded
+        into grew with the whole site's history.
+
+        Returns:
+            Calls whose ``created`` falls in today's UTC day.
+        """
+        start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        return self.filter(created__gte=start, created__lt=start + timedelta(days=1))
 
     def this_month(self) -> Self:
         """Filter to calls made in the last 30 days."""
@@ -36,38 +50,49 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
 
     def billable(self) -> Self:
         """Filter to calls that actually consumed the service's quota.
-
-        Excludes the three kinds of entry the limiter writes for calls it
-        *skipped* - geo-filtered, rate-limited, and service-disabled. Those rows
-        exist so a skipped attempt is visible in usage reporting, not because a
-        request went out; counting them against a limit lets a burst of
-        rejections spend a budget no request ever used.
-
-        A call that went out and failed is still billable - the remote service
-        counted it.
+        Excludes the three kinds of entry the limiter writes for calls it *skipped* - geo-filtered, rate-limited, and service-disabled.
+        Those rows exist so a skipped attempt is visible in usage reporting, not because a request went out; counting them against a limit lets a burst of rejections spend a budget no request ever used.
 
         Returns:
             Filtered queryset.
         """
         return self.filter(was_geo_filtered=False, was_rate_limited=False, was_service_disabled=False)
 
-    def successful(self) -> Self:
-        """Filter to successful calls."""
-        return self.filter(success=True)
+    def usage_by_profile(self, window: timedelta) -> list[tuple[int, int]]:
+        """Who consumed this queryset's calls over ``window``, heaviest first.
 
-    def rate_limited(self) -> Self:
-        """Filter to calls that were blocked by rate limiting."""
-        return self.filter(was_rate_limited=True)
+        Composable rather than self-filtering: chain ``for_service`` and
+        ``billable`` to ask about quota actually spent, or leave them off to
+        include the refusals, which are the record of demand that went unmet.
 
-    def geo_filtered(self) -> Self:
-        """Filter to calls that were skipped due to geo filtering."""
-        return self.filter(was_geo_filtered=True)
+        Unattributed rows are excluded rather than grouped under a null key -
+        the site's own scheduled work is not a user's consumption, and a
+        fair-share decision that counted it would restrain people for it.
 
-    def service_disabled(self) -> Self:
-        """Filter to calls that were skipped due to service being disabled."""
-        return self.filter(was_service_disabled=True)
+        Args:
+            window: How far back to look.
 
-    def summary_by_service(self) -> list[dict]:
+        Returns:
+            ``(profile_id, calls)`` pairs, heaviest first, ties by profile id.
+        """
+        rows = self.since(window).exclude(profile__isnull=True).values("profile_id").annotate(calls=Count("id")).order_by("-calls", "profile_id")
+        return [(row["profile_id"], row["calls"]) for row in rows]
+
+    def active_consumers(self, window: timedelta) -> int:
+        """How many distinct people used this queryset's service over ``window``.
+
+        The denominator of a fair share: one active consumer may reasonably
+        have the whole budget, a hundred may not.
+
+        Args:
+            window: How far back to look.
+
+        Returns:
+            Count of distinct attributed profiles, ignoring unattributed rows.
+        """
+        return self.since(window).exclude(profile__isnull=True).values("profile_id").distinct().count()
+
+    def summary_by_service(self) -> list[Mapping[str, Any]]:
         """Return per-service usage summary for the last 30 days."""
         return list(
             self.this_month()
@@ -84,5 +109,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         )
 
 
-class ApiCallLogManager(abstract.DashboardManager.from_queryset(ApiCallLogQuerySet)):
+_ApiCallLogManagerBase = abstract.DashboardManager.from_queryset(ApiCallLogQuerySet)
+
+
+class ApiCallLogManager(_ApiCallLogManagerBase):
     """Manager for ApiCallLog that proxies all ApiCallLogQuerySet methods."""

@@ -1,21 +1,5 @@
 /**
  * Collapsible page sections, and the tools-FAB list that restores them.
- *
- * Any element with ``[data-collapse-scope][data-collapse-section]`` gets a chevron
- * button injected into its header that toggles an ``.is-collapsed`` class, hiding
- * the whole section, header included. State is persisted in ``localStorage`` keyed
- * by scope ("pin", "wiki", "trip") and section name only - deliberately not by
- * entity id, so collapsing "Comments" on one pin collapses it on every pin,
- * independently of the wiki and trip pages.
- *
- * Because collapsing hides the header too, there is nothing left to click to bring
- * a section back. The fixed ``#tools-fab`` lists the current page's collapsed
- * sections so they can be restored individually.
- *
- * Ported out of ``base.html``'s inline script unchanged. Listeners are attached
- * once the document is ready rather than at import: this ships in the classic
- * ``core.js`` bundle loaded from ``<head>``, where ``document.body`` is still null
- * and none of the sections exist yet.
  */
 
 const forcedOpen = new Set<string>();
@@ -46,11 +30,7 @@ function applyState(container: HTMLElement): void {
     const section = container.dataset.collapseSection;
     if (!scope || !section) return;
 
-    // data-collapse-if-empty is set server-side whenever a section currently has no
-    // content. It collapses by default alongside the stored preference but is never
-    // written to localStorage - it is re-derived from the section's actual content on
-    // every load rather than being a sticky choice. forcedOpen overrides it for this
-    // page load only, so an explicit restore-from-FAB sticks.
+    // data-collapse-if-empty is set server-side whenever a section currently has no content.
     const emptyByDefault = container.dataset.collapseIfEmpty === "true" && !forcedOpen.has(key(scope, section));
     const collapsed = isCollapsed(scope, section) || emptyByDefault;
     container.classList.toggle("is-collapsed", collapsed);
@@ -128,9 +108,7 @@ export function updateRestoreControls(): void {
     if (!fab || !group) return;
 
     const scope = currentScope();
-    // Detail pages render every tab's markup at once and only toggle `hidden`, so a
-    // section collapsed on one tab would otherwise be offered while viewing another.
-    // .closest('[hidden]') excludes anything inside a hidden tab wrapper at any depth.
+    // Detail pages render every tab's markup at once and only toggle `hidden`, so a section collapsed on one tab would otherwise be offered.
     const hiddenSections = scope
         ? Array.from(document.querySelectorAll<HTMLElement>(`[data-collapse-scope="${scope}"][data-collapse-section].is-collapsed`)).filter((section) => !section.closest("[hidden]"))
         : [];
@@ -213,6 +191,23 @@ function onDocumentClick(event: MouseEvent): void {
     if (fab && openMenu && !openMenu.hidden && !fab.contains(target)) closeToolsFab();
 }
 
+const lazyLoaded = new WeakSet<Element>();
+
+/**
+ * Fires `ul:lazy-load` on a `data-ul-lazy-section="scope:section"` element once htmx has
+ * processed it, unless that section is collapsed; `ul:unhide` loads it on restore instead.
+ */
+export function loadLazySection(event: Event): void {
+    const el = event.target;
+    if (!(el instanceof HTMLElement) || lazyLoaded.has(el)) return;
+    const spec = el.dataset.ulLazySection;
+    if (!spec) return;
+    lazyLoaded.add(el);
+    const [scope = "", section = ""] = spec.split(":");
+    if (isCollapsed(scope, section)) return;
+    window.htmx?.trigger(el, "ul:lazy-load");
+}
+
 /** Reset module state. Test-only: a fresh document invalidates the forced-open set. */
 export function resetCollapsibleSectionsForTests(): void {
     forcedOpen.clear();
@@ -220,26 +215,20 @@ export function resetCollapsibleSectionsForTests(): void {
 
 declare global {
     interface Window {
-        ulSectionCollapsed?: typeof isCollapsed;
         ulRefreshCollapseRestore?: typeof updateRestoreControls;
     }
 }
 
 export function installGlobalCollapsibleSections(): void {
-    // Exposed so hx-trigger conditions on lazy-loaded sections can skip firing their
-    // request when the section is already hidden.
-    window.ulSectionCollapsed = isCollapsed;
     // Exposed for tab switches that do not go through page-tabs.js's `ul:tabShown`
     // (e.g. the Article tab's internal sub-tab toggle).
     window.ulRefreshCollapseRestore = updateRestoreControls;
 
     document.addEventListener("click", onDocumentClick);
     document.addEventListener("htmx:afterSettle", scanAll);
+    document.addEventListener("htmx:afterProcessNode", loadLazySection);
 
-    // page-tabs.js dispatches ul:tabShown on <body>, which does not exist yet when
-    // this runs from the <head> - so both this binding and the first scan wait for
-    // the document. The inline version this replaced ran after <body> and could bind
-    // immediately.
+    // page-tabs.js dispatches ul:tabShown on <body>, which does not exist yet when this runs from the <head>.
     const ready = (): void => {
         document.body.addEventListener("ul:tabShown", updateRestoreControls);
         scanAll();

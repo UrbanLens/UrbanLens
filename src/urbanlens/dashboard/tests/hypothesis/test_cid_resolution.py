@@ -1,17 +1,18 @@
-"""Tests for services.apis.locations.cid_resolution.resolve_cids's provider dispatch.
-
-Covers the REData-vs-Google-Places choice and how each provider's failure
-modes map onto CidResolutionResult's resolved/unresolvable/pending buckets -
-see cid_resolution.py's module docstring for why each bucket exists.
-"""
+"""Tests for services.apis.locations.cid_resolution.resolve_cids's provider dispatch."""
 
 from __future__ import annotations
 
 from unittest import mock
 
+import requests
+
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import cid_resolution
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidBatchResult, RedataPermissionError
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import (
+    CidLookupEntry,
+    RedataCidBatchResult,
+    RedataPermissionError,
+)
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
@@ -45,6 +46,42 @@ class ResolveCidsProviderChoiceTests(SimpleTestCase):
 
         self.assertEqual(result.provider, cid_resolution.PROVIDER_GOOGLE)
         self.assertEqual(result.resolved, {1: (1.0, 2.0)})
+
+    def test_redata_url_without_key_uses_google(self) -> None:
+        """Both settings are required - a URL alone must not be treated as configured."""
+        with (
+            mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+            mock.patch.object(settings, "redata_api_key", None),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.GoogleGeocodingGateway",
+            ) as gateway_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
+            ) as redata_cls,
+        ):
+            gateway_cls.return_value.get_coordinates_by_cid.return_value = (1.0, 2.0)
+            result = cid_resolution.resolve_cids([1])
+
+        self.assertEqual(result.provider, cid_resolution.PROVIDER_GOOGLE)
+        redata_cls.assert_not_called()
+
+    def test_redata_key_without_url_uses_google(self) -> None:
+        """Both settings are required - a key alone must not be treated as configured."""
+        with (
+            mock.patch.object(settings, "redata_api_url", None),
+            mock.patch.object(settings, "redata_api_key", "test-key"),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.GoogleGeocodingGateway",
+            ) as gateway_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
+            ) as redata_cls,
+        ):
+            gateway_cls.return_value.get_coordinates_by_cid.return_value = (1.0, 2.0)
+            result = cid_resolution.resolve_cids([1])
+
+        self.assertEqual(result.provider, cid_resolution.PROVIDER_GOOGLE)
+        redata_cls.assert_not_called()
 
 
 class ResolveViaRedataTests(SimpleTestCase):
@@ -127,7 +164,10 @@ class ResolveViaRedataTests(SimpleTestCase):
             cid_resolution.resolve_cids([1, 2], urls_by_cid={1: "https://maps.google.com/maps/place/X"})
 
         sent_entries = gateway_cls.return_value.resolve_cids.call_args.args[0]
-        self.assertEqual(sent_entries, [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X"), CidLookupEntry(cid=2, url=None)])
+        self.assertEqual(
+            sent_entries,
+            [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X"), CidLookupEntry(cid=2, url=None)],
+        )
 
     def test_still_pending_on_redatas_end_is_reported_as_pending(self) -> None:
         with mock.patch(
@@ -177,3 +217,16 @@ class ResolveViaGoogleTests(SimpleTestCase):
 
         self.assertEqual(result.unresolvable, {1})
         self.assertEqual(result.pending, [])
+
+    def test_transient_request_error_defers_only_that_cid_and_keeps_going(self) -> None:
+        """Unlike a rate limit, one cid's transient failure must not abort the rest of the batch."""
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.cid_resolution.GoogleGeocodingGateway",
+        ) as gateway_cls:
+            gateway = gateway_cls.return_value
+            gateway.get_coordinates_by_cid.side_effect = [requests.ConnectionError("boom"), (3.0, 4.0)]
+            result = cid_resolution.resolve_cids([1, 2])
+
+        self.assertEqual(result.pending, [1])
+        self.assertEqual(result.resolved, {2: (3.0, 4.0)})
+        self.assertEqual(result.unresolvable, set())

@@ -6,7 +6,7 @@
         {% if members %}<span class="badge">{{ members|length }}</span>{% endif %}
         {% if can_add_members %}
         <button type="button" class="btn btn--icon-sm"
-                onclick="document.getElementById('add-member-dialog').showModal()" aria-label="Add member">
+                data-dialog-open="add-member-dialog" aria-label="Add member">
             <i class="material-symbols-outlined">add</i>
         </button>
         {% endif %}
@@ -41,8 +41,6 @@
             {% endif %}
 
             {# RSVP: clickable dropdown for current user, static badge for others. #}
-            {# Invited-but-not-joined members skip RSVP entirely - see the invite  #}
-            {# banner in trip_header_partial.html for the join/decline action.    #}
             {% if membership.status == 'invited' %}
             <span class="trip-member-rsvp trip-member-rsvp--invited" title="Hasn't joined the trip yet">Invited</span>
             {% elif membership.profile == profile %}
@@ -50,7 +48,7 @@
                 <button type="button"
                         class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }} trip-member-rsvp--mine"
                         title="Change your RSVP"
-                        onclick="var p=document.getElementById('rsvp-popup-{{ member.id }}');p.hidden=!p.hidden;event.stopPropagation()">
+                        data-trip-action="toggle-rsvp" data-popup-id="rsvp-popup-{{ member.id }}">
                     {% if membership.rsvp %}<span class="trip-member-rsvp-label">RSVP:</span>{% endif %}
                     {% if membership.rsvp == 'yes' %}Going
                     {% elif membership.rsvp == 'no' %}Not Coming
@@ -96,7 +94,7 @@
                         hx-target="#trip-members-panel"
                         hx-swap="outerHTML"
                         hx-confirm="Remove {{ member.display_name }} from this trip?"
-                        hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                        data-ul-before-request="mark-deleting">
                     <i class="material-symbols-outlined">person_remove</i>
                 </button>
                 {% elif membership.profile == profile and profile != trip.creator %}
@@ -115,10 +113,44 @@
     {% else %}
     <p class="trip-panel-empty">No members yet.</p>
     {% endif %}
+
+    {# Email invitations the viewer may withdraw, shown by the address typed and nothing else. #}
+    {% if email_invitations %}
+    <p class="trip-add-friend-heading">Invited by email</p>
+    <ul class="trip-member-list">
+        {% for invitation in email_invitations %}
+        <li class="trip-member-item" data-trip-invitation>
+            <div class="trip-member-avatar">
+                <span class="trip-member-avatar-initial"><i class="material-symbols-outlined">mail</i></span>
+            </div>
+            <div class="trip-member-info">
+                <span class="trip-member-name">{{ invitation.email }}</span>
+                {% if invitation.inviter_id != profile.id %}<span class="trip-member-username">invited by @{{ invitation.inviter.user.username }}</span>{% endif %}
+            </div>
+            {% if invitation.trip_response == 'pending' %}
+            <span class="trip-member-rsvp trip-member-rsvp--invited" title="Waiting for a reply">Invited</span>
+            {% elif invitation.trip_response == 'accepted' %}
+            <span class="trip-member-rsvp trip-member-rsvp--yes">Joined</span>
+            {% else %}
+            <span class="trip-member-rsvp trip-member-rsvp--no">Declined</span>
+            {% endif %}
+            <div class="trip-member-actions">
+                <button type="button" class="detail-pin-action-btn"
+                        title="Withdraw invitation"
+                        hx-post="{% url 'trips.invitation.cancel' trip.slug invitation.uuid %}"
+                        hx-target="#trip-members-panel"
+                        hx-swap="outerHTML"
+                        hx-confirm="Withdraw the invitation to {{ invitation.email }}?">
+                    <i class="material-symbols-outlined">cancel</i>
+                </button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 </div>
 
-{# -- Add member dialog - lives here (not detail.html) so it refreshes with #}
-{# this panel and never shows a friend who was just added as still addable. #}
+{# Add member dialog - lives here (not detail.html) so it refreshes with this panel and never shows a friend who was just added as still. #}
 {% if can_add_members %}
 <dialog id="add-member-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-add-member">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Member" %}
@@ -130,7 +162,7 @@
             <li>
                 <form hx-post="{% url 'trips.members' trip.slug %}"
                       hx-target="#trip-members-panel" hx-swap="outerHTML"
-                      hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}">
+                      data-ul-on-success="close-dialog">
                     {% csrf_token %}
                     <input type="hidden" name="username" value="{{ friend.user.username }}">
                     <button type="submit" class="trip-add-friend-btn">
@@ -149,23 +181,24 @@
             {% endfor %}
         </ul>
     </div>
-    <div class="trip-add-friend-divider"><span>or enter a username</span></div>
+    <div class="trip-add-friend-divider"><span>or enter a username or email</span></div>
     {% endif %}
     <form hx-post="{% url 'trips.members' trip.slug %}"
           hx-target="#trip-members-panel"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
+          data-ul-on-success="close-dialog reset"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">
-            <label for="member-username">Username{% if not addable_friends %} <span class="required">*</span>{% endif %}</label>
+            <label for="member-username">Username or email{% if not addable_friends %} <span class="required">*</span>{% endif %}</label>
             <input type="text" name="username" id="member-username" required
-                   placeholder="Enter exact username">
+                   autocomplete="off" placeholder="Exact username, or an email address">
+            <span class="settings-help">Someone invited by email chooses whether to join the trip, and whether to become your friend, separately.</span>
         </div>
         <div class="form-actions">
-            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add Member</button>
+            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add or Invite</button>
             <button type="button" class="btn btn--ghost"
-                    onclick="this.closest('dialog').close()">Cancel</button>
+                    data-dialog-close>Cancel</button>
         </div>
     </form>
 </dialog>

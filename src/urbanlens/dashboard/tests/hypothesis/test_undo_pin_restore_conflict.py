@@ -1,13 +1,4 @@
-"""Undoing a pin delete must cope with the location having been re-pinned since.
-
-``PinUndoHandler.restore`` pre-checks every foreign key the batch referenced - profile,
-location, wiki, labels - and raises ``UndoExpiredError`` rather than letting the
-recreate fail with an uncaught IntegrityError. It does not check
-``db_pin_unique_location_per_profile``: one root pin per location per profile.
-
-A user who deletes a pin, drops a new one at the same place, and then hits undo trips
-exactly that constraint - which is an ordinary sequence, not a contrived one.
-"""
+"""Undoing a pin delete must cope with the location having been re-pinned since."""
 
 from __future__ import annotations
 

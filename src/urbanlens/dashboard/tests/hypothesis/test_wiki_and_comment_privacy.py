@@ -1,17 +1,5 @@
-"""Access-control tests for wiki-scoped controllers and comment-author privacy.
+"""Access-control tests for wiki-scoped controllers and comment-author privacy."""
 
-Covers two regressions:
-
-- Wiki-scoped views (page, gallery, boundary, aliases, label membership,
-  markup, detail pins, comments) resolved the Location/Wiki from the URL
-  slug alone, so any logged-in user could view or edit the wiki for a place
-  they had never pinned. Every one of them must instead resolve through
-  ``resolve_visible_wiki``/``location_visible_to``, which requires the
-  requester to have a pin at that Location.
-- Comment visibility (and reactions) must also respect the comment author's
-  own ``comment_visibility`` privacy setting, independent of whether the
-  viewer can see the page the comment is on.
-"""
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -20,8 +8,6 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.model import Comment
-from urbanlens.dashboard.models.labels.meta import KIND_TAG
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -72,11 +58,15 @@ class WikiVisibilityTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_wiki_label_membership_unpinned_404s(self) -> None:
-        response = self.client.get(reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.wiki.location.slug}))
+        response = self.client.get(
+            reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.wiki.location.slug})
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_wiki_label_membership_pinned_succeeds(self) -> None:
-        response = self.client.get(reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.own_wiki.location.slug}))
+        response = self.client.get(
+            reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.own_wiki.location.slug})
+        )
         self.assertEqual(response.status_code, 200)
 
     def test_wiki_markup_json_unpinned_404s(self) -> None:
@@ -173,3 +163,74 @@ class CommentAuthorPrivacyTests(TestCase):
         own_comment = baker.make(Comment, pin=None, wiki=self.wiki, profile=self.user.profile)
         response = self.client.post(reverse("comment.react", args=[own_comment.id]), data={"emoji": "👍"})
         self.assertEqual(response.status_code, 200)
+
+    def test_cannot_reply_when_author_restricts_to_no_one(self) -> None:
+        """Replying by guessed sequential id must not confirm a hidden comment exists."""
+        comment = self._comment(visibility=VisibilityChoice.NO_ONE)
+        response = self.client.post(
+            reverse("location.wiki.comments", args=[self.wiki.location.slug]),
+            {"text": "a reply", "parent_id": comment.id},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Comment.objects.filter(parent=comment).exists())
+
+    def test_can_reply_when_author_allows_anyone(self) -> None:
+        comment = self._comment(visibility=VisibilityChoice.ANYONE)
+        response = self.client.post(
+            reverse("location.wiki.comments", args=[self.wiki.location.slug]),
+            {"text": "a reply", "parent_id": comment.id},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Comment.objects.filter(parent=comment, text="a reply").exists())
+
+    def test_cannot_reply_to_a_comment_mentioning_an_unpinned_location(self) -> None:
+        """``is_visible_to`` drops the whole comment; a parent_id must not bypass that."""
+        comment = self._mention_hidden_comment()
+        response = self.client.post(
+            reverse("location.wiki.comments", args=[self.wiki.location.slug]),
+            {"text": "a reply", "parent_id": comment.id},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Comment.objects.filter(parent=comment).exists())
+
+    def test_mention_of_unpinned_location_is_excluded_from_wiki_comment_listing(self) -> None:
+        comment = self._mention_hidden_comment()
+        response = self.client.get(reverse("location.wiki.comments", args=[self.wiki.location.slug]))
+        self.assertEqual(response.status_code, 200)
+        rendered_comment_ids = {row["comment"].id for row in response.context["rendered_comments"]}
+        self.assertNotIn(comment.id, rendered_comment_ids)
+        self.assertNotIn(str(self._secret_location.uuid), response.content.decode())
+
+    def test_cannot_react_to_a_comment_mentioning_an_unpinned_location(self) -> None:
+        comment = self._mention_hidden_comment()
+        response = self.client.post(reverse("comment.react", args=[comment.id]), data={"emoji": "👍"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_react_to_a_pending_scan_comment(self) -> None:
+        comment = self._comment(visibility=VisibilityChoice.ANYONE)
+        comment.pending_scan = True
+        comment.save(update_fields=["pending_scan"])
+        response = self.client.post(reverse("comment.react", args=[comment.id]), data={"emoji": "👍"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_deleting_a_hidden_comment_is_not_found(self) -> None:
+        """A 403 would confirm the sequential id exists, which the listing withholds."""
+        comment = self._comment(visibility=VisibilityChoice.NO_ONE)
+        response = self.client.delete(
+            reverse("location.wiki.comment.delete", args=[self.wiki.location.slug, comment.id])
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Comment.objects.filter(pk=comment.id).exists())
+
+    def _mention_hidden_comment(self) -> Comment:
+        """A comment the listing drops solely because of an ``@loc`` mention the viewer has not pinned."""
+        self._secret_location = baker.make("dashboard.Location")
+        self.author.profile.comment_visibility = VisibilityChoice.ANYONE
+        self.author.profile.save(update_fields=["comment_visibility"])
+        return baker.make(
+            Comment,
+            pin=None,
+            wiki=self.wiki,
+            profile=self.author.profile,
+            text=f"Pairs well with @[Secret Spot](loc:{self._secret_location.uuid})",
+        )

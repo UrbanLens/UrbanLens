@@ -1,21 +1,16 @@
 """Re-encrypt every ``EncryptedTextField`` column under the currently-active key.
 
-The second half of a key change. Because ``EncryptedTextField`` reads through
-every key in ``encryption_keys()`` but writes under the first, adding a new key
-alone leaves the database in a mixed state that works but still depends on the
-retired key. This command removes that dependency so the old key can be dropped:
+Because ``EncryptedTextField`` reads through every key in ``encryption_keys()`` but writes under the
+first, adding a new key alone leaves the database in a mixed state that works but still depends on
+the retired key.
+Columns are discovered from the app registry rather than a hard-coded list, so a field added later
+is covered automatically - a static list would silently skip whatever it forgot, which is precisely
+the failure this command exists to prevent.
 
-    1. Set the new key as ``UL_FIELD_ENCRYPTION_KEY`` and move the old one into
-       ``UL_FIELD_ENCRYPTION_KEY_FALLBACKS``. Deploy. Nothing breaks - old rows
-       still decrypt under the fallback.
-    2. Run this command. Every row is rewritten under the new key.
-    3. Remove the old key from ``UL_FIELD_ENCRYPTION_KEY_FALLBACKS``. Deploy.
-
-Skipping step 2 is what turns a routine key change into permanent data loss.
-
-Columns are discovered from the app registry rather than a hard-coded list, so a
-field added later is covered automatically - a static list would silently skip
-whatever it forgot, which is precisely the failure this command exists to prevent.
+- Set the new key as ``UL_FIELD_ENCRYPTION_KEY`` and move the old one into
+  ``UL_FIELD_ENCRYPTION_KEY_FALLBACKS``. Deploy. Nothing breaks - old rows still decry...
+- Run this command. Every row is rewritten under the new key.
+- Remove the old key from ``UL_FIELD_ENCRYPTION_KEY_FALLBACKS``. Deploy.
 """
 
 from __future__ import annotations
@@ -38,8 +33,8 @@ def _encrypted_columns() -> list[tuple[str, str, str, str]]:
     """Find every concrete ``EncryptedTextField`` column in the project.
 
     Returns:
-        One ``(label, table, pk_column, column)`` tuple per encrypted column,
-        where ``label`` is a human-readable ``Model.field`` identifier.
+        One ``(label, table, pk_column, column)`` tuple per encrypted column, where ``label`` is a
+        human-readable ``Model.field`` identifier.
     """
     found: list[tuple[str, str, str, str]] = []
     model: type[Model]
@@ -81,12 +76,11 @@ class Command(BaseCommand):
         """Re-encrypt every discovered column.
 
         Args:
-            *args: Unused positional arguments.
-            **options: Parsed command-line options.
+            *args: Unused positional arguments. **options: Parsed command-line options.
 
         Raises:
-            CommandError: When one or more rows could not be decrypted with any
-                configured key, unless ``--skip-undecryptable`` was passed.
+            CommandError: When one or more rows could not be decrypted with any configured key, unless
+            ``--skip-undecryptable`` was passed.
         """
         dry_run: bool = options["dry_run"]
         skip_undecryptable: bool = options["skip_undecryptable"]
@@ -107,9 +101,8 @@ class Command(BaseCommand):
         rotated_total = 0
         failures: list[str] = []
 
-        # A dry run only decrypts, so it needs no transaction of its own - and
-        # must not open one, since rolling it back would mark an enclosing
-        # transaction (a caller's, or a test's) for rollback too.
+        # A dry run only decrypts, so it needs no transaction of its own - and must not open one, since rolling
+        # it back would mark an enclosing transaction (a caller's, or a test's) for rollback too.
         with transaction.atomic() if not dry_run else nullcontext():
             for label, table, pk_column, column in columns:
                 rotated, column_failures = self._rotate_column(table, pk_column, column, label=label, dry_run=dry_run)
@@ -132,11 +125,7 @@ class Command(BaseCommand):
                     "--skip-undecryptable: those values are already unreadable, so leaving them behind costs nothing "
                     "that dropping the retired key would not have cost anyway.",
                 )
-            # Aborting here would protect nothing. A value no configured key can
-            # read is already lost, so retiring a key takes nothing further from
-            # it - while refusing to finish leaves every *other* value still
-            # dependent on the key being retired, which is the actual risk. The
-            # rows are reported either way so they can be cleaned up separately.
+            # Aborting here would protect nothing.
             self.stdout.write(self.style.WARNING(f"{len(failures)} undecryptable value(s) left as they were; they were already unreadable under every configured key."))
 
         summary = "Would re-encrypt" if dry_run else "Re-encrypted"
@@ -147,10 +136,9 @@ class Command(BaseCommand):
     def _rotate_column(self, table: str, pk_column: str, column: str, *, label: str, dry_run: bool) -> tuple[int, list[str]]:
         """Re-encrypt every non-empty value in one column.
 
-        Uses a raw cursor rather than the ORM so the stored ciphertext is
-        handled directly - going through the model would decrypt on read and
-        re-encrypt on write via the same key set, making the rotation invisible
-        and any undecryptable row an unhandled exception mid-iteration.
+        Uses a raw cursor rather than the ORM so the stored ciphertext is handled directly - going through
+        the model would decrypt on read and re-encrypt on write via the same key set, making the rotation
+        invisible and any undecryptable row an unhandled exception mid-iteration.
 
         Args:
             table: Database table name.
@@ -167,7 +155,7 @@ class Command(BaseCommand):
         failures: list[str] = []
 
         with connection.cursor() as cursor:
-            cursor.execute(f"SELECT {pk_column}, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''")  # noqa: S608 # nosec B608 - identifiers come from Django's model registry, not user input
+            cursor.execute(f"SELECT {pk_column}, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''")  # noqa: S608  # nosec B608 - identifiers come from Django's model registry, not
             rows = cursor.fetchall()
 
             for pk, ciphertext in rows:
@@ -177,7 +165,7 @@ class Command(BaseCommand):
                     failures.append(f"{label} [pk={pk}]: no configured key can decrypt this value.")
                     continue
                 if not dry_run:
-                    cursor.execute(f"UPDATE {table} SET {column} = %s WHERE {pk_column} = %s", [rotated_value, pk])  # noqa: S608 # nosec B608 - identifiers come from Django's model registry, not user input
+                    cursor.execute(f"UPDATE {table} SET {column} = %s WHERE {pk_column} = %s", [rotated_value, pk])  # noqa: S608  # nosec B608 - identifiers come from Django's model registry, not
                 rotated += 1
 
         return rotated, failures

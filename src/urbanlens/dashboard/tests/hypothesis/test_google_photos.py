@@ -1,16 +1,4 @@
-"""Tests for the Google Photos Picker integration.
-
-Covers:
-- GooglePhotosGateway - session create/get, media item listing (pagination),
-  duration-string parsing, download with the ``=d``/``=w..-h..`` suffix.
-- Settings connect/callback/disconnect (OAuth2 state validation, mirrors
-  GoogleCalendarCallbackView's tests).
-- Pin-detail session create/status views - the session/poll/list flow, since
-  there's no coordinate filter to test here (every picked item is a candidate).
-- import_google_photos task - new-item happy path and checksum dedupe.
-
-All HTTP/OAuth calls are mocked; no real network access occurs.
-"""
+"""Tests for the Google Photos Picker integration."""
 
 from __future__ import annotations
 
@@ -25,9 +13,16 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.apis.photos.google import GooglePhotosGateway, PickedMediaItem, PickerSession, media_item_web_url
+from urbanlens.dashboard.services.apis.photos.google import (
+    PREVIEW_MAX_DIMENSION,
+    GooglePhotosGateway,
+    PickedMediaItem,
+    PickerSession,
+    media_item_web_url,
+)
+from urbanlens.dashboard.services.media.storage import lock_profile_uploads
 
 
 def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b""):
@@ -45,7 +40,11 @@ def _account(**kwargs) -> GooglePhotosAccount:
 
     from django.utils import timezone
 
-    defaults = {"access_token": "access", "refresh_token": "refresh", "token_expiry": timezone.now() + datetime.timedelta(hours=1)}
+    defaults = {
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "token_expiry": timezone.now() + datetime.timedelta(hours=1),
+    }
     defaults.update(kwargs)
     user = baker.make(User)
     return GooglePhotosAccount(profile=user.profile, **defaults)
@@ -60,10 +59,24 @@ class GooglePhotosGatewayTests(TestCase):
     def test_create_session_parses_polling_config(self) -> None:
         gw = self._gateway()
         gw.session.post.return_value = _mock_response(
-            json_data={"id": "sess1", "pickerUri": "https://photos.google.com/picker/sess1", "pollingConfig": {"pollInterval": "5s", "timeoutIn": "300s"}, "mediaItemsSet": False},
+            json_data={
+                "id": "sess1",
+                "pickerUri": "https://photos.google.com/picker/sess1",
+                "pollingConfig": {"pollInterval": "5s", "timeoutIn": "300s"},
+                "mediaItemsSet": False,
+            },
         )
         result = gw.create_session()
-        self.assertEqual(result, PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=False, poll_interval_s=5, timeout_s=300))
+        self.assertEqual(
+            result,
+            PickerSession(
+                id="sess1",
+                picker_uri="https://photos.google.com/picker/sess1",
+                media_items_set=False,
+                poll_interval_s=5,
+                timeout_s=300,
+            ),
+        )
 
     def test_create_session_raises_on_error(self) -> None:
         from urbanlens.dashboard.services.core.gateway import GatewayRequestError
@@ -76,8 +89,27 @@ class GooglePhotosGatewayTests(TestCase):
     def test_list_session_media_items_follows_pagination(self) -> None:
         gw = self._gateway()
         gw.session.get.side_effect = [
-            _mock_response(json_data={"mediaItems": [{"id": "a", "mediaFile": {"baseUrl": "https://x/a", "mimeType": "image/jpeg", "filename": "a.jpg"}}], "nextPageToken": "p2"}),
-            _mock_response(json_data={"mediaItems": [{"id": "b", "mediaFile": {"baseUrl": "https://x/b", "mimeType": "image/jpeg", "filename": "b.jpg"}}]}),
+            _mock_response(
+                json_data={
+                    "mediaItems": [
+                        {
+                            "id": "a",
+                            "mediaFile": {"baseUrl": "https://x/a", "mimeType": "image/jpeg", "filename": "a.jpg"},
+                        }
+                    ],
+                    "nextPageToken": "p2",
+                }
+            ),
+            _mock_response(
+                json_data={
+                    "mediaItems": [
+                        {
+                            "id": "b",
+                            "mediaFile": {"baseUrl": "https://x/b", "mimeType": "image/jpeg", "filename": "b.jpg"},
+                        }
+                    ]
+                }
+            ),
         ]
         items = gw.list_session_media_items("sess1")
         self.assertEqual([i.id for i in items], ["a", "b"])
@@ -96,6 +128,21 @@ class GooglePhotosGatewayTests(TestCase):
         gw.download_media_item("https://x/a", original=False)
         called_url = gw.session.get.call_args[0][0]
         self.assertIn("=w", called_url)
+
+    def test_the_preview_is_a_thumbnail_not_a_full_size_image(self) -> None:
+        """The proxied preview URL is used in exactly one place - an `<img>` in `_google_photos_picker_grid.html`. The test above passes for any `=w`, which is why it did not catch that."""
+        gw = self._gateway()
+        gw.session.get.return_value = _mock_response(content=b"bytes")
+        gw.download_media_item("https://x/a", original=False)
+        called_url = gw.session.get.call_args[0][0]
+
+        self.assertNotIn("2048", called_url)
+        self.assertIn(f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}", called_url)
+
+    def test_the_preview_dimension_stays_a_thumbnail(self) -> None:
+        """Guards the constant: raising it back would leave the assertion above
+        passing while restoring the defect it exists to prevent."""
+        self.assertLessEqual(PREVIEW_MAX_DIMENSION, 1024)
 
 
 # -- Settings: connect / disconnect -------------------------------------------
@@ -119,6 +166,21 @@ class GooglePhotosSettingsViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
 
+    def test_successful_connect_redirects_to_the_connections_tab(self) -> None:
+        """Regression guard: the success path used to redirect to the bare settings URL (no #hash), unlike every error branch in the same view - settings/index.html's tab-switch JS only activates a non-default tab when the URL carries a fragment, so this silently landed the user on the default Privacy tab instead of Connections."""
+        from django.core import signing
+
+        state = signing.dumps({"pid": self.profile.id}, salt="google-photos-connect")
+        with mock.patch(
+            "urbanlens.dashboard.controllers.google_photos.exchange_code_for_tokens",
+            return_value={"access_token": "tok", "refresh_token": "ref", "expires_in": 3600},
+        ):
+            response = self.client.get(reverse("settings.google_photos.callback"), {"state": state, "code": "abc"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('settings.view')}#google-photos-settings-section")
+        self.assertTrue(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
+
     def test_disconnect_removes_the_account(self) -> None:
         GooglePhotosAccount.objects.create(profile=self.profile, access_token="a", refresh_token="r")
         with mock.patch("urbanlens.dashboard.controllers.google_photos.revoke_token"):
@@ -126,10 +188,7 @@ class GooglePhotosSettingsViewTests(TestCase):
         self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
 
     def test_disconnect_revokes_the_token_at_google(self) -> None:
-        """Regression: the account model's own docstring promises "deleted
-        (after best-effort token revocation)", matching GoogleCalendarAccount's
-        disconnect flow - the view previously just deleted the row, leaving
-        the OAuth grant live on Google's side indefinitely."""
+        """Regression: the account model's own docstring promises "deleted (after best-effort token revocation)", matching GoogleCalendarAccount's disconnect flow - the view previously just deleted the row, leaving the OAuth grant live on Google's side indefinitely."""
         GooglePhotosAccount.objects.create(profile=self.profile, access_token="access-tok", refresh_token="refresh-tok")
         with mock.patch("urbanlens.dashboard.controllers.google_photos.revoke_token") as mock_revoke:
             self.client.post(reverse("settings.google_photos.disconnect"))
@@ -162,15 +221,38 @@ class PinGooglePhotosSessionTests(TestCase):
         self.account = GooglePhotosAccount.objects.create(profile=self.profile, access_token="a", refresh_token="r")
 
     def test_session_create_returns_waiting_state(self) -> None:
-        picker_session = PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=False, poll_interval_s=5, timeout_s=300)
+        picker_session = PickerSession(
+            id="sess1",
+            picker_uri="https://photos.google.com/picker/sess1",
+            media_items_set=False,
+            poll_interval_s=5,
+            timeout_s=300,
+        )
         with mock.patch.object(GooglePhotosGateway, "create_session", return_value=picker_session):
             response = self.client.post(reverse("pin.google_photos.session.create", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["session_id"], "sess1")
 
+    def test_a_rate_limit_refusal_does_not_500_the_session_create_view(self) -> None:
+        """P122: the view's `except GatewayRequestError` must also catch a refusal, not just a real failure."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with mock.patch.object(
+            GooglePhotosGateway, "create_session", side_effect=RateLimitExceededError("google_photos")
+        ):
+            response = self.client.post(reverse("pin.google_photos.session.create", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("error", response.context)
+
     def test_session_status_still_waiting(self) -> None:
         cache.set("ul_gphotos_session_owner_sess1", self.profile.id, 600)
-        picker_session = PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=False, poll_interval_s=5, timeout_s=300)
+        picker_session = PickerSession(
+            id="sess1",
+            picker_uri="https://photos.google.com/picker/sess1",
+            media_items_set=False,
+            poll_interval_s=5,
+            timeout_s=300,
+        )
         with mock.patch.object(GooglePhotosGateway, "get_session", return_value=picker_session):
             response = self.client.get(reverse("pin.google_photos.session.status", args=[self.pin.slug, "sess1"]))
         self.assertEqual(response.status_code, 200)
@@ -178,8 +260,16 @@ class PinGooglePhotosSessionTests(TestCase):
 
     def test_session_status_ready_lists_all_picked_items_as_candidates(self) -> None:
         cache.set("ul_gphotos_session_owner_sess1", self.profile.id, 600)
-        picker_session = PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=True, poll_interval_s=5, timeout_s=300)
-        item = PickedMediaItem(id="item1", base_url="https://x/item1", mime_type="image/jpeg", filename="item1.jpg", create_time=None)
+        picker_session = PickerSession(
+            id="sess1",
+            picker_uri="https://photos.google.com/picker/sess1",
+            media_items_set=True,
+            poll_interval_s=5,
+            timeout_s=300,
+        )
+        item = PickedMediaItem(
+            id="item1", base_url="https://x/item1", mime_type="image/jpeg", filename="item1.jpg", create_time=None
+        )
         with (
             mock.patch.object(GooglePhotosGateway, "get_session", return_value=picker_session),
             mock.patch.object(GooglePhotosGateway, "list_session_media_items", return_value=[item]),
@@ -189,7 +279,9 @@ class PinGooglePhotosSessionTests(TestCase):
 
     def test_status_for_unowned_session_is_404(self) -> None:
         # Never registered as owned by this profile.
-        response = self.client.get(reverse("pin.google_photos.session.status", args=[self.pin.slug, "someone-elses-session"]))
+        response = self.client.get(
+            reverse("pin.google_photos.session.status", args=[self.pin.slug, "someone-elses-session"])
+        )
         self.assertEqual(response.status_code, 404)
 
 
@@ -212,7 +304,9 @@ class ImportGooglePhotosTaskTests(TestCase):
         cache.set(session_items_cache_key(session_id), items, 3600)
 
     def test_imports_a_new_item_and_logs_a_visit(self) -> None:
-        self._seed_cache("sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}})
+        self._seed_cache(
+            "sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}}
+        )
         with (
             mock.patch.object(GooglePhotosGateway, "download_media_item", return_value=b"jpeg-bytes"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -223,12 +317,19 @@ class ImportGooglePhotosTaskTests(TestCase):
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertEqual(image.source_url, media_item_web_url("item1"))
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.PHOTO).exists())
+        # Omitting source= defaults the row to UPLOAD, which is indistinguishable
+        # from the upload form to every source-keyed consumer: the Media gallery's
+        # per-source tabs, achievements' UPLOAD-filtered counts, and the
+        # UPLOAD-gated reputation rules all silently miscount these.
+        self.assertEqual(image.source, ImageSource.GOOGLE_PHOTOS)
 
     def test_skips_item_already_imported_by_checksum(self) -> None:
         content = b"already-here"
         checksum = hashlib.sha256(content).hexdigest()
         baker.make(Image, pin=self.pin, profile=self.profile, checksum=checksum)
-        self._seed_cache("sess1", {"dup": {"base_url": "https://x/dup", "mime_type": "image/jpeg", "filename": "dup.jpg"}})
+        self._seed_cache(
+            "sess1", {"dup": {"base_url": "https://x/dup", "mime_type": "image/jpeg", "filename": "dup.jpg"}}
+        )
 
         with (
             mock.patch.object(GooglePhotosGateway, "download_media_item", return_value=content),
@@ -254,31 +355,31 @@ class ImportGooglePhotosTaskTests(TestCase):
             counts = tasks.import_google_photos(self.pin.pk, self.profile.pk, "sess1", ["item1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
-        self._seed_cache("sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}})
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
+        self._seed_cache(
+            "sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}}
+        )
         with (
             mock.patch.object(GooglePhotosGateway, "download_media_item", return_value=b"jpeg-bytes"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+            mock.patch(
+                "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+            ) as lock,
         ):
             tasks.import_google_photos(self.pin.pk, self.profile.pk, "sess1", ["item1"])
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
 
-# -- GooglePhotosAccountManager.get_for_profile: self-heal on undecryptable tokens --
+# -- GooglePhotosAccount.objects.get_for_profile: undecryptable tokens --
 
 
 class GetPhotosAccountTests(TestCase):
-    """GooglePhotosAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
+    """GooglePhotosAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it.
 
-    Regression test for a production 500: rotating field_encryption_key
-    without migrating old rows makes EncryptedTextField.from_db_value raise
-    InvalidToken, which crashed every page that touched the Google Photos
-    connection (e.g. GET /dashboard/settings/google-photos/).
-    """
+    Regression test for a production 500: rotating field_encryption_key without migrating old rows makes
+    EncryptedTextField.from_db_value raise InvalidToken, which crashed every page that touched the Google Photos
+    connection (e.g."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -298,10 +399,10 @@ class GetPhotosAccountTests(TestCase):
     def test_returns_account_when_decryptable(self) -> None:
         self.assertEqual(GooglePhotosAccount.objects.get_for_profile(self.profile), self.account)
 
-    def test_undecryptable_account_is_healed_to_none(self) -> None:
+    def test_undecryptable_account_reads_as_none_and_is_kept(self) -> None:
         self._corrupt_stored_access_token()
         self.assertIsNone(GooglePhotosAccount.objects.get_for_profile(self.profile))
-        self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
+        self.assertTrue(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
 
     def test_settings_view_does_not_500_on_undecryptable_account(self) -> None:
         self._corrupt_stored_access_token()

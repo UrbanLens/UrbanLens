@@ -14,10 +14,11 @@
                     {{ article.title }}
                 </a>
             </h4>
-            
+
             {% if article.thumbnail %}
             <div class="wikipedia-thumb-wrap">
-                <img class="wikipedia-thumb" src="{{ article.thumbnail }}" alt="{{ article.title }}" loading="lazy">
+                <img class="wikipedia-thumb" src="{{ article.thumbnail }}" alt="{{ article.title }}" loading="lazy"
+                     data-thumb-fallback="image" data-thumb-fallback-class="wikipedia-thumb">
             </div>
             {% endif %}
 
@@ -25,8 +26,7 @@
             <p class="wikipedia-description">{{ article.description }}</p>
             {% endif %}
             {% if article.extract %}
-            {# article.extract is server-sanitized HTML (WikipediaGateway._clean_and_trim_extract) #}
-            {# - real headings/paragraphs/lists, already capped server-side. #}
+            {# article.extract is server-sanitized HTML (WikipediaGateway._clean_and_trim_extract) real headings/paragraphs/lists, already capped. #}
             <div class="wikipedia-extract">{{ article.extract|safe }}</div>
             {% endif %}
             {% include "dashboard/partials/pins/_ai_extract_button.html" with url=article.url %}

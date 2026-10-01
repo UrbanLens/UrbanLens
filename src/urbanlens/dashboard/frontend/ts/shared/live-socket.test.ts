@@ -10,12 +10,6 @@ const PAGE_URL = "https://urbanlens.test/";
 
 /**
  * Put the document back on an https page.
- *
- * The scheme the helper picks comes from ``location``, and the happy-dom
- * document is shared by every test file in the run: ``leave-confirmation.test.ts``
- * navigates it away, so whichever file follows inherits an about:blank location
- * and would see ``ws://`` here for reasons that have nothing to do with this
- * module.
  */
 function restorePageUrl(): void {
     (window as unknown as { happyDOM?: { setURL(url: string): void } }).happyDOM?.setURL(PAGE_URL);
@@ -28,9 +22,6 @@ type Listener = (event: never) => void;
 
 /**
  * A WebSocket the test drives by hand.
- *
- * ``close()`` emits a close event, as a real socket does - which is the whole
- * reason a deliberate close can be mistaken for a dropped one.
  */
 class StubSocket {
     static readonly CONNECTING = 0;
@@ -97,11 +88,6 @@ interface Scheduled {
 
 /**
  * A clock the test steps by hand.
- *
- * ``bun-types`` does not declare bun's own ``jest.useFakeTimers``, and stubbing
- * the four globals is what the rest of this suite does with ``fetch`` anyway. It
- * also exposes ``pendingTimers()``, which is the only direct way to prove a
- * teardown left nothing armed.
  */
 let scheduled = new Map<number, Scheduled>();
 let now = 0;
@@ -170,6 +156,7 @@ interface OpenArgs {
     onMessage?: (data: unknown) => void;
     onOpen?: () => void;
     onPermanentClose?: () => void;
+    onClose?: (code: number) => void;
 }
 
 /** Every handle opened this test, so afterEach can unsubscribe them all. */
@@ -181,6 +168,7 @@ function open(args: OpenArgs = {}): LiveSocketHandle {
         onMessage: args.onMessage ?? ((data) => args.received?.push(data)),
         onOpen: args.onOpen,
         onPermanentClose: args.onPermanentClose,
+        onClose: args.onClose,
     });
     handles.push(handle);
     return handle;
@@ -201,9 +189,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    // window and document are shared across the whole file, so a handle left
-    // open here would still be listening for "online" during a later test and
-    // would reconnect into its socket list.
+    // window and document are shared across the whole file, so a handle left open here would still be listening for "online" during a later.
     for (const handle of handles) handle.close();
     restoreClock();
     globalThis.WebSocket = realWebSocket;
@@ -570,6 +556,42 @@ describe("a refused connection", () => {
     });
 });
 
+describe("onClose", () => {
+    test("fires each time the connection goes away on its own, a refusal included", () => {
+        let closed = 0;
+        open({ onClose: () => (closed += 1) });
+        current().accept();
+        current().drop();
+        advance(1000);
+        current().drop();
+        advance(2000);
+        current().accept();
+        current().drop(4404);
+
+        expect(closed).toBe(3);
+    });
+
+    test("says why, so a refusal for capacity can be told from a drop", () => {
+        const codes: number[] = [];
+        open({ onClose: (code) => codes.push(code) });
+        current().accept();
+        current().drop(4429);
+        advance(60000);
+        current().drop();
+
+        expect(codes).toEqual([4429, 1006]);
+    });
+
+    test("does not fire for a deliberate close", () => {
+        let closed = 0;
+        const handle = open({ onClose: () => (closed += 1) });
+        current().accept();
+        handle.close();
+
+        expect(closed).toBe(0);
+    });
+});
+
 describe("onOpen", () => {
     test("fires on every successful connection, not just the first", () => {
         let opened = 0;
@@ -580,5 +602,65 @@ describe("onOpen", () => {
         current().accept();
 
         expect(opened).toBe(2);
+    });
+});
+
+describe("a connection refused for capacity", () => {
+    // 4429 is the consumers' "this account already holds as many sockets as it
+    // may" (services/security/socket_budget.py). Unlike 4404 it is temporary -
+    // closing a tab frees a place - so the socket keeps trying. What it must not
+    // do is try eagerly: every attempt is a handshake, an auth resolution and a
+    // store round trip, which is the cost the cap exists to bound.
+    test("keeps trying, unlike an unauthorized one", () => {
+        open();
+        current().accept();
+        current().drop(4429);
+
+        advance(600000);
+        expect(sockets.length).toBeGreaterThan(1);
+    });
+
+    test("waits the full ceiling rather than the shortest delay", () => {
+        open();
+        current().accept();
+        current().drop(4429);
+
+        advance(29000);
+        expect(sockets.length).toBe(1);
+        advance(10000);
+        expect(sockets.length).toBe(2);
+    });
+
+    test("is not brought forward by coming back online", () => {
+        open();
+        current().accept();
+        current().drop(4429);
+
+        window.dispatchEvent(new Event("online"));
+        expect(sockets.length).toBe(1);
+    });
+
+    test("is not brought forward by returning to the tab", () => {
+        // The one that would bite hardest: a browser one socket over the
+        // allowance would otherwise retry on every window switch.
+        open();
+        current().accept();
+        current().drop(4429);
+
+        document.dispatchEvent(new Event("visibilitychange"));
+        document.dispatchEvent(new Event("visibilitychange"));
+        expect(sockets.length).toBe(1);
+    });
+
+    test("goes back to retrying eagerly once a place comes free", () => {
+        open();
+        current().accept();
+        current().drop(4429);
+        advance(40000);
+        current().accept();
+        current().drop(1006);
+
+        window.dispatchEvent(new Event("online"));
+        expect(sockets.length).toBe(3);
     });
 });

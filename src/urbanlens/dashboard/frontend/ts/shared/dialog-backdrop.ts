@@ -1,24 +1,5 @@
 /**
  * Close a ``<dialog>`` when its backdrop is clicked.
- *
- * A native dialog's backdrop is part of the dialog element itself, so a backdrop
- * click arrives with ``event.target`` set to the dialog and can only be told apart
- * from a click on the dialog's own box by comparing coordinates against its rect.
- *
- * The press is tracked separately from the click so that selecting text inside the
- * dialog and releasing outside it does not close the dialog - a plain click handler
- * would treat that drag as a backdrop click and discard whatever the user was
- * partway through doing.
- *
- * ``data-closefn`` names a global to call instead of ``close()``, for dialogs that
- * need to tear something down (a Leaflet map, a draw session) on the way out.
- *
- * **Testing limitation.** ``_isBackdrop`` compares against ``getBoundingClientRect``,
- * which happy-dom reports as all zeros; the tests alongside this drive the
- * press-then-click sequencing, which is the real logic, and cannot verify the
- * geometry itself.
- *
- * Ported out of ``base.html``'s inline script unchanged.
  */
 
 type PressOrigin = "backdrop" | "inside" | null;

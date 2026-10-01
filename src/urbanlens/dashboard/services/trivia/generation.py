@@ -1,32 +1,23 @@
-"""AI-generated trivia questions mined from wiki article content.
-
-Every wiki already implies at least one profile can see it (a Wiki only
-ever exists because its creator had pinned that location - see
-``services.wiki.wiki_access``'s visibility rule) - so, unlike a per-viewer
-request, this background generator needs no additional profile-scoping
-before reading a wiki's article text.
-
-Generated questions are classified by the exact same
-``services.trivia.classifier`` used for user submissions before ever being
-persisted - a rejected candidate was never shown to anyone, so (unlike a
-user's own rejected submission) there is no "show it back to the author
-very rarely" leniency to apply here; it is simply discarded.
-"""
+"""AI-generated trivia questions mined from wiki article content."""
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
+from django.db.models import F
 from django.db.models.functions import Length
+from django.utils import timezone
 
-from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus
+from urbanlens.dashboard.models.trivia.model import TriviaGenerationAttempt, TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
 from urbanlens.dashboard.services.trivia.classifier import classify_trivia_question
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.ai.gateway import LLMGateway
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +31,9 @@ MAX_QUESTIONS_PER_WIKI = 3
 #: How many not-yet-processed wikis one sweep considers - bounded so a
 #: single scheduled run can't spend unbounded AI tokens.
 DEFAULT_SWEEP_BATCH_SIZE = 25
+
+#: A wiki the sweep mined is not mined again for this long, whatever came of it.
+RETRY_AFTER = timedelta(days=30)
 
 #: Separator between a generated question and its answer within one ANSWER
 #: tag - deliberately unlikely to appear in ordinary prose.
@@ -57,28 +51,22 @@ Respond with each question/answer pair wrapped in its own ANSWER tag, with the q
 If the article doesn't contain enough concrete facts to write a good question, return no ANSWER tags at all."""
 
 
-def generate_questions_for_wiki(wiki: Wiki) -> list[TriviaQuestion]:
+def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None) -> list[TriviaQuestion]:
     """Generate, classify, and persist approved AI trivia questions from one wiki's article.
-
-    Idempotent per location: a location that already has at least one
-    AI_GENERATED question is skipped entirely, so this is safe to call
-    repeatedly (e.g. from a periodic sweep) without regenerating or
-    re-spending tokens on the same wiki.
+    Idempotent per location: a location that already has at least one AI_GENERATED question is skipped entirely, so this is safe to call repeatedly (e.g. from a periodic sweep) without regenerating or re-spending tokens on the same wiki.
 
     Args:
         wiki: The wiki to mine for trivia questions.
+        gateway: The trivia-generation gateway, when the caller already has one.
 
     Returns:
-        Every newly-created (APPROVED) question - empty if the wiki was
-        skipped (no substantial content, already generated, AI unavailable)
-        or nothing survived classification.
-    """
+        Every newly-created (APPROVED) question - empty if the wiki was skipped (no substantial content, already generated, AI unavailable) or nothing survived classification."""
     if TriviaQuestion.objects.filter(location=wiki.location, source=TriviaQuestionSource.AI_GENERATED).exists():
         return []
     if not wiki.description or len(wiki.description) < MIN_DESCRIPTION_LENGTH:
         return []
 
-    gateway = get_gateway("trivia_generation", instructions=_INSTRUCTIONS)
+    gateway = gateway or _gateway()
     if gateway is None:
         return []
 
@@ -119,32 +107,48 @@ def generate_questions_for_wiki(wiki: Wiki) -> list[TriviaQuestion]:
     return created
 
 
-def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) -> dict[str, int]:
-    """Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
+def _gateway() -> LLMGateway | None:
+    return get_gateway("trivia_generation", instructions=_INSTRUCTIONS)
 
-    Called from a scheduled Celery task (``tasks.run_scheduled_trivia_generation``).
+
+def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) -> dict[str, int]:
+    """Generate AI trivia questions for a bounded batch of wikis, those never or least recently mined first.
+
+    Each wiki mined is recorded whether or not a question survived, and is not mined again for
+    ``RETRY_AFTER``, so wikis that yield nothing cannot hold the batch and re-spend tokens every run. Nothing
+    is recorded while AI is unavailable.
 
     Args:
         batch_size: Maximum number of wikis to consider in this run.
 
     Returns:
-        ``{"wikis_considered": int, "questions_created": int}``.
-    """
+        ``{"wikis_considered": int, "questions_created": int}``."""
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     already_generated_location_ids = TriviaQuestion.objects.filter(source=TriviaQuestionSource.AI_GENERATED).values_list("location_id", flat=True)
-    candidates = (
+    candidates = list(
         Wiki.objects.exclude(location_id__in=already_generated_location_ids)
         .exclude(description__isnull=True)
         .annotate(description_length=Length("description"))
         .filter(description_length__gte=MIN_DESCRIPTION_LENGTH)
+        .exclude(trivia_generation_attempt__attempted_at__gte=timezone.now() - RETRY_AFTER)
         .select_related("location")
-        .order_by("pk")[:batch_size]
+        .order_by(F("trivia_generation_attempt__attempted_at").asc(nulls_first=True), "pk")[:batch_size],
     )
+    summary = {"wikis_considered": 0, "questions_created": 0}
+    if not candidates:
+        return summary
+    gateway = _gateway()
+    if gateway is None:
+        return summary
 
-    wikis_considered = 0
-    questions_created = 0
     for wiki in candidates:
-        wikis_considered += 1
-        questions_created += len(generate_questions_for_wiki(wiki))
-    return {"wikis_considered": wikis_considered, "questions_created": questions_created}
+        try:
+            created = generate_questions_for_wiki(wiki, gateway=gateway)
+        except Exception:
+            logger.exception("Trivia generation failed for wiki %s; recorded as attempted", wiki.pk)
+            created = []
+        TriviaGenerationAttempt.objects.update_or_create(wiki=wiki, defaults={"attempted_at": timezone.now(), "questions_created": len(created)})
+        summary["wikis_considered"] += 1
+        summary["questions_created"] += len(created)
+    return summary

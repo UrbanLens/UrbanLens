@@ -1,12 +1,4 @@
-"""Tests for PinController.parse_for_preview - the import wizard's file-parsing step.
-
-Covers the suggested list/category name ("stem") derived from each uploaded
-file - for the bug this guards against: a KMZ
-is just a ZIP wrapping a single "doc.kml" (Google's own fixed internal
-filename, from Google Takeout/My Maps exports), so using that inner name
-unconditionally always produced the same generic "doc" suggestion regardless
-of what the user actually named the .kmz.
-"""
+"""Tests for PinController.parse_for_preview - the import wizard's file-parsing step."""
 
 from __future__ import annotations
 
@@ -20,8 +12,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.tasks import finish_import_preview_task, parse_import_preview_task
 
 _KML_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -42,6 +36,16 @@ def _kmz_bytes(inner_filename: str) -> bytes:
     return buf.getvalue()
 
 
+def _read_preview(test: TestCase, uploads: list[SimpleUploadedFile]) -> dict:
+    """Post an upload and let the preview's tasks run, returning what the dialog receives."""
+    with tasks_run_inline(parse_import_preview_task, finish_import_preview_task):
+        response = test.client.post(reverse("pin.import.preview"), {"upload_files": uploads})
+    test.assertEqual(response.status_code, 202, response.content)
+    state = test.client.get(response.json()["status_url"]).json()
+    test.assertEqual(state["status"], "done", state)
+    return state["result"]
+
+
 class ParseForPreviewStemTests(TestCase):
     """PinController.parse_for_preview - suggested list/category name per file."""
 
@@ -52,9 +56,7 @@ class ParseForPreviewStemTests(TestCase):
 
     def _post(self, filename: str, data: bytes) -> list[dict]:
         upload = SimpleUploadedFile(filename, data, content_type="application/octet-stream")
-        response = self.client.post(reverse("pin.import.preview"), {"upload_files": [upload]})
-        self.assertEqual(response.status_code, 200)
-        return response.json()["lists"]
+        return _read_preview(self, [upload])["lists"]
 
     def test_kmz_wrapping_doc_kml_uses_the_outer_filename(self) -> None:
         """The exact reported bug: Google Takeout/My Maps KMZ always names its
@@ -66,9 +68,10 @@ class ParseForPreviewStemTests(TestCase):
 
     def test_plain_kml_upload_uses_its_own_filename(self) -> None:
         """Sanity baseline: a non-archive upload is completely unaffected."""
-        upload = SimpleUploadedFile("Urbex Sites.kml", _KML_TEMPLATE.encode(), content_type="application/vnd.google-earth.kml+xml")
-        response = self.client.post(reverse("pin.import.preview"), {"upload_files": [upload]})
-        lists = response.json()["lists"]
+        upload = SimpleUploadedFile(
+            "Urbex Sites.kml", _KML_TEMPLATE.encode(), content_type="application/vnd.google-earth.kml+xml"
+        )
+        lists = _read_preview(self, [upload])["lists"]
         self.assertEqual(len(lists), 1)
         self.assertEqual(lists[0]["stem"], "Urbex Sites")
 
@@ -100,7 +103,9 @@ class ParseForPreviewStemTests(TestCase):
         of those formats ever call out to Google. Explicitly force a blank key
         here rather than relying on this environment's own `.env` happening to
         leave it unset."""
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.maps.settings.google_unrestricted_api_key", ""):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.maps.settings.google_unrestricted_api_key", ""
+        ):
             lists = self._post("Urbex Sites.kml", _KML_TEMPLATE.encode())
         self.assertEqual(len(lists), 1)
         self.assertEqual(lists[0]["stem"], "Urbex Sites")
@@ -109,9 +114,8 @@ class ParseForPreviewStemTests(TestCase):
 class PreviewPinCapTests(TestCase):
     """The preview materialises every pin at once; the import does not.
 
-    `import_pins_streaming` is a generator yielding one SSE event per pin, so
-    it never holds the whole set. The preview that runs *first* builds every
-    pin dict and serialises them into a single in-request JSON response, and
+    The confirmed import walks its pins one at a time. The preview that runs
+    *first* builds every pin dict and serialises them into a single result, and
     nothing bounded that - which matters more since the archive extractor's
     budget became a shared 2 GB across an upload's nested archives.
 
@@ -139,9 +143,7 @@ class PreviewPinCapTests(TestCase):
     def _preview(self, data: bytes, cap: int) -> dict:
         upload = SimpleUploadedFile("spots.geojson", data, content_type="application/octet-stream")
         with mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", cap):
-            response = self.client.post(reverse("pin.import.preview"), {"upload_files": [upload]})
-        self.assertEqual(response.status_code, 200)
-        return response.json()
+            return _read_preview(self, [upload])
 
     def test_the_preview_stops_at_the_cap(self) -> None:
         payload = self._preview(self._geojson(12), cap=5)

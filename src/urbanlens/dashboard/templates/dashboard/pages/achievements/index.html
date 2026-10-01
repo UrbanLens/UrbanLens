@@ -12,7 +12,7 @@
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
         {% if is_owner %}
-        {% include "dashboard/partials/profile/_profile_tabs.html" with active="achievements" profile_slug=subject.slug %}
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="achievements" profile_slug=subject.slug has_achievements=has_achievements %}
         {% else %}
         <nav class="ul-subnav-tabs" aria-label="Achievements views">
             <a href="{% url 'achievement.list' profile_slug=subject.slug %}" class="ul-subnav-tab is-active" aria-current="page">

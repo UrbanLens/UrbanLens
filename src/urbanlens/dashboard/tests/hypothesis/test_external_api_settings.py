@@ -1,12 +1,4 @@
-"""Tests for the external API's account-settings sync endpoint.
-
-The endpoint has to hold three lines at once: it must not become a back door
-around the site's own gating (feature entitlements, the community kill switch),
-it must be genuinely partial so a one-toggle sync never clobbers concurrent web
-edits, and it must report what the profile *actually ended up as* rather than
-echoing the submission - because ``Profile.save()`` rewrites community-gated
-fields underneath it.
-"""
+"""Tests for the external API's account-settings sync endpoint."""
 
 from __future__ import annotations
 
@@ -21,7 +13,12 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import SyncAliasesDirection, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
-from urbanlens.dashboard.services.profile.profile_settings import SETTINGS_FIELDS, SettingsValidationError, apply_settings_patch, read_settings
+from urbanlens.dashboard.services.profile.profile_settings import (
+    SETTINGS_FIELDS,
+    SettingsValidationError,
+    apply_settings_patch,
+    read_settings,
+)
 
 
 def _bearer(raw_key: str) -> dict:
@@ -56,7 +53,9 @@ class SettingsScopeTests(_SettingsApiTestCase):
     def test_patch_requires_settings_write(self) -> None:
         """A read-only grant cannot change anything."""
         ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.SETTINGS_READ.value])
-        response = self.client.patch(self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_unauthenticated_request_is_rejected(self) -> None:
@@ -81,7 +80,13 @@ class SettingsReadTests(_SettingsApiTestCase):
     def test_get_includes_computed_context(self) -> None:
         """A client can render the settings UI without a second round-trip."""
         payload = self.client.get(self.url, **_bearer(self.raw_key)).json()
-        for key in ("updated", "effective_distance_units", "features", "allowed_image_dimensions", "allowed_video_heights"):
+        for key in (
+            "updated",
+            "effective_distance_units",
+            "features",
+            "allowed_image_dimensions",
+            "allowed_video_heights",
+        ):
             with self.subTest(key=key):
                 self.assertIn(key, payload)
         self.assertIn("ai", payload["features"])
@@ -90,7 +95,13 @@ class SettingsReadTests(_SettingsApiTestCase):
     def test_get_leaks_nothing_outside_the_allowlist(self) -> None:
         """Profile carries location history and subscription linkage - none of it here."""
         payload = self.client.get(self.url, **_bearer(self.raw_key)).json()
-        allowed = set(SETTINGS_FIELDS) | {"updated", "effective_distance_units", "features", "allowed_image_dimensions", "allowed_video_heights"}
+        allowed = set(SETTINGS_FIELDS) | {
+            "updated",
+            "effective_distance_units",
+            "features",
+            "allowed_image_dimensions",
+            "allowed_video_heights",
+        }
         self.assertEqual(set(payload) - allowed, set())
 
 
@@ -98,7 +109,9 @@ class SettingsPatchTests(_SettingsApiTestCase):
     """PATCH round-trips, stays partial, and validates."""
 
     def test_patch_round_trips(self) -> None:
-        response = self.client.patch(self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["theme_mode"], ThemeChoice.LIGHT)
         self.profile.refresh_from_db()
@@ -107,18 +120,27 @@ class SettingsPatchTests(_SettingsApiTestCase):
     def test_patch_is_partial(self) -> None:
         """An unsubmitted field is left alone, not reset to its default."""
         Profile.objects.filter(pk=self.profile.pk).update(track_routes=False, map_default_zoom=7)
-        self.client.patch(self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key))
+        self.client.patch(
+            self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.profile.refresh_from_db()
         self.assertFalse(self.profile.track_routes)
         self.assertEqual(self.profile.map_default_zoom, 7)
 
     def test_patch_rejects_an_invalid_choice(self) -> None:
-        response = self.client.patch(self.url, {"theme_mode": "chartreuse"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"theme_mode": "chartreuse"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_patch_ignores_a_field_outside_the_allowlist(self) -> None:
         """An unknown key is dropped by the serializer, never written to the model."""
-        response = self.client.patch(self.url, {"is_superuser": True, "theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url,
+            {"is_superuser": True, "theme_mode": ThemeChoice.LIGHT},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
         self.assertFalse(self.user.is_superuser)
@@ -126,7 +148,9 @@ class SettingsPatchTests(_SettingsApiTestCase):
     def test_patch_accepts_null_for_a_nullable_field(self) -> None:
         """Null is a real value here - it resets distance units to "infer"."""
         Profile.objects.filter(pk=self.profile.pk).update(distance_units="mi")
-        response = self.client.patch(self.url, {"distance_units": None}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"distance_units": None}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.profile.refresh_from_db()
         self.assertIsNone(self.profile.distance_units)
@@ -168,7 +192,12 @@ class SettingsCommunityGatingTests(_SettingsApiTestCase):
     def test_coercion_is_not_reported_as_an_error(self) -> None:
         """A client asking for something the model overrides still gets a 200."""
         Profile.objects.filter(pk=self.profile.pk).update(community_enabled=False)
-        response = self.client.patch(self.url, {"contact_visibility": VisibilityChoice.ANYONE}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url,
+            {"contact_visibility": VisibilityChoice.ANYONE},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["contact_visibility"], VisibilityChoice.NO_ONE)
 
@@ -178,13 +207,17 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
 
     def test_ai_field_rejected_when_feature_is_off(self) -> None:
         with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
-            response = self.client.patch(self.url, {"ai_enabled": True}, content_type="application/json", **_bearer(self.raw_key))
+            response = self.client.patch(
+                self.url, {"ai_enabled": True}, content_type="application/json", **_bearer(self.raw_key)
+            )
         self.assertEqual(response.status_code, 400)
         self.assertIn("ai_enabled", response.json()["fields"])
 
     def test_places_field_rejected_when_feature_is_off(self) -> None:
         with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
-            response = self.client.patch(self.url, {"places_google_enabled": False}, content_type="application/json", **_bearer(self.raw_key))
+            response = self.client.patch(
+                self.url, {"places_google_enabled": False}, content_type="application/json", **_bearer(self.raw_key)
+            )
         self.assertEqual(response.status_code, 400)
         self.assertIn("places_google_enabled", response.json()["fields"])
 
@@ -204,18 +237,18 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
 
     def test_ungated_fields_are_unaffected_by_a_missing_feature(self) -> None:
         with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
-            response = self.client.patch(self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key))
+            response = self.client.patch(
+                self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key)
+            )
         self.assertEqual(response.status_code, 200)
 
 
 class SettingsNameAndContactTests(_SettingsApiTestCase):
     """``first_name``/``last_name`` and the six contact methods, via /settings/.
 
-    These live on ``User`` (name) and ``Profile`` (contact) respectively, but
-    both are meant to look like an ordinary settings field to a client - see
-    ``services.profile.profile_settings``'s docstring on why they're allowlisted here
-    rather than left to ``PATCH /profiles/{slug}/``.
-    """
+    These live on ``User`` (name) and ``Profile`` (contact) respectively, but both are meant to look like an
+    ordinary settings field to a client - see ``services.profile.profile_settings``'s docstring on why they're
+    allowlisted here rather than left to ``PATCH /profiles/{slug}/``."""
 
     def test_patch_writes_first_and_last_name_to_the_user(self) -> None:
         response = self.client.patch(
@@ -235,7 +268,9 @@ class SettingsNameAndContactTests(_SettingsApiTestCase):
     def test_patch_name_only_touches_user_not_profile_update_fields(self) -> None:
         """A name-only patch must not blow up on an empty Profile update_fields list."""
         Profile.objects.filter(pk=self.profile.pk).update(map_default_zoom=7)
-        response = self.client.patch(self.url, {"first_name": "Grace"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"first_name": "Grace"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.map_default_zoom, 7)
@@ -256,20 +291,26 @@ class SettingsNameAndContactTests(_SettingsApiTestCase):
         self.assertEqual(self.profile.phone_number, "+15551234567")
 
     def test_patch_rejects_a_discord_username_outside_the_allowed_charset(self) -> None:
-        response = self.client.patch(self.url, {"discord_username": "no spaces!"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"discord_username": "no spaces!"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 400)
         self.assertIn("discord_username", response.json()["fields"])
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.discord_username, "")
 
     def test_patch_accepts_a_valid_discord_username(self) -> None:
-        response = self.client.patch(self.url, {"discord_username": "ada.lovelace"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"discord_username": "ada.lovelace"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["discord_username"], "ada.lovelace")
 
     def test_patch_clears_a_contact_method_with_an_empty_string(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(phone_number="+15551234567")
-        response = self.client.patch(self.url, {"phone_number": ""}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"phone_number": ""}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["phone_number"], "")
         self.profile.refresh_from_db()
@@ -278,11 +319,9 @@ class SettingsNameAndContactTests(_SettingsApiTestCase):
     def test_email_and_username_remain_unwritable(self) -> None:
         """Login identity stays off the allowlist even though name/contact are now on it.
 
-        Neither is a declared ``SettingsPatchSerializer`` field, so - like any
-        other undeclared key - it is silently dropped rather than rejected;
-        see ``test_patch_ignores_a_field_outside_the_allowlist`` for the same
-        contract against ``is_superuser``.
-        """
+        Neither is a declared ``SettingsPatchSerializer`` field, so - like any other undeclared key - it is
+        silently dropped rather than rejected; see ``test_patch_ignores_a_field_outside_the_allowlist`` for the
+        same contract against ``is_superuser``."""
         original_email = self.user.email
         original_username = self.user.username
         response = self.client.patch(
@@ -333,7 +372,13 @@ class SettingsServiceTests(TestCase):
         self.assertIn("discord_username", ctx.exception.errors)
 
     def test_apply_rejects_a_storage_dimension_above_entitlement(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.profile.profile_settings.allowed_user_dimension_values", return_value={1080}), self.assertRaises(SettingsValidationError) as ctx:
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.profile.profile_settings.allowed_user_dimension_values",
+                return_value={1080},
+            ),
+            self.assertRaises(SettingsValidationError) as ctx,
+        ):
             apply_settings_patch(self.profile, {"image_downscale_max_dimension": 999999}, user=self.user)
         self.assertIn("image_downscale_max_dimension", ctx.exception.errors)
 

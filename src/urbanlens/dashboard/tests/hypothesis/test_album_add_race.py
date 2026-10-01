@@ -1,15 +1,4 @@
-"""Adding a photo to an album must survive a concurrent add of the same photo.
-
-``add_images_to_album`` reads which images are already in the album, then inserts the
-rest - a check-then-act with no lock. ``uq_album_item`` correctly stops the duplicate
-row, but an unguarded insert turns the loser of that race into an ``IntegrityError``
-rather than a no-op.
-
-The race is not hypothetical: there are two callers, and one of them is the Celery task
-``cache_media_item_into_album``. Celery delivers at least once, so a redelivered task
-races both a retry of itself and the user adding the same photo from the picker once it
-materialises.
-"""
+"""Adding a photo to an album must survive a concurrent add of the same photo."""
 
 from __future__ import annotations
 
@@ -36,8 +25,12 @@ class AlbumAddRaceTests(TestCase):
         self.location = Location.objects.create(latitude=39.5, longitude=-75.5)
         self.pin = Pin.objects.create(profile=self.profile, location=self.location, name="Album host")
         self.album = Album.objects.create(parent_pin=self.pin, profile=self.profile, name="Ruins", slug="ruins")
-        self.image = Image.objects.create(pin=self.pin, location=self.location, profile=self.profile, image="photos/a.jpg")
-        self.other = Image.objects.create(pin=self.pin, location=self.location, profile=self.profile, image="photos/b.jpg")
+        self.image = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.profile, image="photos/a.jpg"
+        )
+        self.other = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.profile, image="photos/b.jpg"
+        )
 
     def _add_with_stale_read(self, images: list[Image]) -> int:
         """Run the add as if another process inserted between our read and our write.
@@ -56,11 +49,19 @@ class AlbumAddRaceTests(TestCase):
         self.assertEqual(added, 0)
 
     def test_the_membership_is_not_duplicated(self):
-        AlbumItem.objects.create(album=self.album, image=self.image, order=0)
+        # Attribute the pre-existing row to a different profile than the one racing
+        # in, so an ignore_conflicts regression that overwrites instead of skipping
+        # (e.g. an accidental update_conflicts=True, or update_or_create) shows up as
+        # a changed owner/order rather than passing on row count alone.
+        original_adder, _ = Profile.objects.get_or_create(user=User.objects.create_user(username="original-adder"))
+        original = AlbumItem.objects.create(album=self.album, image=self.image, added_by=original_adder, order=3)
 
         self._add_with_stale_read([self.image])
 
-        self.assertEqual(AlbumItem.objects.filter(album=self.album, image=self.image).count(), 1)
+        survivor = AlbumItem.objects.get(album=self.album, image=self.image)
+        self.assertEqual(survivor.pk, original.pk)
+        self.assertEqual(survivor.order, 3)
+        self.assertEqual(survivor.added_by_id, original_adder.pk)
 
     def test_the_photos_that_are_new_still_get_added(self):
         # Losing the race on one photo must not discard the rest of the batch.
@@ -69,7 +70,11 @@ class AlbumAddRaceTests(TestCase):
         added = self._add_with_stale_read([self.image, self.other])
 
         self.assertEqual(added, 1)
-        self.assertTrue(AlbumItem.objects.filter(album=self.album, image=self.other).exists())
+        # Not just presence: the row the race-safe insert actually wrote must still
+        # carry attribution, so a "simplify the bulk_create" edit that drops added_by
+        # doesn't slip past an exists()-only check.
+        new_item = AlbumItem.objects.get(album=self.album, image=self.other)
+        self.assertEqual(new_item.added_by_id, self.profile.pk)
 
     def test_the_ordinary_path_is_unaffected(self):
         added = add_images_to_album(self.album, [self.image, self.other], self.profile)
@@ -81,9 +86,9 @@ class AlbumAddRaceTests(TestCase):
         self.assertEqual(add_images_to_album(self.album, [self.image], self.profile), 1)
         self.assertEqual(add_images_to_album(self.album, [self.image], self.profile), 0)
 
-    def test_new_items_are_appended_after_existing_ones(self):
+    def test_new_items_are_stored_with_null_order(self):
         add_images_to_album(self.album, [self.image], self.profile)
         add_images_to_album(self.album, [self.other], self.profile)
 
-        orders = list(AlbumItem.objects.filter(album=self.album).order_by("order").values_list("image_id", "order"))
-        self.assertEqual([image_id for image_id, _ in orders], [self.image.pk, self.other.pk])
+        orders = list(AlbumItem.objects.filter(album=self.album).values_list("image_id", "order"))
+        self.assertCountEqual(orders, [(self.image.pk, None), (self.other.pk, None)])

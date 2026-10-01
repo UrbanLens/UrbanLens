@@ -1,14 +1,4 @@
-"""Tests for the profile page's photo strip (services.profile.profile_photos + the
-PhotoAttachmentPointsView lightbox side panel).
-
-The central invariant, stated explicitly in the original request: a photo
-must never be shown to a viewer who doesn't already have some other,
-independent way to see it - a bare pin-only upload (the overwhelming
-default) is never eligible at all, even on the owner's own strip, and a
-wiki-attached photo is only shown to a second viewer who has genuinely
-pinned that location themselves. Every "shown" test here has a matching
-"NOT shown" counterpart proving the boundary, not just the positive case.
-"""
+"""Tests for the profile page's photo strip (services.profile.profile_photos + the PhotoAttachmentPointsView lightbox side panel)."""
 
 from __future__ import annotations
 
@@ -23,7 +13,11 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.profile.profile_photos import attachment_points_for_image, strip_photos_for_owner, strip_photos_visible_to
+from urbanlens.dashboard.services.profile.profile_photos import (
+    attachment_points_for_image,
+    strip_photos_for_owner,
+    strip_photos_visible_to,
+)
 
 _coord_counter = 0
 
@@ -31,14 +25,14 @@ _coord_counter = 0
 def _location(**kwargs) -> Location:
     """A Location with per-call unique coordinates.
 
-    Locations are unique per (latitude, longitude), so tests that create more
-    than one (e.g. a wiki location plus a separate pin-only location) would
-    otherwise hit the unique constraint (mirrors test_child_pins.py's
-    ``_make_pin``).
-    """
+    Locations are unique per (latitude, longitude), so tests that create more than one (e.g. a wiki location
+    plus a separate pin-only location) would otherwise hit the unique constraint (mirrors test_child_pins.py's
+    ``_make_pin``)."""
     global _coord_counter
     _coord_counter += 1
-    return baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001, **kwargs)
+    return baker.make(
+        Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001, **kwargs
+    )
 
 
 def _wiki_with_pin(profile, **wiki_kwargs) -> tuple[Location, Wiki]:
@@ -130,10 +124,7 @@ class StripPhotosVisibleToTests(TestCase):
         self.assertEqual(list(strip_photos_visible_to(self.owner, self.viewer)), [])
 
     def test_uploader_visibility_setting_still_composes_with_wiki_access(self) -> None:
-        """Wiki-location access is necessary but not sufficient - the uploader's
-        own photo_upload_visibility (a second, independent gate) must still
-        permit this specific viewer, exactly as it already does for the real
-        wiki gallery (ImageQuerySet.visible_to)."""
+        """Wiki-location access is necessary but not sufficient - the uploader's own photo_upload_visibility (a second, independent gate) must still permit this specific viewer, exactly as it already does for the real wiki gallery (ImageQuerySet.visible_to)."""
         self.owner.photo_upload_visibility = VisibilityChoice.NO_ONE
         self.owner.save(update_fields=["photo_upload_visibility"])
         location = _location()
@@ -235,7 +226,12 @@ class ProfilePageShowsPhotoStripTests(TestCase):
         baker.make(Pin, profile=self.owner.profile, location=location)
         image = baker.make(Image, profile=self.owner.profile, wiki=wiki, pin=None, media_type=MediaKind.PHOTO)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.owner.profile.slug or self.owner.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse(
+                "profile.view_user",
+                kwargs={"profile_slug": self.owner.profile.slug or self.owner.profile.ensure_slug()},
+            )
+        )
 
         self.assertNotContains(response, f'data-photo-id="{image.pk}"')
         self.assertNotContains(response, ">Photos<")

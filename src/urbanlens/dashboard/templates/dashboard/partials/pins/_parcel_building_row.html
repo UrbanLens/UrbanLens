@@ -1,0 +1,12 @@
+{% comment %}One building in the "Buildings on this Property" list. A building a child pin covers opens its card in place.{% endcomment %}
+<li class="parcel-building{% if not row.child_name %} parcel-building--unpinned{% endif %}">
+    {% if row.opens_in_place %}
+    <details class="parcel-building-opens" hx-get="{% url 'pin.child_building' row.child_slug %}" hx-trigger="toggle once"
+             hx-target="find .parcel-building-card" hx-swap="innerHTML" hx-disinherit="*">
+        <summary>{% include "dashboard/partials/pins/_parcel_building_row_summary.html" %}<i class="material-symbols-outlined parcel-building-chevron" aria-hidden="true">expand_more</i></summary>
+        <div class="parcel-building-card"><div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div></div>
+    </details>
+    {% else %}
+    {% include "dashboard/partials/pins/_parcel_building_row_summary.html" %}
+    {% endif %}
+</li>

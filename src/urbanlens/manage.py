@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import sys
 
-# Ensure /app/src is on sys.path when running this file directly.
 PROJECT_SRC = Path(__file__).resolve().parents[1]  # .../src
 sys.path.insert(0, str(PROJECT_SRC))
 
@@ -16,23 +15,16 @@ _ENV_VARS_TO_PRINT = [
     "DJANGO_DEBUG",
     "UL_ALLOWED_HOSTS",
     "UL_DB_HOST",
-    "UL_VALKEY_URL",
+    "UL_DRAGONFLY_URL",
     "UL_UNSAFE_ALLOW_HTTP",
 ]
 
-#: Set in the environment after the startup block has been printed, so child
-#: processes that re-enter manage.py (bin/init.py running collectstatic then
-#: migrate, the runserver autoreloader) don't repeat it.
+#: Set once printed so re-entered manage.py processes skip it.
 STARTUP_ENV_PRINTED_FLAG = "UL_STARTUP_ENV_PRINTED"
 
-def _print_startup_env() -> None:
-    """Print key environment variables before Django initialises.
 
-    Prints at most once per process tree: the ``UL_STARTUP_ENV_PRINTED``
-    environment flag is set after printing, and inherited environments that
-    already carry it (later manage.py invocations from the same parent, the
-    autoreload child process) skip the block entirely.
-    """
+def _print_startup_env() -> None:
+    """Print key environment variables once per process tree."""
     if os.environ.get(STARTUP_ENV_PRINTED_FLAG):
         return
     os.environ[STARTUP_ENV_PRINTED_FLAG] = "1"

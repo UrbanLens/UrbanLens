@@ -1,24 +1,4 @@
-"""A panel that never got an answer must not be remembered as empty for 12 hours.
-
-``SlidesPanelSource.fetch`` warms every imagery provider and then sets a "ready"
-marker. It used to call ``self.collect(...)``, discard the per-provider outcomes
-it returns, and set that marker for :data:`SLIDES_READY_TTL_SECONDS` (12 hours)
-unconditionally.
-
-Two things made that wrong together. The collectors caught
-``RequestCancelledError`` - the base class of ``RateLimitExceededError`` - logged
-it at debug and appended *no* result at all, so a rate-limited provider registered
-as neither success nor failure. And ``fetch`` threw the results away regardless.
-So a provider refused by its own rate limiter left the panel marked warm and empty
-for twelve hours, which is indistinguishable to every reader from "this location
-genuinely has no imagery".
-
-The distinction now drives the marker's lifetime, mirroring
-``spotguessr.geo_bonus``, which gives a real "nothing found" a 30-day TTL and a
-failed lookup 60 seconds for exactly this reason. A *disabled* service stays
-silent: that is a stable state, not a transient one, and re-warming every few
-minutes because an admin turned a provider off would be worse than the bug.
-"""
+"""A panel that never got an answer must not be remembered as empty for 12 hours."""
 
 from __future__ import annotations
 
@@ -28,11 +8,15 @@ from django.core.cache import cache
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.apis.locations.base import SlideFetch
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, ServiceDisabledError
+from urbanlens.dashboard.services.apis.locations.base import SlideFetch
+from urbanlens.dashboard.services.core.rate_limiter import (
+    RateLimiterUnavailableError,
+    RateLimitExceededError,
+    ServiceDisabledError,
+)
 from urbanlens.dashboard.services.pins.external_data import (
     FAILURE_SKIP_TTL_SECONDS,
     SLIDES_READY_TTL_SECONDS,
@@ -63,17 +47,17 @@ class PanelReadyTtlTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = Profile.objects.get(user=baker.make("auth.User"))
-        self.pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=41.35, longitude=-71.45))
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=baker.make(Location, latitude=41.35, longitude=-71.45)
+        )
         self.source = SatellitePanelSource()
         cache.delete(self.source.ready_key(self.pin))
 
     def _fetch_with(self, error: Exception | None) -> int:
         """Run a fetch and return the TTL it stamped on the ready marker.
 
-        The marker's lifetime is the thing under test and the test cache backend
-        (LocMemCache) cannot report a key's remaining TTL, so the ``cache.set``
-        call itself is observed rather than its aftermath.
-        """
+        The marker's lifetime is the thing under test and the test cache backend (LocMemCache) cannot report a
+        key's remaining TTL, so the ``cache.set`` call itself is observed rather than its aftermath."""
         return self._fetch_with_gateways([_StubGateway(error)])
 
     def _fetch_with_gateways(self, gateways: list[_StubGateway]) -> int:
@@ -83,13 +67,14 @@ class PanelReadyTtlTests(TestCase):
         ):
             self.source.fetch(self.pin)
 
-        marker_calls = [call for call in cache_set.call_args_list if call.args and call.args[0] == self.source.ready_key(self.pin)]
+        marker_calls = [
+            call for call in cache_set.call_args_list if call.args and call.args[0] == self.source.ready_key(self.pin)
+        ]
         self.assertEqual(len(marker_calls), 1, "fetch must stamp the ready marker exactly once")
         return marker_calls[0].args[2]
 
     def test_a_rate_limited_provider_is_recorded_as_a_failure(self) -> None:
-        """It used to be swallowed by the RequestCancelledError arm, appending no
-        result, so nothing downstream could tell it had happened."""
+        """It used to be swallowed by the RequestCancelledError arm, appending no result, so nothing downstream could tell it had happened."""
         with mock.patch(
             "urbanlens.dashboard.services.pins.external_data._satellite_gateways",
             return_value=[_StubGateway(RateLimitExceededError("stub_imagery"))],
@@ -113,6 +98,10 @@ class PanelReadyTtlTests(TestCase):
         """An admin turning a provider off is stable, not transient - re-warming
         every few minutes forever would be worse than the bug being fixed."""
         self.assertEqual(self._fetch_with(ServiceDisabledError("stub_imagery")), SLIDES_READY_TTL_SECONDS)
+
+    def test_an_unreadable_rate_limiter_is_only_trusted_briefly(self) -> None:
+        """The limiter failing on a database error is transient, unlike a disabled service it shares a parent with."""
+        self.assertEqual(self._fetch_with(RateLimiterUnavailableError("stub_imagery")), FAILURE_SKIP_TTL_SECONDS)
 
     def test_the_marker_is_always_set(self) -> None:
         """Whatever happened, the panel must not poll in a tight loop."""

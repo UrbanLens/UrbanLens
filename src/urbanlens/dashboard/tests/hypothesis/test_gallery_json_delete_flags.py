@@ -1,11 +1,4 @@
-"""The gallery payload carries what the delete prompt has to decide from.
-
-``galleryDelete`` asks a different question depending on whether removing a photo
-from a pin would also take it off a community wiki, and on whether withdrawing it
-from there is the owner's to do at all. Both facts come from the server - a tile
-that lost them would silently fall back to "not on a wiki" and delete the
-contribution without asking, which is the behaviour this whole change removed.
-"""
+"""The gallery payload carries what the delete prompt has to decide from."""
 
 from __future__ import annotations
 

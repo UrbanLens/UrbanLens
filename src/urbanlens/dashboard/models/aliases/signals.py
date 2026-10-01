@@ -1,13 +1,5 @@
 """Wiki-sync: mirror newly-added aliases between a pin and its community wiki.
-
-Additive only in both directions (never deletes an alias on either side - see
-each handler's docstring) and only fires for genuine new aliases, never edits
-to an existing one (Profile.sync_aliases' docstring documents this scope
-explicitly - "edits to aliases will not be synced" is a deliberate product
-decision, not a gap). Both handlers use get_or_create, which is naturally
-loop-safe: the mirrored write on the "other side" either creates a row (which
-re-fires the opposite handler, but that handler's own get_or_create then finds
-the row already exists and does nothing further) or finds one already there.
+Additive only in both directions (never deletes an alias on either side - see each handler's docstring) and only fires for genuine new aliases, never edits to an existing one (Profile.sync_aliases' docstring documents this scope explicitly - "edits to aliases will not be synced" is a deliberate product decision, not a gap).
 """
 
 from __future__ import annotations
@@ -19,6 +11,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
+from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +20,25 @@ logger = logging.getLogger(__name__)
 #: mirrored alias actually came from.
 WIKI_SYNC_SOURCE = "wiki_sync"
 
-#: LocationCache sources whose result quality depends on the name/aliases
-#: available for the location - a new alias may surface a Wikipedia article
-#: (or images on one) that couldn't be matched under the previous name set.
-#: "Wikipedia article images not reliably
-#: reaching Media section" entry for the report this addresses.
-_ALIAS_SENSITIVE_CACHE_SOURCES = ("wikipedia", "wikimedia", "wikipedia_media")
+
+def _drop_name_sensitive_cache(location_id: int | None) -> None:
+    """Drop the location's cached lookups a new name could improve.
+
+    A Wikimedia search is by name, so it always goes. A Wikipedia match is kept: the lookup takes the
+    first nearby article that fits, so another name only helps where it missed - and article images
+    go with the miss, since they are read from the matched article.
+
+    Args:
+        location_id: The location whose cache rows to drop; None is a no-op.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+    if location_id is None:
+        return
+    rows = LocationCache.objects.filter(location_id=location_id)
+    rows.filter(source="wikimedia").delete()
+    if not rows.filter(source="wikipedia", data__has_key="title").exclude(data__title="").exists():
+        rows.filter(source__in=("wikipedia", "wikipedia_media")).delete()
 
 
 @receiver(post_save, sender=PinAlias, dispatch_uid="pin_alias_sync_to_wiki")
@@ -60,14 +66,7 @@ def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: 
             return
         if WikiAutoRemoval.objects.was_removed(wiki_id=pin.wiki_id, kind=AutoRemovalKind.ALIAS, value=instance.name):
             return
-        # Case-insensitive lookup: the mirrored wiki may already have this
-        # name under different casing (its own uniqueness is case-insensitive
-        # too, but independent of PinAlias's), which would otherwise race it.
-        WikiAlias.objects.get_or_create(
-            wiki_id=pin.wiki_id,
-            name__iexact=instance.name,
-            defaults={"name": instance.name, "kind": instance.kind, "source": WIKI_SYNC_SOURCE, "created_by_id": pin.profile_id},
-        )
+        WikiAlias.objects.resolve_or_create(pin.wiki_id, instance.name, defaults={"kind": instance.kind, "source": WIKI_SYNC_SOURCE, "created_by_id": pin.profile_id})
 
     transaction.on_commit(_run)
 
@@ -76,36 +75,17 @@ def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: 
 def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, created: bool, **kwargs) -> None:
     """Mirror a newly-added wiki alias onto every opted-in profile's pin at that location.
 
-    A location can have many pins (one per user who's pinned it); this fires
-    once per opted-in pin, each an independent additive get_or_create. Deleting
-    a wiki alias never propagates (no post_delete hook here), matching the
-    "additive only" spec.
+    A location can have many pins, so this is sized by the place's popularity rather than the
+    alias author's own data - hence the bulk queue (services.aliases.fanout) rather than inline
+    work. Deleting a wiki alias never propagates (no post_delete hook), matching "additive only".
     """
     if not created:
         return
 
     def _run() -> None:
-        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
-        from urbanlens.dashboard.models.auto_removals.queryset import normalize_auto_removal_value
-        from urbanlens.dashboard.models.pin.model import Pin
-        from urbanlens.dashboard.models.profile.meta import SyncAliasesDirection
-        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.tasks import fan_out_wiki_alias_to_pins
 
-        try:
-            wiki = Wiki.objects.get(pk=instance.wiki_id)
-        except Wiki.DoesNotExist:
-            return
-        pins = Pin.objects.filter(
-            location_id=wiki.location_id,
-            profile__sync_aliases__in=(SyncAliasesDirection.FROM_WIKI, SyncAliasesDirection.BOTH),
-        )
-        removed_pin_ids = set(PinAutoRemoval.objects.filter(pin__in=pins, kind=AutoRemovalKind.ALIAS, value=normalize_auto_removal_value(AutoRemovalKind.ALIAS, instance.name)).values_list("pin_id", flat=True))
-        for pin in pins:
-            if pin.pk in removed_pin_ids:
-                continue
-            # Case-insensitive lookup: this pin may already have the name
-            # under different casing, which would otherwise race it.
-            PinAlias.objects.get_or_create(pin=pin, name__iexact=instance.name, defaults={"name": instance.name, "kind": instance.kind, "source": WIKI_SYNC_SOURCE})
+        safely_enqueue_task(fan_out_wiki_alias_to_pins, instance.pk)
 
     transaction.on_commit(_run)
 
@@ -122,7 +102,6 @@ def invalidate_name_sensitive_cache_for_new_pin_alias(sender: type[PinAlias], in
         return
 
     def _run() -> None:
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.pin.model import Pin
 
         try:
@@ -131,7 +110,7 @@ def invalidate_name_sensitive_cache_for_new_pin_alias(sender: type[PinAlias], in
             return
         if pin.location_id is None:
             return
-        LocationCache.objects.filter(location_id=pin.location_id, source__in=_ALIAS_SENSITIVE_CACHE_SOURCES).delete()
+        _drop_name_sensitive_cache(pin.location_id)
 
     transaction.on_commit(_run)
 
@@ -146,13 +125,12 @@ def invalidate_name_sensitive_cache_for_new_wiki_alias(sender: type[WikiAlias], 
         return
 
     def _run() -> None:
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         try:
             wiki = Wiki.objects.get(pk=instance.wiki_id)
         except Wiki.DoesNotExist:
             return
-        LocationCache.objects.filter(location_id=wiki.location_id, source__in=_ALIAS_SENSITIVE_CACHE_SOURCES).delete()
+        _drop_name_sensitive_cache(wiki.location_id)
 
     transaction.on_commit(_run)

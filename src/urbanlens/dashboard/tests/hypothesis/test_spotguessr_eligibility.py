@@ -155,7 +155,7 @@ class MultiplayerLabelFilterCannotLeakTests(TestCase):
         self.assertNotIn(host_only_location, results)
 
     def test_pinned_by_both_and_labeled_by_only_the_host_is_still_eligible(self) -> None:
-        """"At least one participant's pin has the label" - not "every" participant's."""
+        """ "At least one participant's pin has the label" - not "every" participant's."""
         shared_location = _make_location()
         host_pin = baker.make(Pin, profile=self.host, location=shared_location)
         host_pin.labels.add(self.label)

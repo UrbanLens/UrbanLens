@@ -1,20 +1,4 @@
-"""A Consensus round must not show you a photo you are not allowed to see.
-
-Being eligible for a wiki satisfies only the first of the two visibility gates.
-Eligibility means "you have a visited pin at this place", which grants you the
-wiki - the container. It says nothing about the second gate: whether the
-uploader's ``photo_upload_visibility`` admits *you* to the photos on it.
-
-The photo strategy read ``wiki.images`` with neither gate applied, so a photo
-contributed under a FRIENDS-only setting could be put in front of any player who
-had been to the place. It reached them as a full-size image to drop a pin on,
-which is about as complete an exposure as the app has.
-
-Two bugs sat on top of each other here: ``_photo_build_round`` used
-``wiki.images.filter(...)``, which both skipped visibility *and* defeated the
-prefetch that ``eligibility`` builds - the exact misuse its comment warns about
-("only .all() reads the cache").
-"""
+"""A Consensus round must not show you a photo you are not allowed to see."""
 
 from __future__ import annotations
 
@@ -51,7 +35,9 @@ class ConsensusPhotoVisibilityTests(TestCase):
 
     def _photo(self, uploader_visibility: str) -> Image:
         Profile.objects.filter(pk=self.uploader.pk).update(photo_upload_visibility=uploader_visibility)
-        return baker.make(Image, profile=self.uploader, wiki=self.wiki, image="pin_images/x.jpg", latitude=None, longitude=None)
+        return baker.make(
+            Image, profile=self.uploader, wiki=self.wiki, image="pin_images/x.jpg", latitude=None, longitude=None
+        )
 
     def _pool(self) -> list[Wiki]:
         return list(eligibility.eligible_wikis(self.player))
@@ -70,7 +56,9 @@ class ConsensusPhotoVisibilityTests(TestCase):
         """The player has the wiki. They do not have this photo."""
         hidden = self._photo(VisibilityChoice.FRIENDS)
 
-        self.assertNotIn(hidden.pk, self._offered_image_ids(), "a Consensus round offered a photo the uploader's settings exclude")
+        self.assertNotIn(
+            hidden.pk, self._offered_image_ids(), "a Consensus round offered a photo the uploader's settings exclude"
+        )
 
     def test_a_visible_photo_is_still_offered(self) -> None:
         """Positive control - without it, breaking the feature would pass."""
@@ -80,7 +68,9 @@ class ConsensusPhotoVisibilityTests(TestCase):
 
     def test_the_players_own_photo_is_offered_whatever_they_set(self) -> None:
         Profile.objects.filter(pk=self.player.pk).update(photo_upload_visibility=VisibilityChoice.NO_ONE)
-        mine = baker.make(Image, profile=self.player, wiki=self.wiki, image="pin_images/mine.jpg", latitude=None, longitude=None)
+        mine = baker.make(
+            Image, profile=self.player, wiki=self.wiki, image="pin_images/mine.jpg", latitude=None, longitude=None
+        )
 
         self.assertIn(mine.pk, self._offered_image_ids())
 

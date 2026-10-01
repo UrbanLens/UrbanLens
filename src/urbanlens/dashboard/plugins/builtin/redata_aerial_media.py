@@ -1,11 +1,5 @@
 """Aerial & drone footage plugin: a Media-gallery source for overhead views of a pin, via REData.
-
-REData's ``/media/lookup/?is_aerial=true`` filters its pooled media index
-down to drone and aerial footage, recognised from each item's own title and
-description. An aerial view of a roofless mill or a fenced-off complex shows
-what no street-level photo can, which makes this its own gallery tab rather
-than rows mixed into the general media results.
-"""
+An aerial view of a roofless mill or a fenced-off complex shows what no street-level photo can, which makes this its own gallery tab rather than rows mixed into the general media results."""
 
 from __future__ import annotations
 
@@ -14,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
 
 if TYPE_CHECKING:
@@ -44,15 +39,7 @@ class AerialMediaSource(GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, {"items": items}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached REData media rows into gallery tiles.
-
-        ``url`` is the publisher's permalink *page*, not an image - REData
-        publishes the bytes it mirrored as ``cached_url`` (absolute, and stable
-        where a provider's own thumbnail link expires). Using ``url`` as the
-        tile's image source, as this did until 2026-08-19, renders an HTML page
-        into an ``<img>``; ``page_url`` is not a field REData emits at all, so
-        the "open the original" link fell back to the same value.
-        """
+        """Turn cached REData media rows into gallery tiles."""
         items = []
         for row in (data or {}).get("items") or []:
             page_url = row.get("url") or ""
@@ -76,8 +63,19 @@ class AerialMediaPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "redata_aerial_media"
     verbose_name: ClassVar[str] = "Aerial & Drone Footage"
-    description: ClassVar[str] = "Adds an aerial/drone footage tab to the pin detail page's Media gallery, from REData's pooled media index filtered to overhead views."
+    description: ClassVar[str] = "Adds an aerial/drone footage tab to the Private Pin page's Media gallery, from REData's pooled media index filtered to overhead views."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_media."""
+        return {
+            "redata_media": ServiceDefaults(
+                display_name="REData Media",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Pooled media index lookups via GET /media/lookup/, filtered here to aerial and drone footage. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_media_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the aerial-media gallery source."""

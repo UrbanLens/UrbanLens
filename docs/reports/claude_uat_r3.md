@@ -99,7 +99,7 @@ A "How do I get a Google Takeout file?" accordion is present.
 
 ## Pin Detail — Article, Comments, Edit History Tabs
 
-The pin detail page has four top-level tabs: **Overview**, **Article**, **Comments**, **Edit History**.
+The Private Pin page has four top-level tabs: **Overview**, **Article**, **Comments**, **Edit History**.
 
 ### Article tab
 Private per-pin long-form notes, formatted like a Wikipedia article with sections, links, and references. Completely private to the logged-in user. Empty state: "You haven't written an article for this pin yet" with a "Write your article" CTA — clear and well-worded.
@@ -157,7 +157,7 @@ Additional:
 ### AI tab
 - Master "Enable AI Features" toggle (disables everything at once)
 - Per-type auto-labeling: auto-categorize, auto-tag, auto-status on pin creation
-- AI link analysis: reads external links on pin detail pages and fills in fields; results shown in notifications
+- AI link analysis: reads external links on Private Pin pages and fills in fields; results shown in notifications
 
 ### Account tab
 - Storage: 500 GB quota; photo downscale preference (1920px default / 1280px / 800px)

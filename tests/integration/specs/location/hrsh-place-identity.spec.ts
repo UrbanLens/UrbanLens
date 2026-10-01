@@ -1,35 +1,10 @@
 /**
- * Five coordinates on one property have to mean one property.
- *
- * This is the foundational claim the rest of `specs/location/` rests on. A user
- * who drops a pin anywhere on the Hudson River State Hospital campus has pinned
- * *the campus*, and two users who drop pins 400 m apart on it are looking at the
- * same place - which is what makes a shared wiki, a shared boundary and shared
- * building data coherent rather than a coincidence of proximity.
- *
- * The app's own answer to "is this the same property" is not a field; it is a
- * refusal. `services.pins.pin_creation` enforces one root pin per property, and
- * says so in words that distinguish the two cases:
- *
- * - `"You already have a pin on this property."` - place-based, and the thing
- *   these tests are about.
- * - `"You already have a pin at this location."` - the exact-coordinate unique
- *   constraint, which is a different and much weaker statement.
- *
- * Asserting on *which* refusal comes back is the sharpest available evidence,
- * and better than inferring identity from a shared wiki slug: two pins can share
- * a wiki for reasons that have nothing to do with the parcel.
- *
- * **The refusal is conditional on geometry already existing.** The rule fires
- * only `if new_parent is None and location.place_id`, and `place_id` is set only
- * once a provider has actually supplied a parcel polygon. On virgin ground every
- * pin is created happily and nothing is refused - so these tests skip rather
- * than fail when the parcel never arrived, and `hrsh-boundary.spec.ts` reports
- * that absence as the finding it is.
+ * Five coordinates on one property have to mean one property. This is the foundational claim the
+ * rest of `specs/location/` rests on.
  */
 
-import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
-import { approximateAreaSqm, containsCoordinate, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, MEASURED_PARCEL_AREA_SQM, OUTSIDE_BOUNDARY, REPORTED_PROJECT_ACREAGE } from "../../lib/hrsh.js";
+import { allPins, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
+import { approximateAreaSqm, containsCoordinate, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, MEASURED_PARCEL_AREA_SQM, metresBetween, OUTSIDE_BOUNDARY, REPORTED_PROJECT_ACREAGE } from "../../lib/hrsh.js";
 
 skipUnlessLocationDataEnabled();
 
@@ -153,6 +128,15 @@ test.describe("Hudson River State Hospital - one property, five coordinates", ()
         const refused: string[] = [];
         let accepted = 0;
 
+        // A probe an earlier run failed to delete would be refused as a duplicate of itself.
+        for (const row of await allPins(campus.api)) {
+            const leftover = !row.parent_uuid && OUTSIDE_BOUNDARY.some((point) => metresBetween(point, { label: row.slug, latitude: row.latitude, longitude: row.longitude }) < 1);
+            if (leftover) {
+                const removed = await campus.api.delete(`pins/${row.slug}/`);
+                expect(removed.ok(), `could not delete the leftover probe ${row.slug} (HTTP ${removed.status()})`).toBe(true);
+            }
+        }
+
         for (const point of OUTSIDE_BOUNDARY) {
             const response = await campus.api.post("pins/", {
                 name: `e2e hrsh off-campus probe ${point.label}`,
@@ -165,7 +149,8 @@ test.describe("Hudson River State Hospital - one property, five coordinates", ()
                 accepted += 1;
                 const created = JSON.parse(body) as { slug?: string };
                 if (created.slug) {
-                    await campus.api.delete(`pins/${created.slug}/`);
+                    const removed = await campus.api.delete(`pins/${created.slug}/`);
+                    expect(removed.ok(), `could not delete probe ${created.slug} (HTTP ${removed.status()}); the next run would be refused by it`).toBe(true);
                 }
             } else {
                 refused.push(`${point.label}: HTTP ${response.status()} ${body.slice(0, 160)}`);

@@ -1,16 +1,4 @@
-"""Auto-tagging is granted, then opted *out* of - not opted into.
-
-Reported: the Organize page asked every label two questions (an "auto-tagging"
-checkbox and a comma-separated keyword list) that together made automatic
-tagging something a user had to assemble by hand, per label. It is now a
-capability: a user who has the subscription feature and has not switched it
-off gets it for every tag and category label, minus whichever ones they
-excluded individually.
-
-Statuses, people and media labels are deliberately outside it - REData's
-suggestion service models "which of my labels describes this place", which
-"Visited" and a person's name are not.
-"""
+"""Auto-tagging is granted, then opted *out* of - not opted into."""
 
 from __future__ import annotations
 
@@ -43,13 +31,20 @@ class AutoTagAvailabilityTests(TestCase):
 
     def test_without_the_feature_there_is_nothing_to_offer(self) -> None:
         self.assertFalse(self._available(KIND_TAG, has_feature=False))
+        # Same user/kind, capability granted - an "always gated off" implementation
+        # would still pass the assertion above.
+        self.assertTrue(self._available(KIND_TAG, has_feature=True))
 
     def test_the_user_can_switch_it_off_wholesale(self) -> None:
         self.assertFalse(self._available(KIND_TAG, disabled=True))
         self.assertFalse(self._available(KIND_CATEGORY, disabled=True))
+        # Same user/kinds, switched back on - an "always disabled" implementation
+        # would still pass the assertions above.
+        self.assertTrue(self._available(KIND_TAG, disabled=False))
+        self.assertTrue(self._available(KIND_CATEGORY, disabled=False))
 
     def test_statuses_people_and_media_are_out_of_scope(self) -> None:
-        """"Visited" and a person's name are not "what is this place"."""
+        """ "Visited" and a person's name are not "what is this place"."""
         for kind in (KIND_STATUS, KIND_USER, KIND_MEDIA):
             self.assertFalse(self._available(kind), f"{kind} labels should never auto-tag")
 
@@ -125,11 +120,8 @@ class OrganizeFormTests(TestCase):
 class ControlMatchesServerTests(TestCase):
     """The dialog must not offer a control the server ignores, or hide one it honours.
 
-    This is the invariant the previous gating test existed for (a checkbox was
-    once shown on AI grounds alone, while the server decided on the user's own
-    settings). The gate changed; the invariant did not, so it is asserted here
-    against the one helper both halves now consult.
-    """
+    This is the invariant the previous gating test existed for (a checkbox was once shown on AI grounds alone,
+    while the server decided on the user's own settings)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -156,7 +148,9 @@ class ControlMatchesServerTests(TestCase):
             self._post_edit(label, disable=True)
 
         label.refresh_from_db()
-        self.assertTrue(label.allow_auto_tag, "a user without the capability must not be able to set a flag they cannot see")
+        self.assertTrue(
+            label.allow_auto_tag, "a user without the capability must not be able to set a flag they cannot see"
+        )
 
     def test_the_server_honours_the_field_with_the_capability(self) -> None:
         from unittest import mock

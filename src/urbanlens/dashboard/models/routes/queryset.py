@@ -11,10 +11,14 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     import datetime
 
+    from django.contrib.gis.geos import Point
+    from django.contrib.gis.measure import Distance
+
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.routes.model import Route  # noqa: F401 - mypy needs these; ruff does not
 
 
-class RouteQuerySet(abstract.FrontendDashboardQuerySet):
+class RouteQuerySet(abstract.FrontendDashboardQuerySet["Route"]):
     """QuerySet for Route records."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -42,9 +46,7 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet):
 
     def intersecting_bbox(self, min_lat: float, min_lng: float, max_lat: float, max_lng: float) -> Self:
         """Filter to routes whose path overlaps a lat/lng bounding box.
-
-        Uses the cheaper index-only ``bboverlaps`` lookup rather than a full
-        ``intersects`` test, since this is meant for coarse map-viewport scoping.
+        Uses the cheaper index-only ``bboverlaps`` lookup rather than a full ``intersects`` test, since this is meant for coarse map-viewport scoping.
 
         Args:
             min_lat: Southern boundary.
@@ -59,6 +61,22 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet):
         bbox.srid = 4326
         return self.filter(path__bboverlaps=bbox)
 
+    def passing_within(self, point: Point, distance: Distance) -> Self:
+        """Filter to routes whose path passes within ``distance`` of ``point``.
+        Named distinctly from ``PinQuerySet.near_point`` (a different signature - a bare ``radius_km: float`` rather than a ``Distance``) so the two are never mistaken for interchangeable proximity helpers.
 
-class RouteManager(abstract.FrontendDashboardManager.from_queryset(RouteQuerySet)):
+        Args:
+            point: The coordinate to test proximity against (SRID 4326).
+            distance: How close the path must come.
+
+        Returns:
+            Filtered queryset.
+        """
+        return self.filter(path__dwithin=(point, distance))
+
+
+_RouteManagerBase = abstract.FrontendDashboardManager.from_queryset(RouteQuerySet)
+
+
+class RouteManager(_RouteManagerBase):
     """Manager for Route."""

@@ -5,25 +5,25 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.subscriptions.access_state import AccessBearingQuerySet
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
 
-class SiteSettingsQuerySet(abstract.FrontendDashboardQuerySet):
+class SiteSettingsQuerySet(AccessBearingQuerySet, abstract.FrontendDashboardQuerySet["SiteSettings"]):
     """QuerySet for the site settings singleton."""
 
 
-class SiteSettingsManager(abstract.FrontendDashboardManager.from_queryset(SiteSettingsQuerySet)):
+_SiteSettingsManagerBase = abstract.FrontendDashboardManager.from_queryset(SiteSettingsQuerySet)
+
+
+class SiteSettingsManager(_SiteSettingsManagerBase["SiteSettings"]):
     """Manager for SiteSettings. Use get_current() for the singleton record."""
 
     def get_current(self) -> SiteSettings:
         """Return (and create if missing) the singleton settings record.
-
-        Memoised for the duration of a request (see
-        :mod:`urbanlens.dashboard.models.site_settings.request_cache`) - the row cannot
-        change mid-request, and this is called several times over on every page. Outside
-        a request the memo is inert and every call reads through to the database.
+        Memoised for the duration of a request (see :mod:`urbanlens.dashboard.models.site_settings.request_cache`) - the row cannot change mid-request, and this is called several times over on every page.
 
         Returns:
             The single SiteSettings row (pk=1).

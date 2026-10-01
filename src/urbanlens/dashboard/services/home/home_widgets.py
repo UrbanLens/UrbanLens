@@ -1,16 +1,9 @@
-"""The signed-in homepage's customizable widget dashboard.
-
-Defines the fixed catalog of widgets the homepage can show (``HOME_WIDGETS``),
-resolves a profile's effective widget layout (enabled widgets, in their
-chosen order, plus disabled ones available to re-enable), and builds the data
-context each widget's partial template needs.
-"""
+"""The signed-in homepage's customizable widget dashboard."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from itertools import chain
 from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
@@ -29,11 +22,10 @@ class HomeWidget:
     template: str
 
 
-#: The full catalog of homepage widgets, in default display order. Adding a
-#: new widget here makes it available to every profile automatically (shown,
-#: enabled, at the end of the default order) - no backfill needed since
-#: ``effective_widget_layout`` treats a profile's saved layout as an ordered
-#: subset, not an exhaustive list.
+#: The full catalog of homepage widgets, in default display order.
+#: Adding a new widget here makes it available to every profile automatically (shown, enabled, at the
+#: end of the default order) - no backfill needed since ``effective_widget_layout`` treats a
+#: profile's saved layout as an ordered subset, not an exhaustive list.
 HOME_WIDGETS: tuple[HomeWidget, ...] = (
     HomeWidget("stats", "Your Stats", "bar_chart", "dashboard/partials/home/_widget_stats.html"),
     HomeWidget("safety_checkin", "Active Check-In", "emergency_home", "dashboard/partials/home/_widget_safety_checkin.html"),
@@ -58,11 +50,7 @@ def effective_widget_layout(profile: Profile) -> list[dict[str, Any]]:
         profile: The signed-in profile whose homepage is being rendered/customized.
 
     Returns:
-        A list of ``{"widget": HomeWidget, "enabled": bool}`` covering every
-        widget in ``HOME_WIDGETS`` exactly once - enabled widgets first, in
-        the profile's saved order, followed by disabled widgets in their
-        registry default order.
-    """
+        A list of ``{"widget": HomeWidget, "enabled": bool}`` covering every widget in ``HOME_WIDGETS`` exactly once - enabled widgets first, in the profile's saved order, followed by disabled widgets in their registry default order."""
     saved_keys = [key for key in (profile.home_widget_layout or []) if key in _WIDGETS_BY_KEY]
     if not saved_keys:
         # Never customized (or customized to nothing, which we treat the same
@@ -82,13 +70,10 @@ def save_widget_layout(profile: Profile, enabled_keys: list[str]) -> list[str]:
 
     Args:
         profile: The profile customizing their homepage.
-        enabled_keys: Widget keys the user wants shown, in their chosen order
-            (as submitted by the customize dialog - unrecognized keys and
-            duplicates are dropped).
+        enabled_keys: Widget keys the user wants shown, in their chosen order (as submitted by the customize dialog - unrecognized keys and duplicates are dropped).
 
     Returns:
-        The validated, de-duplicated key list that was actually saved.
-    """
+        The validated, de-duplicated key list that was actually saved."""
     from urbanlens.dashboard.models.profile.model import Profile
 
     valid_keys = list(dict.fromkeys(key for key in enabled_keys if key in _WIDGETS_BY_KEY))
@@ -98,20 +83,13 @@ def save_widget_layout(profile: Profile, enabled_keys: list[str]) -> list[str]:
 
 def home_dashboard_context(profile: Profile) -> dict[str, Any]:
     """Build the data context every homepage widget partial draws from.
-
-    Most entries below are unevaluated querysets, so a widget the user has
-    switched off costs nothing - the template never iterates it. Two were not:
-    the ten counts behind ``home_stats`` all execute as the dict is built, and
-    ``home_recent_comments`` is forced by the ``sorted()`` that merges two
-    sources. Those are now built only when their widget is enabled, which is a
-    dozen queries a user who turned both off was paying on every homepage load.
+    Most entries below are unevaluated querysets, so a widget the user has switched off costs nothing - the template never iterates it.
 
     Args:
         profile: The signed-in user's profile.
 
     Returns:
-        The ``home_*`` context vars consumed by ``partials/home/_widget_*.html``.
-    """
+        The ``home_*`` context vars consumed by ``partials/home/_widget_*.html``."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.labels.meta import KIND_STATUS
@@ -129,8 +107,9 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
     if "recent_comments" in enabled:
         recent_pin_comments = Comment.objects.filter(profile=profile).select_related("pin", "wiki", "wiki__location").order_by("-created")[:5]
         recent_trip_comments = TripComment.objects.by_author(profile)[:5]
+        either_kind: list[Comment | TripComment] = [*recent_pin_comments, *recent_trip_comments]
         recent_comments = sorted(
-            chain(recent_pin_comments, recent_trip_comments),
+            either_kind,
             key=lambda comment: comment.created,
             reverse=True,
         )[:5]
@@ -144,7 +123,7 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
     home_stats: list[dict[str, Any]] = []
     if "stats" in enabled:
         maps_count = MarkupMap.objects.for_profile(profile).count()
-        photos_count = Image.objects.filter(profile=profile).count()
+        photos_count = Image.objects.filter(profile=profile).photos().count()
         comments_count = Comment.objects.filter(profile=profile).count() + TripComment.objects.filter(author=profile).count()
         safety_checkins_count = SafetyCheckin.objects.filter(profile=profile).count() + UndoAction.objects.filter(profile=profile, model_label="safety_checkin").count()
         trips_created_count = Trip.objects.filter(creator=profile).count()
@@ -162,7 +141,7 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
 
     return {
         "home_stats": home_stats,
-        "home_recent_photos": Image.objects.uploaded_by(profile)[:8],
+        "home_recent_photos": Image.objects.uploaded_by(profile).photos().with_file()[:8],
         "home_recent_pins": Pin.objects.filter(profile=profile).select_related("location").order_by("-created")[:6],
         "home_recent_markup_maps": MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-created")[:6],
         "home_priority_unvisited_pins": (

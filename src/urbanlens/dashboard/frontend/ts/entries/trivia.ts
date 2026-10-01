@@ -1,19 +1,10 @@
 /**
  * Trivia - solo and multiplayer gameplay loop, lobby, and chat.
- *
- * Server-authoritative: this file never decides whether an answer is
- * correct or computes points itself - it only collects an answer, posts it,
- * and renders whatever `services.trivia.session` decided. Multiplayer state
- * sync (lobby updates, round advancement, chat) arrives over a WebSocket
- * (`consumers.TriviaSessionConsumer`); solo sessions never open one at all.
- * Mirrors spotguessr.ts's shape, minus the map/photo/lobby-drawing machinery
- * Trivia doesn't need.
- *
- * Chrome (panel swapping, focus mode, fullscreen, the players/chat drawer)
- * belongs to the shared game shell - see ts/shared/game-shell.ts.
  */
-import { getCsrfToken } from "../shared/csrf";
+import { getJson, postForm } from "../shared/session-request";
+import { installFriendPicker, pickFriendsToInvite, selectedFriendIds } from "../shared/friend-picker";
 import { confirmAction, toast } from "../shared/dialogs";
+import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 
@@ -110,11 +101,6 @@ interface ChatMessagePayload {
     created: string;
 }
 
-interface FriendOption {
-    profile_id: number;
-    username: string;
-}
-
 /** Shell panel name -> the element id the markup uses. */
 const PANEL_IDS: Record<string, string> = {
     settings: "trivia-settings-panel",
@@ -144,13 +130,9 @@ let currentRound: RoundPayload | null = null;
 let isMultiplayer = false;
 let hostProfileId: number | null = null;
 let ws: LiveSocketHandle | null = null;
-let friendOptions: FriendOption[] = [];
 let totalRounds = 0;
 let sessionPoints = 0;
-// The round submitAnswer() has already credited points for via its own
-// direct response, if any - showBroadcastReveal() still has to run for
-// this round (it's the only source of every player's results table), but
-// must not award this player's own points a second time.
+// The round submitAnswer() has already credited points for via its own direct response, if any.
 let lastRevealedRoundId: number | null = null;
 
 function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number, questionIdValue?: number): string {
@@ -159,23 +141,6 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
     if (roundIdValue !== undefined) resolved = resolved.replace(urls.round_id_sentinel, String(roundIdValue));
     if (questionIdValue !== undefined) resolved = resolved.replace(urls.question_id_sentinel, String(questionIdValue));
     return resolved;
-}
-
-async function postForm(url: string, data: Record<string, string>): Promise<any> {
-    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
-    // template with only numeric ids substituted, never an arbitrary/external url.
-    const response = await fetch(url, {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(data),
-    });
-    return response.json();
-}
-
-async function getJson(url: string): Promise<any> {
-    // Same-origin urlFor(...) path template - see postForm's note above.
-    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });  // lgtm[js/request-forgery]
-    return response.json();
 }
 
 function el<T extends HTMLElement>(id: string): T {
@@ -193,8 +158,7 @@ function showPanel(id: string): void {
     shell?.showPanel(name);
 }
 
-// Every network round-trip on this page is a button press, and none of them
-// used to change anything on screen until the response landed.
+// Every network round-trip on this page is a button press, and none of them used to change anything on screen until the response landed.
 async function withBusy<T>(button: HTMLButtonElement | null, work: () => Promise<T>): Promise<T> {
     if (button) {
         button.disabled = true;
@@ -214,115 +178,28 @@ async function withBusy<T>(button: HTMLButtonElement | null, work: () => Promise
 // Friend picker
 // ---------------------------------------------------------------------------
 
-async function loadFriendOptions(): Promise<FriendOption[]> {
-    if (friendOptions.length) return friendOptions;
-    const data = await getJson(urls.friends);
-    friendOptions = data.friends ?? [];
-    return friendOptions;
-}
-
-function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>): void {
-    container.innerHTML = "";
-    const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
-    if (!available.length) {
-        container.innerHTML = '<p class="trivia-panel-hint">No friends available to invite.</p>';
-        return;
-    }
-    for (const friend of available) {
-        const label = document.createElement("label");
-        label.className = "trivia-friend-option";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = String(friend.profile_id);
-        label.append(checkbox, document.createTextNode(friend.username));
-        container.appendChild(label);
-    }
-}
-
-async function initFriendPicker(): Promise<void> {
+function initFriendPicker(): void {
     const toggle = el<HTMLInputElement>("trivia-play-with-friends");
     const wrap = el("trivia-invite-wrap");
-    const friends = await loadFriendOptions();
     toggle.addEventListener("change", () => {
         wrap.hidden = !toggle.checked;
-        if (toggle.checked) renderFriendCheckboxes(el("trivia-friend-list"), friends, new Set());
     });
-}
-
-// Builds a small checkbox-picker dialog on the fly and resolves with the
-// chosen profile ids (empty if cancelled). There's no dedicated "invite
-// more" dialog markup in the template (unlike the initial invite flow's
-// trivia-friend-list, which lives inside the settings panel) so this is
-// constructed in JS, but it reuses renderFriendCheckboxes - the exact same
-// checkbox rendering the initial invite flow uses - rather than duplicating
-// it. Replaces the old window.prompt() exact-username-match flow, which
-// silently no-op'd on any typo or case mismatch with zero feedback.
-//
-// It is mounted into the shell rather than document.body so it stays painted
-// (and inside the page's [hidden] / custom-property scope) in true fullscreen.
-function pickFriendsToInvite(available: FriendOption[]): Promise<number[]> {
-    return new Promise((resolve) => {
-        const dialog = document.createElement("dialog");
-        dialog.className = "ul-dialog ul-game-dialog trivia-invite-more-dialog";
-
-        const header = document.createElement("div");
-        header.className = "dialog-header";
-        const heading = document.createElement("h3");
-        heading.textContent = "Invite more players";
-        header.appendChild(heading);
-
-        const list = document.createElement("div");
-        list.className = "trivia-invite-more-list";
-        renderFriendCheckboxes(list, available, new Set());
-
-        const actions = document.createElement("div");
-        actions.className = "dialog-footer";
-        const cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.className = "btn btn--ghost";
-        cancelBtn.textContent = "Cancel";
-        const inviteBtn = document.createElement("button");
-        inviteBtn.type = "button";
-        inviteBtn.className = "btn btn--primary";
-        inviteBtn.textContent = "Invite";
-        actions.append(cancelBtn, inviteBtn);
-
-        dialog.append(header, list, actions);
-        if (shell) {
-            shell.mountOverlay(dialog);
-        } else {
-            document.body.appendChild(dialog);
-        }
-
-        const cleanup = (result: number[]) => {
-            dialog.close();
-            dialog.remove();
-            resolve(result);
-        };
-        cancelBtn.addEventListener("click", () => cleanup([]));
-        inviteBtn.addEventListener("click", () => {
-            const checked = Array.from(list.querySelectorAll<HTMLInputElement>("input:checked")).map((input) => Number(input.value));
-            cleanup(checked);
-        });
-        // Escape key / native "cancel" - treat like the Cancel button.
-        dialog.addEventListener("cancel", () => cleanup([]));
-
-        dialog.showModal();
-    });
+    installFriendPicker();
 }
 
 async function handleInviteMore(): Promise<void> {
     if (sessionId === null) return;
-    const friends = await loadFriendOptions();
     const lobby: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
-    const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
-    const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
-    if (!available.length) {
-        toast.error("Everyone on your friends list is already in this game.");
-        return;
-    }
-
-    const chosenIds = await pickFriendsToInvite(available);
+    const chosenIds = await pickFriendsToInvite({
+        url: urls.friends,
+        exclude: lobby.participants.map((participant) => participant.profile_id),
+        // Into the shell, not document.body: outside it the dialog is neither painted in true fullscreen
+        // nor inside the page's [hidden] / custom-property scope.
+        mount: (dialog) => {
+            if (shell) shell.mountOverlay(dialog);
+            else document.body.appendChild(dialog);
+        },
+    });
     if (!chosenIds.length) return;
 
     for (const profileId of chosenIds) {
@@ -406,8 +283,7 @@ async function beginGame(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Real-time (multiplayer only)
-// ---------------------------------------------------------------------------
+// Real-time (multiplayer only) ---------------------------------------------------------------------------
 
 /** The players/chat drawer only has anything in it once a socket exists. */
 function setRailAvailable(on: boolean): void {
@@ -421,9 +297,9 @@ function connectSessionSocket(): void {
     ws = openLiveSocket({
         path: `/ws/trivia/session/${sessionId}/`,
         onMessage: handleSocketMessage,
-        // 4404 here means the host removed this player, or the entitlement went
-        // away - nothing more is coming, so drop the handle rather than leave a
-        // dead one blocking a later join.
+        // Every open, reconnects included: a dropped connection takes the acknowledgement with it, and an entry left in the composer's queue.
+        onOpen: () => chatComposer?.reset(),
+        // 4404 here means the host removed this player, or the entitlement went away.
         onPermanentClose: () => {
             ws = null;
         },
@@ -466,6 +342,11 @@ function handleSocketMessage(data: any): void {
         case "chat.message":
             appendChatMessage(data.message as ChatMessagePayload);
             break;
+        case "error":
+            // The consumer refuses a frame with an error rather than a close - an out-of-scope credential, a failed write, or a volume limit.
+            if (chatComposer) chatComposer.reportRefusal(data.detail);
+            else toastRefusal(data.detail);
+            break;
         default:
             break;
     }
@@ -476,6 +357,9 @@ function handleSocketMessage(data: any): void {
 // ---------------------------------------------------------------------------
 
 function appendChatMessage(message: ChatMessagePayload): void {
+    // Our own message coming back on the broadcast is the acknowledgement, so
+    // it stops being a candidate for a later refusal to hand back.
+    if (message.profile_id === myProfileId) chatComposer?.confirm(message.body);
     const log = el("trivia-chat-log");
     const line = document.createElement("div");
     const nameSpan = document.createElement("span");
@@ -494,15 +378,16 @@ async function loadChatHistory(): Promise<void> {
     for (const message of (data.messages ?? []) as ChatMessagePayload[]) appendChatMessage(message);
 }
 
+/** Holds what has been sent and not yet acknowledged - see shared/chat-composer.ts. */
+let chatComposer: ChatComposer | null = null;
+
 function initChat(): void {
+    // Resolved on each send rather than captured: the socket is replaced on
+    // every reconnect, and send() returns false while there isn't one.
+    chatComposer = new ChatComposer(el<HTMLInputElement>("trivia-chat-input"), (payload) => ws?.send(payload) ?? false);
     el("trivia-chat-form").addEventListener("submit", (event) => {
         event.preventDefault();
-        const input = el<HTMLInputElement>("trivia-chat-input");
-        const body = input.value.trim();
-        // send() is false while the socket is reconnecting - leave what they
-        // typed in the box rather than clearing it for a message that never left.
-        if (!body || !ws?.send({ body })) return;
-        input.value = "";
+        chatComposer?.submit();
     });
 }
 
@@ -603,11 +488,7 @@ function renderRoundScores(results: RoundResult[]): void {
 // Gameplay
 // ---------------------------------------------------------------------------
 
-// Whether the current viewer can end the whole game (host, multiplayer
-// only - solo play has "play again" for the same purpose). Recomputed on
-// every round render and whenever a host transfer happens mid-game
-// (see the "participant.left" socket handler), since hostProfileId can
-// change without a new round starting.
+// Whether the current viewer can end the whole game (host, multiplayer only - solo play has "play again" for the same purpose).
 function updateRoundActionVisibility(): void {
     el<HTMLButtonElement>("trivia-leave-round-btn").hidden = !isMultiplayer;
     el<HTMLButtonElement>("trivia-end-game-round-btn").hidden = !(isMultiplayer && hostProfileId === myProfileId);
@@ -710,9 +591,7 @@ function renderSummary(summary: SummaryPayload): void {
     }
 }
 
-// Bails out of whatever game/lobby state we were in, back to the settings
-// panel - used both for "Leave" succeeding and for being told (over the
-// socket) that we were removed by the host.
+// Bails out of whatever game/lobby state we were in, back to the settings panel.
 function resetToSettings(): void {
     sessionId = null;
     currentRound = null;
@@ -752,9 +631,7 @@ async function leaveGame(): Promise<void> {
     resetToSettings();
 }
 
-// Host-only manual escape hatch for a stalled/AFK multiplayer game - see
-// controllers.trivia.TriviaEndSessionView. Confirmed first since it's
-// irreversible for every other participant, not just the host.
+// Host-only manual escape hatch for a stalled/AFK multiplayer game - see controllers.trivia.TriviaEndSessionView.
 async function endGameNow(): Promise<void> {
     if (sessionId === null) return;
     const confirmed = await confirmAction({
@@ -820,25 +697,18 @@ async function startGame(): Promise<void> {
 
     const params = new URLSearchParams(body);
     if (el<HTMLInputElement>("trivia-play-with-friends").checked) {
-        const checked = Array.from(document.querySelectorAll<HTMLInputElement>("#trivia-friend-list input:checked"));
-        if (!checked.length) {
+        const invited = selectedFriendIds(el("trivia-friend-list"));
+        if (!invited.length) {
             toast.error("Pick at least one friend to invite, or turn off multiplayer.");
             return;
         }
-        for (const checkbox of checked) params.append("invite_profile_ids", checkbox.value);
+        for (const profileId of invited) params.append("invite_profile_ids", String(profileId));
     }
 
     totalRounds = Number(requestedRounds) || 0;
     sessionPoints = 0;
 
-    const payload = await withBusy(el<HTMLButtonElement>("trivia-start-btn"), async () => {
-        const response = await fetch(urls.start, {
-            method: "POST",
-            headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-            body: params,
-        });
-        return response.json();
-    });
+    const payload = await withBusy(el<HTMLButtonElement>("trivia-start-btn"), () => postForm(urls.start, params));
     await handleStartOrRoundResponse(payload);
 }
 
@@ -867,9 +737,7 @@ async function submitAnswer(): Promise<void> {
         : "Answer submitted - waiting for the rest of the group...";
     applyRevealVerdict(payload.revealed ? payload.is_correct : null);
     if (payload.revealed) {
-        // The round.revealed broadcast for this same round is still coming
-        // (it's the only source of every player's results table) - this
-        // just keeps it from crediting these points again when it arrives.
+        // The round.revealed broadcast for this same round is still coming (it's the only source of every player's results table).
         lastRevealedRoundId = roundId;
         if (payload.points) setSessionPoints(sessionPoints + payload.points);
     }
@@ -888,9 +756,7 @@ function showBroadcastReveal(data: RoundRevealBroadcast): void {
             : `Not quite - the answer was "${data.answer}".`
         : `The answer was "${data.answer}".`;
     applyRevealVerdict(mine ? mine.is_correct : null);
-    // Skipped when this round already credited via submitAnswer()'s own
-    // response (this player was the one who revealed it) - otherwise the
-    // same points land twice, once from each path.
+    // Skipped when this round already credited via submitAnswer()'s own response (this player was the one who revealed it).
     if (mine?.is_correct && mine.points && lastRevealedRoundId !== data.round_id) setSessionPoints(sessionPoints + mine.points);
     renderRoundScores(data.results);
 }
@@ -920,8 +786,7 @@ async function goToNextRound(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Deep link from an invite notification (?session=<id>)
-// ---------------------------------------------------------------------------
+// Deep link from an invite notification (?session=<id>) ---------------------------------------------------------------------------
 
 async function loadInitialSession(): Promise<void> {
     const raw = pageEl?.dataset.initialSessionId;
@@ -991,7 +856,7 @@ function init(): void {
         el<HTMLInputElement>("trivia-difficulty").value = String(window.TRIVIA_LAST_CONFIG.difficulty);
     }
 
-    void initFriendPicker();
+    initFriendPicker();
     initChat();
     void loadInitialSession();
 }

@@ -1,10 +1,4 @@
-"""Alias views - list, add, remove, and adopt alternate names for Pins and Wikis.
-
-The alias list is the full set of names a pin or place is known by, *including*
-the current name (marked in the UI). "Use this name" promotes any other alias
-to be the current name; the old name needs no special handling because it is
-already an alias.
-"""
+"""Alias views - alternate names for Pins and Wikis."""
 
 from __future__ import annotations
 
@@ -113,22 +107,16 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
 def _render_location_panel(request, location: Location, wiki: Wiki, profile: Profile) -> HttpResponse:
     """Render the wiki aliases panel with current-name annotation.
 
-    Takes the profile rather than re-deriving it from the request: every caller
-    has just had one back from ``resolve_visible_wiki``, and a second derivation
-    can disagree with the first. ``getattr(request.user, "profile", None)``
-    swallows ``RelatedObjectDoesNotExist`` (Django makes it an ``AttributeError``
-    so ``hasattr`` works), and a None viewer means ``visible_actor_ids`` returns
-    the empty set - silently costing the viewer their own and their friends'
-    rows, on the one path whose job is to show them.
+    Takes the profile rather than re-deriving it from the request: every caller has just had one back
+    from ``resolve_visible_wiki``, and a second derivation can disagree with the first.
     """
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
 
     rows = wiki.aliases.order_by("name")
     if concealment_active(wiki, profile):
         rows = conceal_rows(rows, profile)
-    # Annotated against the *shown* name, not the stored one: "is current" is a
-    # comparison, and comparing to a name this viewer cannot see would mark the
-    # wrong alias - or none - and say so on the page.
+    # Annotated against the *shown* name, not the stored one: "is current" is a comparison, and comparing to a
+    # name this viewer cannot see would mark the wrong alias - or none - and say so on the page.
     shown = conceal_wiki(wiki, profile)
     aliases = _annotated(rows, shown.name)
     return render(
@@ -163,17 +151,17 @@ class PinAliasView(LoginRequiredMixin, View):
 
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        # External data for this pin's location may have been cached by
-        # something other than this pin's own panel fetch (background
-        # enrichment, another user's pin at the same location, ...) - backfill
-        # from it now, mirroring the wiki aliases panel's same backfill below.
+        # Names other accounts' lookups cached reach this pin only here, on its owner's visit.
         if pin.location is not None:
-            persist_official_aliases_for_location(pin.location)
+            persist_official_aliases_for_location(pin.location, profile=pin.profile)
         return _render_pin_panel(request, pin)
 
     def post(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        name = (request.POST.get("name") or "").strip()
+        # Sanitized before the emptiness check: PinAlias.save() applies sanitize_name, so a name of only dropped
+        # characters (e.g. "<>", an emoji) would otherwise pass this check and raise an uncaught ValueError out
+        # of create_pin_alias below (see the wiki-side LocationAliasView.post, which has the same comment).
+        name = sanitize_name((request.POST.get("name") or "").strip()) or ""
         if not name:
             return HttpResponse("Name is required.", status=400)
         name_error = column_length_error(PinAlias, "name", name, "Alias")
@@ -183,7 +171,8 @@ class PinAliasView(LoginRequiredMixin, View):
         try:
             create_pin_alias(pin, name=name, kind=kind)
         except AliasExistsError as exc:
-            return HttpResponse(exc.safe_message, status=409)
+            logger.info("pin alias creation rejected: %s", exc)
+            return HttpResponse("That alias already exists.", status=409)
         return _render_pin_panel(request, pin)
 
 
@@ -194,7 +183,8 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
         try:
             delete_pin_alias(pin, alias)
         except AliasIsCurrentNameError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("pin alias delete rejected: %s", exc)
+            return HttpResponse("This alias is the current name - pick another name first.", status=400)
         return _render_pin_panel(request, pin)
 
 
@@ -228,17 +218,13 @@ class LocationAliasView(LoginRequiredMixin, View):
 
     def get(self, request, location_slug):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        # Wikis are created lazily, so official-name candidates gathered before
-        # the wiki existed have no alias rows yet; backfill them from the cache
-        # (DB reads only - no network) now that there is a wiki to attach to.
         persist_official_aliases_for_location(location)
         return _render_location_panel(request, location, wiki, profile)
 
     def post(self, request, location_slug):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        # Sanitized before the emptiness check: WikiAlias.save() applies
-        # sanitize_name, so a name of only dropped characters would otherwise
-        # store as a blank alias (see pin_subresources.add_pin_alias).
+        # Sanitized before the emptiness check: WikiAlias.save() applies sanitize_name, so a name of only
+        # dropped characters would otherwise store as a blank alias (see pin_subresources.add_pin_alias).
         name = sanitize_name((request.POST.get("name") or "").strip()) or ""
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
@@ -247,11 +233,13 @@ class LocationAliasView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": name_error}, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            # See PinAliasView.post's atomic() comment - same reasoning here.
             with transaction.atomic():
-                WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
+                alias = WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
         except IntegrityError:
             return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
+        from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_add
+
+        stash_wiki_alias_add(wiki, profile, alias)
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,
@@ -267,9 +255,11 @@ class LocationAliasDeleteView(LoginRequiredMixin, View):
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(wiki.name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
         alias_name = alias.name
-        # Tombstone first: an external-source sync or the pin<->wiki alias-mirror
-        # signal could otherwise recreate this exact name the moment either one
-        # next runs, silently undoing the deletion.
+        from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_remove
+
+        stash_wiki_alias_remove(wiki, profile, alias)
+        # Tombstone first: an external-source sync or the pin<->wiki alias-mirror signal could otherwise
+        # recreate this exact name the moment either one next runs, silently undoing the deletion.
         WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.ALIAS, value=alias_name)
         alias.delete()
         WikiEdit.objects.create(
@@ -286,26 +276,21 @@ class LocationAliasUseView(LoginRequiredMixin, View):
     def post(self, request, location_slug, alias_id):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
-        # Renaming saves the wiki (through apply_wiki_edit), so it needs the
-        # real row - see concealment.writable_wiki. The panel then re-renders
-        # from what was written, not from the pre-write projection.
+        # Renaming saves the wiki (through apply_wiki_edit), so it needs the real row - see
+        # concealment.writable_wiki.
         target = writable_wiki(wiki)
+        before_name = target.name
         edit = promote_wiki_alias_to_name(target, profile, alias)
+        if edit is not None:
+            from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_promote
+
+            stash_wiki_alias_promote(target, profile, before_name=before_name, after_name=target.name)
         response = _render_location_panel(request, location, target, profile)
         if edit is None:
             # The alias was already the wiki's name, so nothing was written.
-            # Announcing a rename anyway would push a "renamed" toast and a
-            # wikiRenamed event for an edit that does not exist in the history -
-            # which is exactly what a user retrying a request whose response
-            # they never saw would see.
             return response
-        # wiki.name, not alias.name: Wiki.save() sanitizes the incoming name, so
-        # the alias text and what actually got stored can differ. The toast has
-        # to state what was stored or it lies about the result of the edit.
-        # `target`, not `wiki`: the rename went through the real row, and the
-        # projection resolve returned still holds the pre-rename name - so this
-        # comment's own promise, that the toast states what was stored, only
-        # holds for the row that was written.
+        # wiki.name, not alias.name: Wiki.save() sanitizes the incoming name, so the alias text and what
+        # actually got stored can differ.
         response["HX-Trigger"] = json.dumps({"wikiRenamed": {"name": target.name}})
         return _show_toast(response, f"Renamed to “{target.name}”.")
 

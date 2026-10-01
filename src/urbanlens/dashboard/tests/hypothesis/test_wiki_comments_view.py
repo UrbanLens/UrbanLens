@@ -1,9 +1,5 @@
-"""Tests for WikiCommentsView (GET/POST /location/<slug>/wiki/comments/).
+"""Tests for WikiCommentsView (GET/POST /location/<slug>/wiki/comments/)."""
 
-Covers a regression where the comment-panel context omitted ``location``,
-leaving ``{% url 'location.wiki.comments' location.slug %}`` in the compose
-partial resolving against an empty slug and raising NoReverseMatch.
-"""
 from __future__ import annotations
 
 from django.urls import reverse

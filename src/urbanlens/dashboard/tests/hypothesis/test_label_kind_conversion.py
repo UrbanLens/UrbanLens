@@ -1,14 +1,4 @@
-"""Tests for UL-155: label ("badge") kind-change UX.
-
-Converting a label between tag/category/status keeps its pin/wiki
-memberships but clears its parent/child hierarchy (LabelEditView.post -
-_apply_kind_conversion + label.parents.clear() - a parent/child link only
-makes sense between two labels of the same kind, since _parent_candidates
-is itself kind-scoped). The edit form's hint text used to only mention
-memberships being migrated, saying nothing about hierarchy being lost -
-this covers the now-conditional warning and the underlying clear-on-convert
-behavior it describes.
-"""
+"""Tests for UL-155: label ("badge") kind-change UX."""
 
 from __future__ import annotations
 

@@ -1,28 +1,4 @@
-/**
- * Gesture tests for the floorplan editor, in a real browser.
- *
- * Everything else about the editor can be tested as pure functions, and is.
- * Dragging cannot: it is the point where this code meets Leaflet, pointer
- * capture, and a DOM that rebuilds itself mid-gesture, and every serious defect
- * in the drag work came from that seam rather than from the arithmetic either
- * side of it. Two of them - a drag that ended after one frame because render()
- * destroys the element it was bound to, and a drag that froze because it
- * snapped to the wall it was itself dragging - are invisible to a unit test by
- * construction.
- *
- * The page is a harness rather than the Django template: the template needs a
- * server, and what is under test is the bundle's behaviour, not Django's
- * rendering. The bundle is the real built artifact.
- *
- * Run with `bun run test:browser`. It lives outside `frontend/ts/` on purpose:
- * bunfig.toml preloads happy-dom for everything under there, and unregistering
- * it - which this file must do, since a simulated DOM and a real browser cannot
- * both own the globals - would strip the DOM from every other test in the same
- * process. A separate directory means a separate `bun test` invocation.
- *
- * Requires `bun run build` first, and a chromium Playwright can launch; see
- * bin/browser_libs.sh for the shared libraries this host needs.
- */
+/** Gesture tests for the floorplan editor, in a real browser. Everything else about the editor can be tested as pure functions, and is. */
 
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -42,37 +18,33 @@ const ROOT = join(import.meta.dir, "../../../../..");
 const STATIC_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/static");
 const BUNDLE = join(STATIC_DIR, "dashboard/js/floorplan-editor.js");
 
-/**
- * These drive the built bundle, so they need `bun run build` to have run.
- * Skipped rather than failed without it: a missing build is a setup gap, and a
- * red suite that means "you did not build" trains people to ignore red suites.
- */
+/** These drive the built bundle, so they need `bun run build` to have run. */
 const BUILT = existsSync(BUNDLE);
 
-/**
- * Test-controlled save behaviour.
- *
- * A conflict is a server state, not a client one, so the only honest way to
- * reach it is for the server to answer the way a real one would when another
- * tab has saved first.
- */
-const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null, lastRotation: -1 };
+/** Test-controlled save behaviour. A conflict is a server state, not a client one, so the only honest way to reach it is for the server to answer the way a real one would when another tab has saved first. */
+interface SaveSpy {
+    conflict: boolean;
+    fail: boolean;
+    attempts: number;
+    lastPool: number;
+    lastPoolUuid: string;
+    lastHadUuid: boolean;
+    lastName: string;
+    lastValidFrom: string | null;
+    lastRotation: number;
+}
 
-/**
- * Answer a save the way the server does: with the document it was given, every
- * client-side id replaced by a real one.
- *
- * The fixture used to answer with a fixed plan whatever it was sent, which
- * meant applyServerIds never had anything to apply and the whole
- * local-id-to-real-id cycle went unexercised in the browser.
- */
+const saves: SaveSpy = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null, lastRotation: -1 };
+
+/** Clear what the save handler last recorded, before a test that asserts on it. */
+function resetSaveSpy(fields: Partial<SaveSpy>): void {
+    Object.assign(saves, fields);
+}
+
+/** Answer a save the way the server does: with the document it was given, every client-side id replaced by a real one. */
 function echoSaved(document: unknown, versions: unknown): unknown {
     let issued = 0;
-    // The real save view answers with the row's actual provenance and the uuid
-    // it was stored under - "local" once the save has forked a community plan
-    // into the viewer's own, which is what stops the next autosave forking it
-    // again. Echoing the payload alone would leave both fields absent and the
-    // fixture would fork forever.
+    // Echo provenance and uuid too: echoing the payload alone forks forever.
     const rename = (value: unknown): unknown => {
         if (Array.isArray(value)) return value.map(rename);
         if (!value || typeof value !== "object") return value;
@@ -83,10 +55,7 @@ function echoSaved(document: unknown, versions: unknown): unknown {
     };
     const saved = rename(document) as Record<string, unknown>;
     const uuid = saved.uuid ?? "srv-plan";
-    // save() strips `versions` before sending and the real view answers with the
-    // list rebuilt from rows, so echoing only what arrived emptied the version
-    // list on every save - which hid it, and left everything past the first save
-    // unexercised. The entry just written carries the name it was written with.
+    // Rebuild the version list from rows like the real view; echoing arrivals emptied it past the first save.
     const list = Array.isArray(versions)
         ? (versions as Array<Record<string, unknown>>).map((entry) =>
               entry.uuid === uuid ? { ...entry, name: saved.name, valid_from: saved.valid_from ?? null } : entry,
@@ -135,20 +104,8 @@ async function planCentre(): Promise<{ x: number; y: number }> {
 }
 
 /** A four-wall square, 10m on a side, as the editor's own document shape. */
-/**
- * A grid of rooms, for asking what a real survey costs to redraw.
- *
- * Args:
- *     cells: Rooms per side. 12 gives 312 walls and 144 faces.
- */
-/** Markers scattered over a grid plan.
- *
- * A survey-sized plan is not only walls: a hazard or a stairwell per few rooms is
- * ordinary, and every one of them is a Leaflet marker rebuilt on each drag frame.
- * The perf fixture carried `markers: []`, so the measured cost of a drag excluded
- * markers entirely - and with them the most expensive thing render() does per
- * marker, which is assembling the popup's DOM.
- */
+/** A grid of rooms (cells per side), for asking what a real survey costs to redraw. */
+/** Markers scattered over a grid plan. A survey-sized plan is not only walls: a hazard or a stairwell per few rooms is ordinary, and every one of them is a Leaflet marker rebuilt on each drag frame. */
 function gridMarkers(cells: number, step: number): unknown[] {
     const out: unknown[] = [];
     const kinds = ["hazard", "stair", "elevator"];
@@ -345,12 +302,7 @@ let browser: Browser;
 let page: Page;
 let server: ReturnType<typeof Bun.serve>;
 
-/**
- * Load the harness with the real bundle and a stubbed server.
- *
- * Served over HTTP rather than injected: the bundle is a module that imports a
- * chunk by relative URL, which cannot resolve without a real origin.
- */
+/** Load the harness with the real bundle and a stubbed server. Served over HTTP rather than injected: the bundle is a module that imports a chunk by relative URL, which cannot resolve without a real origin. */
 async function openEditor(
     viewport = { width: 1200, height: 800 },
     hasTouch = false,
@@ -377,14 +329,7 @@ async function openEditor(
     await settle();
 }
 
-/**
- * Wait until the plan stops moving on screen.
- *
- * The editor fits the view to the plan once it loads, and Leaflet animates
- * that. Measuring during the animation reads the zoom settling as the geometry
- * changing, which is the difference between a test that fails once in ten runs
- * and one that means something.
- */
+/** Wait until the plan stops moving on screen. The editor fits the view to the plan once it loads, and Leaflet animates that. */
 async function settle(): Promise<void> {
     let previous = "";
     for (let attempt = 0; attempt < 40; attempt++) {
@@ -401,16 +346,7 @@ async function settle(): Promise<void> {
     }
 }
 
-/**
- * The screen extent of every wall on the floor, and a point on the topmost one.
- *
- * Measured as a union rather than per element, and read in the page rather than
- * through Playwright's boundingBox(). Both matter: render() destroys and
- * rebuilds every layer on each frame, so "the first .floorplan-wall" is not the
- * same wall before and after a gesture - measuring one that way reports a plain
- * click as a 70px move - and a straight wall is a zero-height line, which
- * Playwright treats as invisible and refuses to measure at all.
- */
+/** The screen extent of every wall on the floor, and a point on the topmost one. Measured as a union rather than per element, and read in the page rather than through Playwright's boundingBox(). */
 async function planExtent(): Promise<{ top: number; left: number; bottom: number; width: number; height: number; grab: { x: number; y: number } }> {
     const measured = await page.evaluate(() => {
         const nodes = [...document.querySelectorAll(".floorplan-wall")];
@@ -490,7 +426,9 @@ beforeAll(async () => {
             if (path === "/json-lostphoto") {
                 const plan = squarePlan() as Record<string, unknown>;
                 const floors = plan.floors as Array<{ walls: Array<Record<string, unknown>> }>;
-                for (const wall of floors[0].walls) wall.references = ["ref-gone"];
+                const [groundFloor] = floors;
+                if (!groundFloor) throw new Error("squarePlan() has no floors, so this fixture cannot cite a wall");
+                for (const wall of groundFloor.walls) wall.references = ["ref-gone"];
                 plan.reference_pool = [{ uuid: "ref-gone", kind: "photo", title: "South elevation", url: "https://example.test/south.jpg", image_uuid: null }];
                 return servePlan(plan);
             }
@@ -534,7 +472,15 @@ beforeAll(async () => {
                 }
                 return Response.json({ ok: true, floorplan: echoed });
             }
-            return new Response(Bun.file(join(STATIC_DIR, path.replace(/^\//, ""))));
+            // The editor asks this deployment which basemap layers it serves, on every load. A
+            // self-hoster with no REData configured is answered exactly this, and falls back to
+            // the built-in vendor sources - so the harness runs the same path the fallback does.
+            if (path === "/dashboard/map/basemap-tiles/sources/") return Response.json({ layers: [] });
+            const file = Bun.file(join(STATIC_DIR, path.replace(/^\//, "")));
+            // 404 rather than a thrown ENOENT: an unhandled throw in here is attributed to
+            // whichever test happens to be running, which reads as that test failing.
+            if (!(await file.exists())) return new Response("not found", { status: 404 });
+            return new Response(file);
         },
     });
 });
@@ -628,7 +574,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.mouse.down();
         for (let step = 1; step <= 8; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 8);
         await page.mouse.up();
-        expect(await page.locator("#floorplan-undo").isDisabled()).toBe(false);
+        expect(await page.locator("#ul-undo-btn").isVisible()).toBe(true);
         expect((await planExtent()).top).toBeLessThan(before.top - 20);
 
         await page.keyboard.press("Control+z");
@@ -676,27 +622,26 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
-    test("on a phone, undo and the floor switcher stay on the canvas", async () => {
-        // They used to live in the sidebar, which stacks below the map under
-        // 900px - so for the whole time anyone was drawing on a phone, the one
-        // control you reach for after a mistake was off the bottom of the page.
+    test("on a phone, undo, the floor switcher, and delete stay reachable", async () => {
+        // Floor switcher and delete live on the canvas because the sidebar stacks
+        // below the map under 900px. Undo is the shared floating bar: still on
+        // screen, and not in the sidebar, after a drag makes it available.
         await openEditor({ width: 375, height: 812 });
-        // Delete only appears with a selection, and it is on this list for the
-        // same reason as the other two: the sidebar it also lives in is below a
-        // 72vh map, and a phone has no Delete key.
         const plan = await planExtent();
         await page.mouse.click(plan.grab.x, plan.grab.y);
         await settle();
+        await page.mouse.move(plan.grab.x, plan.grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(plan.grab.x, plan.grab.y - step * 8);
+        await page.mouse.up();
+        await settle();
 
-        for (const selector of ["#floorplan-undo", "#floorplan-floors", "#floorplan-delete"]) {
+        for (const selector of ["#floorplan-floors", "#floorplan-delete"]) {
             const placement = await page.evaluate((which) => {
                 const node = document.querySelector(which as string);
                 if (!node) return null;
                 const rect = node.getBoundingClientRect();
                 return {
-                    // Structural, not positional: a control can be made to
-                    // overlap the map with CSS while still living in a panel
-                    // that scrolls away, which is what this is guarding against.
                     inShell: Boolean(node.closest(".floorplan-map-shell")),
                     rendered: rect.width > 0 && rect.height > 0,
                     onScreen: rect.top >= 0 && rect.bottom <= window.innerHeight,
@@ -707,6 +652,27 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             expect(placement!.rendered, `${selector} should be rendered`).toBe(true);
             expect(placement!.onScreen, `${selector} should be reachable without scrolling`).toBe(true);
         }
+
+        const undo = await page.evaluate(() => {
+            const node = document.getElementById("ul-undo-btn");
+            if (!node) return null;
+            const rect = node.getBoundingClientRect();
+            const floors = document.getElementById("floorplan-floors-panel")?.getBoundingClientRect();
+            const overlap = floors
+                ? !(rect.right <= floors.left || floors.right <= rect.left || rect.bottom <= floors.top || floors.bottom <= rect.top)
+                : false;
+            return {
+                inSidebar: Boolean(node.closest(".floorplan-sidebar")),
+                rendered: rect.width > 0 && rect.height > 0,
+                onScreen: rect.top >= 0 && rect.bottom <= window.innerHeight,
+                overlapFloors: overlap,
+            };
+        });
+        expect(undo, "undo button is missing").not.toBeNull();
+        expect(undo!.inSidebar, "undo should not live in the sidebar").toBe(false);
+        expect(undo!.rendered, "undo should be rendered").toBe(true);
+        expect(undo!.onScreen, "undo should be reachable without scrolling").toBe(true);
+        expect(undo!.overlapFloors, "undo should not cover the floor strip").toBe(false);
         await page.close();
     });
 
@@ -736,14 +702,20 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             await openEditor(viewport);
             await page.locator('[data-tool="wall"]').click(); // give the options panel content
             await settle();
+            const plan = await planExtent();
+            await page.mouse.move(plan.grab.x, plan.grab.y);
+            await page.mouse.down();
+            await page.mouse.move(plan.grab.x, plan.grab.y - 24);
+            await page.mouse.up();
+            await settle();
 
             const overlaps = await page.evaluate(() => {
                 // Leaflet's own zoom control is on this list too - it is no
-                // longer reparented into .floorplan-canvas-controls (undo and
-                // redo moved into #floorplan-tools instead), so it is once
-                // again a free-floating control that could collide with the
-                // rest, same as on every other map.
-                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom"];
+                // longer reparented into .floorplan-canvas-controls, so it is
+                // once again a free-floating control that could collide with
+                // the rest, same as on every other map. The shared undo bar
+                // must clear the floor strip (and the rest) once it is visible.
+                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom", "#ul-undo-bar"];
                 const boxes = selectors
                     .map((selector) => ({ selector, node: document.querySelector(selector) }))
                     .filter((entry) => entry.node && !(entry.node as HTMLElement).hidden)
@@ -1475,12 +1447,12 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await expectRoomNamed("Plant room");
 
         // One press takes back the whole name, not one letter of it.
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         await expectRoomNamed("Island");
 
         // The next takes back the drag, which was never part of that group.
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         const back = await page.evaluate(() => {
             const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
@@ -1794,7 +1766,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
 
         // Undo puts the blank canvas back rather than leaving a plan nobody
         // asked for.
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         expect(await page.locator(".floorplan-wall").count()).toBe(0);
         expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(false);
@@ -1824,7 +1796,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
         expect(await disabledness()).toEqual({ room: false, opening: false, box: false });
 
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         expect(await disabledness()).toEqual({ room: true, opening: true, box: true });
         await page.close();
@@ -1945,9 +1917,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // only ever reached the server when something *else* had already marked the
         // document dirty. Typing a name and leaving lost it - and beforeunload
         // stayed quiet on the way out, because state.dirty was never set.
-        saves.attempts = 0;
-        saves.lastName = "";
-        saves.lastValidFrom = null;
+        resetSaveSpy({ attempts: 0, lastName: "", lastValidFrom: null });
         await openEditor();
 
         // Plan name and date live behind "Add more details".
@@ -1966,17 +1936,11 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("clearing the plan name leaves it unnamed, and the list still labels it", async () => {
-        // The default used to be applied inside save(), so "no name" was stored as
-        // a copy of whatever the floor happened to be called at that moment: the
-        // placeholder stopped applying once saved, and renaming the floor left the
-        // plan carrying the old name. The version list has always had a fallback of
-        // its own, which is where a derived default belongs.
+        // Derived defaults belong in the version list, not frozen from the floor name at save.
         saves.attempts = 0;
         await openEditor();
 
-        // Give the floor a nickname first: the default that used to be frozen in
-        // was the floor's name, so without one the two behaviours agree and this
-        // test would pass against the bug it exists for.
+        // Nickname the floor first, or both behaviours agree and the test passes against the bug.
         await page.locator(".floorplan-floor-fields__name").fill("Boiler floor");
         for (let waited = 0; waited < 40 && saves.attempts === 0; waited++) await page.waitForTimeout(250);
 
@@ -2013,7 +1977,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         for (let waited = 0; waited < 40 && saves.lastName !== "Boiler house"; waited++) await page.waitForTimeout(250);
         expect(saves.lastName).toBe("Boiler house");
 
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         expect(await nameField.inputValue(), "undo left the renamed plan on screen").toBe(before);
 
@@ -2123,7 +2087,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(await named(), "renumbering moved the storeys' contents rather than their labels").toEqual(["1:Attic", "G:"]);
 
         // And it is undoable, like every other edit here.
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         expect(await named(), "undo did not put the deleted storey back").toEqual(["2:Attic", "1:", "G:"]);
         await page.close();
@@ -2895,7 +2859,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.locator("#floorplan-map").focus();
         await page.keyboard.press("ArrowRight");
         await settle();
-        expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "nothing to undo before switching").toBe(false);
+        expect(await page.evaluate(() => !document.getElementById("ul-undo-btn")?.hidden), "nothing to undo before switching").toBe(true);
         const wallsBefore = await page.locator(".floorplan-wall").count();
 
         // The version list lives behind "Add more details".
@@ -2904,7 +2868,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.waitForFunction((was) => document.querySelectorAll(".floorplan-wall").length !== was, wallsBefore, { timeout: 15000 });
         await settle();
 
-        expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "undo still points at the version that was left").toBe(true);
+        expect(await page.evaluate(() => document.getElementById("ul-undo-btn")?.hidden), "undo still points at the version that was left").toBe(true);
         await page.close();
     });
 

@@ -1,20 +1,4 @@
-"""Tests for the production-only guard on REData's ML-training write surfaces.
-
-Dev and staging deployments point at *production* REData on purpose: nearly
-every REData endpoint - including the POST-shaped ones - only asks REData to go
-fetch and cache third-party data about a place, so sharing one instance saves
-third-party quota instead of burning it. Four endpoints are different in kind:
-they send UrbanLens's own content for REData to store and train models on.
-Those must never fire from a throwaway deployment, or demo data lands in the
-production ML corpus indistinguishable from real data.
-
-Two things are proved here: that the environment classifier fails closed (only
-an explicit ``production`` counts, so an unset or garbage ``UL_ENVIRONMENT``
-never enables writes), and that the classification actually reaches every one
-of the four write surfaces while leaving reads and cache-fill calls alone.
-
-Every HTTP call is mocked - nothing here touches the network.
-"""
+"""Tests for the production-only guard on REData's ML-training write surfaces."""
 
 from __future__ import annotations
 
@@ -23,9 +7,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from django.test import override_settings
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.labels.redata_labels_gateway import RedataLabelsGateway
 from urbanlens.dashboard.services.apis.locations.redata_routing_gateway import RedataRoutingGateway
@@ -40,7 +24,18 @@ _hyp = hyp_settings(max_examples=50, deadline=None)
 #: Every environment name a deployment can realistically be running under that
 #: is *not* production, plus the two "misconfigured" cases the guard has to
 #: treat the same way: unset, and a name nobody recognises.
-NON_PRODUCTION_NAMES = ["development", "local", "staging", "testing", None, "", "prod", "produktion", "PRODUCTION_CLONE", "not-production"]
+NON_PRODUCTION_NAMES = [
+    "development",
+    "local",
+    "staging",
+    "testing",
+    None,
+    "",
+    "prod",
+    "produktion",
+    "PRODUCTION_CLONE",
+    "not-production",
+]
 
 
 def _response(status_code: int, body: object) -> mock.Mock:
@@ -61,10 +56,8 @@ def _labels(session: mock.Mock) -> RedataLabelsGateway:
 def _as_environment(name: str | None):
     """Run a block as if ``UL_ENVIRONMENT`` were ``name``.
 
-    Drives ``IS_PRODUCTION`` through the real classifier rather than restating
-    the rule, so a test naming an environment proves the whole chain from the
-    env var to the guard.
-    """
+    Drives ``IS_PRODUCTION`` through the real classifier rather than restating the rule, so a test naming an
+    environment proves the whole chain from the env var to the guard."""
     return override_settings(ENVIRONMENT_NAME=name, IS_PRODUCTION=is_production_environment(name))
 
 
@@ -145,7 +138,9 @@ class TrueWriteSurfacesAreSkippedOffProductionTests(SimpleTestCase):
         for name in NON_PRODUCTION_NAMES:
             with self.subTest(name=name), _as_environment(name):
                 session = mock.Mock()
-                result = _photos(session).submit_photos([{"photo_id": "abc", "location_latitude": 1.0, "location_longitude": 2.0}])
+                result = _photos(session).submit_photos(
+                    [{"photo_id": "abc", "location_latitude": 1.0, "location_longitude": 2.0}]
+                )
                 session.post.assert_not_called()
                 # Indistinguishable from "submitted, nothing scored yet" - the
                 # caller caches no confidence and reports no failure.
@@ -156,7 +151,9 @@ class TrueWriteSurfacesAreSkippedOffProductionTests(SimpleTestCase):
         for name in NON_PRODUCTION_NAMES:
             with self.subTest(name=name), _as_environment(name):
                 session = mock.Mock()
-                result = _photos(session).submit_votes([{"photo_id": "abc", "is_relevant": True}, {"photo_id": "def", "is_relevant": False}])
+                result = _photos(session).submit_votes(
+                    [{"photo_id": "abc", "is_relevant": True}, {"photo_id": "def", "is_relevant": False}]
+                )
                 session.post.assert_not_called()
                 self.assertEqual(result["recorded"], 0)
                 # The truthful shape, and the same one production returns for a
@@ -176,7 +173,18 @@ class TrueWriteSurfacesAreSkippedOffProductionTests(SimpleTestCase):
         for name in NON_PRODUCTION_NAMES:
             with self.subTest(name=name), _as_environment(name):
                 session = mock.Mock()
-                result = _labels(session).sync_assignments("user-1", [{"external_id": "pin-1", "latitude": 1.0, "longitude": 2.0, "label_ids": ["abc"], "replace": True}])
+                result = _labels(session).sync_assignments(
+                    "user-1",
+                    [
+                        {
+                            "external_id": "pin-1",
+                            "latitude": 1.0,
+                            "longitude": 2.0,
+                            "label_ids": ["abc"],
+                            "replace": True,
+                        }
+                    ],
+                )
                 session.post.assert_not_called()
                 self.assertEqual(result["locations_created"], 0)
                 self.assertEqual(result["assignments_added"], 0)
@@ -199,7 +207,9 @@ class TrueWriteSurfacesAreAttemptedOnProductionTests(SimpleTestCase):
     def test_submit_photos_posts(self) -> None:
         session = mock.Mock()
         session.post.return_value = _response(200, {"count": 1, "results": {"abc": {"confidence": 0.9}}, "unknown": []})
-        result = _photos(session).submit_photos([{"photo_id": "abc", "location_latitude": 1.0, "location_longitude": 2.0}])
+        result = _photos(session).submit_photos(
+            [{"photo_id": "abc", "location_latitude": 1.0, "location_longitude": 2.0}]
+        )
         self.assertEqual(session.post.call_args.args[0], "https://redata.example.test/api/v1/photos/")
         self.assertEqual(result["results"]["abc"]["confidence"], 0.9)
 
@@ -222,26 +232,30 @@ class TrueWriteSurfacesAreAttemptedOnProductionTests(SimpleTestCase):
     def test_sync_assignments_posts(self) -> None:
         session = mock.Mock()
         session.post.return_value = _response(200, {"locations_created": 1})
-        _labels(session).sync_assignments("user-1", [{"external_id": "pin-1", "latitude": 1.0, "longitude": 2.0, "label_ids": ["abc"], "replace": True}])
+        _labels(session).sync_assignments(
+            "user-1",
+            [{"external_id": "pin-1", "latitude": 1.0, "longitude": 2.0, "label_ids": ["abc"], "replace": True}],
+        )
         self.assertEqual(session.post.call_args.args[0], "https://redata.example.test/api/v1/labels/assignments/")
 
 
 class ReadAndCacheFillSurfacesAreUnaffectedTests(SimpleTestCase):
     """Everything that is not a contribution still calls REData from any environment.
 
-    This is the whole point of the distinction: dev pointed at production REData
-    is *better* than dev with its own instance, so the guard must not creep past
-    the four surfaces that actually store our data. Three of the calls below are
-    POSTs - being a POST is not what makes an endpoint a write.
-    """
+    This is the whole point of the distinction: dev pointed at production REData is *better* than dev with its
+    own instance, so the guard must not creep past the four surfaces that actually store our data."""
 
     def test_get_confidence_batch_is_a_post_shaped_read_and_still_calls(self) -> None:
         for name in NON_PRODUCTION_NAMES:
             with self.subTest(name=name), _as_environment(name):
                 session = mock.Mock()
-                session.post.return_value = _response(200, {"count": 1, "results": {"abc": {"confidence": 0.5}}, "unknown": []})
+                session.post.return_value = _response(
+                    200, {"count": 1, "results": {"abc": {"confidence": 0.5}}, "unknown": []}
+                )
                 result = _photos(session).get_confidence_batch(["abc"])
-                self.assertEqual(session.post.call_args.args[0], "https://redata.example.test/api/v1/photos/confidence/")
+                self.assertEqual(
+                    session.post.call_args.args[0], "https://redata.example.test/api/v1/photos/confidence/"
+                )
                 self.assertEqual(result["results"]["abc"]["confidence"], 0.5)
 
     def test_suggest_labels_is_a_post_shaped_read_and_still_calls(self) -> None:
@@ -265,9 +279,16 @@ class ReadAndCacheFillSurfacesAreUnaffectedTests(SimpleTestCase):
         for name in NON_PRODUCTION_NAMES:
             with self.subTest(name=name), _as_environment(name):
                 session = mock.Mock()
-                session.post.return_value = _response(200, {"route": {"distance_meters": 100.0, "duration_seconds": 60.0}})
-                gateway = RedataRoutingGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
-                self.assertEqual(gateway.get_route([(41.0, -73.9), (41.1, -73.8)]), {"distance_meters": 100.0, "duration_seconds": 60.0})
+                session.post.return_value = _response(
+                    200, {"route": {"distance_meters": 100.0, "duration_seconds": 60.0}}
+                )
+                gateway = RedataRoutingGateway(
+                    base_url="https://redata.example.test", api_key="test-key", session=session
+                )
+                self.assertEqual(
+                    gateway.get_route([(41.0, -73.9), (41.1, -73.8)]),
+                    {"distance_meters": 100.0, "duration_seconds": 60.0},
+                )
                 session.post.assert_called_once()
 
 
@@ -284,12 +305,22 @@ class BackfillProfileGuardTests(TestCase):
             self.addCleanup(patcher.stop)
 
     def test_off_production_returns_zero_counts_and_builds_no_gateway(self) -> None:
-        with _as_environment("development"), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway") as gateway_class:
+        with (
+            _as_environment("development"),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway"
+            ) as gateway_class,
+        ):
             self.assertEqual(redata_suggestions.backfill_profile(self.profile), (0, 0))
         gateway_class.assert_not_called()
 
     def test_on_production_syncs(self) -> None:
-        with _as_environment("production"), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway") as gateway_class:
+        with (
+            _as_environment("production"),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway"
+            ) as gateway_class,
+        ):
             labels_synced, _pins_synced = redata_suggestions.backfill_profile(self.profile)
         gateway_class.assert_called()
         self.assertGreater(labels_synced, 0)

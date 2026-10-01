@@ -1,13 +1,4 @@
-"""Fire & disaster history plugin: wildfires and federal disaster declarations near a pin, via REData.
-
-The same ``/hazards/`` endpoint the seismic panel reads, but the other two
-providers: ``nifc_wildfires`` (mapped US fire perimeters back to ~1900 -
-whether fire reached this property, not whether the region burns) and
-``fema_disasters`` (county-level declarations since 1953, with which
-assistance programmes were actually authorised). For a site's back-story,
-"burned in 1988" and "flood-declared county, 2011" are often the answer to
-"why is this place abandoned".
-"""
+"""Fire & disaster history plugin: wildfires and federal disaster declarations near a pin, via REData."""
 
 from __future__ import annotations
 
@@ -15,8 +6,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -32,18 +24,12 @@ _PROVIDERS = ("nifc_wildfires", "fema_disasters")
 def _fire_name(event: dict, year: str) -> str:
     """The fire's own name, without the year this row already labels it with.
 
-    REData composes ``title`` as ``"<incident> (<year>)"`` because it has no
-    other place to publish the name - the raw incident string is not in
-    ``attributes``. This panel puts the year in the row *label*, so repeating it
-    in the value reads as a mistake.
-
     Args:
         event: One ``nifc_wildfires`` hazard event.
         year: The four-digit year already shown in the row's label.
 
     Returns:
-        The incident name, or an empty string when REData had none.
-    """
+        The incident name, or an empty string when REData had none."""
     title = str(event.get("title") or "").strip()
     suffix = f" ({year})"
     if year and title.endswith(suffix):
@@ -56,9 +42,13 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
 
     key = "hazard_history"
     cache_source = "hazard_history"
+    site_level: ClassVar[bool] = True
     section_id = "hazard-history-section"
     icon = "local_fire_department"
     title = "Fire & Disaster History"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Disasters"
+    tab_order: ClassVar[int] = 40
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self, pin: Pin) -> bool:
@@ -66,13 +56,7 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
         return super().gate(pin) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Search REData's hazards registry for fire/disaster history and cache it.
-
-        No ``radius_meters``: each provider's own default is the point -
-        wildfires tight (2 km: did fire reach *this* property), FEMA fixed
-        (declarations designate whole counties). ``years=80`` reaches back
-        to FEMA's 1953 start; the wildfire perimeters simply extend further.
-        """
+        """Search REData's hazards registry for fire/disaster history and cache it."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.redata_hazards_gateway import RedataHazardsGateway
 
@@ -138,6 +122,17 @@ class HazardHistoryPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Fire & Disaster History"
     description: ClassVar[str] = "Shows NIFC wildfire perimeters that reached the pin's site and FEMA disaster declarations for its county on the detail page, sourced through REData's natural-hazards registry. USA only."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_hazards."""
+        return {
+            "redata_hazards": ServiceDefaults(
+                display_name="REData Natural Hazards",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Wildfire perimeters, disaster declarations and earthquakes via GET /hazards/. Also spent by the usgs_earthquakes plugin, which declares nothing so this is the one budget. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_hazards_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the fire & disaster history pin-detail panel."""

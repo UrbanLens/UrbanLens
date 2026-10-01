@@ -1,16 +1,10 @@
-"""Tests for services.import_formats.gpx.gpx_to_dict() - GPX waypoint import.
+"""Tests for services.import_formats.gpx.gpx_to_dict() - GPX waypoint import."""
 
-Tracks/routes are deliberately never imported as pins (see the module docstring
-for the rationale), so the regression coverage here specifically checks that a
-file containing both waypoints and a multi-point track only produces pins for
-the waypoints.
-"""
 from __future__ import annotations
 
 from pathlib import Path
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
 
@@ -117,7 +111,9 @@ class GpxToDictTests(SimpleTestCase):
             alphabet=st.characters(blacklist_categories=("Cs", "Cc"), blacklist_characters="<>&\"'"),
             min_size=1,
             max_size=40,
-        ).map(str.strip).filter(bool),
+        )
+        .map(str.strip)
+        .filter(bool),
         lat=st.floats(min_value=-89, max_value=89, allow_nan=False, allow_infinity=False),
         lon=st.floats(min_value=-179, max_value=179, allow_nan=False, allow_infinity=False),
     )

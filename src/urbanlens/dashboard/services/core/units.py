@@ -1,9 +1,5 @@
 """Unit conversion and formatting helpers for user-facing distances.
-
-Distances are computed and stored internally in kilometres; these helpers convert
-to the viewer's preferred unit (see ``Profile.effective_distance_units``) only at
-display time.
-"""
+Distances are computed and stored internally in kilometres; these helpers convert to the viewer's preferred unit (see ``Profile.effective_distance_units``) only at display time."""
 
 from __future__ import annotations
 
@@ -41,7 +37,6 @@ def format_distance(distance_km: float, units: str, *, decimals: int = 1) -> str
         decimals: Number of decimal places to render.
 
     Returns:
-        A string like ``"12.3 km"`` or ``"7.6 mi"``.
-    """
+        A string like ``"12.3 km"`` or ``"7.6 mi"``."""
     value = km_to_display(distance_km, units)
     return f"{value:.{decimals}f} {unit_label(units)}"

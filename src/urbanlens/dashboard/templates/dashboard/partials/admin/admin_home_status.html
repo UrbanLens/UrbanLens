@@ -1,9 +1,4 @@
-{% comment %}
-HTMX partial: infrastructure health + git update badges for the admin home
-page's status row. Context: unhealthy_services, total_services,
-git_has_newer_commits, git_available, git_branch - see
-SiteAdminHomeStatusPartialView.
-{% endcomment %}
+{% comment %}HTMX partial: infrastructure health + git update badges for the admin home page's status row.{% endcomment %}
 {% if unhealthy_services %}
 <span class="admin-home-status admin-home-status--warn">
     <i class="material-symbols-outlined">warning</i>

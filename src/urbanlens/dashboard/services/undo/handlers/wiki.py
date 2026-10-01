@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
@@ -42,42 +42,26 @@ _RESTORABLE_FIELDS = (
 
 def with_wiki_descendants(wikis: list[Wiki]) -> list[Wiki]:
     """Expand ``wikis`` to include their full child-wiki subtree.
-
-    Deleting a wiki cascades to its ``child_wikis`` (``Wiki.parent_wiki`` is
-    ``on_delete=CASCADE``), so stashing only the given wikis would silently
-    lose any nested child wikis on restore.
+    Deleting a wiki cascades to its ``child_wikis`` (``Wiki.parent_wiki`` is ``on_delete=CASCADE``), so stashing only the given wikis would silently lose any nested child wikis on restore.
 
     Args:
         wikis: The wikis about to be deleted.
 
     Returns:
-        ``wikis`` plus every descendant, as fresh Wiki instances.
-    """
-    all_ids = {w.pk for w in wikis}
-    frontier = set(all_ids)
-    while frontier:
-        children = set(Wiki.objects.filter(parent_wiki_id__in=frontier).values_list("pk", flat=True))
-        frontier = children - all_ids
-        all_ids |= frontier
-    return list(Wiki.objects.filter(pk__in=all_ids))
+        ``wikis`` plus every descendant, as fresh Wiki instances."""
+    return list(Wiki.objects.filter(pk__in=[w.pk for w in wikis]).with_descendants())
 
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.wiki import MODEL_LABEL``) instead
-#: of hand-typing ``"wiki"`` - a typo in a hand-typed string only fails at
-#: runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "wiki"
 
 
 @register
 class WikiUndoHandler(UndoHandler):
-    """Restores a wiki's own fields, hierarchy position, and labels - not its cascade children.
-
-    Comments, aliases, edit history, and photos are gone the instant the
-    wiki is deleted and are not restored.
-    """
+    """Restores a wiki's own fields, hierarchy position, and labels - not its cascade children."""
 
     model_label = MODEL_LABEL
+    model = Wiki
 
     @classmethod
     def serialize(cls, instances: Sequence[Wiki]) -> list[dict[str, Any]]:
@@ -86,6 +70,11 @@ class WikiUndoHandler(UndoHandler):
     @classmethod
     def _serialize_one(cls, wiki: Wiki) -> dict[str, Any]:
         fields = {name: getattr(wiki, name) for name in _RESTORABLE_FIELDS}
+        # Image.wiki is SET_NULL, so the delete detached these photos rather than destroying them,
+        # and nothing else records where they were.
+        # The exemption comes along in the same read: a delete by the contributor revokes the
+        # community quota bonus their photos earned here (services.media.quota_rewards), and a
+        photos = list(wiki.images.values_list("pk", "quota_exempt_reason"))
         return {
             "old_pk": wiki.pk,
             "fields": fields,
@@ -93,9 +82,8 @@ class WikiUndoHandler(UndoHandler):
             "created_by_id": wiki.created_by_id,
             "parent_wiki_old_pk": wiki.parent_wiki_id,
             "label_ids": list(wiki.labels.values_list("id", flat=True)),
-            # Image.wiki is SET_NULL, so the delete detached these photos rather
-            # than destroying them, and nothing else records where they were.
-            "image_ids": list(wiki.images.values_list("pk", flat=True)),
+            "image_ids": [pk for pk, _reason in photos],
+            "bonus_image_ids": [pk for pk, reason in photos if reason == QuotaExemption.COMMUNITY_CONTRIBUTION],
         }
 
     @classmethod
@@ -107,12 +95,7 @@ class WikiUndoHandler(UndoHandler):
         """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and labels.
 
         Raises:
-            UndoExpiredError: If the location, creator profile, or any label
-                this batch referenced was independently deleted during the
-                retention window, or the location has acquired a new wiki since,
-                since recreating the row would otherwise fail with an uncaught
-                IntegrityError.
-        """
+            UndoExpiredError: If the location, creator profile, or any label this batch referenced was independently deleted during the retention window, or the location has acquired a new wiki since, since recreating the row would otherwise fail with an uncaught IntegrityError."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
@@ -142,10 +125,9 @@ class WikiUndoHandler(UndoHandler):
         for entry, wiki in zip(payload, restored, strict=True):
             old_parent_pk = entry["parent_wiki_old_pk"]
             if old_parent_pk:
-                # The parent may have been restored in this same batch (its
-                # pk changed), or it may never have been deleted at all (only
-                # a child subtree was stashed) - in which case its old pk is
-                # still the current one.
+                # The parent may have been restored in this same batch (its pk changed), or it may
+                # never have been deleted at all (only a child subtree was stashed) - in which case
+                # its old pk is still the current one.
                 parent = old_to_new.get(old_parent_pk) or Wiki.objects.filter(pk=old_parent_pk).first()
                 if parent is not None:
                     wiki.parent_wiki = parent
@@ -155,7 +137,34 @@ class WikiUndoHandler(UndoHandler):
             image_ids = entry.get("image_ids") or []
             if image_ids:
                 Image.objects.filter(pk__in=image_ids, wiki__isnull=True).update(wiki=wiki)
+            # Re-grant only what this delete took: a photo back on this wiki that is carrying no
+            # exemption now.
+            # Restoring is not a grant, and an exemption held for some other reason is not this
+            # one's to move.
+            bonus_ids = entry.get("bonus_image_ids") or []
+            regranted: list[int] = []
+            if bonus_ids:
+                regranted = list(Image.objects.filter(pk__in=bonus_ids, wiki=wiki, quota_exempt_reason="").values_list("pk", flat=True))
+                if regranted:
+                    Image.objects.filter(pk__in=regranted).update(quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION)
+            entry["regranted_image_ids"] = regranted
             if entry["label_ids"]:
                 wiki.labels.set(entry["label_ids"])
 
         return restored
+
+    @classmethod
+    def redo_delete(cls, payload: dict[str, Any]) -> None:
+        """Re-delete the wikis ``restore`` recreated, and re-take what it re-granted.
+        The inherited implementation only deletes the rows.
+
+        Args:
+            payload: Wrapped stash of the form
+                ``{"entries": [...], "restored_pks": [...]}``.
+        """
+        for entry in payload.get("entries") or []:
+            regranted = entry.get("regranted_image_ids") or []
+            if regranted:
+                Image.objects.filter(pk__in=regranted, quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION).update(quota_exempt_reason="")
+            entry["regranted_image_ids"] = []
+        super().redo_delete(payload)

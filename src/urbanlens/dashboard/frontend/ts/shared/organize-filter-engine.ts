@@ -1,27 +1,23 @@
-export type OrgNamespace = "tag" | "cat" | "status" | "people";
+export type OrgNamespace = "tag" | "cat" | "status" | "people" | "media";
 
-export const ORG_FILTER_NAMESPACES: OrgNamespace[] = ["tag", "cat", "status", "people"];
+export const ORG_FILTER_NAMESPACES: OrgNamespace[] = ["tag", "cat", "status", "people", "media"];
 
 /**
- * Maps a `Label.kind` (what `data-kind` carries in rendered markup) to the
- * namespace this module keys everything else on.
- *
- * These are two different vocabularies that happen to agree on two of three
- * values: `Label.kind` is `"tag" | "category" | "status"` (see
- * `models/labels/meta.py`), while `OrgNamespace` abbreviates the middle one to
- * `"cat"`. Anything looking up a per-namespace registry from a `data-kind`
- * attribute has to translate, or it silently misses categories only - which
- * reads as "this feature is broken for categories" rather than as a typo.
+ * Maps a `Label.kind` (what `data-kind` carries in rendered markup) to the namespace this module keys everything else on.
  */
-export const ORG_NS_BY_LABEL_KIND: Record<string, OrgNamespace> = { tag: "tag", category: "cat", status: "status", people: "people" };
+export const ORG_NS_BY_LABEL_KIND: Record<string, OrgNamespace> = { tag: "tag", category: "cat", status: "status", people: "people", media: "media" };
 
-const NS_LABELS: Record<OrgNamespace, string> = { tag: "tags", cat: "categories", status: "statuses", people: "people" };
+/** The `data-tab` value of each namespace's `.organize-tab` trigger. */
+export const ORG_TAB_KEY_BY_NS: Record<OrgNamespace, string> = { tag: "tags", cat: "categories", status: "status", people: "people", media: "media" };
+
+const NS_LABELS: Record<OrgNamespace, string> = { tag: "tags", cat: "categories", status: "statuses", people: "people", media: "media labels" };
 
 const NS_CONFIG: Record<OrgNamespace, { rowsId: string; cardSel: string; idKey: string; nameKey: string; iconKey: string; customIconKey?: string; colorKey: string; parentsKey: string }> = {
     tag: { rowsId: "tag-rows", cardSel: ".tag-card[data-tag-id]", idKey: "tagId", nameKey: "tagName", iconKey: "tagIcon", customIconKey: "tagCustomIcon", colorKey: "tagColor", parentsKey: "tagParents" },
     cat: { rowsId: "category-rows", cardSel: ".tag-card[data-category-id]", idKey: "categoryId", nameKey: "categoryName", iconKey: "categoryIcon", customIconKey: "categoryCustomIcon", colorKey: "categoryColor", parentsKey: "categoryParents" },
     status: { rowsId: "status-rows", cardSel: ".tag-card[data-status-id]", idKey: "statusId", nameKey: "statusName", iconKey: "statusIcon", customIconKey: "statusCustomIcon", colorKey: "statusColor", parentsKey: "statusParents" },
     people: { rowsId: "people-label-rows", cardSel: ".tag-card[data-people-id]", idKey: "peopleId", nameKey: "peopleName", iconKey: "peopleIcon", colorKey: "peopleColor", parentsKey: "peopleParents" },
+    media: { rowsId: "media-label-rows", cardSel: ".tag-card[data-media-id]", idKey: "mediaId", nameKey: "mediaName", iconKey: "mediaIcon", colorKey: "mediaColor", parentsKey: "mediaParents" },
 };
 
 interface SharedFilterState {
@@ -187,10 +183,7 @@ function hasAnyOrgFilter(): boolean {
 
 function countVisibleCards(ns: OrgNamespace): number {
     const cfg = NS_CONFIG[ns];
-    // In tree view, applyFilterForNs() hides a filtered-out card's ancestor
-    // .tag-tree-item, not the card itself - getOrgVisibleCards() already
-    // knows that (it's what filters the cross-tab search results), so this
-    // reuses it rather than re-deriving the same visibility check.
+    // In tree view, applyFilterForNs() hides a filtered-out card's ancestor.tag-tree-item, not the card itself.
     return getOrgVisibleCards(document.getElementById(cfg.rowsId), cfg.cardSel).length;
 }
 
@@ -205,7 +198,7 @@ function updateCrossTabCounts(): void {
         return;
     }
 
-    const counts: Record<OrgNamespace, number> = { tag: 0, cat: 0, status: 0, people: 0 };
+    const counts: Record<OrgNamespace, number> = { tag: 0, cat: 0, status: 0, people: 0, media: 0 };
     ORG_FILTER_NAMESPACES.forEach((ns) => {
         counts[ns] = countVisibleCards(ns);
     });
@@ -246,7 +239,7 @@ function updateCrossTabCounts(): void {
         const selfCount = counts[ns];
         const prefix = selfCount === 0 ? `No ${NS_LABELS[ns]} match, but ` : "";
         const parts = otherParts.map((p) => {
-            const tabKey = p.ns === "cat" ? "categories" : p.ns === "tag" ? "tags" : p.ns;
+            const tabKey = ORG_TAB_KEY_BY_NS[p.ns];
             const tabBtn = document.querySelector(`.organize-tab[data-tab="${tabKey}"]`);
             return tabBtn ? `<button class="org-cross-tab-link" type="button" data-org-tab="${tabKey}">${p.n} ${p.label}</button>` : `${p.n} ${p.label}`;
         });

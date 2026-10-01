@@ -4,16 +4,31 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class PinListQuerySet(abstract.PublicDashboardQuerySet):
+class PinListQuerySet(abstract.PublicDashboardQuerySet["PinList"]):
     """Custom queryset for PinList models."""
+
+    def with_pin_counts(self) -> PinListQuerySet:
+        """Annotate each list's pin count so ``pin_count`` costs no rows.
+
+        The alternative a caller reaches for is ``prefetch_related("items")``,
+        which fetches every membership row (and with ``items__pin``, every pin)
+        to produce one integer per list.
+
+        Returns:
+            The queryset with ``_pin_count`` annotated, which
+            :attr:`~urbanlens.dashboard.models.pin_list.model.PinList.pin_count`
+            prefers over counting rows in Python.
+        """
+        return self.annotate(_pin_count=Count("items", distinct=True))
 
     def for_profile(self, profile: Profile | int) -> PinListQuerySet:
         """Every list owned by ``profile`` (accepts a Profile instance or a raw pk).
@@ -28,10 +43,7 @@ class PinListQuerySet(abstract.PublicDashboardQuerySet):
 
     def active_smart_lists(self, profile: Profile | int) -> PinListQuerySet:
         """The profile's smart lists that actually have matching rules configured.
-
-        A smart list with neither ``smart_filter`` nor ``smart_boundary`` set
-        has nothing to auto-match against yet, so callers syncing smart-list
-        membership only need to consider lists with at least one of the two.
+        A smart list with neither ``smart_filter`` nor ``smart_boundary`` set has nothing to auto-match against yet, so callers syncing smart-list membership only need to consider lists with at least one of the two.
 
         Args:
             profile: The owning profile.
@@ -42,11 +54,14 @@ class PinListQuerySet(abstract.PublicDashboardQuerySet):
         return self.for_profile(profile).filter(is_smart=True).filter(Q(smart_filter__isnull=False) | Q(smart_boundary__isnull=False))
 
 
-class PinListManager(abstract.PublicDashboardManager.from_queryset(PinListQuerySet)):
+_PinListManagerBase = abstract.PublicDashboardManager.from_queryset(PinListQuerySet)
+
+
+class PinListManager(_PinListManagerBase):
     """Custom query manager for PinList models."""
 
 
-class PinListItemQuerySet(abstract.DashboardQuerySet):
+class PinListItemQuerySet(abstract.DashboardQuerySet["PinListItem"]):
     """Custom queryset for PinListItem models."""
 
     def for_list(self, pin_list) -> PinListItemQuerySet:
@@ -73,5 +88,8 @@ class PinListItemQuerySet(abstract.DashboardQuerySet):
         return self.for_list(pin_list).filter(pin=pin).first()
 
 
-class PinListItemManager(abstract.DashboardManager.from_queryset(PinListItemQuerySet)):
+_PinListItemManagerBase = abstract.DashboardManager.from_queryset(PinListItemQuerySet)
+
+
+class PinListItemManager(_PinListItemManagerBase):
     """Custom query manager for PinListItem models."""

@@ -1,32 +1,4 @@
-"""The subscription gate on a ``PanelSource``, enforced on the server and not only in the UI.
-
-``PanelSource.required_feature`` states, as a fact about the source itself,
-which :class:`~urbanlens.dashboard.models.subscriptions.SiteFeature` a viewer
-must hold before that source's data may be shown to them. Today exactly one
-source declares it - EPA ECHO's *nearby*-facilities list (its exact-site
-compliance card is deliberately free) - but the property being pinned here is
-not about EPA at all:
-
-1. **The gate is enforced where the data is served, not only where the tab is
-   drawn.** Hiding the tab strip is a presentation choice; ``panel_info`` is a
-   plain URL, and until this test existed any logged-in user could type
-   ``/map/pin/<slug>/panel/epa_echo/`` and receive the gated payload in full.
-   That is the live bug these tests were written against.
-2. **A gated panel is refused as 404, never 403.** A 403 answers "yes, that
-   panel exists and has data for this pin, you just aren't paying" - which is
-   most of what the paywalled panel knows. The refusal is therefore made
-   byte-identical to the response for a panel key that does not exist at all.
-3. **Tab assembly reads the source's own declaration.** The controller used to
-   carry its own hardcoded list of which tabs were gated; two records of the
-   same fact drift, and the direction they drift in is a panel that is hidden
-   in one place and served in another. The tests below prove the gate follows
-   ``required_feature`` by moving it onto a source that has never been gated
-   and watching that source disappear.
-4. **The fetch is never scheduled for a viewer who may not see the result.**
-   Refusing after ``_pending_panel`` would still spend an upstream API call (and
-   EPA ECHO's budget is 5 calls/minute) on behalf of someone who will never be
-   shown the answer.
-"""
+"""The subscription gate on a ``PanelSource``, enforced on the server and not only in the UI."""
 
 from __future__ import annotations
 
@@ -52,10 +24,30 @@ if TYPE_CHECKING:
 #: would make a broken gate look like a working one.
 _EPA_DATA = {
     "facilities": [
-        {"registry_id": "110000000001", "name": "Nearby Plating Works", "address": "1 Industrial Way", "compliance_status": "Violation", "significant_violator": True, "latitude": 40.02},
-        {"registry_id": "110000000002", "name": "Nearby Rendering Plant", "address": "2 Industrial Way", "compliance_status": "No Violation", "latitude": 40.03},
+        {
+            "registry_id": "110000000001",
+            "name": "Nearby Plating Works",
+            "address": "1 Industrial Way",
+            "compliance_status": "Violation",
+            "significant_violator": True,
+            "latitude": 40.02,
+        },
+        {
+            "registry_id": "110000000002",
+            "name": "Nearby Rendering Plant",
+            "address": "2 Industrial Way",
+            "compliance_status": "No Violation",
+            "latitude": 40.03,
+        },
     ],
-    "exact_site": {"registry_id": "110000000009", "name": "The Pinned Facility", "address": "9 Industrial Way", "latitude": 40.0, "longitude": -74.0, "programs": []},
+    "exact_site": {
+        "registry_id": "110000000009",
+        "name": "The Pinned Facility",
+        "address": "9 Industrial Way",
+        "latitude": 40.0,
+        "longitude": -74.0,
+        "programs": [],
+    },
 }
 
 
@@ -65,11 +57,9 @@ class GatedPanelServingTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         """A subscription-less pin owner, with EPA data already cached for their pin.
 
-        The very first user created in a fresh test database is auto-promoted to
-        bootstrap site admin, and ``user_has_feature`` grants a site admin every
-        feature - so a throwaway user absorbs that promotion and the user under
-        test is an ordinary one.
-        """
+        The very first user created in a fresh test database is auto-promoted to bootstrap site admin, and
+        ``user_has_feature`` grants a site admin every feature - so a throwaway user absorbs that promotion and
+        the user under test is an ordinary one."""
         super().setUp()
         baker.make(User)
         self.user = baker.make(User)
@@ -126,10 +116,8 @@ class GatedPanelServingTests(RedataConfiguredMixin, TestCase):
     def test_an_ungated_panel_gains_the_gate_when_its_source_declares_one(self) -> None:
         """The controller consults the source, not a private list of panel keys.
 
-        Photon has never been gated; moving ``required_feature`` onto it must be
-        enough to make ``panel_info`` refuse it, or the controller is still
-        deciding this for itself somewhere.
-        """
+        Photon has never been gated; moving ``required_feature`` onto it must be enough to make ``panel_info``
+        refuse it, or the controller is still deciding this for itself somewhere."""
         photon = get_panel_source("photon")
         assert photon is not None
         with mock.patch.object(type(photon), "required_feature", SiteFeature.NEARBY_RESEARCH):
@@ -156,7 +144,7 @@ class GatedPanelTabAssemblyTests(TestCase):
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
 
     def _tab_keys(self) -> list[str]:
-        """Render the pin detail page and return its tab strip's source keys.
+        """Render the Private Pin page and return its tab strip's source keys.
 
         Returns:
             The ``key`` of every tab in the page's ``panel_tabs`` context.
@@ -178,11 +166,9 @@ class GatedPanelTabAssemblyTests(TestCase):
     def test_a_newly_gated_source_drops_out_of_the_tab_strip(self) -> None:
         """Tab assembly reads ``required_feature``, not a hardcoded key list.
 
-        US Census is an always-available "Regional Data" tab that no controller
-        constant marks as gated; declaring the feature on its source alone has
-        to be enough to hide it, or the two records of "which panels are gated"
-        have already begun to drift.
-        """
+        US Census is an always-available "Regional Data" tab that no controller constant marks as gated;
+        declaring the feature on its source alone has to be enough to hide it, or the two records of "which
+        panels are gated" have already begun to drift."""
         census = get_panel_source("census_tigerweb")
         assert census is not None
         with mock.patch.object(type(census), "required_feature", SiteFeature.NEARBY_RESEARCH):

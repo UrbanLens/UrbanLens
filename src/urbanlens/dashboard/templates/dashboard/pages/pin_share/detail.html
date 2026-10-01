@@ -1,16 +1,19 @@
 {% extends 'dashboard/themes/base.html' %}
-{% load vendor_assets %}
+{% load vendor_assets static l10n %}
 {% load map_components %}
 
-{% block title %}Shared Pin{% endblock %}
+{% block page_title %}Shared Pin{% endblock %}
 
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% endblock %}
 
 {% block content %}
-{% with shared_name=share.shared_name|default:share.place_label %}
+{# safe_place_label, not place_label: a DETECTED share must not read through to the sender's live pin name. #}
+{% with shared_name=share.shared_name|default:share.safe_place_label %}
 <div class="pin-detail-grid">
   <div class="pin-details location-details pin-share-detail-card card">
     <div class="card-header"><i class="material-symbols-outlined">ios_share</i><span>Shared Pin</span></div>
@@ -36,10 +39,7 @@
 
     <div class="details-grid">
       <div class="detail-row full-width"><span class="field-label">Name</span><span class="field-value">{{ shared_name }}</span></div>
-      {% comment %}
-      pin.description is the sender's private personal notes, never something they opted to
-      share (see share.message for that) - address_basic is fine, it only proxies Location.
-      {% endcomment %}
+      {% comment %}pin.description is the sender's private personal notes, never something they opted to share.{% endcomment %}
       {% if pin.address_basic %}<div class="detail-row full-width"><span class="field-label">Address</span><span class="field-value">{{ pin.address_basic }}</span></div>{% endif %}
     </div>
 
@@ -51,7 +51,7 @@
         {% for child_share in bundled_shares %}
         <li class="pin-share-bundle-item">
           <i class="material-symbols-outlined">subdirectory_arrow_right</i>
-          <span>{{ child_share.pin.display_label }}</span>
+          <span>{{ child_share.safe_place_label }}</span>
         </li>
         {% endfor %}
       </ul>
@@ -81,9 +81,14 @@
       <ul class="gallery-grid pin-share-photos-grid">
         {% for photo in share.images.all %}
         <li class="gallery-item">
-          <a class="gallery-thumb-btn" href="{{ photo.image.url }}" target="_blank" rel="noopener noreferrer">
-            <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
+          {% if photo.pending_scan %}
+          {# Not polled: the processing status answers only the uploader. #}
+          <span class="gallery-thumb-btn">{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="gallery-thumb photo-tile-fallback" failed=photo.processing_failed %}</span>
+          {% else %}
+          <a class="gallery-thumb-btn" href="{{ photo.display_url }}" target="_blank" rel="noopener noreferrer">
+            <img src="{{ photo.display_url }}" alt="{{ photo.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
           </a>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
@@ -107,7 +112,9 @@
   </div>
   <div class="location-map pin-map card"><div class="card-header"><i class="material-symbols-outlined">place</i><h3>Location</h3></div>
     <div id="shared-pin-map-wrap" style="position:relative;height:420px">
-      <div id="shared-pin-map" style="height:100%"></div>
+      <div id="shared-pin-map" style="height:100%"
+           data-lat="{{ share.shared_location.latitude|default:''|unlocalize }}" data-lng="{{ share.shared_location.longitude|default:''|unlocalize }}"
+           data-name="{{ shared_name }}"></div>
       {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
       {% map_toolbar "screenshot" panel_id="shared-pin-map-buttons" %}
       <div class="map-bottom-controls">
@@ -116,29 +123,9 @@
     </div>
   </div>
 </div>
-<script>
-(function(){
-  const lat = {{ share.shared_location.latitude|default:'null' }};
-  const lng = {{ share.shared_location.longitude|default:'null' }};
-  const hasCoords = lat !== null && lng !== null;
-  // Continental-US fallback view when there's no location yet (a hidden/rejected
-  // share) so the map still initializes and window.map is still assigned below -
-  // otherwise the toolbar's screenshot tool falls back to its own hardcoded default.
-  const map = L.map('shared-pin-map', { attributionControl: false }).setView(hasCoords ? [lat, lng] : [39.8283, -98.5795], hasCoords ? 16 : 4);
-  // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
-  window.map = map;
-  // Shared layers engine + panel - the exact same component as the main map.
-  // Attribution renders in the page footer (show_map_footer=True) instead of
-  // an on-map overlay - attributionControl is disabled above.
-  window.MapLayers.create(map, {
-    root: document.getElementById('shared-pin-map-layers'),
-    onAttribution: function (text) {
-      const el = document.getElementById('page-footer-attribution-text');
-      if (el) el.textContent = text;
-    },
-  });
-  if (hasCoords) L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
-})();
-</script>
 {% endwith %}
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/pin-share.js' %}"></script>
 {% endblock %}

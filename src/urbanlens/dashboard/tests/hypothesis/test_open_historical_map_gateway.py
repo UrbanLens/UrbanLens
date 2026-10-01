@@ -1,19 +1,13 @@
-"""Tests for the OpenHistoricalMap Overpass gateway (services.apis.locations.open_historical_map).
-
-Constructed with a fake ``session`` object throughout, which keeps
-``Gateway.__post_init__`` from swapping in the real rate-limited/DB-writing
-session (that swap only fires for the default ``requests.Session`` instance -
-see ``Gateway.__post_init__``), so these run DB-free as ``SimpleTestCase``.
-"""
+"""Tests for the OpenHistoricalMap Overpass gateway (services.apis.locations.open_historical_map)."""
 
 from __future__ import annotations
 
 from typing import Any
 from unittest import mock
 
-from hypothesis import given, settings, strategies as st
 import pytest
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.open_historical_map import (
     OhmCoverage,
@@ -74,7 +68,9 @@ class ElementToFeatureTests(SimpleTestCase):
     """_element_to_feature converts Overpass elements into GeoJSON Features."""
 
     def test_node_becomes_point(self) -> None:
-        feature = _element_to_feature({"type": "node", "id": 1, "lat": 40.5, "lon": -74.5, "tags": {"start_date": "1900"}})
+        feature = _element_to_feature(
+            {"type": "node", "id": 1, "lat": 40.5, "lon": -74.5, "tags": {"start_date": "1900"}}
+        )
         assert feature is not None
         self.assertEqual(feature["geometry"], {"type": "Point", "coordinates": [-74.5, 40.5]})
         self.assertEqual(feature["properties"]["id"], "node/1")

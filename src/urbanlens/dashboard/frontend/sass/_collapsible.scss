@@ -23,11 +23,7 @@
 }
 
 // -- Global tools menu ---------------------------------------------------------
-// Fixed bottom-left hamburger button, shared by every page. Its only current
-// content is the "Hidden sections" group (see below), which lists every
-// currently-collapsed section for the page's collapse scope and lets the user
-// bring individual ones back - but the menu is structured to hold unrelated
-// page tools later. Driven by the script in themes/base.html.
+// Fixed bottom-left hamburger button, shared by every page.
 .tools-fab {
     position: fixed;
     left: 22px;
@@ -136,9 +132,7 @@
 }
 
 // -- Fly-to-corner dismiss animation -----------------------------------------
-// Applied by window.ulFlyToToolsFab (see themes/base.html) to auto-loading
-// cards that discover they have nothing to show, so they shrink and fly
-// toward the tools FAB instead of vanishing instantly.
+// Applied by window.ulFlyToToolsFab to auto-loading cards that discover they have nothing to show, so they shrink and fly toward.
 .ext-panel-dismissing {
     transition: transform .38s cubic-bezier(.4, 0, .2, 1), opacity .3s ease-in;
     transform: translate(var(--ext-panel-dismiss-x, 0), var(--ext-panel-dismiss-y, 0)) scale(.12);

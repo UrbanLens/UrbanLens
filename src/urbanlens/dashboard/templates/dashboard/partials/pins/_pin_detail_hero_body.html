@@ -1,18 +1,11 @@
-{% comment %}
-Hero body for the pin detail page (pages/location/index.html). Expects `pin`
-in context, plus the wiki/linking context used by the overview panel.
-{% endcomment %}
+{% comment %}Hero body for the Private Pin page (pages/location/index.html).{% endcomment %}
 {% if pin_cover_candidates %}
-{# Hover-revealed prev/next preview through the pin's other photos - mirrors #}
-{# the wiki page's .cover-hero-nav buttons (see frontend/static/js/cover-hero.js #}
-{# and _gallery.scss's .ul-page-hero--cover hover rule); this hero reuses the #}
-{# shared _page_hero.html cover background instead of a standalone .cover-hero #}
-{# div, so key "pin" resolves to #pin-detail-hero directly. #}
+{# Hover-revealed prev/next preview through the pin's other photos - mirrors the wiki page's.cover-hero-nav buttons. #}
 {{ pin_cover_candidates|json_script:"pin-cover-candidates" }}
-<button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav('pin', -1)" title="Previous photo">
+<button type="button" class="cover-hero-nav cover-hero-prev" data-cover-hero-key="pin" data-cover-hero-step="-1" title="Previous photo">
     <i class="material-symbols-outlined">chevron_left</i>
 </button>
-<button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav('pin', 1)" title="Next photo">
+<button type="button" class="cover-hero-nav cover-hero-next" data-cover-hero-key="pin" data-cover-hero-step="1" title="Next photo">
     <i class="material-symbols-outlined">chevron_right</i>
 </button>
 {% endif %}
@@ -24,15 +17,15 @@ in context, plus the wiki/linking context used by the overview panel.
             {% include "dashboard/partials/ui/_scope_badge.html" %}
         </p>
         <h1 id="pin-detail-hero-title" class="ul-page-hero__title">
-            <a class="pin-detail-hero-parent-link" href="{% url 'pin.details' pin.parent_pin.slug|default:pin.parent_pin.uuid %}"
-               data-tooltip="Back to {{ pin.parent_pin.effective_name }}" data-tooltip-pos="bottom">
-                <i class="material-symbols-outlined">arrow_back</i>{{ pin.parent_pin.effective_name }}
-            </a>
-        </h1>
-        <p class="ul-page-hero__subtitle pin-detail-hero-child-name">
-            <i class="material-symbols-outlined">place</i>
             <span class="pin-name-editable" tabindex="0" role="button"
                   data-raw-name="{{ pin.effective_name }}" title="Click to rename">{{ pin.effective_name }}</span>
+        </h1>
+        <p class="pin-detail-hero-parent">
+            <a class="pin-detail-hero-parent-link" href="{% url 'pin.details' pin.parent_pin.slug|default:pin.parent_pin.uuid %}"
+               data-tooltip="Back to {{ pin.parent_pin.effective_name }}" data-tooltip-pos="bottom">
+                <i class="material-symbols-outlined">arrow_back</i>
+                <span>Part of {{ pin.parent_pin.effective_name }}</span>
+            </a>
         </p>
         {% else %}
         <p class="ul-page-hero__eyebrow">
@@ -54,49 +47,36 @@ in context, plus the wiki/linking context used by the overview panel.
 
     {% if user.profile.community_enabled %}
         {% if pin.location and pin.location.slug %}
-            {% if pin.community_wiki %}
+            {% if linked_wiki_locations|length == 1 %}
             <aside class="pin-hero-wiki-box" id="pin-location-section">
                 <i class="material-symbols-outlined">public</i>
                 <div class="pin-hero-wiki-box-info">
                     <span class="pin-hero-wiki-box-label">Community Wiki</span>
-                    <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-hero-wiki-box-link"
+                    <a href="{% url 'location.wiki' location_slug=linked_wiki_locations.0.slug %}" class="pin-hero-wiki-box-link"
                        data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
-                        {{ pin.location.display_name }}
+                        {{ linked_wiki_locations.0.display_name }}
                         <i class="material-symbols-outlined">open_in_new</i>
                     </a>
                 </div>
-                <div class="pin-hero-wiki-box-actions">
-                    {% if competing_location_count %}
-                    <button type="button" class="btn pin-loc-change-btn"
-                            hx-get="{% url 'pin.link' pin.slug %}"
-                            hx-target="#pin-location-picker"
-                            hx-swap="innerHTML"
-                            data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
-                            data-tooltip-pos="left"
-                            title="Switch to a different shared location">
-                        <i class="material-symbols-outlined">swap_horiz</i>
-                    </button>
-                    {% endif %}
-                    <button type="button" class="btn pin-loc-detach-btn"
-                            hx-post="{% url 'pin.link' pin.slug %}"
-                            hx-target="#pin-overview"
-                            hx-swap="outerHTML"
-                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                            hx-confirm="Detach from this location? Your pin will move to its own independent location, with its own community page."
-                            data-tooltip="Unlink this pin from the shared location. It gets its own independent location, with its own page."
-                            data-tooltip-pos="left"
-                            title="Detach from this shared location">
-                        <i class="material-symbols-outlined">link_off</i>
-                    </button>
+            </aside>
+            {% elif linked_wiki_locations %}
+            <aside class="pin-hero-wiki-box pin-hero-wiki-box--multi" id="pin-location-section">
+                <i class="material-symbols-outlined">public</i>
+                <div class="pin-hero-wiki-box-info">
+                    <span class="pin-hero-wiki-box-label">Community Wikis</span>
+                    <p class="pin-hero-wiki-box-multi-line">
+                        This pin is linked to {{ linked_wiki_locations|length }} wikis:
+                        {% for location in linked_wiki_locations %}<a href="{% url 'location.wiki' location_slug=location.slug %}" class="pin-hero-wiki-box-link"
+                           data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">{{ location.display_name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </p>
                 </div>
-                <div id="pin-location-picker"></div>
             </aside>
             {% else %}
             <button type="button" class="pin-hero-wiki-box pin-hero-wiki-box--share"
                     hx-get="{% url 'pin.wiki.share' pin.slug %}"
                     hx-target="#pin-wiki-share-dialog-body"
                     hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-share-dialog').showModal()}"
+                    data-ul-on-success="show-modal:pin-wiki-share-dialog"
                     data-tooltip="Contribute your own details, names and photos to this place's shared page. You choose exactly what to include."
                     title="Share to this place's community wiki">
                 <i class="material-symbols-outlined">group_add</i>

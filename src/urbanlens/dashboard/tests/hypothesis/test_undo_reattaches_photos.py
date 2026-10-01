@@ -1,21 +1,4 @@
-"""Undoing a pin delete must put its photos back on it.
-
-``Image.pin`` is ``SET_NULL``, not ``CASCADE`` - deleting a pin deliberately
-keeps the user's photos and merely detaches them, unlike comments, albums,
-overlays and links, which the delete destroys. But the undo handler serialized
-only the pin's own fields and label ids, so an undo restored the pin *empty*
-while its photos sat unattached in the library, with nothing left recording
-which pin they had been on.
-
-The ids are captured at stash time because that is the only moment the link
-still exists. On restore, only photos that are *still* detached are re-linked: a
-photo the user has since attached to another pin belongs where they put it.
-
-What this does not restore is everything that CASCADEs - comments, albums,
-overlays, links, notes, visits. Bringing those back means serialising whole
-object graphs, which is a much larger change; the limitation is recorded in
-docs/PROBLEMS.md rather than half-implemented here.
-"""
+"""Undoing a pin delete must put its photos back on it."""
 
 from __future__ import annotations
 

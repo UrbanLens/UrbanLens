@@ -1,19 +1,16 @@
 """Provision (or update) the first-party native app's OAuth2 application.
 
-The mobile/desktop app is a *public* OAuth2 client (RFC 8252): it cannot keep
-a secret, so it authenticates with PKCE only, and its ``client_id`` is not
-sensitive - it's baked into the shipped app. This command exists so every
-environment (dev VM, production, a self-hosted install) can provision the
-exact same registration reproducibly instead of hand-creating it in the
-admin: idempotent on ``client_id``, correcting drifted fields on re-run.
+The mobile/desktop app is a *public* OAuth2 client (RFC 8252): it cannot keep a secret, so it
+authenticates with PKCE only, and its ``client_id`` is not sensitive - it's baked into the shipped
+app.
+This command exists so every environment (dev VM, production, a self-hosted install) can provision
+the exact same registration reproducibly instead of hand-creating it in the admin: idempotent on
+``client_id``, correcting drifted fields on re-run.
 
-Redirect URIs registered by default:
-
-- ``urbanlens://oauth/callback`` - the app's custom scheme (Android/iOS).
-  The scheme must stay in ``OAUTH2_PROVIDER["ALLOWED_REDIRECT_URI_SCHEMES"]``.
-- ``http://127.0.0.1/callback`` - desktop loopback; django-oauth-toolkit
-  matches loopback IPs port-insensitively per RFC 8252 §7.3, so the desktop
-  app may bind any free port.
+- ``urbanlens://oauth/callback`` - the app's custom scheme (Android/iOS). The scheme must stay in
+  ``OAUTH2_PROVIDER["ALLOWED_REDIRECT_URI_SCHEMES"]``.
+- ``http://127.0.0.1/callback`` - desktop loopback; django-oauth-toolkit matches loopback IPs
+  port-insensitively per RFC 8252 §7.3, so the desktop app may bind...
 """
 
 from __future__ import annotations
@@ -57,13 +54,7 @@ class Command(BaseCommand):
                 # A public client's secret is never used; blank it so nothing
                 # ever mistakes this registration for a confidential client.
                 "client_secret": "",
-                # Load-bearing, not cosmetic. ClientSecretField.pre_save hashes
-                # the secret whenever this is True (its default), and hashing ""
-                # means identify_hasher("") raises ValueError, the except branch
-                # runs, and make_password("") is stored - a *valid* hash of the
-                # empty string, which a confidential-client check would then
-                # accept as a correct secret. False stores "" verbatim, which no
-                # presented secret can ever match.
+                # Load-bearing, not cosmetic.
                 "hash_client_secret": False,
                 "user": None,
                 "skip_authorization": False,

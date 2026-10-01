@@ -1,17 +1,4 @@
-{% comment %}
-Manage Image Overlays dialog body - HTMX-swapped by every add/edit/delete
-action (see controllers/map_overlays.py's _render_overlay_list). Rendered
-inside #map-overlays-dialog-body (see _map_annotations_panels.html).
-
-Every action re-targets the whole #map-overlays-dialog-body rather than an
-inner element, for the same reason _custom_layers_list.html does: the response
-is this entire template (list + add form), so swapping a fragment would splice
-duplicate forms in alongside the existing ones.
-
-Corner dragging is not handled here - it happens on the map itself
-(map-image-overlays.ts) and POSTs to the per-overlay corners endpoint. This
-dialog only owns the presentation settings.
-{% endcomment %}
+{% comment %}Manage Image Overlays dialog body - HTMX-swapped by every add/edit/delete action.{% endcomment %}
 <ul id="map-overlay-manage-list" class="map-overlay-manage-list">
     {% for row in rows %}
     <li class="map-overlay-manage-row" id="map-overlay-row-{{ row.overlay.uuid }}" data-overlay-uuid="{{ row.overlay.uuid }}">
@@ -20,8 +7,8 @@ dialog only owns the presentation settings.
             <i class="material-symbols-outlined">map</i>
         </span>
         {% else %}
-        <img class="map-overlay-manage-thumb" src="{{ row.overlay.source_url }}" alt="" loading="lazy"
-             onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'map-overlay-manage-thumb')">
+        <img class="map-overlay-manage-thumb" src="{% if row.overlay.image.pending_scan %}{{ row.overlay.image_link }}{% else %}{{ row.overlay.source_url }}{% endif %}" alt="" loading="lazy"
+             data-thumb-fallback="broken_image" data-thumb-fallback-class="map-overlay-manage-thumb">
         {% endif %}
         <div class="map-overlay-manage-fields">
             <input type="text" name="name" class="map-overlay-manage-name" value="{{ row.overlay.name }}" maxlength="100"
@@ -88,15 +75,22 @@ dialog only owns the presentation settings.
     {% endfor %}
 </ul>
 
+{% if error %}
+<p class="map-overlay-add-error" role="alert">{{ error }}</p>
+{% endif %}
+
 {% if at_limit %}
 <p class="map-overlay-manage-empty">This map already has the maximum of {{ max_overlays }} overlays.</p>
 {% else %}
 <form class="map-overlay-add-form" id="map-overlay-add-form"
       hx-post="{{ create_url }}"
       hx-encoding="multipart/form-data"
-      hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+      hx-target="#map-overlays-dialog-body" hx-swap="innerHTML"
+      hx-disabled-elt="#map-overlay-add-submit">
     {% csrf_token %}
-    <input type="text" name="name" class="map-overlay-add-name" placeholder="Name (e.g. Sanborn 1897, sheet 12)" maxlength="100">
+    <p class="map-overlay-add-heading">Add an overlay</p>
+    <input type="text" name="name" class="map-overlay-add-name" placeholder="Name (e.g. Sanborn 1897, basement blueprint)" maxlength="100"
+           aria-label="Overlay name">
 
     <div class="map-overlay-add-sources">
         <label class="map-overlay-dropzone" id="map-overlay-dropzone"
@@ -104,38 +98,31 @@ dialog only owns the presentation settings.
                ondragleave="this.classList.remove('is-dragover')"
                ondrop="window.ulMapOverlayHandleDrop && window.ulMapOverlayHandleDrop(event, this)">
             <i class="material-symbols-outlined map-overlay-dropzone-icon">cloud_upload</i>
-            <span class="map-overlay-dropzone-text">Drop an image here, or choose a file</span>
+            <span class="map-overlay-dropzone-text" id="map-overlay-dropzone-text">Drop an image here, or choose a file</span>
             <input type="file" name="image" accept="image/*" class="map-overlay-dropzone-input"
-                   onchange="window.ulMapOverlaySyncSubmitState && window.ulMapOverlaySyncSubmitState()">
+                   onchange="window.ulMapOverlayChooseFile && window.ulMapOverlayChooseFile()">
         </label>
         <label class="map-overlay-add-source">
             <span>...or paste an image URL</span>
             <input type="url" name="image_url" placeholder="https://..." maxlength="1000"
-                   oninput="window.ulMapOverlaySyncSubmitState && window.ulMapOverlaySyncSubmitState()">
+                   oninput="window.ulMapOverlayChooseUrl && window.ulMapOverlayChooseUrl()">
         </label>
         <div class="map-overlay-media-pick">
-            <button type="button" class="btn btn--primary" id="map-overlay-pick-media-btn"
+            <button type="button" class="btn btn--ghost" id="map-overlay-pick-media-btn"
                     onclick="window.ulMapOverlayPickFromMedia && window.ulMapOverlayPickFromMedia('{{ gallery_json_url }}')">
-                <i class="material-symbols-outlined">photo_library</i> Pick from this page's Media
+                <i class="material-symbols-outlined">photo_library</i> Choose from uploaded photos
             </button>
-            <div id="map-overlay-media-picker" class="map-overlay-media-picker" hidden></div>
+            <div id="map-overlay-media-picker" class="map-overlay-media-picker" data-processing-url="{% url 'vault.photos.processing' %}" hidden></div>
         </div>
         <input type="hidden" name="image_id" id="map-overlay-image-id">
         <p class="map-overlay-picked-media" id="map-overlay-picked-media" hidden></p>
     </div>
 
-    {% comment %}
-    Filled in by map-image-overlays.ts from the map's current viewport just
-    before submit - a new overlay lands covering roughly what the user is
-    looking at, which is the only placement that makes dragging the corners a
-    small adjustment rather than a hunt.
-    {% endcomment %}
+    {% comment %}Filled in by map-image-overlays.ts from the map's current viewport just before submit.{% endcomment %}
     <input type="hidden" name="corners" id="map-overlay-initial-corners">
 
-    {# Starts disabled - nothing is picked yet on a freshly (re)rendered form. #}
-    {# window.ulMapOverlaySyncSubmitState re-derives this from the fields     #}
-    {# above on every change, so it never stays clickable with nothing to add. #}
-    <button type="submit" class="btn btn--primary" id="map-overlay-add-submit" disabled
+    {# Starts disabled - nothing is picked yet on a freshly (re)rendered form. window.ulMapOverlaySyncSubmitState re-derives this. #}
+    <button type="submit" class="btn btn--primary btn--submit" id="map-overlay-add-submit" disabled
             onclick="window.ulMapOverlaySeedCorners && window.ulMapOverlaySeedCorners()">
         <i class="material-symbols-outlined">add_photo_alternate</i> Add overlay
     </button>

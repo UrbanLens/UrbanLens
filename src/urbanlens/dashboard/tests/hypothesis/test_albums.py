@@ -3,21 +3,25 @@ external-media add path's implied relevance vote."""
 
 from __future__ import annotations
 
+import re
 from unittest import mock
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, AlbumItem, AlbumKind, album_kind_spec
+from urbanlens.dashboard.models.album.queryset import AlbumItemQuerySet
+from urbanlens.dashboard.models.album.sort import ALBUM_SORT_SPECS, AlbumSort, album_sort_spec
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 from urbanlens.dashboard.services.photos.albums import (
     add_images_to_album,
     album_cover,
     album_images,
-    albums_with_images,
+    albums_listing,
     eligible_images_for,
     loose_images_for,
     remove_images_from_album,
@@ -52,7 +56,7 @@ class AlbumSlugScopingTests(TestCase):
         pin = baker.make_recipe("dashboard.pin")
         album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
         self.assertEqual(album.kind, AlbumKind.PLAIN)
-        self.assertFalse(album.manual_order)
+        self.assertEqual(album.sort, AlbumSort.UPLOADED)
 
 
 class AlbumScopeTests(TestCase):
@@ -118,9 +122,18 @@ class AlbumMembershipTests(TestCase):
         self.album.refresh_from_db()
         self.assertIsNone(self.album.cover_image_id)
 
+    def test_removing_a_photo_that_belongs_to_a_different_album_is_a_no_op(self) -> None:
+        other = Album.objects.create(name="Exterior", profile=self.pin.profile, parent_pin=self.pin)
+        add_images_to_album(other, [self.images[0]], self.pin.profile)
+
+        removed = remove_images_from_album(self.album, [self.images[0].pk])
+
+        self.assertEqual(removed, 0)
+        self.assertTrue(AlbumItem.objects.filter(album=other, image=self.images[0]).exists())
+
 
 class AlbumOrderingTests(TestCase):
-    """manual_order decides whether explicit item order is honoured."""
+    """Date/name sorts are live; custom order is only written on a drag."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -128,45 +141,106 @@ class AlbumOrderingTests(TestCase):
         self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
         add_images_to_album(self.album, self.images, self.pin.profile)
 
-    def _item_ids_in_order(self) -> list[int]:
-        return list(AlbumItem.objects.for_album(self.album).order_by("order", "created").values_list("pk", flat=True))
+    def _display_item_ids(self) -> list[int]:
+        return list(AlbumItem.objects.in_display_order(self.album).values_list("pk", flat=True))
 
-    def test_reorder_renumbers_to_the_given_order(self) -> None:
-        reversed_ids = list(reversed(self._item_ids_in_order()))
+    def test_default_sort_is_newest_uploaded_and_leaves_order_null(self) -> None:
+        self.assertEqual(self.album.sort, AlbumSort.UPLOADED)
+        self.assertFalse(AlbumItem.objects.for_album(self.album).exclude(order=None).exists())
+        ordered = album_images(self.album, self.pin.profile)
+        self.assertEqual([img.pk for img in ordered], list(reversed([img.pk for img in self.images])))
+
+    def test_reorder_stamps_every_item_and_switches_to_custom(self) -> None:
+        reversed_ids = list(reversed(self._display_item_ids()))
         self.assertEqual(reorder_album_items(self.album, reversed_ids), 3)
-        self.assertEqual(self._item_ids_in_order(), reversed_ids)
+        self.album.refresh_from_db()
+        self.assertEqual(self.album.sort, AlbumSort.CUSTOM)
+        self.assertEqual(self._display_item_ids(), reversed_ids)
+        self.assertEqual(
+            list(AlbumItem.objects.in_display_order(self.album).values_list("order", flat=True)), [0, 1, 2]
+        )
 
     def test_reorder_ignores_ids_from_another_album(self) -> None:
         other = Album.objects.create(name="Exterior", profile=self.pin.profile, parent_pin=self.pin)
         add_images_to_album(other, [self.images[0]], self.pin.profile)
         foreign_id = AlbumItem.objects.for_album(other).first().pk
 
-        ids = self._item_ids_in_order()
+        ids = self._display_item_ids()
         self.assertEqual(reorder_album_items(self.album, [foreign_id, *ids]), 3)
 
-    def test_manual_order_off_falls_back_to_newest_first(self) -> None:
-        reorder_album_items(self.album, list(reversed(self._item_ids_in_order())))
-        self.album.manual_order = False
-        ordered = album_images(self.album, self.pin.profile)
-        self.assertEqual([img.pk for img in ordered], [img.pk for img in reversed(self.images)])
+    def test_reorder_survives_an_item_deleted_between_its_two_queries(self) -> None:
+        """The display-order read and the hydration read aren't atomic - a row removed in between (another tab, a concurrent remove-from-album request) must not 500 the whole reorder over one photo that's already gone. Same bug class as _hydrate_album_items, fixed the same way: skip the missing row rather than KeyError on it."""
+        ids = self._display_item_ids()
+        victim_id = ids[1]
+        real_write = AlbumItemQuerySet.number_in_order
 
-    def test_manual_order_on_honours_the_saved_order(self) -> None:
-        reversed_ids = list(reversed(self._item_ids_in_order()))
-        reorder_album_items(self.album, reversed_ids)
-        self.album.manual_order = True
-        ordered = album_images(self.album, self.pin.profile)
-        self.assertEqual([img.album_item_id for img in ordered], reversed_ids)
+        def delete_victim_then_call_through(queryset, *args, **kwargs):
+            AlbumItem.objects.filter(pk=victim_id).delete()
+            return real_write(queryset, *args, **kwargs)
 
-    def test_added_photos_append_rather_than_reshuffle(self) -> None:
-        self.album.manual_order = True
-        self.album.save(update_fields=["manual_order", "updated"])
-        before = [img.pk for img in album_images(self.album, self.pin.profile)]
+        with mock.patch.object(AlbumItemQuerySet, "number_in_order", delete_victim_then_call_through):
+            reordered = reorder_album_items(self.album, list(reversed(ids)))
 
+        self.assertEqual(reordered, 2)
+        self.assertFalse(AlbumItem.objects.filter(pk=victim_id).exists())
+        self.assertEqual(self._display_item_ids(), [item_id for item_id in reversed(ids) if item_id != victim_id])
+
+    def test_reorder_with_no_recognized_ids_is_a_no_op(self) -> None:
+        """An empty (or all-foreign) drop must not stamp orders or flip the sort."""
+        reordered = reorder_album_items(self.album, [])
+        self.assertEqual(reordered, 0)
+        self.album.refresh_from_db()
+        self.assertEqual(self.album.sort, AlbumSort.UPLOADED)
+        self.assertFalse(AlbumItem.objects.for_album(self.album).exclude(order=None).exists())
+
+    def test_reorder_splices_a_partial_window_into_the_full_album(self) -> None:
         extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
         add_images_to_album(self.album, [extra], self.pin.profile)
+        display = self._display_item_ids()
+        window = [display[1], display[0], display[2]]
+        reorder_album_items(self.album, window)
+        self.assertEqual(self._display_item_ids(), [display[1], display[0], display[2], *display[3:]])
 
+    def test_new_photos_follow_the_live_sort_without_rewriting_order(self) -> None:
+        extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        add_images_to_album(self.album, [extra], self.pin.profile)
+        self.assertIsNone(AlbumItem.objects.for_album(self.album).get(image=extra).order)
+        after = [img.pk for img in album_images(self.album, self.pin.profile)]
+        self.assertEqual(after[0], extra.pk)
+        self.assertEqual(after[1:], list(reversed([img.pk for img in self.images])))
+
+    def test_after_a_custom_order_new_photos_appear_at_the_end(self) -> None:
+        reorder_album_items(self.album, self._display_item_ids())
+        before = [img.pk for img in album_images(self.album, self.pin.profile)]
+        extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        add_images_to_album(self.album, [extra], self.pin.profile)
         after = [img.pk for img in album_images(self.album, self.pin.profile)]
         self.assertEqual(after, [*before, extra.pk])
+        self.assertIsNone(AlbumItem.objects.for_album(self.album).get(image=extra).order)
+
+    def test_taken_sort_picks_up_metadata_edits_without_touching_order(self) -> None:
+        from django.utils import timezone
+
+        self.album.sort = AlbumSort.TAKEN
+        self.album.save(update_fields=["sort"])
+        oldest = self.images[0]
+        oldest.taken_at = timezone.now()
+        oldest.save(update_fields=["taken_at"])
+        self.assertFalse(AlbumItem.objects.for_album(self.album).exclude(order=None).exists())
+        ordered = album_images(self.album, self.pin.profile)
+        self.assertEqual(ordered[0].pk, oldest.pk)
+
+    def test_name_sort_picks_up_caption_edits_without_touching_order(self) -> None:
+        self.album.sort = AlbumSort.NAME
+        self.album.save(update_fields=["sort"])
+        self.images[0].caption = "zeta"
+        self.images[1].caption = "alpha"
+        self.images[2].caption = "mu"
+        for image in self.images:
+            image.save(update_fields=["caption"])
+        ordered = album_images(self.album, self.pin.profile)
+        self.assertEqual([img.caption for img in ordered], ["alpha", "mu", "zeta"])
+        self.assertFalse(AlbumItem.objects.for_album(self.album).exclude(order=None).exists())
 
 
 class AlbumCoverTests(TestCase):
@@ -189,7 +263,50 @@ class AlbumCoverTests(TestCase):
         add_images_to_album(self.album, self.images, self.pin.profile)
         ordered = album_images(self.album, self.pin.profile)
         self.album.cover_image = ordered[-1]
+        self.album.save(update_fields=["cover_image", "updated"])
         self.assertEqual(album_cover(self.album, self.pin.profile).pk, ordered[-1].pk)
+
+
+class AlbumVisibilityTests(TestCase):
+    """Every read here must chain ``Image.visible_to`` - an album can't widen who sees a photo.
+
+    A stranger profile shares no friendship, trip, or wiki with the pin's owner, so ``visible_to`` denies them
+    regardless of the default visibility settings (see ``ImageQuerySet._shared_within_reach_of``: filing a photo
+    under a pin is not itself sharing it)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, self.images = _pin_with_photos(2)
+        self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
+        add_images_to_album(self.album, self.images, self.pin.profile)
+        self.album.cover_image = self.images[0]
+        self.album.save(update_fields=["cover_image", "updated"])
+        self.stranger = baker.make_recipe("dashboard.user").profile
+
+    def test_album_images_hides_everything_from_a_stranger(self) -> None:
+        self.assertEqual(len(album_images(self.album, self.pin.profile)), 2)
+        self.assertEqual(album_images(self.album, self.stranger), [])
+
+    def test_eligible_images_hides_everything_from_a_stranger(self) -> None:
+        self.assertEqual(eligible_images_for(self.pin, self.pin.profile).count(), 2)
+        self.assertEqual(eligible_images_for(self.pin, self.stranger).count(), 0)
+
+    def test_loose_images_hides_everything_from_a_stranger(self) -> None:
+        loose_pin, _images = _pin_with_photos(1)
+        self.assertEqual(loose_images_for(loose_pin, loose_pin.profile).count(), 1)
+        self.assertEqual(loose_images_for(loose_pin, self.stranger).count(), 0)
+
+    def test_album_cover_hides_from_a_stranger(self) -> None:
+        self.assertIsNotNone(album_cover(self.album, self.pin.profile))
+        self.assertIsNone(album_cover(self.album, self.stranger))
+
+    def test_albums_listing_hides_from_a_stranger(self) -> None:
+        owner_entry = albums_listing(self.pin, self.pin.profile)[0]
+        self.assertEqual(owner_entry.photo_count, 2)
+        self.assertIsNotNone(owner_entry.cover)
+        stranger_entry = albums_listing(self.pin, self.stranger)[0]
+        self.assertEqual(stranger_entry.photo_count, 0)
+        self.assertIsNone(stranger_entry.cover)
 
 
 class AlbumKindSpecTests(TestCase):
@@ -205,10 +322,16 @@ class AlbumKindSpecTests(TestCase):
     def test_plain_albums_carry_no_badge(self) -> None:
         self.assertFalse(album_kind_spec(AlbumKind.PLAIN).badge)
 
-    def test_timelapse_prefers_manual_order(self) -> None:
-        """A timelapse is a sequence, so its order is the point."""
-        self.assertTrue(album_kind_spec(AlbumKind.TIMELAPSE).prefers_manual_order)
-        self.assertFalse(album_kind_spec(AlbumKind.PLAIN).prefers_manual_order)
+    def test_every_sort_has_a_spec(self) -> None:
+        for value in AlbumSort.values:
+            self.assertIn(value, ALBUM_SORT_SPECS)
+
+    def test_unknown_sort_falls_back_to_uploaded(self) -> None:
+        self.assertEqual(album_sort_spec("not-a-sort").sort, AlbumSort.UPLOADED)
+
+    def test_timelapse_defaults_to_date_taken(self) -> None:
+        self.assertEqual(album_kind_spec(AlbumKind.TIMELAPSE).default_sort, AlbumSort.TAKEN)
+        self.assertEqual(album_kind_spec(AlbumKind.PLAIN).default_sort, AlbumSort.UPLOADED)
 
     def test_album_exposes_its_own_spec(self) -> None:
         pin = baker.make_recipe("dashboard.pin")
@@ -216,51 +339,168 @@ class AlbumKindSpecTests(TestCase):
         self.assertEqual(album.spec.icon, "timelapse")
 
 
-class AlbumBatchingTests(TestCase):
-    """albums_with_images resolves every album in a fixed number of queries."""
+def _shapes(ctx: CaptureQueriesContext) -> list[str]:
+    """Each captured statement with its literals blanked, so a growing id list shows and a changed pk does not."""
+    return [re.sub(r"\d+", "N", query["sql"]) for query in ctx.captured_queries]
+
+
+class AlbumListingTests(TestCase):
+    """The Photos tab listing computes cover, count and dates in SQL, in a fixed number of queries."""
+
+    def _listing_queries(self, pin) -> tuple[int, int]:
+        with CaptureQueriesContext(connection) as ctx:
+            entries = albums_listing(pin, pin.profile)
+        return len(entries), len(ctx.captured_queries)
 
     def test_query_count_does_not_grow_with_album_count(self) -> None:
-        """The invariant is constancy, not a specific number.
-
-        ``visible_to`` issues several queries of its own to build the viewer's
-        allowed-uploader set, and that's free to change - what must not change
-        is that resolving eight albums costs the same as resolving two.
-        """
         pin, images = _pin_with_photos(4)
         for index in range(2):
             album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)
             add_images_to_album(album, images, pin.profile)
-
-        with CaptureQueriesContext(connection) as two_albums:
-            self.assertEqual(len(albums_with_images(pin, pin.profile)), 2)
+        two_albums = self._listing_queries(pin)
 
         for index in range(2, 8):
             album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)
             add_images_to_album(album, images, pin.profile)
+        eight_albums = self._listing_queries(pin)
 
-        with CaptureQueriesContext(connection) as eight_albums:
-            self.assertEqual(len(albums_with_images(pin, pin.profile)), 8)
+        self.assertEqual((two_albums[0], eight_albums[0]), (2, 8))
+        self.assertEqual(eight_albums[1], two_albums[1])
 
-        self.assertEqual(len(eight_albums), len(two_albums))
-
-    def test_batched_result_matches_the_single_album_path(self) -> None:
-        pin, images = _pin_with_photos(3)
-        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin, manual_order=True)
+    def test_query_count_and_parameters_do_not_grow_with_photo_count(self) -> None:
+        """A membership row per photo was loaded and its image ids sent back as parameters; neither should happen."""
+        pin, images = _pin_with_photos(2)
+        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
         add_images_to_album(album, images, pin.profile)
-        reorder_album_items(album, list(reversed(list(AlbumItem.objects.for_album(album).values_list("pk", flat=True)))))
-        album.refresh_from_db()
+        with CaptureQueriesContext(connection) as small:
+            albums_listing(pin, pin.profile)
 
-        batched = {a.pk: imgs for a, imgs in albums_with_images(pin, pin.profile)}
-        self.assertEqual(
-            [img.pk for img in batched[album.pk]],
-            [img.pk for img in album_images(album, pin.profile)],
+        more = [baker.make_recipe("dashboard.image", pin=pin, profile=pin.profile) for _ in range(20)]
+        add_images_to_album(album, more, pin.profile)
+        with CaptureQueriesContext(connection) as large:
+            [entry] = albums_listing(pin, pin.profile)
+
+        self.assertEqual(entry.photo_count, 22)
+        self.assertEqual(len(large.captured_queries), len(small.captured_queries))
+        self.assertEqual(_shapes(large), _shapes(small))
+
+    def test_cover_follows_each_albums_own_sort(self) -> None:
+        pin, images = _pin_with_photos(3)
+        newest_first = Album.objects.create(name="Uploaded", profile=pin.profile, parent_pin=pin)
+        custom = Album.objects.create(name="Custom", profile=pin.profile, parent_pin=pin)
+        for album in (newest_first, custom):
+            add_images_to_album(album, images, pin.profile)
+        reorder_album_items(
+            custom, list(reversed(list(AlbumItem.objects.in_display_order(custom).values_list("pk", flat=True))))
         )
+        custom.refresh_from_db()
+
+        listing = {entry.album.pk: entry for entry in albums_listing(pin, pin.profile)}
+
+        self.assertEqual(listing[newest_first.pk].cover.pk, album_images(newest_first, pin.profile)[0].pk)
+        self.assertEqual(listing[custom.pk].cover.pk, album_images(custom, pin.profile)[0].pk)
+        self.assertNotEqual(listing[newest_first.pk].cover.pk, listing[custom.pk].cover.pk)
+
+    def test_explicit_cover_wins_only_while_the_viewer_can_see_it(self) -> None:
+        pin, images = _pin_with_photos(2)
+        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
+        add_images_to_album(album, images, pin.profile)
+        album.cover_image = images[0]
+        album.save(update_fields=["cover_image", "updated"])
+        stranger = baker.make_recipe("dashboard.user").profile
+
+        [owner_entry] = albums_listing(pin, pin.profile)
+        [stranger_entry] = albums_listing(pin, stranger)
+
+        self.assertEqual(owner_entry.cover.pk, images[0].pk)
+        self.assertIsNone(stranger_entry.cover)
+        self.assertEqual(stranger_entry.photo_count, 0)
 
     def test_empty_owner_short_circuits_to_one_query(self) -> None:
         """No albums means no membership or visibility work at all."""
         pin = baker.make_recipe("dashboard.pin")
         with self.assertNumQueries(1):
-            self.assertEqual(albums_with_images(pin, pin.profile), [])
+            self.assertEqual(albums_listing(pin, pin.profile), [])
+
+
+class PinTreeTests(TestCase):
+    """Finding the root of a pin's hierarchy costs one query however deep the pin sits."""
+
+    def _chain(self, depth: int):
+        root = baker.make_recipe("dashboard.pin")
+        node = root
+        for _ in range(depth):
+            node = baker.make_recipe("dashboard.pin", profile=root.profile, parent_pin=node, location=root.location)
+        return root, node
+
+    def test_root_lookup_is_one_query_at_any_depth(self) -> None:
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        for depth in (1, 6):
+            root, leaf = self._chain(depth)
+            with self.assertNumQueries(1):
+                self.assertEqual(Pin.objects.tree_root_id(leaf.pk), root.pk)
+
+    def test_a_corrupted_cycle_terminates(self) -> None:
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        root, leaf = self._chain(2)
+        Pin.objects.filter(pk=root.pk).update(parent_pin=leaf)
+
+        self.assertEqual(Pin.objects.tree_root_id(leaf.pk), leaf.pk)
+
+    def test_move_targets_are_the_rest_of_the_tree(self) -> None:
+        from urbanlens.dashboard.services.photos.albums import move_album_targets
+
+        root, leaf = self._chain(2)
+        album = Album.objects.create(name="Interior", profile=leaf.profile, parent_pin=leaf)
+
+        targets = {pin.pk for pin in move_album_targets(album)}
+
+        self.assertEqual(targets, {root.pk, leaf.parent_pin_id})
+
+
+class AlbumReorderQueryTests(TestCase):
+    """A reorder reads the album once and writes it in one statement, whatever its size."""
+
+    def test_query_count_does_not_grow_with_album_size(self) -> None:
+        def reorder_cost(album) -> int:
+            ids = list(AlbumItem.objects.in_display_order(album).values_list("pk", flat=True))
+            with CaptureQueriesContext(connection) as ctx:
+                reorder_album_items(album, list(reversed(ids)))
+            return len(ctx.captured_queries)
+
+        pin, images = _pin_with_photos(3)
+        small = Album.objects.create(name="Small", profile=pin.profile, parent_pin=pin, sort=AlbumSort.CUSTOM)
+        add_images_to_album(small, images, pin.profile)
+        more = [baker.make_recipe("dashboard.image", pin=pin, profile=pin.profile) for _ in range(15)]
+        large = Album.objects.create(name="Large", profile=pin.profile, parent_pin=pin, sort=AlbumSort.CUSTOM)
+        add_images_to_album(large, [*images, *more], pin.profile)
+
+        self.assertEqual(reorder_cost(large), reorder_cost(small))
+
+    def test_the_write_statement_does_not_grow_with_album_size(self) -> None:
+        """A branch per item makes Postgres test every row against every branch: 267 ms at 5,000 photos, not 26."""
+
+        def write_sql_length(album) -> int:
+            ids = list(AlbumItem.objects.in_display_order(album).values_list("pk", flat=True))
+            with CaptureQueriesContext(connection) as ctx:
+                reorder_album_items(album, list(reversed(ids)))
+            (write,) = [
+                q["sql"]
+                for q in ctx.captured_queries
+                if q["sql"].lstrip().upper().startswith("UPDATE") and "album_items" in q["sql"]
+            ]
+            return len(re.sub(r"ARRAY\[[^\]]*\]|'\{[^}]*\}'", "[]", write))
+
+        pin, images = _pin_with_photos(3)
+        small = Album.objects.create(name="Small", profile=pin.profile, parent_pin=pin, sort=AlbumSort.CUSTOM)
+        add_images_to_album(small, images, pin.profile)
+        more = [baker.make_recipe("dashboard.image", pin=pin, profile=pin.profile) for _ in range(15)]
+        large = Album.objects.create(name="Large", profile=pin.profile, parent_pin=pin, sort=AlbumSort.CUSTOM)
+        add_images_to_album(large, [*images, *more], pin.profile)
+
+        self.assertEqual(write_sql_length(large), write_sql_length(small))
 
 
 class CacheMediaItemIntoAlbumTaskTests(TestCase):
@@ -274,12 +514,16 @@ class CacheMediaItemIntoAlbumTaskTests(TestCase):
     def _run(self):
         from urbanlens.dashboard.tasks import cache_media_item_into_album
 
-        return cache_media_item_into_album(self.album.pk, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg")
+        return cache_media_item_into_album(
+            self.album.pk, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg"
+        )
 
     def test_files_the_materialized_image_into_the_album(self) -> None:
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
         with (
-            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
+            ),
             mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote,
         ):
             result = self._run()
@@ -304,7 +548,9 @@ class CacheMediaItemIntoAlbumTaskTests(TestCase):
         from urbanlens.dashboard.tasks import cache_media_item_into_album
 
         with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
-            self.assertIsNone(cache_media_item_into_album(album_id, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg"))
+            self.assertIsNone(
+                cache_media_item_into_album(album_id, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg")
+            )
         materialize.assert_not_called()
 
 
@@ -336,7 +582,9 @@ class ExternalMediaAlbumAddTests(TestCase):
     def test_records_a_relevant_vote_and_caches(self) -> None:
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
         with (
-            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image) as materialize,
+            mock.patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
+            ) as materialize,
             mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote,
         ):
             result = self._call()
@@ -347,7 +595,9 @@ class ExternalMediaAlbumAddTests(TestCase):
         materialize.assert_called_once()
         queue_vote.assert_called_once()
 
-        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        vote = MediaRelevance.objects.get(
+            profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+        )
         self.assertTrue(vote.is_relevant)
 
     def test_respects_an_existing_not_relevant_vote(self) -> None:
@@ -366,7 +616,9 @@ class ExternalMediaAlbumAddTests(TestCase):
         self.assertIsNone(result.image)
         materialize.assert_not_called()
         # The user's deliberate down-vote must survive untouched.
-        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        vote = MediaRelevance.objects.get(
+            profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+        )
         self.assertFalse(vote.is_relevant)
 
     def test_an_existing_relevant_vote_still_caches(self) -> None:
@@ -379,7 +631,9 @@ class ExternalMediaAlbumAddTests(TestCase):
         )
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
         with (
-            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
+            ),
             mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote"),
         ):
             result = self._call()
@@ -402,7 +656,9 @@ class ExternalMediaAlbumAddTests(TestCase):
         # The raw exception text must not reach the user.
         self.assertNotIn("boom", result.error)
         self.assertTrue(
-            MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)).is_relevant
+            MediaRelevance.objects.get(
+                profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+            ).is_relevant
         )
 
     def test_explicit_policy_overrides_a_prior_downvote(self) -> None:
@@ -418,14 +674,18 @@ class ExternalMediaAlbumAddTests(TestCase):
         )
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
         with (
-            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
+            ),
             mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote"),
         ):
             result = self._call(policy=VotePolicy.EXPLICIT)
 
         self.assertFalse(result.declined)
         self.assertTrue(result.voted)
-        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        vote = MediaRelevance.objects.get(
+            profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+        )
         self.assertTrue(vote.is_relevant)
 
     def test_materialize_false_records_the_vote_without_downloading(self) -> None:
@@ -437,5 +697,40 @@ class ExternalMediaAlbumAddTests(TestCase):
         self.assertIsNone(result.error)
         materialize.assert_not_called()
         self.assertTrue(
-            MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)).is_relevant
+            MediaRelevance.objects.get(
+                profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+            ).is_relevant
         )
+
+
+class AlbumPageQueryShapeTests(TestCase):
+    """The album page and the Photos panel run the same statements for a small album as for a large one."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, images = _pin_with_photos(2)
+        self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
+        add_images_to_album(self.album, images, self.pin.profile)
+        self.client.force_login(self.pin.profile.user)
+
+    def _grow(self) -> None:
+        more = [baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile) for _ in range(20)]
+        add_images_to_album(self.album, more, self.pin.profile)
+
+    def _shapes_of(self, url: str) -> list[str]:
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        return _shapes(ctx)
+
+    def test_album_detail(self) -> None:
+        url = reverse("pin.albums.detail", args=[self.pin.slug, self.album.slug])
+        small = self._shapes_of(url)
+        self._grow()
+        self.assertEqual(self._shapes_of(url), small)
+
+    def test_photos_panel(self) -> None:
+        url = reverse("pin.albums", args=[self.pin.slug])
+        small = self._shapes_of(url)
+        self._grow()
+        self.assertEqual(self._shapes_of(url), small)

@@ -1,13 +1,4 @@
-"""The friend_accepted delivery preference is consulted - it was the one dead stem.
-
-Audit chunk 479 checked all 12 preference-covered notification types: eleven
-consulted their toggle at creation; FRIEND_ACCEPTED was created
-unconditionally at both of its sites, so a user who silenced it in settings
-kept receiving it - a stored preference that did nothing, the same class the
-"wire them all" decision fixed for text channels. Both sites now consult it,
-without disturbing the acceptance flow's other effects (the request
-notification still gets marked read, the friendship is still returned).
-"""
+"""The friend_accepted delivery preference is consulted - it was the one dead stem."""
 
 from __future__ import annotations
 
@@ -29,7 +20,9 @@ class FriendAcceptedPreferenceTests(TestCase):
         request_or_accept_friendship(self.requester, self.acceptor)
 
     def _accepted_notifications(self) -> int:
-        return NotificationLog.objects.filter(profile=self.requester, notification_type=NotificationType.FRIEND_ACCEPTED).count()
+        return NotificationLog.objects.filter(
+            profile=self.requester, notification_type=NotificationType.FRIEND_ACCEPTED
+        ).count()
 
     def test_default_preference_still_notifies(self) -> None:
         friendship = accept_friend_request(self.acceptor, self.requester)

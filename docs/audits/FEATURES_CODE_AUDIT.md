@@ -2,7 +2,7 @@
 
 Generated 2026-08-25, by reading the actual implementation for concrete claims in
 `docs/FEATURES.md` (a codebase-generated feature inventory, last verified/expanded 2026-07-29) -
-not by reading other docs. This is a different kind of check than `docs/GOALS_CODE_AUDIT.md`:
+not by reading other docs. This is a different kind of check than `docs/audits/GOALS_CODE_AUDIT.md`:
 `FEATURES.md` describes what the code currently does rather than what it's obligated to do, so
 most drift here is the doc falling behind fast-moving feature work, not the code violating an
 intent. Several findings were live security/privacy gaps regardless.
@@ -264,7 +264,7 @@ seems like its own surprise. Flagged below as an open product question rather th
 ## Nearby-research feature gate
 
 **Claim** (`docs/FEATURES.md` "External Data Enrichment", implied by `SiteFeature.NEARBY_RESEARCH`'s
-own comment): nearby-facility/feature research tabs on the pin detail page - EPA's
+own comment): nearby-facility/feature research tabs on the Private Pin page - EPA's
 nearby-regulated-facilities list, Cameras & Structures, Underground Structures, Permits &
 Violations, Reported Incidents, Water & Hydrology, Site Conditions, Fire & Disaster History - are
 gated behind a paid `SiteFeature`, separate from each plugin's own free "data about this exact
@@ -273,7 +273,7 @@ pin" card.
 **Verdict: CONTRADICTS the implied generalization, not `docs/FEATURES.md`'s actual prose - fixed
 via a code comment, no behavior change.** Exactly one panel declares `required_feature`:
 `EpaEchoNearbyPanelSource`, and for it the gate is enforced correctly and *symmetrically* on both
-the web pin-detail page and the external API via the single shared `panel_visible_to()` function -
+the web Private Pin page and the external API via the single shared `panel_visible_to()` function -
 no bypass exists for this one. The other seven named panels never set `required_feature` (default
 `None`), so `panel_visible_to()` returns `True` unconditionally for all of them, on both surfaces
 - they are fully free today, by design (`test_panel_feature_gate.py`'s own docstring: "Today

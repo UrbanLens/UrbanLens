@@ -1,20 +1,11 @@
-"""Tier classification for the external API's throttles.
-
-The tier is derived from a view's own ``required_scopes_by_method``, so these
-tests pin down the derivation rather than the rates themselves: a
-misclassification would either strangle a legitimate sync client (reads counted
-as writes) or, worse, let a runaway write loop spend the far more generous read
-budget.
-
-Pure logic, so no database is needed.
-"""
+"""Tier classification for the external API's throttles."""
 
 from __future__ import annotations
 
 from django.conf import settings
 from django.test import SimpleTestCase
-from hypothesis import given, strategies as st
 
+from hypothesis import given, strategies as st
 from urbanlens.dashboard.external_api.throttling import (
     TIER_READ,
     TIER_WRITE,
@@ -24,12 +15,15 @@ from urbanlens.dashboard.external_api.throttling import (
     request_tier,
 )
 from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.UrbanLens.settings.app import AppSettings
 
 
 class _FakeView:
     """A view declaring scopes per method, optionally with an explicit tier override."""
 
-    def __init__(self, required_scopes_by_method: dict | None = None, throttle_tier_by_method: dict | None = None) -> None:
+    def __init__(
+        self, required_scopes_by_method: dict | None = None, throttle_tier_by_method: dict | None = None
+    ) -> None:
         if required_scopes_by_method is not None:
             self.required_scopes_by_method = required_scopes_by_method
         if throttle_tier_by_method is not None:
@@ -93,7 +87,9 @@ class RequestTierTests(SimpleTestCase):
         self.assertEqual(request_tier(view, "GET"), TIER_WRITE)
 
     @given(
-        read_scopes=st.lists(st.sampled_from([s for s in ApiKeyScope if s.value.endswith(":read")]), min_size=1, max_size=4),
+        read_scopes=st.lists(
+            st.sampled_from([s for s in ApiKeyScope if s.value.endswith(":read")]), min_size=1, max_size=4
+        ),
         method=st.sampled_from(["GET", "POST", "PATCH", "DELETE"]),
     )
     def test_any_all_read_declaration_is_read_tier(self, read_scopes: list, method: str) -> None:
@@ -115,11 +111,9 @@ class RequestTierTests(SimpleTestCase):
 class ThrottleConfigurationTests(SimpleTestCase):
     """The three throttle classes are wired to configured rates.
 
-    ``SimpleRateThrottle`` resolves its rate in ``__init__`` and raises
-    ``ImproperlyConfigured`` on a missing key, so merely constructing each class
-    proves the settings entry exists - which is why the settings change and the
-    class change had to ship together.
-    """
+    ``SimpleRateThrottle`` resolves its rate in ``__init__`` and raises ``ImproperlyConfigured`` on a missing
+    key, so merely constructing each class proves the settings entry exists - which is why the settings change
+    and the class change had to ship together."""
 
     def test_read_throttle_constructs_with_its_rate(self) -> None:
         """external_api_read is configured and bound to the read tier."""
@@ -144,10 +138,9 @@ class ThrottleConfigurationTests(SimpleTestCase):
         self.assertNotIn("external_api_key", settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"])
 
     def test_writes_are_capped_tighter_than_reads(self) -> None:
-        """The whole point of the split: writes get the smaller hourly budget."""
-        rates = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]
-        read_count = int(rates["external_api_read"].split("/")[0])
-        write_count = int(rates["external_api_write"].split("/")[0])
+        """The whole point of the split: writes get the smaller hourly budget by default; a host may raise it."""
+        read_count = int(settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["external_api_read"].split("/")[0])
+        write_count = int(str(AppSettings.model_fields["external_api_write_rate"].default).split("/")[0])
         self.assertLess(write_count, read_count)
 
 

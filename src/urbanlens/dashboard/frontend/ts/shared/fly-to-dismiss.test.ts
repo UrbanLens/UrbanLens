@@ -1,12 +1,5 @@
 /**
  * What can honestly be asserted about the fly-to-corner dismissal here.
- *
- * The animation itself cannot: happy-dom reports `getBoundingClientRect` and
- * `getComputedStyle` as zeros, so the computed offsets are meaningless under test
- * and asserting on them would be asserting on the stub. These cover the parts that
- * are real - that the element is always removed exactly once, by whichever of the
- * two paths gets there first - which is the behaviour that matters: a card that is
- * never removed stays on screen forever, and one removed twice throws.
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -32,6 +25,15 @@ describe("flyToToolsFab", () => {
         expect(el.isConnected).toBe(false);
         flyToToolsFab(el);
         expect(el.classList.contains("ext-panel-dismissing")).toBe(false);
+    });
+
+    test("a hidden element is removed immediately without animating", () => {
+        const el = card();
+        el.hidden = true;
+        flyToToolsFab(el);
+
+        expect(el.classList.contains("ext-panel-dismissing")).toBe(false);
+        expect(el.isConnected).toBe(false);
     });
 
     test("a connected element is taken out of flow and marked as dismissing", () => {

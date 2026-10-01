@@ -1,30 +1,12 @@
-﻿"""Property-based tests for the Friendship state machine.
+"""Property-based tests for the Friendship state machine."""
 
-Friendship transitions follow strict rules:
-  accept  → ACCEPTED
-  decline → DECLINED    (re-request allowed)
-  ignore  → IGNORED     (re-request blocked)
-  remove  → REMOVED     (re-request allowed)
-  block   → BLOCKED     (re-request blocked)
-
-Mute is deliberately absent from that list: it is not a transition. It sets
-the caller's own mute column and leaves ``status`` untouched, because muting an
-accepted friend must not stop them being a friend. See
-``test_friendship_mute_flag`` for that behaviour and the bug it replaced.
-
-NOTE: Friendship.between() calls QuerySet.get() and raises DoesNotExist when
-no friendship exists between two profiles.  The tests here use
-Friendship.objects.create() directly for initial setup so they are not affected
-by that known limitation.
-"""
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
@@ -36,10 +18,10 @@ _db_settings = settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
 
-_DEFAULT_CREATE_KWARGS = dict(
-    relationship_type=FriendshipType.FRIEND,
-    permissions=Permission.VIEW_PROFILE,
-)
+_DEFAULT_CREATE_KWARGS = {
+    "relationship_type": FriendshipType.FRIEND,
+    "permissions": Permission.VIEW_PROFILE,
+}
 
 
 def _make_requested(profile_a: Profile, profile_b: Profile) -> Friendship:
@@ -116,16 +98,7 @@ class FriendshipTransitionTests(TestCase):
 class FriendshipBlockMuteTests(TestCase):
     """block() creates a new friendship row when none exists; mute() only flips a flag.
 
-    The asymmetry is the point. Blocking must work against a stranger - that
-    is what blocking is for - so it invents the row. Muting must not: it is a
-    notification preference about a relationship you already have, and the
-    classmethod that used to conjure a ``Muted`` row for a stranger both
-    invented a relationship out of nothing and (because ``Muted`` was a
-    status) permanently blocked the pair from ever exchanging a friend
-    request. Mute is now :meth:`Friendship.mute`, an instance method that
-    writes one boolean; see ``test_friendship_mute_flag`` for its full
-    behaviour.
-    """
+    The asymmetry is the point."""
 
     profile_a: Profile
     profile_b: Profile
@@ -189,13 +162,14 @@ class FriendshipUniqueConstraintTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             _make_requested(self.profile_a, self.profile_b)
 
-    def test_reversed_direction_does_not_conflict(self) -> None:
-        """A→B and B→A are separate friendship rows (unique_together is directional)."""
+    def test_reversed_direction_conflicts_too(self) -> None:
+        """This asserted the opposite until 2026-09-05, and that was the defect.
+
+        `unique_together` is directional, so it permitted A→B *and* B→A - while every reader assumed one row per
+        pair and the mute columns are per-side of one row."""
         _make_requested(self.profile_a, self.profile_b)
-        try:
+        with self.assertRaises(IntegrityError), transaction.atomic():
             _make_requested(self.profile_b, self.profile_a)
-        except IntegrityError as exc:
-            self.fail(f"Reversed pair should not raise IntegrityError: {exc}")
 
 
 class FriendshipQuerySetTests(TestCase):
@@ -215,12 +189,6 @@ class FriendshipQuerySetTests(TestCase):
         qs = Friendship.objects.all().is_friend()
         for f in qs:
             self.assertEqual(f.status, FriendshipStatus.ACCEPTED)
-
-    def test_not_friend_excludes_accepted(self) -> None:
-        self.friendship.accept()
-        qs = Friendship.objects.all().not_friend()
-        for f in qs:
-            self.assertNotEqual(f.status, FriendshipStatus.ACCEPTED)
 
     def test_between_finds_existing_friendship(self) -> None:
         found = Friendship.objects.all().between(self.profile_a, self.profile_b)
@@ -245,12 +213,14 @@ class FriendshipQuerySetTests(TestCase):
         self.assertIn(self.friendship.pk, result_b)
 
     @given(
-        status=st.sampled_from([
-            FriendshipStatus.DECLINED,
-            FriendshipStatus.REMOVED,
-            FriendshipStatus.IGNORED,
-            FriendshipStatus.BLOCKED,
-        ])
+        status=st.sampled_from(
+            [
+                FriendshipStatus.DECLINED,
+                FriendshipStatus.REMOVED,
+                FriendshipStatus.IGNORED,
+                FriendshipStatus.BLOCKED,
+            ]
+        )
     )
     @_db_settings
     def test_rejected_statuses_absent_from_is_friend_queryset(self, status: str) -> None:

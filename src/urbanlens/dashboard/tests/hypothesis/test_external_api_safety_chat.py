@@ -1,24 +1,4 @@
-"""Tests for the external API's owner/partner check-in chat.
-
-Before this endpoint existed the only non-session chat surface was the
-tokenized contact-portal WebSocket, which authenticates an emergency *contact* -
-so a mobile client could read a check-in and never see the conversation
-happening on it. These tests hold the lines that make the REST version safe to
-be that second door:
-
-* the transcript is readable by the owner and by an **ACCEPTED** partner, and by
-  nobody else - a merely-invited partner, a stranger, and an emergency contact
-  with an account all get an identical 404, never a 403;
-* a REST-sent message goes through the same create-then-broadcast pair the web
-  form uses, so it reaches everyone holding an open socket. This is asserted on
-  the broadcast itself rather than on "the row was created", because the failure
-  it guards is silent: the sender's own view looks completely correct while
-  every other participant sees nothing until they reload;
-* an archived check-in answers 409 rather than 400, so a client can tell "this
-  conversation is over" from "your message was malformed";
-* the contact-portal ``token`` never appears in a message payload, matching the
-  rule the rest of the safety surface already holds.
-"""
+"""Tests for the external API's owner/partner check-in chat."""
 
 from __future__ import annotations
 
@@ -29,9 +9,9 @@ from django.contrib.auth.models import User
 from django.test import SimpleTestCase
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.serializers_safety_chat import SafetyCheckinMessageCreateSerializer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
@@ -53,8 +33,7 @@ def _bearer(raw_key: str) -> dict:
         raw_key: The plaintext API key.
 
     Returns:
-        Extra kwargs for ``self.client``.
-    """
+        Extra kwargs for ``self.client``."""
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
@@ -81,52 +60,46 @@ class _SafetyChatTestCase(TestCase):
             contact_message="Please call me",
             contacts=[(None, "friend@example.com", "Friend")],
         )
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=self.partner, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin,
+            profile=self.partner,
+            invited_by=self.owner,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+        )
         self.url = reverse("external_api:safety.checkins.messages", kwargs={"checkin_slug": self.checkin.slug})
 
     def _issue_key(self, user: User, scopes: list[str] | None = None) -> str:
         """Issue an API key for *user* carrying the safety scopes.
 
         Args:
-            user: The key's owner.
-            scopes: Scope values to grant, defaulting to safety read + write.
+            user: The key's owner. scopes: Scope values to grant, defaulting to safety read + write.
 
         Returns:
-            The plaintext key.
-        """
+            The plaintext key."""
         key, raw = generate_api_key(user, "Test")
         # scopes is editable=False, so it is set directly rather than through a
         # form. The default grant deliberately excludes safety:*.
-        ApiKey.objects.filter(pk=key.pk).update(scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value])
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value]
+        )
         return raw
 
     def _post(self, raw_key: str, body: str):
         """POST a chat message.
 
         Args:
-            raw_key: The plaintext API key to authenticate with.
-            body: The message body to submit.
+            raw_key: The plaintext API key to authenticate with. body: The message body to submit.
 
         Returns:
-            The response.
-        """
+            The response."""
         return self.client.post(self.url, {"body": body}, content_type="application/json", **_bearer(raw_key))
 
 
 class SafetyChatBodyValidationProperties(SimpleTestCase):
     """Property-based bounds on the submitted-message serializer.
 
-    Deliberately DB-free and client-free: the property being checked is a pure
-    function of the string, and driving it through ``self.client`` would make a
-    few hundred examples take minutes for no extra coverage.
-
-    The property that matters is the *agreement* between this serializer and
-    ``services.visits.safety.create_chat_message``. The service strips and then rejects
-    an empty result; if the serializer disagreed for any input, that input would
-    pass validation and then fail deeper in with a differently-shaped error body
-    for the same user mistake - so the two must accept and reject exactly the
-    same strings.
-    """
+    Deliberately DB-free and client-free: the property being checked is a pure function of the string, and
+    driving it through ``self.client`` would make a few hundred examples take minutes for no extra coverage."""
 
     #: Ordinary text plus every flavour of whitespace, and deliberately no NUL or
     #: surrogates: DRF's CharField rejects those through validators of its own,
@@ -140,9 +113,7 @@ class SafetyChatBodyValidationProperties(SimpleTestCase):
         """A body is valid here exactly when the service would accept it.
 
         Args:
-            body: Arbitrary submitted text, weighted toward the blank and
-                nearly-blank cases where the two rules could disagree.
-        """
+            body: Arbitrary submitted text, weighted toward the blank and nearly-blank cases where the two rules could disagree."""
         service_would_accept = bool(body.strip())
         self.assertEqual(SafetyCheckinMessageCreateSerializer(data={"body": body}).is_valid(), service_would_accept)
 
@@ -188,13 +159,14 @@ class SafetyChatAccessTests(_SafetyChatTestCase):
     def test_merely_invited_partner_gets_404(self) -> None:
         """An unaccepted invite must not open someone's live conversation.
 
-        The case a status-less ``partners.filter()`` would let through: the row
-        exists from the moment the invite is sent, so a membership test that
-        ignores status admits someone who never took on the responsibility.
-        """
+        The case a status-less ``partners.filter()`` would let through: the row exists from the moment the
+        invite is sent, so a membership test that ignores status admits someone who never took on the
+        responsibility."""
         invitee_user = baker.make(User, username="invitee")
         invitee = Profile.objects.get(user=invitee_user)
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=invitee, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED
+        )
 
         response = self.client.get(self.url, **_bearer(self._issue_key(invitee_user)))
         self.assertEqual(response.status_code, 404)
@@ -204,7 +176,9 @@ class SafetyChatAccessTests(_SafetyChatTestCase):
         """The write side refuses the same people the read side does."""
         invitee_user = baker.make(User, username="invitee")
         invitee = Profile.objects.get(user=invitee_user)
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=invitee, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED
+        )
 
         self.assertEqual(self._post(self._issue_key(invitee_user), "let me in").status_code, 404)
         self.assertFalse(SafetyCheckinMessage.objects.filter(body="let me in").exists())
@@ -258,8 +232,14 @@ class SafetyChatReadTests(_SafetyChatTestCase):
         SafetyCheckinMessage.objects.create(checkin=self.checkin, sender_profile=self.owner, body="from owner")
         SafetyCheckinMessage.objects.create(checkin=self.checkin, sender_profile=self.partner, body="from partner")
 
-        owner_view = {row["body"]: row["is_mine"] for row in self.client.get(self.url, **_bearer(self.owner_key)).json()["results"]}
-        partner_view = {row["body"]: row["is_mine"] for row in self.client.get(self.url, **_bearer(self.partner_key)).json()["results"]}
+        owner_view = {
+            row["body"]: row["is_mine"]
+            for row in self.client.get(self.url, **_bearer(self.owner_key)).json()["results"]
+        }
+        partner_view = {
+            row["body"]: row["is_mine"]
+            for row in self.client.get(self.url, **_bearer(self.partner_key)).json()["results"]
+        }
 
         self.assertEqual(owner_view, {"from owner": True, "from partner": False})
         self.assertEqual(partner_view, {"from owner": False, "from partner": True})
@@ -277,10 +257,9 @@ class SafetyChatReadTests(_SafetyChatTestCase):
     def test_contact_sender_has_a_name_but_no_account(self) -> None:
         """An email-only contact is a participant without being a user.
 
-        ``sender_kind`` is the discriminator so a client branches on the kind
-        rather than on which field happened to be null - a contact has no
-        profile page to link to, and inventing one is worse than omitting it.
-        """
+        ``sender_kind`` is the discriminator so a client branches on the kind rather than on which field
+        happened to be null - a contact has no profile page to link to, and inventing one is worse than omitting
+        it."""
         contact = self.checkin.contacts.first()
         SafetyCheckinMessage.objects.create(checkin=self.checkin, sender_contact=contact, body="Are you okay?")
 
@@ -294,10 +273,8 @@ class SafetyChatReadTests(_SafetyChatTestCase):
     def test_orphaned_sender_still_renders(self) -> None:
         """Both sender FKs are SET_NULL, so a deleted account leaves its messages behind.
 
-        The transcript has to survive that rather than 500 - a safety
-        conversation losing its history because one participant closed their
-        account would destroy the record of what was said during an incident.
-        """
+        The transcript has to survive that rather than 500 - a safety conversation losing its history because
+        one participant closed their account would destroy the record of what was said during an incident."""
         SafetyCheckinMessage.objects.create(checkin=self.checkin, body="orphan")
         row = self.client.get(self.url, **_bearer(self.owner_key)).json()["results"][0]
 
@@ -341,16 +318,16 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         self.assertEqual(payload["body"], "Reached the north rim")
         self.assertEqual(payload["sender_username"], "explorer")
         self.assertTrue(payload["is_mine"])
-        self.assertTrue(SafetyCheckinMessage.objects.filter(checkin=self.checkin, body="Reached the north rim").exists())
+        self.assertTrue(
+            SafetyCheckinMessage.objects.filter(checkin=self.checkin, body="Reached the north rim").exists()
+        )
 
     def test_partner_posts_a_message_attributed_to_their_own_profile(self) -> None:
         """A partner's message is theirs, not the owner's.
 
-        Worth pinning: ``resolve_message_sender`` is handed the request's user
-        and no contact, and a lazy implementation that simply used
-        ``checkin.profile`` would attribute every REST message to the explorer -
-        making a watcher's "I can't reach you" look like the explorer saying it.
-        """
+        Worth pinning: ``resolve_message_sender`` is handed the request's user and no contact, and a lazy
+        implementation that simply used ``checkin.profile`` would attribute every REST message to the explorer -
+        making a watcher's "I can't reach you" look like the explorer saying it."""
         response = self._post(self.partner_key, "Can't reach you, calling now")
 
         self.assertEqual(response.status_code, 201)
@@ -361,11 +338,8 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
     def test_a_rest_message_is_broadcast_to_the_live_socket(self) -> None:
         """The whole point of reusing the service's send pair.
 
-        A message that is only *saved* is invisible in real time to everyone
-        holding an open socket until they happen to reload - and nothing errors,
-        so the sender's own view looks entirely correct. That silence is why
-        this asserts on the broadcast rather than on the row.
-        """
+        A message that is only *saved* is invisible in real time to everyone holding an open socket until they
+        happen to reload - and nothing errors, so the sender's own view looks entirely correct."""
         with mock.patch("urbanlens.dashboard.services.visits.safety.broadcast_chat_message") as broadcast:
             response = self._post(self.owner_key, "still going")
 
@@ -408,14 +382,13 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_archived_checkin_is_409_not_400(self) -> None:
-        """"This conversation is over" is a different answer from "your message is bad".
+        """ "This conversation is over" is a different answer from "your message is bad".
 
-        A client must be able to tell them apart: one means retire the thread,
-        the other means ask the user to retype. Writing into an archived
-        check-in would also restore plaintext onto a row whose PII has already
-        been sealed away and scrubbed.
-        """
-        SafetyCheckinArchive.objects.create(checkin=self.checkin, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1)
+        A client must be able to tell them apart: one means retire the thread, the other means ask the user to
+        retype."""
+        SafetyCheckinArchive.objects.create(
+            checkin=self.checkin, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1
+        )
 
         response = self._post(self.owner_key, "one last thing")
         self.assertEqual(response.status_code, 409)
@@ -425,9 +398,9 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
     def test_archived_checkin_still_reads(self) -> None:
         """Archival closes the chat to writes, not to reads.
 
-        The transcript's bodies are scrubbed by archival itself; the endpoint
-        must not additionally start 404ing, or a client would be unable to tell
-        an archived check-in from one it may not see.
-        """
-        SafetyCheckinArchive.objects.create(checkin=self.checkin, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1)
+        The transcript's bodies are scrubbed by archival itself; the endpoint must not additionally start
+        404ing, or a client would be unable to tell an archived check-in from one it may not see."""
+        SafetyCheckinArchive.objects.create(
+            checkin=self.checkin, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1
+        )
         self.assertEqual(self.client.get(self.url, **_bearer(self.owner_key)).status_code, 200)

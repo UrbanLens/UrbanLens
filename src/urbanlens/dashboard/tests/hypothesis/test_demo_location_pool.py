@@ -1,16 +1,10 @@
-"""Export -> import -> seed, end to end.
+"""Export -> import -> seed, end to end."""
 
-The point of the round trip is the last step: a demo account must end up holding
-a pin on a *real* imported location, because holding that pin is what earns it
-access to the place's wiki. Coordinates are never invented - a pin at an
-unsurveyed point resolves no boundary, no parcel and no wiki, which reads as the
-product being broken.
-"""
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
+import tempfile
 from unittest import mock
 
 from django.core.management import call_command
@@ -34,7 +28,9 @@ class DemoLocationRoundTripTests(TestCase):
         self.export = Path(self.directory.name) / "export.json"
 
     def _publish_a_location(self) -> Location:
-        location = baker.make(Location, latitude="41.700000", longitude="-73.900000", google_place=None, official_name="Passed Place")
+        location = baker.make(
+            Location, latitude="41.700000", longitude="-73.900000", google_place=None, official_name="Passed Place"
+        )
         baker.make(PublicPinCandidate, location=location, status=PublicPinCandidateStatus.PASSED)
         Wiki.objects.create(location=location, name="Passed Place")
         return location

@@ -1,4 +1,5 @@
 """Achievements models package."""
+
 from urbanlens.dashboard.models.achievements.meta import METRIC_STREAK_PREFIX, ActivityKind, streak_metric_key
 from urbanlens.dashboard.models.achievements.model import (
     DEFAULT_ACHIEVEMENT_COLOR,

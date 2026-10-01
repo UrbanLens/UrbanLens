@@ -1,9 +1,4 @@
-{% comment %}
-Message search results, shared by "search this conversation" (thread header)
-and "search all conversations" (sidebar). Context: `hits` (dicts from
-services.direct_messages.search_direct_messages: `message`, `partner`,
-`snippet`, `url`), `query`, `scope` (`"conversation"` or `"all"`).
-{% endcomment %}
+{% comment %}Message search results, shared by "search this conversation" (thread header) and "search all conversations" (sidebar).{% endcomment %}
 {% if hits %}
 <ul class="dm-search-result-list" role="list">
     {% for hit in hits %}

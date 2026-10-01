@@ -1,18 +1,4 @@
-"""The site-features panel reaches REData's registry without hardcoding it.
-
-REData's points-of-interest registry holds about two dozen providers and
-UrbanLens reached two. The rest are the ones closest to this app's subject:
-agency surveillance-camera registers, OpenStreetMap's worldwide contributed
-camera set, FCC-registered antenna structures, FAA facility groups, EPA
-contamination programmes, storage tanks.
-
-The thing worth testing is not that a panel renders - it is *how the provider
-list is arrived at*. Most of these providers are generated on REData's side from
-dataset tables, so a list written into UrbanLens would stop growing silently.
-These tests pin the two properties that keep that from happening: the panel asks
-REData which providers cover the point, and the only tags it names itself are
-ones that identify an **UrbanLens panel**, not a REData source.
-"""
+"""The site-features panel reaches REData's registry without hardcoding it."""
 
 from __future__ import annotations
 
@@ -24,14 +10,28 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.plugins.builtin.redata_site_features import _SHOWN_ELSEWHERE, _TOO_GENERIC, SiteFeaturesPanelSource, SiteFeaturesPlugin, feature_rows
+from urbanlens.dashboard.plugins.builtin.redata_site_features import (
+    _SHOWN_ELSEWHERE,
+    _TOO_GENERIC,
+    SiteFeaturesPanelSource,
+    SiteFeaturesPlugin,
+    feature_rows,
+)
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway"
 
 
 def _camera(name: str = "Main St & 1st Ave", category: str = "Red-light camera") -> dict:
-    return {"provider": "chicago_red_light_cameras", "name": name, "category": category, "url": "https://example.test/cam/1", "latitude": 41.9, "longitude": -87.6, "attributes": {"agency": "CDOT"}}
+    return {
+        "provider": "chicago_red_light_cameras",
+        "name": name,
+        "category": category,
+        "url": "https://example.test/cam/1",
+        "latitude": 41.9,
+        "longitude": -87.6,
+        "attributes": {"agency": "CDOT"},
+    }
 
 
 class ProviderDiscoveryTests(TestCase):
@@ -45,19 +45,33 @@ class ProviderDiscoveryTests(TestCase):
     def test_the_providers_asked_come_from_redatas_capability_index(self) -> None:
         """Not from a list in this repo - see the module docstring for why."""
         with (
-            mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["chicago_red_light_cameras", "fcc_asr", "osm_surveillance"]) as tags,
-            mock.patch(f"{_GATEWAY}.RedataPointsOfInterestGateway.near_point", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.applicable_provider_tags",
+                return_value=["chicago_red_light_cameras", "fcc_asr", "osm_surveillance"],
+            ) as tags,
+            mock.patch(
+                f"{_GATEWAY}.RedataPointsOfInterestGateway.near_point",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(41.9, -87.6)
 
         tags.assert_called_once_with(41.9, -87.6)
-        self.assertEqual(near.call_args.kwargs["provider"], ["chicago_red_light_cameras", "fcc_asr", "osm_surveillance"])
+        self.assertEqual(
+            near.call_args.kwargs["provider"], ["chicago_red_light_cameras", "fcc_asr", "osm_surveillance"]
+        )
 
     def test_providers_with_their_own_panel_are_left_out(self) -> None:
         """Including them would show the same facility twice under a vaguer heading."""
         with (
-            mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["fcc_asr", "yelp", "epa_echo", "nps_places", "osm"]),
-            mock.patch(f"{_GATEWAY}.RedataPointsOfInterestGateway.near_point", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.applicable_provider_tags",
+                return_value=["fcc_asr", "yelp", "epa_echo", "nps_places", "osm"],
+            ),
+            mock.patch(
+                f"{_GATEWAY}.RedataPointsOfInterestGateway.near_point",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(41.9, -87.6)
 
@@ -67,7 +81,10 @@ class ProviderDiscoveryTests(TestCase):
         """The property the capability lookup exists for."""
         with (
             mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["some_register_redata_added_yesterday"]),
-            mock.patch(f"{_GATEWAY}.RedataPointsOfInterestGateway.near_point", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.RedataPointsOfInterestGateway.near_point",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(41.9, -87.6)
 
@@ -101,11 +118,8 @@ class ProviderDiscoveryTests(TestCase):
     def test_the_excluded_tags_all_name_an_urbanlens_panel(self) -> None:
         """`_SHOWN_ELSEWHERE` is about this app's UI, which is why it may be written down.
 
-        If a tag here stopped matching a panel, the list would have quietly
-        become a REData-taxonomy list - the kind that goes stale. Judgements
-        about REData's taxonomy live in `_TOO_GENERIC` instead, where the fact
-        that they can go stale is stated rather than hidden among these.
-        """
+        If a tag here stopped matching a panel, the list would have quietly become a REData-taxonomy list - the
+        kind that goes stale."""
         from urbanlens.dashboard.services.pins.external_data import panel_sources
 
         keys = set(panel_sources())
@@ -123,7 +137,9 @@ class FeatureRowTests(SimpleTestCase):
     def test_a_row_is_labelled_by_redatas_own_category(self) -> None:
         rows = feature_rows([_camera()])
 
-        self.assertEqual(rows, [{"category": "Red-light camera", "name": "Main St & 1st Ave", "url": "https://example.test/cam/1"}])
+        self.assertEqual(
+            rows, [{"category": "Red-light camera", "name": "Main St & 1st Ave", "url": "https://example.test/cam/1"}]
+        )
 
     def test_a_row_with_no_name_falls_back_to_its_description(self) -> None:
         rows = feature_rows([{"category": "Antenna structure", "description": "Guyed mast, 120m", "url": ""}])
@@ -171,7 +187,10 @@ class RenderTests(TestCase):
         context = self.source.render_context(self.pin, {"features": [_camera()]})
 
         assert context is not None
-        self.assertEqual(context["meta"][0], {"label": "Red-light camera", "value": "Main St & 1st Ave", "href": "https://example.test/cam/1"})
+        self.assertEqual(
+            context["meta"][0],
+            {"label": "Red-light camera", "value": "Main St & 1st Ave", "href": "https://example.test/cam/1"},
+        )
 
     def test_nothing_found_renders_nothing(self) -> None:
         self.assertIsNone(self.source.render_context(self.pin, {"features": []}))

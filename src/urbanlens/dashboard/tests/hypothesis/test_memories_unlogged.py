@@ -1,11 +1,4 @@
-"""Tests for the Memories "log your visits" flow.
-
-Covers the queryset that finds pins marked visited without a dated record
-(``PinQuerySet.visited_without_record``), the service that surfaces them
-(``unlogged_visited_pins``), and the view that logs/edits those visits
-(``MemoriesVisitView``). All require the database because a Pin's coordinates
-live on its linked PostGIS-backed Location.
-"""
+"""Tests for the Memories "log your visits" flow."""
 
 from __future__ import annotations
 
@@ -37,8 +30,12 @@ def _aware(year: int, month: int, day: int) -> datetime.datetime:
 def _make_pin(profile, *, last_visited=None, name=None, parent_pin=None) -> Pin:
     """Create a test pin with a uniquely-located Location to dodge the unique constraint."""
     offset = next(_COORDS)
-    location = baker.make("dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}")
-    return baker.make("dashboard.Pin", profile=profile, location=location, last_visited=last_visited, name=name, parent_pin=parent_pin)
+    location = baker.make(
+        "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
+    )
+    return baker.make(
+        "dashboard.Pin", profile=profile, location=location, last_visited=last_visited, name=name, parent_pin=parent_pin
+    )
 
 
 class VisitedWithoutRecordQuerySetTests(TestCase):
@@ -66,7 +63,7 @@ class VisitedWithoutRecordQuerySetTests(TestCase):
 
     def test_pin_with_visited_label_but_no_record_is_included(self) -> None:
         pin = _make_pin(self.profile, last_visited=None)
-        label = ensure_label( profile=self.profile, kind="status", name="Visited")
+        label = ensure_label(profile=self.profile, kind="status", name="Visited")
         pin.labels.add(label)
         self.assertIn(pin, self._unlogged())
 
@@ -180,7 +177,7 @@ class MemoriesVisitsViewTests(TestCase):
         self.assertContains(response, reverse("memories.visits"))
 
     def test_lists_unlogged_pins_shows_the_shared_select_map(self) -> None:
-        """Reuses the same map/selection UX as Memories > Locations - see pin-select-map.js."""
+        """Reuses the same map/selection UX as Memories > Locations - see pin-select-map.ts."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
         response = self.client.get(reverse("memories.visits"))
         self.assertContains(response, 'id="unlogged-visits-map"')
@@ -190,13 +187,13 @@ class MemoriesVisitsViewTests(TestCase):
 
     def test_bulk_toolbar_has_a_date_field_and_hover_pairing(self) -> None:
         """The bulk toolbar's "log" action lets the user pick which date to
-        apply (not just today), and the map<->list is wired for hover
-        highlight, matching the trip detail page's UX."""
+        apply (not just today), and each card carries the class memories-tabs.ts
+        pairs with its marker on hover."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
         response = self.client.get(reverse("memories.visits"))
         self.assertContains(response, "data-bulk-date")
         self.assertContains(response, "Log visit on this date")
-        self.assertContains(response, "cardSelector: '.unlogged-card'")
+        self.assertContains(response, 'class="unlogged-card')
 
     def test_empty_queue_shows_caught_up_body(self) -> None:
         response = self.client.get(reverse("memories.visits"))
@@ -224,7 +221,7 @@ class MemoriesVisitsViewTests(TestCase):
 
     def test_map_page_enables_footer_attribution(self) -> None:
         """show_map_footer must be set whenever the map itself renders, so
-        pin-select-map.js's onAttribution callback has somewhere to write to."""
+        pin-select-map.ts's onAttribution callback has somewhere to write to."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
         response = self.client.get(reverse("memories.visits"))
         self.assertTrue(response.context["show_map_footer"])
@@ -345,7 +342,9 @@ class MemoriesVisitsBulkActionViewTests(TestCase):
         payload = {"pin_slugs": slugs}
         if visited_date is not None:
             payload["visited_date"] = visited_date
-        return self.client.post(reverse("memories.visits.bulk", args=[action]), data=json.dumps(payload), content_type="application/json")
+        return self.client.post(
+            reverse("memories.visits.bulk", args=[action]), data=json.dumps(payload), content_type="application/json"
+        )
 
     def test_log_creates_a_dated_visit_for_each_pin(self) -> None:
         first = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
@@ -423,5 +422,25 @@ class MemoriesVisitsBulkActionViewTests(TestCase):
 
     def test_unknown_action_is_404(self) -> None:
         pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
-        response = self.client.post(reverse("memories.visits.bulk", args=["explode"]), data=json.dumps({"pin_slugs": [pin.slug]}), content_type="application/json")
+        response = self.client.post(
+            reverse("memories.visits.bulk", args=["explode"]),
+            data=json.dumps({"pin_slugs": [pin.slug]}),
+            content_type="application/json",
+        )
         self.assertEqual(response.status_code, 404)
+
+
+class TimelineVisitFormTargetTests(TestCase):
+    """The visit dialog's form swaps #memories-unlogged-band; htmx sends nothing when the target is missing."""
+
+    def test_the_timeline_carries_the_band_even_with_nothing_to_log(self) -> None:
+        user = baker.make(User)
+        pin = _make_pin(user.profile, last_visited=_aware(2024, 6, 1), name="Logged")
+        PinVisit.objects.create(pin=pin, visited_at=_aware(2024, 6, 1), source=VisitSource.MANUAL)
+        self.client.force_login(user)
+
+        form = self.client.get(reverse("memories.visit", args=[pin.slug])).content.decode()
+        page = self.client.get(reverse("memories.view")).content.decode()
+
+        self.assertIn('hx-target="#memories-unlogged-band"', form)
+        self.assertIn('id="memories-unlogged-band"', page)

@@ -1,22 +1,18 @@
-"""Tests for GoogleMapsPhotoProxyView - proxying (and caching) Google Places photo bytes.
-
-An expired photo reference (Google Places photo references aren't valid
-forever) must surface as a plain 404 to the client, not a 502 - "Handle 502 errors gracefully" entry for the
-original report (staging logs showing 404s from Google logged and re-surfaced
-as noisy 502s on every view of the same stale reference).
-"""
+"""Tests for GoogleMapsPhotoProxyView - proxying (and caching) Google Places photo bytes."""
 
 from __future__ import annotations
 
 from unittest import mock
 
-from django.core.cache import cache
+from django.conf import settings as django_settings
+from django.core.cache import cache, caches
 from django.urls import reverse
 from model_bakery import baker
 import requests
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+from urbanlens.dashboard.services.core.bounded_cache import MAX_CACHED_BODY_BYTES
 from urbanlens.UrbanLens.settings.app import settings
 
 
@@ -31,7 +27,10 @@ def _signed_url(photo_name: str) -> str:
 
     from urbanlens.dashboard.controllers.media_proxy import sign_photo_name
 
-    return reverse("media.google_maps_photo", args=[quote(photo_name, safe="")]) + f"?sig={quote(sign_photo_name(photo_name), safe='')}"
+    return (
+        reverse("media.google_maps_photo", args=[quote(photo_name, safe="")])
+        + f"?sig={quote(sign_photo_name(photo_name), safe='')}"
+    )
 
 
 class GoogleMapsPhotoProxyViewTests(TestCase):
@@ -41,6 +40,7 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         self.user = baker.make("auth.User")
         self.client.force_login(self.user)
         cache.clear()
+        caches[django_settings.PROXIED_BYTES_CACHE].clear()
         # The view short-circuits to a 404 before ever calling the gateway
         # when no key is configured - force one so the mocked gateway calls
         # below are actually exercised.
@@ -54,7 +54,9 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_expired_reference_is_cached_to_avoid_repeat_upstream_calls(self) -> None:
-        with mock.patch.object(GooglePlacesGateway, "get_photo_media", side_effect=_http_error(404, "Not Found")) as mocked:
+        with mock.patch.object(
+            GooglePlacesGateway, "get_photo_media", side_effect=_http_error(404, "Not Found")
+        ) as mocked:
             self.client.get(_signed_url("places/ABC/photos/XYZ"))
             response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 404)
@@ -66,7 +68,9 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         self.assertEqual(response.status_code, 502)
 
     def test_connection_failure_returns_502(self) -> None:
-        with mock.patch.object(GooglePlacesGateway, "get_photo_media", side_effect=requests.exceptions.ConnectionError("boom")):
+        with mock.patch.object(
+            GooglePlacesGateway, "get_photo_media", side_effect=requests.exceptions.ConnectionError("boom")
+        ):
             response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 502)
 
@@ -78,11 +82,32 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         self.assertEqual(response["Content-Type"], "image/jpeg")
 
     def test_successful_fetch_is_cached_to_avoid_repeat_upstream_calls(self) -> None:
-        with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")) as mocked:
+        with mock.patch.object(
+            GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")
+        ) as mocked:
             self.client.get(_signed_url("places/ABC/photos/XYZ"))
             response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mocked.call_count, 1)
+
+    def test_an_oversized_photo_is_served_but_not_cached(self) -> None:
+        """The cache is shared with everything else proxied; one large body must not evict it."""
+        big = b"x" * (MAX_CACHED_BODY_BYTES + 1)
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(big, "image/jpeg")) as mocked:
+            first = self.client.get(_signed_url("places/ABC/photos/BIG"))
+            self.client.get(_signed_url("places/ABC/photos/BIG"))
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.content, big)
+        self.assertEqual(mocked.call_count, 2)
+
+    def test_photos_are_cached_in_the_proxied_bytes_cache(self) -> None:
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")):
+            self.client.get(_signed_url("places/ABC/photos/XYZ"))
+        cache.clear()
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_not_called()
 
     def test_unsigned_request_is_rejected_before_any_upstream_call(self) -> None:
         """The photo_name path segment is client-controlled - without a valid
@@ -97,7 +122,9 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
 
         wrong_sig = sign_photo_name("places/OTHER/photos/DIFFERENT")
         with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]) + f"?sig={wrong_sig}")
+            response = self.client.get(
+                reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]) + f"?sig={wrong_sig}"
+            )
         self.assertEqual(response.status_code, 404)
         mocked.assert_not_called()
 

@@ -1,11 +1,4 @@
-"""Tests for the custom python-social-auth pipeline steps.
-
-The 2FA detour step already has its own file (test_social_auth_sso_2fa.py);
-these cover the remaining steps, which the coverage report showed almost
-entirely unexercised despite being privacy-relevant: last-name suppression
-for new SSO accounts, the avatar fetch's never-overwrite guarantee, Discord
-handle sync, and SSO username generation (including its sanitization edges).
-"""
+"""Tests for the custom python-social-auth pipeline steps."""
 
 from __future__ import annotations
 
@@ -90,12 +83,18 @@ class FetchAndSaveAvatarTests(TestCase):
     def test_avatar_is_saved_when_profile_has_none(self) -> None:
         user = baker.make(User)
         with (
-            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.resolve_provider_url", return_value="https://example.com/a.jpg"),
-            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.download", return_value=b"\xff\xd8fakejpegbytes"),
+            patch(
+                "urbanlens.dashboard.services.profile.avatar.AvatarService.resolve_provider_url",
+                return_value="https://example.com/a.jpg",
+            ),
+            patch(
+                "urbanlens.dashboard.services.profile.avatar.AvatarService.download",
+                return_value=b"\xff\xd8fakejpegbytes",
+            ),
         ):
             fetch_and_save_avatar(_backend(), user, {}, is_new=True)
         user.profile.refresh_from_db()
-        self.assertTrue(user.profile.avatar)
+        self.assertTrue(user.profile.avatar_upload)
 
     def test_unresolvable_provider_url_is_a_no_op(self) -> None:
         user = baker.make(User)
@@ -111,7 +110,10 @@ class FetchAndSaveAvatarTests(TestCase):
     def test_failed_download_saves_nothing(self) -> None:
         user = baker.make(User)
         with (
-            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.resolve_provider_url", return_value="https://example.com/a.jpg"),
+            patch(
+                "urbanlens.dashboard.services.profile.avatar.AvatarService.resolve_provider_url",
+                return_value="https://example.com/a.jpg",
+            ),
             patch("urbanlens.dashboard.services.profile.avatar.AvatarService.download", return_value=None),
         ):
             fetch_and_save_avatar(_backend(), user, {}, is_new=True)

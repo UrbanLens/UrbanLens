@@ -1,24 +1,11 @@
-"""Real image bytes for tests that upload one.
-
-Uploading `b"photo-bytes"` named `photo.jpg` used to work, because content
-sniffing failed open on anything `filetype` could not fingerprint. Photos now
-require a positive identification - a file whose bytes are not an image is
-refused - so a test that wants to exercise a successful upload has to supply an
-actual image.
-
-That is a better test regardless of the check: a placeholder string is not
-something the product would ever accept, so a test built on one was describing
-a path no user can take.
-
-Each helper returns bytes for the smallest valid file of its format. They are
-literals rather than generated with Pillow so that these stay usable in a
-``SimpleTestCase`` and cost nothing to construct.
-"""
+"""Real image bytes for tests that upload one."""
 
 from __future__ import annotations
 
 #: A 1x1 PNG. Produced by Pillow and confirmed to fingerprint as ``png``.
-PNG_BYTES = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c49444154789c63f8ffff3f0005fe02fe0def46b80000000049454e44ae426082")
+PNG_BYTES = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c49444154789c63f8ffff3f0005fe02fe0def46b80000000049454e44ae426082"
+)
 
 #: A 1x1 JPEG. Larger than the others because a JPEG carries its quantisation
 #: and Huffman tables; a hand-trimmed one is not a JPEG any decoder will open.
@@ -56,13 +43,10 @@ def png_upload(name: str = "photo.png"):
     """A ``SimpleUploadedFile`` holding a real PNG.
 
     Args:
-        name: Filename to upload it under. The extension matters - it decides
-            the Content-Type the file is later served with, and photo uploads
-            are allowlisted by it.
+        name: Filename to upload it under.
 
     Returns:
-        An uploaded file ready to post.
-    """
+        An uploaded file ready to post."""
     from django.core.files.uploadedfile import SimpleUploadedFile
 
     return SimpleUploadedFile(name, PNG_BYTES, content_type="image/png")
@@ -75,8 +59,7 @@ def jpeg_upload(name: str = "photo.jpg"):
         name: Filename to upload it under.
 
     Returns:
-        An uploaded file ready to post.
-    """
+        An uploaded file ready to post."""
     from django.core.files.uploadedfile import SimpleUploadedFile
 
     return SimpleUploadedFile(name, JPEG_BYTES, content_type="image/jpeg")

@@ -1,0 +1,24 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with modifier="top" icon="merge_type" title="Tag Mapping" subtitle="Map equivalent OpenStreetMap/Overture tags together so a place shows one chip, not several." %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="external_tags" %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="site-admin-page page-content" id="panel-external-tags">
+    {% include "dashboard/partials/admin/_external_tag_mapping_body.html" %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/site_admin_external_tags.js' %}"></script>
+{% endblock %}

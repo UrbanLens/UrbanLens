@@ -1,16 +1,4 @@
-"""A wiki with no description/dates/security/links must still offer to add a link.
-
-`_wiki_about_card.html`'s outer guard used to be
-`{% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active
-or wiki.links.exists %}`, hiding the whole card - including the links row,
-whose "add a link" button (see `_pin_links_row.html`'s `dialog_id`) is the only
-entry point for adding one - the moment all four were empty. A wiki that has
-never had any of those set could never get its first link short of using
-"Suggest Edits" to set some other field first.
-
-See PROBLEMS.md, "a wiki with zero description/dates/security/links has no way
-to add its first link".
-"""
+"""A wiki with no description/dates/security/links must still offer to add a link."""
 
 from __future__ import annotations
 
@@ -31,7 +19,13 @@ _ALL_UNKNOWN = {field_name: "unknown" for field_name, _label in SECURITY_FIELDS}
 
 
 def _render_about_card(wiki: Wiki) -> str:
-    return render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": wiki})
+    # wiki_links: real callers (LocationWikiView.get, LocationWikiEditView.post)
+    # pass this already narrowed by concealment.visible_rows - this helper has
+    # no viewer to narrow for (these tests aren't about concealment; see
+    # test_concealed_render.py for that), so it's the plain unfiltered set.
+    return render_to_string(
+        "dashboard/partials/wiki/_wiki_about_card.html", {"wiki": wiki, "wiki_links": wiki.links.all()}
+    )
 
 
 class EmptyWikiRendersTheAddLinkAffordanceTests(TestCase):
@@ -55,6 +49,11 @@ class EmptyWikiRendersTheAddLinkAffordanceTests(TestCase):
         self.assertNotIn("wiki-meta-dates", html)
         self.assertNotIn("security-indicators", html)
 
+    def test_coordinates_are_shown(self) -> None:
+        html = _render_about_card(self.wiki)
+        self.assertIn("detail-item--coordinates", html)
+        self.assertIn("Coordinates", html)
+
 
 class WikiWithOnlyALinkStillRendersTests(TestCase):
     """Anti-vacuity: the card must actually reflect content, not render blindly."""
@@ -68,3 +67,26 @@ class WikiWithOnlyALinkStillRendersTests(TestCase):
 
         self.assertIn("example.com", html)
         self.assertNotIn("No links yet.", html)
+
+
+class WikiAboutCardIdentityFieldsTests(TestCase):
+    """Place Name / Official Name / Address / coordinates mirror the pin details card."""
+
+    def test_official_name_and_coordinates_render(self) -> None:
+        location = baker.make(
+            Location,
+            official_name="Riverside Mill",
+            latitude="41.73610",
+            longitude="-73.75790",
+            street_number="42",
+            route="Mill St",
+        )
+        wiki = baker.make(
+            Wiki, location=location, name="Riverside", description=None, date_abandoned=None, **_ALL_UNKNOWN
+        )
+        html = _render_about_card(wiki)
+        self.assertIn("Official Name", html)
+        self.assertIn("Riverside Mill", html)
+        self.assertIn("Coordinates", html)
+        self.assertIn("41.73610", html)
+        self.assertIn("-73.75790", html)

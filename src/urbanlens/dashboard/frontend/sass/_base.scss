@@ -4,10 +4,7 @@
 
 html {
     scrollbar-gutter: stable;
-    // Absolutely-positioned tooltip bubbles (see _tooltips.scss) can extend past the
-    // viewport edge when their trigger sits near the left/right edge of the page.
-    // visibility:hidden still counts toward scrollable overflow, so an off-screen,
-    // invisible tooltip can otherwise force a horizontal scrollbar on the whole page.
+    // Absolutely-positioned tooltip bubbles can extend past the viewport edge when their trigger sits near the left/right edge of the page..
     overflow-x: hidden;
 }
 
@@ -118,7 +115,7 @@ body div.container {
 
 input[type=range] {
     border: 0 none;
-    
+
 }
 
 // -- Confirm dialog ------------------------------------------------------------
@@ -265,9 +262,7 @@ input[type=range] {
     }
 }
 
-// <select> defaults to display:inline-block; the rest of the site's layout
-// assumes it lays out like a block-level form control (see _reset.scss for the
-// native select's background/border/height skin).
+// <select> defaults to display:inline-block; the rest of the site's layout assumes it lays out like a block-level form control.
 select {
     display: block;
 }

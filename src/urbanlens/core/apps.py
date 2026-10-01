@@ -14,6 +14,5 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self):
-        # Create an instance of DatabaseBackup to schedule backups
         DatabaseBackup()
         get_git_commit_at_start()

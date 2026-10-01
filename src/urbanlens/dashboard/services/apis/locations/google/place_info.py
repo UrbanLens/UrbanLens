@@ -18,7 +18,6 @@ from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.abstract.addressable import AddressableModel
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
@@ -72,8 +71,6 @@ class GooglePlaceService:
         fetch_if_missing: bool = True,
     ) -> GooglePlace:
         """Return the shared GooglePlace row for a coordinate pair.
-
-        Creates the row and optionally contacts Google when no cached data exists.
 
         Args:
             latitude: WGS-84 latitude.
@@ -153,9 +150,7 @@ class GooglePlaceService:
 
     def ensure_linked_by_place_id(self, location: Location, place_id: str) -> GooglePlace | None:
         """Attach entity.google_place using a Google Place ID string.
-
-        Stores the ``place_id`` on the shared GooglePlace row and links the entity,
-        so future views can skip an additional Places API call.
+        Stores the ``place_id`` on the shared GooglePlace row and links the entity, so future views can skip an additional Places API call.
 
         Args:
             entity: A Location or Pin with latitude and longitude set.

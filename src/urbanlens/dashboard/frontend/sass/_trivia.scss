@@ -1,9 +1,7 @@
 @use 'variables' as *;
 @use 'game_shell' as shell;
 
-// Belt-and-braces alongside the shell's own `.ul-game [hidden]` guard: every
-// panel, dock and rail section below sets an explicit display, which beats the
-// UA stylesheet's [hidden] rule regardless of specificity.
+// Belt-and-braces alongside the shell's own `.ul-game [hidden]` guard.
 .trivia-page {
     [hidden] {
         display: none !important;
@@ -13,9 +11,7 @@
         @include shell.cta;
     }
 
-    // The play panel only allocates a `rail` grid column while the drawer is
-    // open; left in flow the closed rail is auto-placed into an implicit row
-    // beneath the stage. Below md the shell already takes it out of flow.
+    // The play panel only allocates a `rail` grid column while the drawer is open.
     @include up($breakpoint-md) {
         .ul-game-shell:not(.is-rail-open) .ul-game-rail {
             display: none;
@@ -79,20 +75,6 @@
     width: 100%;
     max-width: 24rem;
     @include shell.hideable;
-}
-
-.trivia-friend-list {
-    display: flex;
-    flex-direction: column;
-    gap: $space-xs;
-    max-height: 12rem;
-    overflow-y: auto;
-}
-
-.trivia-friend-option {
-    display: flex;
-    align-items: center;
-    gap: $space-sm;
 }
 
 // -- Empty state ---------------------------------------------------------------------
@@ -280,14 +262,3 @@
     @include shell.chat-form;
 }
 
-// -- JS-built invite dialog --------------------------------------------------------------------------
-// Sizing/chrome comes from .ul-game-dialog; only the scrolling picker is local.
-.trivia-invite-more-dialog {
-    .trivia-invite-more-list {
-        display: flex;
-        flex-direction: column;
-        gap: $space-sm;
-        max-height: 16rem;
-        overflow-y: auto;
-    }
-}

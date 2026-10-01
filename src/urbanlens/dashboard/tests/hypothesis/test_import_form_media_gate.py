@@ -1,13 +1,4 @@
-"""Regression tests for the Import Pins dialog's video/AI feature gating.
-
-The dialog template (dashboard/pages/location/import/csv.html) accepts photo/
-video drops and gates video + AI-parsed-file support on
-`can_upload_videos`/`can_use_ai_features`. Both come from the
-`add_feature_access` context processor (settings/base.py), not from
-PinController.import_form's own context dict - these tests guard that
-wiring so a future change to the context-processor list can't silently
-disable the gate for this page.
-"""
+"""Regression tests for the Import Pins dialog's video/AI feature gating."""
 
 from __future__ import annotations
 
@@ -37,7 +28,7 @@ class ImportFormMediaGateTests(TestCase):
         response = self.client.get(_IMPORT_FORM_URL)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn("var canUploadVideos = false;", content)
+        self.assertIn('data-can-upload-videos="false"', content)
 
     def test_video_accept_shown_with_feature(self) -> None:
         settings_obj = SiteSettings.get_current()
@@ -45,7 +36,7 @@ class ImportFormMediaGateTests(TestCase):
         response = self.client.get(_IMPORT_FORM_URL)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn("var canUploadVideos = true;", content)
+        self.assertIn('data-can-upload-videos="true"', content)
         self.assertIn(",video/*", content)
 
     def test_ai_file_types_hidden_without_feature(self) -> None:

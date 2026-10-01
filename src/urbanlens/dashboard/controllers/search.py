@@ -11,22 +11,20 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.views import View
 
+from urbanlens.dashboard.external_api.serializers_search import MAX_QUERY_LENGTH
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.search_history import SearchHistory
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
+from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
-#: Candidate example queries for the empty dialog's "Try searching for" section, in
-#: priority order - richer natural-language examples first (they show off more of
-#: what search understands), broad single-type fallbacks last (near-guaranteed to
-#: have results for any user with that kind of data at all). Never shown as-is -
-#: see _verified_hints, which only surfaces ones that actually return a result for
-#: the requesting profile, per the resolved backlog item requiring suggestions that
-#: won't dead-end the user.
+#: Candidate example queries for the empty dialog's "Try searching for" section, in priority order - richer
+#: natural-language examples first (they show off more of what search understands), broad single-type fallbacks
+#: last (near-guaranteed to have results for any user with that kind of data at all).
 SEARCH_HINT_CANDIDATES = (
     "pins near me",
     "photos from this year",
@@ -52,9 +50,8 @@ def _verified_hints(profile: Profile) -> list[str]:
         profile: The requesting user's profile.
 
     Returns:
-        Candidates from SEARCH_HINT_CANDIDATES, in priority order, that each
-        returned at least one search result - never a query guaranteed to
-        dead-end the user in an empty state.
+        Candidates from SEARCH_HINT_CANDIDATES, in priority order, that each returned at least one
+        search result - never a query guaranteed to...
     """
     cache_key = f"search_hints:{profile.pk}"
     cached: list[str] | None = cache.get(cache_key)
@@ -82,6 +79,20 @@ def _get_profile(request: HttpRequest) -> Profile:
     return profile
 
 
+#: How often one account may run a global search.
+#:
+#: The panel fires per keystroke, and each fire fans one query out to about
+#: eleven providers, each running a trigram-similarity scan over the account's
+#: rows that no index helps. Generous enough that nobody typing reaches it -
+#: a fast typist in a long word is well inside it - and low enough that a script
+#: cannot hold the pool open. Counted on GET, because GET is the expensive
+#: method here.
+GLOBAL_SEARCH_RATE = Rate(limit=120, window_seconds=60)
+
+#: Which methods the throttle counts for the panel.
+GLOBAL_SEARCH_METHODS = frozenset({"GET"})
+
+
 class GlobalSearchPanelView(LoginRequiredMixin, View):
     """The search dialog's swap target: suggestions when empty, results otherwise."""
 
@@ -95,7 +106,11 @@ class GlobalSearchPanelView(LoginRequiredMixin, View):
             The ``_panel.html`` partial for the dialog body.
         """
         profile = _get_profile(request)
-        query = (request.GET.get("q") or "").strip()
+        # Truncated, not refused: somebody who pastes a paragraph into a search
+        # box should get results for the start of it. The same ceiling the API
+        # surface of this engine already applies, and for the same reason - a
+        # long needle is compared against every row.
+        query = (request.GET.get("q") or "").strip()[:MAX_QUERY_LENGTH]
 
         if not query:
             return render(
@@ -115,14 +130,14 @@ class GlobalSearchPanelView(LoginRequiredMixin, View):
                 "query": query,
                 "response": response,
                 "filter_chips": response.parsed.describe_filters(),
+                "problem_notes": response.parsed.describe_problems(),
             },
         )
 
 
 class GlobalSearchHintsView(LoginRequiredMixin, View):
-    """Verified "Try searching for" example queries, loaded separately from the
-    main panel so running several candidate searches never delays the dialog
-    opening - see _panel.html's hx-get on this view.
+    """Verified "Try searching for" example queries, loaded separately from the main panel so running
+    several candidate searches never delays the dialog opening - see _panel.html's hx-get on this view.
 
     GET /search/hints/ → the hint-buttons fragment.
     """
@@ -147,9 +162,8 @@ class GlobalSearchHintsView(LoginRequiredMixin, View):
 class GlobalSearchCommitView(LoginRequiredMixin, View):
     """Records a query into search history.
 
-    Called by the dialog when the user commits to a search - pressing Enter or
-    clicking a result - rather than on every debounced keystroke, so history
-    holds intentional searches instead of prefixes.
+    Called by the dialog when the user commits to a search - pressing Enter or clicking a result -
+    rather than on every debounced keystroke, so history holds intentional searches instead of prefixes.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:

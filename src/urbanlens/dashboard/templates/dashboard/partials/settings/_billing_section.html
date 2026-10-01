@@ -1,5 +1,4 @@
 {# Membership settings subsection - loaded via HTMX (BillingSettingsSectionView). #}
-{# Context: stripe_configured, role_rows, subscriptions, has_billing_customer, minimum_pledge_dollars #}
 <div id="billing-settings-body" class="settings-subsection-body">
 {% if not stripe_configured %}
     <p class="settings-help">Paid subscriptions aren't configured on this server yet.</p>
@@ -59,6 +58,9 @@
             {{ row.role.name }}
         </h3>
         {% if row.role.description %}<p class="settings-help">{{ row.role.description }}</p>{% endif %}
+        {% if row.already_subscribed %}
+        <p class="settings-help">You're subscribed to {{ row.role.name }}; manage it under Your subscriptions.</p>
+        {% else %}
         <form method="post" action="{% url 'settings.billing.checkout' %}" class="settings-field">
             {% csrf_token %}
             <input type="hidden" name="role_slug" value="{{ row.role.slug }}">
@@ -80,6 +82,7 @@
             </div>
             {% endif %}
         </form>
+        {% endif %}
     </div>
     {% endfor %}
     {% if not role_rows %}

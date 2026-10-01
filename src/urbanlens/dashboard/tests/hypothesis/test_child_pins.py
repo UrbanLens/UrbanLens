@@ -9,9 +9,9 @@ import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
@@ -22,7 +22,11 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.map_pins.autocomplete import search_local
-from urbanlens.dashboard.tests.hypothesis.strategies import coord_pair_float, lat_float, lon_float, nonempty_name, priority as priority_strategy
+from urbanlens.dashboard.tests.hypothesis.strategies import (
+    coord_pair_float,
+    nonempty_name,
+    priority as priority_strategy,
+)
 
 # DB-backed @given tests below never touch self.client - only ORM/service
 # calls - per this repo's documented rule that hypothesis's per-example DB
@@ -46,7 +50,9 @@ def _make_pin(profile, **kwargs) -> Pin:
     location = kwargs.pop("location", None)
     if location is None:
         _coord_counter += 1
-        location = baker.make(Location, latitude=42.0 + _coord_counter * 0.001, longitude=-73.0 - _coord_counter * 0.001)
+        location = baker.make(
+            Location, latitude=42.0 + _coord_counter * 0.001, longitude=-73.0 - _coord_counter * 0.001
+        )
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
@@ -91,19 +97,16 @@ class MergeRetainsPropertiesTests(TestCase):
 class MergeRetainsPropertiesPropertyTests(TestCase):
     """Property-based generalization of MergeRetainsPropertiesTests above.
 
-    PinBulkMergeView.post has no extracted service function to call directly
-    (the reparenting - ``source.parent_pin = target; source.save(...)`` - is
-    inline in the view), so this exercises that same ORM-level operation
-    directly rather than going through self.client, per this repo's
-    documented @given + self.client incompatibility. Verifies the merge
-    invariant - a pin's own fields (name, priority, and its Location) survive
-    reparenting unchanged - for arbitrary generated names/priorities/
-    coordinates rather than one hand-picked example.
-    """
+    PinBulkMergeView.post has no extracted service function to call directly (the reparenting -
+    ``source.parent_pin = target; source.save(...)`` - is inline in the view), so this exercises that same
+    ORM-level operation directly rather than going through self.client, per this repo's documented @given +
+    self.client incompatibility."""
 
     @given(name=nonempty_name, priority=priority_strategy, coords=coord_pair_float)
     @_db_settings
-    def test_reparenting_retains_name_priority_and_location(self, name: str, priority: int, coords: tuple[float, float]) -> None:
+    def test_reparenting_retains_name_priority_and_location(
+        self, name: str, priority: int, coords: tuple[float, float]
+    ) -> None:
         lat, lon = coords
         profile = baker.make(User).profile
         target = _make_pin(profile, name="Target")
@@ -154,6 +157,11 @@ class MapChildPinsJsonTests(TestCase):
         self.assertIn("/dashboard/map/pin/", by_name["Boiler House"]["parent_url"])
         self.assertIn("/dashboard/map/pin/", by_name["Boiler House"]["url"])
 
+    def test_child_count_reflects_own_nested_children(self) -> None:
+        by_name = {p["name"]: p for p in self._get().json()["pins"]}
+        self.assertEqual(by_name["Boiler House"]["child_count"], 1)
+        self.assertEqual(by_name["Basement Door"]["child_count"], 0)
+
     def test_applies_filter_criteria(self) -> None:
         response = self._get({"name": "Basement"})
         names = {p["name"] for p in response.json()["pins"]}
@@ -170,12 +178,9 @@ class MapChildPinsJsonTests(TestCase):
 class MapSearchExcludesChildPinsTests(TestCase):
     """POST /map/search/ (the filter-formula search path) must not surface child pins as if they were root pins.
 
-    Unlike every other map-data query, this path built its queryset without
-    ``.root_pins()`` before ``get_map_data()`` was called with an explicit
-    (non-None) query - which only applies that filter itself when no query is
-    given. Left unfixed, a search would show a merged/detail pin as a normal
-    top-level marker, the opposite of the "merged pins disappear" symptom.
-    """
+    Unlike every other map-data query, this path built its queryset without ``.root_pins()`` before
+    ``map_data_context()`` was called with an explicit (non-None) query - which only applies that filter itself
+    when no query is given."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -208,6 +213,11 @@ class SearchLocalChildPinTests(TestCase):
         assert match is not None  # nosec B101
         self.assertTrue(match.is_child)
         self.assertIn("Asylum Grounds", match.subtitle)
+        # Child pins get their own marker treatment - a nested-arrow icon and a
+        # closer default zoom - so a jump lands the user at the sub-location,
+        # not zoomed out to the whole root pin's usual level.
+        self.assertEqual(match.icon, "subdirectory_arrow_right")
+        self.assertEqual(match.zoom, 17)
 
     def test_root_pin_is_not_flagged_as_child(self) -> None:
         results = search_local("Asylum", self.profile)
@@ -215,6 +225,8 @@ class SearchLocalChildPinTests(TestCase):
         self.assertIsNotNone(match)
         assert match is not None  # nosec B101
         self.assertFalse(match.is_child)
+        self.assertEqual(match.icon, "push_pin")
+        self.assertEqual(match.zoom, 16)
 
 
 class PinDetachChildViewTests(TestCase):
@@ -327,15 +339,22 @@ class PinPromoteChildrenViewTests(TestCase):
         root = _make_pin(self.profile, name="Root")
         root.slug = root.ensure_slug()
         same_loc_child = _make_pin(self.profile, name="Same Spot", parent_pin=root, location=root.location)
-        self._promote(root)
+        response = self._promote(root)
         same_loc_child.refresh_from_db()
         self.assertEqual(same_loc_child.parent_pin_id, root.pk)
+        # The one candidate child existed (child_count was non-zero, so the
+        # view didn't 400), but it was skipped, not promoted - the reported
+        # count must reflect that, not just "how many children were found".
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["promoted"], 0)
 
     def test_child_sharing_a_non_root_pins_location_is_still_promoted(self) -> None:
         """When the pin being promoted-from itself has a parent, a child sharing
         its Location can still move to that parent - only *root* pins are
         constrained by Location, and the child isn't becoming one here."""
-        same_loc_child = _make_pin(self.profile, name="Same Spot", parent_pin=self.parent, location=self.parent.location)
+        same_loc_child = _make_pin(
+            self.profile, name="Same Spot", parent_pin=self.parent, location=self.parent.location
+        )
         self._promote(self.parent)
         same_loc_child.refresh_from_db()
         self.assertEqual(same_loc_child.parent_pin_id, self.grandparent.pk)
@@ -343,7 +362,9 @@ class PinPromoteChildrenViewTests(TestCase):
     def test_promoted_child_nests_under_existing_root_at_same_location(self) -> None:
         root = _make_pin(self.profile, name="Standalone Root")
         root.slug = root.ensure_slug()
-        colliding_child = _make_pin(self.profile, name="Colliding Child", parent_pin=root, location=self.grandparent.location)
+        colliding_child = _make_pin(
+            self.profile, name="Colliding Child", parent_pin=root, location=self.grandparent.location
+        )
         self._promote(root)
         colliding_child.refresh_from_db()
         self.assertEqual(colliding_child.parent_pin_id, self.grandparent.pk)
@@ -423,12 +444,7 @@ class PinSwapWithParentModelTests(TestCase):
 
 
 class PinSwapWithParentPropertyTests(TestCase):
-    """Property-based generalization of PinSwapWithParentModelTests above:
-    the "child becomes parent of former parent", "child takes over
-    grandparent slot", and "no cycle results" invariants must hold for a
-    chain of arbitrary depth, not just the one hand-picked 3-level chain
-    above. Pure model-method test (Pin.swap_with_parent()) - no self.client.
-    """
+    """Property-based generalization of PinSwapWithParentModelTests above: the "child becomes parent of former parent", "child takes over grandparent slot", and "no cycle results" invariants must hold for a chain of arbitrary depth, not just the one hand-picked 3-level chain above. Pure model-method test (Pin.swap_with_parent()) - no self.client."""
 
     @given(depth=st.integers(min_value=2, max_value=6))
     @_db_settings
@@ -529,7 +545,9 @@ class DetailPinJsonChildrenTests(TestCase):
         self.assertEqual(names, {"Child"})
 
     def test_children_flag_returns_full_subtree_with_owner_names(self) -> None:
-        response = self.client.get(reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug}), {"children": "1"})
+        response = self.client.get(
+            reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug}), {"children": "1"}
+        )
         by_name = {dp["name"]: dp for dp in response.json()["detail_pins"]}
         self.assertEqual(set(by_name), {"Child", "Grandchild"})
         self.assertNotIn("owner_name", by_name["Child"])
@@ -544,16 +562,9 @@ class DetailPinJsonChildrenTests(TestCase):
 class DetailPinCoordinateDedupTests(TestCase):
     """Detail pins placed near each other must keep distinct coordinates.
 
-    ``Location.objects.get_nearby_or_create``'s default 50m proximity dedup
-    would otherwise snap two nearby detail pins (or a detail pin and its own
-    parent) onto the same Location, collapsing their marker coordinates
-    together - reported after several detail pins placed around a map all
-    ended up stacked on one point.
-
-    The exact-point case (as opposed to the nearby case covered here) is
-    rejected outright - see ``test_child_pin_overlap``, which also carries the
-    property-based generalization of this class.
-    """
+    ``Location.objects.get_nearby_or_create``'s default 50m proximity dedup would otherwise snap two nearby
+    detail pins (or a detail pin and its own parent) onto the same Location, collapsing their marker coordinates
+    together - reported after several detail pins placed around a map all ended up stacked on one point."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -576,12 +587,18 @@ class DetailPinCoordinateDedupTests(TestCase):
         first = self._create_detail_pin("First", 42.00010, -73.00010)
         second = self._create_detail_pin("Second", 42.00020, -73.00020)
         self.assertNotEqual(first.location_id, second.location_id)
-        self.assertNotEqual((first.effective_latitude, first.effective_longitude), (second.effective_latitude, second.effective_longitude))
+        self.assertNotEqual(
+            (first.effective_latitude, first.effective_longitude),
+            (second.effective_latitude, second.effective_longitude),
+        )
 
     def test_detail_pin_near_parent_keeps_its_own_coordinates(self) -> None:
         child = self._create_detail_pin("Nearby child", 42.00010, -73.00010)
         self.assertNotEqual(child.location_id, self.root.location_id)
-        self.assertNotEqual((child.effective_latitude, child.effective_longitude), (self.root.effective_latitude, self.root.effective_longitude))
+        self.assertNotEqual(
+            (child.effective_latitude, child.effective_longitude),
+            (self.root.effective_latitude, self.root.effective_longitude),
+        )
 
     def test_moving_detail_pin_near_another_keeps_distinct_coordinates(self) -> None:
         first = self._create_detail_pin("First", 42.00010, -73.00010)
@@ -651,6 +668,23 @@ class PinShareBundleTests(TestCase):
         bundled_pins = set(root_share.bundled_shares.values_list("pin_id", flat=True))
         self.assertEqual(bundled_pins, {self.child.pk, self.grandchild.pk})
 
+    def test_already_pending_child_share_is_not_duplicated(self) -> None:
+        """A child that already has its own pending share to this recipient must be
+        skipped by the bundle, not doubled up into a second PinShare row."""
+        existing = PinShare.objects.create(
+            pin=self.child,
+            location=self.child.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
+        )
+        self._share(include_children=True)
+        root_share = PinShare.objects.get(pin=self.root)
+        bundled_pins = set(root_share.bundled_shares.values_list("pin_id", flat=True))
+        self.assertEqual(bundled_pins, {self.grandchild.pk})
+        self.assertEqual(PinShare.objects.filter(pin=self.child).count(), 1)
+        self.assertEqual(PinShare.objects.get(pin=self.child).pk, existing.pk)
+
     def test_without_flag_no_bundle_is_created(self) -> None:
         self._share(include_children=False)
         root_share = PinShare.objects.get(pin=self.root)
@@ -677,9 +711,7 @@ class PinShareBundleTests(TestCase):
         self.assertIsNone(new_root.parent_pin_id)
         self.assertEqual(new_child.parent_pin_id, new_root.pk)
         self.assertEqual(new_grandchild.parent_pin_id, new_child.pk)
-        # The shape of the bundle travels; the sender's icon does not. This used
-        # to assert the icon came too - see test_share_pin_copy_fidelity's
-        # NOT_COPIED for what stays with its owner and why.
+        # The shape of the bundle travels; the sender's icon does not.
         self.assertNotEqual(new_child.icon, "factory")
 
     def test_reject_rejects_the_whole_bundle(self) -> None:
@@ -710,7 +742,9 @@ class PinShareSelectedChildrenTests(TestCase):
         self.child_b = _make_pin(self.sender, name="Rolling Mill", parent_pin=self.root)
 
     def test_dialog_get_lists_exactly_the_requested_children(self) -> None:
-        response = self.client.get(reverse("pin.share.dialog", kwargs={"pin_slug": self.root.slug}), {"children": str(self.child_a.uuid)})
+        response = self.client.get(
+            reverse("pin.share.dialog", kwargs={"pin_slug": self.root.slug}), {"children": str(self.child_a.uuid)}
+        )
         self.assertContains(response, "Blast Furnace")
         self.assertNotContains(response, "Rolling Mill")
 
@@ -740,7 +774,9 @@ class PinShareSelectedChildrenTests(TestCase):
         self.assertEqual(bundled_pins, {self.child_a.pk})
 
     def test_a_uuid_belonging_to_someone_elses_pin_is_ignored(self) -> None:
-        other_pin = baker.make(Pin, profile=baker.make(User).profile, location=baker.make(Location, latitude=60.0, longitude=-90.0))
+        other_pin = baker.make(
+            Pin, profile=baker.make(User).profile, location=baker.make(Location, latitude=60.0, longitude=-90.0)
+        )
         self.client.post(
             reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}),
             {"profile_id": self.recipient.pk, "child_pin_uuids": [str(other_pin.uuid)]},
@@ -769,7 +805,7 @@ class VisitedLabelPropagationTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.visited = ensure_label( kind=KIND_STATUS, name="Visited", profile=self.profile)
+        self.visited = ensure_label(kind=KIND_STATUS, name="Visited", profile=self.profile)
         self.root = _make_pin(self.profile)
         self.child = _make_pin(self.profile, parent_pin=self.root)
         self.grandchild = _make_pin(self.profile, parent_pin=self.child)
@@ -784,6 +820,61 @@ class VisitedLabelPropagationTests(TestCase):
         self.assertNotIn(self.visited, self.child.labels.all())
 
     def test_other_status_labels_do_not_cascade(self) -> None:
-        other = ensure_label( kind=KIND_STATUS, name="Demolished", profile=self.profile)
+        other = ensure_label(kind=KIND_STATUS, name="Demolished", profile=self.profile)
         self.grandchild.labels.add(other)
         self.assertNotIn(other, self.root.labels.all())
+
+
+class PinActionsFabVisibilityTests(TestCase):
+    """The floating Actions button only appears when it has something to show."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _page(self, pin: Pin):
+        pin.slug = pin.ensure_slug()
+        pin.save(update_fields=["slug"])
+        return self.client.get(reverse("pin.details", kwargs={"pin_slug": pin.slug}))
+
+    def test_hierarchy_items_hidden_but_the_fab_remains_for_its_article_actions(self) -> None:
+        """The fab itself always renders (it also holds the Article tab's Source/Clear controls - see _hierarchy_actions_fab.html and test_articles.py's test_pin_detail_page_offers_source_and_clear_via_the_actions_menu), even for the common case of a pin with neither children nor a parent."""
+        pin = _make_pin(self.profile, name="Lonely")
+        response = self._page(pin)
+        self.assertContains(response, "pin-actions-fab")
+        self.assertNotContains(response, "Child pin details")
+        self.assertNotContains(response, "Open parent pin")
+
+    def test_toggle_shown_when_the_pin_has_children(self) -> None:
+        parent = _make_pin(self.profile, name="Campus")
+        _make_pin(self.profile, name="Boiler", parent_pin=parent)
+        response = self._page(parent)
+        self.assertContains(response, "pin-actions-fab")
+        self.assertContains(response, "Child pin details")
+
+    def test_the_hierarchy_controls_are_named_by_what_they_do_not_by_their_icon(self) -> None:
+        """An icon font's ligature is the link's text, so without a label a screen reader says "toggle_on"."""
+        parent = _make_pin(self.profile, name="Campus")
+        child = _make_pin(self.profile, name="Boiler", parent_pin=parent)
+        _make_pin(self.profile, name="Valve", parent_pin=child)
+        content = self._page(child).content.decode()
+        for label in ('aria-label="Child pin details"', 'aria-label="Open parent pin"', 'aria-label="Actions"'):
+            self.assertIn(label, content)
+
+    def test_toggle_hidden_on_a_childless_nested_pin_but_parent_actions_remain(self) -> None:
+        parent = _make_pin(self.profile, name="Campus")
+        child = _make_pin(self.profile, name="Boiler", parent_pin=parent)
+        response = self._page(child)
+        self.assertContains(response, "pin-actions-fab")
+        self.assertContains(response, "Open parent pin")
+        self.assertNotContains(response, "Child pin details")
+
+    def test_both_toggle_and_parent_link_shown_on_a_nested_pin_with_children(self) -> None:
+        parent = _make_pin(self.profile, name="Campus")
+        child = _make_pin(self.profile, name="Boiler", parent_pin=parent)
+        _make_pin(self.profile, name="Valve", parent_pin=child)
+        response = self._page(child)
+        self.assertContains(response, "pin-actions-fab")
+        self.assertContains(response, "Child pin details")
+        self.assertContains(response, "Open parent pin")

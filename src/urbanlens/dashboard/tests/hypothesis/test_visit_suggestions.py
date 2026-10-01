@@ -1,15 +1,5 @@
-"""Tests for the visit-suggestion feature: services/visits.py business logic.
+"""Tests for the visit-suggestion feature: services/visits.py business logic."""
 
-Covers:
-- build_visit_suggestion_message: privacy-safe place description fallback chain.
-- find_pin_at / get_or_create_pin_at: pin dedup by location id or coordinates.
-- create_visit_suggestion: suggestion/notification creation, the "nothing would
-  change so don't notify" skip, and the existing-visit merge-offer path.
-- accept_visit_suggestion / merge_visit_suggestion: pin creation, participant
-  mutual-connection filtering, and VisitSource selection.
-- TripActivityCompleteView: completer auto-logs immediately, other rsvp=yes
-  members get suggestions, rsvp=no/maybe/None members get nothing.
-"""
 from __future__ import annotations
 
 import datetime
@@ -17,9 +7,9 @@ import datetime
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
@@ -58,6 +48,7 @@ def _make_accepted_friendship(a, b) -> Friendship:
 # ---------------------------------------------------------------------------
 # build_visit_suggestion_message
 # ---------------------------------------------------------------------------
+
 
 class BuildVisitSuggestionMessageTests(TestCase):
     """Fallback chain: official_name -> name -> city+state -> city -> generic."""
@@ -109,7 +100,9 @@ class BuildVisitSuggestionMessageTests(TestCase):
         self.assertEqual(build_visit_suggestion_message(location=location), "at a location")
 
     @given(
-        sentinel=st.text(alphabet=st.characters(max_codepoint=127, whitelist_categories=("Lu", "Ll")), min_size=5, max_size=20).filter(
+        sentinel=st.text(
+            alphabet=st.characters(max_codepoint=127, whitelist_categories=("Lu", "Ll")), min_size=5, max_size=20
+        ).filter(
             lambda s: s.casefold() not in _MEANINGLESS_NAME_PHRASES,
         ),
     )
@@ -156,6 +149,7 @@ class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
 # ---------------------------------------------------------------------------
 # find_pin_at / get_or_create_pin_at
 # ---------------------------------------------------------------------------
+
 
 class FindPinAtTests(TestCase):
     def setUp(self) -> None:
@@ -208,20 +202,13 @@ class GetOrCreatePinAtTests(TestCase):
 # create_visit_suggestion
 # ---------------------------------------------------------------------------
 
+
 class SuggesterIdentityMaskingTests(TestCase):
     """A visit suggestion must mask its sender like every other notification does.
 
-    The sibling of `test_calendar_sync.CalendarInviteIdentityMaskingTests`, found
-    by `bin/report_defect_history.py`'s incomplete-fix query: the commit that
-    fixed the calendar importer said it masked "like its sibling does", which is
-    exactly the phrase that means more instances exist. This was one.
-
-    The message is stored as plain text and is picked up by push delivery and by
-    `notification_text_alerts`, which builds an SMS body from the stored text -
-    so a name masked only at render time has already left the app. Being
-    connected is not sufficient permission: `VisibilityChoice`'s own docstring
-    notes accepted friends qualify for every level *except* `NO_ONE`.
-    """
+    The sibling of `test_calendar_sync.CalendarInviteIdentityMaskingTests`, found by
+    `bin/report_defect_history.py`'s incomplete-fix query: the commit that fixed the calendar importer said it
+    masked "like its sibling does", which is exactly the phrase that means more instances exist."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -281,8 +268,20 @@ class SuggesterIdentityMaskingTests(TestCase):
         recipient_pin = baker.make(Pin, profile=self.recipient, location=self.location)
         baker.make(PinVisit, pin=recipient_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
         other = baker.make("auth.User").profile
-        Friendship.objects.create(from_profile=self.recipient, to_profile=other, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
-        Friendship.objects.create(from_profile=self.suggester, to_profile=other, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.recipient,
+            to_profile=other,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
+        Friendship.objects.create(
+            from_profile=self.suggester,
+            to_profile=other,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
 
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
         origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
@@ -486,6 +485,7 @@ class CreateVisitSuggestionTests(TestCase):
 # accept_visit_suggestion
 # ---------------------------------------------------------------------------
 
+
 class AcceptVisitSuggestionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -497,15 +497,15 @@ class AcceptVisitSuggestionTests(TestCase):
     def _make_suggestion(self, **overrides) -> VisitSuggestion:
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
         origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
-        defaults = dict(
-            location=self.location,
-            latitude=40.0,
-            longitude=-74.0,
-            visited_at=self.visited_at,
-            suggested_by=self.suggester,
-            suggested_to=self.recipient,
-            origin_visit=origin_visit,
-        )
+        defaults = {
+            "location": self.location,
+            "latitude": 40.0,
+            "longitude": -74.0,
+            "visited_at": self.visited_at,
+            "suggested_by": self.suggester,
+            "suggested_to": self.recipient,
+            "origin_visit": origin_visit,
+        }
         defaults.update(overrides)
         return baker.make(VisitSuggestion, **defaults)
 
@@ -534,7 +534,9 @@ class AcceptVisitSuggestionTests(TestCase):
 
     def test_source_is_trip_for_trip_flow(self) -> None:
         trip = Trip.objects.create(name="Test Trip", creator=self.suggester)
-        activity = TripActivity.objects.create(trip=trip, added_by=self.suggester, location=self.location, title="Explore")
+        activity = TripActivity.objects.create(
+            trip=trip, added_by=self.suggester, location=self.location, title="Explore"
+        )
         suggestion = self._make_suggestion(origin_visit=None, trip_activity=activity)
 
         visit = accept_visit_suggestion(suggestion, self.recipient)
@@ -573,6 +575,7 @@ class AcceptVisitSuggestionTests(TestCase):
 # merge_visit_suggestion
 # ---------------------------------------------------------------------------
 
+
 class MergeVisitSuggestionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -583,7 +586,9 @@ class MergeVisitSuggestionTests(TestCase):
         _make_accepted_friendship(self.recipient, self.suggester)
 
         self.recipient_pin = baker.make(Pin, profile=self.recipient, location=self.location)
-        self.existing_visit = baker.make(PinVisit, pin=self.recipient_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        self.existing_visit = baker.make(
+            PinVisit, pin=self.recipient_pin, visited_at=self.visited_at, source=VisitSource.MANUAL
+        )
 
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
         origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
@@ -628,6 +633,7 @@ class MergeVisitSuggestionTests(TestCase):
 # null out origin_visit on an accepted VisitSuggestion.
 # ---------------------------------------------------------------------------
 
+
 class VisitSuggestionOriginCascadeTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -637,22 +643,19 @@ class VisitSuggestionOriginCascadeTests(TestCase):
         self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
 
     def _make_suggestion(self, **overrides) -> VisitSuggestion:
-        defaults = dict(
-            location=self.location,
-            latitude=40.0,
-            longitude=-74.0,
-            visited_at=self.visited_at,
-            suggested_by=self.suggester,
-            suggested_to=self.recipient,
-        )
+        defaults = {
+            "location": self.location,
+            "latitude": 40.0,
+            "longitude": -74.0,
+            "visited_at": self.visited_at,
+            "suggested_by": self.suggester,
+            "suggested_to": self.recipient,
+        }
         defaults.update(overrides)
         return baker.make(VisitSuggestion, **defaults)
 
     def test_bulk_deleting_pin_with_accepted_suggestion_does_not_raise(self) -> None:
-        """Reproduces the production bug: bulk-deleting a pin whose visit had an
-        accepted VisitSuggestion raised IntegrityError against
-        db_visit_suggestion_exactly_one_origin, because origin_visit was
-        SET_NULL and the collector nulled it without clearing from_my_activity."""
+        """Reproduces the production bug: bulk-deleting a pin whose visit had an accepted VisitSuggestion raised IntegrityError against db_visit_suggestion_exactly_one_origin, because origin_visit was SET_NULL and the collector nulled it without clearing from_my_activity."""
         origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
         origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
         suggestion = self._make_suggestion(origin_visit=origin_visit, status=VisitSuggestionStatus.ACCEPTED)
@@ -673,7 +676,9 @@ class VisitSuggestionOriginCascadeTests(TestCase):
 
     def test_deleting_trip_activity_deletes_the_suggestion(self) -> None:
         trip = Trip.objects.create(name="Test Trip", creator=self.suggester)
-        activity = TripActivity.objects.create(trip=trip, added_by=self.suggester, location=self.location, title="Explore")
+        activity = TripActivity.objects.create(
+            trip=trip, added_by=self.suggester, location=self.location, title="Explore"
+        )
         suggestion = self._make_suggestion(origin_visit=None, trip_activity=activity)
 
         activity.delete()
@@ -700,6 +705,7 @@ class VisitSuggestionOriginCascadeTests(TestCase):
 # ---------------------------------------------------------------------------
 # Trip activity completion: completer auto-logs, other rsvp=yes members get suggestions
 # ---------------------------------------------------------------------------
+
 
 class TripActivityCompletionTests(TestCase):
     def setUp(self) -> None:
@@ -755,10 +761,18 @@ class TripActivityCompletionTests(TestCase):
     def test_activity_rsvp_override_controls_visit_suggestion(self) -> None:
         attending = baker.make("auth.User").profile
         skipping = baker.make("auth.User").profile
-        attending_membership = TripMembership.objects.create(trip=self.trip, profile=attending, rsvp=TripMembership.RSVP_NO)
-        skipping_membership = TripMembership.objects.create(trip=self.trip, profile=skipping, rsvp=TripMembership.RSVP_YES)
-        TripActivityRSVP.objects.create(activity=self.activity, membership=attending_membership, rsvp=TripMembership.RSVP_YES)
-        TripActivityRSVP.objects.create(activity=self.activity, membership=skipping_membership, rsvp=TripMembership.RSVP_NO)
+        attending_membership = TripMembership.objects.create(
+            trip=self.trip, profile=attending, rsvp=TripMembership.RSVP_NO
+        )
+        skipping_membership = TripMembership.objects.create(
+            trip=self.trip, profile=skipping, rsvp=TripMembership.RSVP_YES
+        )
+        TripActivityRSVP.objects.create(
+            activity=self.activity, membership=attending_membership, rsvp=TripMembership.RSVP_YES
+        )
+        TripActivityRSVP.objects.create(
+            activity=self.activity, membership=skipping_membership, rsvp=TripMembership.RSVP_NO
+        )
 
         self.client.post(self._complete_url(), data={"completed_date": "2026-06-01"})
 

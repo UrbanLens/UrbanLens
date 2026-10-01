@@ -1,0 +1,4 @@
+# See the note in src/urbanlens/dashboard/tests/.ruff.toml - test code is
+# formatted at 120 columns. This covers the contract suite.
+extend = "../pyproject.toml"
+line-length = 120

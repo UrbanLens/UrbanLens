@@ -1,0 +1,186 @@
+# Forward the scheme the request REALLY arrived with, instead of asserting
+# https unconditionally. When the TLS-terminating front door (Cloudflare
+# Tunnel / NPM) sets X-Forwarded-Proto, pass it through; when the header is
+# absent (front door misconfigured, or something reaching this nginx
+# directly), fall back to the actual scheme nginx observed. This is what
+# lets Django's SECURE_SSL_REDIRECT actually fire for genuine plain-HTTP
+# requests - the old hardcoded "https" made every request look secure, so
+# the redirect could never trigger. A client spoofing "https" over plain
+# HTTP only skips its own redirect (exactly today's behavior for everyone),
+# and Secure cookies are still browser-enforced over real TLS only, so this
+# strictly tightens enforcement without adding trust in the client.
+#
+# X-Forwarded-Host is overwritten in every proxy block, never passed through:
+# Django sets USE_X_FORWARDED_HOST, so it decides the origin of an OAuth
+# redirect_uri or an emailed link. ALLOWED_HOSTS checks only its domain, so a
+# port is kept only when it is the one this stack is published on
+# (UL_APP_PORT, rendered in by the image's envsubst); any other falls back to
+# the port-less $host.
+map $http_x_forwarded_proto $forwarded_scheme {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+map $http_host $forwarded_host {
+    default                    $host;
+    "~^[^:]+:${UL_APP_PORT}$"  $http_host;
+}
+
+server {
+    listen 8080;
+    # A variable upstream is looked up per request (TTL 10s), so a recreated app
+    # container's new address is picked up without restarting nginx.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $app_upstream urbanlens_app:8000;
+    set $app_ws_upstream urbanlens_app_ws:8001;
+    server_name localhost;
+
+    # This nginx always sits behind a TLS-terminating front door (Cloudflare
+    # Tunnel today, NGINX Proxy Manager in the future), so $remote_addr here
+    # is the front door's IP, not the visitor's. Trust its X-Forwarded-For
+    # instead. Docker hands a stack a network from 172.16.0.0/12 or, once a
+    # host has used those up, 192.168.0.0/16; an untrusted front door makes
+    # every visitor one address and every per-address limit site-wide.
+    set_real_ip_from 172.16.0.0/12;
+    set_real_ip_from 192.168.0.0/16;
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+
+    # Generous ceiling so large Google Takeout location-history exports and
+    # multi-photo batches aren't rejected before Django can even respond;
+    # tune as needed.
+    client_max_body_size 200m;
+
+    # Set explicitly rather than left to nginx's 60s default. nginx decides when
+    # a client stops waiting; it does not stop the worker, which keeps computing
+    # a response nobody will read until gunicorn's own `-t` reaps it. That is why
+    # `-t` is 180 rather than 600 (package.json) - the window in which an
+    # abandoned request can go on burning CPU is a minute, not eight.
+    location / {
+        proxy_read_timeout 120s;
+        proxy_pass http://$app_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_scheme;
+        # See the note above the map blocks.
+        proxy_set_header X-Forwarded-Host $forwarded_host;
+    }
+
+    # Routed to the dedicated `app-ws` Daphne service (docker-compose.yml) - the
+    # main `app` service above never sees WebSocket traffic. proxy_read_timeout
+    # is raised well past nginx's 60s default so idle chat connections aren't
+    # dropped between messages.
+    location /ws/ {
+        # Generous enough for several people behind one NAT with several tabs
+        # each, and far below the 1024-per-worker pool this shares with every
+        # HTTP request. See the zone's definition in nginx.conf for why this
+        # exists alongside the per-account cap rather than instead of it.
+        limit_conn ws_conn 60;
+        proxy_pass http://$app_ws_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_scheme;
+        # See the note above the map blocks.
+        proxy_set_header X-Forwarded-Host $forwarded_host;
+        proxy_read_timeout 3600s;
+    }
+
+    # CompressedManifestStaticFilesStorage (settings/base.py) renames every
+    # collectstatic'd asset to embed a content hash (e.g. core.4f3a91c2d0b1.js),
+    # so a given URL's bytes can never change - safe to cache for as long as a
+    # browser will keep it. This location must come before the plain /static/
+    # block below: regex locations take priority over prefix matches, so
+    # hashed assets get this Cache-Control instead of the unhashed default.
+    # WhiteNoise's own cache-header logic never runs here - it's wired in only
+    # as a storage backend for collectstatic's hashing/manifest, and nginx
+    # (not Django) is what answers /static/ requests in this stack.
+    # Quoted: nginx's config-file tokenizer treats a bare `{`/`}` as a block
+    # delimiter even mid-token when unquoted, so the `{8,32}` quantifier below
+    # truncated this pattern right before itself and broke the regex compile
+    # ("missing closing parenthesis") - taking the whole nginx container down.
+    location ~* "^/static/(.+\.[0-9a-f]{8,32}\.(?:css|js|svg|png|jpe?g|gif|webp|ico|woff2?|ttf|eot|map))$" {
+        alias /app/src/urbanlens/frontend/static/$1;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location /static/ {
+        alias /app/src/urbanlens/frontend/static/;
+    }
+
+    # User-uploaded media is NOT served off disk here: /media/ requests go to
+    # Django (dashboard.controllers.media.MediaGateView), which authenticates
+    # and authorizes the requester and then answers with an X-Accel-Redirect
+    # into the internal-only location below, letting nginx stream the actual
+    # bytes. Serving /media/ directly (the old configuration) let anyone who
+    # guessed a filename fetch any user's photos with no auth check.
+    location /media/ {
+        # Stated rather than inherited: this block had no timeout of its own, so
+        # it silently ran on nginx's 60s default while `/` ran on 120s. The gate
+        # view answers with an X-Accel-Redirect and nginx streams the bytes
+        # itself, so this bounds the authorization check, not the download.
+        proxy_read_timeout 120s;
+        proxy_pass http://$app_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_scheme;
+        # See the note above the map blocks.
+        proxy_set_header X-Forwarded-Host $forwarded_host;
+    }
+
+    # Only reachable via X-Accel-Redirect from the Django media gate above -
+    # `internal` makes direct client requests for /_protected_media/... 404.
+    # The alias must point at the same media_volume mount the app containers
+    # use (docker-compose.yml mounts it at /app/src/urbanlens/media), and the
+    # path prefix must match MEDIA_X_ACCEL_PREFIX in settings/base.py.
+    location /_protected_media/ {
+        internal;
+        alias /app/src/urbanlens/media/;
+
+        # nginx forwards only a small allow-list of upstream headers when it
+        # follows an X-Accel-Redirect, and these four are not on it - the set
+        # is measured on this exact image and written out in
+        # media.conf.template. Django sets them on the gate's response and the
+        # browser never sees them, on precisely the responses carrying the
+        # bytes. Stated here, in the location, rather than at server level:
+        # `add_header` in a location replaces everything inherited, so a
+        # server-level set would silently vanish from the two locations below
+        # that carry an add_header of their own.
+        #
+        # frame-ancestors is 'self' rather than the media host's configurable
+        # value because this vhost is the app's own origin - the Vault document
+        # lightbox framing a PDF from here is same-origin.
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Cross-Origin-Resource-Policy "same-site" always;
+        add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'self'" always;
+    }
+
+    location /nginx-health {
+        access_log off;
+        return 200 "OK\n";
+        add_header Content-Type text/plain;
+    }
+
+    # The Prometheus scrape endpoint is not part of the public site. Django
+    # guards it too (bearer token and/or a network allowlist, and the route is
+    # not even registered unless UL_METRICS_ENABLED) - this is the outer layer,
+    # so a misconfiguration on one side is not enough on its own to publish the
+    # application's view map to the internet.
+    #
+    # 404, not 403: a scanner learns nothing it did not already know. An exact
+    # match, so it costs nothing on any other path, and so /metrics-something
+    # is not caught by it - there is nothing else under this prefix.
+    #
+    # A scraper reaches the endpoint by talking to the app container directly
+    # (its published port or the compose network), not through this vhost.
+    location = /metrics {
+        access_log off;
+        return 404;
+    }
+}

@@ -1,28 +1,17 @@
-"""Tests for Label model properties and LabelQuerySet filter methods.
-
-get_label_and_descendants is already thoroughly covered in test_label.py.
-This file covers the customization-aware display properties and queryset filters.
-
-Property tests use unsaved Label instances with _user_customizations injected
-directly - no DB access required.  Queryset tests use baker.
-"""
+"""Tests for Label model properties and LabelQuerySet filter methods."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.labels.model import (
-    KIND_CATEGORY,
-    KIND_STATUS,
-    KIND_TAG,
-    Label,
-)
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 
 _hyp = settings(max_examples=50, deadline=None)
 _text = st.text(min_size=1, max_size=30, alphabet=st.characters(whitelist_categories=("L", "N")))
@@ -281,39 +270,6 @@ class LabelQuerySetVisibilityTests(TestCase):
         self.assertNotIn(self.global_b, qs)
 
 
-# -- LabelQuerySet.with_icon ---------------------------------------------------
-
-
-class LabelQuerySetWithIconTests(TestCase):
-    """with_icon() returns labels that have a non-empty icon or custom_icon."""
-
-    def setUp(self):
-        self.with_icon = baker.make(
-            "dashboard.Label",
-            name="starred",
-            icon="⭐",
-            custom_icon=None,
-            profile=None,
-            kind=KIND_TAG,
-        )
-        self.no_icon = baker.make(
-            "dashboard.Label",
-            name="plain",
-            icon=None,
-            custom_icon=None,
-            profile=None,
-            kind=KIND_TAG,
-        )
-
-    def test_includes_label_with_icon(self) -> None:
-        qs = Label.objects.with_icon()
-        self.assertIn(self.with_icon, qs)
-
-    def test_excludes_label_without_icon(self) -> None:
-        qs = Label.objects.with_icon()
-        self.assertNotIn(self.no_icon, qs)
-
-
 # -- LabelQuerySet.ordered -----------------------------------------------------
 
 
@@ -323,13 +279,13 @@ class LabelQuerySetOrderedTests(TestCase):
     def test_ordered_returns_queryset(self) -> None:
         baker.make("dashboard.Label", name="z", order=1, profile=None, kind=KIND_TAG)
         baker.make("dashboard.Label", name="a", order=2, profile=None, kind=KIND_TAG)
-        qs = Label.objects.ordered()
+        qs = Label.objects.in_display_order()
         self.assertGreater(qs.count(), 0)
 
     def test_ordered_higher_order_comes_first(self) -> None:
         b_low: Label = baker.make(Label, name="low", order=1, profile=None, kind=KIND_TAG)
         b_high: Label = baker.make(Label, name="high", order=10, profile=None, kind=KIND_TAG)
-        pks = list(Label.objects.filter(pk__in=[b_low.pk, b_high.pk]).ordered().values_list("pk", flat=True))
+        pks = list(Label.objects.filter(pk__in=[b_low.pk, b_high.pk]).in_display_order().values_list("pk", flat=True))
         self.assertEqual(pks[0], b_high.pk)
 
 
@@ -525,11 +481,11 @@ class LabelInitialOrderForParentsTests(TestCase):
         self.assertIsNone(Label.initial_order_for_parents(self.profile, [hidden.pk]))
 
     def test_single_parent_order_minus_one(self) -> None:
-        parent = ensure_label( name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
+        parent = ensure_label(name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
         self.assertEqual(Label.initial_order_for_parents(self.profile, [parent.pk]), 19)
 
     def test_multiple_parents_uses_lowest_order(self) -> None:
-        hospital = ensure_label( name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
+        hospital = ensure_label(name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
         pennsylvania = baker.make(Label, name="Pennsylvania", profile=self.profile, kind=KIND_TAG, order=35)
         self.assertEqual(
             Label.initial_order_for_parents(self.profile, [hospital.pk, pennsylvania.pk]),

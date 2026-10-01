@@ -1,10 +1,4 @@
-"""The shared test helpers must fail when they are supposed to.
-
-``run_concurrently`` and ``assert_agrees`` exist to make two error-prone patterns
-routine - real-thread race tests, and holding a fast reimplementation to the
-function it replaced. A helper that silently passes is worse than no helper,
-because every test built on it inherits the false confidence.
-"""
+"""The shared test helpers must fail when they are supposed to."""
 
 from __future__ import annotations
 
@@ -32,7 +26,7 @@ class AssertAgreesTests(SimpleTestCase):
         self.assertIn("1 subject", message)
 
     def test_the_other_direction_reads_differently(self) -> None:
-        """"Wrongly hidden" and "wrongly shown" are different bugs; the message must say which."""
+        """ "Wrongly hidden" and "wrongly shown" are different bugs; the message must say which."""
         with pytest.raises(AssertionError, match="said no where the reference said yes"):
             assert_agrees(lambda n: n >= 2, lambda n: n > 2, range(6))
 

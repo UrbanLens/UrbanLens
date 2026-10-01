@@ -1,4 +1,5 @@
 """Tests for UL-240: viewing a pending friend request should mark its notification read."""
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -86,7 +87,9 @@ class FriendRequestResolutionStateTests(TestCase):
         )
 
     def test_pending_request_is_pending_and_unresolved(self) -> None:
-        Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED
+        )
         notification = self._notification()
 
         self.assertTrue(notification.is_friend_request_pending)
@@ -119,12 +122,13 @@ class FriendRequestResolutionStateTests(TestCase):
         self.assertFalse(notification.is_friend_request_pending)
         self.assertIsNone(notification.friend_request_resolution)
 
-    def test_accept_response_view_leaves_notification_reflecting_accepted_state(self) -> None:
-        """End-to-end: the notification dropdown's own respond endpoint (used
-        when the user clicks Accept from the panel) must leave the original
-        friend_request notification resolvable to "accepted" afterward, not
-        just marked read with stale pending wording."""
-        Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED)
+    def test_accept_response_view_dismisses_notification_with_accepted_resolution(self) -> None:
+        """End-to-end: accepting from the panel dismisses the friend_request
+        notification from the inbox while leaving its resolution readable on
+        the history page."""
+        Friendship.objects.create(
+            from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED
+        )
         notification = self._notification()
         self.client.force_login(self.recipient_user)
 
@@ -132,5 +136,6 @@ class FriendRequestResolutionStateTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         notification.refresh_from_db()
+        self.assertEqual(notification.status, Status.DISMISSED)
         self.assertFalse(notification.is_friend_request_pending)
         self.assertEqual(notification.friend_request_resolution, "accepted")

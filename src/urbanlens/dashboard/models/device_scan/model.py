@@ -1,13 +1,6 @@
 """Wireless device scanning: ingested scan data and the wiki markers it produces.
-
-The mobile app's device-scanning feature uploads nearby-device readings (MAC
-address, signal-strength samples along a route, a client-estimated location,
-and a device-type guess) through the external API. A background task
-(``dashboard.tasks.process_device_scan_upload``) turns camera/sensor/tracker
-detections into :class:`WikiDeviceMarker` rows - fuzzy map markers that
-tighten as more scans corroborate them - on every wiki whose boundary
-contains the detection. See ``services.device_scan`` for the classification
-and clustering logic; this module only holds the data.
+The mobile app's device-scanning feature uploads nearby-device readings (MAC address, signal-strength samples along a route, a client-estimated location, and a device-type guess) through the external API.
+See ``services.device_scan`` for the classification and clustering logic; this module only holds the data.
 """
 
 from __future__ import annotations
@@ -15,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import PointField
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, FloatField, ForeignKey, Index, IntegerField, PositiveIntegerField, TextField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, FloatField, ForeignKey, Index, IntegerField, ManyToManyField, PositiveIntegerField, Q, TextField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.device_scan.queryset import (
@@ -59,6 +52,7 @@ class ScanUploadStatus(abstract.TextChoices):
     """Processing status of a DeviceScanUpload."""
 
     PENDING = "pending", "Pending"
+    PROCESSING = "processing", "Processing"
     PROCESSED = "processed", "Processed"
     FAILED = "failed", "Failed"
 
@@ -82,15 +76,14 @@ class MarkerStatus(abstract.TextChoices):
 class ScannedDevice(abstract.FrontendDashboardModel):
     """One physical wireless device, identified by its MAC address.
 
-    Global rather than per-profile: many users' scans corroborate the same
-    device, and its classification/marker history is shared across all of
-    them rather than siloed per uploader.
+    Global rather than per-profile: many users' scans corroborate the same device. Its name and type are a
+    summary of every scan's report (``services.device_scan.summary``), never one uploader's word.
     """
 
     # Normalized upper-case colon-separated form (see
-    # services.device_scan.mac_address.normalize_mac_address) - the only
-    # form ever stored, so a lookup can never miss a match over a casing or
-    # separator difference between two uploads of the same device.
+    # services.device_scan.mac_address.normalize_mac_address) - the only form ever stored, so a
+    # lookup can never miss a match over a casing or separator difference between two uploads of the
+    # same device.
     mac_address = CharField(max_length=17, unique=True, editable=False)
     display_name = CharField(max_length=255, blank=True, default="")
     device_type = CharField(max_length=20, choices=DeviceType.choices, default=DeviceType.UNKNOWN)
@@ -99,7 +92,7 @@ class ScannedDevice(abstract.FrontendDashboardModel):
     # (abstract.DashboardModel) already mean exactly that, since the only
     # writes to this model happen from scan ingestion touching the row.
 
-    objects: ScannedDeviceManager = ScannedDeviceManager()
+    objects = ScannedDeviceManager()
 
     def __str__(self) -> str:
         return f"ScannedDevice({self.mac_address}, {self.device_type})"
@@ -111,30 +104,30 @@ class ScannedDevice(abstract.FrontendDashboardModel):
 
 class DeviceScanUpload(abstract.FrontendDashboardModel):
     """One batch upload from the mobile app's device-scanning feature.
-
-    ``profile`` is null whenever the uploading profile has
-    ``Profile.track_device_scans`` turned off - the upload is still processed
-    (classification/markers are shared community data), just without personal
-    attribution. Authentication is always required to reach the upload
-    endpoint regardless; this field only controls attribution.
-
-    A ``FrontendDashboardModel`` (for its ``uuid``) rather than a plain
-    ``DashboardModel``, so the upload endpoint's response can hand back an
-    opaque identifier - matching every other external-API response in this
-    app, none of which ever expose a raw integer pk.
+    ``profile`` is null whenever the uploading profile has ``Profile.track_device_scans`` turned off - the upload is still processed (classification/markers are shared community data), just without personal attribution.
+    Device scans are never deleted: when the uploading profile is, the upload stays with ``profile`` cleared.
     """
 
     profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="device_scan_uploads")
-    # Client-supplied idempotency/resume token. Stored verbatim for the
-    # client's own troubleshooting; the server does not currently dedupe on it.
+    # Client-supplied idempotency key, one per upload batch: a retry carrying the same value
+    # gets the original upload back instead of storing the batch twice.
     client_session_uuid = CharField(max_length=64, blank=True, default="")
     status = CharField(max_length=20, choices=ScanUploadStatus.choices, default=ScanUploadStatus.PENDING)
     error = TextField(blank=True, default="")
+    #: When a worker last took it for processing.
+    claimed_at = DateTimeField(null=True, blank=True)
+    #: How many workers have taken it; a sweep gives up past ``MAX_SCAN_UPLOAD_ATTEMPTS``.
+    attempts = PositiveIntegerField(default=0)
+    #: Wikis this upload may add evidence to: those its points fall in that the uploader could see when it was
+    #: sent. Decided at upload, the only time the uploader is known for an unattributed upload.
+    routable_wikis = ManyToManyField("dashboard.Wiki", blank=True, related_name="+")
+    #: False for uploads made before ``routable_wikis`` existed, which route to every wiki their points fall in.
+    routing_recorded = BooleanField(default=False)
 
     if TYPE_CHECKING:
         profile_id: int | None
 
-    objects: DeviceScanUploadManager = DeviceScanUploadManager()
+    objects = DeviceScanUploadManager()
 
     def __str__(self) -> str:
         return f"DeviceScanUpload({self.pk}, {self.status})"
@@ -142,6 +135,17 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_device_scan_uploads"
         get_latest_by = "created"
+        constraints = [
+            # Keyed on the token alone: an unattributed upload carries no profile to scope it by.
+            UniqueConstraint(fields=["client_session_uuid"], condition=~Q(client_session_uuid=""), name="db_scanupload_one_per_client_session"),
+        ]
+        indexes = [
+            Index(
+                fields=["status", "created"],
+                condition=Q(status__in=[ScanUploadStatus.PENDING, ScanUploadStatus.PROCESSING]),
+                name="idxdb_scanupload_unfinished",
+            ),
+        ]
 
 
 class DeviceScanEntry(abstract.DashboardModel):
@@ -155,6 +159,8 @@ class DeviceScanEntry(abstract.DashboardModel):
     upload = ForeignKey(DeviceScanUpload, on_delete=CASCADE, related_name="entries")
     device = ForeignKey(ScannedDevice, on_delete=CASCADE, related_name="scan_entries")
     device_type_guess = CharField(max_length=20, choices=DeviceType.choices, null=True, blank=True)
+    #: The name this scan saw the device advertise.
+    device_name = CharField(max_length=255, blank=True, default="")
     detected = BooleanField(default=True)
     location = PointField(geography=True, srid=4326)
     # Set when the client is confirming/refuting a marker it learned about
@@ -166,7 +172,7 @@ class DeviceScanEntry(abstract.DashboardModel):
         device_id: int
         expected_marker_id: int | None
 
-    objects: DeviceScanEntryManager = DeviceScanEntryManager()
+    objects = DeviceScanEntryManager()
 
     def __str__(self) -> str:
         return f"DeviceScanEntry(upload={self.upload_id}, device={self.device_id})"
@@ -177,11 +183,7 @@ class DeviceScanEntry(abstract.DashboardModel):
 
 class DeviceSignalReading(abstract.DashboardModel):
     """One raw (coordinate, signal strength) sample along a scan route.
-
-    Kept for richness beyond what the v1 clustering algorithm consumes (a
-    per-entry average signal strength) - future refinements (proper
-    trilateration, a signal-strength heatmap) can mine this without a schema
-    change, per the "store as much data as possible" requirement.
+    Kept for richness beyond what the v1 clustering algorithm consumes (a per-entry average signal strength) - future refinements (proper trilateration, a signal-strength heatmap) can mine this without a schema change, per the "store as much data as possible" requirement.
     """
 
     entry = ForeignKey(DeviceScanEntry, on_delete=CASCADE, related_name="readings")
@@ -192,7 +194,7 @@ class DeviceSignalReading(abstract.DashboardModel):
     if TYPE_CHECKING:
         entry_id: int
 
-    objects: DeviceSignalReadingManager = DeviceSignalReadingManager()
+    objects = DeviceSignalReadingManager()
 
     def __str__(self) -> str:
         return f"DeviceSignalReading(entry={self.entry_id}, rssi={self.signal_strength})"
@@ -203,17 +205,7 @@ class DeviceSignalReading(abstract.DashboardModel):
 
 class WikiDeviceMarker(abstract.FrontendDashboardModel):
     """A fuzzy (or manually pinpointed) device location on one wiki's map.
-
-    Multiple ACTIVE rows can exist for the same (device, wiki) pair while a
-    moved device's old and new locations are both still corroborated - see
-    ``services.device_scan.clustering`` for how they're reconciled.
-
-    ``centroid`` is the single source of truth for where this marker is
-    displayed, whether it holds an automatically-computed fuzzy position or a
-    manually placed one - a future wiki-editing UI sets ``manually_placed``
-    and overwrites ``centroid``/``radius_meters`` directly (typically to a
-    precise point and a near-zero radius) when a user pinpoints the device;
-    the clustering recompute then leaves this row's position alone.
+    Multiple ACTIVE rows can exist for the same (device, wiki) pair while a moved device's old and new locations are both still corroborated - see ``services.device_scan.clustering`` for how they're reconciled.
     """
 
     wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, related_name="device_markers")
@@ -226,18 +218,11 @@ class WikiDeviceMarker(abstract.FrontendDashboardModel):
 
     confidence = FloatField(default=0.0)
     observation_count = PositiveIntegerField(default=0)
-    # Consecutive "not detected" reports with no positive corroboration in
-    # between - reset to 0 by any positive detection. Crossing
-    # ABSENCE_STREAK_THRESHOLD (services.device_scan.clustering) flips status
-    # to PRESUMED_REMOVED.
+    #: Distinct accounts that reported the device missing since it was last seen. Reaching
+    #: ``ABSENCE_REPORTERS_THRESHOLD`` (services.device_scan.clustering) flips status to PRESUMED_REMOVED.
     absence_streak = PositiveIntegerField(default=0)
     avg_signal_strength = FloatField(null=True, blank=True)
 
-    # Deliberately plain (not auto_now[_add]) and always set explicitly by
-    # services.device_scan.clustering from the contributing entries' own
-    # timestamps - unlike the inherited created/updated (this row's own
-    # lifecycle), a marker's first recompute can already span scan data
-    # going back to the lookback window's start.
     first_observed_at = DateTimeField()
     last_observed_at = DateTimeField()
 
@@ -245,7 +230,7 @@ class WikiDeviceMarker(abstract.FrontendDashboardModel):
         wiki_id: int
         device_id: int
 
-    objects: WikiDeviceMarkerManager = WikiDeviceMarkerManager()
+    objects = WikiDeviceMarkerManager()
 
     def __str__(self) -> str:
         return f"WikiDeviceMarker(wiki={self.wiki_id}, device={self.device_id}, {self.status})"

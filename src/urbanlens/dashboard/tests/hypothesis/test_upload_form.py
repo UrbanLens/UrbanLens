@@ -1,12 +1,5 @@
-"""Tests for the multi-file upload form and its supporting widget/field classes.
+"""Tests for the multi-file upload form and its supporting widget/field classes."""
 
-No database access required - these are pure form-validation tests.
-
-Classes under test:
-    _MultipleFileInput  - widget that extracts a list from the file dict
-    _MultipleFileField  - field that validates and returns a list of files
-    UploadDataFile      - the public form
-"""
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -18,6 +11,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile, _MultipleFileField, _MultipleFileInput
 
 # -- _MultipleFileInput --------------------------------------------------------
+
 
 class MultipleFileInputValueFromDatadictTests(SimpleTestCase):
     """value_from_datadict calls files.getlist(name) and returns the result."""
@@ -49,6 +43,7 @@ class MultipleFileInputValueFromDatadictTests(SimpleTestCase):
 
 # -- _MultipleFileField --------------------------------------------------------
 
+
 class MultipleFileFieldCleanTests(SimpleTestCase):
     """_MultipleFileField.clean validates each file individually."""
 
@@ -60,11 +55,13 @@ class MultipleFileFieldCleanTests(SimpleTestCase):
 
     def test_empty_list_raises_validation_error(self) -> None:
         from django import forms
+
         with self.assertRaises(forms.ValidationError):
             self._field().clean([])
 
     def test_none_raises_validation_error(self) -> None:
         from django import forms
+
         with self.assertRaises(forms.ValidationError):
             self._field().clean(None)
 
@@ -88,6 +85,7 @@ class MultipleFileFieldCleanTests(SimpleTestCase):
 
 
 # -- UploadDataFile ------------------------------------------------------------
+
 
 class UploadDataFileFormTests(TestCase):
     """UploadDataFile validates that at least one file is provided."""
@@ -126,15 +124,18 @@ class UploadDataFileFormTests(TestCase):
         self.assertIn("upload_files", form.errors)
 
     def test_form_valid_with_multiple_files_via_bind(self) -> None:
-        files: MultiValueDict = MultiValueDict({
-            "upload_files": [self._file("a.kml"), self._file("b.kml")],
-        })
+        files: MultiValueDict = MultiValueDict(
+            {
+                "upload_files": [self._file("a.kml"), self._file("b.kml")],
+            }
+        )
         form = UploadDataFile(data={}, files=files)
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(len(form.cleaned_data["upload_files"]), 2)
 
 
 # -- _MultipleFileField - falsy file filtering ---------------------------------
+
 
 class MultipleFileFieldFalsyFilterTests(SimpleTestCase):
     """_MultipleFileField.clean skips falsy entries in the list (the `if f` guard)."""
@@ -154,7 +155,7 @@ class MultipleFileFieldFalsyFilterTests(SimpleTestCase):
         self.assertEqual(len(result), 1)
 
     def test_list_of_all_falsy_after_filter_returns_empty(self) -> None:
-        from django.core.files.uploadedfile import SimpleUploadedFile as SUF
+
         # Pass a truthy list to bypass the `if not data` check, then let `if f` filter reduce it.
         # An empty-bytes file is still truthy, so we'd need a truly falsy entry.
         # Here we use False as the falsy value.

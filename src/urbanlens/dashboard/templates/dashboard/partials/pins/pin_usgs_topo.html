@@ -1,3 +1,4 @@
+{% load remote_copies %}
 <div id="usgs-topo-section" class="usgs-topo card card--secondary">
     {% if debug %}
     <span class="debug-marker" hidden
@@ -16,7 +17,7 @@
         <a href="{{ map.downloadURL }}" target="_blank" rel="noopener noreferrer" class="usgs-topo-card"
            title="{{ map.title }}">
             {% if map.previewGraphicURL %}
-            <img src="{{ map.previewGraphicURL }}" alt="{{ map.title }}" class="usgs-topo-thumb" loading="lazy">
+            <img src="{{ map.previewGraphicURL|remote_copy:'usgs_topo' }}" alt="{{ map.title }}" class="usgs-topo-thumb" loading="lazy">
             {% else %}
             <div class="usgs-topo-thumb-empty">
                 <i class="material-symbols-outlined">terrain</i>

@@ -1,20 +1,14 @@
-"""Tests for services.import_formats.wkt_wkb - WKT/WKB pin import.
+"""Tests for services.import_formats.wkt_wkb - WKT/WKB pin import."""
 
-Unlike the other formats, a WKT/WKB file is N independent one-line records: a
-malformed line must be skipped with a warning rather than aborting the whole
-file, since these are typically hand-pasted rather than produced by a single
-trusted export pipeline. That per-line fault tolerance is the main regression
-risk covered here.
-"""
 from __future__ import annotations
 
 from pathlib import Path
 
-from hypothesis import given, settings as hyp_settings, strategies as st
 import shapely.geometry
 import shapely.wkb
 import shapely.wkt
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 

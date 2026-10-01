@@ -1,11 +1,5 @@
 /**
  * Outgoing encryption must say *why* it produced no ciphertext.
- *
- * "Nobody to encrypt to" and "the key request failed" are different answers:
- * the first legitimately allows the caller to send plaintext, the second must
- * not, because the thread is one both participants believe is encrypted. These
- * were once the same `null`, so a single 500 on a key fetch sent a readable
- * message into an encrypted conversation with nothing but a console line.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
@@ -175,5 +169,28 @@ describe("a conversation that encrypts normally", () => {
         expect(result.status).toBe("encrypted");
         if (result.status !== "encrypted") return;
         expect(result.payload.ciphertext).not.toContain("old mill");
+    });
+});
+
+describe("a sign-in refused for asking too often", () => {
+    test("says so, and never submits the raw password", async () => {
+        const { wireLoginForm } = await import("./e2ee-client");
+        stubFetch({ "/e2ee/login-params/": { status: 429 } });
+        document.body.innerHTML = `
+            <form id="login"><input name="username" value="jess"><input name="password" value="secret">
+            <button type="submit" class="btn">Sign in</button></form>`;
+        const form = document.getElementById("login") as HTMLFormElement;
+        let submitted = false;
+        form.submit = () => {
+            submitted = true;
+        };
+        wireLoginForm(form);
+
+        form.dispatchEvent(new Event("submit", { cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(submitted).toBe(false);
+        expect(document.body.textContent).toContain("Too many sign-in attempts");
+        expect(form.querySelector("button")!.classList.contains("is-loading")).toBe(false);
     });
 });

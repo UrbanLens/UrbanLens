@@ -1,25 +1,4 @@
-"""Positive controls for the fourth concealment review round.
-
-The third review round's V4 finding was that the whole render-test suite had
-no positive control for automatic content: `resolve_fields` could be deleted
-outright and every test would still pass, because nothing proved the
-own/friend/automatic logic ever actually ran rather than happening to agree
-with a wholesale-hide default. This file exists so the same thing can't
-happen to the surfaces the fourth round added or fixed - each test below
-would fail if the code under test were deleted or reverted to its prior
-(wholesale-hide, or unguarded) behaviour, not just if concealment broke
-outright.
-
-Covers: own+friends visibility for CustomLayer/MapImageOverlay/Album/Reaction/
-WikiOwner/WikiPropertySale; the layer_uuid read-side nulling and the write-
-safety fix that stops an edit to an unrelated field silently destroying a
-real, invisible layer assignment; the WikiOwner/WikiPropertySale dedup fix
-(an oracle and, for sales, a direct name leak); wiki-scoped boundary
-concealment and the write-path fix that stops a viewer's own just-drawn
-boundary vanishing from the very response that saved it; and the search
-result display fix (a surviving candidate's title/snippet must come from the
-concealed values, not the live row).
-"""
+"""Positive controls for the fourth concealment review round."""
 
 from __future__ import annotations
 
@@ -30,7 +9,6 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.model import CustomLayer, PinMarkup
@@ -72,6 +50,7 @@ class OwnContributionVisibleRowsTests(TestCase):
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 
         corners = {f"{d}_{axis}": 0.0 for d in ("nw", "ne", "se", "sw") for axis in ("latitude", "longitude")}
+        corners["tile_url_template"] = "/map/historical-tiles/x/{z}/{x}/{y}.png"
         own = baker.make(MapImageOverlay, parent_wiki=self.wiki, profile=self.viewer, **corners)
         friend_overlay = baker.make(MapImageOverlay, parent_wiki=self.wiki, profile=self.friend, **corners)
         baker.make(MapImageOverlay, parent_wiki=self.wiki, profile=self.stranger, **corners)
@@ -104,18 +83,17 @@ class OwnContributionVisibleRowsTests(TestCase):
         own_sale = WikiPropertySale.objects.create(location=self.wiki.location, created_by=self.viewer)
         stranger_sale = WikiPropertySale.objects.create(location=self.wiki.location, created_by=self.stranger)
         with _CONCEALED:
-            visible_sales = visible_rows(WikiPropertySale.objects.for_location(self.wiki.location), self.wiki, self.viewer)
+            visible_sales = visible_rows(
+                WikiPropertySale.objects.for_location(self.wiki.location), self.wiki, self.viewer
+            )
         self.assertEqual({s.pk for s in visible_sales}, {own_sale.pk})
         self.assertNotIn(stranger_sale.pk, {s.pk for s in visible_sales})
 
     def test_wiki_owner_official_record_with_no_creator_is_automatic_not_hidden(self) -> None:
         """plugins.builtin.property_records writes OwnerSource.OFFICIAL rows with no created_by.
 
-        Null actor here is genuinely ambiguous (also caused by account
-        deletion), so - like WikiLink - it defaults to automatic rather than
-        being treated as a departed account. A concealed viewer must still
-        see a real deed-lookup record; that's what a fresh wiki would show.
-        """
+        Null actor here is genuinely ambiguous (also caused by account deletion), so - like WikiLink - it
+        defaults to automatic rather than being treated as a departed account."""
         from urbanlens.dashboard.models.property_owner.meta import OwnerSource
 
         official = WikiOwner.objects.create(name="County Record LLC", source=OwnerSource.OFFICIAL, created_by=None)
@@ -143,18 +121,18 @@ class OwnContributionVisibleRowsTests(TestCase):
 class LayerUuidNullingAndWriteSafetyTests(TestCase):
     """The read-side layer_uuid nulling, and the write-path fix that stops it destroying real data.
 
-    Round 4's adversarial review caught the write-safety bug directly: nulling
-    a hidden layer for *display* means the edit panel's own <select> shows no
-    selection, so editing any other field on the item echoes that None back
-    as if clearing the layer had been deliberate - silently and permanently
-    stripping a real, invisible layer assignment. test_editing_an_unrelated_field_
-    does_not_clear_a_hidden_layer is that exact scenario end to end.
-    """
+    Round 4's adversarial review caught the write-safety bug directly: nulling a hidden layer for *display*
+    means the edit panel's own <select> shows no selection, so editing any other field on the item echoes that
+    None back as if clearing the layer had been deliberate - silently and permanently stripping a real,
+    invisible layer assignment. test_editing_an_unrelated_field_ does_not_clear_a_hidden_layer is that exact
+    scenario end to end."""
 
     def setUp(self) -> None:
         super().setUp()
         self.wiki, self.viewer, self.friend, self.stranger = _wiki_with_viewer_friend_stranger()
-        self.stranger_layer = baker.make(CustomLayer, parent_wiki=self.wiki, profile=self.stranger, name="STRANGER-LAYER")
+        self.stranger_layer = baker.make(
+            CustomLayer, parent_wiki=self.wiki, profile=self.stranger, name="STRANGER-LAYER"
+        )
         self.item = baker.make(
             PinMarkup,
             parent_wiki=self.wiki,
@@ -234,7 +212,9 @@ class WikiOwnerDedupTests(TestCase):
             )
         self.assertEqual(response.status_code, 200)
 
-        new_owners = WikiOwner.objects.for_location(self.wiki.location).filter(name="Alice").exclude(pk=stranger_owner.pk)
+        new_owners = (
+            WikiOwner.objects.for_location(self.wiki.location).filter(name="Alice").exclude(pk=stranger_owner.pk)
+        )
         self.assertEqual(new_owners.count(), 1)
         self.assertEqual(new_owners.first().created_by_id, self.viewer.pk)
         # The panel actually shows the submission worked, rather than a
@@ -283,7 +263,10 @@ class WikiScopedBoundaryConcealmentTests(TestCase):
 
     def test_post_shows_the_viewers_own_just_drawn_boundary_in_the_same_response(self) -> None:
         """The self-inconsistency the review caught: drawing your own boundary must not make it vanish."""
-        polygon = {"type": "MultiPolygon", "coordinates": [[[[0, 0], [0, 0.0005], [0.0005, 0.0005], [0.0005, 0], [0, 0]]]]}
+        polygon = {
+            "type": "MultiPolygon",
+            "coordinates": [[[[0, 0], [0, 0.0005], [0.0005, 0.0005], [0.0005, 0], [0, 0]]]],
+        }
         with _CONCEALED:
             response = self.client.post(
                 reverse("location.wiki.boundary", args=[self.wiki.location.slug]),
@@ -297,7 +280,10 @@ class WikiScopedBoundaryConcealmentTests(TestCase):
 
     def test_a_later_get_still_hides_it_from_the_same_concealed_viewer(self) -> None:
         """The POST override is scoped to that one response - a subsequent GET has no such certainty and must hide it again."""
-        polygon = {"type": "MultiPolygon", "coordinates": [[[[0, 0], [0, 0.0005], [0.0005, 0.0005], [0.0005, 0], [0, 0]]]]}
+        polygon = {
+            "type": "MultiPolygon",
+            "coordinates": [[[[0, 0], [0, 0.0005], [0.0005, 0.0005], [0.0005, 0], [0, 0]]]],
+        }
         with _CONCEALED:
             self.client.post(
                 reverse("location.wiki.boundary", args=[self.wiki.location.slug]),
@@ -311,13 +297,9 @@ class WikiScopedBoundaryConcealmentTests(TestCase):
 class SearchResultUsesConcealedValuesTests(TestCase):
     """A surviving search candidate's displayed text must be the concealed value, not the live row.
 
-    This is the critical content-leak the fourth round's adversarial review
-    caught in the search fix itself: the over-fetch+reverify gate only
-    decided whether a concealed wiki could appear in results at all: the
-    SearchResult it then built still read wiki.name/description straight off
-    the live row. A term matching only via a friend's alias must not display
-    the wiki's true, stranger-renamed title.
-    """
+    This is the critical content-leak the fourth round's adversarial review caught in the search fix itself: the
+    over-fetch+reverify gate only decided whether a concealed wiki could appear in results at all: the
+    SearchResult it then built still read wiki.name/description straight off the live row."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -332,7 +314,9 @@ class SearchResultUsesConcealedValuesTests(TestCase):
         from urbanlens.dashboard.services.global_search.providers import WikiSearchProvider
 
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
-            Wiki.objects.filter(pk=self.wiki.pk).update(name="Haunted Steel Mill", description="stranger's security notes")
+            Wiki.objects.filter(pk=self.wiki.pk).update(
+                name="Haunted Steel Mill", description="stranger's security notes"
+            )
         baker.make(WikiAlias, wiki=self.wiki, name="Old Warehouse", created_by=self.friend)
 
         parsed = parse_query("warehouse")
@@ -389,3 +373,37 @@ class AutocompleteUsesConcealedValuesTests(TestCase):
 
         pin_results = [r for r in results if r.pin_slug == pin.slug]
         self.assertTrue(all("Stranger Depot Yard" not in r.subtitle for r in pin_results))
+
+
+class ConcealedWikiTextBatchTests(TestCase):
+    """The concealed re-check reads alias and tag text once per batch, not once per candidate (G1-19)."""
+
+    def test_a_batch_of_wikis_costs_one_alias_read_and_one_tag_read(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from urbanlens.dashboard.models.aliases.model import WikiAlias
+        from urbanlens.dashboard.services.global_search.providers import ConcealedWikiText
+
+        wiki, viewer, friend, stranger = _wiki_with_viewer_friend_stranger()
+        from urbanlens.dashboard.models.place.model import Place
+
+        others = [
+            baker.make(Wiki, location=baker.make(Location, place=baker.make(Place)), name=f"Mill {index}")
+            for index in range(4)
+        ]
+        baker.make(WikiAlias, wiki=wiki, name="Friendly Depot", created_by=friend)
+        baker.make(WikiAlias, wiki=others[0], name="Own Yard", created_by=viewer)
+        batch = list(Wiki.objects.filter(pk__in=[wiki.pk, *(other.pk for other in others)]).select_related("location"))
+        text = ConcealedWikiText(viewer)
+
+        with CaptureQueriesContext(connection) as ctx:
+            text.load(batch)
+        alias_reads = [q for q in ctx.captured_queries if "dashboard_wiki_aliases" in q["sql"]]
+        tag_reads = [q for q in ctx.captured_queries if "dashboard_place_external_tags" in q["sql"]]
+        self.assertEqual((len(alias_reads), len(tag_reads)), (1, 1))
+
+        with CaptureQueriesContext(connection) as again:
+            haystacks = text.haystacks(next(row for row in batch if row.pk == wiki.pk))
+        self.assertFalse([q for q in again.captured_queries if "dashboard_wiki_aliases" in q["sql"]])
+        self.assertIn("friendly depot", haystacks)

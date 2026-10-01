@@ -1,14 +1,6 @@
 /**
- * Reading the toast notifications the app reports every result through.
- *
- * `CLAUDE.md` states the rule these helpers encode: results and errors surface
- * as toasts. That makes a toast the single most reliable place to assert what
- * the server actually decided - more reliable than re-reading the page, because
- * a failed action frequently leaves the page looking exactly as it did before.
- *
- * Toasts are rendered by toastr 2.1.4 (loaded in `themes/base.html`) with a
- * 4.5-second timeout, so an assertion has to be made promptly after the action
- * that provoked it rather than at the end of a long test.
+ * Reading the toast notifications the app reports every result through. `CLAUDE.md` states the rule
+ * these helpers encode: results and errors surface as toasts.
  */
 
 import { expect, type Locator, type Page } from "@playwright/test";

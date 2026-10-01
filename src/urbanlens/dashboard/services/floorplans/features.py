@@ -1,31 +1,13 @@
-"""A floorplan's drawable items as GeoJSON, filtered by viewport, storey and kind.
-
-The map-facing counterpart to the document (``serialization.document_for``).
-Two different questions:
-
-- *"What is this building's plan?"* - the document: nested, whole, editable,
-  and the shape the editor round-trips.
-- *"What should I draw right now?"* - this: flat GeoJSON features for one
-  storey inside one viewport, which is what a renderer (Leaflet, QGIS,
-  anything that speaks GeoJSON) actually consumes.
-
-This is where plan-local metres become WGS-84. The projection mirrors
-``frontend/ts/shared/floorplan/coords.ts`` exactly - same Earth radius, same
-equirectangular approximation about the plan origin - because the editor draws
-in local metres and the map draws these features, and a disagreement between
-the two would show up as a plan that shifts when you switch views.
-
-Filtering happens in Python rather than the database: walls are stored as four
-float columns, not geometry, so there is no spatial index to defer to. That is
-the right trade - the bbox exists to bound what crosses the wire, and one
-storey of one building is a few hundred rows to begin with.
-"""
+"""A floorplan's drawable items as GeoJSON, filtered by viewport, storey and kind."""
 
 from __future__ import annotations
 
 import logging
 import math
 from typing import TYPE_CHECKING, Any
+
+from django.db.models import F, Max, Min, Q, QuerySet
+from django.db.models.functions import Abs, Greatest, Least
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanOpening
@@ -45,11 +27,7 @@ EARTH_RADIUS_M = 6371008.8
 
 
 class PlanProjection:
-    """Plan-local metres to WGS-84 for one plan origin.
-
-    The server-side twin of ``coords.ts``'s class of the same name; keep the
-    two in step.
-    """
+    """Plan-local metres to WGS-84 for one plan origin."""
 
     def __init__(self, origin_lat: float, origin_lng: float) -> None:
         self.origin_lat = origin_lat
@@ -64,6 +42,67 @@ class PlanProjection:
             self.origin_lat + y / self.metres_per_deg_lat,
         ]
 
+    def local_bounds(self, bbox: tuple[float, float, float, float]) -> LocalBounds:
+        """A WGS-84 viewport as the plan-local rectangle it covers.
+
+        The projection is linear in each axis, so the rectangle is exact, and an item overlaps the viewport
+        exactly when its local bounds overlap this.
+
+        Args:
+            bbox: ``(min_lng, min_lat, max_lng, max_lat)``.
+
+        Returns:
+            The local-metre bounds; x is unbounded when the origin sits on a pole and longitude means nothing.
+        """
+        min_lng, min_lat, max_lng, max_lat = bbox
+        min_y = (min_lat - self.origin_lat) * self.metres_per_deg_lat
+        max_y = (max_lat - self.origin_lat) * self.metres_per_deg_lat
+        if not self.metres_per_deg_lng:
+            return LocalBounds(None, min_y, None, max_y)
+        return LocalBounds((min_lng - self.origin_lng) * self.metres_per_deg_lng, min_y, (max_lng - self.origin_lng) * self.metres_per_deg_lng, max_y)
+
+
+class LocalBounds:
+    """A plan-local rectangle in metres; a None x edge means unbounded."""
+
+    def __init__(self, min_x: float | None, min_y: float, max_x: float | None, max_y: float) -> None:
+        self.min_x = min_x
+        self.min_y = min_y
+        self.max_x = max_x
+        self.max_y = max_y
+
+    def segments(self) -> Q:
+        """Rows whose segment ``(ax, ay)-(bx, by)`` has bounds overlapping this rectangle."""
+        condition = Q(low_y__lte=self.max_y, high_y__gte=self.min_y)
+        if self.min_x is not None and self.max_x is not None:
+            condition &= Q(low_x__lte=self.max_x, high_x__gte=self.min_x)
+        return condition
+
+    def points(self) -> Q:
+        """Rows whose point ``(x, y)`` falls inside this rectangle."""
+        condition = Q(y__gte=self.min_y, y__lte=self.max_y)
+        if self.min_x is not None and self.max_x is not None:
+            condition &= Q(x__gte=self.min_x, x__lte=self.max_x)
+        return condition
+
+
+def _segment_extent(walls: QuerySet) -> QuerySet:
+    return walls.annotate(low_x=Least("ax", "bx"), high_x=Greatest("ax", "bx"), low_y=Least("ay", "by"), high_y=Greatest("ay", "by"))
+
+
+def ground_level(floorplan: Floorplan) -> int | None:
+    """The storey a caller that names none is shown: level 0, else the one nearest it.
+
+    Args:
+        floorplan: The plan version.
+
+    Returns:
+        The level, or None when the plan has no floors.
+    """
+    from urbanlens.dashboard.models.floorplans.model import FloorplanFloor
+
+    return FloorplanFloor.objects.filter(floorplan=floorplan).order_by(Abs("level"), "level").values_list("level", flat=True).first()
+
 
 def _projection(floorplan: Floorplan) -> PlanProjection | None:
     """The plan's projection, or None when it has no origin to project about."""
@@ -72,29 +111,15 @@ def _projection(floorplan: Floorplan) -> PlanProjection | None:
     return PlanProjection(float(floorplan.origin_lat), float(floorplan.origin_lng))
 
 
-def _overlaps(points: list[list[float]], bbox: tuple[float, float, float, float]) -> bool:
-    """Whether a feature's own bounds meet the requested viewport."""
-    min_lng, min_lat, max_lng, max_lat = bbox
-    lngs = [point[0] for point in points]
-    lats = [point[1] for point in points]
-    return not (max(lngs) < min_lng or min(lngs) > max_lng or max(lats) < min_lat or min(lats) > max_lat)
-
-
 def _opening_state(opening: FloorplanOpening) -> str:
     """Whether this opening is presently secured, as one word.
-
-    A door may carry several locks, and the useful answer is about the door
-    rather than about any one of them: a padlock on and a deadbolt off still
-    means the door does not open. Only when every lock is known to be off does
-    the door read as unlocked; with no locks recorded, or none of them known,
-    the honest answer is that nobody has said.
+    A door may carry several locks, and the useful answer is about the door rather than about any one of them: a padlock on and a deadbolt off still means the door does not open.
 
     Args:
         opening: The opening, with its locks prefetched.
 
     Returns:
-        ``"locked"``, ``"unlocked"`` or ``"unknown"``.
-    """
+        ``"locked"``, ``"unlocked"`` or ``"unknown"``."""
     states = [lock.state for lock in opening.locks.all()]
     if any(state == "locked" for state in states):
         return "locked"
@@ -116,20 +141,19 @@ def feature_collection(
 
     Args:
         floorplan: The plan version to read.
-        bbox: ``(min_lng, min_lat, max_lng, max_lat)`` in WGS-84; only items
-            overlapping it.
+        bbox: ``(min_lng, min_lat, max_lng, max_lat)`` in WGS-84; only items overlapping it.
         level: Restrict to one storey by its level number.
-        kind: Restrict walls to one :class:`FloorplanWallKind`, or markers to
-            one :class:`FloorplanMarkerKind`.
+        kind: Restrict walls to one :class:`FloorplanWallKind`, or markers to one :class:`FloorplanMarkerKind`.
         item_types: Which of wall/room/marker to include.
         limit: Hard cap on features returned.
 
     Returns:
-        A ``FeatureCollection`` dict, with ``truncated`` set on its top level
-        when the cap was reached - silence about a cut-off list reads as
-        "that's everything", which it would not be. Empty when the plan has no
-        origin, since nothing can be placed on a map without one.
-    """
+        A ``FeatureCollection`` dict, with ``truncated`` set on its top level when the cap was reached - silence about a cut-off list reads as "that's everything", which it would not be.
+
+    The viewport, the kind and the cap are applied in the query, so a read costs the rows it returns rather
+    than every row on the selected floors."""
+    from django.db.models import prefetch_related_objects
+
     from urbanlens.dashboard.models.floorplans.model import FloorplanFloor, FloorplanMarker, FloorplanRoomSeed, FloorplanWall
 
     projection = _projection(floorplan)
@@ -145,24 +169,27 @@ def feature_collection(
     if not floor_levels:
         return {"type": "FeatureCollection", "features": features, "count": 0, "truncated": False, "floorplan": str(floorplan.uuid)}
 
-    def add(feature: dict[str, Any], points: list[list[float]]) -> bool:
-        """Append a feature unless filtered out or over the cap."""
+    window = projection.local_bounds(bbox) if bbox is not None else None
+
+    def take(rows: QuerySet) -> list[Any]:
+        """At most the remaining budget of *rows*, noting when there were more."""
         nonlocal truncated
-        if bbox is not None and not _overlaps(points, bbox):
-            return True
-        if len(features) >= limit:
+        remaining = limit - len(features)
+        fetched = list(rows.order_by("floor_id", "sort_order", "pk")[: remaining + 1]) if remaining > 0 else list(rows[:1])
+        if len(fetched) > remaining:
             truncated = True
-            return False
-        features.append(feature)
-        return True
+            return fetched[: max(remaining, 0)]
+        return fetched
 
     if "wall" in item_types:
-        # Locks come with the openings, not one query per door: a renderer's
-        # first question about a door is whether it opens, and asking it per
-        # opening would be a query per opening.
-        walls = FloorplanWall.objects.filter(floor_id__in=floor_levels).prefetch_related("openings__locks")
+        walls_qs = _segment_extent(FloorplanWall.objects.filter(floor_id__in=floor_levels))
         if kind:
-            walls = walls.filter(kind=kind)
+            walls_qs = walls_qs.filter(kind=kind)
+        if window is not None:
+            walls_qs = walls_qs.filter(window.segments())
+        walls = take(walls_qs)
+        # Locks come with the openings, not one query per door - and only for the walls kept.
+        prefetch_related_objects(walls, "openings__locks")
         for wall in walls:
             line = [projection.to_world(wall.ax, wall.ay), projection.to_world(wall.bx, wall.by)]
             feature = {
@@ -189,23 +216,23 @@ def feature_collection(
                             "t_end": opening.t_end,
                             "swing": opening.swing,
                             "sill_meters": opening.sill_meters,
-                            # One word for what a reader wants to know about a
-                            # door, rather than the locks themselves: a lock's
-                            # type, condition and what opens it are the
-                            # document's business, and a map wants to colour a
-                            # door. Locked if any lock on it is - a door with a
-                            # padlock on and a deadbolt off is locked.
+                            # One word for what a reader wants to know about a door, rather than the
+                            # locks themselves: a lock's type, condition and what opens it are the
+                            # document's business, and a map wants to colour a door.
+                            # Locked if any lock on it is - a door with a padlock on and a deadbolt
                             "lock_state": _opening_state(opening),
                         }
                         for opening in wall.openings.all()
                     ],
                 },
             }
-            if not add(feature, line):
-                break
+            features.append(feature)
 
     if "room" in item_types and not truncated:
-        for room in FloorplanRoomSeed.objects.filter(floor_id__in=floor_levels):
+        rooms = FloorplanRoomSeed.objects.filter(floor_id__in=floor_levels)
+        if window is not None:
+            rooms = rooms.filter(window.points())
+        for room in take(rooms):
             point = projection.to_world(room.x, room.y)
             feature = {
                 "type": "Feature",
@@ -220,14 +247,15 @@ def feature_collection(
                     "level": floor_levels.get(room.floor_id),
                 },
             }
-            if not add(feature, [point]):
-                break
+            features.append(feature)
 
     if "marker" in item_types and not truncated:
         markers = FloorplanMarker.objects.filter(floor_id__in=floor_levels)
         if kind:
             markers = markers.filter(kind=kind)
-        for marker in markers:
+        if window is not None:
+            markers = markers.filter(window.points())
+        for marker in take(markers):
             point = projection.to_world(marker.x, marker.y)
             feature = {
                 "type": "Feature",
@@ -245,8 +273,7 @@ def feature_collection(
                     "level": floor_levels.get(marker.floor_id),
                 },
             }
-            if not add(feature, [point]):
-                break
+            features.append(feature)
 
     return {
         "type": "FeatureCollection",
@@ -264,28 +291,20 @@ def bounds_of(floorplan: Floorplan) -> list[float] | None:
         floorplan: The plan version.
 
     Returns:
-        ``[min_lng, min_lat, max_lng, max_lat]``, or None when the plan has no
-        origin or nothing placed.
-    """
+        ``[min_lng, min_lat, max_lng, max_lat]``, or None when the plan has no origin or nothing placed."""
     from urbanlens.dashboard.models.floorplans.model import FloorplanFloor, FloorplanMarker, FloorplanRoomSeed, FloorplanWall
 
     projection = _projection(floorplan)
     if projection is None:
         return None
 
-    floor_ids = list(FloorplanFloor.objects.filter(floorplan=floorplan).values_list("pk", flat=True))
-    if not floor_ids:
-        return None
-
-    xs: list[float] = []
-    ys: list[float] = []
-    for ax, ay, bx, by in FloorplanWall.objects.filter(floor_id__in=floor_ids).values_list("ax", "ay", "bx", "by"):
-        xs.extend((ax, bx))
-        ys.extend((ay, by))
-    for model in (FloorplanRoomSeed, FloorplanMarker):
-        for x, y in model.objects.filter(floor_id__in=floor_ids).values_list("x", "y"):
-            xs.append(x)
-            ys.append(y)
+    floors = FloorplanFloor.objects.filter(floorplan=floorplan).values("pk")
+    extents = [
+        FloorplanWall.objects.filter(floor_id__in=floors).aggregate(min_x=Min(Least("ax", "bx")), min_y=Min(Least("ay", "by")), max_x=Max(Greatest("ax", "bx")), max_y=Max(Greatest("ay", "by"))),
+        *(model.objects.filter(floor_id__in=floors).aggregate(min_x=Min("x"), min_y=Min("y"), max_x=Max(F("x")), max_y=Max(F("y"))) for model in (FloorplanRoomSeed, FloorplanMarker)),
+    ]
+    xs = [value for extent in extents for value in (extent["min_x"], extent["max_x"]) if value is not None]
+    ys = [value for extent in extents for value in (extent["min_y"], extent["max_y"]) if value is not None]
     if not xs:
         return None
 

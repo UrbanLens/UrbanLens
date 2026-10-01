@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, CharField, ForeignKey, Index, UniqueConstraint
+from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.social_link.queryset import SocialLinkManager
@@ -12,14 +12,7 @@ from urbanlens.dashboard.models.social_link.queryset import SocialLinkManager
 
 class SocialLink(abstract.DashboardModel):
     """A single social media or community link belonging to a user profile.
-
-    Storing links in a separate table (rather than as columns on Profile) means
-    new platforms can be added without schema migrations - only the service-layer
-    lookup tables need updating.
-
-    The ``platform`` field is a free-form string key (e.g. ``"instagram"``,
-    ``"bluesky"``).  Validation and URL construction are handled by
-    :mod:`urbanlens.dashboard.services.profile.social_links`, not by this model.
+    Storing links in a separate table (rather than as columns on Profile) means new platforms can be added without schema migrations - only the service-layer lookup tables need updating.
     """
 
     platform = CharField(max_length=30)

@@ -1,15 +1,4 @@
-"""Tests for the six admin-configurable site limits added to SiteSettings.
-
-Covers:
-- max_friends_per_user - Friendship.accept() refuses once either side is at the cap.
-- max_pins_per_list - PinListAddPinsView truncates a batch add to fit.
-- max_upcoming_trips_per_user - TripCreateView refuses a new trip past the cap.
-- max_trip_activities - TripActivitiesView refuses a new activity past the cap.
-- max_safety_checkin_contacts - validate_notifiable_contacts rejects past the cap.
-
-Every setting is 0 = unlimited; each test suite verifies both the enforced
-case and that 0 disables enforcement entirely.
-"""
+"""Tests for the six admin-configurable site limits added to SiteSettings."""
 
 from __future__ import annotations
 
@@ -195,7 +184,9 @@ class MaxUpcomingTripsPerUserTests(TestCase):
         self.client.force_login(self.user)
 
     def _make_upcoming_trip(self) -> Trip:
-        trip = Trip.objects.create(name="Existing Trip", creator=self.profile, start_date=datetime.date.today() + datetime.timedelta(days=3))
+        trip = Trip.objects.create(
+            name="Existing Trip", creator=self.profile, start_date=datetime.date.today() + datetime.timedelta(days=3)
+        )
         TripMembership.objects.get_or_create(trip=trip, profile=self.profile, defaults={"rsvp": "yes"})
         return trip
 
@@ -205,7 +196,9 @@ class MaxUpcomingTripsPerUserTests(TestCase):
         settings.save()
         self._make_upcoming_trip()
 
-        resp = self.client.post(reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json")
+        resp = self.client.post(
+            reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 400)
         self.assertFalse(Trip.objects.filter(name="New Trip").exists())
 
@@ -215,7 +208,9 @@ class MaxUpcomingTripsPerUserTests(TestCase):
         settings.save()
         self._make_upcoming_trip()
 
-        resp = self.client.post(reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json")
+        resp = self.client.post(
+            reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(Trip.objects.filter(name="New Trip").exists())
 
@@ -226,7 +221,9 @@ class MaxUpcomingTripsPerUserTests(TestCase):
         for _ in range(3):
             self._make_upcoming_trip()
 
-        resp = self.client.post(reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json")
+        resp = self.client.post(
+            reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 200)
 
 
@@ -249,7 +246,9 @@ class MaxTripActivitiesTests(TestCase):
         settings.save()
         TripActivity.objects.create(trip=self.trip, added_by=self.profile, title="Existing", order=0)
 
-        resp = self.client.post(self._url(), data=json.dumps({"title": "New Activity"}), content_type="application/json")
+        resp = self.client.post(
+            self._url(), data=json.dumps({"title": "New Activity"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 400)
         self.assertFalse(TripActivity.objects.filter(trip=self.trip, title="New Activity").exists())
 
@@ -258,7 +257,9 @@ class MaxTripActivitiesTests(TestCase):
         settings.max_trip_activities = 5
         settings.save()
 
-        resp = self.client.post(self._url(), data=json.dumps({"title": "New Activity"}), content_type="application/json")
+        resp = self.client.post(
+            self._url(), data=json.dumps({"title": "New Activity"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(TripActivity.objects.filter(trip=self.trip, title="New Activity").exists())
 
@@ -291,6 +292,7 @@ class SiteAdminFormTests(TestCase):
             "max_pins_per_list",
             "max_friends_per_user",
             "max_group_chat_members",
+            "max_group_chats_per_user",
             "max_safety_checkin_contacts",
         ):
             self.assertContains(resp, field)
@@ -304,6 +306,7 @@ class SiteAdminFormTests(TestCase):
                 "max_pins_per_list": "13",
                 "max_friends_per_user": "99",
                 "max_group_chat_members": "3",
+                "max_group_chats_per_user": "12",
                 "max_safety_checkin_contacts": "2",
             },
         )
@@ -313,6 +316,7 @@ class SiteAdminFormTests(TestCase):
         self.assertEqual(settings.max_pins_per_list, 13)
         self.assertEqual(settings.max_friends_per_user, 99)
         self.assertEqual(settings.max_group_chat_members, 3)
+        self.assertEqual(settings.max_group_chats_per_user, 12)
         self.assertEqual(settings.max_safety_checkin_contacts, 2)
 
     def test_post_clamps_negative_values_to_zero(self) -> None:

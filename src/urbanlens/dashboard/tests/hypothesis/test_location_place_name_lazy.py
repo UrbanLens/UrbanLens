@@ -4,7 +4,7 @@ Covers the full lazy-loading chain: the model property is cache-only,
 tasks.resolve_location_place_name is what actually populates the cache in the
 background, and PinOverviewView (the actual renderer of
 pin_overview_partial.html/deduplicated_identity_fields, loaded as an HTMX
-fragment by the main pin detail page) is what dispatches it - see each
+fragment by the main Private Pin page) is what dispatches it - see each
 piece's own docstring for the reasoning. Regression coverage for the reported
 bug: "we're still contacting external APIs (like google places) immediately
 on the import of each pin... even when place data should be cached."
@@ -30,7 +30,10 @@ class ResolveLocationPlaceNameTaskTests(TestCase):
         from urbanlens.dashboard.tasks import resolve_location_place_name
 
         location = baker.make(Location, latitude="40.0", longitude="-74.0", google_place=None)
-        with patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value="Old Factory"):
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value="Old Factory",
+        ):
             result = resolve_location_place_name(location.pk)
         self.assertEqual(result, "Old Factory")
         location.refresh_from_db()
@@ -66,7 +69,11 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
     def _dispatched_location_ids(self, mock_enqueue) -> list[int]:
         from urbanlens.dashboard.tasks import resolve_location_place_name
 
-        return [call.args[1] for call in mock_enqueue.call_args_list if call.args and call.args[0] is resolve_location_place_name]
+        return [
+            call.args[1]
+            for call in mock_enqueue.call_args_list
+            if call.args and call.args[0] is resolve_location_place_name
+        ]
 
     def test_dispatches_when_uncached_and_apis_enabled(self) -> None:
         self.profile.external_apis_enabled = True
@@ -91,21 +98,16 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
         self.assertEqual(self._dispatched_location_ids(mock_enqueue), [])
 
     def test_page_render_never_calls_the_live_resolver(self) -> None:
-        """The actual reported bug: rendering the pin page must never itself
-        make a live Google Places/Geocoding call, cached or not.
+        """The actual reported bug: rendering the pin page must never itself make a live Google Places/Geocoding call, cached or not.
 
-        ``safely_enqueue_task`` is stubbed so this measures the *render* path
-        only. The view legitimately dispatches resolve_location_place_name,
-        which legitimately resolves - and this suite runs with
-        UL_CELERY_TASK_ALWAYS_EAGER outside Docker, where dispatching runs it
-        inline. Leaving it unstubbed tests Celery's eager mode rather than the
-        view (and fails, since the eager task resolves during the request).
-        """
+        ``safely_enqueue_task`` is stubbed so this measures the *render* path only."""
         self.profile.external_apis_enabled = True
         self.profile.save(update_fields=["external_apis_enabled"])
         with (
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue,
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name") as mock_resolve,
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name"
+            ) as mock_resolve,
         ):
             response = self._get_pin_page()
         self.assertEqual(response.status_code, 200)

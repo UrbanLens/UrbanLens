@@ -1,10 +1,4 @@
-"""Deleting your own photo must not break it for people you shared it with.
-
-``create_pin_from_share`` copies a photo by assigning the *same* storage key
-(``image=image.image.name``) - the bytes are deliberately not duplicated. Deleting an
-``Image`` row, however, calls ``image.image.delete()``, which removes that file from
-storage outright. Nothing checks whether another row still points at it.
-"""
+"""Deleting your own photo must not break it for people you shared it with."""
 
 from __future__ import annotations
 
@@ -19,6 +13,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.model import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.media.images import delete_stored_file
+from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
 from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
 
@@ -37,7 +32,11 @@ class SharedImageFileDeletionTests(TestCase):
         self.stored_name = self.image.image.name
 
         share = PinShare.objects.create(
-            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING,
+            pin=self.pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
         )
         share.images.set([self.image])
         self.recipient_pin = create_pin_from_share(share)
@@ -85,3 +84,59 @@ class SharedImageFileDeletionTests(TestCase):
         remaining.delete()
 
         self.assertFalse(default_storage.exists(self.stored_name))
+
+
+class AnalysisThumbnailDeletionTests(SharedImageFileDeletionTests):
+    """The sandbox's downscaled analysis copy belongs to one row and goes with it (P14)."""
+
+    def setUp(self):
+        super().setUp()
+        self.image.analysis_thumbnail.save("shared-photo-analysis.jpg", ContentFile(b"analysis"), save=True)
+        self.analysis_name = self.image.analysis_thumbnail.name
+
+    def test_deleting_an_unshared_photo_removes_its_analysis_copy(self):
+        solo = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, file_size=9)
+        solo.image.save("solo-photo.jpg", ContentFile(b"solo-bytes"), save=True)
+        solo.analysis_thumbnail.save("solo-analysis.jpg", ContentFile(b"analysis"), save=True)
+        analysis = solo.analysis_thumbnail.name
+
+        delete_stored_file(solo)
+        solo.delete()
+
+        self.assertFalse(default_storage.exists(analysis))
+
+    def test_a_shared_original_still_removes_its_own_analysis_copy(self):
+        self._sender_deletes_their_photo()
+
+        self.assertTrue(default_storage.exists(self.stored_name), "the premise failed: the shared file went")
+        self.assertFalse(
+            default_storage.exists(self.analysis_name),
+            "the sender's analysis copy outlived its row because the original file was still shared",
+        )
+
+
+class AccountDeletionPhotoFileTests(SharedImageFileDeletionTests):
+    """Hard-deleting an account applies the same shared-file rule as deleting one photo."""
+
+    def test_deleting_the_senders_account_keeps_the_file_a_recipient_was_shared(self):
+        hard_delete_profile(self.sender)
+
+        self.assertTrue(
+            default_storage.exists(self.stored_name),
+            "deleting the sender's account removed the file the recipient's shared copy points at",
+        )
+
+    def test_deleting_an_account_removes_every_derived_file_of_its_photos(self):
+        solo = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, file_size=9)
+        solo.image.save("solo-photo.jpg", ContentFile(b"solo-bytes"), save=False)
+        for field_name in ("thumbnail", "marker_thumbnail", "analysis_thumbnail"):
+            getattr(solo, field_name).save(f"solo-{field_name}.jpg", ContentFile(b"derived"), save=False)
+        solo.save()
+        names = [solo.image.name, solo.thumbnail.name, solo.marker_thumbnail.name, solo.analysis_thumbnail.name]
+        self.assertTrue(
+            all(default_storage.exists(name) for name in names), "the premise failed: a file was not written"
+        )
+
+        hard_delete_profile(self.sender)
+
+        self.assertEqual([name for name in names if default_storage.exists(name)], [])

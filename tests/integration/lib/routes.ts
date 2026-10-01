@@ -1,16 +1,6 @@
 /**
- * Site paths, in one place.
- *
- * Specs address pages through these rather than through string literals, so a
- * route that moves is one edit here instead of a grep across the suite. The
- * values are the output of Django's own `reverse()` against this urlconf, not
- * transcriptions of the pattern strings - `dashboard/urls.py` nests `include()`
- * several levels deep and the assembled path is not obvious from reading it.
- *
- * Deliberately not exhaustive. A route earns an entry when a spec navigates to
- * it; the "every page in the navigation still loads" sweep discovers its
- * targets from the rendered menu instead, so it stays correct as pages are
- * added.
+ * Site paths, in one place. Specs address pages through these rather than through string literals,
+ * so a route that moves is one edit here instead of a grep across the suite.
  */
 
 /** Reachable without signing in. */
@@ -37,6 +27,9 @@ export const appRoutes = {
     lists: "/dashboard/lists/",
     trips: "/dashboard/trips/",
     memories: "/dashboard/memories/",
+    vaultHome: "/dashboard/vault/",
+    vaultPhotos: "/dashboard/vault/photos/",
+    vaultDocuments: "/dashboard/vault/documents/",
     messages: "/dashboard/messages/",
     organize: "/dashboard/organize/",
     safety: "/dashboard/safety/",
@@ -73,6 +66,33 @@ export const contentRoutes = {
 /** Staff-only surfaces. */
 export const staffRoutes = {
     siteAdmin: "/dashboard/site-admin/",
+    siteAdminUsers: "/dashboard/site-admin/users/",
+    siteAdminSettings: "/dashboard/site-admin/settings/",
+    siteAdminStats: "/dashboard/site-admin/stats/",
+    djangoAdmin: "/admin/",
+    djangoAdminLogin: "/admin/login/",
+} as const;
+
+/** Internal session-authenticated REST. Not the published external API. */
+export const restRoutes = {
+    pins: "/dashboard/rest/pins/",
+    pin: (uuid: string) => `/dashboard/rest/pins/${uuid}/`,
+    review: (pinPk: number | string) => `/dashboard/rest/reviews/create_or_update/${pinPk}/`,
+} as const;
+
+export const toolsRoutes = {
+    exportStart: "/dashboard/tools/export/start/",
+    exportStatus: (jobId: string) => `/dashboard/tools/export/status/${jobId}/`,
+    exportDownload: (jobId: string) => `/dashboard/tools/export/download/${jobId}/`,
+    adminTools: "/dashboard/tools/admin/",
+} as const;
+
+export const mediaRoute = (path: string): string => `/media/${path.replace(/^\/+/, "")}`;
+
+export const oauthRoutes = {
+    authorize: "/oauth/authorize/",
+    token: "/oauth/token/",
+    introspect: "/oauth/introspect/",
 } as const;
 
 /**
@@ -92,6 +112,7 @@ export const shellFragmentRoutes = {
 /** JSON endpoints the map page itself calls, useful as service-level probes. */
 export const mapDataRoutes = {
     pins: "/dashboard/map/pins/",
+    document: "/dashboard/map/document/",
     pinsMeta: "/dashboard/map/pins/meta/",
     pinList: "/dashboard/map/pins/list/",
     search: "/dashboard/map/search/",

@@ -1,20 +1,4 @@
-"""Regression test: cids stuck pending on REData's own end must not retry forever.
-
-REData's cid-resolution cache policy (StaggeredCachePolicy, min_ttl_hours=720 by
-default - see ../REData's core.services.staggered_cache) has a hard minimum-TTL
-floor: once a cid has been checked at all, REData won't queue another
-resolution attempt for it for weeks, but keeps reporting it as "pending" (HTTP
-200, result.request_failed=False) every time it's asked, since it's neither
-resolved nor confirmed unresolvable. Before this fix,
-resolve_deferred_pin_locations treated that identically to a batch that was
-still making real progress and retried every ~120s forever with no cap - the
-existing consecutive_request_failures cap only covers whole-batch request
-failures, not "REData responded fine but nothing moved."
-
-retry()'s args list is [profile_id, remaining_lists, auto_tag, total,
-consecutive_request_failures, consecutive_no_progress] - tests index from the
-end.
-"""
+"""Regression test: cids stuck pending on REData's own end must not retry forever."""
 
 from __future__ import annotations
 
@@ -57,7 +41,10 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
 
     def test_no_progress_below_the_cap_still_retries(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._all_pending_result()),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
+                return_value=self._all_pending_result(),
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
@@ -76,7 +63,10 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
     def test_a_batch_past_the_deadline_gives_up_and_notifies_instead_of_retrying(self) -> None:
         """The cap now only widens the retry gap; two days of no progress ends it."""
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._all_pending_result()),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
+                return_value=self._all_pending_result(),
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
@@ -96,11 +86,10 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
         self.assertEqual(notification.importance, Importance.HIGH)
 
     def test_partial_progress_resets_the_no_progress_counter(self) -> None:
-        """One cid resolving out of the batch is real progress, even if the rest are
-        still pending - it must not inherit whatever no-progress streak preceded it,
-        or a REData queue that's slowly working through a large batch would still get
-        cut off early by a stale counter."""
-        partial = CidResolutionResult(provider=PROVIDER_REDATA, resolved={111: (41.348754, -71.453896)}, pending=[222], request_failed=False)
+        """One cid resolving out of the batch is real progress, even if the rest are still pending - it must not inherit whatever no-progress streak preceded it, or a REData queue that's slowly working through a large batch would still get cut off early by a stale counter."""
+        partial = CidResolutionResult(
+            provider=PROVIDER_REDATA, resolved={111: (41.348754, -71.453896)}, pending=[222], request_failed=False
+        )
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=partial),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),

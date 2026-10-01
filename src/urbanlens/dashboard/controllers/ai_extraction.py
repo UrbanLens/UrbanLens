@@ -1,8 +1,4 @@
-"""AI link-extraction views - start a run from the pin page, review past runs.
-
-The review page is deliberately not linked anywhere in the site's navigation
-(per the feature request); users reach it through the completion notification.
-"""
+"""AI link-extraction views."""
 
 from __future__ import annotations
 
@@ -30,7 +26,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Review page cap - plenty for a per-user history at <=~20 runs/day.
+#: Review page cap (<=~20 runs/day).
 _REVIEW_PAGE_LIMIT = 100
 
 
@@ -50,7 +46,8 @@ class PinLinkExtractionView(LoginRequiredMixin, View):
         try:
             start_link_extraction(request.user, profile, pin, request.POST.get("url", ""))
         except LinkExtractionError as exc:
-            return _toast(str(exc), "warning", status=403)
+            logger.info("link extraction rejected for pin %s: %s", pin.slug, exc)
+            return _toast("Couldn't start reading that link right now.", "warning", status=403)
         remaining = extractions_remaining_today(profile)
         return _toast(f"Reading that page in the background - you'll get a notification when it's done. ({remaining} run(s) left today.)", "success")
 

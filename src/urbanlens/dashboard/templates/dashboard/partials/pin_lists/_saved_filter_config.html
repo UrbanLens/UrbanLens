@@ -1,0 +1,7 @@
+{% comment %}URLs for the saved-filter form (frontend/ts/shared/saved-filter-form.ts), wherever the form appears.{% endcomment %}
+<div id="saved-filter-config" hidden
+     data-delete-url-template="{% url 'saved_filters.delete' '00000000-0000-0000-0000-000000000000' %}"
+     data-region-search-url="{% url 'region_search.search' %}"
+     data-suggest-name-url="{% url 'saved_filters.suggest_name' %}"
+     data-map-center-lat="{{ map_center_lat|default:39.8283 }}"
+     data-map-center-lng="{{ map_center_lng|default:-98.5795 }}"></div>

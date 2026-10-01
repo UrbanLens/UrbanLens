@@ -24,9 +24,7 @@ PUSH_MESSAGE_LIMIT = 300
 
 def notification_group_name(profile_id: int) -> str:
     """Build the channel-layer group name for one profile's live notifications.
-
-    Every open browser session of that profile joins this group, so a single
-    ``group_send`` reaches all of the user's tabs at once.
+    Every open browser session of that profile joins this group, so a single ``group_send`` reaches all of the user's tabs at once.
 
     Args:
         profile_id: Primary key of the recipient's Profile.
@@ -63,11 +61,7 @@ def as_push_payload(notification: NotificationLog) -> dict[str, Any]:
 @receiver(post_save, sender=NotificationLog, dispatch_uid="notification_live_push")
 def push_notification_to_browser(sender: type[NotificationLog], instance: NotificationLog, created: bool, **kwargs: Any) -> None:
     """Broadcast a newly created notification to the recipient's browser sessions.
-
-    The broadcast runs after the transaction commits, so the browser's
-    follow-up unread-count fetch is guaranteed to see the new row. A
-    channel-layer failure (e.g. Valkey down) is logged and swallowed - live
-    delivery is best-effort and must never break notification creation.
+    The broadcast runs after the transaction commits, so the browser's follow-up unread-count fetch is guaranteed to see the new row.
 
     Args:
         sender: The ``NotificationLog`` model class.
@@ -84,15 +78,7 @@ def push_notification_to_browser(sender: type[NotificationLog], instance: Notifi
 @receiver(post_save, sender=NotificationLog, dispatch_uid="notification_text_alerts")
 def enqueue_text_alerts(sender: type[NotificationLog], instance: NotificationLog, created: bool, **kwargs: Any) -> None:
     """Queue the delayed WhatsApp/SMS alert for a new notification, per the recipient's toggles.
-
-    Central wiring for every notification type with a ``<type>_whatsapp``/
-    ``<type>_sms`` preference pair - previously only safety check-ins and DMs
-    ever delivered to these channels and every other toggle silently did
-    nothing (decision 2026-07-23: "Wire them all" in docs/NOTES.md). The
-    scheduling helper no-ops cheaply for
-    types without toggles and for recipients who left them off (the default),
-    and the delayed task re-checks read-state before ever sending. Runs after
-    commit so the Celery worker is guaranteed to see the row.
+    The scheduling helper no-ops cheaply for types without toggles and for recipients who left them off (the default), and the delayed task re-checks read-state before ever sending.
 
     Args:
         sender: The ``NotificationLog`` model class.
@@ -113,12 +99,7 @@ def enqueue_text_alerts(sender: type[NotificationLog], instance: NotificationLog
 @receiver(post_save, sender=NotificationLog, dispatch_uid="notification_native_push")
 def enqueue_native_push(sender: type[NotificationLog], instance: NotificationLog, created: bool, **kwargs: Any) -> None:
     """Enqueue delivery of a new notification to the recipient's native devices.
-
-    The WebSocket broadcast above only reaches open browser tabs; a native app
-    in the background needs a real push (UnifiedPush/ntfy - see
-    ``services.notifications.push``). Runs after commit so the Celery worker is guaranteed
-    to see the row, and the task itself exits immediately for profiles with no
-    registered devices.
+    The WebSocket broadcast above only reaches open browser tabs; a native app in the background needs a real push (UnifiedPush/ntfy - see ``services.notifications.push``).
 
     Args:
         sender: The ``NotificationLog`` model class.

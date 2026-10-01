@@ -10,11 +10,15 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.db.models import Model
+from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.social.connections import get_connections
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -22,18 +26,17 @@ if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
     from django.http.response import HttpResponseBase
 
+    from urbanlens.dashboard.services.core.session_access import SessionAccess
+
 
 class AlphaFeatureRequiredMixin:
     """Refuses users who do not hold :attr:`SiteFeature.ALPHA_FEATURES`.
 
-    The games (SpotGuessr, Trivia, Consensus) are alpha features: the same
-    entitlement that hides the games nav and the hub must also gate every
-    in-game route, otherwise anyone with a URL can play.
-
-    Mix this in **after** ``LoginRequiredMixin`` (e.g.
-    ``class FooView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View)``)
-    so anonymous visitors are redirected to the login page first rather than
-    receiving a bare 403.
+    The games (SpotGuessr, Trivia, Consensus) are alpha features: the same entitlement that hides the
+    games nav and the hub must also gate every in-game route, otherwise anyone with a URL can play.
+    Mix this in **after** ``LoginRequiredMixin`` (e.g. ``class FooView(LoginRequiredMixin,
+    AlphaFeatureRequiredMixin, View)``) so anonymous visitors are redirected to the login page first
+    rather than receiving a bare 403.
 
     Raises:
         PermissionDenied: When the authenticated user lacks the feature.
@@ -45,12 +48,44 @@ class AlphaFeatureRequiredMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
+def participant_session_or_404[SessionT: Model](access: SessionAccess[SessionT], profile: Profile, session_id: int) -> SessionT:
+    """The session, only if ``profile`` actively participates in it.
+
+    404 rather than 403, so a session someone else is playing does not reveal that it exists.
+
+    Raises:
+        Http404: The session does not exist, or ``profile`` is not an active participant.
+    """
+    session = access.session_for(session_id, profile.pk)
+    if session is None:
+        raise Http404("No such session for this profile.")
+    return session
+
+
+def refuse_unless_joined(access: SessionAccess[Any], session: Model, profile: Profile) -> JsonResponse | None:
+    """A 403 for an invitee who has not accepted, else None.
+
+    Reading a round advances the game (it creates the next round, or completes the session), which only a player
+    may do.
+    """
+    if access.is_joined_participant(session.pk, profile.pk):
+        return None
+    return JsonResponse({"error": "Accept the invite before playing."}, status=403)
+
+
+def deep_link_session_id(access: SessionAccess[Any], profile: Profile, raw_session_id: str | None) -> int | None:
+    """The ``?session=`` a game page should reopen on load, if ``profile`` still actively participates in it."""
+    if not raw_session_id or not (raw_session_id.isascii() and raw_session_id.isdigit()) or len(raw_session_id) > 18:
+        return None
+    session_id = int(raw_session_id)
+    return session_id if access.is_active_participant(session_id, profile.pk) else None
+
+
 class GameEntry:
     """One row in the games directory.
 
-    ``url`` resolves ``url_name`` lazily (on template access, not at import
-    time) - ``GAMES`` below is built at module import, before every URL
-    pattern is necessarily registered yet.
+    ``url`` resolves ``url_name`` lazily (on template access, not at import time) - ``GAMES`` below is
+    built at module import, before every URL pattern is necessarily registered yet.
     """
 
     def __init__(self, *, name: str, description: str, icon: str, url_name: str) -> None:
@@ -102,15 +137,14 @@ class RatedRow(Protocol):
 def rating_stats(own_rating: RatedRow | None, friend_ratings: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Stat chips for the shared game hero (``partials/games/_game_hero_body.html``).
 
-    SpotGuessr and Trivia expose structurally identical rating rows and
-    identical ``visible_friend_ratings`` payloads, so both build their chips
-    here rather than keeping two copies that can drift apart.
+    SpotGuessr and Trivia expose structurally identical rating rows and identical
+    ``visible_friend_ratings`` payloads, so both build their chips here rather than keeping two copies
+    that can drift apart.
 
     Args:
         own_rating: The viewer's rating row, or None for a player with no rated games yet.
-        friend_ratings: ``{"profile": Profile, "rating": <row> | None}`` mappings for
-            friends who have opted into sharing (a friend who hasn't played yet
-            still appears, with ``rating=None``).
+        friend_ratings: ``{"profile": Profile, "rating": <row> | None}`` mappings for friends who have
+        opted into sharing (a friend who hasn't played yet still...
 
     Returns:
         One dict per chip, with ``label``, ``value``, ``note`` and ``is_self`` keys.
@@ -143,3 +177,29 @@ class GamesOverviewView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         return render(request, "dashboard/pages/games/index.html", {"page_name": "games", "games": GAMES})
+
+
+#: Bounds the work an ``exclude`` list can ask for; a lobby is far smaller.
+_MAX_EXCLUDED_IDS = 200
+
+
+def _parse_profile_ids(raw: str) -> set[int]:
+    """The integer ids in a comma-separated list, ignoring anything else."""
+    tokens = raw.split(",")[:_MAX_EXCLUDED_IDS]
+    return {int(token) for token in (t.strip() for t in tokens) if token.isdecimal()}
+
+
+class GameFriendPickerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
+    """The profile's friends as invite checkboxes, for every game's invite picker.
+
+    GET /games/friends/?exclude=<profile id>,<profile id>
+
+    ``exclude`` drops profiles already in a lobby. It only shapes the list: each game's invite endpoint still checks
+    that the invitee is a friend.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        excluded = _parse_profile_ids(request.GET.get("exclude", ""))
+        friends = sorted((friend for friend in get_connections(profile) if friend.pk not in excluded), key=lambda friend: friend.username.casefold())
+        return render(request, "dashboard/partials/games/_friend_picker_options.html", {"friends": friends})

@@ -1,12 +1,4 @@
-"""Tests for Image.location wiring, effective coordinates, and duplicate-upload checksums.
-
-Covers:
-- compute_checksum() - deterministic hashing and file-pointer rewind
-- Image.effective_latitude/effective_longitude - own GPS preferred, location fallback
-- _visit_dialog_context() - the photo picker excludes other visits' photos
-- _sync_visit_photos() - sets location/checksum, reuses duplicates, never steals
-  photos from other visits
-"""
+"""Tests for Image.location wiring, effective coordinates, and duplicate-upload checksums."""
 
 from __future__ import annotations
 
@@ -16,9 +8,9 @@ import io
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.images import JPEG_BYTES
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.visits import _sync_visit_photos, _visit_dialog_context

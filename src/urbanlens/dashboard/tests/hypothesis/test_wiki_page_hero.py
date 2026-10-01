@@ -50,10 +50,7 @@ class WikiPageHeroTests(TestCase):
         self.assertIn("123 Main St", content)
 
     def test_notice_and_action_buttons_render_inside_the_hero(self) -> None:
-        """The suggest-edits/delete/back-to-pin actions and the community-wiki
-        notice used to render as their own row directly below the hero,
-        spending extra page height on them - both now render inside the hero
-        itself (see _wiki_detail_hero_body.html) instead."""
+        """The suggest-edits/delete/back-to-pin actions and the community-wiki notice used to render as their own row directly below the hero, spending extra page height on them - both now render inside the hero itself (see _wiki_detail_hero_body.html) instead."""
         content = self._get().content.decode()
         hero_start = content.index('id="wiki-hero"')
         content_block_start = content.index('id="wiki-onboarding"')
@@ -77,10 +74,35 @@ class WikiPageHeroTests(TestCase):
         self.assertNotIn("wiki-address", content)
 
 
+class WikiActionsFabVisibilityTests(TestCase):
+    """The wiki page's Actions button follows the same hide-when-empty rule."""
+
+    def setUp(self) -> None:
+        baker.make("auth.User")
+        self.user: User = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.4", longitude="-73.4")
+        self.wiki: Wiki = baker.make("dashboard.Wiki", location=self.location, name="Old Mill")
+        baker.make(Pin, profile=self.profile, location=self.location)
+        self.client.force_login(self.user)
+
+    def test_hierarchy_items_hidden_but_the_fab_remains_for_its_article_actions(self) -> None:
+        """The fab itself always renders on a wiki page too - it also holds the
+        Article tab's Source/Clear controls (see _hierarchy_actions_fab.html)."""
+        content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
+        self.assertIn("pin-actions-fab", content)
+        self.assertNotIn("Child pin details", content)
+
+    def test_toggle_shown_when_the_wiki_has_child_wikis(self) -> None:
+        child_loc = baker.make(Location, latitude="41.41", longitude="-73.41")
+        baker.make("dashboard.Wiki", location=child_loc, name="Boiler Room", parent_wiki=self.wiki)
+        content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
+        self.assertIn("pin-actions-fab", content)
+        self.assertIn("Child pin details", content)
+
+
 class WikiAboutCardLinkStylingTests(TestCase):
-    """The About card's links row (_pin_links_row.html, shared with the pin
-    details page) used to rely on CSS scoped to body.page-location-details
-    only - it rendered on the wiki page with no chip/spacing styling at all."""
+    """The About card's links row (_pin_links_row.html, shared with the pin details page) used to rely on CSS scoped to body.page-location-details only - it rendered on the wiki page with no chip/spacing styling at all."""
 
     def setUp(self) -> None:
         baker.make("auth.User")
@@ -103,7 +125,7 @@ class WikiAboutCardLinkStylingTests(TestCase):
         _pin_link_add_dialog.html."""
         baker.make(WikiLink, wiki=self.wiki, url="https://example.com/history")
         content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
-        self.assertIn("document.getElementById('wiki-link-add-dialog').showModal()", content)
+        self.assertIn('data-dialog-open="wiki-link-add-dialog"', content)
         self.assertNotIn('class="pin-link-add-form"', content)
 
     def test_add_link_dialog_renders_on_the_page(self) -> None:

@@ -1,14 +1,4 @@
-"""Tests for a bug where editing a label's icon/color left the map pin cache stale.
-
-A pin's rendered marker (icon/color) can come from a label it carries
-(``Pin.effective_icon``/``effective_color``), not just its own fields. The
-client's map pin cache only refreshes when the server's ``Max(Pin.updated)``
-advances (see ``map_pins_meta`` in controllers/maps.py), but editing a label
-never touched any Pin row - so a badge icon change was invisible to the
-cache-freshness check and users kept seeing the old icon until something else
-happened to invalidate the cache. LabelEditView/LabelCustomizeView now bump
-``Pin.updated`` for every pin carrying the edited label.
-"""
+"""Tests for a bug where editing a label's icon/color left the map pin cache stale."""
 
 from __future__ import annotations
 
@@ -20,7 +10,8 @@ from model_bakery import baker
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
@@ -47,7 +38,11 @@ class LabelEditPinCacheInvalidationTests(TestCase):
     def test_editing_own_label_bumps_pins_carrying_it(self) -> None:
         label = baker.make(Label, profile=self.profile, kind="tag", name="Urbex", icon="place")
         pin = _make_pin_with_label(self.profile, label)
-        other_pin = baker.make("dashboard.Pin", profile=self.profile, location=baker.make("dashboard.Location", latitude="41.500000", longitude="-75.500000"))
+        other_pin = baker.make(
+            "dashboard.Pin",
+            profile=self.profile,
+            location=baker.make("dashboard.Location", latitude="41.500000", longitude="-75.500000"),
+        )
         Pin.objects.filter(pk=other_pin.pk).update(updated=_STALE)
 
         url = reverse("label.edit", kwargs={"label_kind": "tag", "label_id": label.id})
@@ -68,7 +63,7 @@ class LabelCustomizePinCacheInvalidationTests(TestCase):
         self.client.force_login(self.user)
 
     def test_customizing_a_global_label_bumps_own_pins_carrying_it(self) -> None:
-        global_label = ensure_label( profile=None, kind="tag", name="Visited", icon="check")
+        global_label = ensure_label(profile=None, kind="tag", name="Visited", icon="check")
         pin = _make_pin_with_label(self.profile, global_label)
 
         url = reverse("label.customize", kwargs={"label_kind": "tag", "label_id": global_label.id})
@@ -90,7 +85,9 @@ class LabelDetailViewPinCacheInvalidationTests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         _key, self.raw_key = generate_api_key(self.user, "Labels client")
-        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value])
+        ApiKey.objects.filter(user=self.user).update(
+            scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value]
+        )
 
     def test_patching_own_label_bumps_pins_carrying_it(self) -> None:
         label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Urbex", icon="place")

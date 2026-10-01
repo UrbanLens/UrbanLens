@@ -1,12 +1,4 @@
-"""Tests for GameSessionConsumer - real-time sync for multiplayer SpotGuessr sessions (UL-392).
-
-Uses TransactionTestCase (not the project's default TestCase) because Channels
-consumers touch the database from a background thread via
-``database_sync_to_async`` - Channels' own testing docs call out
-TransactionTestCase as the safe choice for exactly this reason. CHANNEL_LAYERS
-is overridden to the in-memory backend so these tests don't need a real
-Valkey/Redis connection. Mirrors test_safety_chat.py's established pattern.
-"""
+"""Tests for GameSessionConsumer - real-time sync for multiplayer SpotGuessr sessions (UL-392)."""
 
 from __future__ import annotations
 
@@ -17,7 +9,7 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
-from django.test import TransactionTestCase, override_settings
+from django.test import TransactionTestCase
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
@@ -30,7 +22,6 @@ from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
 from urbanlens.dashboard.models.subscriptions import UserSubscription
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session
 
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 _coordinate_counter = count()
 
 
@@ -56,7 +47,6 @@ def _make_profile(*, alpha: bool = True) -> Profile:
     return Profile.objects.get(user=user)
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class GameSessionConsumerTests(TransactionTestCase):
     def setUp(self) -> None:
         self.host = _make_profile()
@@ -118,11 +108,7 @@ class GameSessionConsumerTests(TransactionTestCase):
     def test_a_participant_without_alpha_features_is_rejected(self) -> None:
         """Gating only the HTTP routes left this socket as the way around them.
 
-        The participant is real and invited - what they lack is the entitlement
-        every game view enforces. Without this check they could still watch
-        live rounds and the scoreboard and post chat while every HTTP route
-        answered 403.
-        """
+        The participant is real and invited - what they lack is the entitlement every game view enforces."""
         _run(self._a_participant_without_alpha_features_is_rejected())
 
     async def _a_participant_without_alpha_features_is_rejected(self) -> None:

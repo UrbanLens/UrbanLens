@@ -6,36 +6,47 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
-from django.test import TransactionTestCase, override_settings
+from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.visits.safety import accept_checkin_partner_invite, invite_checkin_partner, is_owner_or_accepted_partner, remove_checkin_partner
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+from urbanlens.dashboard.services.visits.safety import (
+    CannotInviteSelfError,
+    MaxPartnersReachedError,
+    PartnerAlreadyInvitedError,
+    PartnerNotFoundError,
+    accept_checkin_partner_invite,
+    invite_checkin_partner,
+    is_owner_or_accepted_partner,
+    remove_checkin_partner,
+)
 
 
 def _profile(**kwargs) -> Profile:
     return baker.make("auth.User", **kwargs).profile
+
+
+def _visible_profile() -> Profile:
+    """A profile anyone may see - only someone the inviter can see can be invited by name."""
+    profile = _profile()
+    Profile.objects.filter(pk=profile.pk).update(profile_visibility=VisibilityChoice.ANYONE)
+    return profile
 
 
 def _checkin(profile: Profile, **kwargs) -> SafetyCheckin:
@@ -57,40 +68,56 @@ class InviteCheckinPartnerTests(TestCase):
         self.checkin = _checkin(self.owner)
 
     def test_unknown_username_raises(self):
-        with self.assertRaisesMessage(ValueError, "No user found"):
+        with self.assertRaises(PartnerNotFoundError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username="nobody-by-this-name")
 
     def test_self_invite_raises(self):
-        with self.assertRaisesMessage(ValueError, "your own check-in"):
+        with self.assertRaises(CannotInviteSelfError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=self.owner.username)
 
     def test_blocked_invitee_raises(self):
+        """Same exception type as an unknown username - confirming a block would
+        itself confirm the account exists, which is the enumeration leak this guards."""
         invitee = _profile()
         Friendship.objects.create(from_profile=invitee, to_profile=self.owner, status=FriendshipStatus.BLOCKED)
 
-        with self.assertRaisesMessage(ValueError, "isn't accepting invitations"):
+        with self.assertRaises(PartnerNotFoundError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
     def test_duplicate_invite_raises(self):
-        invitee = _profile()
+        invitee = _visible_profile()
         invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
-        with self.assertRaisesMessage(ValueError, "already been invited"):
+        with self.assertRaises(PartnerAlreadyInvitedError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
     def test_over_cap_raises(self):
         settings = SiteSettings.get_current()
         settings.max_safety_checkin_partners = 1
         settings.save(update_fields=["max_safety_checkin_partners"])
-        first = _profile()
-        second = _profile()
+        first = _visible_profile()
+        second = _visible_profile()
         invite_checkin_partner(self.checkin, inviter=self.owner, username=first.username)
 
-        with self.assertRaisesMessage(ValueError, "at most 1 partners"):
+        with self.assertRaises(MaxPartnersReachedError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=second.username)
 
+    def test_over_cap_raises_even_for_unknown_username(self):
+        """The cap check must fire before username resolution.
+
+        Otherwise "check-in full" only ever answers for a real account, letting a caller who fills their own
+        check-in once turn the cap into a free, repeatable username-existence oracle."""
+        settings = SiteSettings.get_current()
+        settings.max_safety_checkin_partners = 1
+        settings.save(update_fields=["max_safety_checkin_partners"])
+        first = _visible_profile()
+        invite_checkin_partner(self.checkin, inviter=self.owner, username=first.username)
+
+        with self.assertRaises(MaxPartnersReachedError):
+            invite_checkin_partner(self.checkin, inviter=self.owner, username="no-such-person-at-all")
+
     def test_successful_invite_creates_invited_partner(self):
-        invitee = _profile()
+        invitee = _visible_profile()
 
         partner = invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
@@ -106,7 +133,9 @@ class AcceptCheckinPartnerInviteTests(TestCase):
         self.owner = _profile()
         self.checkin = _checkin(self.owner)
         self.invitee = _profile()
-        self.partner = SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=self.invitee, invited_by=self.owner)
+        self.partner = SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=self.invitee, invited_by=self.owner
+        )
 
     def test_repeat_accept_is_a_no_op(self):
         accept_checkin_partner_invite(self.partner)
@@ -117,11 +146,7 @@ class AcceptCheckinPartnerInviteTests(TestCase):
         self.assertFalse(NotificationLog.objects.exists())
 
     def test_accept_after_concurrent_removal_is_a_no_op(self):
-        """Regression guard: accepting a stale in-memory ``partner`` whose row the owner
-        already removed concurrently must not resurrect it or send a phantom "partner
-        accepted" notification - save() on a deleted row would otherwise silently
-        no-op the UPDATE while the rest of the function ran anyway.
-        """
+        """Regression guard: accepting a stale in-memory ``partner`` whose row the owner already removed concurrently must not resurrect it or send a phantom "partner accepted" notification - save() on a deleted row would otherwise silently no-op the UPDATE while the rest of the function ran anyway."""
         SafetyCheckinPartner.objects.filter(pk=self.partner.pk).delete()
 
         accept_checkin_partner_invite(self.partner)
@@ -133,12 +158,10 @@ class AcceptCheckinPartnerInviteTests(TestCase):
 class IsOwnerOrAcceptedPartnerTests(TestCase):
     """is_owner_or_accepted_partner: the owner and unrelated-profile boundary cases.
 
-    Kept in a class of its own, separate from the @given property test below -
-    per this repo's CLAUDE.md, Hypothesis example-shrinking and this TestCase's
-    per-test transaction rollback don't always compose cleanly, so a plain
-    fixture-sharing test placed alongside a `@given` method in the same class
-    can see leftover data from it.
-    """
+    Kept in a class of its own, separate from the @given property test below - per this repo's CLAUDE.md,
+    Hypothesis example-shrinking and this TestCase's per-test transaction rollback don't always compose cleanly,
+    so a plain fixture-sharing test placed alongside a `@given` method in the same class can see leftover data
+    from it."""
 
     def setUp(self):
         self.owner = _profile()
@@ -232,7 +255,6 @@ def _run(coro):
     return async_to_sync(_wrap)()
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
     """SafetyCheckinChatConsumer's widened session-route permission check."""
 
@@ -242,7 +264,9 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.checkin = _checkin(self.owner_profile)
 
     def _session_communicator(self, user) -> WebsocketCommunicator:
-        comm = WebsocketCommunicator(SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/")
+        comm = WebsocketCommunicator(
+            SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/"
+        )
         comm.scope["url_route"] = {"kwargs": {"checkin_uuid": str(self.checkin.uuid), "token": None}}
         comm.scope["user"] = user
         return comm
@@ -380,11 +404,7 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.assertEqual(close_two.get("code"), 4404)
 
     def test_write_access_is_revoked_immediately_even_before_the_close_arrives(self):
-        """Regression guard for _create_message's in-band recheck: a removed partner's
-        connection may not have processed its close frame yet (or the revocation
-        broadcast may never arrive at all, see the periodic-revalidation test below) -
-        either way, an attempted send in that window must be rejected, not accepted.
-        """
+        """Regression guard for _create_message's in-band recheck: a removed partner's connection may not have processed its close frame yet (or the revocation broadcast may never arrive at all, see the periodic-revalidation test below) - either way, an attempted send in that window must be rejected, not accepted."""
         _run(self._write_access_is_revoked_immediately_even_before_the_close_arrives())
 
     async def _write_access_is_revoked_immediately_even_before_the_close_arrives(self):
@@ -421,11 +441,7 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.assertEqual(await _message_count(), 0)
 
     def test_dropped_revocation_broadcast_is_caught_by_periodic_revalidation(self):
-        """Regression guard: partner_access_revoked (the group_send remove_checkin_partner
-        fires) is best-effort, like every other broadcast in this module - if it's ever
-        lost (a channel-layer hiccup), the periodic re-validation backstop must still
-        close the connection on its own, rather than leaving it open indefinitely.
-        """
+        """Regression guard: partner_access_revoked (the group_send remove_checkin_partner fires) is best-effort, like every other broadcast in this module - if it's ever lost (a channel-layer hiccup), the periodic re-validation backstop must still close the connection on its own, rather than leaving it open indefinitely."""
         _run(self._dropped_revocation_broadcast_is_caught_by_periodic_revalidation())
 
     async def _dropped_revocation_broadcast_is_caught_by_periodic_revalidation(self):

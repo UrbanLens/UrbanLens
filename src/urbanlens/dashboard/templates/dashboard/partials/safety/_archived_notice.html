@@ -1,21 +1,22 @@
-{% comment %}
-Static locked-state notice replacing a safety check-in's content once it has been encrypted and
-scrubbed (services.safety.archive_checkin) - reached either by a live `safetyCheckinArchived`
-dissolve (see _dissolve_animation.html) or by loading/refreshing the page after the fact; either
-way the server has already scrubbed the plaintext, so this is the only state there is to show.
-
-Expects: can_unlock (bool - true only for the owner, who alone ever held a seal to open this)
-and, only when can_unlock, archive (the SafetyCheckinArchive: ciphertext/nonce/sealed_key) for
-client-side decryption. Partners and contacts never get an unlock affordance - they never held
-a seal, regardless of how much of the check-in they could see while it was active.
-{% endcomment %}
+{% load static %}
+{% comment %}Static locked-state notice replacing a safety check-in's content once it has been encrypted and scrubbed.{% endcomment %}
 <div class="card safety-archived-notice" id="safety-archived-notice">
     <i class="material-symbols-outlined">lock</i>
     <h3>This check-in has concluded and its details are now private.</h3>
     {% if can_unlock %}
     <p class="form-hint">Only you can unlock and view what was recorded, on a device that holds your encryption key.</p>
     <button type="button" class="btn btn--ghost" id="safety-archive-unlock-btn"
-            data-ciphertext="{{ archive.ciphertext }}" data-nonce="{{ archive.nonce }}" data-sealed-key="{{ archive.sealed_key }}">
+            data-ciphertext="{{ archive.ciphertext }}" data-nonce="{{ archive.nonce }}" data-sealed-key="{{ archive.sealed_key }}"
+            data-self-slug="{{ self_slug }}"
+            data-login-identifier="{{ request.user.username }}"
+            data-url-login-params="{% url 'e2ee.login_params' %}"
+            data-url-enroll="{% url 'e2ee.enroll' %}"
+            data-url-keys="{% url 'e2ee.keys' %}"
+            data-url-rewrap="{% url 'e2ee.rewrap' %}"
+            data-url-reset="{% url 'e2ee.reset' %}"
+            data-url-conversation-key="{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}"
+            data-url-login="{% url 'login' %}"
+            data-url-faq="{% url 'faq' %}#faq-e2ee">
         <i class="material-symbols-outlined">lock_open</i> Unlock
     </button>
     <dl class="safety-archive-unlocked-fields" id="safety-archive-unlocked" hidden>
@@ -25,32 +26,6 @@ a seal, regardless of how much of the check-in they could see while it was activ
     </dl>
     {% endif %}
 </div>
-{% if can_unlock %}
-<script>
-(function () {
-    var btn = document.getElementById('safety-archive-unlock-btn');
-    if (!btn || btn.dataset.unlockInit) return;
-    btn.dataset.unlockInit = '1';
-    btn.addEventListener('click', function () {
-        if (!window.UrbanLensE2EE) return;
-        btn.disabled = true;
-        window.UrbanLensE2EE.decryptSafetyArchive(btn.dataset.sealedKey, btn.dataset.ciphertext, btn.dataset.nonce).then(function (data) {
-            btn.disabled = false;
-            if (!data) {
-                if (window.toastr) toastr.error("Could not unlock this check-in on this device - try a device that's already unlocked your messages.");
-                return;
-            }
-            document.getElementById('safety-archive-title').textContent = data.title || '(untitled)';
-            document.getElementById('safety-archive-plan').textContent = data.plan_details || '(no plan recorded)';
-            document.getElementById('safety-archive-resolved-by').textContent = data.resolved_by_label || 'unknown';
-            var unlocked = document.getElementById('safety-archive-unlocked');
-            if (unlocked) unlocked.hidden = false;
-            btn.hidden = true;
-        }).catch(function () {
-            btn.disabled = false;
-            if (window.toastr) toastr.error('Could not unlock this check-in on this device.');
-        });
-    });
-}());
-</script>
+{% if can_unlock and not e2ee_needs_oauth_enroll %}
+<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 {% endif %}

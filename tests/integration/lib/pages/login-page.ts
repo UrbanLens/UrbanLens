@@ -1,15 +1,8 @@
-/**
- * The sign-in form.
- *
- * Used both by the specs that test signing in and by `auth.setup.ts`, which
- * mints the session every other project runs on - so this is the one page
- * object whose breakage stops the entire suite, and the reason its failure
- * message goes out of its way to report the form's own error text rather than
- * "timed out waiting for navigation".
- */
+/** The sign-in form. */
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
+import { env } from "../env.js";
 import { publicRoutes } from "../routes.js";
 
 export class LoginPage {
@@ -17,12 +10,16 @@ export class LoginPage {
     readonly password: Locator;
     readonly submit: Locator;
     readonly errors: Locator;
+    readonly signedInNav: Locator;
 
     constructor(private readonly page: Page) {
         this.username = page.locator("#id_username");
         this.password = page.locator("#id_password");
         this.submit = page.locator("#password-login-form button[type=submit]");
         this.errors = page.locator(".auth-errors, .errorlist");
+        // Rendered only for an authenticated user; see `AppShell`, which uses
+        // the same locator as its "this page rendered as signed in" marker.
+        this.signedInNav = page.locator("nav.app-nav");
     }
 
     async goto(): Promise<void> {
@@ -35,31 +32,50 @@ export class LoginPage {
         await this.username.fill(username);
         await this.password.fill(password);
         // The form's submit handler may derive the credential in the browser
-        // first (see `UrbanLensE2EE.wireLoginForm`), so this waits for whatever
-        // navigation eventually happens rather than for the click alone.
+        // first (see `UrbanLensE2EE.wireLoginForm`), so the outcome is awaited
+        // after the click rather than raced against it.
+        await this.submit.click();
+        await this.dismissRecoveryKeyDialog();
+        // Waited on by what rendered: the post-login page rewrites its URL client-side, so a URL predicate can miss a success.
         //
-        // `domcontentloaded` rather than the default full `load`: the page that
-        // follows sign-in pulls jQuery, toastr and HTMX from public CDNs, and
-        // waiting for those makes a slow third-party host look like a failed
-        // sign-in. Whether those loaded is a question `specs/services` asks
-        // deliberately.
-        await Promise.all([
-            this.page.waitForURL((url) => !url.pathname.startsWith("/accounts/login"), { waitUntil: "domcontentloaded" }),
-            this.submit.click(),
-        ]);
+        // `Promise.any`, not `race`: a 2FA challenge is also a success, and `race` settles on rejections too.
+        //
+        // Both branches get the navigation budget explicitly; the default action timeout is half of it.
+        const budget = env.navigationTimeoutMs;
+        await Promise.any([
+            this.signedInNav.waitFor({ state: "visible", timeout: budget }),
+            this.page.waitForURL((url) => url.pathname.startsWith("/accounts/login/2fa"), { timeout: budget }),
+        ]).catch((error: unknown) => {
+            // `AggregateError.message` is "All promises were rejected", which
+            // says less than either timeout did. Re-throw the first real one.
+            const [first] = (error as AggregateError).errors ?? [];
+            throw first instanceof Error ? first : (error as Error);
+        });
+    }
+
+    /**
+     * Dismisses the "save your recovery key" overlay shown on first login after key regeneration.
+     *
+     * A new account generates its keys before the overlay appears, which can take longer than any fixed wait, so
+     * this waits for whichever comes first: the overlay, the signed-in page, or a 2FA challenge.
+     */
+    private async dismissRecoveryKeyDialog(): Promise<void> {
+        const later = this.page.locator(".e2ee-recovery-later");
+        const budget = env.navigationTimeoutMs;
+        const overlay = await Promise.any([
+            later.waitFor({ state: "visible", timeout: budget }).then(() => true),
+            this.signedInNav.waitFor({ state: "visible", timeout: budget }).then(() => false),
+            this.page.waitForURL((url) => url.pathname.startsWith("/accounts/login/2fa"), { timeout: budget }).then(() => false),
+        ]).catch(() => false);
+        if (overlay) {
+            await later.click();
+        }
     }
 
     /**
      * Signs in and asserts a session was actually established.
      *
-     * @throws When sign-in did not happen, saying why. Three quite different
-     *     causes all present as "the URL never changed": the form came back
-     *     with an error ("your email hasn't been verified", "too many failed
-     *     attempts" - both ordinary states of a staging account), the POST was
-     *     rejected before the view ran (a CSRF origin mismatch renders Django's
-     *     own 403 page at the same URL), or the page's JavaScript never
-     *     submitted at all. Reporting only the timeout leaves all three looking
-     *     identical.
+     * @throws When sign-in did not happen, saying why. Three quite different causes all present as "the URL never changed": the form came back with an error ("your email hasn't been verified", "too many failed attempts" - both ordinary states of a staging account), the POST was rejected before the view ran (a CSRF origin mismatch renders Django's own 403 page at the same URL), or the page's JavaScript never submitted at all. Reporting only the timeout leaves all three looking identical.
      */
     async signIn(username: string, password: string): Promise<void> {
         await this.goto();
@@ -79,7 +95,10 @@ export class LoginPage {
 
     /** Whatever the page can say about why it is still here. */
     private async diagnose(): Promise<string> {
-        const reported = (await this.errors.allInnerTexts()).join(" | ").trim();
+        // Guarded like every later read in this method: the page may still be
+        // navigating when the error path runs, and an unguarded read throws
+        // "Execution context was destroyed" over whatever it was about to say.
+        const reported = (await this.errors.allInnerTexts().catch(() => [] as string[])).join(" | ").trim();
         if (reported) {
             return `The form reported: ${reported}`;
         }

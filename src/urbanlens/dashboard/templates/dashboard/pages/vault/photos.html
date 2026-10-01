@@ -1,0 +1,107 @@
+{% extends 'dashboard/pages/vault/media_page.html' %}
+{% load vendor_assets %}
+{% load static %}
+
+{% block header %}
+{# Leaflet powers the placement map and the Vault album detail view's photo map. #}
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
+<script type="module" src="{% static 'dashboard/js/vault-photos.js' %}"></script>
+{# Same album-panel module the pin/wiki Photos tab uses (location/index.html). #}
+<script type="module" src="{% static 'dashboard/js/albums.js' %}"></script>
+{% endblock %}
+
+{% block page_title %}Photos{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="photo_library" title="Photos" subtitle="Every photo you've added, and a quick way to turn them into visits." modifier="top" %}
+{% endblock %}
+
+{% block accept %}image/*{% endblock %}
+{% block dropzone_hint %}Drag &amp; drop anywhere on this page, or click to upload. We'll sort photos by where and when they were taken.{% endblock %}
+
+{% block before_gallery %}
+{# -- Organize queue (re-fetches itself after uploads land) ----------- #}
+<div id="photos-attention-wrap"
+     data-processing-url="{% url 'vault.photos.processing' %}"
+     hx-get="{% url 'vault.photos.queue' %}"
+     hx-trigger="refreshQueue from:body"
+     hx-swap="innerHTML">
+    {% include "dashboard/partials/vault/_photo_attention.html" %}
+</div>
+
+{# -- Albums (this Vault's own, plus a toggle for albums across your pins) -- #}
+{# ?album= is carried through so a deep link (or a Back navigation) loads that album directly instead of the list. #}
+<section id="albums" class="photos-albums-section" aria-label="Albums">
+    <div class="photos-gallery-head">
+        <h2><i class="material-symbols-outlined">photo_album</i> Albums</h2>
+        {# Overflow menu for secondary options - reuses the same overflow-menu component/classes as pin_lists/detail.html. #}
+        <div class="pin-list-more-menu">
+            <button type="button" class="btn btn--icon pin-list-more-btn" id="vault-albums-more-btn"
+                    aria-haspopup="true" aria-expanded="false" aria-label="More album options" title="More options">
+                <i class="material-symbols-outlined">more_vert</i>
+            </button>
+            <div class="pin-list-more-menu-panel" id="vault-albums-more-menu-panel" hidden>
+                <button type="button" id="vault-pin-albums-toggle-btn">
+                    <i class="material-symbols-outlined">photo_library</i>
+                    <span>Show your pin albums</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="vault-albums-panel"
+         hx-get="{% url 'vault.photos.albums' %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="albums-panel-skeleton" aria-hidden="true">
+            <div class="album-card album-card--skeleton"></div>
+            <div class="album-card album-card--skeleton"></div>
+            <div class="album-card album-card--skeleton"></div>
+        </div>
+    </div>
+
+    <div id="vault-pin-albums-panel" class="vault-pin-albums-panel"
+         data-url="{% url 'vault.photos.pin_albums' %}" hidden>
+        <div class="albums-panel-skeleton" aria-hidden="true">
+            <div class="album-card album-card--skeleton"></div>
+            <div class="album-card album-card--skeleton"></div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block gallery_title %}{% if show == "from_others" %}Photos from Others{% else %}All photos{% endif %}{% endblock %}
+
+{% block gallery_filters %}
+{% if from_others_count %}
+<a href="?show={% if show == 'from_others' %}mine{% else %}from_others{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
+   class="btn btn--ghost btn--sm photos-show-others-toggle" id="vault-photos-show-others">
+    <i class="material-symbols-outlined">group</i>
+    {% if show == "from_others" %}Show all photos{% else %}Photos from Others{% endif %}
+    <span class="badge">{{ from_others_count }}</span>
+</a>
+{% endif %}
+{% endblock %}
+
+{% block grid_attrs %}
+    data-show="{{ show }}"{% endblock %}
+
+{% block empty_state %}
+<i class="material-symbols-outlined">image</i>
+<p>No photos yet. Upload some above to get started.</p>
+{% endblock %}
+
+{% block after_page %}
+{# -- Confirm-pin dialog: preview/move/name a pin before creating it from a photo -- #}
+{# Closes itself on any successful POST inside it (create-pin, or filing onto an existing pin). #}
+<dialog id="photo-pin-confirm-dialog" class="ul-dialog photo-pin-confirm-dialog"
+        data-ul-on-success="close-dialog" data-ul-success-verb="post" aria-labelledby="dialog-title-create-a-pin">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a pin" %}
+    <div id="photo-pin-confirm-body" class="photo-pin-confirm-body">
+        <p class="photo-pin-confirm-loading">Loading&hellip;</p>
+    </div>
+</dialog>
+{% endblock %}

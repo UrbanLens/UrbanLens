@@ -8,7 +8,7 @@ import re
 from typing import TYPE_CHECKING
 
 from django.db import models
-from django.db.models import Index
+from django.db.models import Field, Index
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.notifications.meta import (
@@ -22,20 +22,15 @@ from urbanlens.dashboard.services.security.redact import redact_text
 
 logger = logging.getLogger(__name__)
 
-#: A single leading slash, then no slash and no backslash. Rejects "//host"
-#: and "/\host" (WHATWG treats "\" as "/" in an authority, so both leave the
-#: origin), any absolute URL, and any scheme including "javascript:". Also
-#: rejects the raw TAB/LF/CR that URL parsers strip before parsing.
+#: A single leading slash, then no slash and no backslash.
+#: Rejects "//host" and "/\host" (WHATWG treats "\" as "/" in an authority, so both leave the
+#: origin), any absolute URL, and any scheme including "javascript:".
 _URL_IS_SAFE_PATH = re.compile(r"^/(?![/\\])[^\s\\]*$")
 
 
 class NotificationLog(abstract.FrontendDashboardModel):
     """Records a notification sent to a specific user profile.
-
-    Extends ``FrontendDashboardModel`` (rather than ``DashboardModel``) purely
-    for its ``uuid``: the external API addresses a notification by uuid, and
-    exposing the sequential integer pk instead would leak both site-wide
-    notification volume and a trivially walkable neighbour space.
+    Extends ``FrontendDashboardModel`` (rather than ``DashboardModel``) purely for its ``uuid``: the external API addresses a notification by uuid, and exposing the sequential integer pk instead would leak both site-wide notification volume and a trivially walkable neighbour space.
     """
 
     status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
@@ -60,39 +55,46 @@ class NotificationLog(abstract.FrontendDashboardModel):
         blank=True,
     )
 
+    # The message this notification previews, if any - lets a later delete find and redact this
+    # row's ``message`` text (see ``delete_message_for_everyone``/``delete_group_message``) instead
+    # of leaving a since-unsent preview sitting in the recipient's notification list. SET_NULL, not
+    # CASCADE: the message tombstones rather than hard-deleting in the ordinary flow, and even where
+    # it doesn't, losing the reference should never take the notification history down with it.
+    direct_message = models.ForeignKey(
+        "dashboard.DirectMessage",
+        on_delete=models.SET_NULL,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
+    group_message = models.ForeignKey(
+        "dashboard.GroupMessage",
+        on_delete=models.SET_NULL,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
+
     if TYPE_CHECKING:
         profile_id: int | None
         source_profile_id: int | None
+        direct_message_id: int | None
+        group_message_id: int | None
 
     objects = NotificationManager()
 
     def save(self, *args, **kwargs):
         """Clip ``title`` to its column width before writing.
-
-        Titles are assembled from user-controlled names - a wiki, an
-        achievement, a group - several of whose own columns are as wide as this
-        one, leaving the surrounding text as pure overflow. The write then
-        fails with ``DataError`` inside whatever operation raised the
-        notification, which is rarely that operation's own concern: an overlong
-        destination-wiki name used to abort a safety escalation before it
-        reached the emergency contacts.
-
-        A title is display text, so clipping is preferable to failing the
-        write, and doing it here covers the call sites that do not know how long
-        the name they interpolated can be.
-
-        Also drops any ``url`` that is not a plain same-origin path. Every
-        producer today builds this with ``reverse()``, but that is a convention
-        no code enforces, and the value is assigned straight to
-        ``window.location`` in four places and rendered into an ``href`` in
-        three more - so one producer passing a raw string would be an open
-        redirect or, via a ``javascript:`` scheme in the ``href`` sinks, stored
-        XSS. Enforcing it here rather than with a ``validators=[...]`` entry is
-        deliberate: validators only run under ``full_clean()``, which the
-        ``notify()`` path never calls.
+        Titles are assembled from user-controlled names - a wiki, an achievement, a group - several of whose own columns are as wide as this one, leaving the surrounding text as pure overflow.
+        A title is display text, so clipping is preferable to failing the write, and doing it here covers the call sites that do not know how long the name they interpolated can be.
         """
         if self.title:
-            self.title = self.title[: self._meta.get_field("title").max_length]
+            # get_field() is typed Field | ForeignObjectRel, and only the former carries max_length;
+            # a reverse relation named "title" cannot exist here.
+            # Narrowed rather than assumed so the truncation cannot silently stop happening.
+            title_field = self._meta.get_field("title")
+            if isinstance(title_field, Field) and title_field.max_length:
+                self.title = self.title[: title_field.max_length]
         if self.url and not _URL_IS_SAFE_PATH.match(self.url):
             logger.warning("Refusing to store a non-relative notification url (%s); dropping it.", redact_text(self.url))
             self.url = ""
@@ -119,12 +121,7 @@ class NotificationLog(abstract.FrontendDashboardModel):
 
     @property
     def is_friend_request_pending(self) -> bool:
-        """True when this is a friend_request notification still awaiting a response.
-
-        Deliberately independent of read status: opening the notification dropdown
-        marks notifications read, but the Accept/Decline buttons must stay visible
-        until the recipient actually accepts or declines the request.
-        """
+        """True when this is a friend_request notification still awaiting a response."""
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 
         friendship = self._friend_request_friendship
@@ -132,14 +129,8 @@ class NotificationLog(abstract.FrontendDashboardModel):
 
     @property
     def friend_request_resolution(self) -> str | None:
-        """Returns "accepted"/"declined" once a friend_request notification's underlying
-        request has been resolved one way or the other, else None (still pending,
-        or this isn't a friend_request notification).
-
-        Without this, a friend_request notification's Accept/Decline buttons
-        disappear once resolved (see `is_friend_request_pending`) but the title/
-        message stayed frozen at "Sarah wants to be your friend." forever after -
-        looking like a dangling, unactionable request instead of a settled one.
+        """Returns "accepted"/"declined" once a friend_request notification's underlying request has been resolved one way or the other, else None (still pending, or this isn't a friend_request notification).
+        Without this, a friend_request notification's Accept/Decline buttons disappear once resolved (see `is_friend_request_pending`) but the title/ message stayed frozen at "Sarah wants to be your friend." forever after - looking like a dangling, unactionable request instead of a settled one.
         """
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 
@@ -165,13 +156,8 @@ class NotificationLog(abstract.FrontendDashboardModel):
 
 class NotificationPreference(abstract.DashboardModel):
     """Per-user delivery preferences for each notification type.
-
-    Site/email delivery is a single ``DeliveryPreference`` choice per type
-    (see below). WhatsApp and SMS are independent on/off toggles instead of
-    being folded into that enum: each is billed per message sent (unlike
-    email), so they default off, and a 4-way combined enum would need 16
-    string values to cover every combination - a plain boolean per channel
-    is simpler and keeps the existing site/email columns untouched.
+    Site/email delivery is a single ``DeliveryPreference`` choice per type (see below).
+    WhatsApp and SMS are independent on/off toggles instead of being folded into that enum: each is billed per message sent (unlike email), so they default off, and a 4-way combined enum would need 16 string values to cover every combination - a plain boolean per channel is simpler and keeps the existing site/email columns untouched.
     """
 
     trip_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)

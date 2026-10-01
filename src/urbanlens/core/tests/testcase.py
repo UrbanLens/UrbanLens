@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -13,12 +12,8 @@ class _MessagePrefixMixin:
     """
     Shared message-prefixing behavior for our custom TestCase/SimpleTestCase variants.
     """
-    # Deprecated, in favor of fn. Named with a leading underscore (unlike a
-    # plain "target"/"method_name") because those are exactly the attribute
-    # names test subclasses reach for on their own domain objects (see e.g.
-    # ProfileDetailVisibilityTests.target, a Profile) - an un-prefixed name
-    # here shadowed those, forcing mypy to widen every such attribute to
-    # "type | None" and flag every subsequent access as a union-attr error.
+
+    # Deprecated, in favor of fn.
     _message_target: type | None = None
     # Deprecated, in favor of fn
     _message_method_name: str | None = None
@@ -104,24 +99,35 @@ class _MessagePrefixMixin:
 class _CacheIsolationMixin:
     """Start every test with an empty cache.
 
-    Django rolls the database back between tests; it does not roll the cache
-    back. Those two facts interact badly, because rollback *reuses primary
-    keys*: a test that warms a cache entry keyed on a model's pk (the panel
-    system's ``ulfetch:ready:<source>:loc<id>`` markers, for one) leaves it
-    behind for the next test, whose freshly-created row is handed the same pk
-    and therefore finds a cache someone else warmed.
+    Django rolls the database back between tests; it does not roll the cache back. Those two facts
+    interact badly, because rollback *reuses primary keys*: a test that warms a cache entry keyed
+    on a model's pk (the panel system's ``ulfetch:ready:<source>:loc<id>`` markers, for one) leaves
+    it behind for the next test, whose freshly-created row is handed the same pk and therefore
+    finds a cache someone else warmed.
 
-    The failure is order-dependent, so it shows up as a test that passes alone
-    and fails in a suite - and points at whichever test happened to run first
-    rather than at itself.
+    The failure is order-dependent, so it shows up as a test that passes alone and fails in a
+    suite - and points at whichever test happened to run first rather than at itself.
+
+    The request-scoped ``SiteSettings`` memo is reset for the same reason: a response the test
+    client never finished sends no ``request_finished``, leaving the memo holding a row a
+    rolled-back test created.
+
+    Every configured alias, not just ``default``: proxied bytes have their own store
+    (``settings.PROXIED_BYTES_CACHE``), and a tile left in it outlives the test that seeded it.
     """
 
     def setUp(self) -> None:
-        """Clear the cache, then run the subclass's own setUp."""
-        super().setUp()
-        from django.core.cache import cache
+        """Clear the caches, then run the subclass's own setUp."""
+        from django.core.cache import caches
 
-        cache.clear()
+        from urbanlens.dashboard.models.site_settings import request_cache
+        from urbanlens.dashboard.services.core.counters import reset_local_fallback
+
+        request_cache.end_scope()
+        for alias in caches:
+            caches[alias].clear()
+        reset_local_fallback()
+        super().setUp()
 
 
 class TestCase(_CacheIsolationMixin, _MessagePrefixMixin, _HypothesisMixin, test.TestCase):

@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from unittest import mock
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.base import best_polygon_from_geometry, default_bbox
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
@@ -53,9 +52,7 @@ class DefaultBoundingBoxTests(SimpleTestCase):
 
 
 class BestPolygonFromGeometryTests(SimpleTestCase):
-    """Regression coverage for a real bug: MultiPolygon.__iter__ yields Polygon elements that
-    must be returned as-is, never re-wrapped in Polygon(...) - Django's Polygon constructor has
-    no "copy an existing Polygon" overload and raises TypeError when given one."""
+    """Regression coverage for a real bug: MultiPolygon.__iter__ yields Polygon elements that must be returned as-is, never re-wrapped in Polygon(...) - Django's Polygon constructor has no "copy an existing Polygon" overload and raises TypeError when given one."""
 
     def test_single_polygon_is_returned_unwrapped(self) -> None:
         from django.contrib.gis.geos import Polygon
@@ -84,7 +81,9 @@ class PlaceNameResolverChainTests(SimpleTestCase):
     @given(name=st.text(min_size=1, max_size=80).filter(is_meaningful_name))
     @hyp_settings(max_examples=25)
     def test_returns_first_meaningful_name(self, name: str) -> None:
-        chain = PlaceNameResolverChain(resolvers=(_Resolver(None), _Resolver("No Information Available"), _Resolver(name)))
+        chain = PlaceNameResolverChain(
+            resolvers=(_Resolver(None), _Resolver("No Information Available"), _Resolver(name))
+        )
         self.assertEqual(chain.resolve(40.0, -74.0), name)
 
     def test_returns_none_when_no_resolver_finds_name(self) -> None:
@@ -139,11 +138,7 @@ class PlaceNameResolverChainTests(SimpleTestCase):
     def test_google_places_resolver_skips_locality_only_result_for_next_poi(self) -> None:
         """A bare city hit (e.g. a rural pin with no closer POI) must not become the pin's name.
 
-        Regression test: a golf course with no other nearby Places result used to be
-        named "Poughkeepsie" (its enclosing city) because Nearby Search can return a
-        locality as its only "establishment" match. The resolver must skip results
-        whose types are exclusively administrative/regional ones.
-        """
+        The resolver must skip results whose types are exclusively administrative/regional ones."""
         from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
 
         with (
@@ -193,10 +188,11 @@ class PlaceNameResolverChainTests(SimpleTestCase):
         with mock.patch.object(
             GoogleGeocodingGateway,
             "geocode_coordinates",
-            return_value={"results": [{"formatted_address": "Poughkeepsie, NY 12603, USA", "types": ["locality", "political"]}]},
+            return_value={
+                "results": [{"formatted_address": "Poughkeepsie, NY 12603, USA", "types": ["locality", "political"]}]
+            },
         ):
             self.assertIsNone(gateway.get_place_name(40.0, -74.0))
-
 
 
 class BoundaryProviderChainTests(SimpleTestCase):
@@ -304,7 +300,7 @@ class BoundaryProviderChainTests(SimpleTestCase):
             {"lat": 39.999, "lon": -74.001},
         ]
         elements = [
-            {"type": "way", "id": 1, "geometry": ring, "tags": {"landuse": "industrial"}},
+            {"type": "way", "id": 1, "geometry": ring, "tags": {"landuse": "industrial", "name": "Riverside Works"}},
             {"type": "way", "id": 2, "geometry": inner_ring, "tags": {"building": "yes"}},
         ]
         gateway = OverpassGateway(session=mock.Mock())
@@ -348,12 +344,12 @@ class OverpassGatewayTests(SimpleTestCase):
     def test_default_tag_filter_splits_into_valid_clauses(self) -> None:
         """Regression test: Overpass QL has no `|` OR-operator between bracket filters.
 
-        A previous version of `_DEFAULT_FEATURE_TAG_FILTER` chained filters with a bare
-        `|` directly inside a single statement, which Overpass rejects with a parse
-        error on every request. Clauses must instead be split into separate unioned
-        statements.
-        """
-        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import _DEFAULT_FEATURE_TAG_FILTER, OverpassGateway
+        A previous version of `_DEFAULT_FEATURE_TAG_FILTER` chained filters with a bare `|` directly inside a
+        single statement, which Overpass rejects with a parse error on every request."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import (
+            _DEFAULT_FEATURE_TAG_FILTER,
+            OverpassGateway,
+        )
 
         query = OverpassGateway._nearby_features_query(
             40.0,
@@ -583,10 +579,7 @@ class OverpassGatewayTests(SimpleTestCase):
         self.assertEqual(gateway.session.post.call_count, 1)
 
     def test_query_failure_degrades_to_empty_list_without_a_traceback(self) -> None:
-        """The public overpass-api.de instance routinely times out/429s/504s under
-        normal load (shared community infrastructure, per its own ServiceDefaults
-        note) - this must never propagate, and shouldn't log at a level that
-        makes routine external flakiness look like an UrbanLens crash."""
+        """The public overpass-api.de instance routinely times out/429s/504s under normal load (shared community infrastructure, per its own ServiceDefaults note) - this must never propagate, and shouldn't log at a level that makes routine external flakiness look like an UrbanLens crash."""
         import requests
 
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
@@ -614,21 +607,14 @@ class OverpassGatewayTests(SimpleTestCase):
 class SelfIntersectingRingTests(SimpleTestCase):
     """Regression coverage for a real reported bug: a self-intersecting OSM way
 
-    (GEOS logs "GEOS_NOTICE: Self-intersection at or near point ...") used to
-    crash `_polygon_from_element` -> `_polygon_from_ring` ->
-    `best_polygon_from_geometry` with `TypeError: Parameter must be a sequence
-    of LinearRings...`, from a `Polygon(geos_geometry)` call re-wrapping a
-    geometry that `.buffer(0)` had already turned into something other than a
-    plain Polygon (see BestPolygonFromGeometryTests above for the underlying
-    fix - this class instead drives the exact failing scenario end-to-end,
-    starting from a genuinely self-intersecting ring, the way real Overpass
-    data triggered it, rather than re-testing the already-fixed function in
-    isolation).
-    """
+    (GEOS logs "GEOS_NOTICE: Self-intersection at or near point ...") used to crash `_polygon_from_element` ->
+    `_polygon_from_ring` -> `best_polygon_from_geometry` with `TypeError: Parameter must be a sequence of
+    LinearRings...`, from a `Polygon(geos_geometry)` call re-wrapping a geometry that `.buffer(0)` had already
+    turned into something other than a plain Polygon (see BestPolygonFromGeometryTests above for the underlying
+    fix - this class instead drives the exact failing scenario end-to-end, starting from a genuinely
+    self-intersecting ring, the way real Overpass data triggered it, rather than re-testing the already-fixed
+    function in isolation)."""
 
-    #: A classic "bowtie"/figure-8 ring - crosses itself at (5, 5), which is
-    #: exactly the shape GEOS flags as self-intersecting and that used to
-    #: crash boundary resolution for the affected pin.
     _BOWTIE_RING = [(0.0, 0.0), (10.0, 10.0), (10.0, 0.0), (0.0, 10.0), (0.0, 0.0)]
 
     def test_polygon_from_ring_never_raises_on_a_self_intersecting_ring(self) -> None:
@@ -642,10 +628,7 @@ class SelfIntersectingRingTests(SimpleTestCase):
             self.assertTrue(result.valid)
 
     def test_polygon_from_element_never_raises_on_a_self_intersecting_way(self) -> None:
-        """Same scenario via the real Overpass element shape (a `way` with a
-        flat `geometry` list of {lat, lon} nodes), matching the exact call
-        chain in the original traceback: _polygon_from_element ->
-        _polygon_from_ring -> best_polygon_from_geometry."""
+        """Same scenario via the real Overpass element shape (a `way` with a flat `geometry` list of {lat, lon} nodes), matching the exact call chain in the original traceback: _polygon_from_element -> _polygon_from_ring -> best_polygon_from_geometry."""
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import _polygon_from_element
 
         element = {"type": "way", "geometry": [{"lat": lat, "lon": lon} for lon, lat in self._BOWTIE_RING]}
@@ -772,9 +755,7 @@ class NominatimInfoViewTests(TestCase):
         return self.client.get(reverse("pin.nominatim", args=[self.pin.slug]))
 
     def test_email_only_result_is_rendered_not_204(self) -> None:
-        """email was previously missing from the gate's useful-fields tuple even
-        though the template already renders it - a place with only an email
-        would 204 instead of showing that one fact."""
+        """email was previously missing from the gate's useful-fields tuple even though the template already renders it - a place with only an email would 204 instead of showing that one fact."""
         response = self._cache_and_fetch({"email": "info@example.com"})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "info@example.com")
@@ -782,7 +763,9 @@ class NominatimInfoViewTests(TestCase):
     def test_address_breakdown_only_result_is_rendered_not_204(self) -> None:
         """A point with no OSM tags of its own, only the neighbourhood/postcode/
         county now folded into extra_details, still renders."""
-        response = self._cache_and_fetch({"extra_details": [{"key": "postcode", "label": "Postcode", "value": "45237"}]})
+        response = self._cache_and_fetch(
+            {"extra_details": [{"key": "postcode", "label": "Postcode", "value": "45237"}]}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "45237")
 

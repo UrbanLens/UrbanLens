@@ -1,15 +1,4 @@
-"""The export must not issue a query per exported row.
-
-Two sites in ``services/import_export/export.py`` prefetched a relation and then
-read it with a verb that bypasses the prefetch cache, so each one paid for the
-fetch *and* queried per row anyway - over a whole account, which is where an
-export's row counts come from.
-
-Both were fixed on 2026-08-14 (commits ``4dc6b596``, ``f7cc04d3``) and both were
-silently discarded five days later when merge ``3fcd6ab3`` resolved this file in
-favour of the release branch. Neither commit carried a test, which is the only
-reason the regression survived the merge unnoticed; this file is that test.
-"""
+"""The export must not issue a query per exported row."""
 
 from __future__ import annotations
 
@@ -61,7 +50,9 @@ class ExportQueryScalingTests(TestCase):
         if len(large) > len(small) + _TOLERANCE:
             grew = queries_that_grew(small, large)[:3]
             detail = "\n".join(f"  {before} -> {after}: {sql}" for before, after, sql in grew)
-            self.fail(f"{export.__name__} ran {len(small)} queries for {_FIRST} rows and {len(large)} for {_FIRST + _SECOND}.\nWhat multiplied:\n{detail}")
+            self.fail(
+                f"{export.__name__} ran {len(small)} queries for {_FIRST} rows and {len(large)} for {_FIRST + _SECOND}.\nWhat multiplied:\n{detail}"
+            )
 
     def _seed_labels(self, count: int) -> None:
         for _ in range(count):
@@ -85,10 +76,8 @@ class ExportQueryScalingTests(TestCase):
     def test_a_global_label_exports_only_the_owner_s_own_pins(self):
         """The narrowed prefetch must not change what the export contains.
 
-        A global label is visible to everyone, so prefetching its whole `pins`
-        relation pulls other profiles' pins. Narrowing that fetch is only safe
-        if the exported list still holds exactly the exporter's own pins.
-        """
+        A global label is visible to everyone, so prefetching its whole `pins` relation pulls other profiles'
+        pins."""
         import json
         import os
 
@@ -103,4 +92,6 @@ class ExportQueryScalingTests(TestCase):
                 rows = json.load(fh)
 
         exported = next(row for row in rows if row["name"] == shared.name)
-        self.assertEqual(exported["pin_uuids"], [str(mine.uuid)], "a global label must export the exporter's pins and nobody else's")
+        self.assertEqual(
+            exported["pin_uuids"], [str(mine.uuid)], "a global label must export the exporter's pins and nobody else's"
+        )

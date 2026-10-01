@@ -1,21 +1,4 @@
-"""Custom python-social-auth pipeline steps.
-
-These are inserted into ``SOCIAL_AUTH_PIPELINE`` in ``settings/base.py`` and
-run for every OAuth login (Google, Discord, ...).
-
-Step contracts
---------------
-- Return ``None`` or an empty dict to do nothing and pass through.
-- Return a dict to merge extra data into the pipeline state.
-- Raise ``StopPipeline`` to abort the login.
-- Return an ``HttpResponse`` (e.g. a redirect) to interrupt the pipeline and
-  send that response straight back to the browser instead of continuing -
-  used by ``enforce_two_factor_for_sso`` below to detour through the 2FA
-  challenge page instead of letting python-social-auth log the user in.
-
-All steps must accept ``**kwargs`` because the pipeline may pass extra
-keyword arguments that we do not care about.
-"""
+"""Custom python-social-auth pipeline steps."""
 
 from __future__ import annotations
 
@@ -29,6 +12,7 @@ from django.urls import reverse
 
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER, has_second_factor
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, UsernameGenerator, username_is_taken
+from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
 from urbanlens.dashboard.services.profile.avatar import AvatarService
 
 if TYPE_CHECKING:
@@ -41,6 +25,42 @@ logger = logging.getLogger(__name__)
 # -- Pipeline steps ------------------------------------------------------------
 
 
+def refuse_unverified_address_link(
+    strategy: Any,
+    backend: Any,
+    uid: str,
+    response: dict[str, Any] | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> HttpResponseRedirect | None:
+    """Refuse a sign-in whose link is keyed by an address the provider did not verify. Runs before ``social_user``.
+
+    Google links are keyed by address, so without this an unverified copy of an address would sign in to the
+    account holding it.
+
+    Args:
+        strategy: The social-auth strategy, for its request.
+        backend: The social-auth backend in use.
+        uid: The provider identity ``social_uid`` produced.
+        response: The provider's user-info response.
+
+    Returns:
+        A redirect to sign-in when refused, else None.
+    """
+    from django.contrib import messages
+    from social_django.models import UserSocialAuth
+
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+    if normalize_email(uid) != normalize_email(str((response or {}).get("email") or "")) or provider_verified_email(response):
+        return None
+    if not UserSocialAuth.objects.filter(provider=getattr(backend, "name", ""), uid=uid).exists():
+        return None
+    messages.error(strategy.request, _UNVERIFIED_ADDRESS_MESSAGE)
+    logger.info("Refused an SSO sign-in by an unverified address onto an existing link")
+    return redirect("login")
+
+
 def generate_sso_username(
     backend: Any,
     user: User | None,
@@ -50,13 +70,7 @@ def generate_sso_username(
     **kwargs: Any,
 ) -> dict[str, Any] | None:
     """Choose an initial username for new SSO users.
-
-    Prefers the provider handle when it is valid and not already taken:
-    Discord ``username``, or the local part of a Google account email.
     Otherwise falls back to a random ``{adjective}{animal}{number}`` name.
-
-    Replaces the default ``social_core.pipeline.user.get_username`` step.
-    Existing users (``user`` is not None) are left unchanged.
 
     Args:
         backend: The social-auth backend in use.
@@ -65,8 +79,7 @@ def generate_sso_username(
         details: Normalised details dict produced by ``social_details``.
 
     Returns:
-        Dict with ``username`` key for new users, or None for returning users.
-    """
+        Dict with ``username`` key for new users, or None for returning users."""
     if user is not None:
         return {"username": user.username}
 
@@ -87,21 +100,13 @@ def suppress_last_name_for_new_users(
     **kwargs: Any,
 ) -> None:
     """Clear ``last_name`` on the Django User for brand-new SSO accounts.
-
-    Runs after ``user_details`` (which copies the provider's given/family name
-    into the User model).  Preserving the first name lets the UI greet the
-    user naturally while stripping the last name limits personal data exposure.
-
-    Existing users are not affected so that a user who manually added their
-    last name on their profile settings doesn't lose it on every subsequent
-    login.
+    Existing users are not affected so that a user who manually added their last name on their profile settings doesn't lose it on every subsequent login.
 
     Args:
         backend: The social-auth backend in use.
         user: The Django User being logged in.
         response: Raw response from the OAuth provider.
-        is_new: True only when the User row was just created in this pipeline run.
-    """
+        is_new: True only when the User row was just created in this pipeline run."""
     if not is_new or user is None:
         return
     if user.last_name:
@@ -119,16 +124,13 @@ def fetch_and_save_avatar(
     **kwargs: Any,
 ) -> None:
     """Download the provider avatar (or Gravatar) and store it on the Profile.
-
-    Only fetches when the profile has no existing avatar so that users who
-    upload their own photo are not overwritten on subsequent logins.
+    Only fetches when the profile has no existing avatar so that users who upload their own photo are not overwritten on subsequent logins.
 
     Args:
         backend: The social-auth backend in use (name is ``backend.name``).
         user: The Django User, or None if authentication failed earlier.
         response: Raw response from the OAuth provider.
-        is_new: True when the User was just created in this pipeline run.
-    """
+        is_new: True when the User was just created in this pipeline run."""
     if user is None:
         return
 
@@ -138,7 +140,7 @@ def fetch_and_save_avatar(
         logger.warning("No profile found for user %s; skipping avatar fetch", user.pk)
         return
 
-    if profile.avatar:
+    if profile.avatar or profile.avatar_upload:
         return
 
     avatar_url = AvatarService.resolve_provider_url(backend, user, response)
@@ -149,9 +151,128 @@ def fetch_and_save_avatar(
     if not image_bytes:
         return
 
-    filename = f"sso_avatar_{user.pk}.jpg"
-    profile.avatar.save(filename, ContentFile(image_bytes), save=True)
+    profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(image_bytes))])
+    queue_held_upload(profile, "avatar")
     logger.info("Saved SSO avatar for user %s from %s", user.username, backend.name)
+
+
+#: Response keys under which Google (``email_verified``, ``verified_email``) and Discord (``verified``) say the
+#: provider verified the account's address.
+_PROVIDER_VERIFIED_KEYS = ("email_verified", "verified_email", "verified")
+
+#: Pipeline kwarg carrying a provider address the new account must prove before it becomes its primary.
+UNVERIFIED_SSO_EMAIL_KWARG = "unverified_sso_email"
+
+_UNVERIFIED_ADDRESS_MESSAGE = "Your provider hasn't verified that email address, so it can't be used to sign in. Verify it with them, or sign in another way."
+_ADDRESS_IN_USE_MESSAGE = "An UrbanLens account already uses that email address. Sign in to it with your password or passkey."
+
+
+def provider_verified_email(response: dict[str, Any] | None) -> str:
+    """The normalized address the provider says it verified, or ``""``.
+
+    Args:
+        response: The provider's user-info response.
+
+    Returns:
+        The normalized address, or ``""`` when the provider sent none or did not verify it.
+    """
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+    if not response or not any(response.get(key) in (True, "true", "True") for key in _PROVIDER_VERIFIED_KEYS):
+        return ""
+    return normalize_email(str(response.get("email") or ""))
+
+
+def resolve_sso_email(
+    strategy: Any,
+    details: dict[str, Any],
+    response: dict[str, Any] | None = None,
+    user: User | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> dict[str, Any] | HttpResponseRedirect | None:
+    """Decide which address a new SSO account is created with. Runs before ``create_user``.
+
+    A provider address becomes the primary only when the provider verified it and no other account holds it. An
+    unverified address is left off the account and claimed through ``email_claims.claim_address`` once the
+    account exists, whether or not another account holds it, so the signer sees the same thing either way. A
+    verified address another account holds refuses the sign-in: the signer has proved the mailbox, so the
+    refusal tells only its owner that it is registered.
+
+    Args:
+        strategy: The social-auth strategy, for its request.
+        details: Normalised details from ``social_details``.
+        response: The provider's user-info response.
+        user: The account already linked to this provider identity, if any.
+
+    Returns:
+        None for a returning account, or one whose address is verified and free; the pipeline kwargs that
+        create the account without an address; or a redirect to sign-in.
+    """
+    from django.contrib import messages
+
+    from urbanlens.dashboard.services.auth.email_claims import address_holder
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.signup import is_abandoned_signup
+
+    if user is not None:
+        return None
+    email = str(details.get("email") or "").strip()
+    if not email:
+        return None
+    holder = address_holder(email)
+    if holder is not None and is_abandoned_signup(holder):
+        holder.delete()
+        holder = None
+    if provider_verified_email(response) == normalize_email(email):
+        if holder is None:
+            return None
+        messages.error(strategy.request, _ADDRESS_IN_USE_MESSAGE)
+        logger.info("Refused an SSO sign-up onto an address another account holds")
+        return redirect("login")
+    return {"email": "", UNVERIFIED_SSO_EMAIL_KWARG: email}
+
+
+def claim_unverified_sso_email(user: User | None = None, is_new: bool = False, *args: Any, **kwargs: Any) -> None:
+    """Send a new account's unverified provider address through the confirmation flow ``resolve_sso_email`` deferred.
+
+    Args:
+        user: The Django User.
+        is_new: True when the User was just created in this pipeline run.
+        **kwargs: Carries ``UNVERIFIED_SSO_EMAIL_KWARG`` when ``resolve_sso_email`` set one aside.
+    """
+    from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
+
+    email = kwargs.get(UNVERIFIED_SSO_EMAIL_KWARG)
+    if not is_new or user is None or not email:
+        return
+    try:
+        claim_address(user.profile, email, make_primary=True)
+    except EmailClaimError:
+        logger.info("Could not claim the provider address for new SSO user %s", user.pk)
+
+
+def record_provider_verified_email(
+    backend: Any,
+    user: User | None,
+    response: dict[str, Any] | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    """Record the account's primary address as verified when the provider verified that same address.
+
+    Args:
+        backend: The social-auth backend in use.
+        user: The Django User, or None if authentication failed earlier.
+        response: The provider's user-info response."""
+    from urbanlens.dashboard.services.auth.email_claims import mark_primary_verified
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+    if user is None or not user.email:
+        return
+    verified = provider_verified_email(response)
+    if verified and verified == normalize_email(user.email):
+        mark_primary_verified(user)
 
 
 def mark_new_user_onboarding(
@@ -162,16 +283,12 @@ def mark_new_user_onboarding(
     **kwargs: Any,
 ) -> None:
     """Set profile_setup_complete=False for brand-new SSO users.
-
-    Causes PostLoginRedirectView to send them to /profile/edit/ so they can
-    choose a username and avatar before landing on the map.  Existing users
-    and email-registered users are not affected.
+    Causes PostLoginRedirectView to send them to /profile/edit/ so they can choose a username and avatar before landing on the map.
 
     Args:
         backend: The social-auth backend in use.
         user: The Django User, or None if authentication failed earlier.
-        is_new: True when the User was just created in this pipeline run.
-    """
+        is_new: True when the User was just created in this pipeline run."""
     if not is_new or user is None:
         return
     try:
@@ -191,16 +308,12 @@ def save_discord_social_link(
     **kwargs: Any,
 ) -> None:
     """Store the Discord username as a SocialLink for Discord SSO users.
-
-    Runs for every Discord login so that username changes on Discord are
-    reflected in UrbanLens.  Only overwrites the stored handle; does not
-    remove the link if the response is missing a username.
+    Runs for every Discord login so that username changes on Discord are reflected in UrbanLens.
 
     Args:
         backend: The social-auth backend in use.
         user: The Django User, or None if authentication failed earlier.
-        response: Raw OAuth response payload from Discord.
-    """
+        response: Raw OAuth response payload from Discord."""
     if user is None or getattr(backend, "name", "") != "discord":
         return
 
@@ -232,20 +345,7 @@ def enforce_two_factor_for_sso(
     *args: Any,
     **kwargs: Any,
 ) -> HttpResponseRedirect | None:
-    """Detour through the 2FA challenge if this account has a second factor enabled.
-
-    python-social-auth logs the user in automatically once the pipeline
-    finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s
-    ``has_second_factor()`` gate in the SSO path, so without this step an
-    account with a passkey/authenticator app configured could bypass 2FA
-    entirely by signing in with Google/Discord instead of a password.
-
-    Must run as the last pipeline step: everything before it (user/profile
-    creation, avatar fetch, onboarding flags) should still complete normally
-    on every SSO login: only whether *this* step goes on to call
-    ``auth_login()`` is gated. Returning an ``HttpResponseRedirect`` here
-    interrupts the pipeline (see the module docstring) instead of falling
-    through to python-social-auth's own login.
+    """Detour through the 2FA challenge if this account has a second factor enabled. python-social-auth logs the user in automatically once the pipeline finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s ``has_second_factor()`` gate...
 
     Args:
         strategy: The social-auth strategy, used here for ``strategy.request``.
@@ -254,8 +354,7 @@ def enforce_two_factor_for_sso(
         is_new: True for a brand-new account - can't have 2FA configured yet.
 
     Returns:
-        A redirect to the 2FA challenge page if a factor is enrolled, else None.
-    """
+        A redirect to the 2FA challenge page if a factor is enrolled, else None."""
     if user is None or is_new:
         return None
     if not has_second_factor(user):
@@ -307,8 +406,7 @@ def _provider_username_preference(
         details: Normalised details dict produced by ``social_details``.
 
     Returns:
-        Sanitized username candidate, or None when no provider handle is usable.
-    """
+        Sanitized username candidate, or None when no provider handle is usable."""
     name = getattr(backend, "name", "")
     if name == "discord":
         raw = response.get("username")

@@ -1,21 +1,14 @@
 """Reusable map UI components shared by every Leaflet map on the site.
 
-The main map (``pages/map/index.html``) defines the canonical look and
-behavior for the layers panel and the "jump to location" search bar. These
-inclusion tags render that exact markup for any map page, and the shared
-JavaScript engines bind to it by data attributes:
+Because the markup and the JS are single-sourced, every map is guaranteed to present layers and
+search identically.
 
-* ``{% map_layers_panel %}`` pairs with ``window.MapLayers.create(...)``
+- ``{% map_layers_panel %}`` pairs with ``window.MapLayers.create(...)``
   (``frontend/ts/shared/map-layers.ts``).
-* ``{% map_search_bar %}`` pairs with ``window.LocationSearchEngine.attach(...)``
+- ``{% map_search_bar %}`` pairs with ``window.LocationSearchEngine.attach(...)``
   (``frontend/ts/shared/location-search-engine.ts``).
-* ``{% map_toolbar %}`` renders the top-right tool icon row (screenshot,
-  and - on the main map - add/import/search/select) and pairs with
-  ``window._openMapToolbarScreenshot(...)`` (``themes/base.html``).
-
-Because the markup and the JS are single-sourced, every map is guaranteed to
-present layers and search identically. New layers (e.g. from plugins) can be
-added with `register_map_layer`.
+- ``{% map_toolbar %}`` renders the top-right tool icon row (screenshot, and - on the main map -
+  add/import/search/select) and pairs with ``window._openMapTool...
 """
 
 from __future__ import annotations
@@ -26,6 +19,11 @@ from typing import Any
 
 from django import template
 from django.urls import reverse
+from django.utils.html import json_script
+from django.utils.safestring import SafeString, mark_safe
+
+from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
+from urbanlens.dashboard.models.profile.meta import MapViewChoice
 
 register = template.Library()
 
@@ -35,22 +33,19 @@ class MapLayerSpec:
     """Declarative description of one layer button in the layers panel.
 
     Attributes:
-        key: Stable identifier bound to ``data-map-layer`` and matched by the
-            JS engine (``street``, ``terrain``, ``satellite``, ...).
-        kind: How the JS engine treats the button: ``base`` (mutually
-            exclusive tile layers), ``overlay`` (independent tile overlays),
-            ``action`` (e.g. dark mode), or ``custom`` (page-registered
-            toggles such as pins or photos).
+        key: Stable identifier bound to ``data-map-layer`` and matched by the JS engine (``street``,
+        ``terrain``, ``satellite``, ...).
+        kind: How the JS engine treats the button: ``base`` (mutually exclusive tile layers),
+        ``overlay`` (independent tile overlays), ``action``...
         label: Short label shown under the thumbnail.
         aria_label: Accessible name for the button.
         tooltip: Tooltip text (may include the keyboard shortcut hint).
-        thumb: Static path of the thumbnail image, or empty to fall back to
-            ``icon``.
+        thumb: Static path of the thumbnail image, or empty to fall back to ``icon``.
         thumb_alt: Alt text for the thumbnail image.
-        icon: Material Symbols icon name used in the compact strip variant
-            and as the thumbnail fallback.
-        color: Optional accent hex color (e.g. a CustomLayer's chosen color)
-            tinted behind the icon in the icon-only thumbnail variant.
+        icon: Material Symbols icon name used in the compact strip variant and as the thumbnail
+        fallback.
+        color: Optional accent hex color (e.g. a CustomLayer's chosen color) tinted behind the icon in
+        the icon-only thumbnail variant.
         button_id: Explicit DOM id (kept stable for tests/automation).
     """
 
@@ -71,18 +66,18 @@ class MapLayerSpec:
             object.__setattr__(self, "button_id", f"{self.key}-layer-button")
 
 
-#: Registry of every known layer button, keyed by ``MapLayerSpec.key``.
-#: The button ids and copy for street/terrain/satellite/weather/pins/dark/
-#: borders/places are preserved verbatim from the original main-map markup.
+#: Registry of every known layer button, keyed by ``MapLayerSpec.key``. The button ids and copy for
+#: street/terrain/satellite/weather/pins/dark/ borders/places are preserved verbatim from the original main-map
+#: markup.
 MAP_LAYER_REGISTRY: dict[str, MapLayerSpec] = {}
 
 
 def register_map_layer(spec: MapLayerSpec) -> MapLayerSpec:
     """Register a layer button so templates can request it by key.
 
-    Plugins may call this at import time to contribute new layer buttons;
-    pages opt in by listing the key in their ``{% map_layers_panel %}`` call
-    and registering a matching custom toggle with the JS engine.
+    Plugins may call this at import time to contribute new layer buttons; pages opt in by listing the
+    key in their ``{% map_layers_panel %}`` call and registering a matching custom toggle with the JS
+    engine.
 
     Args:
         spec: The layer description to register.
@@ -303,11 +298,10 @@ register_map_layer(
 def custom_layer_button(layer: Any) -> MapLayerSpec:
     """Wrap a CustomLayer row as a MapLayerSpec so it renders in the layers panel.
 
-    The panel template only ever duck-types on a button's key/kind/label/icon/...
-    attributes, so a per-pin/wiki user-created layer can reuse the exact same
-    rendering path as the static, developer-registered layers - it just isn't
-    added to the process-wide :data:`MAP_LAYER_REGISTRY`, since that would leak
-    one pin's layers into every other map on the site.
+    The panel template only ever duck-types on a button's key/kind/label/icon/... attributes, so a
+    per-pin/wiki user-created layer can reuse the exact same rendering path as the static,
+    developer-registered layers - it just isn't added to the process-wide :data:`MAP_LAYER_REGISTRY`,
+    since that would leak one pin's layers into every other map on the site.
 
     Args:
         layer: A ``CustomLayer`` instance.
@@ -327,8 +321,32 @@ def custom_layer_button(layer: Any) -> MapLayerSpec:
     )
 
 
-@register.inclusion_tag("dashboard/partials/map/_layers_panel.html")
+def viewer_default_base(context: Any, offered: list[MapLayerSpec]) -> str:
+    """Which base the viewer's settings say this panel's map should open on.
+
+    Args:
+        context: Template context, read for ``request.user``'s profile.
+        offered: The buttons this panel renders, so a setting the page has no button for resolves to
+            one it does rather than stranding the viewer on a layer they cannot switch away from.
+
+    Returns:
+        A :class:`MapViewChoice` value (``remember`` included - the JS decides whether it has
+        somewhere to remember), or ``""`` when there is no profile to read.
+    """
+    profile = getattr(getattr(context.get("request"), "user", None), "profile", None)
+    configured = str(getattr(profile, "default_map_view", "") or "")
+    if configured in ("", MapViewChoice.REMEMBER):
+        return configured
+
+    offered_bases = {normalize_layer_mode(b.key, None) for b in offered if b.kind == "base"}
+    if not offered_bases or normalize_layer_mode(configured, None) in offered_bases:
+        return configured
+    return MapViewChoice.SATELLITE.value if MapViewChoice.SATELLITE.value in offered_bases else ""
+
+
+@register.inclusion_tag("dashboard/partials/map/_layers_panel.html", takes_context=True)
 def map_layers_panel(
+    context: Any,
     layers: str = "street,terrain,satellite,weather,dark,borders",
     variant: str = "panel",
     panel_id: str = "map-layers-panel",
@@ -340,24 +358,18 @@ def map_layers_panel(
     """Render the shared map layers component.
 
     Args:
-        layers: Comma-separated layer keys from :data:`MAP_LAYER_REGISTRY`,
-            in display order. Unknown keys are ignored so a page can list a
-            plugin layer that may not be installed.
-        variant: ``panel`` for the main-map flyout (thumbnails, opens from a
-            Layers toggle) or ``strip`` for the compact icon row used inside
-            dialogs (e.g. the comment map composer).
+        context: Template context, read for the viewer's ``default_map_view``.
+        layers: Comma-separated layer keys from :data:`MAP_LAYER_REGISTRY`, in display order.
+        variant: ``panel`` for the main-map flyout (thumbnails, opens from a Layers toggle) or ``strip``
+        for the compact icon row used inside dialogs...
         panel_id: DOM id of the component root.
-        extra_class: Extra CSS classes for the root (e.g.
-            ``map-layers-panel--inline`` to dock it in a
-            ``.map-bottom-controls`` row).
-        custom_layers: Iterable of ``CustomLayer`` rows to append after the
-            static registry buttons (e.g. a pin or wiki's own layers).
-        manage_layers_url: HTMX GET URL for the "Manage Layers" dialog entry
-            point. Omit to hide that button (e.g. the ``strip`` variant).
-        manage_overlays_url: HTMX GET URL for the "Image Overlays" dialog,
-            where a user georeferences a historical map or site plan onto this
-            map. Omit to hide that button - only the pin-detail and wiki maps
-            have overlays.
+        extra_class: Extra CSS classes for the root (e.g. ``map-layers-panel--inline`` to dock it in a
+        ``.map-bottom-controls`` row).
+        custom_layers: Iterable of ``CustomLayer`` rows to append after the static registry buttons
+        (e.g. a pin or wiki's own layers).
+        manage_layers_url: HTMX GET URL for the "Manage Layers" dialog entry point.
+        manage_overlays_url: HTMX GET URL for the "Image Overlays" dialog, where a user georeferences a
+        historical map or site plan onto this map.
 
     Returns:
         Context for ``partials/map/_layers_panel.html``.
@@ -372,6 +384,7 @@ def map_layers_panel(
         "extra_class": extra_class,
         "manage_layers_url": manage_layers_url,
         "manage_overlays_url": manage_overlays_url,
+        "default_base": viewer_default_base(context, buttons),
     }
 
 
@@ -393,9 +406,6 @@ def map_search_bar(
         placeholder: Input placeholder text.
         show_history: Whether to render the search-history button.
         show_geolocate: Whether to render the "center on my location" button.
-            Callers should only pass True when the profile's Live Location
-            history setting is enabled - this tag has no profile access of
-            its own to check that.
         extra_class: Extra CSS classes for the bar element.
 
     Returns:
@@ -415,16 +425,14 @@ class MapToolSpec:
     """Declarative description of one top-right toolbar button.
 
     Attributes:
-        key: Stable identifier matched against the ``tools`` argument of
-            :func:`map_toolbar`.
+        key: Stable identifier matched against the ``tools`` argument of :func:`map_toolbar`.
         icon: Material Symbols icon name.
         aria_label: Accessible name for the button.
         tooltip: Tooltip text (may include a keyboard shortcut hint).
         tooltip_pos: Tooltip placement (``""`` for float-only, or ``"below"``).
         button_id: Explicit DOM id (kept stable for tests/automation).
-        onclick: JS expression for a plain ``onclick`` handler. Ignored for
-            ``hx_get_name`` buttons; filled in dynamically for ``screenshot``
-            (see :func:`map_toolbar`).
+        onclick: JS expression for a plain ``onclick`` handler.
+        markup_tool: The drawing tool a markup button starts, which ``markup-panel.ts`` reads from ``data-markup-tool``.
         hx_get_name: URL name to reverse for an ``hx-get`` button, or ``""``.
         hx_target: ``hx-target`` selector, paired with ``hx_get_name``.
         hx_swap: ``hx-swap`` value, paired with ``hx_get_name``.
@@ -438,6 +446,7 @@ class MapToolSpec:
     tooltip_pos: str = ""
     button_id: str = field(default="")
     onclick: str = ""
+    markup_tool: str = ""
     hx_get_name: str = ""
     hx_target: str = ""
     hx_swap: str = ""
@@ -449,9 +458,8 @@ class MapToolSpec:
             object.__setattr__(self, "button_id", f"{self.key}-map-tool-button")
 
 
-#: Registry of every known toolbar tool, keyed by ``MapToolSpec.key``. The
-#: button ids and copy for add_pin/import/search/select/screenshot are
-#: preserved verbatim from the original main-map toolbar markup.
+#: Registry of every known toolbar tool, keyed by ``MapToolSpec.key``. The button ids and copy for
+#: add_pin/import/search/select/screenshot are preserved verbatim from the original main-map toolbar markup.
 MAP_TOOL_REGISTRY: dict[str, MapToolSpec] = {}
 
 
@@ -510,9 +518,8 @@ register_map_tool(
         aria_label="Pin list",
         tooltip="Browse the pins matching the current filters",
         tooltip_pos="below",
-        # _togglePinListPanel() already looks this id up to sync the button's
-        # active state; the edge handle (#pin-list-handle) is a desktop
-        # convenience rather than the only way in.
+        # _togglePinListPanel() already looks this id up to sync the button's active state; the edge handle
+        # (#pin-list-handle) is a desktop convenience rather than the only way in.
         button_id="pin-list-button",
         onclick="_togglePinListPanel()",
     )
@@ -522,7 +529,7 @@ register_map_tool(
         key="select",
         icon="check_box",
         aria_label="Select pins",
-        tooltip="Select multiple pins to merge, edit, or delete",
+        tooltip="Select multiple pins to merge, edit, or delete. Ctrl+click a second pin to start.",
         tooltip_pos="below",
         button_id="select-pins-button",
         onclick="toggleSelectMode()",
@@ -533,7 +540,7 @@ register_map_tool(
         key="select_detail_pins",
         icon="check_box",
         aria_label="Select child pins",
-        tooltip="Select multiple child pins to promote or delete",
+        tooltip="Select multiple child pins to promote or delete. Ctrl+click a second pin to start.",
         tooltip_pos="below",
         button_id="select-detail-pins-button",
         onclick="toggleDetailPinSelectMode()",
@@ -557,11 +564,7 @@ register_map_tool(
         aria_label="Select pins",
         tooltip="Select multiple pins",
         tooltip_pos="below",
-        # Matches pin-select-map.js's `selectToggleBtnId` option, passed as this
-        # exact id from memories/visits.html - no onclick here since that script
-        # binds its own click handler by id (see setSelectMode()) rather than
-        # using an inline onclick, same as select/select_detail_pins' pattern
-        # but through addEventListener instead of a global function call.
+        # No onclick: memories-tabs.ts passes this id to pin-select-map.ts as `selectToggleBtnId`, which binds it.
         button_id="unlogged-visits-select-toggle",
     )
 )
@@ -572,11 +575,7 @@ register_map_tool(
         aria_label="Select pins",
         tooltip="Select multiple pins",
         tooltip_pos="below",
-        # Sibling of select_unlogged_visits above - same shared PinSelectMap
-        # component, memories/locations.html's own button id. Previously a
-        # bespoke `.pin-select-toggle` pill instead of this shared component;
-        # see test_memories_unlogged.py's fix for the identical defect on the
-        # visits.html sibling page.
+        # Sibling of select_unlogged_visits above, for Memories > Locations.
         button_id="pin-suggestions-select-toggle",
     )
 )
@@ -593,11 +592,8 @@ register_map_tool(
     )
 )
 
-# -- Markup drawing tools (pin detail, Location wiki, safety check-in maps) ----
-# Formerly a dropdown ("Add Detail") docked in .map-bottom-controls; now plain
-# icon buttons in the top-right toolbar like every other map tool. Onclick
-# handlers are the same window globals createMarkupToolbar() exposes (see
-# ts/shared/markup-toolbar.ts and _markup_panel_dialog.html).
+# Onclick handlers are the same window globals createMarkupToolbar() exposes (see ts/shared/markup-toolbar.ts
+# and _markup_panel_dialog.html).
 register_map_tool(
     MapToolSpec(
         key="markup_pin",
@@ -617,7 +613,7 @@ register_map_tool(
         tooltip="Draw a line",
         tooltip_pos="below",
         button_id="markup-line-button",
-        onclick="startMarkupDraw('line')",
+        markup_tool="line",
     )
 )
 register_map_tool(
@@ -628,7 +624,7 @@ register_map_tool(
         tooltip="Draw an arrow",
         tooltip_pos="below",
         button_id="markup-arrow-button",
-        onclick="startMarkupDraw('arrow')",
+        markup_tool="arrow",
     )
 )
 register_map_tool(
@@ -639,11 +635,10 @@ register_map_tool(
         tooltip="Draw freehand",
         tooltip_pos="below",
         button_id="markup-freehand-button",
-        # Stored as a regular "line" markup item (see markup-engine.ts's
-        # onMouseDown "freehand" branch) - it's just a multi-point line sampled
-        # continuously along the drag instead of click-per-vertex, so it needs
+        # Stored as a regular "line" markup item (see markup-engine.ts's onMouseDown "freehand" branch) - it's
+        # just a multi-point line sampled continuously along the drag instead of click-per-vertex, so it needs
         # no dedicated backend markup_type, serializer, or export handling.
-        onclick="startMarkupDraw('freehand')",
+        markup_tool="freehand",
     )
 )
 register_map_tool(
@@ -654,7 +649,7 @@ register_map_tool(
         tooltip="Add a text label",
         tooltip_pos="below",
         button_id="markup-text-button",
-        onclick="startTextPlacement()",
+        markup_tool="text",
     )
 )
 register_map_tool(
@@ -665,7 +660,7 @@ register_map_tool(
         tooltip="Draw a square",
         tooltip_pos="below",
         button_id="markup-square-button",
-        onclick="startShapeDraw('square')",
+        markup_tool="square",
     )
 )
 register_map_tool(
@@ -676,7 +671,7 @@ register_map_tool(
         tooltip="Draw a circle",
         tooltip_pos="below",
         button_id="markup-circle-button",
-        onclick="startShapeDraw('circle')",
+        markup_tool="circle",
     )
 )
 register_map_tool(
@@ -687,7 +682,7 @@ register_map_tool(
         tooltip="Draw a polygon",
         tooltip_pos="below",
         button_id="markup-polygon-button",
-        onclick="startShapeDraw('polygon')",
+        markup_tool="polygon",
     )
 )
 
@@ -703,29 +698,21 @@ def map_toolbar(
 ) -> dict[str, Any]:
     """Render the shared top-right map toolbar (tools only).
 
-    Every map on the site renders this exact markup so the screenshot tool -
-    and any future toolbar tool - behaves identically everywhere: same
-    placement, same collapse behavior, same underlying screenshot code path
-    (``window._openMapToolbarScreenshot``, ``themes/base.html``).
+    Every map on the site renders this exact markup so the screenshot tool - and any future toolbar tool
+
+    - behaves identically everywhere: same placement, same collapse behavior, same underlying screenshot
+      code path (``window._openMapToolbarScreenshot``, ``themes/...
 
     Args:
-        tools: Comma-separated tool keys from :data:`MAP_TOOL_REGISTRY`, in
-            display order. Unknown keys are ignored.
-        panel_id: DOM id of the toolbar root. Must be unique per page.
-        map_var: JS expression evaluating to the page's Leaflet map instance
-            (e.g. ``"window.map"``), used to seed the screenshot composer's
-            initial view. Ignored if ``screenshot_onclick`` is given.
-        screenshot_context: Raw JS expression (e.g. an object literal)
-            passed as the composer's ``context`` option, or ``"null"``.
-        screenshot_onclick: Full ``onclick`` override for the screenshot
-            button, for pages that need bespoke logic (e.g. resolving
-            context from a JS config object) instead of the generic
-            ``_openMapToolbarScreenshot(map_var, context)`` call.
-        screenshot_trip_name: When set, overrides ``screenshot_context`` with
-            ``{tripName: ...}`` (JSON-encoded, so it round-trips safely
-            through the auto-escaped HTML attribute) so the composer can
-            suggest a title based on the trip instead of reverse-geocoding
-            the map view.
+        tools: Comma-separated tool keys from :data:`MAP_TOOL_REGISTRY`, in display order.
+        panel_id: DOM id of the toolbar root.
+        map_var: Ignored if ``screenshot_onclick`` is given.
+        screenshot_context: Raw JS expression (e.g. an object literal) passed as the composer's
+        ``context`` option, or ``"null"``.
+        screenshot_onclick: Full ``onclick`` override for the screenshot button, for pages that need
+        bespoke logic (e.g. resolving context from a JS config object)...
+        screenshot_trip_name: When set, overrides ``screenshot_context`` with ``{tripName: ...}``
+        (JSON-encoded, so it round-trips safely through the auto-escaped...
 
     Returns:
         Context for ``partials/map/_map_toolbar.html``.
@@ -752,3 +739,36 @@ def map_toolbar(
         "panel_id": panel_id,
         "buttons": buttons,
     }
+
+
+@register.simple_tag(takes_context=True)
+def basemap_tile_catalogue(context: template.Context) -> SafeString:
+    """Embed this deployment's basemap layer catalogue in the document, ahead of any map.
+
+    Rendered in ``themes/base.html`` immediately before ``core.js``, so ``map-layers.ts`` can read
+    it synchronously at the moment it is asked for a tile source - before the first tile request
+    goes out. Fetching the same catalogue over HTTP instead (``registerRedataLayers()``) leaves a
+    window in which a map draws vendor tiles and swaps afterwards, by which point the vendor has
+    already been told which coordinates the user is looking at.
+
+    Args:
+        context: The template context, read for ``request`` to tell a signed-in viewer from a
+            signed-out one - only the former can fetch a proxied raster layer.
+
+    Returns:
+        A ``<script type="application/json">`` block, or empty when this deployment offers nothing
+        beyond its built-in vendor layers.
+    """
+    from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
+
+    # Rendered without a request on a few fragment paths, where "not signed in" is the safe read:
+    # it offers only the keyless layers, rather than proxy URLs the viewer may not be able to fetch.
+    user = getattr(context.get("request"), "user", None)
+    # allow_fetch=False: this runs on every page, map or not, and a cold cache must never put a
+    # REData round trip inside a page render. A miss renders nothing and the client asks instead.
+    layers = catalogue_for_viewer(authenticated=user is not None and bool(user.is_authenticated), allow_fetch=False)
+    if not layers:
+        # No element at all, rather than an empty one: absent means "ask over HTTP if you care",
+        # which is what a page rendered outside this base template gets. See map-layers.ts.
+        return mark_safe("")
+    return json_script(layers, "ul-basemap-tiles")

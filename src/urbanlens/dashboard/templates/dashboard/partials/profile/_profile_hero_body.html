@@ -1,29 +1,4 @@
-{% comment %}
-Hero body for profile/index.html and profile/edit.html - rendered inside
-.ul-page-hero--profile (see _page_hero.scss), so both pages share one fixed
-hero height and the Profile | Edit subnav never jumps when switching tabs.
-
-Expects:
-  profile           - the Profile being shown (required)
-  edit_mode         - when True, swaps the "Edit Profile" CTA for "View
-                       Profile" (used by profile/edit.html; omit/False on
-                       profile/index.html)
-  friendship_status, friendship, friends_since - only used when viewing
-                       another user's profile (see userprofile.py).
-  viewer_muted      - whether the *viewer* muted this relationship. A separate
-                       flag from friendship_status, deliberately: muting must
-                       never change the relationship, so there is no 'muted'
-                       status to branch on and the Mute/Unmute toggle lives
-                       inside the 'accepted' branch instead. Resolved in the
-                       view because mute is stored per side of a shared row.
-  viewer_placed_block - True only when the viewer is the one who placed the
-                       block. Both parties see the 'blocked' branch (the
-                       relationship row is matched in either direction), but
-                       only the blocker may lift it, so the Unblock button is
-                       gated on this rather than on friendship_status.
-  preview_modes     - "View as" options; only rendered when present
-  can_view_contact  - gates the email meta item
-{% endcomment %}
+{% comment %}Hero body for profile/index.html and profile/edit.html.{% endcomment %}
 <div class="profile-avatar-col">
     <div class="profile-avatar-wrap">
         {% if profile.avatar %}
@@ -57,7 +32,7 @@ Expects:
                 {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
                 {% endif %}
                 {% if profile.user == request.user %}
-                {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
+                {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility %}
                 {% endif %}
                 {% include "dashboard/partials/ui/_supporter_badge.html" %}
             </h1>
@@ -110,7 +85,7 @@ Expects:
                     <form method="post" action="{% url 'friend.block' profile.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn friendship-btn btn--danger" title="Block this user"
-                                onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
+                                data-confirm="Block {{ profile.username }}?" data-confirm-message="They will not be able to see your profile." data-confirm-label="Block">
                             <i class="material-symbols-outlined">block</i> Block
                         </button>
                     </form>
@@ -235,13 +210,13 @@ Expects:
                   data-raw-email="{{ profile.email|default:'' }}" title="Click to change your email">
                 <i class="material-symbols-outlined">email</i><span class="profile-meta-text">{{ profile.email|default:"Add email..." }}</span>
             </span>
-            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility %}
         </span>
         {% elif profile.email and can_view_contact %}
         <span class="profile-meta-item{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             <i class="material-symbols-outlined">email</i>{{ profile.email }}
             {% if profile.user == request.user %}
-            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility %}
             {% endif %}
         </span>
         {% endif %}

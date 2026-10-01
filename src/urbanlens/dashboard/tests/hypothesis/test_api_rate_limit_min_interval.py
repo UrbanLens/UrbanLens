@@ -1,18 +1,9 @@
-"""Tests for the API rate limiter's minimum-interval (spacing) enforcement.
-
-Covers ApiRateLimit.min_interval_seconds/last_call_at, ServiceDefaults' matching
-field, _reserve_call()'s new spacing check, SiteAdminApiLimitsView's POST
-handling of the new form field, and the Nominatim default that motivated this
-feature - a rolling per-minute *count* doesn't guarantee even spacing between
-calls, which is what these providers actually require. GDELT's own spacing
-requirement moved with it when the GDELT panel was rewired to REData's
-``/search/news/`` - REData is the one calling GDELT directly now, so the
-concern is REData's to pace, not this registry's.
-"""
+"""Tests for the API rate limiter's minimum-interval (spacing) enforcement."""
 
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import Client
@@ -24,7 +15,11 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
-from urbanlens.dashboard.services.core.rate_limiter import SERVICE_REGISTRY, RateLimitExceededError, ServiceDefaults, _reserve_call
+from urbanlens.dashboard.services.core.rate_limiter import (
+    RateLimitExceededError,
+    ServiceDefaults,
+    _reserve_call,
+)
 
 
 class ServiceDefaultsMinIntervalFieldTests(SimpleTestCase):
@@ -92,6 +87,18 @@ class ReserveCallMinIntervalTests(TestCase):
         # block if the spacing check ever ran unconditionally on last_call_at.
         _reserve_call(self.service)
 
+    def test_call_exactly_at_the_interval_boundary_is_allowed(self) -> None:
+        """``elapsed < min_interval_seconds`` blocks - equal-to is allowed, not blocked.
+
+        Guards the boundary condition itself: a ``<=`` typo here would reject a call landing exactly on the
+        configured spacing, which is the spacing the admin asked for, not a violation of it."""
+        frozen_now = timezone.now()
+        ApiRateLimit.objects.filter(service=self.service).update(last_call_at=frozen_now - timedelta(seconds=5))
+        with patch("urbanlens.dashboard.services.core.rate_limiter.timezone.now", return_value=frozen_now):
+            entry_pk = _reserve_call(self.service)
+        entry = ApiCallLog.objects.get(pk=entry_pk)
+        self.assertTrue(entry.success)
+
 
 class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
     def setUp(self) -> None:
@@ -100,12 +107,21 @@ class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
         add_user_to_site_admin_group(self.admin)
         self.client = Client()
         self.client.force_login(self.admin)
-        self.cfg = ApiRateLimit.objects.create(service="test_admin_service", display_name="Test Admin Service", calls_per_minute=10, calls_per_day=100)
+        self.cfg = ApiRateLimit.objects.create(
+            service="test_admin_service", display_name="Test Admin Service", calls_per_minute=10, calls_per_day=100
+        )
 
     def test_post_saves_min_interval_seconds(self) -> None:
         self.client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "min_interval_seconds": "5", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "5",
+                "notes": "",
+            },
         )
         self.cfg.refresh_from_db()
         self.assertEqual(self.cfg.min_interval_seconds, 5.0)
@@ -115,7 +131,69 @@ class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
         self.cfg.save(update_fields=["min_interval_seconds"])
         self.client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "min_interval_seconds": "", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "",
+                "notes": "",
+            },
         )
         self.cfg.refresh_from_db()
         self.assertIsNone(self.cfg.min_interval_seconds)
+
+    def test_non_numeric_min_interval_seconds_is_ignored_not_saved(self) -> None:
+        self.cfg.min_interval_seconds = 5.0
+        self.cfg.save(update_fields=["min_interval_seconds"])
+        response = self.client.post(
+            reverse("site_admin_api_limits"),
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "not-a-number",
+                "notes": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.cfg.refresh_from_db()
+        self.assertEqual(self.cfg.min_interval_seconds, 5.0)
+
+    def test_post_requires_site_admin_permission_before_and_after_promotion(self) -> None:
+        """Gated by ``dashboard.view_site_admin`` - not automatic for any logged-in user."""
+        user = baker.make(User)
+        client = Client()
+        client.force_login(user)
+
+        response = client.post(
+            reverse("site_admin_api_limits"),
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "5",
+                "notes": "",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+        self.cfg.refresh_from_db()
+        self.assertIsNone(self.cfg.min_interval_seconds)
+
+        add_user_to_site_admin_group(user)
+        response = client.post(
+            reverse("site_admin_api_limits"),
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "5",
+                "notes": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.cfg.refresh_from_db()
+        self.assertEqual(self.cfg.min_interval_seconds, 5.0)

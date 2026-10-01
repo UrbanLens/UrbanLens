@@ -1,15 +1,4 @@
-"""Tests for the custom-field REFERENCE picker's "wiki" kind recognizing
-boundary-mate wikis (docs/PROBLEMS.md follow-up).
-
-Before this fix, referenceable_queryset("wiki", profile) used
-`Wiki.objects.filter(location__pins__profile=profile)` - an exact-Location-row-
-only check that duplicated (and never got updated to match) the boundary-mate
-fix already applied to wiki_access.location_visible_to in commit 15e6e2e2. A
-user whose pin sits on the same building as an existing wiki - but at a
-boundary-mate Location row, not the wiki's own exact Location - could already
-see and open that wiki (the earlier fix), but still could not select it as a
-REFERENCE custom field target. See wiki_access.visible_wiki_location_ids.
-"""
+"""Tests for the custom-field REFERENCE picker's "wiki" kind recognizing boundary-mate wikis (docs/PROBLEMS.md follow-up)."""
 
 from __future__ import annotations
 
@@ -18,7 +7,6 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki

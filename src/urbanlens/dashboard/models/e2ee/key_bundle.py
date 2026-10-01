@@ -22,20 +22,7 @@ DEFAULT_KDF_MEMLIMIT = 67_108_864  # 64 MiB
 
 class MessagingKeyBundle(abstract.DashboardModel):
     """One profile's public key plus wrapped (client-encrypted) copies of its private key.
-
-    Unwrap paths, in the order clients try them:
-
-    1. ``password_wrapped_secret`` - private key encrypted under an Argon2id
-       key derived from the login password in the browser (never transmitted).
-       Empty for OAuth-only accounts, which have no password.
-    2. ``recovery_wrapped_secret`` - private key encrypted under a random
-       32-byte recovery key shown to the user once at enrollment. This is the
-       only path for OAuth users on a new device and for password users after
-       an email-link password reset on a device with no cached key.
-
-    ``password_wrap_stale`` is set when a password reset invalidates path 1;
-    any client that still holds the decrypted private key clears it by
-    re-wrapping under the new password (``POST e2ee/rewrap``).
+    Unwrap paths, in the order clients try them: ``password_wrapped_secret`` - private key encrypted under an Argon2id key derived from the login password in the browser (never transmitted).
     """
 
     profile = OneToOneField(
@@ -51,7 +38,6 @@ class MessagingKeyBundle(abstract.DashboardModel):
     # crypto_secretbox blob (base64: nonce || ciphertext) of the private key,
     # wrapped under the password-derived key. Empty for OAuth-only accounts.
     password_wrapped_secret = TextField(blank=True, default="")
-    # Argon2id salt (base64) used to derive the wrapping key from the password.
     # Independent from AccountKdf.auth_salt - domain separation between the
     # authentication credential and the wrapping key.
     password_wrap_salt = CharField(max_length=64, blank=True, default="")

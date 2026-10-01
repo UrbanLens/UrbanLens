@@ -1,17 +1,6 @@
 /**
- * A notification made by one account has to reach another account's browser.
- *
- * This is the chain nothing else in the repo tests end to end. A unit test can
- * assert that `NotificationLog.objects.notify()` writes a row; it cannot tell
- * you that the row reaches a *different user's* rendered page, because the row
- * and the page live in one process there. On a deployment they are separated by
- * a database, a channel layer, an HTMX fragment endpoint that the shell polls,
- * and a template - and any one of those can be the reason a badge never fills
- * in.
- *
- * Driven through the friend-request path because it is the shortest route from
- * "account B did something" to "account A should be told", and because it needs
- * no fixtures beyond the two accounts the suite already has.
+ * A notification made by one account has to reach another account's browser. This is the chain
+ * nothing else in the repo tests end to end.
  */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";

@@ -7,7 +7,6 @@ distinguishable from each other).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest import mock
 
 from django.contrib.auth.models import User
 from django.test import Client
@@ -18,7 +17,6 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.search.saved_filter_cache import pins_fingerprint
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -31,8 +29,12 @@ class SavedFilterMatchCountsViewTests(TestCase):
         self.profile: Profile = self.user.profile
         self.client = Client()
         self.client.force_login(self.user)
-        self.tagged_pin = baker.make(Pin, profile=self.profile, name="Tagged Pin", location=baker.make(Location, latitude=40.0, longitude=-74.0))
-        self.other_pin = baker.make(Pin, profile=self.profile, name="Other Pin", location=baker.make(Location, latitude=41.0, longitude=-75.0))
+        self.tagged_pin = baker.make(
+            Pin, profile=self.profile, name="Tagged Pin", location=baker.make(Location, latitude=40.0, longitude=-74.0)
+        )
+        self.other_pin = baker.make(
+            Pin, profile=self.profile, name="Other Pin", location=baker.make(Location, latitude=41.0, longitude=-75.0)
+        )
 
     def _url(self, **params) -> str:
         base = reverse("saved_filters.counts")
@@ -59,7 +61,12 @@ class SavedFilterMatchCountsViewTests(TestCase):
         self.assertEqual(data["counts"][str(saved_filter.uuid)], 1)
 
     def test_count_reflects_sidebar_criteria_combined_with_the_filter(self) -> None:
-        baker.make(Pin, profile=self.profile, name="Tagged Second", location=baker.make(Location, latitude=42.0, longitude=-76.0))
+        baker.make(
+            Pin,
+            profile=self.profile,
+            name="Tagged Second",
+            location=baker.make(Location, latitude=42.0, longitude=-76.0),
+        )
         saved_filter = SavedFilter.objects.create(profile=self.profile, name="Tagged Only", criteria={})
         # Sidebar's own "name" search narrows the count further.
         response = self.client.get(self._url(name="Tagged Pin"))
@@ -92,23 +99,30 @@ class SavedFilterMatchCountsViewTests(TestCase):
         data = response.json()
         self.assertEqual(data["counts"][str(saved_filter.uuid)], 2)
 
-    def test_pins_fingerprint_is_computed_once_per_request_not_once_per_filter(self) -> None:
-        """Regression: get_or_compute_matching_uuids used to recompute the profile's pin
-        fingerprint (a DB aggregate) once per saved filter the profile owns, on every single
-        request to this view. With N saved filters that was N redundant, identical queries per
-        toggle instead of 1. See docs/GOALS_CODE_AUDIT.md ("Saved filter performance")."""
-        for i in range(5):
-            SavedFilter.objects.create(profile=self.profile, name=f"Extra {i}", criteria={})
-        self.assertGreater(self.profile.saved_filters.count(), 5)
+    def test_a_deleted_pin_stops_counting_on_the_next_request(self) -> None:
+        saved_filter = SavedFilter.objects.create(profile=self.profile, name="All", criteria={})
+        self.assertEqual(self.client.get(self._url()).json()["counts"][str(saved_filter.uuid)], 2)
 
-        with mock.patch(
-            "urbanlens.dashboard.controllers.saved_filters.pins_fingerprint",
-            wraps=pins_fingerprint,
-        ) as wrapped:
-            response = self.client.get(self._url())
+        self.other_pin.delete()
+
+        self.assertEqual(self.client.get(self._url()).json()["counts"][str(saved_filter.uuid)], 1)
+
+    def test_a_filter_on_detail_pin_count_counts_through_its_annotation(self) -> None:
+        """The detail-pin criteria annotate the queryset, which the count reads as a subquery."""
+        baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.tagged_pin,
+            location=baker.make(Location, latitude=40.001, longitude=-74.001),
+        )
+        saved_filter = SavedFilter.objects.create(
+            profile=self.profile, name="No details", criteria={"max_detail_pins": 0}
+        )
+
+        response = self.client.get(self._url())
 
         self.assertEqual(response.status_code, 200)
-        wrapped.assert_called_once()
+        self.assertEqual(response.json()["counts"][str(saved_filter.uuid)], 1)
 
     def test_other_profiles_filters_are_not_included(self) -> None:
         other_profile: Profile = baker.make(User).profile

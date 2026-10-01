@@ -1,27 +1,13 @@
-"""Tests for the TEMPORARY legacy CID coordinate repair.
-
-Delete this file together with
-``services.apis.locations.legacy_cid_coordinate_fix`` once every user has had
-the chance to re-import their pins.
-
-Parsing (pure, no DB): a name that is wholly a coordinate parses in every
-supported format, a name that merely mentions one does not, and a hypothesis
-round-trip covers arbitrary in-range pairs.
-
-Matching/moving (DB): a legacy pin is found by CID and by coordinate-shaped
-name (verbatim and cross-format) and moved onto its corrected Location, while
-post-cutoff pins, other profiles' pins, already-correct pins and collisions with
-an existing pin are all left alone.
-"""
+"""Tests for the TEMPORARY legacy CID coordinate repair."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.location.model import Location
@@ -127,33 +113,36 @@ class RepairLegacyPinCoordinatesTests(TestCase):
     def _location(self, latitude: float, longitude: float, *, legacy: bool = True) -> Location:
         """Create a Location, backdated before the cutoff unless told otherwise."""
         location = Location.objects.create(latitude=latitude, longitude=longitude)
-        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
         Location.objects.filter(pk=location.pk).update(created=stamp)
         return Location.objects.get(pk=location.pk)
 
     def _pin(self, location: Location, *, name: str = "", profile=None, legacy: bool = True) -> Pin:
         """Create a pin on *location*, backdated before the cutoff unless told otherwise."""
         pin = Pin.objects.create(profile=profile or self.profile, location=location, name=name)
-        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
         Pin.objects.filter(pk=pin.pk).update(created=stamp)
         return Pin.objects.get(pk=pin.pk)
 
     def _set_cid(self, location: Location, cid: int) -> None:
         """Link a CID to *location* without the live place-name lookup.
 
-        Assigning ``location.cid`` goes through ``GooglePlaceService`` with
-        ``fetch_if_missing=True``, which calls REData's nearby-places search to
-        name the coordinates - a real network call, so under the test harness's
-        network block every test in this class died on a ``RuntimeError`` before
-        reaching its own assertions. The service's own bulk-path flag skips that
-        lookup, which is all these tests ever wanted.
-        """
+        Assigning ``location.cid`` goes through ``GooglePlaceService`` with ``fetch_if_missing=True``, which
+        calls REData's nearby-places search to name the coordinates - a real network call, so under the test
+        harness's network block every test in this class died on a ``RuntimeError`` before reaching its own
+        assertions."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
         GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
 
     def _repair(self, *, cid=None, name="", latitude=RIGHT_LATITUDE, longitude=RIGHT_LONGITUDE):
-        return repair_legacy_pin_coordinates(profile=self.profile, cid=cid, name=name, latitude=latitude, longitude=longitude)
+        return repair_legacy_pin_coordinates(
+            profile=self.profile, cid=cid, name=name, latitude=latitude, longitude=longitude
+        )
 
     # -- is_legacy_location -------------------------------------------------
 
@@ -310,15 +299,142 @@ class RepairLegacyPinCoordinatesTests(TestCase):
         self.assertIsNone(self._repair(cid=None, name="Old Tower"))
 
 
+class RepointCidToCorrectedLocationTests(TestCase):
+    """P20: repoint_cid_to_corrected_location moves a CID off the wrongly-placed Location."""
+
+    def _location(self, latitude: float, longitude: float) -> Location:
+        return Location.objects.create(latitude=latitude, longitude=longitude)
+
+    def _set_cid(self, location: Location, cid: int) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
+
+    def test_moves_the_cid_to_the_corrected_location(self):
+        from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
+            repoint_cid_to_corrected_location,
+        )
+
+        legacy = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(legacy, 12345)
+        correct = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+
+        repoint_cid_to_corrected_location(legacy, correct, 12345)
+
+        legacy.refresh_from_db()
+        correct.refresh_from_db()
+        self.assertIsNone(legacy.cid)
+        self.assertEqual(correct.cid, 12345)
+
+    def test_by_cid_resolves_to_the_corrected_location_afterward(self):
+        from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
+            repoint_cid_to_corrected_location,
+        )
+
+        legacy = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(legacy, 12345)
+        correct = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+
+        repoint_cid_to_corrected_location(legacy, correct, 12345)
+
+        self.assertEqual(Location.objects.by_cid(12345).first().pk, correct.pk)
+
+    def test_does_nothing_when_the_legacy_location_no_longer_holds_this_cid(self):
+        """Must not clear a GooglePlace row that legitimately holds a *different* cid - guards
+        against a stale/reordered caller repointing a cid that never matched this location."""
+        from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
+            repoint_cid_to_corrected_location,
+        )
+
+        legacy = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(legacy, 99999)
+        correct = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+
+        repoint_cid_to_corrected_location(legacy, correct, 12345)
+
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.cid, 99999)
+        self.assertIsNone(Location.objects.by_cid(12345).first())
+
+    def test_does_nothing_when_the_legacy_location_has_no_google_place(self):
+        from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
+            repoint_cid_to_corrected_location,
+        )
+
+        legacy = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        correct = self._location(RIGHT_LATITUDE, RIGHT_LONGITUDE)
+
+        repoint_cid_to_corrected_location(legacy, correct, 12345)
+
+        correct.refresh_from_db()
+        self.assertIsNone(correct.cid)
+
+
+class CidRepointOnRepairTests(TestCase):
+    """P20: _create_pin_from_confirmed repoints the cid instead of skipping the backfill."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def _location(self, latitude: float, longitude: float, *, legacy: bool = True) -> Location:
+        location = Location.objects.create(latitude=latitude, longitude=longitude)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
+        Location.objects.filter(pk=location.pk).update(created=stamp)
+        return Location.objects.get(pk=location.pk)
+
+    def _pin(self, location: Location, *, name: str = "", legacy: bool = True) -> Pin:
+        pin = Pin.objects.create(profile=self.profile, location=location, name=name)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
+        Pin.objects.filter(pk=pin.pk).update(created=stamp)
+        return Pin.objects.get(pk=pin.pk)
+
+    def _set_cid(self, location: Location, cid: int) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
+
+    def test_repairing_a_pin_repoints_the_cid_onto_the_corrected_location(self):
+        from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
+
+        wrong = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(wrong, 12345)
+        self._pin(wrong, name="Old Water Tower")
+
+        pin, created = _create_pin_from_confirmed(
+            {"name": "Old Water Tower", "description": "", "cid": 12345, "label_ids": []},
+            location=wrong,
+            latitude=RIGHT_LATITUDE,
+            longitude=RIGHT_LONGITUDE,
+            user_profile=self.profile,
+            list_labels=[],
+            category_label=None,
+            auto_tag=False,
+        )
+
+        self.assertIsNotNone(pin)
+        self.assertFalse(created)
+        pin.refresh_from_db()
+        self.assertNotEqual(pin.location_id, wrong.pk)
+        self.assertEqual(pin.location.cid, 12345)
+
+        wrong.refresh_from_db()
+        self.assertIsNone(wrong.cid)
+        self.assertEqual(Location.objects.by_cid(12345).first().pk, pin.location_id)
+
+
 class PreviewNeedsLegacyRepairTests(TestCase):
     """preview_needs_legacy_repair - the import preview's "don't dedupe this" flag.
 
-    Regression coverage for the bug where a re-import's preview step deselected
-    exactly the pins the legacy repair exists to fix: its "already on your map"
-    check compared the preview's own (still S2-guessed) coordinates against the
-    user's existing pins, found the legacy pin sitting at that same wrong spot,
-    and pre-deselected the record before it ever reached the server-side repair.
-    """
+    Regression coverage for the bug where a re-import's preview step deselected exactly the pins the legacy
+    repair exists to fix: its "already on your map" check compared the preview's own (still S2-guessed)
+    coordinates against the user's existing pins, found the legacy pin sitting at that same wrong spot, and
+    pre-deselected the record before it ever reached the server-side repair."""
 
     def setUp(self):
         super().setUp()
@@ -329,13 +445,17 @@ class PreviewNeedsLegacyRepairTests(TestCase):
 
     def _location(self, latitude: float, longitude: float, *, legacy: bool = True) -> Location:
         location = Location.objects.create(latitude=latitude, longitude=longitude)
-        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
         Location.objects.filter(pk=location.pk).update(created=stamp)
         return Location.objects.get(pk=location.pk)
 
     def _pin(self, location: Location, *, name: str = "", profile=None, legacy: bool = True) -> Pin:
         pin = Pin.objects.create(profile=profile or self.profile, location=location, name=name)
-        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
         Pin.objects.filter(pk=pin.pk).update(created=stamp)
         return Pin.objects.get(pk=pin.pk)
 

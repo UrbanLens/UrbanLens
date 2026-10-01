@@ -143,6 +143,12 @@ describe("opening and closing", () => {
         expect(popup().hidden).toBe(true);
     });
 
+    test("picking an emoji closes its picker", () => {
+        toggleReactionPicker(addButton());
+        popup().querySelector<HTMLElement>('[data-emoji="😀"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(popup().hidden).toBe(true);
+    });
+
     test("clicking an emoji records it as recent", () => {
         toggleReactionPicker(addButton());
         popup().querySelector<HTMLElement>('[data-emoji="😀"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -156,7 +162,12 @@ describe("opening and closing", () => {
 });
 
 describe("installGlobalReactionPicker", () => {
-    test("exposes the global the comment partials call from onclick", () => {
-        expect(typeof window.toggleReactionPicker).toBe("function");
+    test("the add button opens its picker, and again closes it, with no global to call", () => {
+        const click = () => addButton().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        click();
+        expect(popup().hidden).toBe(false);
+        click();
+        expect(popup().hidden).toBe(true);
+        expect("toggleReactionPicker" in window).toBe(false);
     });
 });

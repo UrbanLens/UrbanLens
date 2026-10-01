@@ -2,25 +2,29 @@
 
 from __future__ import annotations
 
-from django.db.models import BooleanField, CharField, DecimalField, Index, IntegerField, TextField
+from django.db.models import SET_NULL, BooleanField, CharField, DecimalField, ForeignKey, Index, IntegerField, PositiveSmallIntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
 
 
 class ApiCallLog(abstract.DashboardModel):
-    """Log entry for one external API call.
-
-    The ``created`` timestamp (from the base model) is the call time.
-    Rows are trimmed daily by ``tasks.prune_api_call_logs``; its retention is
-    set by the *costs page's* 12-month spend chart, not by the 30-day
-    rate-limit windows - see that task before shortening it.
-    """
+    """Log entry for one external API call. The ``created`` timestamp (from the base model) is the call time."""
 
     service = CharField(
         max_length=50,
         db_index=True,
         help_text="Service identifier matching ApiRateLimit.service.",
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="api_calls",
+        help_text=(
+            "Whose behalf this call was made on, from the actor bound for the request. Null for the site's own scheduled work, which is nobody's consumption, and for a call whose account has since been deleted - the usage stays in the record, unattributed."
+        ),
     )
     endpoint = TextField(
         blank=True,
@@ -34,6 +38,11 @@ class ApiCallLog(abstract.DashboardModel):
         null=True,
         blank=True,
         help_text="Round-trip response time in milliseconds.",
+    )
+    status_code = PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="The upstream's HTTP status. Null when no response arrived (refused before sending, a network error) or the caller had none to record.",
     )
     was_rate_limited = BooleanField(
         default=False,
@@ -64,6 +73,10 @@ class ApiCallLog(abstract.DashboardModel):
         indexes = [
             # Composite index for rate-limit window queries: service + created
             Index(fields=["service", "created"], name="idxdb_apilog_svc_cdt"),
+            # Per-consumer window questions ("how much of this service has this
+            # profile used in the last minute", "how many distinct people are
+            # competing for it") read profile straight off this index.
+            Index(fields=["service", "created", "profile"], name="idxdb_apilog_svc_cdt_prf"),
         ]
         ordering = ["-created"]
 

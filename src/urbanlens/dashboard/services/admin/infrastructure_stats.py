@@ -149,12 +149,12 @@ def collect_postgres_stats() -> InfrastructureServiceStat:
         )
 
 
-def _valkey_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
-    """Build labeled Valkey metrics from a connected client."""
+def _dragonfly_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
+    """Build labeled Dragonfly metrics from a connected client."""
     info = client.info()
     uptime_seconds = int(info.get("uptime_in_seconds", 0))
-    # Valkey reports its version under "valkey_version"; Redis uses "redis_version".
-    server_version = str(info.get("valkey_version") or info.get("redis_version") or "Unknown")
+    # Dragonfly reports its version under "dragonfly_version"; Valkey uses "valkey_version"; Redis uses "redis_version".
+    server_version = str(info.get("dragonfly_version") or info.get("valkey_version") or info.get("redis_version") or "Unknown")
 
     hits = int(info.get("keyspace_hits", 0))
     misses = int(info.get("keyspace_misses", 0))
@@ -181,22 +181,21 @@ def _valkey_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
     return tuple(metrics)
 
 
-def collect_valkey_stats() -> InfrastructureServiceStat:
-    """Collect Valkey/Redis cache statistics.
+def collect_dragonfly_stats() -> InfrastructureServiceStat:
+    """Collect Dragonfly/Redis cache statistics.
 
     Returns:
-        InfrastructureServiceStat for the configured Valkey instance, or a
-        disabled stat when ``UL_VALKEY_URL``/``UL_REDIS_URL`` is unset.
-    """
-    url = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+        InfrastructureServiceStat for the configured Dragonfly instance, or a disabled stat when
+        ``UL_DRAGONFLY_URL``/``UL_VALKEY_URL``/``UL_REDIS_URL`` is unset."""
+    url = os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
     if not url:
         return InfrastructureServiceStat(
-            key="valkey",
-            name="Valkey",
+            key="dragonfly",
+            name="Dragonfly",
             icon="memory",
             status="disabled",
             status_label="Not configured",
-            metrics=(ServiceMetric("Status", "UL_VALKEY_URL is not set"),),
+            metrics=(ServiceMetric("Status", "UL_DRAGONFLY_URL is not set"),),
         )
 
     client: redis.Redis | None = None
@@ -209,18 +208,18 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
         )
         client.ping()
         return InfrastructureServiceStat(
-            key="valkey",
-            name="Valkey",
+            key="dragonfly",
+            name="Dragonfly",
             icon="memory",
             status="healthy",
             status_label="Connected",
-            metrics=_valkey_metrics(client),
+            metrics=_dragonfly_metrics(client),
         )
     except RedisError:
-        logger.exception("Failed to collect Valkey infrastructure stats")
+        logger.exception("Failed to collect Dragonfly infrastructure stats")
         return InfrastructureServiceStat(
-            key="valkey",
-            name="Valkey",
+            key="dragonfly",
+            name="Dragonfly",
             icon="memory",
             status="unhealthy",
             status_label="Connection error",
@@ -237,12 +236,7 @@ _CELERY_STATS_TTL = 30  # seconds - limits blocking RPCs to at most once per 30s
 
 
 def collect_celery_stats() -> InfrastructureServiceStat:
-    """Collect Celery broker and worker statistics for the admin stats page.
-
-    Results are cached for 30 seconds because each live collection makes up to five
-    synchronous broadcast RPCs (ping, stats, active, reserved, scheduled), each with
-    a 1-second timeout, which can block an admin page load for up to 5 seconds.
-    """
+    """Collect Celery broker and worker statistics for the admin stats page."""
     from django.core.cache import cache
 
     with contextlib.suppress(Exception):
@@ -326,21 +320,17 @@ def _redact_url(url: str) -> str:
     """Hide credentials in service URLs displayed to admins.
 
     Args:
-        url: The service URL, which may embed a username and password (the Celery
-            broker URL does).
+        url: The service URL, which may embed a username and password (the Celery broker URL does).
 
     Returns:
-        The URL with any password replaced by ``***``, or a placeholder when it
-        cannot be parsed.
-    """
+        The URL with any password replaced by ``***``, or a placeholder when it cannot be parsed."""
     try:
         parsed = urlparse(url)
     except ValueError:
-        # Returning the raw URL here defeats the one thing this function exists to
-        # do - `urlparse` raises on a malformed IPv6 URL, and the input includes the
-        # broker URL, so the failure case was displaying the password verbatim.
-        # Nothing is known about the string's structure at this point, so redact all
-        # of it rather than guess which part was the credential.
+        # Returning the raw URL here defeats the one thing this function exists to do - `urlparse`
+        # raises on a malformed IPv6 URL, and the input includes the broker URL, so the failure case
+        # was displaying the password verbatim.
+        # Nothing is known about the string's structure at this point, so redact all of it rather
         logger.warning("Could not parse a service URL for redaction; redacting it entirely")
         return "<unparseable URL - redacted>"
     if not parsed.password:
@@ -354,9 +344,7 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
     """Collect nginx reverse-proxy health statistics.
 
     Returns:
-        InfrastructureServiceStat for the nginx health endpoint configured by
-        ``UL_NGINX_HEALTH_URL`` (default ``http://urbanlens_nginx/nginx-health``).
-    """
+        InfrastructureServiceStat for the nginx health endpoint configured by ``UL_NGINX_HEALTH_URL`` (default ``http://urbanlens_nginx/nginx-health``)."""
     health_url = os.getenv("UL_NGINX_HEALTH_URL", "http://urbanlens_nginx:8080/nginx-health")
     try:
         started = time.monotonic()
@@ -400,11 +388,7 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
 
 def _collect_or_degrade(key: str, name: str, icon: str, collector: Callable[[], InfrastructureServiceStat]) -> InfrastructureServiceStat:
     """Run one collector, degrading to an "unavailable" stat if it raises.
-
-    Each collector already handles the failure it expects - Valkey catches
-    ``RedisError``, and so on. This catches everything they don't: a malformed
-    connection URL, a DNS error surfacing as ``OSError``, a driver raising
-    something new after an upgrade.
+    Each collector already handles the failure it expects - Dragonfly catches ``RedisError``, and so on.
 
     Args:
         key: The service's stable key, kept stable so the template can style it.
@@ -413,8 +397,7 @@ def _collect_or_degrade(key: str, name: str, icon: str, collector: Callable[[], 
         collector: The per-service collection function.
 
     Returns:
-        The collected stat, or an ``unhealthy`` placeholder describing the failure.
-    """
+        The collected stat, or an ``unhealthy`` placeholder describing the failure."""
     try:
         return collector()
     except Exception:
@@ -432,21 +415,13 @@ def _collect_or_degrade(key: str, name: str, icon: str, collector: Callable[[], 
 def collect_infrastructure_service_stats() -> tuple[InfrastructureServiceStat, ...]:
     """Collect health statistics for all UrbanLens infrastructure services.
 
-    Each service is collected independently. This page exists to tell an admin which
-    component is unhealthy, so one component being unhealthy in an unanticipated way
-    must not take the whole page down with it - previously an exception from any single
-    collector propagated and the status page returned a 500, hiding the state of the
-    three services that were fine along with the one that wasn't.
-
     Returns:
-        Tuple of service stats in display order: PostgreSQL, Valkey, Celery, nginx.
-        Always four entries, in that order, however badly the services are behaving.
-    """
+        Tuple of service stats in display order: PostgreSQL, Dragonfly, Celery, nginx."""
     # Each collector is named here rather than held in a module-level table, so the
     # reference resolves at call time and stays patchable by tests.
     return (
         _collect_or_degrade("postgres", "PostgreSQL", "storage", collect_postgres_stats),
-        _collect_or_degrade("valkey", "Valkey", "memory", collect_valkey_stats),
+        _collect_or_degrade("dragonfly", "Dragonfly", "memory", collect_dragonfly_stats),
         _collect_or_degrade("celery", "Celery", "conveyor_belt", collect_celery_stats),
         _collect_or_degrade("nginx", "nginx", "dns", collect_nginx_stats),
     )

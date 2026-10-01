@@ -1,13 +1,6 @@
 /**
- * Labels: the lifecycle, and the two behaviours that only show up against data.
- *
- * The counts are the interesting part. `pin_count`/`location_count` are opt-in
- * (`?with_counts=true`) because each costs a correlated subquery per label, and
- * that opt-in is exactly the kind of thing that drifts from its published
- * schema: the document declared both fields *required* while the response
- * omitted them unless asked (docs/PROBLEMS.md, 2026-08-24). Asserting both
- * halves - absent by default, present and correct when requested - is what
- * keeps the endpoint and its contract honest about the same thing.
+ * Labels: the lifecycle, and the two behaviours that only show up against data. The counts are the
+ * interesting part.
  */
 
 import { expect, test } from "../../lib/fixtures.js";

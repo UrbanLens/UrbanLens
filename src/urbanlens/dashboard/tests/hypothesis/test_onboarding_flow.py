@@ -1,11 +1,5 @@
-"""Tests for the signup-race fix and the /welcome/ onboarding redirect chain.
+"""Tests for the signup-race fix and the /welcome/ onboarding redirect chain."""
 
-Regression coverage for the bug where profile_setup_complete never flipped to
-False for normal email signups: the User post_save signal (signals.py) now
-sets it explicitly in defaults=, instead of VerifyEmailView relying on a
-Profile.objects.get_or_create(...).created check that always came back False
-because the signal had already created the row.
-"""
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -15,10 +9,12 @@ from django.test import RequestFactory
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.account import PostLoginRedirectView
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.tasks import process_signup
 
 _HIBP_PATCH = "urbanlens.dashboard.services.apis.security.hibp.HaveIBeenPwnedGateway.is_password_pwned"
 _STRONG_PASSWORD = "Zebra-quilt-nexus-42!"
@@ -28,7 +24,11 @@ class SignupProfileSetupCompleteTests(TestCase):
     """create_user_profile (the User post_save signal) sets profile_setup_complete=False."""
 
     def test_email_signup_sets_profile_setup_complete_false(self) -> None:
-        with patch(_HIBP_PATCH, return_value=False):
+        with (
+            patch(_HIBP_PATCH, return_value=False),
+            tasks_run_inline(process_signup),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             response = self.client.post(
                 reverse("signup"),
                 {
@@ -40,13 +40,15 @@ class SignupProfileSetupCompleteTests(TestCase):
             )
         self.assertEqual(response.status_code, 302)
         user = User.objects.get(username="newexplorer")
-        # The signal already ran synchronously inside form.save() above -
-        # profile_setup_complete must be False immediately, before any
-        # email-verification step ever runs.
+        # False before any email-verification step runs.
         self.assertFalse(user.profile.profile_setup_complete)
 
     def test_email_signup_sets_welcome_onboarding_complete_false(self) -> None:
-        with patch(_HIBP_PATCH, return_value=False):
+        with (
+            patch(_HIBP_PATCH, return_value=False),
+            tasks_run_inline(process_signup),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.client.post(
                 reverse("signup"),
                 {
@@ -107,7 +109,9 @@ class WelcomeRedirectChainTests(TestCase):
 
     def test_welcome_complete_but_profile_setup_incomplete_goes_to_profile_edit(self) -> None:
         user: User = baker.make(User)
-        Profile.objects.filter(pk=user.profile.pk).update(welcome_onboarding_complete=True, profile_setup_complete=False)
+        Profile.objects.filter(pk=user.profile.pk).update(
+            welcome_onboarding_complete=True, profile_setup_complete=False
+        )
         user.refresh_from_db()
         self.assertEqual(self._get_redirect(user), reverse("profile.edit"))
 

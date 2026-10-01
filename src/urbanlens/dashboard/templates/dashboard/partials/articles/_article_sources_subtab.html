@@ -1,0 +1,11 @@
+{% comment %}The Sources sub-tab panel; loads its list the first time it is shown. Needs sources_url.{% endcomment %}
+<div id="article-subtab-sources" class="article-sources-subtab" data-article-subtab="sources" role="tabpanel" aria-labelledby="article-subtab-btn-sources" hidden>
+    <div class="card article-sources-card">
+        <div class="article-sources"
+             hx-get="{{ sources_url }}"
+             hx-trigger="intersect once"
+             hx-swap="innerHTML">
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading sources...</div>
+        </div>
+    </div>
+</div>

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.test import Client
 from django.urls import reverse
 import stripe
 
@@ -28,42 +29,147 @@ class StripeWebhookViewTests(TestCase):
         self._secret_patch = mock.patch.object(app_settings, "stripe_webhook_secret", "whsec_test")
         self._secret_patch.start()
         self.addCleanup(self._secret_patch.stop)
+        key_patch = mock.patch.object(app_settings, "stripe_secret_key", "sk_test_123")
+        key_patch.start()
+        self.addCleanup(key_patch.stop)
 
     def test_valid_signature_processes_the_event_and_marks_it_processed(self) -> None:
         with (
             mock.patch("stripe.Webhook.construct_event", return_value=_mock_event()),
             mock.patch("urbanlens.dashboard.services.billing.webhooks.handle_event") as mock_handle,
         ):
-            response = self.client.post(reverse("billing.stripe_webhook"), data=b"{}", content_type="application/json", HTTP_STRIPE_SIGNATURE="sig")
+            response = self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b"{}",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="sig",
+            )
 
         self.assertEqual(response.status_code, 200)
         mock_handle.assert_called_once_with(_EVENT)
         webhook_event = StripeWebhookEvent.objects.get(stripe_event_id="evt_123")
         self.assertIsNotNone(webhook_event.processed_at)
         self.assertEqual(webhook_event.event_type, "checkout.session.completed")
+        self.assertEqual(webhook_event.payload, _EVENT)
+
+    def test_endpoint_is_reachable_without_a_csrf_token(self) -> None:
+        """The one deliberately CSRF-exempt endpoint in the codebase (see class docstring) - Stripe posts server-to-server with no Django session/CSRF token. The default test client doesn't enforce CSRF, so every other test here would pass even if the `csrf_exempt` decorator were dropped; only an `enforce_csrf_checks` client proves it."""
+        with (
+            mock.patch("stripe.Webhook.construct_event", return_value=_mock_event()),
+            mock.patch("urbanlens.dashboard.services.billing.webhooks.handle_event"),
+        ):
+            response = Client(enforce_csrf_checks=True).post(
+                reverse("billing.stripe_webhook"),
+                data=b"{}",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="sig",
+            )
+
+        self.assertEqual(response.status_code, 200)
 
     def test_invalid_signature_is_rejected_and_nothing_is_stored(self) -> None:
-        with mock.patch("stripe.Webhook.construct_event", side_effect=stripe.SignatureVerificationError("bad sig", "sig_header")):
-            response = self.client.post(reverse("billing.stripe_webhook"), data=b"{}", content_type="application/json", HTTP_STRIPE_SIGNATURE="bad")
+        with mock.patch(
+            "stripe.Webhook.construct_event", side_effect=stripe.SignatureVerificationError("bad sig", "sig_header")
+        ):
+            response = self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b"{}",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="bad",
+            )
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(StripeWebhookEvent.objects.exists())
 
-    def test_missing_webhook_secret_returns_503(self) -> None:
-        with mock.patch.object(app_settings, "stripe_webhook_secret", None):
-            response = self.client.post(reverse("billing.stripe_webhook"), data=b"{}", content_type="application/json", HTTP_STRIPE_SIGNATURE="sig")
+    def test_malformed_payload_value_error_is_rejected_and_nothing_is_stored(self) -> None:
+        """construct_event raises plain ValueError (not SignatureVerificationError) for a
+        body that isn't valid JSON at all - a distinct branch of the view's except tuple."""
+        with mock.patch("stripe.Webhook.construct_event", side_effect=ValueError("invalid payload")):
+            response = self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b"not json",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="sig",
+            )
 
-        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(StripeWebhookEvent.objects.exists())
+
+    def test_missing_webhook_secret_is_a_clean_refusal_not_a_503(self) -> None:
+        """A deployment with no UL_STRIPE_WEBHOOK_SECRET configured can never verify any signature, so every POST here is refused the same way a bad signature is (400) - not a 503, which Stripe (and any prober) reads as a transient crash worth retrying."""
+        with mock.patch.object(app_settings, "stripe_webhook_secret", None):
+            response = self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b'{"type": "ping"}',
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn(b"Traceback", response.content)
+        self.assertFalse(StripeWebhookEvent.objects.exists())
 
     def test_replaying_an_already_processed_event_does_not_reinvoke_the_handler(self) -> None:
         with (
             mock.patch("stripe.Webhook.construct_event", return_value=_mock_event()),
             mock.patch("urbanlens.dashboard.services.billing.webhooks.handle_event") as mock_handle,
         ):
-            first = self.client.post(reverse("billing.stripe_webhook"), data=b"{}", content_type="application/json", HTTP_STRIPE_SIGNATURE="sig")
-            second = self.client.post(reverse("billing.stripe_webhook"), data=b"{}", content_type="application/json", HTTP_STRIPE_SIGNATURE="sig")
+            first = self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b"{}",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="sig",
+            )
+            second = self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b"{}",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="sig",
+            )
 
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
         mock_handle.assert_called_once()
         self.assertEqual(StripeWebhookEvent.objects.filter(stripe_event_id="evt_123").count(), 1)
+
+    def test_a_handler_that_raises_leaves_the_event_recorded_but_unprocessed(self) -> None:
+        """The audit row is written before handle_event runs, in its own transaction, so a blown-up handler still leaves the payload behind to debug from - but processed_at must NOT get set, or a Stripe retry would see it as already-handled and never re-run the handler (see the ordering comment in StripeWebhookView.post)."""
+        with (
+            mock.patch("stripe.Webhook.construct_event", return_value=_mock_event()),
+            mock.patch("urbanlens.dashboard.services.billing.webhooks.handle_event", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
+            self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b"{}",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="sig",
+            )
+
+        webhook_event = StripeWebhookEvent.objects.get(stripe_event_id="evt_123")
+        self.assertIsNone(webhook_event.processed_at)
+
+
+class StripeWebhookViewConfiguresTheApiKeyTests(TestCase):
+    """The handlers call the Stripe API from a web worker that may never have served a checkout."""
+
+    def test_the_handler_sees_the_configured_key(self) -> None:
+        seen: list[str | None] = []
+        with (
+            mock.patch.object(app_settings, "stripe_webhook_secret", "whsec_test"),
+            mock.patch.object(app_settings, "stripe_secret_key", "sk_test_fresh"),
+            mock.patch.object(stripe, "api_key", None),
+            mock.patch("stripe.Webhook.construct_event", return_value=_mock_event()),
+            mock.patch(
+                "urbanlens.dashboard.services.billing.webhooks.handle_event",
+                side_effect=lambda _event: seen.append(stripe.api_key),
+            ),
+        ):
+            response = self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b"{}",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="sig",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(seen, ["sk_test_fresh"])

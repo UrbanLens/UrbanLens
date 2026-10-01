@@ -1,11 +1,4 @@
-"""Third-party assets resolve to one place, chosen when the page is rendered.
-
-Every script and stylesheet the site loads from someone else's server used to be
-written out inline in whichever template wanted it. That is how leaflet-draw came
-to be requested from two different CDNs, how one template asked unpkg for
-whatever Leaflet it happened to be serving that day, and how Leaflet's marker
-images came to be fetched from a different release than the library using them.
-"""
+"""Third-party assets resolve to one place, chosen when the page is rendered."""
 
 from __future__ import annotations
 
@@ -47,7 +40,24 @@ class VendorAssetTableTests(SimpleTestCase):
         """The marker images were served from 1.7.1 while the library was 1.9.4."""
         library = VENDOR_ASSETS["leaflet_js"].path.split("/")[1]
         for key in ("leaflet_marker_icon", "leaflet_marker_shadow"):
-            self.assertEqual(VENDOR_ASSETS[key].path.split("/")[1], library, f"{key} is from a different Leaflet release")
+            self.assertEqual(
+                VENDOR_ASSETS[key].path.split("/")[1], library, f"{key} is from a different Leaflet release"
+            )
+
+    def test_every_script_and_style_pins_an_integrity_hash(self) -> None:
+        """Every ``<script>``/``<link>`` this table can render must be checkable.
+
+        Only ``image`` assets are exempt - they have no tag of their own (`vendor_asset_tag` raises for one), so
+        nothing renders `integrity=` for them regardless."""
+        for key, asset in VENDOR_ASSETS.items():
+            if asset.kind == "image":
+                continue
+            self.assertTrue(asset.integrity, f"{key} ({asset.kind}) has no integrity hash")
+            self.assertRegex(
+                asset.integrity,
+                r"^sha(256|384|512)-",
+                f"{key}'s integrity value {asset.integrity!r} is not a valid SRI hash",
+            )
 
 
 class VendorAssetResolutionTests(SimpleTestCase):
@@ -90,7 +100,9 @@ class VendorAssetResolutionTests(SimpleTestCase):
 
     def test_the_template_tags_render(self) -> None:
         with _mirrored("https://assets.example.test/vendor"):
-            rendered = Template('{% load vendor_assets %}{% vendor_asset "leaflet_js" %}|{% vendor_asset_source "leaflet_marker_icon" %}').render(Context({}))
+            rendered = Template(
+                '{% load vendor_assets %}{% vendor_asset "leaflet_js" %}|{% vendor_asset_source "leaflet_marker_icon" %}'
+            ).render(Context({}))
         tag, url = rendered.split("|")
         self.assertIn("https://assets.example.test/vendor/leaflet/1.9.4/leaflet.js", tag)
         self.assertEqual(url, "https://assets.example.test/vendor/leaflet/1.9.4/images/marker-icon.png")
@@ -106,7 +118,9 @@ class NoRawCdnUrlsInTemplatesTests(SimpleTestCase):
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 if pattern.search(line):
                     offenders.append(f"{path.relative_to(_TEMPLATE_ROOT)}:{number}: {line.strip()[:100]}")
-        self.assertEqual(offenders, [], "add the asset to VENDOR_ASSETS and use {% vendor_asset %}:\n" + "\n".join(offenders))
+        self.assertEqual(
+            offenders, [], "add the asset to VENDOR_ASSETS and use {% vendor_asset %}:\n" + "\n".join(offenders)
+        )
 
 
 class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
@@ -115,7 +129,12 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
     def test_the_mirror_origin_reaches_the_directives_that_serve_it(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
 
-        directives: dict[str, object] = {"script-src": ["'self'"], "style-src": ["'self'"], "font-src": ["'self'"], "img-src": ["https:"]}
+        directives: dict[str, list[str]] = {
+            "script-src": ["'self'"],
+            "style-src": ["'self'"],
+            "font-src": ["'self'"],
+            "img-src": ["https:"],
+        }
 
         origin = allow_vendor_mirror(directives, "https://assets.example.test/vendor/leaflet")
 
@@ -128,7 +147,7 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
     def test_no_mirror_configured_changes_nothing(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
 
-        directives: dict[str, object] = {"script-src": ["'self'"]}
+        directives: dict[str, list[str]] = {"script-src": ["'self'"]}
 
         self.assertIsNone(allow_vendor_mirror(directives, None))
         self.assertEqual(directives["script-src"], ["'self'"])
@@ -136,9 +155,105 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
     def test_the_origin_is_admitted_once_however_deep_the_root(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
 
-        directives: dict[str, object] = {"script-src": ["'self'"], "style-src": [], "font-src": []}
+        directives: dict[str, list[str]] = {"script-src": ["'self'"], "style-src": [], "font-src": []}
 
         allow_vendor_mirror(directives, "https://assets.example.test/a/b/c")
         allow_vendor_mirror(directives, "https://assets.example.test/d")
 
         self.assertEqual(directives["script-src"].count("https://assets.example.test"), 1)
+
+
+class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
+    """A self-hosted vector basemap is the one map layer the browser fetches itself.
+
+    A raster layer is proxied, so the browser only ever talks to this origin and the policy needs
+    no exception. A vector layer is the opposite: REData publishes a ``style_url`` and the browser
+    goes straight to it for the style, its glyphs, its sprite and the PMTiles archive. Refused by
+    CSP, the map is blank with no network error a user could act on.
+    """
+
+    def test_the_style_origin_reaches_connect_src_and_only_that(self) -> None:
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, list[str]] = {
+            "connect-src": ["'self'"],
+            "img-src": ["https:"],
+            "script-src": ["'self'"],
+        }
+
+        origins = allow_basemap_style_origins(directives, "https://tiles.example.test/styles/street.json")
+
+        self.assertEqual(origins, ["https://tiles.example.test"])
+        self.assertIn("https://tiles.example.test", directives["connect-src"])
+        # img-src already allows https: wholesale, which covers the sprite's image half; script-src
+        # must not widen for a style document, which is data and never executes.
+        self.assertNotIn("https://tiles.example.test", directives["img-src"])
+        self.assertNotIn("https://tiles.example.test", directives["script-src"])
+
+    def test_the_real_policy_declares_the_directive_this_helper_writes_to(self) -> None:
+        """The helper appends only to lists that already exist, so naming a directive the policy does not declare is a silent no-op that reads like configuration - which `worker-src` was, before this caught it."""
+        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
+
+        self.assertIsInstance(_CSP_DIRECTIVES.get("connect-src"), list)
+        self.assertIn(
+            "https:",
+            _CSP_DIRECTIVES["img-src"],
+            "img-src stops covering the sprite if this wholesale entry is ever dropped",
+        )
+
+    def test_buying_the_hosted_basemap_admits_its_glyph_host(self) -> None:
+        """The proxied style still names protomaps.github.io for glyphs and sprites; unadmitted, the map has no labels."""
+        from urbanlens.UrbanLens.settings.base import allow_hosted_basemap_assets
+
+        directives: dict[str, list[str]] = {"connect-src": ["'self'"], "script-src": ["'self'"]}
+
+        self.assertEqual(allow_hosted_basemap_assets(directives, ""), [])
+        self.assertEqual(directives["connect-src"], ["'self'"])
+
+        allow_hosted_basemap_assets(directives, "pk_test")
+        self.assertEqual(directives["connect-src"], ["'self'", "https://protomaps.github.io"])
+        self.assertEqual(directives["script-src"], ["'self'"])
+
+    def test_no_style_origin_configured_changes_nothing(self) -> None:
+        """The default for every deployment today, hosted and self-hosted: REData offers only raster."""
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, list[str]] = {"connect-src": ["'self'"]}
+
+        self.assertEqual(allow_basemap_style_origins(directives, ""), [])
+        self.assertEqual(directives["connect-src"], ["'self'"])
+
+    def test_the_origin_is_admitted_once_however_deep_the_url(self) -> None:
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, list[str]] = {"connect-src": []}
+
+        allow_basemap_style_origins(directives, "https://tiles.example.test/a/b/style.json")
+        allow_basemap_style_origins(directives, "https://tiles.example.test/c/d/other.json")
+
+        self.assertEqual(directives["connect-src"], ["https://tiles.example.test"])
+
+    def test_a_style_whose_assets_live_on_another_host_admits_both(self) -> None:
+        """Protomaps' hosted API serves tiles from one host and the glyphs and sprite from another; admitting only the first leaves MapLibre with no labels."""
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, list[str]] = {"connect-src": ["'self'"]}
+
+        origins = allow_basemap_style_origins(directives, "https://api.protomaps.com https://protomaps.github.io")
+
+        self.assertEqual(origins, ["https://api.protomaps.com", "https://protomaps.github.io"])
+        self.assertEqual(
+            directives["connect-src"], ["'self'", "https://api.protomaps.com", "https://protomaps.github.io"]
+        )
+
+    def test_a_value_that_is_not_a_url_is_skipped_rather_than_admitted(self) -> None:
+        """A bare hostname has no scheme, and `scheme://` with an empty netloc is not an origin - either would widen connect-src with a value no browser matches."""
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, list[str]] = {"connect-src": []}
+
+        self.assertEqual(
+            allow_basemap_style_origins(directives, "tiles.example.test , https://ok.example.test"),
+            ["https://ok.example.test"],
+        )
+        self.assertEqual(directives["connect-src"], ["https://ok.example.test"])

@@ -1,12 +1,5 @@
 """PinList models - named, ordered collections of a profile's Pins.
-
-A PinList can be plain (pins added/removed only by explicit user action) or
-"smart" (``is_smart=True``), in which case it auto-includes pins matching a
-saved filter (``smart_filter``, same JSON shape as ``SavedFilter.criteria``)
-and/or falling inside a drawn boundary polygon (``smart_boundary``). See
-``dashboard.services.pins.pin_list_membership`` for the matching/sync logic and
-``dashboard.models.pin_list.signals`` for the Pin-save hook that keeps
-smart-list membership current.
+A PinList can be plain (pins added/removed only by explicit user action) or "smart" (``is_smart=True``), in which case it auto-includes pins matching a saved filter (``smart_filter``, same JSON shape as ``SavedFilter.criteria``) and/or falling inside a drawn boundary polygon (``smart_boundary``).
 """
 
 from __future__ import annotations
@@ -15,26 +8,19 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, ForeignKey, Index, IntegerField, JSONField, TextField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, ForeignKey, IntegerField, JSONField, TextField
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_list.queryset import PinListItemManager, PinListManager
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH
 
-if TYPE_CHECKING:
-    from django.db.models import Manager as DjangoManager
-
 logger = logging.getLogger(__name__)
 
 
 class PinList(abstract.PublicDashboardModel):
     """A profile's named, ordered collection of their own Pins.
-
-    URLs identify a list by ``slug`` rather than ``uuid`` - see
-    ``abstract.PublicDashboardModel``. Slugs are unique per-profile (not
-    globally), matching ``Pin``'s scoping and this model's existing
-    per-profile name uniqueness.
+    URLs identify a list by ``slug`` rather than ``uuid`` - see ``abstract.PublicDashboardModel``.
     """
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="pin_lists")
@@ -45,12 +31,10 @@ class PinList(abstract.PublicDashboardModel):
     # Same JSON shape as SavedFilter.criteria - see dashboard.services.search.filter_criteria.
     smart_filter = JSONField(null=True, blank=True)
     smart_boundary = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
-    # Tracks which SavedFilter smart_filter was last copied from, so editing
-    # that SavedFilter can resync this list's membership too - see
-    # PinListEditView (sets/clears this alongside smart_filter) and
-    # SavedFilterEditView (resyncs every list still pointing at it).
-    # SET_NULL rather than CASCADE: deleting the source SavedFilter shouldn't
-    # blow away a list's last-synced snapshot, only stop it from tracking further edits.
+    # Tracks which SavedFilter smart_filter was last copied from, so editing that SavedFilter can
+    # resync this list's membership too - see PinListEditView (sets/clears this alongside
+    # smart_filter) and SavedFilterEditView (resyncs every list still pointing at it).
+    # SET_NULL rather than CASCADE: deleting the source SavedFilter shouldn't blow away a list's
     source_saved_filter = ForeignKey(
         "dashboard.SavedFilter",
         on_delete=SET_NULL,
@@ -69,9 +53,6 @@ class PinList(abstract.PublicDashboardModel):
 
     objects = PinListManager()
 
-    if TYPE_CHECKING:
-        items: DjangoManager[PinListItem]
-
     def __str__(self) -> str:
         return self.name
 
@@ -79,14 +60,13 @@ class PinList(abstract.PublicDashboardModel):
     def pin_count(self) -> int:
         """Number of pins currently on this list.
 
-        ``len(self.items.all())`` rather than ``self.items.count()`` - when a
-        caller has already run ``prefetch_related("items")`` (or
-        ``"items__pin"``) on the queryset this instance came from (see
-        ``PinListsIndexView.get``), ``.all()`` reuses that cached result set
-        instead of issuing a fresh ``COUNT(*)`` query per list on every
-        list-index render. Falls back to one query, same as ``.count()``
-        would have, when nothing was prefetched.
+        Prefers ``with_pin_counts()``'s annotation, which counts in the database. Falls back to
+        ``len(self.items.all())``, which reuses a ``prefetch_related("items")`` cache where a
+        caller set one up and otherwise costs the same single query ``.count()`` would have.
         """
+        annotated = getattr(self, "_pin_count", None)
+        if annotated is not None:
+            return annotated
         return len(self.items.all())
 
     def _slugify_base(self) -> str:

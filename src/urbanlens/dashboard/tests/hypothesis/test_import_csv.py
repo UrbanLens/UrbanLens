@@ -1,15 +1,8 @@
-"""Tests for GoogleMapsGateway._csv_row_iter() - CSV pin import.
+"""Tests for GoogleMapsGateway._csv_row_iter() - CSV pin import."""
 
-Two independent CSV shapes are supported: Google Takeout exports (identified by
-a URL column) and generic spreadsheet exports (Airtable, Google Sheets, Excel,
-etc.) that carry their own latitude/longitude columns. This file only covers
-the generic-column path; Takeout-URL parsing is exercised elsewhere via the
-Google Maps import tests.
-"""
 from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
@@ -82,11 +75,7 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertAlmostEqual(pins[0]["longitude"], 2.0)
 
     def test_parking_location_column_is_recognized_as_a_url_column(self):
-        """UL-203: Google Takeout's Parking.csv export uses a "Parking location"
-        header for its URL column, not "URL" - every row previously fell
-        through to the generic latitude/longitude fallback (which Parking.csv
-        has none of) and was silently skipped, so the whole file failed to
-        import a single pin."""
+        """UL-203: Google Takeout's Parking.csv export uses a "Parking location" header for its URL column, not "URL" - every row previously fell through to the generic latitude/longitude fallback (which Parking.csv has none of) and was silently skipped, so the whole file failed to import a single pin."""
         csv_text = 'Parking location,Timestamp\n"https://maps.google.com/maps/search/3.0,4.0",2024-01-01T00:00:00Z'
 
         pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
@@ -135,7 +124,9 @@ class CsvRowIterLatLonTests(SimpleTestCase):
             alphabet=st.characters(blacklist_categories=("Cs", "Cc"), blacklist_characters=',\r\n"'),
             min_size=1,
             max_size=40,
-        ).map(str.strip).filter(bool),
+        )
+        .map(str.strip)
+        .filter(bool),
         lat=st.floats(min_value=-89, max_value=89, allow_nan=False, allow_infinity=False),
         lon=st.floats(min_value=-179, max_value=179, allow_nan=False, allow_infinity=False),
     )
@@ -151,12 +142,7 @@ class CsvRowIterLatLonTests(SimpleTestCase):
 
 
 class CsvRowIterS2GuessFlagTests(SimpleTestCase):
-    """TEMPORARY: _csv_row_iter() flags rows whose cid came from the imprecise
-    S2-cell URL pattern, so the import preview can force-select them by default -
-    see the matching TEMPORARY block in GoogleMapsGateway._preview_pins. Remove
-    together with that block once every user's previously-imported data has been
-    repaired.
-    """
+    """TEMPORARY: _csv_row_iter() flags rows whose cid came from the imprecise S2-cell URL pattern, so the import preview can force-select them by default - see the matching TEMPORARY block in GoogleMapsGateway._preview_pins."""
 
     def setUp(self):
         self.profile = object()
@@ -172,7 +158,10 @@ class CsvRowIterS2GuessFlagTests(SimpleTestCase):
         self.assertEqual(pins[0]["cid"], 0x59AC8820518A7E79)
         # Carried through to a deferred REData lookup (cid_resolution.resolve_cids) -
         # resolving via the place's own URL is faster/more reliable than cid alone.
-        self.assertEqual(pins[0]["maps_url"], "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79")
+        self.assertEqual(
+            pins[0]["maps_url"],
+            "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79",
+        )
 
     def test_search_url_without_a_data_segment_is_not_flagged(self):
         csv_text = 'Title,URL\nSome Place,"https://maps.google.com/maps/search/1.0,2.0"'

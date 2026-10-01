@@ -1,23 +1,13 @@
-"""Tests for live notification push (dashboard/models/notifications/signals.py).
-
-Covers:
-- notification_group_name() - group naming and channel-layer validity
-- as_push_payload()         - payload shape and message truncation
-- push_notification_to_browser() - broadcast on create, not on update
-
-The actual channel-layer delivery (get_channel_layer/async_to_sync tolerance,
-Celery dispatch) now lives in services.core.channel_broadcast.send_group_message
-and tasks.broadcast_channel_group_message - see test_channel_broadcast.py.
-"""
+"""Tests for live notification push (dashboard/models/notifications/signals.py)."""
 
 from __future__ import annotations
 
 import re
 from unittest.mock import patch
 
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.notifications import signals as push_signals
 from urbanlens.dashboard.models.notifications.model import NotificationLog
@@ -72,10 +62,8 @@ class AsPushPayloadTests(SimpleTestCase):
 class PushSignalTests(TestCase):
     """The post_save receiver hands inserts (and only inserts) to send_group_message after commit.
 
-    Channel-layer/Celery delivery itself - including "no layer configured" and
-    "delivery failed" tolerance - is send_group_message's contract, covered by
-    test_channel_broadcast.py, not re-tested here.
-    """
+    Channel-layer/Celery delivery itself - including "no layer configured" and "delivery failed" tolerance - is
+    send_group_message's contract, covered by test_channel_broadcast.py, not re-tested here."""
 
     def setUp(self):
         self.user = baker.make("auth.User")

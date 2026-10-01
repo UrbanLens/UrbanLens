@@ -1,12 +1,4 @@
-/**
- * Visits: the log of when somebody actually went.
- *
- * Small surface, and worth a deployed test for one reason - a visit is the only
- * thing in the API written against a *past* timestamp the client chooses, which
- * makes it the place where timezone handling shows up. A naive round-trip that
- * passes in a UTC test process can shift a visit by hours on a deployment whose
- * database or worker is set to something else.
- */
+/** Visits: the log of when somebody actually went. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";

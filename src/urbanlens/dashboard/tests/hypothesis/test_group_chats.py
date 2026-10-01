@@ -1,20 +1,4 @@
-"""Tests for group chats built on the direct message system.
-
-Covers:
-- create_group_chat validation, privacy enforcement, and membership rows
-- rename/add/remove/leave permission rules (creator manages membership; any
-  member renames; anyone leaves)
-- The join-time history boundary: members added later cannot see (or fetch)
-  messages sent before they joined, including via the older-pages endpoint
-- create_group_message validation and read-state behavior
-- share_pin_in_group_message creating one PinShare per connected member
-- Unread counts and the merged conversation list
-- The group HTTP endpoints (thread, send, rename, members, leave, delete)
-- The group E2EE key endpoints (member gating, envelope-coverage checks,
-  version sequencing, and pre-join envelope invisibility)
-- The change-password endpoint (current-password proof, SSO first set,
-  bundle rewrap/stale handling)
-"""
+"""Tests for group chats built on the direct message system."""
 
 from __future__ import annotations
 
@@ -34,10 +18,13 @@ from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, Messagin
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
+from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
+from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for, reaction_summary
 from urbanlens.dashboard.services.messaging.group_chats import (
+    ClientUuidReusedAcrossGroupsError,
     add_group_members,
     create_group_chat,
     create_group_message,
@@ -237,21 +224,28 @@ class CreateGroupMessageTests(TestCase):
 
     def test_body_and_ciphertext_mutually_exclusive(self) -> None:
         with self.assertRaises(ValueError):
-            create_group_message(self.creator, self.group, "hi", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1)
+            create_group_message(
+                self.creator, self.group, "hi", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1
+            )
 
     def test_encrypted_message_persists(self) -> None:
-        message = create_group_message(self.creator, self.group, "", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1)
+        # The key row is part of the fixture because it is part of reality: a
+        # client cannot encrypt under version 1 until it has uploaded that
+        # version's envelopes, which is the only thing that creates a GroupKey
+        # (controllers/e2ee.py). The send path checks it now - see
+        # test_group_key_version_is_real.
+        GroupKey.objects.create(group=self.group, version=1)
+
+        message = create_group_message(
+            self.creator, self.group, "", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1
+        )
         self.assertTrue(message.is_encrypted)
         self.assertEqual(message.key_version, 1)
 
     def test_sender_read_state_advances(self) -> None:
         create_group_message(self.creator, self.group, "hello")
-        sender_membership = self.group.membership_for(self.creator)
-        assert sender_membership is not None
-        self.assertEqual(GroupMessage.objects.unread_for(sender_membership).count(), 0)
-        member_membership = self.group.membership_for(self.member)
-        assert member_membership is not None
-        self.assertEqual(GroupMessage.objects.unread_for(member_membership).count(), 1)
+        self.assertEqual(unread_group_conversation_count(self.creator), 0)
+        self.assertEqual(unread_group_conversation_count(self.member), 1)
 
     def test_unread_group_conversation_count(self) -> None:
         self.assertEqual(unread_group_conversation_count(self.member), 0)
@@ -268,15 +262,38 @@ class CreateGroupMessageTests(TestCase):
         self.assertEqual(message.tombstone_text_for(self.member.pk), "Message deleted")
         self.assertIsNone(message.tombstone_text_for(self.creator.pk))
 
+    def test_message_notification_references_the_message(self) -> None:
+        NotificationLog.objects.all().delete()
+        message = create_group_message(self.creator, self.group, "hello")
+        notification = NotificationLog.objects.get(profile=self.member)
+        self.assertEqual(notification.group_message_id, message.pk)
+
+    def test_delete_redacts_the_recipients_notification_preview(self) -> None:
+        NotificationLog.objects.all().delete()
+        message = create_group_message(self.creator, self.group, "the secret plan is at midnight")
+        notification = NotificationLog.objects.get(profile=self.member)
+        self.assertIn("secret plan", notification.message)
+        delete_group_message(message, self.creator)
+        notification.refresh_from_db()
+        self.assertEqual(notification.message, "Message deleted")
+
+    def test_delete_redacts_every_members_notification(self) -> None:
+        third = _profile()
+        add_group_members(self.group, self.creator, [third])
+        NotificationLog.objects.all().delete()
+        message = create_group_message(self.creator, self.group, "the secret plan is at midnight")
+        delete_group_message(message, self.creator)
+        for member in (self.member, third):
+            notification = NotificationLog.objects.get(profile=member, group_message=message)
+            self.assertEqual(notification.message, "Message deleted")
+
 
 class GroupMessageLiveIdentityPrivacyTests(TestCase):
     """serialize_group_message must not leak a masked sender's real identity.
 
-    Regression: the name was already resolved through resolve_visible_identity,
-    but ``sender_slug`` was still copied from the raw sender unconditionally -
-    so a viewer who couldn't see the masked sender's profile could still read
-    their real slug directly off the live WebSocket payload.
-    """
+    Regression: the name was already resolved through resolve_visible_identity, but ``sender_slug`` was still
+    copied from the raw sender unconditionally - so a viewer who couldn't see the masked sender's profile could
+    still read their real slug directly off the live WebSocket payload."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -303,6 +320,22 @@ class GroupMessageLiveIdentityPrivacyTests(TestCase):
 
         self.assertEqual(payload["sender_name"], self.hidden_sender.username)
         self.assertEqual(payload["sender_slug"], self.hidden_sender.slug)
+
+    def test_reaction_summary_masks_hidden_reactor_slug_for_viewer(self) -> None:
+        message = create_group_message(self.viewer, self.group, "React here")
+        Reaction.objects.create(profile=self.hidden_sender, group_message=message, emoji="👍")
+
+        summary = reaction_summary(message, viewer=self.viewer)
+
+        self.assertEqual(summary, [{"emoji": "👍", "count": 1, "slugs": [""]}])
+
+    def test_reaction_summary_keeps_real_slug_for_reactors_own_view(self) -> None:
+        message = create_group_message(self.viewer, self.group, "React here")
+        Reaction.objects.create(profile=self.hidden_sender, group_message=message, emoji="👍")
+
+        summary = reaction_summary(message, viewer=self.hidden_sender)
+
+        self.assertEqual(summary, [{"emoji": "👍", "count": 1, "slugs": [self.hidden_sender.slug or ""]}])
 
 
 class GroupPinShareTests(TestCase):
@@ -334,6 +367,59 @@ class GroupPinShareTests(TestCase):
         self.assertIsNotNone(own)
         self.assertEqual(own.recipient_id, self.friend_a.pk)
         self.assertIsNone(message.share_for(self.stranger.pk))
+
+
+class GroupMessageReplayScopingTests(TestCase):
+    """create_group_message's idempotency guard must never cross groups.
+
+    Regression: GroupMessage.client_uuid is uniquely constrained per *sender* only
+    (db_gmsg_unique_client_uuid_per_sender - by design, since scoping to the group too would let two different
+    senders' uuids collide inside the same conversation), but the replay check that reads it back only compared
+    (sender, client_uuid) - never checking whether the match it found actually belongs to the group the caller
+    asked about."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.member_a = _profile()
+        self.member_b = _profile()
+        _befriend(self.sender, self.member_a)
+        _befriend(self.sender, self.member_b)
+        self.group_a = create_group_chat(self.sender, "Group A", [self.member_a])
+        self.group_b = create_group_chat(self.sender, "Group B", [self.member_b])
+        self.pin_a = baker.make("dashboard.Pin", profile=self.sender)
+        self.pin_b = baker.make("dashboard.Pin", profile=self.sender)
+
+    def test_replaying_a_client_uuid_into_a_different_group_is_rejected(self) -> None:
+        shared_uuid = uuid_module.uuid4()
+        share_pin_in_group_message(self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid)
+
+        with self.assertRaises(ClientUuidReusedAcrossGroupsError):
+            share_pin_in_group_message(self.sender, self.group_b, self.pin_b, "for group B", client_uuid=shared_uuid)
+
+        # The rejected call must not have fanned out any real access to group
+        # B's member - the actual damage the silent cross-wire caused.
+        self.assertFalse(GroupMessageShare.objects.filter(recipient=self.member_b).exists())
+        self.assertFalse(PinShare.objects.filter(pin=self.pin_b).exists())
+        self.assertFalse(GroupMessage.objects.filter(group=self.group_b).exists())
+
+        # Group A's own message is untouched.
+        self.assertEqual(GroupMessage.objects.filter(group=self.group_a).count(), 1)
+
+    def test_replaying_the_same_group_and_uuid_is_still_a_true_replay(self) -> None:
+        """The fix must not break the legitimate same-group retry this guards."""
+        shared_uuid = uuid_module.uuid4()
+        first = share_pin_in_group_message(
+            self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid
+        )
+
+        second = share_pin_in_group_message(
+            self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid
+        )
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(GroupMessage.objects.filter(group=self.group_a).count(), 1)
+        self.assertEqual(GroupMessageShare.objects.filter(recipient=self.member_a).count(), 1)
 
 
 class ConversationMergeTests(TestCase):
@@ -381,20 +467,10 @@ class ConversationMergeTests(TestCase):
         self.assertEqual(rows[group_b.pk]["member_count"], 3)
 
     def test_group_conversations_for_query_count_is_independent_of_group_count(self) -> None:
-        """The N+1 regression this batch fixed: query count must not grow
-        with the number of groups the profile belongs to.
+        """The N+1 regression this batch fixed: query count must not grow with the number of groups the profile belongs to.
 
-        The invariant is *independence*, not an absolute number, so this
-        measures the same call at two sizes and compares. Pinning a literal
-        count made the test assert something it does not care about: the
-        per-sender identity resolution below it costs several queries of its
-        own, and seeding a message (which the interesting case needs) brings
-        those in.
-
-        Every group is seeded with a message on purpose. With none, the newest-
-        message id list is empty and Django skips the fetch entirely, which
-        measures a path this function is not for.
-        """
+        The invariant is *independence*, not an absolute number, so this measures the same call at two sizes and
+        compares."""
         group = create_group_chat(self.me, "One", [self.friend])
         create_group_message(self.me, group, "first")
         with CaptureQueriesContext(connection) as one_group:
@@ -418,12 +494,8 @@ class ConversationMergeTests(TestCase):
     def test_query_count_is_independent_of_group_count_with_distinct_senders(self) -> None:
         """The blind spot in the test above: every group had the *same* last sender.
 
-        The sidebar resolves each last sender's name through the viewer's own
-        visibility, and that answer was resolved one sender at a time. With one
-        sender across every group the dedup cache hid it, so the existing test
-        passed while the cost still scaled with how many *different* people had
-        spoken last.
-        """
+        The sidebar resolves each last sender's name through the viewer's own visibility, and that answer was
+        resolved one sender at a time."""
         first_speaker = _profile()
         _befriend(self.friend, first_speaker)
         group = create_group_chat(self.me, "One", [self.friend, first_speaker])
@@ -450,12 +522,8 @@ class ConversationMergeTests(TestCase):
     def test_only_the_newest_message_per_group_is_materialised(self) -> None:
         """Rows fetched, not queries run - the cost this function actually had.
 
-        The query count was always flat; the row count was every message in
-        every group the viewer belongs to, each with `sender`/`sender__user`
-        joined on, discarded after the first per group. That is invisible to
-        `assertNumQueries`, which is why it survived a fix that named itself an
-        N+1 fix. Counting instantiations measures the thing that grew.
-        """
+        The query count was always flat; the row count was every message in every group the viewer belongs to,
+        each with `sender`/`sender__user` joined on, discarded after the first per group."""
         group = create_group_chat(self.me, "Busy", [self.friend])
         for index in range(12):
             create_group_message(self.me, group, f"m{index}")
@@ -488,36 +556,24 @@ class ConversationMergeTests(TestCase):
 
     def test_unread_group_conversation_count_query_count_is_independent_of_group_count(self) -> None:
         create_group_chat(self.me, "One", [self.friend])
-        with self.assertNumQueries(2):
+        # Memberships, the viewer's blocks, the count.
+        with self.assertNumQueries(3):
             unread_group_conversation_count(self.friend)
 
         for i in range(4):
             other = _profile()
             _befriend(self.me, other)
             create_group_chat(self.me, f"Extra {i}", [self.friend, other])
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             unread_group_conversation_count(self.friend)
 
 
 class GroupMessageNotificationCostTests(TestCase):
     """``_notify_group_message`` must not cost a query per member.
 
-    Its own docstring promises "a small, fixed number of queries regardless of
-    group size", and it goes to some length to keep that: preferences arrive by
-    ``select_related``, unread state by one grouped query, friendship mute by
-    one batched lookup. It runs synchronously inside the sender's request, so a
-    50-member group would otherwise pay a lookup per member for each of them.
-    The invariant is *independence* from member count, not a literal number, so
-    this measures the same call at two sizes.
-
-    Scoped to the notification step deliberately. ``create_group_message`` as a
-    whole is **not** flat: ``broadcast_group_message`` builds one payload per
-    member and resolves the sender's name through each member's own visibility,
-    which is a recorded decision (2026-07-23) rather than an oversight - the
-    alternative leaks a masked name over the live channel. Measuring the whole
-    send would fold that in and this test would be asserting the opposite of
-    what that decision says.
-    """
+    Its own docstring promises "a small, fixed number of queries regardless of group size", and it goes to some
+    length to keep that: preferences arrive by ``select_related``, unread state by one grouped query, friendship
+    mute by one batched lookup."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -535,11 +591,8 @@ class GroupMessageNotificationCostTests(TestCase):
     def _notify_reads(self, group: GroupChat) -> int:
         """How many *reads* notifying a fresh message costs.
 
-        Writes are excluded because one row per notified member is the work
-        itself - it is the lookups feeding those rows that must not scale. The
-        message is created directly so no member has a prior unread one, which
-        is the case ``_already_unread`` skips and the path this is measuring.
-        """
+        Writes are excluded because one row per notified member is the work itself - it is the lookups feeding
+        those rows that must not scale."""
         from urbanlens.dashboard.services.messaging.group_chats import _notify_group_message
 
         message = GroupMessage.objects.create(group=group, sender=self.me, body="hello")
@@ -715,7 +768,9 @@ class GroupKeyEndpointTests(TestCase):
         other_group = create_group_chat(self.creator, "Other", [self.member])
         from urbanlens.dashboard.services.security.e2ee import group_member_token
 
-        self.assertNotEqual(group_member_token(self.group.uuid, self.member.pk), group_member_token(other_group.uuid, self.member.pk))
+        self.assertNotEqual(
+            group_member_token(self.group.uuid, self.member.pk), group_member_token(other_group.uuid, self.member.pk)
+        )
 
     def test_post_requires_exact_member_coverage(self) -> None:
         _enroll(self.creator)
@@ -755,19 +810,8 @@ class GroupKeyEndpointTests(TestCase):
     def test_removing_a_member_flags_rotation(self) -> None:
         """The direction that protects *future* messages from a removed member.
 
-        Removal is already covered on the delivery side - the server stops
-        sending to them (see test_group_removal_stops_delivery). That is a
-        different property from this one: delivery is server-side, and the
-        removed member still holds the envelope for the current key version, so
-        until the group rotates, any message encrypted under it stays readable
-        to whoever holds that key.
-
-        ``needs_rotation`` compares the envelope holders against the current
-        members with ``!=``, which catches removals and additions alike. Only
-        the addition direction was pinned, so narrowing that comparison to a
-        subset check - the obvious way to silence a rotation that looks spurious
-        - would quietly stop rotating on removal and nothing would fail.
-        """
+        Removal is already covered on the delivery side - the server stops sending to them (see
+        test_group_removal_stops_delivery)."""
         _enroll(self.creator)
         _enroll(self.member)
         wrapped = {self._token(self.creator): _blob(), self._token(self.member): _blob()}
@@ -776,7 +820,10 @@ class GroupKeyEndpointTests(TestCase):
 
         remove_group_member(self.group, self.creator, self.member)
 
-        self.assertTrue(json.loads(self.client.get(self.url).content)["needs_rotation"], "a removed member's key version is still current - the group never rotates them out")
+        self.assertTrue(
+            json.loads(self.client.get(self.url).content)["needs_rotation"],
+            "a removed member's key version is still current - the group never rotates them out",
+        )
 
     def test_membership_change_flags_rotation_and_hides_prior_envelopes(self) -> None:
         _enroll(self.creator)
@@ -815,7 +862,9 @@ class ChangePasswordEndpointTests(TestCase):
         self.user.set_password("old-password")
         self.user.save()
         self.client.force_login(self.user)
-        response = self._post({"current_secret": "not-it", "new_auth_key": _blob(), "new_auth_salt": _blob(b"\x04" * 16)})
+        response = self._post(
+            {"current_secret": "not-it", "new_auth_key": _blob(), "new_auth_salt": _blob(b"\x04" * 16)}
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_change_rotates_credential_and_kdf(self) -> None:
@@ -845,9 +894,13 @@ class ChangePasswordEndpointTests(TestCase):
         self.user.set_password("old-password")
         self.user.save()
         bundle = _enroll(self.profile)
-        MessagingKeyBundle.objects.filter(pk=bundle.pk).update(password_wrapped_secret=_blob(), password_wrap_salt=_blob(b"\x09" * 16))
+        MessagingKeyBundle.objects.filter(pk=bundle.pk).update(
+            password_wrapped_secret=_blob(), password_wrap_salt=_blob(b"\x09" * 16)
+        )
         self.client.force_login(self.user)
-        response = self._post({"current_secret": "old-password", "new_auth_key": _blob(), "new_auth_salt": _blob(b"\x04" * 16)})
+        response = self._post(
+            {"current_secret": "old-password", "new_auth_key": _blob(), "new_auth_salt": _blob(b"\x04" * 16)}
+        )
         self.assertEqual(response.status_code, 200)
         bundle.refresh_from_db()
         self.assertTrue(bundle.password_wrap_stale)
@@ -887,7 +940,9 @@ class SetPasswordPromptTests(TestCase):
         # branch away so these tests exercise the password prompt itself.
         from unittest import mock
 
-        patcher = mock.patch("urbanlens.dashboard.controllers.account.should_redirect_to_site_admin", return_value=False)
+        patcher = mock.patch(
+            "urbanlens.dashboard.controllers.account.should_redirect_to_site_admin", return_value=False
+        )
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -896,7 +951,9 @@ class SetPasswordPromptTests(TestCase):
 
         self.user.set_unusable_password()
         self.user.save()
-        ProfileModel.objects.filter(pk=self.profile.pk).update(welcome_onboarding_complete=True, profile_setup_complete=True)
+        ProfileModel.objects.filter(pk=self.profile.pk).update(
+            welcome_onboarding_complete=True, profile_setup_complete=True
+        )
         self.client.force_login(self.user)
         response = self.client.get(reverse("post_login"))
         self.assertRedirects(response, reverse("account.set_password"), fetch_redirect_response=False)
@@ -906,7 +963,9 @@ class SetPasswordPromptTests(TestCase):
 
         self.user.set_unusable_password()
         self.user.save()
-        ProfileModel.objects.filter(pk=self.profile.pk).update(welcome_onboarding_complete=True, profile_setup_complete=True)
+        ProfileModel.objects.filter(pk=self.profile.pk).update(
+            welcome_onboarding_complete=True, profile_setup_complete=True
+        )
         self.client.force_login(self.user)
         self.client.post(reverse("account.set_password.skip"))
         response = self.client.get(reverse("post_login"))

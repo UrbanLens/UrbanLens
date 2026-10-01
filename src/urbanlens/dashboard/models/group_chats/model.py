@@ -1,25 +1,6 @@
 """Group chat models - multi-member conversations built on the direct message system.
-
-A ``GroupChat`` is a named, multi-member conversation. Unlike one-to-one
-direct messages (which have no conversation row at all - see
-``DirectMessage``), group membership, history visibility, and read state all
-hang off explicit rows here:
-
-- ``GroupChatMembership`` - one row per member *stint*. Leaving or being
-  removed sets ``left_at`` (the row is kept for history); being re-added
-  creates a brand-new row. A member only ever sees messages sent during
-  their current stint (``GroupMessageQuerySet.visible_window``), which is
-  what guarantees that someone added to a conversation cannot read anything
-  sent before they joined.
-- ``GroupMessage`` - one message in one group, plaintext or end-to-end
-  encrypted (same body-xor-ciphertext contract as ``DirectMessage``; group
-  keys live in ``models.e2ee.group_key``).
-- ``GroupMessageShare`` - the per-recipient effect of sharing a pin into the
-  group: every member gets their own ``PinShare``, exactly as if the sender
-  had shared with each of them individually.
-
-Permission model: any active member may rename the group or leave; only the
-creator may add or remove members.
+A ``GroupChat`` is a named, multi-member conversation.
+A member only ever sees messages sent during their current stint (``GroupMessageQuerySet.visible_window``), which is what guarantees that someone added to a conversation cannot read anything sent before they joined. - ``GroupMessage`` - one message in one group, plaintext or end-to-end encrypted (same body-xor-ciphertext contract as ``DirectMessage``; group keys live in ``models.e2ee.group_key``). - ``GroupMessageShare`` - the per-recipient effect of sharing a pin into the group: every member gets their own ``PinShare``, exactly as if the sender had shared with each of them individually.
 """
 
 from __future__ import annotations
@@ -43,12 +24,8 @@ MAX_GROUP_NAME_LENGTH = 100
 
 class GroupChat(abstract.DashboardModel):
     """A named, multi-member conversation.
-
     ``uuid`` is the URL key (group ids are not guessable/enumerable).
-    ``creator`` holds group-management rights (add/remove members); it is
-    nullable only because profile deletion must not delete the group out from
-    under the remaining members - a creator-less group simply has no one who
-    can manage membership anymore.
+    ``creator`` holds group-management rights (add/remove members); it is nullable only because profile deletion must not delete the group out from under the remaining members - a creator-less group simply has no one who can manage membership anymore.
     """
 
     uuid = UUIDField(default=uuid.uuid4, unique=True, editable=False)
@@ -112,11 +89,8 @@ class GroupChat(abstract.DashboardModel):
 
 class GroupChatMembership(abstract.DashboardModel):
     """One member's stint in one group chat.
-
-    ``created`` doubles as the join timestamp: history visibility starts
-    there (see ``GroupMessageQuerySet.visible_window``). A member who leaves
-    (or is removed) gets ``left_at`` set and loses access entirely; re-adding
-    them creates a new row, so the absence window stays invisible to them.
+    ``created`` doubles as the join timestamp: history visibility starts there (see ``GroupMessageQuerySet.visible_window``).
+    A member who leaves (or is removed) gets ``left_at`` set and loses access entirely; re-adding them creates a new row, so the absence window stays invisible to them.
     """
 
     group = ForeignKey(
@@ -197,11 +171,7 @@ class GroupChatMembership(abstract.DashboardModel):
 
 class GroupMessage(abstract.DashboardModel):
     """One message in one group chat.
-
-    Same plaintext-or-encrypted contract as ``DirectMessage``: exactly one of
-    ``body``/``ciphertext`` is non-empty, and ``key_version`` records which
-    ``GroupKey`` version encrypted it (0 = plaintext). There is no per-member
-    delete; ``deleted_at`` is the sender's delete-for-everyone tombstone.
+    Same plaintext-or-encrypted contract as ``DirectMessage``: exactly one of ``body``/``ciphertext`` is non-empty, and ``key_version`` records which ``GroupKey`` version encrypted it (0 = plaintext).
     """
 
     group = ForeignKey(
@@ -227,10 +197,10 @@ class GroupMessage(abstract.DashboardModel):
     # Sender-initiated delete-for-everyone: tombstoned for all members.
     deleted_at = DateTimeField(null=True, blank=True)
 
-    # Caller-generated idempotency key - see DirectMessage.client_uuid for the
-    # full rationale. Scoped per sender rather than per group: a sender's own
-    # retry is what needs to collapse, and scoping to the group would let one
-    # client's uuid collide with another's inside the same conversation.
+    # Caller-generated idempotency key - see DirectMessage.client_uuid for the full rationale.
+    # Scoped per sender rather than per group: a sender's own retry is what needs to collapse, and
+    # scoping to the group would let one client's uuid collide with another's inside the same
+    # conversation.
     client_uuid = UUIDField(null=True, blank=True, editable=False)
 
     if TYPE_CHECKING:
@@ -253,9 +223,7 @@ class GroupMessage(abstract.DashboardModel):
 
     def share_for(self, viewer_id: int):
         """Return the viewer's own share row on this message, if any.
-
-        Iterates the (typically prefetched) ``shares`` relation rather than
-        issuing a fresh query, so rendering a page of messages stays N+1-free.
+        Iterates the (typically prefetched) ``shares`` relation rather than issuing a fresh query, so rendering a page of messages stays N+1-free.
 
         Args:
             viewer_id: Primary key of the viewing profile.
@@ -270,9 +238,7 @@ class GroupMessage(abstract.DashboardModel):
 
     def tombstone_text_for(self, viewer_id: int) -> str | None:
         """Return placeholder text to show `viewer_id` instead of this message.
-
-        Mirrors ``DirectMessage.tombstone_text_for``: the sender always sees
-        their own message in full.
+        Mirrors ``DirectMessage.tombstone_text_for``: the sender always sees their own message in full.
 
         Args:
             viewer_id: Primary key of the profile viewing this message.
@@ -321,14 +287,7 @@ class GroupMessage(abstract.DashboardModel):
 
 class GroupMessageShare(abstract.DashboardModel):
     """One member's copy of a pin shared into a group chat.
-
-    Sharing a pin into a group counts as sharing it with every member
-    individually: the service creates one ``PinShare`` per member (running the
-    full provenance/exposure pipeline each time) and records each here so the
-    thread can render that member's own accept/reject state on the card.
-    Members the sender isn't connected to get no row (the friends-only
-    sharing rule still applies per member); they see the card without an
-    action button.
+    Sharing a pin into a group counts as sharing it with every member individually: the service creates one ``PinShare`` per member (running the full provenance/exposure pipeline each time) and records each here so the thread can render that member's own accept/reject state on the card.
     """
 
     message = ForeignKey(

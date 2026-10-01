@@ -1,15 +1,5 @@
 /**
  * Emoji reaction picker for comments, and its most-recently-used list.
- *
- * The picker's full emoji grid is rendered server-side into each comment's
- * ``.reaction-picker-popup``. This adds a "Recent" row on top, built by cloning the
- * matching buttons out of that grid rather than constructing new ones - the clones
- * carry the server's ``hx-post`` attributes with them, so a recent emoji posts the
- * reaction through exactly the same endpoint as the original. That is why each clone
- * is handed to ``htmx.process``: attributes copied via ``cloneNode`` are inert until
- * htmx is told about them.
- *
- * Ported out of ``base.html``'s inline script unchanged.
  */
 
 const RECENT_KEY = "urbanlens.recentReactionEmojis";
@@ -78,8 +68,15 @@ function onDocumentClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (!target?.closest) return;
 
+    const addButton = target.closest<HTMLElement>(".reaction-add-btn");
+    if (addButton) toggleReactionPicker(addButton);
+
     const emojiButton = target.closest<HTMLElement>(".reaction-picker-emoji");
-    if (emojiButton) saveRecentReactionEmoji(emojiButton.dataset.emoji || (emojiButton.textContent?.trim() ?? ""));
+    if (emojiButton) {
+        saveRecentReactionEmoji(emojiButton.dataset.emoji || (emojiButton.textContent?.trim() ?? ""));
+        const open = emojiButton.closest<HTMLElement>(".reaction-picker-popup");
+        if (open) open.hidden = true;
+    }
 
     if (!target.closest(".reaction-picker")) {
         document.querySelectorAll<HTMLElement>(".reaction-picker-popup:not([hidden])").forEach((p) => {
@@ -88,14 +85,6 @@ function onDocumentClick(event: MouseEvent): void {
     }
 }
 
-declare global {
-    interface Window {
-        toggleReactionPicker?: typeof toggleReactionPicker;
-    }
-}
-
 export function installGlobalReactionPicker(): void {
-    // Called from inline onclick= in the comment partials.
-    window.toggleReactionPicker = toggleReactionPicker;
     document.addEventListener("click", onDocumentClick);
 }

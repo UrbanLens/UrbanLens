@@ -9,10 +9,11 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.link_extraction.model import LinkExtraction  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class LinkExtractionQuerySet(abstract.DashboardQuerySet):
+class LinkExtractionQuerySet(abstract.DashboardQuerySet["LinkExtraction"]):
     """Query helpers for :class:`~urbanlens.dashboard.models.link_extraction.model.LinkExtraction`."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -29,10 +30,6 @@ class LinkExtractionQuerySet(abstract.DashboardQuerySet):
     def started_today(self, profile: Profile) -> Self:
         """Runs the profile started since local midnight - the daily-limit window.
 
-        Every run counts against the limit regardless of how it ended (a failed
-        AI call still consumed a fetch and possibly tokens), so this deliberately
-        does not filter by status.
-
         Args:
             profile: The requesting user.
 
@@ -43,5 +40,8 @@ class LinkExtractionQuerySet(abstract.DashboardQuerySet):
         return self.filter(profile=profile, created__gte=midnight)
 
 
-class LinkExtractionManager(abstract.DashboardManager.from_queryset(LinkExtractionQuerySet)):
+_LinkExtractionManagerBase = abstract.DashboardManager.from_queryset(LinkExtractionQuerySet)
+
+
+class LinkExtractionManager(_LinkExtractionManagerBase):
     """Manager for LinkExtraction."""

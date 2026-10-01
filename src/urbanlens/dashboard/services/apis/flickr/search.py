@@ -1,36 +1,4 @@
-"""Public Flickr photo search for the pin/wiki Media gallery.
-
-Distinct from ``gateway.py`` (one user's own OAuth1 library) and ``public.py``
-(a single pasted public album) - this searches Flickr's entire public photo
-pool using a query built from every name this site knows for the place, plus
-two required qualifiers: the state, and a fixed set of urbex-context terms.
-Both are required because a plain landmark-name query against Flickr's global
-pool returns a lot of photos that merely share a common word with the name -
-the state qualifier keeps a name that also belongs to a same-named place
-elsewhere from matching, and the urbex terms keep results on-topic for this
-site's subject matter.
-
-Two gateways implement this, chosen automatically by :class:`FlickrPlugin`
-based on whether a Flickr API key is configured:
-
-* :class:`FlickrSearchGateway` - ``flickr.photos.search`` full-text search,
-  requires an API key. Understands quoted phrases and boolean OR, so the
-  query is one combined ``(names) "state" (urbex terms)`` string.
-* :class:`FlickrFeedSearchGateway` - Flickr's public tags syndication feed,
-  which has never required a key. It only supports ANDing/ORing literal
-  normalized tags, not free-text boolean search, so the same requirement is
-  instead expressed as several simple 3-tag AND queries (see
-  :func:`build_feed_tag_queries`) whose results get unioned. Meaningfully
-  weaker than the API: it only surfaces *recent* uploads matching a tag (not
-  a search over Flickr's history), matching is exact-tag rather than
-  full-text relevance, and only a small preview image is available, not a
-  full-resolution original.
-
-Both contribute the same Media gallery tab (see ``services.pins.external_data``)
-alongside Wikimedia/Smithsonian/LOC/Internet Archive, and share the
-``flickr`` rate-limit/usage-tracking service key with the other two Flickr
-integrations.
-"""
+"""Public Flickr photo search for the pin/wiki Media gallery."""
 
 from __future__ import annotations
 
@@ -57,16 +25,14 @@ _EXTRAS = "url_s,url_z,url_c,url_l,url_o"
 
 FEED_ENDPOINT = "https://www.flickr.com/services/feeds/photos_public.gne"
 _FEED_TIMEOUT = 15
-# Caps how many distinct names one panel fetch queries against the public
-# feed - each name is crossed with every URBEX_TERMS entry (see
-# build_feed_tag_queries), so this bounds the request fan-out per pin fetch
-# against the shared "flickr" rate-limit budget.
+# Caps how many distinct names one panel fetch queries against the public feed - each name is
+# crossed with every URBEX_TERMS entry (see build_feed_tag_queries), so this bounds the request
+# fan-out per pin fetch against the shared "flickr" rate-limit budget.
 _FEED_MAX_NAMES = 4
 
-# Required, ANDed onto every query (see build_search_query and
-# build_feed_tag_queries) so a global search stays scoped to this site's
-# subject matter rather than any photo that happens to share a word with the
-# place's name.
+# Required, ANDed onto every query (see build_search_query and build_feed_tag_queries) so a global
+# search stays scoped to this site's subject matter rather than any photo that happens to share a
+# word with the place's name.
 URBEX_TERMS: tuple[str, ...] = ("abandoned", "urbex", "urban exploration")
 
 
@@ -74,12 +40,10 @@ def _quoted_or_group(terms: list[str]) -> str:
     """Build a parenthesized, quoted OR clause from ``terms`` (deduped, order preserved).
 
     Args:
-        terms: Candidate phrases; blank entries are skipped and duplicates
-            (case-insensitive) are collapsed to their first occurrence.
+        terms: Candidate phrases; blank entries are skipped and duplicates (case-insensitive) are collapsed to their first occurrence.
 
     Returns:
-        ``'("a" OR "b")'``, or ``""`` when no term survives.
-    """
+        ``'("a" OR "b")'``, or ``""`` when no term survives."""
     seen: set[str] = set()
     quoted: list[str] = []
     for raw in terms:
@@ -102,19 +66,18 @@ class _QueryComponents:
     """The raw ingredients of a pin's required-operator Flickr query, before rendering."""
 
     names: list[str]
+    ancestor_names: list[str]
     state: str
 
 
 def _search_components(pin: Pin) -> _QueryComponents | None:
-    """Gather the pin's known names and state, shared by both query renderers.
+    """Gather the pin's known names, ancestor names, and state, shared by both query renderers.
 
     Args:
         pin: The pin to gather query components for.
 
     Returns:
-        The raw (undeduped, unquoted) names and state, or None when the pin
-        has no known state at all - both renderers require one.
-    """
+        The raw (undeduped, unquoted) names, ancestor names, and state, or None when the pin has no known state at all - both renderers require one."""
     from django.core.exceptions import ObjectDoesNotExist
 
     from urbanlens.dashboard.services.locations.naming import is_address_derived_name, is_meaningful_name
@@ -149,27 +112,18 @@ def _search_components(pin: Pin) -> _QueryComponents | None:
         # noise to the query.
         names = [name for name in names if not is_address_derived_name(name, location)]
 
-    return _QueryComponents(names=names, state=state)
+    return _QueryComponents(names=names, ancestor_names=pin.ancestor_search_names(), state=state)
 
 
 def build_search_query(pin: Pin) -> str | None:
     """Build the required-operator Flickr full-text search query for a pin.
-
-    Used by :class:`FlickrSearchGateway` (the API-backed provider). The query
-    has the shape ``(names) "state" (urbex terms)``: an OR-group of every
-    meaningful, non-nickname name known for the place, ANDed with the pin's
-    state in quotes and the fixed :data:`URBEX_TERMS` OR-group. Both the name
-    group and the state are required - a pin with neither is skipped rather
-    than searched with a weaker query, since a Flickr full-text search
-    without them returns mostly off-topic noise.
+    The name group and the state are both required - a pin with neither is skipped rather than searched with a weaker query, since a Flickr full-text search without them returns mostly off-topic noise.
 
     Args:
         pin: The pin to build a search query for.
 
     Returns:
-        The query string, or None when the pin has no usable name or no
-        known state.
-    """
+        The query string, or None when the pin has no usable name or no known state."""
     components = _search_components(pin)
     if components is None:
         return None
@@ -178,33 +132,22 @@ def build_search_query(pin: Pin) -> str | None:
     if not names_clause:
         return None
 
-    urbex_clause = _quoted_or_group(list(URBEX_TERMS))
-    return f'{names_clause} "{components.state}" {urbex_clause}'
+    clauses = [names_clause]
+    if ancestor_clause := _quoted_or_group(components.ancestor_names):
+        clauses.append(ancestor_clause)
+    clauses.append(f'"{components.state}"')
+    clauses.append(_quoted_or_group(list(URBEX_TERMS)))
+    return " ".join(clauses)
 
 
 def build_feed_tag_queries(pin: Pin) -> list[str]:
     """Decompose a pin's required-operator query into public-feed tag-AND queries.
 
-    Used by :class:`FlickrFeedSearchGateway` (the keyless fallback). The
-    public syndication feed only supports ANDing/ORing literal, normalized
-    tags - not free-text boolean search - so the same "(names) state (urbex
-    terms)" requirement is instead expressed as several 3-tag AND queries
-    (one name x one urbex term, both ANDed with the state). Running all of
-    them and unioning the results (see ``MediaProvider.get_media``) is
-    mathematically equivalent to the API's single OR-of-names AND state AND
-    OR-of-urbex-terms query - just decomposed into queries the feed can
-    actually run. Recall is still much lower than the API-backed provider,
-    since matching is exact-normalized-tag rather than full-text relevance.
-
     Args:
         pin: The pin to build tag queries for.
 
     Returns:
-        Comma-joined 3-tag strings (name, state, urbex term; each normalized
-        the same way Flickr normalizes tags for matching), or ``[]`` when the
-        pin has no usable name or state. Capped at :data:`_FEED_MAX_NAMES`
-        distinct names to bound how many feed requests one fetch issues.
-    """
+        Comma-joined tag strings (name, [ancestor,] state, urbex term; each normalized the same way Flickr normalizes tags for matching), or ``[]`` when the pin has no usable name or state."""
     from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 
     components = _search_components(pin)
@@ -214,6 +157,12 @@ def build_feed_tag_queries(pin: Pin) -> list[str]:
     state_tag = normalize_name_for_comparison(components.state)
     if not state_tag:
         return []
+
+    ancestor_tag = ""
+    for candidate in components.ancestor_names:
+        if tag := normalize_name_for_comparison(candidate):
+            ancestor_tag = tag
+            break
 
     name_tags: list[str] = []
     seen: set[str] = set()
@@ -229,6 +178,8 @@ def build_feed_tag_queries(pin: Pin) -> list[str]:
         return []
 
     urbex_tags = [normalize_name_for_comparison(term) for term in URBEX_TERMS]
+    if ancestor_tag:
+        return [f"{name_tag},{ancestor_tag},{state_tag},{urbex_tag}" for name_tag in name_tags for urbex_tag in urbex_tags]
     return [f"{name_tag},{state_tag},{urbex_tag}" for name_tag in name_tags for urbex_tag in urbex_tags]
 
 
@@ -242,11 +193,6 @@ class FlickrSearchGateway(MediaProvider):
 
     def _search(self, text: str) -> list[dict[str, Any]]:
         """Run one ``flickr.photos.search`` call and return raw photo dicts.
-
-        Failures (including a site with no Flickr API key configured) are
-        swallowed and logged rather than raised, matching the other Media
-        gallery providers - a per-term search failure should degrade to "no
-        results from this term", not suppress the whole panel.
 
         Args:
             text: The full boolean query text, from :func:`build_search_query`.
@@ -304,15 +250,7 @@ class FlickrSearchGateway(MediaProvider):
 @dataclass(slots=True, kw_only=True)
 class FlickrFeedSearchGateway(MediaProvider):
     """Keyless fallback: Flickr's public tags syndication feed.
-
-    Used automatically in place of :class:`FlickrSearchGateway` when the site
-    has no Flickr API key configured (see ``FlickrPlugin.get_panel_sources``)
-    - Flickr's public feeds have never required a key. Meaningfully weaker
-    than the API-backed search though (see the module docstring): recent
-    uploads only, exact-tag matching, and only a small preview image per
-    photo. Switches back to the API-backed gateway automatically the moment a
-    key is configured - see ``FlickrMediaPanelSource.search_terms``.
-    """
+    Used automatically in place of :class:`FlickrSearchGateway` when the site has no Flickr API key configured (see ``FlickrPlugin.get_panel_sources``) - Flickr's public feeds have never required a key."""
 
     service_key: ClassVar[str] = "flickr"
     display_name: ClassVar[str] = "Flickr"
@@ -349,11 +287,10 @@ class FlickrFeedSearchGateway(MediaProvider):
                 continue
             link = item.get("link") or ""
             author_id = item.get("author_id") or ""
-            # The feed's own `link` uses the account's path-alias username
-            # (when it has one) rather than its NSID, so it wouldn't always
-            # match the NSID-based source_url the other two Flickr paths
-            # store for the same photo (see photo_web_url) - rebuilding it
-            # from author_id keeps the dedup key consistent across all three.
+            # The feed's own `link` uses the account's path-alias username (when it has one) rather
+            # than its NSID, so it wouldn't always match the NSID-based source_url the other two
+            # Flickr paths store for the same photo (see photo_web_url) - rebuilding it from
+            # author_id keeps the dedup key consistent across all three.
             photo_id = link.rstrip("/").rsplit("/", 1)[-1] if link else ""
             page_url = photo_web_url(author_id, photo_id) if author_id and photo_id.isdigit() else link
             yield MediaItem(
@@ -366,17 +303,7 @@ class FlickrFeedSearchGateway(MediaProvider):
 
 
 class FlickrMediaPanelSource(MediaPanelSource):
-    """Flickr's Media gallery provider: a required-operator, urbex-scoped query.
-
-    Overrides the generic ``MediaPanelSource.search_terms`` (built from
-    ``pin.get_unique_search_name``) - a plain landmark-name query returns too
-    much off-topic noise against Flickr's global photo pool. Which query
-    shape gets built depends on which gateway is active (see
-    ``FlickrPlugin.get_panel_sources``): :func:`build_search_query`'s single
-    full-text string for the API-backed :class:`FlickrSearchGateway`, or
-    :func:`build_feed_tag_queries`'s decomposed tag-AND queries for the
-    keyless :class:`FlickrFeedSearchGateway`.
-    """
+    """Flickr's Media gallery provider: a required-operator, urbex-scoped query."""
 
     @staticmethod
     def search_terms(pin: Pin, gateway: MediaProvider) -> list[str]:
@@ -387,8 +314,7 @@ class FlickrMediaPanelSource(MediaPanelSource):
             gateway: The active gateway - determines which query shape to build.
 
         Returns:
-            The query terms for ``gateway``, or ``[]`` when the pin has no
-            usable name or state.
+            The query terms for ``gateway``, or ``[]`` when the pin has no usable name or state.
         """
         if isinstance(gateway, FlickrFeedSearchGateway):
             return build_feed_tag_queries(pin)

@@ -191,6 +191,7 @@ entirely, operation order relative to the `AlterField` in the same migration doe
 | `EmergencyContactDefault` | `label` | Names a third party who never consented to being in this database; its sibling `email` was already encrypted | 2026-08-15 |
 | `FriendInvitation` | `message` | The inviter's free-text note to someone who does not yet have an account. `email` stays plaintext — see below | 2026-08-15 |
 | `Image` | `exif_data` | The EXIF snapshot from an upload — camera make/model/serial, lens, timestamps, and GPS unless the uploader opted out of location. **The only copy**, see below | 2026-08-24 |
+| `Image` | `original_filename` | The upload's true filename, which a device/app can auto-generate from a capture timestamp or a user can type freely. Kept off the stored path/URL (see `models.images.model.pin_image_upload_path`) so it never reaches anyone the photo is shared with; retained only for the author-attribution heuristic and "download this photo" affordances | 2026-08-31 |
 
 ### `Image.exif_data`: the only copy, and the first `EncryptedJSONField`
 
@@ -234,9 +235,12 @@ every page 500 *including the styled 500 page itself*. Note its default is
 `os.getenv("UL_GOTIFY_TOKEN", "")`, so it degrades to the environment token when one is set,
 not necessarily to empty. Covered by `test_site_settings_encrypted_degradation.py`.
 
-The two categories differ because a credential can be re-fetched from its provider while user-authored content cannot. Of the five `InvalidToken` handlers in this codebase, **four self-heal by deleting
-the row** — Immich, Flickr, Google Photos, Google Calendar. TOTP deliberately does not; silently dropping a user's own 2FA factor is a bigger security-posture change than
-dropping a stale third-party connection.
+The two categories differ because a credential can be re-fetched from its provider while user-authored content cannot. The four provider
+connections (Immich, Flickr, Google Photos, Google Calendar) share `abstract.ProfileConnectionManager`: a read that
+raises `InvalidToken` reports the connection as absent and **keeps the row**, because a process that has not yet been
+given a key another process writes with (a rolling deploy mid-rotation) would otherwise delete a working connection.
+Only an explicit disconnect (`delete_for_profile`) or a reconnect (`connect_for_profile`, which replaces an
+undecryptable row and updates a readable one in place) removes it. TOTP likewise reads as "no device" and keeps its row.
 
 > **Limit:** this covers fields with a **string default** only. A `null=True` field degrades to
 > `None`, which cannot carry an attribute (`x is None` is not overridable), so `Profile.bio`,
@@ -324,9 +328,8 @@ Ordered roughly by risk if left as-is:
    docstrings that claim session data "never reaches the database"; under `cached_db` it does.
 8. **`Image.exif_data`** — trim to an allowlist (capture time, camera model, orientation)
    instead of retaining serial numbers and the rest of the deanonymization surface.
-9. **Device-scan retention** — MAC addresses plus profile-attributed movement trails are the
-   highest-sensitivity/lowest-utility rows here; drop readings older than the clustering
-   lookback window rather than encrypting them.
+9. **Device-scan retention** — ruled out: device scans are never deleted, including when their uploader's
+   account is (Jess, 2026-09-29). Encrypting the readings is still open.
 10. **`Profile.birth_date`** — build an `EncryptedDateField` (store as an encrypted ISO string,
     parse back to `date`) following the same pattern as `EncryptedTextField`.
 11. **`social_django` OAuth tokens** — third-party table; options are a custom storage/pipeline
@@ -343,8 +346,8 @@ Before adding a plaintext PII field, ask:
    - **Yes** → keep the matched form plaintext; if you also need to *display* the value,
      consider storing a separate encrypted display copy (see `ProfileEmail` above).
 2. If you are encrypting it, can the value be re-fetched from somewhere else?
-   - **Yes** (a credential) → leave `fail_soft` off so callers can detect the failure and drop
-     the row, prompting the user to reconnect. **Unless** nothing catches `InvalidToken` and the
+   - **Yes** (a credential) → leave `fail_soft` off so callers can detect the failure and treat
+     the connection as absent, prompting the user to reconnect. **Unless** nothing catches `InvalidToken` and the
      model loads on ordinary page renders — then it must be `fail_soft` regardless of being a
      credential, or one bad row takes the site down (`notify_gotify_token` is the precedent).
    - **No** (user-authored content) → set `fail_soft=True`, and declare it

@@ -13,7 +13,12 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from urbanlens.dashboard.models.place.model import Place
+    from urbanlens.dashboard.models.place.external_tag import PlaceExternalTag  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.place.external_tag_group import ExternalTagGroup, ExternalTagVocabularyEntry  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.place.model import (
+        Place,
+        PlaceAccessGrant,  # noqa: F401 - mypy needs these; ruff does not
+    )
 
 #: A WGS-84 coordinate as any of the forms this codebase stores or parses one
 #: in. ``Location`` holds fixed-precision decimals; parsed input arrives as
@@ -23,7 +28,7 @@ Coordinate = float | Decimal | str | None
 logger = logging.getLogger(__name__)
 
 
-class PlaceQuerySet(abstract.DashboardQuerySet):
+class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     """QuerySet for Place - the real-world parcels and buildings pins resolve onto."""
 
     def current(self) -> Self:
@@ -36,58 +41,35 @@ class PlaceQuerySet(abstract.DashboardQuerySet):
         """Places of one kind (parcel, building, site)."""
         return self.filter(kind=kind)
 
+    def implausible(self) -> Self:
+        """Places larger than their kind can be, and every place in a domain rooted on one.
+
+        Such a place is not the thing it claims to be, so it must not share access between the pins on it.
+        """
+        from urbanlens.dashboard.models.place.model import implausible_area_q
+
+        return self.filter(implausible_area_q() | implausible_area_q("domain_root__"))
+
     def resolvable(self) -> Self:
         """Places a coordinate is allowed to resolve onto.
-
-        Three exclusions, each load-bearing:
-
-        - **Superseded** places keep their geometry for display and history,
-          but a historical campus boundary still geometrically contains every
-          post-split pin, so containment against it must never resolve.
-        - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be
-          *earned* by holding every member, never to be pinned into directly -
-          see ``services.wiki.wiki_access``. Their geometry is the union of
-          their members, so excluding them here is what makes the strict rule
-          unbypassable rather than merely unlikely.
-        - **Geometry-less** places (a building nobody has a footprint for)
-          have nothing to test containment against; they stay reachable
-          through their parent's domain instead.
+        Four exclusions, each load-bearing: - **Superseded** places keep their geometry for display and history, but a historical campus boundary still geometrically contains every post-split pin, so containment against it must never resolve. - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be *earned* by holding every member, never to be pinned into directly - see ``services.wiki.wiki_access``. - **Implausible** places (see :meth:`implausible`) would join strangers a county apart.
         """
-        return self.current().filter(is_aggregate=False, geometry__isnull=False)
+        from urbanlens.dashboard.models.place.model import Place
+
+        return self.current().filter(is_aggregate=False, geometry__isnull=False).exclude(pk__in=Place.objects.implausible().values("pk"))
 
     def containing_point(self, point: Point) -> Self:
         """Resolvable places whose official geometry contains a coordinate.
-
-        Ordered most-specific first: smallest area wins. A building footprint
-        is always smaller than the parcel enclosing it, so area ordering
-        subsumes "deepest in the containment tree" without needing to walk it,
-        and it stays deterministic for two unrelated parcels that overlap
-        through bad county geometry.
+        Ordered most-specific first: smallest area wins.
+        A building footprint is always smaller than the parcel enclosing it, so area ordering subsumes "deepest in the containment tree" without needing to walk it, and it stays deterministic for two unrelated parcels that overlap through bad county geometry.
         """
         return self.resolvable().filter(geometry__contains=point).order_by("area_sqm", "pk")
 
-    def in_domain(self, domain_root_id: int) -> Self:
-        """Every place sharing one access domain."""
-        return self.filter(domain_root_id=domain_root_id)
 
-    def in_domains(self, domain_root_ids: Iterable[int]) -> Self:
-        """Every place in any of the given access domains."""
-        return self.filter(domain_root_id__in=list(domain_root_ids))
-
-    def part_of_children(self) -> Self:
-        """Restrict to places attached to their parent by a ``PART_OF`` edge."""
-        from urbanlens.dashboard.models.place.model import PlaceRelation
-
-        return self.filter(parent__isnull=False, parent_relation=PlaceRelation.PART_OF)
-
-    def member_of_children(self) -> Self:
-        """Restrict to places attached to their parent by a ``MEMBER_OF`` edge."""
-        from urbanlens.dashboard.models.place.model import PlaceRelation
-
-        return self.filter(parent__isnull=False, parent_relation=PlaceRelation.MEMBER_OF)
+_PlaceManagerBase = abstract.DashboardManager.from_queryset(PlaceQuerySet)
 
 
-class PlaceManager(abstract.DashboardManager.from_queryset(PlaceQuerySet)):
+class PlaceManager(_PlaceManagerBase["Place"]):
     """Manager for Place.
 
     ``resolve_for_point`` is the single answer to "which real-world thing is
@@ -113,13 +95,8 @@ class PlaceManager(abstract.DashboardManager.from_queryset(PlaceQuerySet)):
 
     def competing_for_point(self, latitude: Coordinate, longitude: Coordinate, *, resolved: Place | None) -> PlaceQuerySet:
         """Places that genuinely compete with ``resolved`` for a coordinate.
-
-        A competitor is a resolvable place containing the same point that is
-        in a *different access domain*. Everything inside one property -
-        buildings under their parcel - shares a domain and is therefore never
-        a competitor, which is what stops a 124-building campus from telling
-        every visitor that 124 other places cover their pin. What survives is
-        the real case: two unrelated parcels whose county geometry overlaps.
+        A competitor is a resolvable place containing the same point that is in a *different access domain*.
+        Everything inside one property - buildings under their parcel - shares a domain and is therefore never a competitor, which is what stops a 124-building campus from telling every visitor that 124 other places cover their pin.
 
         Args:
             latitude: WGS-84 latitude; None is tolerated.
@@ -153,7 +130,7 @@ def point_for_coordinates(latitude: Coordinate, longitude: Coordinate) -> Point 
     return Point(float(longitude), float(latitude), srid=4326)
 
 
-class PlaceAccessGrantQuerySet(abstract.DashboardQuerySet):
+class PlaceAccessGrantQuerySet(abstract.DashboardQuerySet["PlaceAccessGrant"]):
     """QuerySet for PlaceAccessGrant."""
 
     def for_profile(self, profile) -> Self:
@@ -161,12 +138,12 @@ class PlaceAccessGrantQuerySet(abstract.DashboardQuerySet):
         return self.filter(profile=profile)
 
 
-class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAccessGrantQuerySet)):
-    """Manager for PlaceAccessGrant.
+_PlaceAccessGrantManagerBase = abstract.DashboardManager.from_queryset(PlaceAccessGrantQuerySet)
 
-    Deliberately offers no public "grant access" helper. Grants are written
-    only by the Place backfill migration and by split processing; every other
-    caller must go through the computed predicate.
+
+class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
+    """Manager for PlaceAccessGrant.
+    Every other caller must go through the computed predicate in ``services.wiki.wiki_access``.
     """
 
     def granted_domain_ids(self, profile) -> set[int]:
@@ -180,4 +157,85 @@ class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAcces
         """
         if profile is None or profile.pk is None:
             return set()
-        return set(self.for_profile(profile).values_list("place__domain_root_id", flat=True))
+        return {root for root in self.for_profile(profile).values_list("place__domain_root_id", flat=True) if root is not None}
+
+    def snapshot_family(self, profile_ids: Iterable[int], aggregate: Place, *, reason: str | None = None) -> None:
+        """Permanently grant a split-derived aggregate and all its current members.
+        Used both at the moment a parcel is split (for everyone who held the undivided parcel) and, later, for anyone who independently earns the same aggregate by pinning every one of its current successors - both are "proved full knowledge of this split family", just at different times, and both deserve the identical permanent record.
+
+        Args:
+            profile_ids: Profiles to grant. A no-op for an empty iterable.
+            aggregate: The split-derived aggregate place. Its own row and
+                every current ``MEMBER_OF`` child are granted together.
+            reason: Defaults to :attr:`GrantReason.GRANDFATHERED_SPLIT`.
+        """
+        from urbanlens.dashboard.models.place.model import GrantReason, PlaceRelation
+
+        resolved_reason = reason if reason is not None else GrantReason.GRANDFATHERED_SPLIT
+        ids = list(profile_ids)
+        if not ids:
+            return
+        family = [aggregate, *aggregate.children.filter(parent_relation=PlaceRelation.MEMBER_OF)]
+        grants = [self.model(profile_id=profile_id, place=place, reason=resolved_reason) for profile_id in ids for place in family]
+        # ignore_conflicts: a repeat call (a profile who already holds part of
+        # the family, or two overlapping snapshot triggers) must stay a no-op,
+        # not an IntegrityError on the (profile, place) unique constraint.
+        self.bulk_create(grants, ignore_conflicts=True)
+
+    def record_engagement(self, profile, place: Place | None) -> None:
+        """Permanently grant *profile* the domain *place* sits in, for engaging with it.
+        A profile who views a wiki or shares content to it while they hold access keeps that access even after every qualifying pin is later moved or deleted - see :class:`GrantReason.GRANDFATHERED_ENGAGEMENT`.
+
+        Args:
+            profile: The profile engaging with the wiki. A no-op for None or
+                an unsaved profile.
+            place: The place tied to the wiki's Location. A no-op for None or
+                an unsaved place - a placeless location has no domain to
+                grant, and its exact-pin-match access needs no grandfathering.
+        """
+        from urbanlens.dashboard.models.place.model import GrantReason
+
+        if profile is None or profile.pk is None or place is None or place.pk is None:
+            return
+        self.get_or_create(profile=profile, place=place, defaults={"reason": GrantReason.GRANDFATHERED_ENGAGEMENT})
+
+
+class PlaceExternalTagQuerySet(abstract.DashboardQuerySet["PlaceExternalTag"]):
+    """QuerySet for PlaceExternalTag - raw provider classification data."""
+
+
+_PlaceExternalTagManagerBase = abstract.DashboardManager.from_queryset(PlaceExternalTagQuerySet)
+
+
+class PlaceExternalTagManager(_PlaceExternalTagManagerBase):
+    """Manager for PlaceExternalTag rows."""
+
+
+class ExternalTagGroupQuerySet(abstract.DashboardQuerySet["ExternalTagGroup"]):
+    """QuerySet for ExternalTagGroup."""
+
+    def non_empty(self) -> Self:
+        """Groups that still have at least one member."""
+        return self.filter(members__isnull=False).distinct()
+
+
+_ExternalTagGroupManagerBase = abstract.DashboardManager.from_queryset(ExternalTagGroupQuerySet)
+
+
+class ExternalTagGroupManager(_ExternalTagGroupManagerBase):
+    """Manager for ExternalTagGroup."""
+
+
+class ExternalTagVocabularyEntryQuerySet(abstract.DashboardQuerySet["ExternalTagVocabularyEntry"]):
+    """QuerySet for ExternalTagVocabularyEntry."""
+
+    def ungrouped(self) -> Self:
+        """Entries with no explicit group - eligible for default same-text matching."""
+        return self.filter(group__isnull=True)
+
+
+_ExternalTagVocabularyEntryManagerBase = abstract.DashboardManager.from_queryset(ExternalTagVocabularyEntryQuerySet)
+
+
+class ExternalTagVocabularyEntryManager(_ExternalTagVocabularyEntryManagerBase):
+    """Manager for ExternalTagVocabularyEntry."""

@@ -6,7 +6,6 @@
 <tr><td align="center">
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1)">
 
-  <!-- Header -->
   <tr>
     <td style="background:linear-gradient(135deg,#312e81,#4338ca,#6366f1);padding:32px 32px 24px;text-align:center">
       <p style="margin:0;color:#a5b4fc;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">UrbanLens</p>
@@ -14,15 +13,15 @@
     </td>
   </tr>
 
-  <!-- Body -->
   <tr>
     <td style="padding:32px">
       <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6">
         Hi <strong>{{ profile.username }}</strong>,
       </p>
       <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.65">
-        You (or someone using your account) added this address as an additional email on your
-        UrbanLens profile. Confirm it so it can be used to find your account and to log in.
+        {% if make_primary %}You (or someone using your account) asked to make this the email address you sign in to
+        UrbanLens with. Confirm it to finish the change; until then your current address stays in place.{% else %}You (or someone using your account) added this address as an additional email on your
+        UrbanLens profile. Confirm it so it can be used to find your account and to log in.{% endif %}
       </p>
 
       <div style="text-align:center;margin:28px 0">

@@ -1,9 +1,12 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% load vendor_assets %}
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% endblock %}
 
 {% block hero %}
@@ -55,15 +58,13 @@
         </div>
         <div class="form-row form-row--map">
             <label>Destination &amp; route</label>
-            {# Route markup drawn here lands on a draft MarkupMap created on first #}
-            {# use; its uuid is submitted in the hidden "markup_map" input and #}
-            {# linked to the check-in on creation. #}
+            {# Route markup drawn here lands on a draft MarkupMap created on first use. #}
             {% url 'markup_map.create' as markup_map_create_url %}
             {% url 'markup_map.json' '11111111-1111-1111-1111-111111111111' as markup_map_json_url_template %}
             {% url 'markup_map.markup' '11111111-1111-1111-1111-111111111111' as markup_map_markup_url_template %}
             {% url 'markup_map.markup.edit' '11111111-1111-1111-1111-111111111111' '00000000-0000-0000-0000-000000000000' as markup_map_markup_edit_url_template %}
             {% url 'markup_map.view_state' '11111111-1111-1111-1111-111111111111' as markup_map_view_url_template %}
-            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False markup_map_create_url=markup_map_create_url markup_map_json_url_template=markup_map_json_url_template markup_map_markup_url_template=markup_map_markup_url_template markup_map_markup_edit_url_template=markup_map_markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template markup_map_field_id="markup-map-uuid-field" %}
+            {% include "dashboard/partials/safety/_safety_map.html" with readonly=False markup_map_create_url=markup_map_create_url markup_map_json_url_template=markup_map_json_url_template markup_map_markup_url_template=markup_map_markup_url_template markup_map_markup_edit_url_template=markup_map_markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template markup_map_field_id="markup-map-uuid-field" %}
         </div>
         {# Filled in (only) when the picked destination is covered by a community wiki. #}
         <div id="safety-wiki-notify-option"
@@ -92,65 +93,8 @@
         </div>
     </form>
 </div>
-{% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
-<script>
-(function () {
-    var checkinByInput = document.getElementById('checkin_by');
-    var checkinByUtcInput = document.getElementById('checkin_by_utc');
-    var form = document.getElementById('safety-create-form');
-    if (!checkinByInput || !checkinByUtcInput || !form) return;
+{% endblock %}
 
-    function toLocalInputValue(date) {
-        var pad = function (n) { return String(n).padStart(2, '0'); };
-        return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
-            'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
-    }
-
-    // The datetime-local input has no timezone info and the browser fills/reads
-    // it using the user's local wall clock, but the server treats a naive
-    // datetime as UTC. Mirror the picked value into a hidden UTC ISO string so
-    // check-ins picked outside UTC don't get misread as already in the past.
-    function syncUtcValue() {
-        var picked = new Date(checkinByInput.value);
-        checkinByUtcInput.value = isNaN(picked.getTime()) ? '' : picked.toISOString();
-    }
-
-    var now = new Date();
-    checkinByInput.min = toLocalInputValue(now);
-    if (!checkinByInput.value) {
-        // Default an hour out, not exactly "now" - otherwise the default value
-        // is already in the past by the time the page finishes loading.
-        checkinByInput.value = toLocalInputValue(new Date(now.getTime() + 60 * 60000));
-    }
-    syncUtcValue();
-    checkinByInput.addEventListener('input', syncUtcValue);
-
-    // -- Grace period end time -------------------------------------------------
-    var graceRange = document.querySelector('.safety-grace-slider [data-role="range"]');
-    var endHint = document.getElementById('safety-grace-end-hint');
-    function refreshEndHint() {
-        if (!graceRange || !endHint || !checkinByInput.value) return;
-        var checkinBy = new Date(checkinByInput.value);
-        if (isNaN(checkinBy.getTime())) return;
-        var endsAt = new Date(checkinBy.getTime() + parseFloat(graceRange.value) * 3600000);
-        endHint.textContent = 'Contacts will be notified at ' + endsAt.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
-    }
-    if (graceRange) graceRange.addEventListener('input', refreshEndHint);
-    checkinByInput.addEventListener('input', refreshEndHint);
-    refreshEndHint();
-
-    // -- Future-date validation -------------------------------------------------
-    form.addEventListener('submit', function (evt) {
-        var checkinBy = new Date(checkinByInput.value);
-        if (isNaN(checkinBy.getTime()) || checkinBy <= new Date()) {
-            evt.preventDefault();
-            checkinByInput.setCustomValidity('Expected check-in time must be in the future.');
-            checkinByInput.reportValidity();
-        } else {
-            checkinByInput.setCustomValidity('');
-        }
-    });
-    checkinByInput.addEventListener('input', function () { checkinByInput.setCustomValidity(''); });
-}());
-</script>
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/safety.js' %}"></script>
 {% endblock %}

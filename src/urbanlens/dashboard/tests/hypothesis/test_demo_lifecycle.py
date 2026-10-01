@@ -1,9 +1,5 @@
-"""Demo account lifecycle: the reserved prefix, and the purge.
+"""Demo account lifecycle: the reserved prefix, and the purge."""
 
-The prefix is the only handle either mechanism has. If a real account could
-register one, `purge_demo_accounts` would select and destroy it - so reserving
-it is a data-safety guard, not tidiness.
-"""
 from __future__ import annotations
 
 from datetime import timedelta

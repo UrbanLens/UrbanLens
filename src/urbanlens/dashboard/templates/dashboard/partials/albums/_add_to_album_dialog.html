@@ -1,0 +1,16 @@
+{% comment %}Add / move photos to an album. The rows load from picker_url each time the dialog opens.{% endcomment %}
+<dialog id="album-target-dialog" class="ul-dialog album-target-dialog" aria-label="Choose an album" data-picker-url="{{ picker_url }}">
+  <form method="dialog" class="album-target-head">
+    <h4 class="album-target-title">Add to album</h4>
+    <i class="material-icons spin htmx-indicator" id="album-target-spinner" aria-hidden="true">autorenew</i>
+    <button type="submit" class="album-picker-close" aria-label="Close">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </form>
+  <input type="search" name="q" class="dialog-search album-target-search"
+         placeholder="Search albums..." autocomplete="off"
+         aria-label="Search albums by name"
+         hx-get="{{ picker_url }}" hx-trigger="input changed delay:250ms, search"
+         hx-target="next .album-target-list" hx-swap="innerHTML" hx-indicator="#album-target-spinner">
+  <ul class="album-target-list" aria-live="polite"></ul>
+</dialog>

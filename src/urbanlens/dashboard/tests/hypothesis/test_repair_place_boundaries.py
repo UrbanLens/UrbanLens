@@ -1,18 +1,4 @@
-"""The boundary repair pass must sweep the area the *old* geometry covered.
-
-`provision_places_for_coordinate` calls `resolve_locations_in(place.geometry)`
-whenever it stores an outline, so an oversized parcel re-homed pins across a
-wide area onto itself. Correcting the outline does not undo that.
-
-`resolve_locations_in` re-resolves each location it visits authoritatively, but
-its scope is `Location.objects.filter(point__within=polygon)`. Sweeping with the
-corrected (smaller) polygon therefore visits only the locations still inside it
-and leaves every wrongly-captured location outside it attached to the wrong
-place - a fix that looks applied and isn't. The command must capture the old
-geometry before re-provisioning and sweep with that.
-
-That ordering is the whole point of the command, so it is what these tests pin.
-"""
+"""The boundary repair pass must sweep the area the *old* geometry covered."""
 
 from __future__ import annotations
 
@@ -42,7 +28,9 @@ class RepairPlaceBoundariesTests(TestCase):
         super().setUp()
         self._seq = 0
 
-    def _parcel(self, *, generated_at=None, size: float = 1.0, area_sqm: float = 1_000_000.0, with_location: bool = True) -> Place:
+    def _parcel(
+        self, *, generated_at=None, size: float = 1.0, area_sqm: float = 1_000_000.0, with_location: bool = True
+    ) -> Place:
         self._seq += 1
         place = baker.make(
             Place,
@@ -66,16 +54,24 @@ class RepairPlaceBoundariesTests(TestCase):
         old_geometry = place.geometry
         corrected = _square(0.001)
 
-        def shrink(location, *, force=False, name=None):
+        def shrink(location, *, force=False, name=None, detect_splits=True):
             Place.objects.filter(pk=place.pk).update(geometry=corrected, area_sqm=100.0)
             return place
 
-        with mock.patch(f"{_MODULE}.ensure_place_for_location", side_effect=shrink), mock.patch(f"{_MODULE}.resolution") as resolution:
+        with (
+            mock.patch(f"{_MODULE}.ensure_place_for_location", side_effect=shrink),
+            mock.patch(f"{_MODULE}.resolution") as resolution,
+        ):
             resolution.resolve_locations_in.return_value = 3
             self._run()
 
         swept = resolution.resolve_locations_in.call_args.args[0]
-        self.assertAlmostEqual(swept.area, old_geometry.area, places=9, msg="swept the corrected polygon, leaving wrongly re-homed pins outside it untouched")
+        self.assertAlmostEqual(
+            swept.area,
+            old_geometry.area,
+            places=9,
+            msg="swept the corrected polygon, leaving wrongly re-homed pins outside it untouched",
+        )
         self.assertGreater(swept.area, corrected.area, "the sweep must cover the area the bad boundary captured")
 
     def test_re_resolution_is_forced(self) -> None:
@@ -119,7 +115,10 @@ class RepairPlaceBoundariesTests(TestCase):
     def test_dry_run_neither_fetches_nor_sweeps(self) -> None:
         self._parcel()
 
-        with mock.patch(f"{_MODULE}.ensure_place_for_location") as ensure, mock.patch(f"{_MODULE}.resolution") as resolution:
+        with (
+            mock.patch(f"{_MODULE}.ensure_place_for_location") as ensure,
+            mock.patch(f"{_MODULE}.resolution") as resolution,
+        ):
             output = self._run("--dry-run")
 
         ensure.assert_not_called()
@@ -142,8 +141,97 @@ class RepairPlaceBoundariesTests(TestCase):
         self._parcel()
         self._parcel()
 
-        with mock.patch(f"{_MODULE}.ensure_place_for_location", side_effect=[DatabaseError("boom"), mock.DEFAULT]), mock.patch(f"{_MODULE}.resolution"):
+        with (
+            mock.patch(f"{_MODULE}.ensure_place_for_location", side_effect=[DatabaseError("boom"), mock.DEFAULT]),
+            mock.patch(f"{_MODULE}.resolution"),
+        ):
             output = self._run()
 
         self.assertIn("failed 1", output)
         self.assertIn("repaired 1", output)
+
+
+class _SmallParcelChain:
+    """Answers any coordinate with a tiny parcel around it, which cannot confirm a large outline."""
+
+    def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None):
+        from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
+
+        return ResolvedBoundaries(property_polygon=_square(0.0005, west=longitude - 0.00025, south=latitude - 0.00025))
+
+
+class _SameParcelChain:
+    """Answers with the target's own outline, slightly redrawn, which confirms it."""
+
+    outline: MultiPolygon | None = None
+
+    def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None):
+        from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
+
+        return ResolvedBoundaries(property_polygon=self.outline)
+
+
+class UnconfirmedOutlineTests(TestCase):
+    """An outline the provider chain no longer returns at its own coordinate is wrong, not subdivided.
+
+    HRSH's legacy 102.9 km² parcel held 99 locations across many real parcels. Treating its
+    correction as a split would join every successor into one access family and grandfather grants
+    across all of them - the very over-grant the oversized outline caused.
+    """
+
+    _CHAIN = "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.place = baker.make(
+            Place, kind=PlaceKind.PARCEL, geometry=_square(0.03, west=-73.95, south=41.70), area_sqm=8_300_000.0
+        )
+        self.place.domain_root = self.place
+        self.place.save()
+        self.locations = [
+            baker.make(Location, latitude=41.70 + 0.005 * step, longitude=-73.95 + 0.005 * step, place=self.place)
+            for step in range(1, 6)
+        ]
+
+    def _run(self) -> str:
+        out = StringIO()
+        call_command(_COMMAND, "--all", stdout=out, stderr=StringIO())
+        return out.getvalue()
+
+    def test_an_unconfirmed_outline_is_retired_and_releases_its_locations(self) -> None:
+        from urbanlens.dashboard.models.place.model import PlaceStatus
+
+        with mock.patch(self._CHAIN, _SmallParcelChain):
+            self._run()
+
+        self.place.refresh_from_db()
+        self.assertEqual(
+            self.place.status, PlaceStatus.SUPERSEDED, "the unconfirmed outline still resolves coordinates"
+        )
+        self.assertFalse(
+            Location.objects.filter(place=self.place).exists(),
+            "locations were swept back onto the outline the repair could not confirm",
+        )
+
+    def test_retiring_an_outline_grants_no_access_and_creates_no_family(self) -> None:
+        from urbanlens.dashboard.models.place.model import PlaceAccessGrant
+
+        with mock.patch(self._CHAIN, _SmallParcelChain):
+            self._run()
+
+        self.assertFalse(
+            PlaceAccessGrant.objects.exists(), "a correction must not grandfather access like a split does"
+        )
+        self.assertFalse(Place.objects.filter(parent=self.place).exists(), "a correction must not adopt successors")
+
+    def test_a_confirmed_outline_stays_current(self) -> None:
+        """Anti-vacuity: an outline the chain still returns is repaired in place, not retired."""
+        from urbanlens.dashboard.models.place.model import PlaceStatus
+
+        _SameParcelChain.outline = _square(0.0299, west=-73.9495, south=41.7005)
+        with mock.patch(self._CHAIN, _SameParcelChain):
+            self._run()
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.status, PlaceStatus.CURRENT)
+        self.assertEqual(Location.objects.filter(place=self.place).count(), len(self.locations))

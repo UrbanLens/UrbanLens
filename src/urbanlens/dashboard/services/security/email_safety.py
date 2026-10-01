@@ -1,20 +1,5 @@
 """Safety controls for user-triggered outbound email.
-
-Two independent protections, both required before any feature makes the site
-send email to an address a user typed in:
-
-1. **Rate limits** - each user may trigger at most N emails per hour, day,
-   and rolling 30 days. The site-wide defaults live on
-   :class:`~urbanlens.dashboard.models.site_settings.model.SiteSettings` and
-   subscription roles may raise them per tier (largest applicable limit wins,
-   0 means unlimited - same resolution rule as storage quotas).
-2. **Duplicate suppression** - a user who has already sent a "join the site"
-   email to an address never sends that address another one.
-
-Recipient addresses are stored only as one-way SHA-256 hashes of their
-normalized form (see :class:`~urbanlens.dashboard.models.email_log.model.EmailSendLog`);
-the recipient has not consented to having their address kept.
-"""
+2. **Duplicate suppression** - a user who has already sent a "join the site" email to an address never sends that address another one."""
 
 from __future__ import annotations
 
@@ -40,14 +25,10 @@ _HOUR = datetime.timedelta(hours=1)
 _DAY = datetime.timedelta(days=1)
 _MONTH = datetime.timedelta(days=30)
 
-# How long an in-flight "attempt" reservation (see `email_rate_limit_error`)
-# stays claimed before it self-expires. Comfortably longer than a single SMTP
-# send should ever take, so a reservation always outlives the gap between the
-# check and the eventual `record_email_sent()` call it guards - but still
-# short enough that a request which never actually results in a sent email
-# (the address matched an existing member, or a join email was already sent
-# to it) only inflates the day/month caps for a brief grace window rather
-# than for the whole window.
+# How long an in-flight "attempt" reservation (see `email_rate_limit_error`) stays claimed before it
+# self-expires.
+# Comfortably longer than a single SMTP send should ever take, so a reservation always outlives the
+# gap between the check and the eventual `record_email_sent()` call it guards - but still short
 _INFLIGHT_RESERVATION_TTL_SECONDS = 300
 
 
@@ -58,34 +39,24 @@ def _inflight_cache_key(profile_id: int) -> str:
 
 def hash_email(email: str) -> str:
     """One-way hash of an email address for storage and matching.
-
-    Hashing operates on the normalized form (lowercased, Gmail dot/plus
-    variants collapsed) so trivially distinct spellings of the same inbox
-    hash identically.
+    Hashing operates on the normalized form (lowercased, Gmail dot/plus variants collapsed) so trivially distinct spellings of the same inbox hash identically.
 
     Args:
         email: Raw email address.
 
     Returns:
-        Hex SHA-256 digest of the normalized address (64 chars).
-    """
+        Hex SHA-256 digest of the normalized address (64 chars)."""
     return hashlib.sha256(normalize_email(email).encode("utf-8")).hexdigest()
 
 
 def get_email_limits(profile: Profile) -> tuple[int | None, int | None, int | None]:
     """Resolve the effective outbound-email limits for a profile.
 
-    The site-wide defaults apply to everyone; active subscription roles with
-    their own limits raise them (the largest applicable limit wins). A limit
-    of 0 anywhere means unlimited.
-
     Args:
         profile: The profile whose limits to resolve.
 
     Returns:
-        ``(per_hour, per_day, per_month)`` - each an int cap, or None when
-        that window is unlimited for this user.
-    """
+        ``(per_hour, per_day, per_month)`` - each an int cap, or None when that window is unlimited for this user."""
     settings = SiteSettings.get_current()
     roles = active_subscription_roles(profile.user)
 
@@ -106,29 +77,11 @@ def get_email_limits(profile: Profile) -> tuple[int | None, int | None, int | No
 def email_rate_limit_error(profile: Profile) -> str | None:
     """Check whether the profile may trigger one more outbound email right now.
 
-    The check and the eventual write (`record_email_sent`) are far apart in
-    time - callers only log the send after an outbound SMTP call completes -
-    so a plain "count existing rows, compare to limit" check is not atomic:
-    concurrent requests can all read the same count and all pass before any
-    of them writes its log row, letting the caps be exceeded arbitrarily. To
-    close that window, this atomically reserves an "in-flight" slot in the
-    cache (`cache.add` then `cache.incr`, so concurrent callers for the same
-    profile always observe distinct, strictly increasing reservation counts)
-    and counts that reservation against each limit *before* the caller is
-    allowed to proceed. A rejected request releases its own reservation
-    immediately; an accepted one leaves its reservation in place to be
-    naturally superseded once `record_email_sent` writes the durable log row,
-    and it self-expires shortly after regardless (see
-    `_INFLIGHT_RESERVATION_TTL_SECONDS`) so a request that is accepted here
-    but never actually sends an email doesn't permanently eat into the
-    day/month caps.
-
     Args:
         profile: The profile attempting to send.
 
     Returns:
-        A user-facing error message when a window is exhausted, else None.
-    """
+        A user-facing error message when a window is exhausted, else None."""
     per_hour, per_day, per_month = get_email_limits(profile)
     now = timezone.now()
     logs = EmailSendLog.objects.filter(sender=profile)
@@ -157,28 +110,76 @@ def email_rate_limit_error(profile: Profile) -> str | None:
     return None
 
 
+def release_email_reservation(profile: Profile) -> None:
+    """Return the in-flight reservation :func:`email_rate_limit_error` took, once the send is logged.
+
+    Args:
+        profile: The profile whose reservation to release.
+    """
+    with contextlib.suppress(ValueError):
+        cache.decr(_inflight_cache_key(profile.pk))
+
+
+#: Top-level domains reserved by RFC 2606/6761, which no mailbox can exist under.
+_RESERVED_TLDS = frozenset({"invalid", "test", "example", "localhost"})
+
+
+def is_reserved_address(email: str) -> bool:
+    """Whether no mailbox can exist at an address, so no mail should be handed to the relay or charged for.
+
+    Args:
+        email: Raw address.
+
+    Returns:
+        True for ``*.invalid``, ``*.test``, ``*.example`` and ``*.localhost``, and for a Gmail address Gmail
+        could never issue.
+    """
+    from urbanlens.dashboard.services.security.mail_guard import is_impossible_gmail_address
+
+    return email.rpartition("@")[2].strip().lower().rstrip(".").rpartition(".")[2] in _RESERVED_TLDS or is_impossible_gmail_address(email)
+
+
 def has_sent_join_email(profile: Profile, email: str) -> bool:
-    """Whether this profile has ever sent a join-the-site email to this address.
+    """Whether this profile's join-the-site email ever reached the relay for this address.
 
     Args:
         profile: The prospective sender.
         email: Raw recipient address.
 
     Returns:
-        True when any join-type email was already sent to the address by this
-        user - a second one must not be sent.
+        True when a join-type email was actually sent to the address by this user - a second one must not be sent.
     """
-    return EmailSendLog.objects.filter(
-        sender=profile,
-        recipient_hash=hash_email(email),
-        email_type__in=JOIN_EMAIL_TYPES,
-    ).exists()
+    return EmailSendLog.objects.filter(sender=profile, recipient_hash=hash_email(email), email_type__in=JOIN_EMAIL_TYPES, delivered=True).exists()
 
 
-#: Resending a verification to the same address within this window is refused -
-#: a code constant like the notification debounce TTLs, not a SiteSettings
-#: value: it guards against mail-bombing one inbox via the resend button, and
-#: no deployment wants that configurable to zero.
+def has_charged_join_email(profile: Profile, email: str) -> bool:
+    """Whether inviting this address has already been charged to this profile's email budget, sent or not.
+
+    Args:
+        profile: The inviter.
+        email: Raw recipient address.
+
+    Returns:
+        True once any join-type row exists for the pair.
+    """
+    return EmailSendLog.objects.filter(sender=profile, recipient_hash=hash_email(email), email_type__in=JOIN_EMAIL_TYPES).exists()
+
+
+def mark_join_email_delivered(profile: Profile, email: str) -> None:
+    """Record that a join email went out, converting the charge taken when it was requested.
+
+    Args:
+        profile: The inviter.
+        email: Raw recipient address.
+    """
+    charged = EmailSendLog.objects.filter(sender=profile, recipient_hash=hash_email(email), email_type=EmailType.JOIN_INVITE, delivered=False)
+    if not charged.update(delivered=True):
+        record_email_sent(profile, email, EmailType.JOIN_INVITE)
+
+
+#: Resending a verification to the same address within this window is refused - a code constant like
+#: the notification debounce TTLs, not a SiteSettings value: it guards against mail-bombing one
+#: inbox via the resend button, and no deployment wants that configurable to zero.
 VERIFICATION_RESEND_COOLDOWN_SECONDS = 5 * 60
 
 
@@ -201,19 +202,20 @@ def verification_recently_sent(profile: Profile, email: str) -> bool:
     ).exists()
 
 
-def record_email_sent(profile: Profile, email: str, email_type: EmailType | str) -> EmailSendLog:
+def record_email_sent(profile: Profile, email: str, email_type: EmailType | str, *, delivered: bool = True) -> EmailSendLog:
     """Log one user-triggered outbound email (hashed recipient only).
 
     Args:
         profile: The profile whose action caused the send.
         email: Raw recipient address (hashed before storage, never kept).
         email_type: What kind of email was sent.
+        delivered: False for a charge taken before anything is sent.
 
     Returns:
-        The created log row.
-    """
+        The created log row."""
     return EmailSendLog.objects.create(
         sender=profile,
         recipient_hash=hash_email(email),
         email_type=email_type,
+        delivered=delivered,
     )

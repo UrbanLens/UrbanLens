@@ -1,23 +1,15 @@
-﻿"""Tests for the geocode_address settings view.
+"""Tests for the geocode_address settings view."""
 
-The view accepts GET ?address=<text> and returns JSON {lat, lng}.
-
-Invariants verified:
-  - Empty or missing address returns HTTP 400.
-  - A "lat, lng" string within valid geographic bounds is parsed without any
-    external API call and returned exactly.
-  - Out-of-range values fall through to the Google Geocoding gateway.
-  - A successful Google Geocoding response is relayed as {lat, lng}.
-  - A failed or empty Google Geocoding response returns HTTP 404.
-"""
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from django.contrib.auth.models import User
+from django.core.cache import cache
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 
 _db_settings = settings(
@@ -33,7 +25,14 @@ _valid_lat = st.floats(min_value=-90.0, max_value=90.0, allow_nan=False, allow_i
 _valid_lng = st.floats(min_value=-180.0, max_value=180.0, allow_nan=False, allow_infinity=False)
 
 
-class GeocodeAddressEmptyInputTests(TestCase):
+class _SignedInTestCase(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.client.force_login(baker.make(User))
+
+
+class GeocodeAddressEmptyInputTests(_SignedInTestCase):
     """Missing or blank address must return 400."""
 
     def test_missing_address_param_returns_400(self) -> None:
@@ -49,7 +48,7 @@ class GeocodeAddressEmptyInputTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
 
-class GeocodeAddressCoordParsingTests(TestCase):
+class GeocodeAddressCoordParsingTests(_SignedInTestCase):
     """'lat, lng' strings within valid bounds must be parsed without hitting Google."""
 
     def test_valid_lat_lng_string_returns_200(self) -> None:
@@ -81,9 +80,12 @@ class GeocodeAddressCoordParsingTests(TestCase):
 
     def test_out_of_range_lat_does_not_short_circuit(self) -> None:
         """lat > 90 must fall through to Google (mocked here to return 404)."""
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
-        ) as mock_cls, patch("geopy.geocoders.Nominatim") as mock_nominatim:
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
             mock_cls.return_value.geocode_place_name.return_value = {"results": []}
             mock_nominatim.return_value.geocode.return_value = None
             resp = self.client.get(_GEOCODE_URL, {"address": "95.0, 0.0"})
@@ -91,18 +93,24 @@ class GeocodeAddressCoordParsingTests(TestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_out_of_range_lng_does_not_short_circuit(self) -> None:
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
-        ) as mock_cls, patch("geopy.geocoders.Nominatim") as mock_nominatim:
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
             mock_cls.return_value.geocode_place_name.return_value = {"results": []}
             mock_nominatim.return_value.geocode.return_value = None
             resp = self.client.get(_GEOCODE_URL, {"address": "0.0, 200.0"})
         self.assertEqual(resp.status_code, 404)
 
     def test_non_numeric_string_falls_through_to_google(self) -> None:
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
-        ) as mock_cls, patch("geopy.geocoders.Nominatim") as mock_nominatim:
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
             mock_cls.return_value.geocode_place_name.return_value = {"results": []}
             mock_nominatim.return_value.geocode.return_value = None
             resp = self.client.get(_GEOCODE_URL, {"address": "Albany, NY"})
@@ -111,9 +119,12 @@ class GeocodeAddressCoordParsingTests(TestCase):
 
     def test_three_part_string_falls_through_to_google(self) -> None:
         """Three comma-separated values must not be treated as lat/lng."""
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
-        ) as mock_cls, patch("geopy.geocoders.Nominatim") as mock_nominatim:
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
             mock_cls.return_value.geocode_place_name.return_value = {"results": []}
             mock_nominatim.return_value.geocode.return_value = None
             resp = self.client.get(_GEOCODE_URL, {"address": "1,2,3"})
@@ -122,7 +133,9 @@ class GeocodeAddressCoordParsingTests(TestCase):
     @given(lat=_valid_lat, lng=_valid_lng)
     @_db_settings
     def test_any_valid_coord_pair_is_parsed_and_returned(
-        self, lat: float, lng: float,
+        self,
+        lat: float,
+        lng: float,
     ) -> None:
         address = f"{lat},{lng}"
         resp = self.client.get(_GEOCODE_URL, {"address": address})
@@ -132,7 +145,7 @@ class GeocodeAddressCoordParsingTests(TestCase):
         self.assertAlmostEqual(data["lng"], lng, places=5)
 
 
-class GeocodeAddressGoogleFallbackTests(TestCase):
+class GeocodeAddressGoogleFallbackTests(_SignedInTestCase):
     """When parsing fails, the view must delegate to GoogleGeocodingGateway."""
 
     def _google_result(self, lat: float, lng: float) -> dict:
@@ -150,9 +163,12 @@ class GeocodeAddressGoogleFallbackTests(TestCase):
         self.assertAlmostEqual(data["lng"], -73.75, places=4)
 
     def test_google_empty_results_returns_404(self) -> None:
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
-        ) as mock_cls, patch("geopy.geocoders.Nominatim") as mock_nominatim:
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
             mock_cls.return_value.geocode_place_name.return_value = {"results": []}
             mock_nominatim.return_value.geocode.return_value = None
             resp = self.client.get(_GEOCODE_URL, {"address": "Nowhere XYZ"})
@@ -161,18 +177,24 @@ class GeocodeAddressGoogleFallbackTests(TestCase):
         self.assertIn("error", data)
 
     def test_google_none_result_returns_404(self) -> None:
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
-        ) as mock_cls, patch("geopy.geocoders.Nominatim") as mock_nominatim:
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
             mock_cls.return_value.geocode_place_name.return_value = None
             mock_nominatim.return_value.geocode.return_value = None
             resp = self.client.get(_GEOCODE_URL, {"address": "Nowhere XYZ"})
         self.assertEqual(resp.status_code, 404)
 
     def test_google_key_error_returns_404(self) -> None:
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
-        ) as mock_cls, patch("geopy.geocoders.Nominatim") as mock_nominatim:
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
             # Malformed response missing the expected nested keys.
             mock_cls.return_value.geocode_place_name.return_value = {"results": [{"bad": "shape"}]}
             mock_nominatim.return_value.geocode.return_value = None
@@ -180,10 +202,28 @@ class GeocodeAddressGoogleFallbackTests(TestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_google_value_error_returns_404(self) -> None:
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
-        ) as mock_cls, patch("geopy.geocoders.Nominatim") as mock_nominatim:
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
             mock_cls.return_value.geocode_place_name.side_effect = ValueError("API error")
+            mock_nominatim.return_value.geocode.return_value = None
+            resp = self.client.get(_GEOCODE_URL, {"address": "Somewhere"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_a_rate_limit_refusal_falls_back_to_nominatim_instead_of_500(self) -> None:
+        """P122: a refusal is routine (dev/demo refuse most services outright), not an error to 500 on."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway",
+            ) as mock_cls,
+            patch("geopy.geocoders.Nominatim") as mock_nominatim,
+        ):
+            mock_cls.return_value.geocode_place_name.side_effect = RateLimitExceededError("google_geocoding")
             mock_nominatim.return_value.geocode.return_value = None
             resp = self.client.get(_GEOCODE_URL, {"address": "Somewhere"})
         self.assertEqual(resp.status_code, 404)

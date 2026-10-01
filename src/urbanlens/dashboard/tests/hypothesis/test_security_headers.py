@@ -1,25 +1,17 @@
-"""The transport-security settings that protect every response.
-
-Most of these are Django defaults rather than explicit settings, which is fine
-until someone changes one. Asserting them here means a regression shows up as a
-failing test rather than as a quietly weaker deployment, and it documents which
-ones are deliberate.
-
-HSTS is the one that was actually missing. ``SECURE_SSL_REDIRECT`` alone does
-not close the gap it covers: the redirect is itself served over plain HTTP, so
-an attacker on the path can answer it instead of letting it reach the user. HSTS
-is what stops the *second* visit from being strippable.
-"""
+"""The transport-security settings that protect every response."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
+from unittest import mock
 
 from django.conf import settings
 from django.test import override_settings
 
 from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.UrbanLens.settings.app import AppSettings
 
 #: ``dashboard/templates/dashboard/themes/base.html`` - the template every page extends.
 BASE_TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "dashboard" / "themes" / "base.html"
@@ -31,12 +23,8 @@ NGINX_CONF = Path(__file__).resolve().parents[3] / "config" / "nginx" / "nginx.c
 class ProxyConfigTests(SimpleTestCase):
     """The nginx config ships in this repo, so it can be asserted on like code.
 
-    Nothing else reads this file - it is not Python, so no test had ever
-    touched it - and the integration suite found it advertising
-    ``Server: nginx/1.31.3`` to every client. A precise version is free
-    reconnaissance: it tells a scanner exactly which advisories to try before
-    sending a single interesting request.
-    """
+    A precise version is free reconnaissance: it tells a scanner exactly which advisories to try before sending
+    a single interesting request."""
 
     def test_the_config_exists_where_this_test_expects_it(self) -> None:
         """Guards the test itself: a moved file must not silently pass."""
@@ -59,12 +47,10 @@ def parse_csp(header_value: str) -> dict[str, list[str]]:
     """Split a CSP header into ``{directive: [source, ...]}``.
 
     Args:
-        header_value: The raw header value, e.g. ``"default-src 'self'; object-src 'none'"``.
+        header_value: The raw header value, e.g.
 
     Returns:
-        One entry per directive. Valueless directives (``upgrade-insecure-requests``)
-        map to an empty list.
-    """
+        One entry per directive."""
     directives: dict[str, list[str]] = {}
     for chunk in header_value.split(";"):
         parts = chunk.split()
@@ -77,10 +63,8 @@ class TransportSecuritySettingTests(SimpleTestCase):
     def test_hsts_is_tied_to_the_ssl_redirect_gate(self) -> None:
         """One switch, not two: an HTTP-only deployment must not advertise HSTS.
 
-        Sending HSTS from a deployment intentionally served over HTTP makes it
-        unreachable in any browser that has seen the header, and it is not
-        promptly reversible.
-        """
+        Sending HSTS from a deployment intentionally served over HTTP makes it unreachable in any browser that
+        has seen the header, and it is not promptly reversible."""
         if settings.SECURE_SSL_REDIRECT:
             self.assertGreater(settings.SECURE_HSTS_SECONDS, 0)
         else:
@@ -93,12 +77,9 @@ class TransportSecuritySettingTests(SimpleTestCase):
     def test_cookies_are_never_weaker_than_the_tls_gate(self) -> None:
         """One-directional, not equality.
 
-        Both settings default to ``SECURE_SSL_REDIRECT`` but are explicitly
-        overridable (``_env_bool("SESSION_COOKIE_SECURE", ...)``), and marking
-        cookies secure on a deployment that also permits HTTP is *stricter*, not
-        weaker - this very environment does exactly that. What must never happen
-        is the reverse: HTTPS enforced while cookies are still sent in the clear.
-        """
+        Both settings default to ``SECURE_SSL_REDIRECT`` but are explicitly overridable
+        (``_env_bool("SESSION_COOKIE_SECURE", ...)``), and marking cookies secure on a deployment that also
+        permits HTTP is *stricter*, not weaker - this very environment does exactly that."""
         if settings.SECURE_SSL_REDIRECT:
             self.assertTrue(settings.SESSION_COOKIE_SECURE)
             self.assertTrue(settings.CSRF_COOKIE_SECURE)
@@ -141,98 +122,191 @@ class HstsGateTests(SimpleTestCase):
         self.assertIn("includeSubDomains", response.headers.get("Strict-Transport-Security", ""))
 
 
+class SecurityHeadersMiddlewareTests(SimpleTestCase):
+    """The three headers Django has no built-in setting for."""
+
+    def test_middleware_is_installed_directly_below_securitymiddleware(self) -> None:
+        self.assertIn("urbanlens.dashboard.middleware.SecurityHeadersMiddleware", settings.MIDDLEWARE)
+        self.assertEqual(
+            settings.MIDDLEWARE.index("urbanlens.dashboard.middleware.SecurityHeadersMiddleware"),
+            settings.MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1,
+        )
+
+    def test_permissions_policy_reaches_the_response(self) -> None:
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.headers.get("Permissions-Policy"), settings.PERMISSIONS_POLICY)
+
+    def test_permissions_policy_denies_features_the_app_does_not_use(self) -> None:
+        """Camera/microphone/payment/usb have no caller anywhere in the frontend."""
+        for feature in ("camera", "microphone", "payment", "usb"):
+            with self.subTest(feature=feature):
+                self.assertIn(f"{feature}=()", settings.PERMISSIONS_POLICY)
+
+    def test_permissions_policy_scopes_the_features_actually_used_to_self(self) -> None:
+        """Geolocation (safety-live-location.ts) and clipboard-write (map-context-menu.ts)."""
+        for feature in ("geolocation", "clipboard-write"):
+            with self.subTest(feature=feature):
+                self.assertIn(f"{feature}=(self)", settings.PERMISSIONS_POLICY)
+
+    def test_cross_origin_resource_policy_reaches_the_response(self) -> None:
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.headers.get("Cross-Origin-Resource-Policy"), settings.CROSS_ORIGIN_RESOURCE_POLICY)
+
+    def test_cross_origin_resource_policy_is_not_the_maximally_strict_value(self) -> None:
+        """`same-origin` would also cut off REData and the staging/dev subdomains."""
+        self.assertEqual(settings.CROSS_ORIGIN_RESOURCE_POLICY, "same-site")
+
+    def test_x_permitted_cross_domain_policies_reaches_the_response(self) -> None:
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.headers.get("X-Permitted-Cross-Domain-Policies"), "none")
+
+    def test_cross_origin_embedder_policy_is_sent_report_only(self) -> None:
+        """P56: enforcing it is a decision; observing what it would break is not."""
+        response = self.client.get("/health/")
+
+        self.assertEqual(
+            response.headers.get("Cross-Origin-Embedder-Policy-Report-Only"),
+            settings.CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY,
+        )
+
+    def test_cross_origin_embedder_policy_is_not_enforced(self) -> None:
+        """The enforcing header would block every pasted map-overlay image whose
+        host sends neither CORP nor CORS - `img-src: https:` is deliberately open,
+        so that host set is unbounded by design."""
+        response = self.client.get("/health/")
+
+        self.assertIsNone(response.headers.get("Cross-Origin-Embedder-Policy"))
+
+    def test_the_report_only_value_is_credentialless_not_require_corp(self) -> None:
+        """`require-corp` demands a CORP header the pasted host will not have;
+        `credentialless` drops credentials instead and still renders it."""
+        self.assertEqual(settings.CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY, "credentialless")
+
+    def test_cross_origin_opener_policy_is_djangos_secure_default(self) -> None:
+        """Refutes the scan's claim it's missing - SecurityMiddleware has sent this since Django 4.0."""
+        self.assertEqual(settings.SECURE_CROSS_ORIGIN_OPENER_POLICY, "same-origin")
+
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.headers.get("Cross-Origin-Opener-Policy"), "same-origin")
+
+
 ENFORCE_HEADER = "Content-Security-Policy"
 REPORT_ONLY_HEADER = "Content-Security-Policy-Report-Only"
 
 
 class CspHeaderTests(SimpleTestCase):
-    """The Content-Security-Policy actually reaching responses.
+    """The Content-Security-Policy actually reaching responses, enforced unless a deployment opts out."""
 
-    The policy ships report-only, so these assert the header is *present and
-    correct* rather than that anything is blocked - a report-only policy blocks
-    nothing by design.
-    """
+    def test_middleware_is_installed_directly_below_securityheadersmiddleware(self) -> None:
+        """Order matters: the nonce must exist before any view can read it.
 
-    def test_middleware_is_installed_directly_below_securitymiddleware(self) -> None:
-        """Order matters: the nonce must exist before any view can read it."""
+        SecurityHeadersMiddleware sits between the two - both must stay above
+        everything that can short-circuit a response.
+        """
         self.assertIn("csp.middleware.CSPMiddleware", settings.MIDDLEWARE)
         self.assertEqual(
             settings.MIDDLEWARE.index("csp.middleware.CSPMiddleware"),
-            settings.MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1,
+            settings.MIDDLEWARE.index("urbanlens.dashboard.middleware.SecurityHeadersMiddleware") + 1,
         )
 
-    def test_report_only_is_the_default(self) -> None:
-        """Enforcing a first policy blind is how a CSP breaks a site quietly."""
-        self.assertFalse(settings.CSP_ENFORCE)
+    def test_enforcing_is_the_default(self) -> None:
+        """A report-only policy is not a backstop: it blocks nothing, and no deployment ever set the flag (P143)."""
+        self.assertIs(AppSettings.model_fields["csp_enforce"].default, True)
+        self.assertTrue(settings.CSP_ENFORCE)
+        self.assertTrue(hasattr(settings, "CONTENT_SECURITY_POLICY"))
+        self.assertFalse(hasattr(settings, "CONTENT_SECURITY_POLICY_REPORT_ONLY"))
 
         response = self.client.get("/health/")
-
-        self.assertIn(REPORT_ONLY_HEADER, response.headers)
-        self.assertNotIn(ENFORCE_HEADER, response.headers)
-
-    def test_hardening_directives_are_present(self) -> None:
-        """The four directives that cost nothing and close real classes of attack.
-
-        ``object-src 'none'`` kills plugin-based script execution, ``base-uri``
-        stops an injected ``<base>`` from repointing every relative URL,
-        ``frame-ancestors`` covers clickjacking and ``form-action`` stops an
-        injected form from posting credentials off-site.
-        """
-        response = self.client.get("/health/")
-        policy = parse_csp(response.headers[REPORT_ONLY_HEADER])
-
-        self.assertEqual(policy["object-src"], ["'none'"])
-        self.assertEqual(policy["base-uri"], ["'self'"])
-        self.assertEqual(policy["form-action"], ["'self'"])
-        self.assertIn("frame-ancestors", policy)
-        self.assertEqual(policy["default-src"], ["'self'"])
-
-    def test_enforce_toggle_switches_which_header_is_sent(self) -> None:
-        """``UL_CSP_ENFORCE`` decides the header name, not the policy content."""
-        directives = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]
-
-        with override_settings(
-            CSP_ENFORCE=True,
-            CONTENT_SECURITY_POLICY={"DIRECTIVES": directives},
-            CONTENT_SECURITY_POLICY_REPORT_ONLY=None,
-        ):
-            response = self.client.get("/health/")
 
         self.assertIn(ENFORCE_HEADER, response.headers)
         self.assertNotIn(REPORT_ONLY_HEADER, response.headers)
 
-        enforced = parse_csp(response.headers[ENFORCE_HEADER])
-        self.assertEqual(enforced["object-src"], ["'none'"])
-        self.assertEqual(enforced["form-action"], ["'self'"])
+    def test_an_unset_environment_enforces_and_false_opts_out(self) -> None:
+        """What a deployment that never mentions the variable gets, read from a clean environment."""
+
+        def fresh() -> AppSettings:
+            # type.__call__ skips the singleton cache AppSettingsMeta keeps.
+            return type.__call__(AppSettings, _env_file=None)
+
+        clean = {key: value for key, value in os.environ.items() if key != "UL_CSP_ENFORCE"}
+        with mock.patch.dict(os.environ, clean, clear=True):
+            self.assertTrue(fresh().csp_enforce)
+        with mock.patch.dict(os.environ, {**clean, "UL_CSP_ENFORCE": "false"}, clear=True):
+            self.assertFalse(fresh().csp_enforce)
+
+    def test_hardening_directives_are_present(self) -> None:
+        """The four directives that cost nothing and close real classes of attack.
+
+        ``object-src 'none'`` kills plugin-based script execution, ``base-uri`` stops an injected ``<base>``
+        from repointing every relative URL, ``frame-ancestors`` covers clickjacking and ``form-action`` stops an
+        injected form from posting credentials off-site."""
+        response = self.client.get("/health/")
+        policy = parse_csp(response.headers[ENFORCE_HEADER])
+
+        self.assertEqual(policy["object-src"], ["'none'"])
+        self.assertEqual(policy["base-uri"], ["'self'"])
+        self.assertEqual(policy["form-action"][0], "'self'")
+        self.assertTrue(
+            all(source.startswith("https://") for source in policy["form-action"][1:]), policy["form-action"]
+        )
+        self.assertIn("frame-ancestors", policy)
+        self.assertEqual(policy["default-src"], ["'self'"])
+
+    def test_enforce_toggle_switches_which_header_is_sent(self) -> None:
+        """``UL_CSP_ENFORCE=false`` changes the header name, not the policy content."""
+        directives = settings.CONTENT_SECURITY_POLICY["DIRECTIVES"]
+
+        with override_settings(
+            CSP_ENFORCE=False,
+            CONTENT_SECURITY_POLICY=None,
+            CONTENT_SECURITY_POLICY_REPORT_ONLY={"DIRECTIVES": directives},
+        ):
+            response = self.client.get("/health/")
+
+        self.assertIn(REPORT_ONLY_HEADER, response.headers)
+        self.assertNotIn(ENFORCE_HEADER, response.headers)
+        self.assertEqual(
+            parse_csp(response.headers[REPORT_ONLY_HEADER]),
+            parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER]),
+        )
 
     def test_no_unsafe_eval_anywhere(self) -> None:
-        """'unsafe-inline' is a deliberate concession; 'unsafe-eval' is not."""
-        response = self.client.get("/health/")
+        """'unsafe-inline' is a deliberate concession; 'unsafe-eval' is not. WebAssembly has its own keyword."""
+        policy = parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER])
 
-        self.assertNotIn("'unsafe-eval'", response.headers[REPORT_ONLY_HEADER])
+        for directive, sources in policy.items():
+            self.assertNotIn("'unsafe-eval'", sources, directive)
+        self.assertIn("'wasm-unsafe-eval'", policy["script-src"])
+
+    def test_maplibre_workers_are_admitted_without_widening_scripts(self) -> None:
+        """MapLibre starts its tile workers from a blob: URL; script-src must not gain blob: to allow it."""
+        policy = parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER])
+
+        self.assertEqual(policy["worker-src"], ["'self'", "blob:"])
+        self.assertNotIn("blob:", policy["script-src"])
 
 
 class CspMatchesTheTemplatesTests(SimpleTestCase):
     """Guards the policy against drifting away from what the pages actually load.
 
-    These read the base template rather than hardcoding a host list, so they keep
-    working as the frontend changes: tightening the policy while the templates
-    still need a host fails here instead of in production.
-    """
+    These read the base template rather than hardcoding a host list, so they keep working as the frontend
+    changes: tightening the policy while the templates still need a host fails here instead of in production."""
 
     def test_every_third_party_asset_host_is_allowed(self) -> None:
         """A missing host here is a blank page once the policy is enforced.
 
-        Read from the asset table rather than scraped out of base.html, which is
-        where these URLs used to be written: the table is what the templates
-        resolve through now, and it covers every page rather than the one this
-        test happened to open.
-        """
+        Read from the asset table rather than scraped out of base.html, which is where these URLs used to be
+        written: the table is what the templates resolve through now, and it covers every page rather than the
+        one this test happened to open."""
         from urllib.parse import urlparse
 
         from urbanlens.dashboard.services.core.vendor_assets import VENDOR_ASSETS
 
-        directives = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]
+        directives = settings.CONTENT_SECURITY_POLICY["DIRECTIVES"]
         wanted = {"script": "script-src", "style": "style-src"}
         seen = 0
         for key, asset in VENDOR_ASSETS.items():
@@ -248,18 +322,14 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
     def test_unsafe_inline_is_kept_while_inline_scripts_remain(self) -> None:
         """The caveat, pinned to the thing that causes it.
 
-        ``'unsafe-inline'`` cannot be dropped until the inline blocks are gone -
-        and a nonce would not help incrementally, since browsers ignore
-        ``'unsafe-inline'`` as soon as any nonce is present. Once the inline-JS
-        extraction work lands and base.html has no inline blocks left, this test
-        stops requiring the concession instead of having to be deleted.
-        """
+        ``'unsafe-inline'`` cannot be dropped until the inline blocks are gone - and a nonce would not help
+        incrementally, since browsers ignore ``'unsafe-inline'`` as soon as any nonce is present."""
         html = BASE_TEMPLATE.read_text(encoding="utf-8")
         # Case-insensitive: HTML tag names are, so a <SCRIPT> block would
         # otherwise slip past and read as "no inline scripts left".
         inline_blocks = re.findall(r"<script(?![^>]*\ssrc=)[^>]*>", html, re.IGNORECASE)
 
-        script_src = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]["script-src"]
+        script_src = settings.CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"]
 
         if inline_blocks:
             self.assertIn(

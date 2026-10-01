@@ -1,7 +1,8 @@
-"""Tests for VisitQuerySet filter methods: for_pin, manual, from_takeout.
+"""Tests for VisitQuerySet.for_pin.
 
 All tests require the database - records are created with model_bakery.
 """
+
 from __future__ import annotations
 
 from django.utils import timezone
@@ -14,6 +15,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_visit(pin, source: str = VisitSource.MANUAL) -> PinVisit:
     """Create a PinVisit for the given pin with an explicit source."""
     return baker.make(PinVisit, pin=pin, source=source, visited_at=timezone.now())
@@ -22,6 +24,7 @@ def _make_visit(pin, source: str = VisitSource.MANUAL) -> PinVisit:
 # ---------------------------------------------------------------------------
 # for_pin
 # ---------------------------------------------------------------------------
+
 
 class VisitQuerySetForPinTests(TestCase):
     """for_pin(pin_id) returns only visits belonging to that pin."""
@@ -63,75 +66,3 @@ class VisitQuerySetForPinTests(TestCase):
         self.assertIn(self.visit_a, qs)
         self.assertIn(visit_a2, qs)
         self.assertEqual(qs.count(), 2)
-
-
-# ---------------------------------------------------------------------------
-# manual
-# ---------------------------------------------------------------------------
-
-class VisitQuerySetManualTests(TestCase):
-    """manual() returns only visits with source='manual'."""
-
-    def setUp(self):
-        self.profile = baker.make("auth.User").profile
-        self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
-        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
-
-        self.manual_visit = _make_visit(self.pin, source=VisitSource.MANUAL)
-        self.takeout_visit = _make_visit(self.pin, source=VisitSource.HISTORY)
-
-    def test_manual_visit_is_included(self):
-        qs = PinVisit.objects.for_pin(self.pin.pk).manual()
-        self.assertIn(self.manual_visit, qs)
-
-    def test_takeout_visit_is_excluded(self):
-        qs = PinVisit.objects.for_pin(self.pin.pk).manual()
-        self.assertNotIn(self.takeout_visit, qs)
-
-    def test_manual_on_all_objects_returns_only_manual(self):
-        qs = PinVisit.objects.manual()
-        for visit in qs:
-            self.assertEqual(visit.source, VisitSource.MANUAL)
-
-    def test_manual_returns_correct_count(self):
-        qs = PinVisit.objects.for_pin(self.pin.pk).manual()
-        self.assertEqual(qs.count(), 1)
-
-
-# ---------------------------------------------------------------------------
-# from_takeout
-# ---------------------------------------------------------------------------
-
-class VisitQuerySetFromTakeoutTests(TestCase):
-    """from_takeout() returns only visits with source='history'."""
-
-    def setUp(self):
-        self.profile = baker.make("auth.User").profile
-        self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
-        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
-
-        self.manual_visit = _make_visit(self.pin, source=VisitSource.MANUAL)
-        self.takeout_visit = _make_visit(self.pin, source=VisitSource.HISTORY)
-
-    def test_takeout_visit_is_included(self):
-        qs = PinVisit.objects.for_pin(self.pin.pk).from_takeout()
-        self.assertIn(self.takeout_visit, qs)
-
-    def test_manual_visit_is_excluded(self):
-        qs = PinVisit.objects.for_pin(self.pin.pk).from_takeout()
-        self.assertNotIn(self.manual_visit, qs)
-
-    def test_from_takeout_on_all_objects_returns_only_takeout(self):
-        qs = PinVisit.objects.from_takeout()
-        for visit in qs:
-            self.assertEqual(visit.source, VisitSource.HISTORY)
-
-    def test_from_takeout_returns_correct_count(self):
-        qs = PinVisit.objects.for_pin(self.pin.pk).from_takeout()
-        self.assertEqual(qs.count(), 1)
-
-    def test_no_takeout_visits_returns_empty(self):
-        pin2 = baker.make("dashboard.Pin", profile=self.profile)
-        _make_visit(pin2, source=VisitSource.MANUAL)
-        qs = PinVisit.objects.for_pin(pin2.pk).from_takeout()
-        self.assertFalse(qs.exists())

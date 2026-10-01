@@ -1,5 +1,4 @@
 {% extends "dashboard/themes/auth_base.html" %}
-{% load static %}
 
 {% block title %}Create account - UrbanLens{% endblock %}
 
@@ -68,7 +67,9 @@
         <input type="text" id="id_username" name="username"
                autocomplete="username"
                placeholder="Choose a username"
+               aria-describedby="id_username_help"
                value="{{ form.username.value|default:'' }}">
+        <span class="field-help" id="id_username_help">{{ form.username.help_text }}</span>
         {% if form.username.errors %}
         <ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>
         {% endif %}
@@ -107,26 +108,5 @@
 {% endblock %}
 
 {% block auth_scripts %}
-<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
-<script>
-    // Derive the login credential from the password before submit so the raw
-    // password never reaches the server, even at account creation. The salt
-    // travels as e2ee_auth_salt and becomes the account's AccountKdf row.
-    UrbanLensE2EE.init({
-        selfSlug: null,
-        urls: {
-            loginParams: "{% url 'e2ee.login_params' %}",
-            enroll: "{% url 'e2ee.enroll' %}",
-            keys: "{% url 'e2ee.keys' %}",
-            rewrap: "{% url 'e2ee.rewrap' %}",
-            validatePassword: "{% url 'validate_password_policy' %}",
-            reset: "{% url 'e2ee.reset' %}",
-            partnerKeyBase: "{% url 'e2ee.keys' %}",
-            conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
-            login: "{% url 'login' %}",
-            faqUrl: "{% url 'faq' %}#faq-e2ee",
-        },
-    });
-    UrbanLensE2EE.wireSignupForm(document.getElementById("signup-form"));
-</script>
+{% include "dashboard/partials/auth/_e2ee_scripts.html" %}
 {% endblock %}

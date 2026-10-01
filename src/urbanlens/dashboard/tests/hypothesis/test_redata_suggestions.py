@@ -1,10 +1,4 @@
-"""Tests for services.labels.redata_suggestions - syncing tag/category labels to REData.
-
-Covers the definition/assignment payload builders, the profile-fanout for
-global vs owned labels, the queue_* helpers' REData-not-configured no-ops,
-sync_label_definitions/sync_pin_assignment/backfill_profile, and
-get_suggestions. Every REData HTTP call is mocked - never hits the network.
-"""
+"""Tests for services.labels.redata_suggestions - syncing tag/category labels to REData."""
 
 from __future__ import annotations
 
@@ -28,7 +22,10 @@ from urbanlens.UrbanLens.settings.app import settings
 
 @contextmanager
 def _redata_configured():
-    with mock.patch.object(settings, "redata_api_url", "https://redata.example.test"), mock.patch.object(settings, "redata_api_key", "test-key"):
+    with (
+        mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+        mock.patch.object(settings, "redata_api_key", "test-key"),
+    ):
         yield
 
 
@@ -118,23 +115,42 @@ class SyncLabelDefinitionsTests(TestCase):
         self.profile = _profile()
 
     def test_not_configured_does_nothing(self) -> None:
-        with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway") as gw:
+        with (
+            _redata_not_configured(),
+            mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway") as gw,
+        ):
             redata_suggestions.sync_label_definitions([self.profile.pk], [{"external_id": "abc", "name": "Church"}])
         gw.assert_not_called()
 
     def test_calls_gateway_once_per_profile(self) -> None:
         other = _profile()
         gateway_instance = mock.Mock()
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway", return_value=gateway_instance):
-            redata_suggestions.sync_label_definitions([self.profile.pk, other.pk], [{"external_id": "abc", "name": "Church"}])
+        with (
+            _redata_configured(),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway",
+                return_value=gateway_instance,
+            ),
+        ):
+            redata_suggestions.sync_label_definitions(
+                [self.profile.pk, other.pk], [{"external_id": "abc", "name": "Church"}]
+            )
         self.assertEqual(gateway_instance.define_labels.call_count, 2)
 
     def test_one_profile_failure_does_not_block_the_next(self) -> None:
         other = _profile()
         gateway_instance = mock.Mock()
         gateway_instance.define_labels.side_effect = [GatewayRequestError("boom"), {"created": 1}]
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway", return_value=gateway_instance):
-            redata_suggestions.sync_label_definitions([self.profile.pk, other.pk], [{"external_id": "abc", "name": "Church"}])  # must not raise
+        with (
+            _redata_configured(),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway",
+                return_value=gateway_instance,
+            ),
+        ):
+            redata_suggestions.sync_label_definitions(
+                [self.profile.pk, other.pk], [{"external_id": "abc", "name": "Church"}]
+            )  # must not raise
         self.assertEqual(gateway_instance.define_labels.call_count, 2)
 
 
@@ -144,7 +160,10 @@ class SyncPinAssignmentTests(TestCase):
 
     def test_not_configured_does_nothing(self) -> None:
         pin = _pin(self.profile, seq=1)
-        with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway") as gw:
+        with (
+            _redata_not_configured(),
+            mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway") as gw,
+        ):
             redata_suggestions.sync_pin_assignment(pin)
         gw.assert_not_called()
 
@@ -153,7 +172,13 @@ class SyncPinAssignmentTests(TestCase):
         tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
         pin.labels.add(tag)
         gateway_instance = mock.Mock()
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway", return_value=gateway_instance):
+        with (
+            _redata_configured(),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway",
+                return_value=gateway_instance,
+            ),
+        ):
             redata_suggestions.sync_pin_assignment(pin)
         gateway_instance.sync_assignments.assert_called_once()
         entries = gateway_instance.sync_assignments.call_args.args[1]
@@ -163,7 +188,13 @@ class SyncPinAssignmentTests(TestCase):
         pin = _pin(self.profile, seq=1)
         gateway_instance = mock.Mock()
         gateway_instance.sync_assignments.side_effect = GatewayRequestError("boom")
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway", return_value=gateway_instance):
+        with (
+            _redata_configured(),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway",
+                return_value=gateway_instance,
+            ),
+        ):
             redata_suggestions.sync_pin_assignment(pin)  # must not raise
 
 
@@ -173,13 +204,19 @@ class QueueLabelDefinitionSyncTests(TestCase):
 
     def test_non_suggestable_kind_does_not_schedule_on_commit(self) -> None:
         label = ensure_label(profile=self.profile, name="Visited", kind=KIND_STATUS)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit:
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit,
+        ):
             redata_suggestions.queue_label_definition_sync(label)
         on_commit.assert_not_called()
 
     def test_not_configured_does_not_schedule_on_commit(self) -> None:
         label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
-        with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit:
+        with (
+            _redata_not_configured(),
+            mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit,
+        ):
             redata_suggestions.queue_label_definition_sync(label)
         on_commit.assert_not_called()
 
@@ -188,7 +225,10 @@ class QueueLabelDefinitionSyncTests(TestCase):
         callbacks: list = []
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit", side_effect=callbacks.append),
+            mock.patch(
+                "urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit",
+                side_effect=callbacks.append,
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             redata_suggestions.queue_label_definition_sync(label)
@@ -205,7 +245,10 @@ class QueueLabelRetirementTests(TestCase):
         callbacks: list = []
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit", side_effect=callbacks.append),
+            mock.patch(
+                "urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit",
+                side_effect=callbacks.append,
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             redata_suggestions.queue_label_retirement(label)
@@ -216,7 +259,10 @@ class QueueLabelRetirementTests(TestCase):
 
     def test_not_configured_does_not_schedule_on_commit(self) -> None:
         label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
-        with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit:
+        with (
+            _redata_not_configured(),
+            mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit,
+        ):
             redata_suggestions.queue_label_retirement(label)
         on_commit.assert_not_called()
 
@@ -228,7 +274,10 @@ class QueueLabelRetirementTests(TestCase):
         callbacks: list = []
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit", side_effect=callbacks.append),
+            mock.patch(
+                "urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit",
+                side_effect=callbacks.append,
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             redata_suggestions.queue_label_retirement(label)
@@ -238,16 +287,26 @@ class QueueLabelRetirementTests(TestCase):
 
 class QueuePinAssignmentSyncTests(TestCase):
     def test_not_configured_does_not_schedule_on_commit(self) -> None:
-        with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit:
+        with (
+            _redata_not_configured(),
+            mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit,
+        ):
             redata_suggestions.queue_pin_assignment_sync(1)
         on_commit.assert_not_called()
 
     def test_configured_enqueues_with_pin_id_after_commit(self) -> None:
+        # queue_pin_assignment_sync now calls enqueue_follow_on (bulk_followup.py), which - outside
+        # any active batching_follow_on_work() collector, as here - calls through to
+        # safely_enqueue_task exactly as before, but the name it calls through lives in
+        # bulk_followup's own namespace, not celery's (see "patch the name the module holds").
         callbacks: list = []
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            mock.patch(
+                "urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit",
+                side_effect=callbacks.append,
+            ),
+            mock.patch("urbanlens.dashboard.services.core.bulk_followup.safely_enqueue_task") as enqueue,
         ):
             redata_suggestions.queue_pin_assignment_sync(42)
             callbacks[0]()
@@ -279,7 +338,10 @@ class BackfillProfileTests(TestCase):
         gateway_instance = mock.Mock()
         with (
             _redata_configured(),
-            mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway", return_value=gateway_instance),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway",
+                return_value=gateway_instance,
+            ),
         ):
             labels_synced, pins_synced = redata_suggestions.backfill_profile(self.profile)
         self.assertEqual(labels_synced, baseline + 1)  # the new tag, not the new status label
@@ -300,7 +362,13 @@ class GetSuggestionsTests(TestCase):
         pin = _pin(self.profile, seq=1)
         gateway_instance = mock.Mock()
         gateway_instance.suggest_labels.side_effect = GatewayRequestError("boom")
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway", return_value=gateway_instance):
+        with (
+            _redata_configured(),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway",
+                return_value=gateway_instance,
+            ),
+        ):
             self.assertIsNone(redata_suggestions.get_suggestions(pin))
 
     def test_resolves_results_to_local_labels_and_drops_unknown_ids(self) -> None:
@@ -313,7 +381,13 @@ class GetSuggestionsTests(TestCase):
                 {"label_id": "unknown-uuid", "name": "Ghost", "confidence": 0.5},
             ],
         }
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway", return_value=gateway_instance):
+        with (
+            _redata_configured(),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway",
+                return_value=gateway_instance,
+            ),
+        ):
             suggestions = redata_suggestions.get_suggestions(pin)
         assert suggestions is not None
         self.assertEqual(len(suggestions), 1)

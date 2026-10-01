@@ -1,20 +1,4 @@
-"""Tests for batch photo-location ingestion: matching/clustering, accept/reject, and the
-Tools-page local-scan upload endpoint.
-
-Covers:
-- ingest_location_hits - matches a hit against an existing pin's default
-  (circle-fallback) boundary, clusters unmatched hits by proximity, and
-  merges into existing pending suggestions on a re-run instead of duplicating.
-- accept_pin_suggestion - logs one PinVisit per distinct date (skipping dates
-  already visited), creates a new pin only when none matched, applies
-  suggested_name only when the target pin has no name yet, and respects
-  visit_logging_allowed.
-- reject_pin_suggestion - flips status with no other side effects.
-- PinSuggestionActionView - accept/reject over HTTP, ownership and
-  already-handled guards.
-- PhotoLocationScanUploadView - payload validation for the client-uploaded
-  cluster list.
-"""
+"""Tests for batch photo-location ingestion: matching/clustering, accept/reject, and the Tools-page local-scan upload endpoint."""
 
 from __future__ import annotations
 
@@ -24,6 +8,7 @@ import json
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import F
 from django.urls import reverse
@@ -37,13 +22,46 @@ from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.links.model import PinLink
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import (
+    MAX_SUGGESTION_ALIASES,
+    MAX_SUGGESTION_LINKS,
+    MAX_SUGGESTION_PHOTOS,
+    PinSuggestion,
+    PinSuggestionOrigin,
+    PinSuggestionStatus,
+)
+from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, reject_pin_suggestion
+from urbanlens.dashboard.services.media.storage import (
+    StorageQuotaExceededError,
+    UploadReservation,
+    lock_profile_uploads,
+)
+from urbanlens.dashboard.services.pins.pin_suggestions import (
+    LocationHit,
+    accept_pin_suggestion,
+    attach_suggestion_photos,
+    ingest_location_hits,
+    reject_pin_suggestion,
+)
+from urbanlens.dashboard.services.places import resolution
+from urbanlens.dashboard.tests.hypothesis.place_helpers import make_place
 
 _PIN_LAT = Decimal("40.000000")
 _PIN_LON = Decimal("-74.000000")
+
+
+def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
+    ring = (
+        (lng - delta, lat - delta),
+        (lng + delta, lat - delta),
+        (lng + delta, lat + delta),
+        (lng - delta, lat + delta),
+        (lng - delta, lat - delta),
+    )
+    return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
 def _hit(
@@ -85,7 +103,9 @@ class IngestLocationHitsTests(TestCase):
 
     def test_hit_within_existing_pin_boundary_creates_matched_suggestion(self) -> None:
         # ~11m from the pin - well within the default 50m circle fallback.
-        summary = ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH)
+        summary = ingest_location_hits(
+            self.profile, [_hit(40.0001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH
+        )
         self.assertEqual(summary.matched_suggestions, 1)
         self.assertEqual(summary.new_pin_suggestions, 0)
         suggestion = PinSuggestion.objects.get()
@@ -95,7 +115,9 @@ class IngestLocationHitsTests(TestCase):
 
     def test_hit_far_from_pins_creates_new_pin_suggestion(self) -> None:
         # ~111m away - outside the default 50m circle fallback.
-        summary = ingest_location_hits(self.profile, [_hit(40.001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH)
+        summary = ingest_location_hits(
+            self.profile, [_hit(40.001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH
+        )
         self.assertEqual(summary.matched_suggestions, 0)
         self.assertEqual(summary.new_pin_suggestions, 1)
         suggestion = PinSuggestion.objects.get()
@@ -126,7 +148,9 @@ class IngestLocationHitsTests(TestCase):
 
     def test_rerunning_new_pin_ingest_merges_by_proximity(self) -> None:
         ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=PinSuggestionOrigin.LOCAL_SCAN)
-        ingest_location_hits(self.profile, [_hit(41.00005, -76.00005, "2024-02-02")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        ingest_location_hits(
+            self.profile, [_hit(41.00005, -76.00005, "2024-02-02")], origin=PinSuggestionOrigin.LOCAL_SCAN
+        )
 
         self.assertEqual(PinSuggestion.objects.count(), 1)
         suggestion = PinSuggestion.objects.get()
@@ -134,10 +158,7 @@ class IngestLocationHitsTests(TestCase):
 
 
 class LocationHitWeightTests(TestCase):
-    """LocationHit.weight/extra_dates let one hit stand in for many identically-
-    located photos (see controllers.tools._parse_cluster) without inflating the
-    number of hits matching/clustering actually has to process - hit_count and
-    visit_dates must come out identical either way."""
+    """LocationHit.weight/extra_dates let one hit stand in for many identically- located photos (see controllers.tools._parse_cluster) without inflating the number of hits matching/clustering actually has to process - hit_count and visit_dates must come out identical either way."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -169,16 +190,21 @@ class LocationHitWeightTests(TestCase):
         self.assertEqual(suggestion.hit_count, 3)
 
     def test_weight_accumulates_across_merged_upsert_calls(self) -> None:
-        ingest_location_hits(self.profile, [LocationHit(latitude=40.0001, longitude=-74.0, taken_at=_dt("2024-01-01"), weight=200)], origin=PinSuggestionOrigin.LOCAL_SCAN)
-        ingest_location_hits(self.profile, [LocationHit(latitude=40.0001, longitude=-74.0, taken_at=_dt("2024-01-02"), weight=50)], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        ingest_location_hits(
+            self.profile,
+            [LocationHit(latitude=40.0001, longitude=-74.0, taken_at=_dt("2024-01-01"), weight=200)],
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+        )
+        ingest_location_hits(
+            self.profile,
+            [LocationHit(latitude=40.0001, longitude=-74.0, taken_at=_dt("2024-01-02"), weight=50)],
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+        )
         suggestion = PinSuggestion.objects.get()
         self.assertEqual(suggestion.hit_count, 250)
 
     def test_new_pin_centroid_is_weighted_toward_the_heavier_cluster(self) -> None:
-        """Two representative points ~33m apart (within the 50m cluster radius, so
-        they merge into one suggestion), one standing in for far more photos than
-        the other - the resulting suggestion's coordinates must land much closer to
-        the heavier one than to the naive (unweighted) midpoint."""
+        """Two representative points ~33m apart (within the 50m cluster radius, so they merge into one suggestion), one standing in for far more photos than the other - the resulting suggestion's coordinates must land much closer to the heavier one than to the naive (unweighted) midpoint."""
         heavy_lat, light_lat = 41.0, 41.0003
         heavy = LocationHit(latitude=heavy_lat, longitude=-76.0, taken_at=_dt("2024-04-01"), weight=999)
         light = LocationHit(latitude=light_lat, longitude=-76.0, taken_at=_dt("2024-04-02"), weight=1)
@@ -190,10 +216,7 @@ class LocationHitWeightTests(TestCase):
 
 
 class HitCountRaceConditionTests(TestCase):
-    """hit_count is updated via F() so a concurrent ingest can't clobber it (see
-    _upsert_matched_suggestion/_upsert_new_pin_suggestion - two overlapping scans for one
-    profile, e.g. a repeated Immich sweep overlapping a local-scan upload, is the documented
-    case)."""
+    """hit_count is updated via F() so a concurrent ingest can't clobber it (see _upsert_matched_suggestion/_upsert_new_pin_suggestion - two overlapping scans for one profile, e.g. a repeated Immich sweep overlapping a local-scan upload, is the documented case)."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -241,7 +264,9 @@ class HitCountRaceConditionTests(TestCase):
             return sum(hit.weight for hit in hits)
 
         with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions._weight_of", side_effect=racing_weight_of):
-            ingest_location_hits(self.profile, [_hit(41.0001, -76.0001, "2024-02-02")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+            ingest_location_hits(
+                self.profile, [_hit(41.0001, -76.0001, "2024-02-02")], origin=PinSuggestionOrigin.LOCAL_SCAN
+            )
 
         suggestion.refresh_from_db()
         self.assertEqual(suggestion.hit_count, 1 + 100 + 1)
@@ -263,14 +288,18 @@ class IngestLocationHitsTrackingDisabledTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
 
     def test_matched_hit_creates_no_suggestion(self) -> None:
-        summary = ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH)
+        summary = ingest_location_hits(
+            self.profile, [_hit(40.0001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH
+        )
         self.assertEqual(summary.matched_suggestions, 0)
         self.assertEqual(summary.new_pin_suggestions, 0)
         self.assertEqual(summary.hits_processed, 0)
         self.assertEqual(PinSuggestion.objects.count(), 0)
 
     def test_unmatched_hit_creates_no_suggestion(self) -> None:
-        summary = ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        summary = ingest_location_hits(
+            self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=PinSuggestionOrigin.LOCAL_SCAN
+        )
         self.assertEqual(summary.new_pin_suggestions, 0)
         self.assertEqual(PinSuggestion.objects.count(), 0)
 
@@ -326,19 +355,30 @@ class SampleAssetsAndSuggestionKeysTests(TestCase):
         self.assertEqual(suggestion.sample_assets, [{"asset_id": "a1", "taken_at": "2024-02-01"}])
 
     def test_merging_hits_dedupes_sample_assets_by_id(self) -> None:
-        ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01", asset_id="a1")], origin=PinSuggestionOrigin.IMMICH)
-        ingest_location_hits(self.profile, [_hit(41.00005, -76.00005, "2024-02-02", asset_id="a1")], origin=PinSuggestionOrigin.IMMICH)
+        ingest_location_hits(
+            self.profile, [_hit(41.0, -76.0, "2024-02-01", asset_id="a1")], origin=PinSuggestionOrigin.IMMICH
+        )
+        ingest_location_hits(
+            self.profile, [_hit(41.00005, -76.00005, "2024-02-02", asset_id="a1")], origin=PinSuggestionOrigin.IMMICH
+        )
         suggestion = PinSuggestion.objects.get()
         self.assertEqual(len(suggestion.sample_assets), 1)
 
     def test_sample_assets_never_exceeds_max_suggestion_photos(self) -> None:
         for i in range(MAX_SUGGESTION_PHOTOS + 5):
-            ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01", asset_id=f"asset-{i}")], origin=PinSuggestionOrigin.IMMICH)
+            ingest_location_hits(
+                self.profile,
+                [_hit(41.0, -76.0, "2024-02-01", asset_id=f"asset-{i}")],
+                origin=PinSuggestionOrigin.IMMICH,
+            )
         suggestion = PinSuggestion.objects.get()
         self.assertEqual(len(suggestion.sample_assets), MAX_SUGGESTION_PHOTOS)
 
     def test_two_clusters_merging_into_one_suggestion_both_map_to_its_pk(self) -> None:
-        hits = [_hit(41.0, -76.0, "2024-02-01", source_key="cluster-a"), _hit(41.00005, -76.00005, "2024-02-02", source_key="cluster-b")]
+        hits = [
+            _hit(41.0, -76.0, "2024-02-01", source_key="cluster-a"),
+            _hit(41.00005, -76.00005, "2024-02-02", source_key="cluster-b"),
+        ]
         summary = ingest_location_hits(self.profile, hits, origin=PinSuggestionOrigin.LOCAL_SCAN)
         suggestion = PinSuggestion.objects.get()
         self.assertEqual(summary.suggestion_ids_by_key, {"cluster-a": suggestion.pk, "cluster-b": suggestion.pk})
@@ -346,7 +386,11 @@ class SampleAssetsAndSuggestionKeysTests(TestCase):
     def test_matched_pin_hits_are_also_reported_in_suggestion_ids_by_key(self) -> None:
         location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
         pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
-        summary = ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-01", source_key="cluster-a")], origin=PinSuggestionOrigin.IMMICH)
+        summary = ingest_location_hits(
+            self.profile,
+            [_hit(40.0001, -74.0, "2024-01-01", source_key="cluster-a")],
+            origin=PinSuggestionOrigin.IMMICH,
+        )
         suggestion = PinSuggestion.objects.get(pin=pin)
         self.assertEqual(summary.suggestion_ids_by_key, {"cluster-a": suggestion.pk})
 
@@ -377,12 +421,16 @@ class AcceptPinSuggestionTests(TestCase):
 
         self.assertEqual(result.pin, self.pin)
         self.assertEqual(len(result.visits), 2)
-        self.assertEqual(set(PinVisit.objects.filter(pin=self.pin).values_list("source", flat=True)), {VisitSource.HISTORY})
+        self.assertEqual(
+            set(PinVisit.objects.filter(pin=self.pin).values_list("source", flat=True)), {VisitSource.HISTORY}
+        )
         suggestion.refresh_from_db()
         self.assertEqual(suggestion.status, PinSuggestionStatus.ACCEPTED)
 
     def test_accept_matched_suggestion_skips_dates_already_visited(self) -> None:
-        baker.make_recipe("dashboard.pin_visit", pin=self.pin, visited_at=datetime.datetime(2024, 1, 1, 9, 0, tzinfo=datetime.UTC))
+        baker.make_recipe(
+            "dashboard.pin_visit", pin=self.pin, visited_at=datetime.datetime(2024, 1, 1, 9, 0, tzinfo=datetime.UTC)
+        )
         suggestion = self._matched_suggestion(["2024-01-01", "2024-01-02"])
 
         result = accept_pin_suggestion(suggestion, self.profile)
@@ -402,13 +450,42 @@ class AcceptPinSuggestionTests(TestCase):
             hit_count=1,
             suggested_name="Test Place",
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
             result = accept_pin_suggestion(suggestion, self.profile)
 
         self.assertNotEqual(result.pin.pk, self.pin.pk)
         self.assertEqual(result.pin.profile_id, self.profile.pk)
         self.assertEqual(result.pin.name, "Test Place")
         self.assertEqual(len(result.visits), 1)
+
+    def test_accept_new_pin_suggestion_keeps_coordinate_inside_existing_place_domain(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _square(-74.0, 40.0, 0.01), name="Campus")
+        existing_location = Location.objects.create(latitude=Decimal("40.000000"), longitude=Decimal("-74.005000"))
+        resolution.attach_location(existing_location, parcel)
+        existing_pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=existing_location)
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=None,
+            latitude=Decimal("40.000000"),
+            longitude=Decimal("-73.995000"),
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-02-01"],
+            hit_count=1,
+            suggested_name="Other Building",
+        )
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
+            result = accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertNotEqual(result.pin.pk, existing_pin.pk)
+        self.assertEqual(result.pin.location.latitude, Decimal("40.000000"))
+        self.assertEqual(result.pin.location.longitude, Decimal("-73.995000"))
 
     def test_accept_new_pin_suggestion_does_not_rename_an_already_named_pin(self) -> None:
         self.pin.name = "Existing Name"
@@ -439,16 +516,18 @@ class AcceptPinSuggestionTests(TestCase):
             hit_count=1,
             suggested_name="Suggested Name",
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
             result = accept_pin_suggestion(suggestion, self.profile, name="User Chosen Name")
 
         self.assertEqual(result.pin.name, "User Chosen Name")
 
     def test_accept_new_pin_suggestion_applies_valid_label_ids(self) -> None:
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
-        from urbanlens.dashboard.models.labels.model import Label
 
-        label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Abandoned")
+        label = ensure_label(kind=KIND_TAG, profile=self.profile, name="Abandoned")
         suggestion = PinSuggestion.objects.create(
             profile=self.profile,
             pin=None,
@@ -458,7 +537,10 @@ class AcceptPinSuggestionTests(TestCase):
             visit_dates=["2024-02-01"],
             hit_count=1,
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
             result = accept_pin_suggestion(suggestion, self.profile, label_ids=[label.pk])
 
         self.assertIn(label, result.pin.labels.all())
@@ -512,7 +594,13 @@ class AcceptPinSuggestionPhotoTests(TestCase):
 
     def test_selected_local_image_attaches_to_pin_and_matching_visit(self) -> None:
         suggestion = self._matched_suggestion(["2024-01-01", "2024-01-02"])
-        image = baker.make(Image, profile=self.profile, pin=None, pin_suggestion=suggestion, taken_at=datetime.datetime(2024, 1, 2, 10, 0, tzinfo=datetime.UTC))
+        image = baker.make(
+            Image,
+            profile=self.profile,
+            pin=None,
+            pin_suggestion=suggestion,
+            taken_at=datetime.datetime(2024, 1, 2, 10, 0, tzinfo=datetime.UTC),
+        )
 
         result = accept_pin_suggestion(suggestion, self.profile, image_ids=[image.pk])
 
@@ -554,9 +642,17 @@ class AcceptPinSuggestionPhotoTests(TestCase):
         self.assertIn(image.visit_id, [v.pk for v in result.visits])
 
     def test_already_logged_date_still_resolves_to_the_existing_visit(self) -> None:
-        existing_visit = baker.make_recipe("dashboard.pin_visit", pin=self.pin, visited_at=datetime.datetime(2024, 1, 1, 9, 0, tzinfo=datetime.UTC))
+        existing_visit = baker.make_recipe(
+            "dashboard.pin_visit", pin=self.pin, visited_at=datetime.datetime(2024, 1, 1, 9, 0, tzinfo=datetime.UTC)
+        )
         suggestion = self._matched_suggestion(["2024-01-01"])
-        image = baker.make(Image, profile=self.profile, pin=None, pin_suggestion=suggestion, taken_at=datetime.datetime(2024, 1, 1, 10, 0, tzinfo=datetime.UTC))
+        image = baker.make(
+            Image,
+            profile=self.profile,
+            pin=None,
+            pin_suggestion=suggestion,
+            taken_at=datetime.datetime(2024, 1, 1, 10, 0, tzinfo=datetime.UTC),
+        )
 
         result = accept_pin_suggestion(suggestion, self.profile, image_ids=[image.pk])
 
@@ -565,7 +661,11 @@ class AcceptPinSuggestionPhotoTests(TestCase):
         self.assertEqual(image.visit_id, existing_visit.pk)
 
     def test_selected_immich_asset_maps_to_the_correct_visit(self) -> None:
-        suggestion = self._matched_suggestion(["2024-01-01", "2024-01-02"], origin=PinSuggestionOrigin.IMMICH, sample_assets=[{"asset_id": "a1", "taken_at": "2024-01-02"}])
+        suggestion = self._matched_suggestion(
+            ["2024-01-01", "2024-01-02"],
+            origin=PinSuggestionOrigin.IMMICH,
+            sample_assets=[{"asset_id": "a1", "taken_at": "2024-01-02"}],
+        )
 
         result = accept_pin_suggestion(suggestion, self.profile, asset_ids=["a1"])
 
@@ -601,7 +701,12 @@ class RejectPinSuggestionTests(TestCase):
     def test_reject_deletes_candidate_images(self) -> None:
         user = baker.make(User)
         suggestion = PinSuggestion.objects.create(
-            profile=user.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.LOCAL_SCAN, visit_dates=["2024-01-01"],
+            profile=user.profile,
+            pin=None,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-01-01"],
         )
         image = baker.make(Image, profile=user.profile, pin=None, pin_suggestion=suggestion)
 
@@ -612,10 +717,20 @@ class RejectPinSuggestionTests(TestCase):
     def test_reject_does_not_touch_other_suggestions_images(self) -> None:
         user = baker.make(User)
         suggestion = PinSuggestion.objects.create(
-            profile=user.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.LOCAL_SCAN, visit_dates=["2024-01-01"],
+            profile=user.profile,
+            pin=None,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-01-01"],
         )
         other_suggestion = PinSuggestion.objects.create(
-            profile=user.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.LOCAL_SCAN, visit_dates=["2024-03-01"],
+            profile=user.profile,
+            pin=None,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-03-01"],
         )
         kept_image = baker.make(Image, profile=user.profile, pin=None, pin_suggestion=other_suggestion)
 
@@ -635,7 +750,15 @@ class PinSuggestionActionViewTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
 
     def _suggestion(self, **kwargs) -> PinSuggestion:
-        defaults = {"profile": self.profile, "pin": self.pin, "latitude": _PIN_LAT, "longitude": _PIN_LON, "origin": PinSuggestionOrigin.IMMICH, "visit_dates": ["2024-01-01"], "hit_count": 1}
+        defaults = {
+            "profile": self.profile,
+            "pin": self.pin,
+            "latitude": _PIN_LAT,
+            "longitude": _PIN_LON,
+            "origin": PinSuggestionOrigin.IMMICH,
+            "visit_dates": ["2024-01-01"],
+            "hit_count": 1,
+        }
         defaults.update(kwargs)
         return PinSuggestion.objects.create(**defaults)
 
@@ -675,9 +798,16 @@ class PinSuggestionActionViewTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=self.pin).count(), 0)
 
     def test_accept_new_pin_toast_includes_a_view_pin_link(self) -> None:
-        suggestion = self._suggestion(pin=None, latitude=Decimal("41.000000"), longitude=Decimal("-76.000000"), suggested_name="Old Mill")
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
-            response = self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]), {"name": "Old Mill"})
+        suggestion = self._suggestion(
+            pin=None, latitude=Decimal("41.000000"), longitude=Decimal("-76.000000"), suggested_name="Old Mill"
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
+            response = self.client.post(
+                reverse("memories.locations.action", args=[suggestion.pk, "accept"]), {"name": "Old Mill"}
+            )
         self.assertEqual(response.status_code, 200)
         new_pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         trigger = json.loads(response.headers["HX-Trigger"])
@@ -691,12 +821,19 @@ class PinSuggestionActionViewTests(TestCase):
 
     def test_accept_new_pin_applies_submitted_labels(self) -> None:
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
-        from urbanlens.dashboard.models.labels.model import Label
 
-        label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Abandoned")
-        suggestion = self._suggestion(pin=None, latitude=Decimal("41.000000"), longitude=Decimal("-76.000000"), suggested_name="Old Mill")
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
-            self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]), {"name": "Old Mill", "label_ids": [str(label.pk)]})
+        label = ensure_label(kind=KIND_TAG, profile=self.profile, name="Abandoned")
+        suggestion = self._suggestion(
+            pin=None, latitude=Decimal("41.000000"), longitude=Decimal("-76.000000"), suggested_name="Old Mill"
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
+            self.client.post(
+                reverse("memories.locations.action", args=[suggestion.pk, "accept"]),
+                {"name": "Old Mill", "label_ids": [str(label.pk)]},
+            )
         new_pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         self.assertIn(label, new_pin.labels.all())
 
@@ -710,10 +847,24 @@ class PhotoLocationScanUploadViewTests(TestCase):
         self.client.force_login(self.user)
 
     def _post(self, body: dict):
-        return self.client.post(reverse("tools.photo_scan.upload"), data=json.dumps(body), content_type="application/json")
+        return self.client.post(
+            reverse("tools.photo_scan.upload"), data=json.dumps(body), content_type="application/json"
+        )
 
     def test_valid_clusters_create_suggestions(self) -> None:
-        response = self._post({"clusters": [{"latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01", "2024-05-02"], "count": 3, "label": "IMG_0001.jpg"}]})
+        response = self._post(
+            {
+                "clusters": [
+                    {
+                        "latitude": 41.0,
+                        "longitude": -76.0,
+                        "dates": ["2024-05-01", "2024-05-02"],
+                        "count": 3,
+                        "label": "IMG_0001.jpg",
+                    }
+                ]
+            }
+        )
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data["ok"])
@@ -724,26 +875,27 @@ class PhotoLocationScanUploadViewTests(TestCase):
         self.assertEqual(sorted(suggestion.visit_dates), ["2024-05-01", "2024-05-02"])
 
     def test_a_large_per_cluster_count_stays_a_single_underlying_hit(self) -> None:
-        """A cluster's `count` used to expand into that many separate synthetic
-        hits, each independently checked against every one of the profile's pin
-        boundaries - up to 500 clusters x 2000 photos each could balloon into a
-        million-plus hits processed synchronously in one request, easily enough
-        to trip a reverse proxy's read timeout. `count` must still land correctly
-        on the suggestion's hit_count without that blow-up."""
-        response = self._post({"clusters": [{"latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 2000}]})
+        """`count` must still land correctly on the suggestion's hit_count without that blow-up."""
+        response = self._post(
+            {"clusters": [{"latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 2000}]}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["hits_processed"], 2000)
         suggestion = PinSuggestion.objects.get()
         self.assertEqual(suggestion.hit_count, 2000)
 
     def test_invalid_json_body_is_400(self) -> None:
-        response = self.client.post(reverse("tools.photo_scan.upload"), data="not json", content_type="application/json")
+        response = self.client.post(
+            reverse("tools.photo_scan.upload"), data="not json", content_type="application/json"
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_tracking_disabled_is_403(self) -> None:
         self.profile.track_pin_visits = False
         self.profile.save(update_fields=["track_pin_visits"])
-        response = self._post({"clusters": [{"latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 1}]})
+        response = self._post(
+            {"clusters": [{"latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 1}]}
+        )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(PinSuggestion.objects.exists())
 
@@ -752,7 +904,9 @@ class PhotoLocationScanUploadViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_too_many_clusters_is_400(self) -> None:
-        clusters = [{"latitude": 40.0 + i * 0.01, "longitude": -74.0, "dates": ["2024-01-01"], "count": 1} for i in range(501)]
+        clusters = [
+            {"latitude": 40.0 + i * 0.01, "longitude": -74.0, "dates": ["2024-01-01"], "count": 1} for i in range(501)
+        ]
         response = self._post({"clusters": clusters})
         self.assertEqual(response.status_code, 400)
 
@@ -764,14 +918,22 @@ class PhotoLocationScanUploadViewTests(TestCase):
     def test_upload_reuses_ingest_pipeline_for_matched_pins(self) -> None:
         location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
         baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
-        response = self._post({"clusters": [{"latitude": 40.0001, "longitude": -74.0, "dates": ["2024-05-01"], "count": 1}]})
+        response = self._post(
+            {"clusters": [{"latitude": 40.0001, "longitude": -74.0, "dates": ["2024-05-01"], "count": 1}]}
+        )
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["matched_suggestions"], 1)
         self.assertEqual(data["new_pin_suggestions"], 0)
 
     def test_response_reports_the_suggestion_id_for_each_submitted_cluster(self) -> None:
-        response = self._post({"clusters": [{"id": "cluster-a", "latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 1}]})
+        response = self._post(
+            {
+                "clusters": [
+                    {"id": "cluster-a", "latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 1}
+                ]
+            }
+        )
         self.assertEqual(response.status_code, 200)
         suggestion = PinSuggestion.objects.get()
         self.assertEqual(response.json()["suggestion_ids"], {"cluster-a": suggestion.pk})
@@ -796,13 +958,18 @@ class PinSuggestionImmichThumbnailViewTests(TestCase):
         )
 
     def test_returns_thumbnail_bytes_for_a_known_asset(self) -> None:
-        with mock.patch("urbanlens.dashboard.controllers.pin_suggestions.ImmichGateway.get_asset_thumbnail", return_value=(b"jpeg-bytes", "image/jpeg")):
+        with mock.patch(
+            "urbanlens.dashboard.controllers.immich.ImmichGateway.get_asset_thumbnail",
+            return_value=(b"jpeg-bytes", "image/jpeg"),
+        ):
             response = self.client.get(reverse("memories.locations.immich_thumbnail", args=[self.suggestion.pk, "a1"]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"jpeg-bytes")
 
     def test_404s_for_an_asset_id_not_in_sample_assets(self) -> None:
-        response = self.client.get(reverse("memories.locations.immich_thumbnail", args=[self.suggestion.pk, "not-a-sample"]))
+        response = self.client.get(
+            reverse("memories.locations.immich_thumbnail", args=[self.suggestion.pk, "not-a-sample"])
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_404s_for_another_profiles_suggestion(self) -> None:
@@ -819,6 +986,17 @@ class PinSuggestionImmichThumbnailViewTests(TestCase):
         response = self.client.get(reverse("memories.locations.immich_thumbnail", args=[suggestion.pk, "a1"]))
         self.assertEqual(response.status_code, 404)
 
+    def test_a_rate_limit_refusal_returns_502_not_a_500(self) -> None:
+        """P122: the handler already degrades `GatewayRequestError` to a 502; a refusal must reach it too."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        with mock.patch(
+            "urbanlens.dashboard.controllers.immich.ImmichGateway.get_asset_thumbnail",
+            side_effect=RateLimitExceededError("immich"),
+        ):
+            response = self.client.get(reverse("memories.locations.immich_thumbnail", args=[self.suggestion.pk, "a1"]))
+        self.assertEqual(response.status_code, 502)
+
 
 class PhotoLocationScanPhotoUploadViewTests(TestCase):
     """Opt-in candidate-photo upload endpoint: validation and ownership scoping."""
@@ -828,12 +1006,21 @@ class PhotoLocationScanPhotoUploadViewTests(TestCase):
         self.profile = self.user.profile
         self.client.force_login(self.user)
         self.suggestion = PinSuggestion.objects.create(
-            profile=self.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.LOCAL_SCAN, visit_dates=["2024-01-01"],
+            profile=self.profile,
+            pin=None,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-01-01"],
         )
 
-    def _upload(self, suggestion_id, *, filename: str = "a.jpg", content: bytes = JPEG_BYTES, content_type: str = "image/jpeg"):
+    def _upload(
+        self, suggestion_id, *, filename: str = "a.jpg", content: bytes = JPEG_BYTES, content_type: str = "image/jpeg"
+    ):
         image_file = SimpleUploadedFile(filename, content, content_type=content_type)
-        return self.client.post(reverse("tools.photo_scan.upload_photo"), {"suggestion_id": suggestion_id, "image": image_file})
+        return self.client.post(
+            reverse("tools.photo_scan.upload_photo"), {"suggestion_id": suggestion_id, "image": image_file}
+        )
 
     def test_valid_upload_creates_an_unattached_candidate_image(self) -> None:
         response = self._upload(self.suggestion.pk)
@@ -845,14 +1032,24 @@ class PhotoLocationScanPhotoUploadViewTests(TestCase):
     def test_404_for_another_profiles_suggestion(self) -> None:
         other = baker.make(User)
         suggestion = PinSuggestion.objects.create(
-            profile=other.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.LOCAL_SCAN, visit_dates=["2024-01-01"],
+            profile=other.profile,
+            pin=None,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-01-01"],
         )
         response = self._upload(suggestion.pk)
         self.assertEqual(response.status_code, 404)
 
     def test_404_for_immich_origin_suggestion(self) -> None:
         suggestion = PinSuggestion.objects.create(
-            profile=self.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.IMMICH, visit_dates=["2024-01-01"],
+            profile=self.profile,
+            pin=None,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.IMMICH,
+            visit_dates=["2024-01-01"],
         )
         response = self._upload(suggestion.pk)
         self.assertEqual(response.status_code, 404)
@@ -864,7 +1061,9 @@ class PhotoLocationScanPhotoUploadViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_non_image_content_type_is_rejected(self) -> None:
-        response = self._upload(self.suggestion.pk, filename="a.txt", content=b"not an image", content_type="text/plain")
+        response = self._upload(
+            self.suggestion.pk, filename="a.txt", content=b"not an image", content_type="text/plain"
+        )
         self.assertEqual(response.status_code, 400)
 
 
@@ -879,12 +1078,24 @@ class PinSuggestionBulkActionViewTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
 
     def _suggestion(self, **kwargs) -> PinSuggestion:
-        defaults = {"profile": self.profile, "pin": self.pin, "latitude": _PIN_LAT, "longitude": _PIN_LON, "origin": PinSuggestionOrigin.IMMICH, "visit_dates": ["2024-01-01"], "hit_count": 1}
+        defaults = {
+            "profile": self.profile,
+            "pin": self.pin,
+            "latitude": _PIN_LAT,
+            "longitude": _PIN_LON,
+            "origin": PinSuggestionOrigin.IMMICH,
+            "visit_dates": ["2024-01-01"],
+            "hit_count": 1,
+        }
         defaults.update(kwargs)
         return PinSuggestion.objects.create(**defaults)
 
     def _post(self, action: str, ids: list[int]):
-        return self.client.post(reverse("memories.locations.bulk", args=[action]), data=json.dumps({"suggestion_ids": ids}), content_type="application/json")
+        return self.client.post(
+            reverse("memories.locations.bulk", args=[action]),
+            data=json.dumps({"suggestion_ids": ids}),
+            content_type="application/json",
+        )
 
     def test_accepts_multiple_owned_pending_suggestions(self) -> None:
         first = self._suggestion()
@@ -920,7 +1131,9 @@ class PinSuggestionBulkActionViewTests(TestCase):
     def test_unknown_action_is_404(self) -> None:
         suggestion = self._suggestion()
         response = self.client.post(
-            reverse("memories.locations.bulk", args=["explode"]), data=json.dumps({"suggestion_ids": [suggestion.pk]}), content_type="application/json",
+            reverse("memories.locations.bulk", args=["explode"]),
+            data=json.dumps({"suggestion_ids": [suggestion.pk]}),
+            content_type="application/json",
         )
         self.assertEqual(response.status_code, 404)
 
@@ -936,7 +1149,15 @@ class PinSuggestionAcceptAllViewTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
 
     def _suggestion(self, **kwargs) -> PinSuggestion:
-        defaults = {"profile": self.profile, "pin": self.pin, "latitude": _PIN_LAT, "longitude": _PIN_LON, "origin": PinSuggestionOrigin.IMMICH, "visit_dates": ["2024-01-01"], "hit_count": 1}
+        defaults = {
+            "profile": self.profile,
+            "pin": self.pin,
+            "latitude": _PIN_LAT,
+            "longitude": _PIN_LON,
+            "origin": PinSuggestionOrigin.IMMICH,
+            "visit_dates": ["2024-01-01"],
+            "hit_count": 1,
+        }
         defaults.update(kwargs)
         return PinSuggestion.objects.create(**defaults)
 
@@ -989,7 +1210,15 @@ class PinSuggestionQueueViewOnboardingFlowTests(TestCase):
         self.client.force_login(self.user)
         location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
         pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
-        PinSuggestion.objects.create(profile=self.profile, pin=pin, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.IMMICH, visit_dates=["2024-01-01"], hit_count=1)
+        PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.IMMICH,
+            visit_dates=["2024-01-01"],
+            hit_count=1,
+        )
 
     def test_onboarding_param_pulses_the_accept_all_button_and_shows_the_banner(self) -> None:
         response = self.client.get(reverse("memories.locations"), {"onboarding": "1"})
@@ -1007,7 +1236,7 @@ class PinSuggestionQueueViewOnboardingFlowTests(TestCase):
 
 class PinSuggestionQueueViewSelectMapTests(TestCase):
     """The Locations page's map/selection UX is shared with Memories > Visits -
-    see pin-select-map.js. Regression guard for the shared class names."""
+    see pin-select-map.ts. Regression guard for the shared class names."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -1017,7 +1246,15 @@ class PinSuggestionQueueViewSelectMapTests(TestCase):
     def test_page_with_suggestions_shows_the_shared_select_map(self) -> None:
         location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
         pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
-        PinSuggestion.objects.create(profile=self.profile, pin=pin, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.IMMICH, visit_dates=["2024-01-01"], hit_count=1)
+        PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.IMMICH,
+            visit_dates=["2024-01-01"],
+            hit_count=1,
+        )
 
         response = self.client.get(reverse("memories.locations"))
         self.assertContains(response, 'id="pin-suggestions-map"')
@@ -1030,13 +1267,18 @@ class PinSuggestionQueueViewSelectMapTests(TestCase):
         self.assertNotContains(response, 'id="pin-suggestions-map"')
 
     def test_map_uses_the_shared_toolbar_not_the_bespoke_pill_button(self) -> None:
-        """Regression guard for the identical defect test_memories_unlogged.py
-        already fixed on the sibling visits.html page - this page still had
-        its own bespoke .pin-select-toggle pill (no layers panel or toolbar
-        styling) until now. See docs/GOALS_CODE_AUDIT.md ("Map UI consistency")."""
+        """Regression guard for the identical defect test_memories_unlogged.py already fixed on the sibling visits.html page - this page still had its own bespoke .pin-select-toggle pill (no layers panel or toolbar styling) until now."""
         location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
         pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
-        PinSuggestion.objects.create(profile=self.profile, pin=pin, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.IMMICH, visit_dates=["2024-01-01"], hit_count=1)
+        PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.IMMICH,
+            visit_dates=["2024-01-01"],
+            hit_count=1,
+        )
 
         response = self.client.get(reverse("memories.locations"))
 
@@ -1103,7 +1345,9 @@ class ExternalApiHitFieldsTests(TestCase):
         self.assertEqual(suggestion.suggested_description, "An old sawmill by the creek.")
         self.assertEqual(suggestion.suggested_pin_type, "building")
         self.assertEqual(suggestion.suggested_aliases, ["The Sawmill", "Old Mill"])
-        self.assertEqual(suggestion.suggested_links, [{"name": "Historical society", "url": "https://example.test/mill"}])
+        self.assertEqual(
+            suggestion.suggested_links, [{"name": "Historical society", "url": "https://example.test/mill"}]
+        )
 
     def test_implies_visit_false_contributes_no_visit_dates(self) -> None:
         """A discovery submission isn't evidence anyone actually visited - it must
@@ -1116,7 +1360,13 @@ class ExternalApiHitFieldsTests(TestCase):
 
     def test_merging_hits_dedupes_aliases_case_insensitively_and_caps(self) -> None:
         first = _hit(41.0, -76.0, "2024-02-01", aliases=("Old Mill",), implies_visit=False)
-        second = _hit(41.00005, -76.00005, "2024-02-02", aliases=("old mill", *[f"Alias {i}" for i in range(MAX_SUGGESTION_ALIASES)]), implies_visit=False)
+        second = _hit(
+            41.00005,
+            -76.00005,
+            "2024-02-02",
+            aliases=("old mill", *[f"Alias {i}" for i in range(MAX_SUGGESTION_ALIASES)]),
+            implies_visit=False,
+        )
         ingest_location_hits(self.profile, [first], origin=PinSuggestionOrigin.EXTERNAL_API)
         ingest_location_hits(self.profile, [second], origin=PinSuggestionOrigin.EXTERNAL_API)
         suggestion = PinSuggestion.objects.get()
@@ -1125,7 +1375,10 @@ class ExternalApiHitFieldsTests(TestCase):
 
     def test_merging_hits_dedupes_links_by_url_and_caps(self) -> None:
         first = _hit(41.0, -76.0, "2024-02-01", links=(("A", "https://example.test/a"),), implies_visit=False)
-        second_links = (("A dup", "https://example.test/a"), *[(f"L{i}", f"https://example.test/{i}") for i in range(MAX_SUGGESTION_LINKS)])
+        second_links = (
+            ("A dup", "https://example.test/a"),
+            *[(f"L{i}", f"https://example.test/{i}") for i in range(MAX_SUGGESTION_LINKS)],
+        )
         second = _hit(41.00005, -76.00005, "2024-02-02", links=second_links, implies_visit=False)
         ingest_location_hits(self.profile, [first], origin=PinSuggestionOrigin.EXTERNAL_API)
         ingest_location_hits(self.profile, [second], origin=PinSuggestionOrigin.EXTERNAL_API)
@@ -1145,7 +1398,9 @@ class ExternalApiHitFieldsTests(TestCase):
     def test_hit_matched_to_an_existing_pin_still_captures_suggested_fields(self) -> None:
         location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
         baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
-        hit = _hit(40.0001, -74.0, "2024-01-01", description="Matched place notes", aliases=("Alt name",), implies_visit=False)
+        hit = _hit(
+            40.0001, -74.0, "2024-01-01", description="Matched place notes", aliases=("Alt name",), implies_visit=False
+        )
         ingest_location_hits(self.profile, [hit], origin=PinSuggestionOrigin.EXTERNAL_API)
         suggestion = PinSuggestion.objects.get()
         self.assertIsNotNone(suggestion.pin_id)
@@ -1176,7 +1431,10 @@ class AcceptPinSuggestionEnrichmentTests(TestCase):
             suggested_description="An old sawmill.",
             suggested_pin_type="building",
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
             result = accept_pin_suggestion(suggestion, self.profile)
 
         self.assertEqual(result.pin.description, "An old sawmill.")
@@ -1233,7 +1491,9 @@ class AcceptPinSuggestionEnrichmentTests(TestCase):
         )
         accept_pin_suggestion(suggestion, self.profile)
 
-        self.assertEqual(set(PinAlias.objects.filter(pin=self.pin).values_list("name", flat=True)), {"Old Mill", "The Sawmill"})
+        self.assertEqual(
+            set(PinAlias.objects.filter(pin=self.pin).values_list("name", flat=True)), {"Old Mill", "The Sawmill"}
+        )
         link = PinLink.objects.get(pin=self.pin)
         self.assertEqual(link.name, "Historical society")
         self.assertEqual(link.url, "https://example.test/mill")
@@ -1307,14 +1567,21 @@ class AttachSuggestionPhotosTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.suggestion = PinSuggestion.objects.create(
-            profile=self.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.EXTERNAL_API, visit_dates=[],
+            profile=self.profile,
+            pin=None,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
         )
         self._dns_patch = mock.patch("socket.getaddrinfo", return_value=_FAKE_DNS_RESULT)
         self._dns_patch.start()
         self.addCleanup(self._dns_patch.stop)
 
     def test_downloads_and_stages_candidate_images(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()
+        ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
 
         self.assertEqual(len(created), 1)
@@ -1324,20 +1591,24 @@ class AttachSuggestionPhotosTests(TestCase):
         self.assertIsNone(image.pin_id)
         self.assertTrue(image.checksum)
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no
-        locking at all, unlike every interactive upload path (see
-        per_profile_upload_lock's docstring)."""
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
         with (
-            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()),
-            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+            mock.patch(
+                "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()
+            ),
+            mock.patch(
+                "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+            ) as lock,
         ):
             attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
     def test_never_exceeds_max_suggestion_photos(self) -> None:
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS + 5)]
-        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()
+        ):
             created = attach_suggestion_photos(self.suggestion, urls, self.profile)
 
         self.assertEqual(len(created), MAX_SUGGESTION_PHOTOS)
@@ -1346,7 +1617,9 @@ class AttachSuggestionPhotosTests(TestCase):
     def test_respects_photos_already_attached_from_a_prior_call(self) -> None:
         baker.make(Image, profile=self.profile, pin=None, pin_suggestion=self.suggestion, checksum="already-here")
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS)]
-        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()
+        ):
             created = attach_suggestion_photos(self.suggestion, urls, self.profile)
 
         self.assertEqual(len(created), MAX_SUGGESTION_PHOTOS - 1)
@@ -1358,13 +1631,17 @@ class AttachSuggestionPhotosTests(TestCase):
             "urbanlens.dashboard.services.pins.pin_suggestions.requests.get",
             side_effect=[requests.exceptions.ConnectionError("boom"), _ok_photo_response()],
         ):
-            created = attach_suggestion_photos(self.suggestion, ["https://example.test/broken.jpg", "https://example.test/ok.jpg"], self.profile)
+            created = attach_suggestion_photos(
+                self.suggestion, ["https://example.test/broken.jpg", "https://example.test/ok.jpg"], self.profile
+            )
 
         self.assertEqual(len(created), 1)
 
     def test_an_oversized_download_is_skipped(self) -> None:
         huge = b"x" * (20 * 1024 * 1024 + 1)
-        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response(huge)):
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response(huge)
+        ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/huge.jpg"], self.profile)
 
         self.assertEqual(created, [])
@@ -1372,10 +1649,14 @@ class AttachSuggestionPhotosTests(TestCase):
 
     def test_over_quota_stops_the_batch(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.quota_error_for_upload", return_value="Over quota"),
-            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()) as mocked,
+            mock.patch.object(UploadReservation, "reserve", side_effect=StorageQuotaExceededError("Over quota")),
+            mock.patch(
+                "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()
+            ) as mocked,
         ):
-            created = attach_suggestion_photos(self.suggestion, ["https://example.test/a.jpg", "https://example.test/b.jpg"], self.profile)
+            created = attach_suggestion_photos(
+                self.suggestion, ["https://example.test/a.jpg", "https://example.test/b.jpg"], self.profile
+            )
 
         self.assertEqual(created, [])
         mocked.assert_called_once()
@@ -1390,20 +1671,31 @@ class AttachSuggestionPhotosSsrfTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.suggestion = PinSuggestion.objects.create(
-            profile=self.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.EXTERNAL_API, visit_dates=[],
+            profile=self.profile,
+            pin=None,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
         )
 
     def test_a_literal_private_ip_target_is_rejected(self) -> None:
         with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get") as mocked:
-            created = attach_suggestion_photos(self.suggestion, ["http://169.254.169.254/latest/meta-data/"], self.profile)
+            created = attach_suggestion_photos(
+                self.suggestion, ["http://169.254.169.254/latest/meta-data/"], self.profile
+            )
         mocked.assert_not_called()
         self.assertEqual(created, [])
 
     def test_a_redirect_to_a_private_ip_is_rejected(self) -> None:
-        redirect_response = mock.Mock(status_code=302, headers={"Location": "http://127.0.0.1/internal"}, is_redirect=True)
+        redirect_response = mock.Mock(
+            status_code=302, headers={"Location": "http://127.0.0.1/internal"}, is_redirect=True
+        )
         with (
             mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
-            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=redirect_response),
+            mock.patch(
+                "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=redirect_response
+            ),
         ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
         self.assertEqual(created, [])

@@ -1,17 +1,4 @@
-"""Tests for the profile page's click-to-edit-in-place contact fields + birthday.
-
-Covers:
-- Own-profile view renders each of the 6 contact fields (phone/whatsapp/
-  signal/telegram/discord/matrix) and birth_date as a click-to-edit element
-  only once it actually has a value - an empty field (and, at the section
-  level, an entirely-empty Contact/Additional Details section) is hidden
-  rather than shown with an "Add ..." placeholder; adding a first value is
-  the Edit Profile page's job, not this page's.
-- Other viewers see plain read-only text (only for populated fields, same
-  as before) and the section still disappears entirely when nothing to show.
-- ProfileFieldUpdateView's field="phone_number"/etc and field="birth_date"
-  POST paths, previously untested despite already existing.
-"""
+"""Tests for the profile page's click-to-edit-in-place contact fields + birthday."""
 
 from __future__ import annotations
 
@@ -22,7 +9,14 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 
-_CONTACT_FIELDS = ("phone_number", "whatsapp_number", "signal_username", "telegram_username", "discord_username", "matrix_handle")
+_CONTACT_FIELDS = (
+    "phone_number",
+    "whatsapp_number",
+    "signal_username",
+    "telegram_username",
+    "discord_username",
+    "matrix_handle",
+)
 _CONTACT_EDITABLE_CLASSES = {
     "phone_number": "profile-phone-editable",
     "whatsapp_number": "profile-whatsapp-editable",
@@ -82,7 +76,9 @@ class ProfileContactEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertContains(response, "555-0100")
         # Same "inert wiring-script text" caveat as the hero-meta/bio
         # precedents - check the actual rendered element's class, not just
@@ -97,7 +93,9 @@ class ProfileContactEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertNotContains(response, ">Contact<")
 
 

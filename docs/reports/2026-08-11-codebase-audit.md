@@ -1156,7 +1156,7 @@ caller *cache* a flattened-empty result, so that a transient refusal becomes dur
 
 So a provider refused by its own rate limiter left the panel marked warm and empty for twelve
 hours, indistinguishable to every reader from "this location genuinely has no imagery". The panel
-task's own handler already distinguishes `RateLimitExceededError` correctly (`external_data.py:1274`)
+task's own handler already distinguishes `RateLimitExceededError` correctly (`external_data.py:1084`)
 - it just never saw one, because the collector below had swallowed it.
 
 Now: a rate-limited provider is recorded with `ok=False`, and `fetch` stamps the full window only
@@ -3029,7 +3029,7 @@ established that the `models/*/viewset.py` layer this audit had been scanning is
 
 The layer is generally careful: 48 `select_related` and 15 `prefetch_related` calls. Of seven
 list-building loops, six use `.all()` - the form that reads a prefetch cache. The seventh,
-`views_pin_bulk.py:239`, was:
+`views_pin_bulk.py` (now `services/pins/pin_bulk.py:229`), was:
 
     for pin in pins:
         present = [label for label in to_remove if pin.labels.filter(pk=label.pk).exists()]
@@ -4999,16 +4999,16 @@ re-derived.
 
 The docs were reorganised into `designs/`, `designs/drafts/`, `reports/` and `notes/` at some
 point without updating the links pointing at the old locations. **Ten references across seven
-files** pointed at paths that had simply moved — `docs/plugins.md`, `docs/e2ee.md`,
-`docs/api-expansion-candidates.md`, `docs/overpass-mirror-test.md`, `docs/import_formats.md`,
-`docs/redata-cid-resolution.md`, `docs/designs/spotguessr.md`,
-`docs/designs/mobile-app-stack-r2.md`, `docs/designs/public-pins-by-vote.md`,
-`docs/external_app_api_plan.md`. Each target was located before rewriting, and the rewrite was
+files** pointed at paths that had simply moved — `docs/designs/plugins.md`, `docs/designs/e2ee.md`,
+`docs/reports/api-expansion-candidates.md`, `docs/reports/overpass-mirror-test.md`, `docs/archive/import_formats.md`,
+`docs/designs/redata-cid-resolution.md`, `docs/designs/drafts/spotguessr.md`,
+`docs/designs/drafts/mobile-app-stack-r2.md`, `docs/designs/drafts/public-pins-by-vote.md`,
+`docs/archive/external_app_api_plan.md`. Each target was located before rewriting, and the rewrite was
 anchored so an already-correct path could not be double-prefixed.
 
 **Deliberately left alone** — these reference documents that do not exist anywhere, so repointing
 them would mean inventing a target. They are either deleted or never written, and deciding which
-is the author's call: `docs/api-reference.md`, `docs/architecture/server-agent-split.md`,
+is the author's call: `../REData/docs/api-reference.md`, `docs/architecture/server-agent-split.md`,
 `docs/BACKEND_CHANGES.md`, `docs/migration-0.6.md`, `docs/PARITY.md`, `docs/notes/ai/*.md`
 (three), `docs/prompts/*.md` (two, from `CLAUDE.local.md`). One — `docs/PROBLEMS.md/completed.md`
 — is a malformed path in the source text rather than a missing file.
@@ -5178,7 +5178,7 @@ test's `baker.make` line for the same model first would have caught all three.
 survivor advertising an **older** date than its own visit history supports.
 
 Reproduced before fixing: survivor showed 2026-05-16 while its absorbed history said 2026-08-12.
-User-visible on the map popup (`last_visited` is in the payload) and the pin detail page.
+User-visible on the map popup (`last_visited` is in the payload) and the Private Pin page.
 
 Fixed by calling `sync_last_visited(survivor)` inside the merge's transaction. That also settles
 a second staleness found on the way: **the merge issued no cache invalidation for the survivor
@@ -7455,13 +7455,14 @@ candidates, **both live**:
 
 - `_parse_csv_rows` is called directly by `test_document_pin_import.py`;
 - `_create_location_with_canonical_name` is called from `services/visits/visits.py:201` and
-  `controllers/pin_edit.py:637`, both through **function-local imports**
+  `controllers/pin_edit.py` (the fallback branch that called it, since removed and replaced with a 400
+  response), both through **function-local imports**
   (`from urbanlens.dashboard.controllers.maps import ...` inside a function body), which a
   file-scoped AST scan structurally cannot see.
 
 **Zero dead private helpers. Twentieth artifact.**
 
-The second call site is a useful side result: `pin_edit.py:637` is exactly the fallback branch the
+The second call site is a useful side result: `pin_edit.py`'s now-removed fallback branch was exactly the branch the
 2026-08-13 detach entry names as failing identically to the primary one. That entry was written from
 reading; this confirms the branch is reachable from the live code path, independently.
 

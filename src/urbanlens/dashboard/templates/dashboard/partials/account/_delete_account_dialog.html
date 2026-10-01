@@ -19,32 +19,16 @@
             <label class="form-field">
                 <span class="form-label" for="delete-account-confirm-input">Type "delete {{ request.user.username }}" to confirm</span>
                 <input type="text" name="confirm_text" id="delete-account-confirm-input" class="form-input"
-                       autocomplete="off" spellcheck="false" placeholder="delete {{ request.user.username }}" required>
+                       autocomplete="off" spellcheck="false" placeholder="delete {{ request.user.username }}"
+                       data-expect="delete {{ request.user.username }}" required>
             </label>
         </div>
         <div class="ul-dialog-footer">
-            <button type="submit" id="delete-account-confirm-btn" class="btn btn--danger-filled" disabled>
+            <button type="submit" id="delete-account-confirm-btn" class="btn btn--danger-filled"
+                    data-enabled-by="delete-account-password delete-account-confirm-input" disabled>
                 <i class="material-symbols-outlined">delete_forever</i> Delete my account
             </button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
         </div>
     </form>
 </dialog>
-
-<script>
-(function () {
-    var expected = 'delete {{ request.user.username|escapejs }}';
-    var password = document.getElementById('delete-account-password');
-    var confirmInput = document.getElementById('delete-account-confirm-input');
-    var confirmBtn = document.getElementById('delete-account-confirm-btn');
-    if (!password || !confirmInput || !confirmBtn) return;
-
-    function refresh() {
-        var matches = confirmInput.value.trim().toLowerCase() === expected.toLowerCase();
-        confirmBtn.disabled = !(matches && password.value.length > 0);
-    }
-
-    password.addEventListener('input', refresh);
-    confirmInput.addEventListener('input', refresh);
-})();
-</script>

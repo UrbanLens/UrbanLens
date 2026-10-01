@@ -1,14 +1,5 @@
 /**
  * What a key reset tells the user about their message history.
- *
- * A reset can preserve all, some, or none of the account's encrypted history,
- * and only the server knows which - it reports `rewrapped` and `not_rewrapped`.
- * The previous inline version of this logic claimed "everything stays
- * readable" whenever *any* row had been re-encrypted, and said nothing at all
- * when the old key was held but nothing came back re-encrypted. Both are cases
- * where the user permanently loses conversations and is not told.
- *
- * See PROBLEMS.md, "the E2EE key reset could destroy preservable history".
  */
 
 import { describe, expect, test } from "bun:test";

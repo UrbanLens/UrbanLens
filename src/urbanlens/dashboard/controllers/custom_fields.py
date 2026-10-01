@@ -1,12 +1,6 @@
 """Custom field views - define per-user fields and edit their values on targets.
 
-Field definitions are managed from Settings > Customize (and inline from the pin
-detail panel). Values are edited wherever the target is displayed: the pin detail
-page, another user's profile page, and the photo / markup-map lightboxes.
-
-Everything here is strictly private to the requesting user: fields are looked up
-through ``profile=request.user.profile`` and targets are checked for ownership
-(pins, photos, maps) before a value is written.
+Field definitions are managed from Settings > Customize (and inline from the pin detail panel).
 """
 
 from __future__ import annotations
@@ -18,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -30,15 +24,27 @@ from urbanlens.dashboard.models.custom_fields.model import (
     CustomField,
     CustomFieldDisplay,
     CustomFieldEntity,
+    CustomFieldTextTooLongError,
     CustomFieldType,
     CustomFieldValue,
     CustomFieldValueError,
+    InvalidCheckboxValueError,
+    InvalidDateError,
+    InvalidNumberError,
+    InvalidSelectOptionError,
+    InvalidTimeError,
+    InvalidUrlError,
+    ReferenceKindNotConfiguredError,
+    ReferenceTargetNotFoundError,
 )
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS
+from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, CapacityExceededError, reserve
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.text_limits import MAX_CUSTOM_FIELD_TEXT_LENGTH
+from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS, capped_reference_choices, reference_choices
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -78,17 +84,21 @@ def rows_for_target(profile: Profile, entity_type: str, target: Any) -> list[dic
         target: The Pin / Image / Profile / MarkupMap the values are attached to.
 
     Returns:
-        List of ``{"field": CustomField, "value": CustomFieldValue | None}`` dicts
-        in field display order.
+        List of ``{"field": CustomField, "value": CustomFieldValue | None}`` dicts in field display
+        order.
     """
     fields = list(CustomField.objects.for_entity(profile, entity_type))
     values_by_field_id = {v.field_id: v for v in CustomFieldValue.objects.filter(field__in=fields).for_target(target).select_related("field")}
     rows: list[dict[str, Any]] = []
+    capped_by_kind: dict[str, list[tuple[int, str]]] = {}
     for field in fields:
         value = values_by_field_id.get(field.pk)
         row: dict[str, Any] = {"field": field, "value": value}
         if field.field_type == CustomFieldType.REFERENCE:
-            row["ref_choices"] = field.reference_choices(include_pk=value.reference_pk if value else None)
+            kind = field.reference_kind
+            if kind not in capped_by_kind:
+                capped_by_kind[kind] = capped_reference_choices(kind, profile)
+            row["ref_choices"] = reference_choices(kind, profile, include_pk=value.reference_pk if value else None, capped=capped_by_kind[kind]) if kind else []
         rows.append(row)
     return rows
 
@@ -96,11 +106,10 @@ def rows_for_target(profile: Profile, entity_type: str, target: Any) -> list[dic
 def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldValue | None, str | None]:
     """Create, update, or clear the value of ``field`` on ``target``.
 
-    An empty ``raw`` deletes the stored value (the field simply has no value on
-    that target anymore).
+    An empty ``raw`` deletes the stored value (the field simply has no value on that target anymore).
 
     Args:
-        field: The field being written. Must match the target's entity type.
+        field: The field being written.
         target: The Pin / Image / Profile / MarkupMap instance.
         raw: The user-entered value.
 
@@ -121,8 +130,38 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
     value = existing or CustomFieldValue(field=field, **{target_attr: target})
     try:
         value.set_value(raw)
+    except InvalidNumberError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid number."
+    except InvalidDateError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid date. Use YYYY-MM-DD."
+    except InvalidTimeError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid time. Use HH:MM."
+    except InvalidCheckboxValueError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid checkbox value."
+    except InvalidSelectOptionError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not one of this field's options."
+    except InvalidUrlError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid link."
+    except CustomFieldTextTooLongError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, f"That's too long (max {MAX_CUSTOM_FIELD_TEXT_LENGTH:,} characters)."
+    except ReferenceKindNotConfiguredError as e:
+        logger.warning("custom field value rejected: %s", e)
+        return None, "This field isn't fully configured yet - edit it to choose what it references."
+    except ReferenceTargetNotFoundError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That item wasn't found (or you can't reference it)."
     except CustomFieldValueError as e:
-        return None, e.safe_message
+        # Only EmptyValueError reaches here in practice - raw is already stripped and checked non-blank above -
+        # but the base class is caught too so a future subclass fails safe instead of raising uncaught.
+        logger.warning("unexpected custom field value error: %s", e)
+        return None, "That value couldn't be saved."
     value.save()
     return value, None
 
@@ -159,12 +198,11 @@ def _parse_definition(request: HttpRequest) -> tuple[dict[str, Any], str | None]
     """Extract and validate a field definition from a create/update POST.
 
     Reads ``name``, ``field_type``, ``style``, ``options`` (select fields), and
-    ``slider_min``/``slider_max`` (slider style), validating each against the
-    chosen type.
+    ``slider_min``/``slider_max`` (slider style), validating each against the chosen type.
 
     Returns:
-        Tuple of (definition dict with ``name``/``field_type``/``style``/``config``
-        keys, error message or None). The dict is empty when there's an error.
+        Tuple of (definition dict with ``name``/``field_type``/``style``/``config`` keys, error message
+        or None).
     """
     name = (request.POST.get("name") or "").strip()
     field_type = (request.POST.get("field_type") or "").strip() or CustomFieldType.TEXT
@@ -221,7 +259,7 @@ def create_field(profile: Profile, entity_type: str, request: HttpRequest) -> st
         profile: The owning profile.
         entity_type: A :class:`CustomFieldEntity` value.
         request: POST carrying ``name``, ``field_type``, and optionally
-            ``style``/``options``/``slider_min``/``slider_max``.
+        ``style``/``options``/``slider_min``/``slider_max``.
 
     Returns:
         None on success, or a user-facing error message.
@@ -234,7 +272,10 @@ def create_field(profile: Profile, entity_type: str, request: HttpRequest) -> st
     if CustomField.objects.filter(profile=profile, entity_type=entity_type, name__iexact=definition["name"]).exists():
         return f"You already have a “{definition['name']}” field there."
     try:
-        CustomField.objects.create(profile=profile, entity_type=entity_type, **definition)
+        with reserve(CUSTOM_FIELDS, profile.pk):
+            CustomField.objects.create(profile=profile, entity_type=entity_type, **definition)
+    except CapacityExceededError as exc:
+        return exc.user_message
     except IntegrityError:
         return f"You already have a “{definition['name']}” field there."
     return None
@@ -256,7 +297,7 @@ class CustomFieldSettingsPanelView(LoginRequiredMixin, View):
                     "label": label,
                     "icon": ENTITY_ICONS.get(entity_type, "tune"),
                     "fields": list(CustomField.objects.for_entity(profile, entity_type)),
-                    # display placement only exists on the pin detail page today.
+                    # display placement only exists on the Private Pin page today.
                     "supports_display": entity_type == CustomFieldEntity.PIN,
                 },
             )
@@ -350,12 +391,11 @@ _FIXED_DEFAULT_STEP = 11.0
 
 
 def _render_pin_panel(request: HttpRequest, profile: Profile, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's custom-fields area.
+    """Render the Private Pin page's custom-fields area.
 
-    The response is one wrapper (``#pin-custom-fields-panel``) holding the
-    Custom Fields card (display=default rows), one standalone card per
-    display=section field, and one draggable overlay per display=fixed field -
-    so every value save or definition change re-renders all three placements
+    The response is one wrapper (``#pin-custom-fields-panel``) holding the Custom Fields card
+    (display=default rows), one standalone card per display=section field, and one draggable overlay per
+    display=fixed field - so every value save or definition change re-renders all three placements
     consistently in a single swap.
     """
     rows = rows_for_target(profile, CustomFieldEntity.PIN, pin)
@@ -418,10 +458,10 @@ class PinCustomFieldValueView(LoginRequiredMixin, View):
 class CustomFieldPositionView(LoginRequiredMixin, View):
     """POST: remember where the user dragged a fixed-display field.
 
-    The position is per-field (fields are already per-user) and applies to
-    every pin detail page, per the feature request. Values are viewport
-    percentages, clamped server-side so a bad client can't park a field
-    off-screen for good.
+    The position is per-field (fields are already per-user) and applies to every Private Pin page, per
+    the feature request.
+    Values are viewport percentages, clamped server-side so a bad client can't park a field off-screen
+    for good.
     """
 
     def post(self, request: HttpRequest, field_id: int) -> HttpResponse:
@@ -456,7 +496,9 @@ class ProfileCustomFieldValueView(LoginRequiredMixin, View):
         from urbanlens.dashboard.controllers.userprofile import _render_profile_annotation_partial
 
         author = _profile_for(request)
-        subject = get_object_or_404(Profile, slug=profile_slug)
+        subject = Profile.visible_by_slug(profile_slug, author)
+        if subject is None:
+            raise Http404
         if subject.pk == author.pk:
             return HttpResponse("You cannot annotate your own profile.", status=400)
         field = get_object_or_404(CustomField, id=field_id, profile=author, entity_type=CustomFieldEntity.PROFILE)
@@ -508,7 +550,7 @@ class PhotoCustomFieldsView(LoginRequiredMixin, View):
         profile, image = self._resolve(request, image_id)
         if image is None:
             return HttpResponse(status=204)
-        field = get_object_or_404(CustomField, id=request.POST.get("field_id"), profile=profile, entity_type=CustomFieldEntity.PHOTO)
+        field = get_object_or_404(CustomField, id=safe_int_or_none(request.POST.get("field_id")), profile=profile, entity_type=CustomFieldEntity.PHOTO)
         _, error = save_value(field, image, request.POST.get("value", ""))
         return _render_strip(request, profile, CustomFieldEntity.PHOTO, image, "custom_fields.photo", image.pk, error=error)
 
@@ -532,6 +574,6 @@ class MarkupMapCustomFieldsView(LoginRequiredMixin, View):
         profile, markup_map = self._resolve(request, map_uuid)
         if markup_map is None:
             return HttpResponse(status=204)
-        field = get_object_or_404(CustomField, id=request.POST.get("field_id"), profile=profile, entity_type=CustomFieldEntity.MARKUP_MAP)
+        field = get_object_or_404(CustomField, id=safe_int_or_none(request.POST.get("field_id")), profile=profile, entity_type=CustomFieldEntity.MARKUP_MAP)
         _, error = save_value(field, markup_map, request.POST.get("value", ""))
         return _render_strip(request, profile, CustomFieldEntity.MARKUP_MAP, markup_map, "custom_fields.markup_map", markup_map.uuid, error=error)

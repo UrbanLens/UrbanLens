@@ -1,35 +1,13 @@
 """Place - the real-world parcel or building a coordinate resolves onto.
-
-``Location`` is an exact coordinate. ``Place`` is the *thing* that coordinate
-is on, and it is the unit everything shared hangs off: official geometry, the
-community wiki, and access.
-
-Before Place, official geometry hung off Location, and it was fetched by point
-lookup - so importing 124 building pins onto one campus created 124 Locations
-each holding its own copy of the *same* parcel polygon. Every point on the
-campus then sat inside 125 boundaries at once, which is why a visitor was told
-124 other places covered their pin, why a building's page drew the parcel, and
-why one property could accumulate 125 wikis. One row per real-world thing
-removes all of that at the source.
-
-Two relationships, and the difference between them is the entire access model:
-
-``PART_OF``
-    The child is a component of the parent, and the parent's identity is fully
-    implied by it: a building on a parcel. Knowing the building *is* knowing
-    the parcel it stands on. Carries **no** access semantics - see
-    :class:`PlaceRelation` and the access domain notion below.
-
-``MEMBER_OF``
-    The child is one of several independent peers that make up the parent: the
-    parcels a campus was split into, or the several tax parcels one site spans.
-    The parent's knowledge genuinely exceeds any single child's, so it is
-    earned only by holding every member.
+``Location`` is an exact coordinate.
+Before Place, official geometry hung off Location, and it was fetched by point lookup - so importing 124 building pins onto one campus created 124 Locations each holding its own copy of the *same* parcel polygon.
 """
 
 from __future__ import annotations
 
+from functools import reduce
 import logging
+import operator
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
@@ -54,18 +32,43 @@ class PlaceKind(TextChoices):
     SITE = "site", "Site"
 
 
-class PlaceRelation(TextChoices):
-    """How a Place is attached to its parent - the only access boundary there is.
+#: Largest area a place of each kind can plausibly cover, in square metres; larger is a hull, a town or a county.
+#: A parcel may be twice the largest named site Overpass returns (``MAX_CONTAINING_SITE_AREA_SQM``).
+MAX_PLAUSIBLE_AREA_SQM: dict[str, float] = {
+    PlaceKind.PARCEL: 10_000_000.0,
+    PlaceKind.SITE: 10_000_000.0,
+    PlaceKind.BUILDING: 1_000_000.0,
+}
 
-    ``PART_OF`` is pure organisation. Splitting a property into its buildings
-    must not change who can see what: a parcel and everything ``PART_OF`` it
-    form one **access domain**, and holding a pin anywhere in that domain
-    grants every wiki in it, in both directions.
 
-    ``MEMBER_OF`` is the boundary. Its parent is reachable only by holding
-    access to every one of its members (see
-    ``services.wiki.wiki_access.accessible_domain_ids``).
+def is_plausible_area(kind: str, area_sqm: float | None) -> bool:
+    """Whether a place of ``kind`` could really cover ``area_sqm``.
+
+    Args:
+        kind: A :class:`PlaceKind` value.
+        area_sqm: The area, or None when unknown.
+
+    Returns:
+        False only when the area is known and exceeds the kind's ceiling.
     """
+    ceiling = MAX_PLAUSIBLE_AREA_SQM.get(kind)
+    return area_sqm is None or ceiling is None or area_sqm <= ceiling
+
+
+def implausible_area_q(prefix: str = "") -> Q:
+    """Filter for places larger than their kind can be.
+
+    Args:
+        prefix: Lookup path to the place, e.g. ``"domain_root__"``.
+
+    Returns:
+        A ``Q`` matching the implausible places.
+    """
+    return reduce(operator.or_, (Q(**{f"{prefix}kind": kind, f"{prefix}area_sqm__gt": ceiling}) for kind, ceiling in MAX_PLAUSIBLE_AREA_SQM.items()))
+
+
+class PlaceRelation(TextChoices):
+    """How a Place is attached to its parent - the only access boundary there is. ``PART_OF`` is pure organisation."""
 
     PART_OF = "part_of", "Part of"
     MEMBER_OF = "member_of", "Member of"
@@ -73,12 +76,8 @@ class PlaceRelation(TextChoices):
 
 class PlaceStatus(TextChoices):
     """Whether a Place still describes the ground as it is today.
-
-    Deliberately *not* overloaded to carry access semantics - that is
-    :class:`PlaceRelation`'s job. Status controls one thing: whether a
-    coordinate may resolve onto this geometry. A superseded campus boundary
-    still contains every pin dropped inside its former footprint, so it must
-    never resolve, but it stays for display and history.
+    Status controls one thing: whether a coordinate may resolve onto this geometry.
+    A superseded campus boundary still contains every pin dropped inside its former footprint, so it must never resolve, but it stays for display and history.
     """
 
     CURRENT = "current", "Current"
@@ -89,7 +88,8 @@ class GrantReason(TextChoices):
     """Why a profile holds access that containment can no longer prove."""
 
     GRANDFATHERED_BACKFILL = "backfill", "Held before places existed"
-    GRANDFATHERED_SPLIT = "split", "Held before the parcel was split"
+    GRANDFATHERED_SPLIT = "split", "Held the split family - originally, or by earning every current member"
+    GRANDFATHERED_ENGAGEMENT = "engagement", "Viewed the wiki or shared content to it while access was held"
 
 
 class Place(abstract.DashboardModel):
@@ -144,10 +144,10 @@ class Place(abstract.DashboardModel):
         related_name="domain_members",
     )
     is_aggregate = BooleanField(default=False)
-    # How many BUILDING children this place has. Cached because it decides
-    # scope on every render: a parcel with several buildings is describing the
-    # grounds, while a parcel with one is the ordinary case where "the parcel"
-    # and "the building" are the same thing and neither should be singled out.
+    # How many BUILDING children this place has.
+    # Cached because it decides scope on every render: a parcel with several buildings is describing
+    # the grounds, while a parcel with one is the ordinary case where "the parcel" and "the
+    # building" are the same thing and neither should be singled out.
     building_child_count = IntegerField(default=0)
 
     geometry = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
@@ -186,13 +186,8 @@ class Place(abstract.DashboardModel):
     @property
     def is_multi_building(self) -> bool:
         """Whether the parcel this place belongs to holds several buildings.
-
-        The distinction the whole parcel/building split exists for. An ordinary
-        house is one building on one parcel, and calling either of those "the
-        building" or "the grounds" would be drawing a line where there isn't
-        one - so scope stays neutral and both outlines are drawn. A campus with
-        124 structures is the opposite case, and every marker on it has to
-        commit to describing one or the other.
+        The distinction the whole parcel/building split exists for.
+        An ordinary house is one building on one parcel, and calling either of those "the building" or "the grounds" would be drawing a line where there isn't one - so scope stays neutral and both outlines are drawn.
         """
         from urbanlens.dashboard.services.locations.site_scope import MULTI_BUILDING_THRESHOLD
 
@@ -244,18 +239,7 @@ class Place(abstract.DashboardModel):
 
 class PlaceAccessGrant(abstract.DashboardModel):
     """Materialised access that containment can no longer prove.
-
-    Written by exactly two callers - the Place backfill migration and split
-    processing - and by no API surface at all. Both are cases where the
-    *structure* changed under users who had done nothing wrong: a campus wiki
-    that turns out to span several tax parcels becomes an aggregate, and an
-    aggregate is earned rather than contained. Snapshotting a grant is what
-    guarantees nobody loses access they already had, which in turn is what
-    makes automatic split and site detection safe - a false positive is
-    annoying, never harmful.
-
-    Grants are permanent and are never revoked by pin churn, unlike computed
-    access.
+    Written by four callers, all through ``PlaceAccessGrantManager`` rather than a public "grant access" API surface:
 
     Attributes:
         profile: Who holds the access.

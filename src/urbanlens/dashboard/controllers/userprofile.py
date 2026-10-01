@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from itertools import chain
+from datetime import datetime
 import json
 import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
-from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.validators import validate_email
+from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.forms.profile_form import (
@@ -35,21 +32,21 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoTakingPreference,
     PhotoUsagePreference,
 )
-from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.auth.username import USERNAME_UNAVAILABLE, username_is_available
+from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from urbanlens.dashboard.models.abstract.choices import TextChoices
-    from urbanlens.dashboard.models.profile.email import ProfileEmail
 
 logger = logging.getLogger(__name__)
 
 
 class ViewProfileView(LoginRequiredMixin, View):
-    def get(self, request: HttpRequest, profile_slug: UUID | None = None) -> HttpResponse:
+    def get(self, request: HttpRequest, profile_slug: str | None = None) -> HttpResponse:
         if profile_slug is not None:
             profile = get_object_or_404(Profile, slug=profile_slug)
             if not self._can_view_profile(request, profile):
@@ -90,12 +87,15 @@ class ViewProfileView(LoginRequiredMixin, View):
         else:
             profile_photos = Image.objects.none()
 
+        from urbanlens.dashboard.models.achievements.model import UserAchievement
+
         context = {
             "profile": profile,
             "social_links": get_profile_links(profile),
             "contact_info": contact_info,
             "can_view_contact": can_view_contact,
             "profile_photos": profile_photos,
+            "has_achievements": UserAchievement.objects.for_profile(profile).exists(),
         }
         if request.user == profile.user:
             from urbanlens.dashboard.services.profile.profile_preview import preview_modes
@@ -111,20 +111,39 @@ class ViewProfileView(LoginRequiredMixin, View):
         if avatar_file:
             from django.contrib import messages
 
-            from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, set_profile_avatar
+            from urbanlens.dashboard.services.profile.avatar import (
+                AvatarMalwareDetectedError,
+                AvatarScanUnavailableError,
+                AvatarTooLargeError,
+                AvatarUnsupportedFormatError,
+                AvatarUploadError,
+                set_profile_avatar,
+            )
 
             try:
                 set_profile_avatar(profile, avatar_file)
+            except AvatarTooLargeError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file is too large. Please upload a smaller image.")
+            except AvatarUnsupportedFormatError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file isn't a supported image format. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file.")
+            except AvatarMalwareDetectedError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file failed a security scan and wasn't uploaded.")
+            except AvatarScanUnavailableError as exc:
+                logger.warning("avatar upload scan unavailable for %s: %s", profile.pk, exc)
+                messages.error(request, "Our antivirus scanner is temporarily unavailable. Please try again shortly.")
             except AvatarUploadError as exc:
-                messages.error(request, exc.safe_message)
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That avatar couldn't be uploaded.")
         return redirect("profile.view")
 
     def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
         """Return True if the requesting user is allowed to view this profile.
 
-        Delegates to :meth:`Profile.can_view_profile` so all relationship
-        checks (friends, common pin/friend/trip, anything-in-common) live in
-        one place.
+        Delegates to :meth:`Profile.can_view_profile` so all relationship checks (friends, common
+        pin/friend/trip, anything-in-common) live in one place.
         """
         if request.user == profile.user:
             return True
@@ -144,32 +163,29 @@ class ViewProfileView(LoginRequiredMixin, View):
         except Profile.DoesNotExist:
             return
 
-        from urbanlens.dashboard.services.pins.common_pins import common_pin_location_ids
+        from urbanlens.dashboard.services.pins import common_pins
 
-        common_ids = common_pin_location_ids([my_profile, profile])
-
-        # Locations both profiles have visited. `PinQuerySet.visited()` owns the predicate
-        # ("has a last_visited timestamp or carries the profile's Visited status label") and
-        # its docstring asks callers to build on it rather than re-derive the Q, which this
-        # did - one of four inline copies that had to stay in step by hand.
-        their_visited_ids = set(
-            Pin.objects.filter(profile=profile, location__isnull=False).visited().values_list("location_id", flat=True),
-        )
-        my_visited_ids = set(
-            Pin.objects.filter(profile=my_profile, location__isnull=False).visited().values_list("location_id", flat=True),
-        )
-        shared_visited_ids = their_visited_ids & my_visited_ids
-
-        # common_pin_count itself must be gated the same as the detail-page link -
-        # otherwise a profile that opted out of sharing common-pin data (or a
-        # viewer who hasn't opted in themselves) still had the count rendered on
-        # the stats row, just without a clickable link to the detail page.
+        # Asked before anything is computed, not after. Both scans below walk whole accounts, and the setting
+        # they gate on defaults to friends-only, so the ordinary visitor was paying for an answer the page
+        # then threw away - and paying in proportion to how much the *other* person owns.
         common_pins_permitted = profile.can_view_common_pins_with(my_profile)
+
+        common_ids: set[int] = set()
+        shared_visited_ids: set[int] = set()
+        if common_pins_permitted:
+            common_ids = common_pins.common_pin_location_ids([my_profile, profile])
+
+            # Locations both profiles have visited. `PinQuerySet.visited()` owns the predicate
+            # ("has a last_visited timestamp or carries the profile's Visited status label") and
+            # its docstring asks callers to build on it rather than re-derive the Q, which this
+            # did - one of four inline copies that had to stay in step by hand.
+            their_visited = Pin.objects.filter(profile=profile, location__isnull=False).visited().values("location_id")
+            shared_visited_ids = set(
+                Pin.objects.filter(profile=my_profile, location_id__in=their_visited).visited().values_list("location_id", flat=True).distinct(),
+            )
         context["common_pin_count"] = len(common_ids) if common_pins_permitted else None
         context["can_view_common_pins"] = bool(common_ids) and common_pins_permitted
-        # Gated on the same mutual permission as common_pin_count above. A shared
-        # *visit* discloses more than a shared pin - that both people were actually
-        # there - so it cannot be shown to a viewer the common-pins setting refuses.
+        # Gated on the same mutual permission as common_pin_count above.
         context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name") if shared_visited_ids and common_pins_permitted else Location.objects.none()
 
         # Friendship relationship
@@ -181,17 +197,12 @@ class ViewProfileView(LoginRequiredMixin, View):
         # FriendshipStatus values are capitalized ("Accepted", "Requested"), so normalize here.
         context["friendship_status"] = friendship.status.lower() if friendship else None
         context["friends_since"] = friendship.updated if friendship and friendship.status == FriendshipStatus.ACCEPTED else None
-        # Resolved here rather than in the template: mute is stored one column
-        # per side of the shared row, so "is this muted" only has an answer
-        # once you say whose view is being rendered - and a template cannot
+        # Resolved here rather than in the template: mute is stored one column per side of the shared row, so
+        # "is this muted" only has an answer once you say whose view is being rendered - and a template cannot
         # pass the viewer.
         context["viewer_muted"] = bool(friendship and friendship.is_muted_by(my_profile))
         # Only the profile that *placed* a block may lift it (see
-        # ``services.social.friendship.unblock_profile``). Both parties see the
-        # "Blocked" chip, because ``Friendship.objects.between`` matches either
-        # direction, so without this flag the blocked party is offered an
-        # Unblock button that now correctly answers 404 - an action the UI
-        # promises and the server refuses.
+        # ``services.social.friendship.unblock_profile``).
         context["viewer_placed_block"] = bool(friendship and friendship.status == FriendshipStatus.BLOCKED and friendship.from_profile_id == my_profile.pk)
 
         # Trips in common
@@ -219,7 +230,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["viewer_notes"] = ProfileNote.objects.for_pair(my_profile, profile)
         nickname = ProfileNickname.objects.for_pair(my_profile, profile).first()
         context["nickname"] = nickname.nickname if nickname else ""
-        user_labels = Label.objects.user_labels().visible_to(my_profile).ordered()
+        user_labels = Label.objects.user_labels().visible_to(my_profile).in_display_order()
         assigned_label_ids = set(
             ProfileLabelAssignment.objects.filter(author=my_profile, subject=profile).values_list(
                 "label_id",
@@ -250,11 +261,9 @@ class PhotoAttachmentPointsView(LoginRequiredMixin, View):
     """GET: where one of the requesting user's own photo-strip photos is attached.
 
     Owner-only, same shape as PhotoCustomFieldsView (controllers/custom_fields.py)
-    - shown in the profile photo strip's lightbox side panel so the owner can
-    see at a glance which wiki(s)/conversation(s) a photo is shared through.
-    Never used to determine whether anyone else can *see* the photo - that's
-    services.profile.profile_photos.strip_photos_visible_to's job, applied before an
-    image ever reaches this view's caller.
+
+    - shown in the profile photo strip's lightbox side panel so the owner can see at a glance which
+      wiki(s)/conversation(s) a photo is shared through. Never used t...
     """
 
     def get(self, request: HttpRequest, image_id: int) -> HttpResponse:
@@ -273,21 +282,14 @@ class PhotoAttachmentPointsView(LoginRequiredMixin, View):
 
 
 class CommonPinsView(LoginRequiredMixin, View):
-    """List + map of the pins the viewer has in common with another profile.
+    """List + map of the pins the viewer has in common with another profile."""
 
-    Gated on ``Profile.can_view_common_pins_with`` - mutual, so a 404 covers
-    both "the other profile opted out" and "you haven't opted in yourself",
-    matching how ``ViewProfileView`` already 404s on a failed privacy check
-    rather than rendering an empty/error page that would confirm the profile
-    exists.
-    """
-
-    def get(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+    def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         if not isinstance(request.user, User):
             return redirect("login")
-        other = get_object_or_404(Profile, slug=profile_slug)
         viewer = Profile.objects.filter(user=request.user).first()
-        if viewer is None or viewer.pk == other.pk or not other.can_view_common_pins_with(viewer):
+        other = Profile.visible_by_slug(profile_slug, viewer)
+        if viewer is None or other is None or viewer.pk == other.pk or not other.can_view_common_pins_with(viewer):
             raise Http404
 
         from django.urls import reverse
@@ -295,9 +297,8 @@ class CommonPinsView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.pins.common_pins import common_pin_location_ids
 
         common_ids = common_pin_location_ids([viewer, other])
-        # Only ever read the viewer's own Pin rows for display - the other
-        # profile's private pin data (custom name, notes, icon) must never
-        # leak through this page, per the feature's own privacy requirement.
+        # Only ever read the viewer's own Pin rows for display - the other profile's private pin data (custom
+        # name, notes, icon) must never leak through this page, per the feature's own privacy requirement.
         my_pins = Pin.objects.filter(profile=viewer, location_id__in=common_ids).select_related("location", "location__wiki").order_by("name")
 
         context = {
@@ -313,9 +314,9 @@ class CommonPinsView(LoginRequiredMixin, View):
 class ProfilePreviewStartView(LoginRequiredMixin, View):
     """Start previewing your own profile as a selected type of user.
 
-    Stores the preview state in the session and redirects to the public
-    profile URL; ``ProfilePreviewMiddleware`` then renders that page as a
-    simulated user with the chosen relationship.
+    Stores the preview state in the session and redirects to the public profile URL;
+    ``ProfilePreviewMiddleware`` then renders that page as a simulated user with the chosen
+    relationship.
     """
 
     def post(self, request: HttpRequest, mode: str) -> HttpResponse:
@@ -326,8 +327,7 @@ class ProfilePreviewStartView(LoginRequiredMixin, View):
             mode: A ``VisibilityChoice`` value selecting the simulated viewer.
 
         Returns:
-            Redirect to the previewed profile page (or back to the profile
-            when the mode is unknown).
+            Redirect to the previewed profile page (or back to the profile when the mode is unknown).
         """
         from django.urls import reverse
 
@@ -337,10 +337,9 @@ class ProfilePreviewStartView(LoginRequiredMixin, View):
             return redirect("profile.view")
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # `ensure_slug`, not `save()`: this needs one column and `Profile` is the
-        # most-written row in the app (66 modules), so a whole-row write from
-        # this instance can lose whatever another writer set between the load
-        # above and here. `ensure_slug` writes `update_fields=["slug"]`.
+        # `ensure_slug`, not `save()`: this needs one column and `Profile` is the most-written row in the app
+        # (66 modules), so a whole-row write from this instance can lose whatever another writer set between the
+        # load above and here.
         if not profile.ensure_slug():
             return redirect("profile.view")
 
@@ -379,9 +378,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
     _PROFILE_DATES = frozenset({"birth_date", "started_exploring"})
     _USER_FIELDS = frozenset({"first_name", "last_name"})
 
-    #: Interaction-preference choice fields, mapped to the TextChoices class
-    #: that validates them - see Profile.PREFERENCE_FIELDS for the same set
-    #: paired with its display label instead.
+    #: Interaction-preference choice fields, mapped to the TextChoices class that validates them - see
+    #: Profile.PREFERENCE_FIELDS for the same set paired with its display label instead.
     _PROFILE_PREFERENCE_CHOICES: dict[str, type[TextChoices]] = {
         "photo_taking_preference": PhotoTakingPreference,
         "photo_sharing_preference": PhotoSharingPreference,
@@ -405,10 +403,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         username = request.GET.get("value", "").strip()
         if not username:
             return JsonResponse({"available": False, "reason": "Username required"})
-        if not USERNAME_RE.match(username):
-            return JsonResponse({"available": False, "reason": "3-30 characters: letters, numbers, and underscores only"})
-        if username_is_taken(username, exclude_user_id=request.user.pk):
-            return JsonResponse({"available": False, "reason": "That username is already taken"})
+        if not username_is_available(username, exclude_user_id=request.user.pk):
+            return JsonResponse({"available": False, "reason": USERNAME_UNAVAILABLE})
         return JsonResponse({"available": True})
 
     def post(self, request: HttpRequest) -> JsonResponse:
@@ -423,20 +419,19 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             return JsonResponse({"ok": True})
 
         if field == "email":
-            from urbanlens.dashboard.services.auth.email_normalization import is_email_taken
+            from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
 
             value = request.POST.get("value", "").strip()
             if not value:
                 return JsonResponse({"error": "Email address is required."}, status=400)
+            owner, _ = Profile.objects.get_or_create(user=request.user)
             try:
-                validate_email(value)
-            except ValidationError:
-                return JsonResponse({"error": "Enter a valid email address."}, status=400)
-            if is_email_taken(value, exclude_user_id=request.user.pk):
-                return JsonResponse({"error": "Another account already uses this email address."}, status=409)
-            request.user.email = value
-            request.user.save(update_fields=["email"])
-            return JsonResponse({"ok": True})
+                claim = claim_address(owner, value, make_primary=True)
+            except EmailClaimError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
+            if claim.pk is None:
+                return JsonResponse({"ok": True})
+            return JsonResponse({"ok": True, "pending": True, "message": pending_primary_message(claim.email)})
 
         if field == "username":
             return self._save_username(request)
@@ -451,20 +446,39 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if field == "avatar":
-            from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, set_profile_avatar
+            from urbanlens.dashboard.services.profile.avatar import (
+                AvatarMalwareDetectedError,
+                AvatarScanUnavailableError,
+                AvatarTooLargeError,
+                AvatarUnsupportedFormatError,
+                AvatarUploadError,
+                set_profile_avatar,
+            )
 
             file = request.FILES.get("file_value")
             if not file:
                 return JsonResponse({"error": "No file provided."}, status=400)
-            # Routed through ``set_profile_avatar`` rather than assigned onto
-            # the model directly: that helper is what applies the size cap,
-            # magic-byte sniffing and antivirus scan, and it is the same path
-            # the hero card's form takes.
+            # Routed through ``set_profile_avatar`` rather than assigned onto the model directly: that helper is
+            # what applies the size cap, magic-byte sniffing and antivirus scan, and it is the same path the
+            # hero card's form takes.
             try:
                 set_profile_avatar(profile, file)
+            except AvatarTooLargeError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file is too large. Please upload a smaller image."}, status=413)
+            except AvatarUnsupportedFormatError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file isn't a supported image format. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file."}, status=400)
+            except AvatarMalwareDetectedError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file failed a security scan and wasn't uploaded."}, status=422)
+            except AvatarScanUnavailableError as exc:
+                logger.warning("avatar upload scan unavailable for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "Our antivirus scanner is temporarily unavailable. Please try again shortly."}, status=503)
             except AvatarUploadError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=exc.status_code)
-            return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That avatar couldn't be uploaded."}, status=400)
+            return JsonResponse({"ok": True, "avatar_url": profile.avatar.url if profile.avatar else None, "avatar_pending": bool(profile.avatar_upload)})
 
         if field == "avatar_gravatar":
             return self._save_avatar_gravatar(request, profile)
@@ -503,7 +517,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             raw = request.POST.get("value", "").strip()
             if raw:
                 try:
-                    parsed = datetime.strptime(raw, "%Y-%m-%d").date()
+                    parsed = datetime.strptime(raw, "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; the field is a DateField
                 except ValueError:
                     return JsonResponse({"error": "Invalid date format."}, status=400)
                 validator = validate_birth_date if field == "birth_date" else validate_started_exploring
@@ -524,10 +538,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         username = request.POST.get("value", "").strip()
         if not username:
             return JsonResponse({"error": "Username is required."}, status=400)
-        if not USERNAME_RE.match(username):
-            return JsonResponse({"error": "3-30 characters: letters, numbers, and underscores only."}, status=400)
-        if username_is_taken(username, exclude_user_id=request.user.pk):
-            return JsonResponse({"error": "That username is already taken."}, status=409)
+        if not username_is_available(username, exclude_user_id=request.user.pk):
+            return JsonResponse({"error": USERNAME_UNAVAILABLE}, status=400)
         request.user.username = username
         request.user.save(update_fields=["username"])
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -543,6 +555,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
 
         from django.core.files.base import ContentFile
 
+        from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
         from urbanlens.dashboard.services.profile.avatar import AvatarService
 
         email = request.user.email or ""
@@ -553,14 +566,15 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         img = AvatarService.download(url)
         if not img:
             return JsonResponse({"error": "No Gravatar found for your email address."}, status=404)
-        profile.avatar.save(f"gravatar_{request.user.pk}.jpg", ContentFile(img), save=True)
-        return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
+        profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(img))])
+        queue_held_upload(profile, "avatar")
+        return JsonResponse({"ok": True, "avatar_url": profile.avatar.url if profile.avatar else None, "avatar_pending": True})
 
     def _save_avatar_emoji(self, request: HttpRequest, profile: Profile) -> JsonResponse:
         """Generate and store an emoji avatar from the inline picker.
 
         Args:
-            request: The HTTP request. POST params: ``animal``, ``color``.
+            request: The HTTP request.
             profile: The requesting user's own profile.
 
         Returns:
@@ -584,22 +598,14 @@ class EditProfileView(LoginRequiredMixin, View):
         discord_form: DiscordHandleForm,
         link_error: str = "",
     ) -> dict:
-        import hashlib
-
-        from urbanlens.dashboard.services.profile.avatar import AvatarService
+        from urbanlens.dashboard.models.achievements.model import UserAchievement
+        from urbanlens.dashboard.services.profile.avatar import AvatarService, gravatar_preview_url
         from urbanlens.dashboard.services.profile.profile_preview import preview_modes
         from urbanlens.dashboard.services.profile.social_links import URL_INPUT_PLATFORM_LABELS, get_profile_links
 
         discord_link = profile.social_links.filter(platform="discord").first()
         if not discord_form.is_bound:
             discord_form = DiscordHandleForm(initial={"discord": discord_link.handle if discord_link else ""})
-
-        email = profile.user.email or ""
-        if email:
-            gh = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
-            gravatar_preview_url = f"https://www.gravatar.com/avatar/{gh}?s=200&d=identicon"
-        else:
-            gravatar_preview_url = ""
 
         preference_fields = [
             {
@@ -621,9 +627,10 @@ class EditProfileView(LoginRequiredMixin, View):
             "social_links": get_profile_links(profile),
             "link_error": link_error,
             "supported_platforms": URL_INPUT_PLATFORM_LABELS,
-            "gravatar_preview_url": gravatar_preview_url,
+            "gravatar_preview_url": gravatar_preview_url(profile.user.email or ""),
             "emoji_options": AvatarService.random_options(4),
             "secondary_emails": profile.secondary_emails.all(),
+            "has_achievements": UserAchievement.objects.for_profile(profile).exists(),
         }
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -656,12 +663,12 @@ class EditProfileView(LoginRequiredMixin, View):
             return redirect("login")
         form = ProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
-            form.save()
-            # Truncated to the column width, matching how every other free-text field
-            # here is handled (e.g. albums' name). These two are assigned straight from
-            # POST rather than through the form above, so nothing else bounds them, and
-            # User.first_name/last_name are max_length=150 - an over-long name reached
-            # the database and came back as a 500.
+            # Named, so an avatar the sandbox re-encoded since the profile was read is not written back.
+            form.save(commit=False).save(update_fields=list(form.fields))
+            # Truncated to the column width, matching how every other free-text field here is handled (e.g.
+            # albums' name). These two are assigned straight from POST rather than through the form above, so
+            # nothing else bounds them, and User.first_name/last_name are max_length=150 - an over-long name
+            # reached the database and came back as a 500.
             name_limit = User._meta.get_field("first_name").max_length  # noqa: SLF001 - _meta is public API
             request.user.first_name = request.POST.get("first_name", "").strip()[:name_limit]
             request.user.last_name = request.POST.get("last_name", "").strip()[:name_limit]
@@ -756,45 +763,24 @@ class EditProfileView(LoginRequiredMixin, View):
         return redirect("profile.edit")
 
     def _add_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
-        from urbanlens.dashboard.models.profile.email import ProfileEmail
-        from urbanlens.dashboard.services.auth.email_normalization import is_email_taken, normalize_email
+        from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
 
-        raw = request.POST.get("email_input", "").strip().lower()
-        email_error = ""
+        email_error = email_status = ""
         try:
-            validate_email(raw)
-        except ValidationError:
-            email_error = "Enter a valid email address."
+            claim = claim_address(profile, request.POST.get("email_input", ""), make_primary=False)
+        except EmailClaimError as exc:
+            email_error = str(exc)
         else:
-            normalized = normalize_email(raw)
-            if is_email_taken(raw, exclude_user_id=request.user.pk):
-                email_error = "That email address is already in use."
-            elif profile.secondary_emails.filter(normalized_email=normalized).exists():
-                email_error = "You've already added that email address."
-            else:
-                from urbanlens.dashboard.models.email_log.model import EmailType
-                from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent
-
-                # An arbitrary-address send path, so it takes the same
-                # per-profile ledger caps as invites - without them this is
-                # unbounded.
-                limit_error = email_rate_limit_error(profile)
-                if limit_error:
-                    email_error = limit_error
-                else:
-                    secondary_email = ProfileEmail.objects.create(profile=profile, email=raw)
-                    _send_profile_email_verification(request, secondary_email)
-                    record_email_sent(profile, raw, EmailType.EMAIL_VERIFICATION)
-        return self._emails_response(request, profile, email_error=email_error)
+            email_status = f"We sent a confirmation link to {claim.email}."
+        return self._emails_response(request, profile, email_error=email_error, email_status=email_status)
 
     def _remove_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
-        email_id = request.POST.get("email_id", "")
-        profile.secondary_emails.filter(pk=email_id).delete()
+        profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id"))).delete()
         return self._emails_response(request, profile)
 
     def _resend_email_verification(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         email_status = ""
-        secondary_email = profile.secondary_emails.filter(pk=request.POST.get("email_id", ""), is_verified=False).first()
+        secondary_email = profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id")), is_verified=False).first()
         if secondary_email:
             from urbanlens.dashboard.models.email_log.model import EmailType
             from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, verification_recently_sent
@@ -804,8 +790,10 @@ class EditProfileView(LoginRequiredMixin, View):
             elif (limit_error := email_rate_limit_error(profile)) is not None:
                 email_status = limit_error
             else:
-                _send_profile_email_verification(request, secondary_email)
+                from urbanlens.dashboard.services.auth.email_claims import queue_confirmation
+
                 record_email_sent(profile, secondary_email.email, EmailType.EMAIL_VERIFICATION)
+                queue_confirmation(secondary_email)
                 email_status = f"Verification email resent to {secondary_email.email}."
         return self._emails_response(request, profile, email_status=email_status)
 
@@ -830,16 +818,16 @@ class EditProfileView(LoginRequiredMixin, View):
         return redirect("profile.edit")
 
 
+#: Per account. Each probe fetches a third-party profile page on the caller's behalf.
+SOCIAL_LINK_PROBE_RATE = Rate(limit=20, window_seconds=10 * 60, on_outage=Outage.REFUSE)
+SOCIAL_LINK_PROBE_METHODS = frozenset({"GET"})
+
+
 class SocialLinkVerifyView(LoginRequiredMixin, View):
     """Verify that a just-saved social-link URL resolves to a valid profile page.
 
-    Called automatically by HTMX after a new link is added.  Returns 204 when
-    the link looks fine; returns 200 with an ``HX-Trigger`` toast payload when
-    the remote server indicates the profile does not exist or is unreachable.
-
-    Only verifiable platforms (see ``VERIFIABLE_PLATFORMS``) are checked; the
-    view silently returns 204 for anything else so the client never has to
-    guard against unrecognised platforms.
+    Only verifiable platforms (see ``VERIFIABLE_PLATFORMS``) are checked; the view silently returns 204
+    for anything else so the client never has to guard against unrecognised platforms.
     """
 
     _TIMEOUT_SECONDS = 5
@@ -849,11 +837,10 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
         """Verify the platform+handle pair and return an optional toast trigger.
 
         Args:
-            request: The HTTP request.  Query params: ``platform``, ``handle``.
+            request: The HTTP request.
 
         Returns:
             204 when the link appears valid or cannot be determined.
-            200 with ``HX-Trigger`` when the link is demonstrably broken.
         """
         from urbanlens.dashboard.services.profile.social_links import (
             PLATFORM_URL_TEMPLATE,
@@ -885,24 +872,17 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
 
         Returns:
             204 when the URL resolves successfully.
-            200 with ``HX-Trigger`` when a problem is detected.
         """
-        import requests
         from requests.exceptions import RequestException
 
+        from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, open_public_url
+
         try:
-            resp = requests.get(
-                url,
-                timeout=self._TIMEOUT_SECONDS,
-                allow_redirects=True,
-                stream=True,
-                headers={"User-Agent": self._USER_AGENT},
-            )
-            resp.close()
-            status_code = resp.status_code
-        except RequestException:
-            # Network error, DNS failure, timeout, SSL problem, etc.
-            # Don't alarm the user - we simply cannot confirm either way.
+            with open_public_url("GET", url, timeout=self._TIMEOUT_SECONDS, total_deadline=self._TIMEOUT_SECONDS * 2, headers={"User-Agent": self._USER_AGENT}) as resp:
+                status_code = resp.status_code
+        except (RequestException, UnsafeUrlError):
+            # Unreachable, or somewhere this server must not go: either way the link cannot be confirmed,
+            # which is not grounds to alarm the user.
             return HttpResponse(status=204)
 
         if status_code == 404:
@@ -919,46 +899,21 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
         return response
 
 
-def _send_profile_email_verification(request: HttpRequest, secondary_email: ProfileEmail) -> None:
-    """Email a confirm-ownership link for a newly-added (or re-sent) secondary email.
-
-    Args:
-        request: The HTTP request (used to build an absolute verification URL).
-        secondary_email: The unverified ``ProfileEmail`` to send a link for.
-    """
-    import smtplib
-
-    from django.core.mail import EmailMultiAlternatives
-    from django.template.loader import render_to_string
-    from django.urls import reverse
-
-    verify_url = request.build_absolute_uri(
-        reverse("profile.email.verify", args=[str(secondary_email.verification_token)]),
-    )
-    context = {"profile": secondary_email.profile, "verify_url": verify_url}
-    subject = "Confirm your email address for UrbanLens"
-    text_body = f"Hi {secondary_email.profile.username},\n\nConfirm this email address so it can be used to find your UrbanLens account and to log in:\n{verify_url}\n\nIf you didn't request this, you can ignore this email.\n\n- UrbanLens"
-    html_body = render_to_string("dashboard/email/verify_profile_email.html", context)
-
-    try:
-        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[secondary_email.email])
-        msg.attach_alternative(html_body, "text/html")
-        msg.send()
-    except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send profile email verification to %s", secondary_email.email)
+def pending_primary_message(email: str) -> str:
+    """What the account is told after asking to change its primary address, whether or not the address is free."""
+    return f"We sent a confirmation link to {email}. Your email address changes once you follow it."
 
 
 class ProfileEmailVerifyView(View):
     """Click-through from a secondary-email confirmation link (no login required).
 
-    Anyone holding the emailed link can confirm ownership of that inbox, the
-    same way the initial signup verification link works - the visitor may not
-    be logged in as the owning profile at the time they click it.
+    Anyone holding the emailed link can confirm ownership of that inbox, the same way the initial signup
+    verification link works - the visitor may not be logged in as the owning profile at the time they
+    click it.
     """
 
     def get(self, request: HttpRequest, token) -> HttpResponse:
         from django.contrib import messages
-        from django.db import IntegrityError
 
         from urbanlens.dashboard.models.profile.email import ProfileEmail
 
@@ -968,28 +923,34 @@ class ProfileEmailVerifyView(View):
         elif secondary_email.is_verified:
             messages.info(request, f"{secondary_email.email} is already verified.")
         else:
-            try:
-                secondary_email.mark_verified()
-            except IntegrityError:
-                messages.error(request, "That email address is already verified on another account.")
+            from urbanlens.dashboard.services.auth.email_claims import confirm
+
+            promoted = secondary_email.promote_on_verify
+            error = confirm(secondary_email)
+            if error:
+                messages.error(request, error)
             else:
-                # Deliver any friend requests + visit suggestions that were
-                # waiting on this address (visit participants tagged by email
-                # before this account claimed it).
+                # Deliver any friend requests + visit suggestions that were waiting on this address (visit
+                # participants tagged by email before this account claimed it).
+                from urbanlens.dashboard.services.social.friend_invitations import bind_to_new_account
+                from urbanlens.dashboard.services.trips.trip_invitations import bind_invitations_to_account
                 from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites
 
                 process_pending_visit_invites(secondary_email.profile.user, email=secondary_email.email)
-                messages.success(request, f"{secondary_email.email} is verified and can now be used to find you and to log in.")
+                bind_invitations_to_account(secondary_email.profile.user, email=secondary_email.email)
+                bind_to_new_account(secondary_email.profile.user, email=secondary_email.email)
+                if promoted:
+                    messages.success(request, f"{secondary_email.email} is now the email address you sign in with.")
+                else:
+                    messages.success(request, f"{secondary_email.email} is verified and can now be used to find you and to log in.")
         return redirect("profile.edit")
 
 
 def _authenticated_profile(request: HttpRequest) -> Profile:
     """Return the authenticated user's Profile.
 
-    LoginRequiredMixin guarantees this path is only reached by authenticated
-    users, but mypy sees request.user as User | AnonymousUser.  The isinstance
-    guard here makes that explicit and raises PermissionDenied (→ 403) for the
-    theoretically-unreachable anonymous case.
+    LoginRequiredMixin guarantees this path is only reached by authenticated users, but mypy sees
+    request.user as User | AnonymousUser.
     """
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -998,14 +959,22 @@ def _authenticated_profile(request: HttpRequest) -> Profile:
     return get_object_or_404(Profile, user=request.user)
 
 
+def _visible_subject_or_404(request: HttpRequest, profile_slug: str) -> tuple[Profile, Profile]:
+    """The requester's profile and the one ``profile_slug`` names, raising 404 unless the requester may see it."""
+    author = _authenticated_profile(request)
+    subject = Profile.visible_by_slug(profile_slug, author)
+    if subject is None:
+        raise Http404
+    return author, subject
+
+
 class ProfileNoteView(LoginRequiredMixin, View):
     """Create a new private note about another profile (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)
 
@@ -1019,11 +988,10 @@ class ProfileNoteView(LoginRequiredMixin, View):
 class ProfileNoteDeleteView(LoginRequiredMixin, View):
     """Delete one of the viewer's private notes about another profile (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID, note_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str, note_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
         ProfileNote.objects.for_pair(author, subject).filter(pk=note_id).delete()
         return _render_profile_annotation_partial(request, author, subject)
 
@@ -1031,11 +999,10 @@ class ProfileNoteDeleteView(LoginRequiredMixin, View):
 class ProfileNoteEditView(LoginRequiredMixin, View):
     """Edit (PATCH) the content of an existing private note (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID, note_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str, note_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
         content = request.POST.get("content", "").strip()
         ProfileNote.objects.for_pair(author, subject).filter(pk=note_id).update(content=content)
         return _render_profile_annotation_partial(request, author, subject)
@@ -1044,12 +1011,12 @@ class ProfileNoteEditView(LoginRequiredMixin, View):
 class ProfileLabelToggleView(LoginRequiredMixin, View):
     """Toggle a user-type label on another profile (HTMX - re-renders the label chips)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID, label_id: int) -> HttpResponse:
-        from urbanlens.dashboard.models.labels.model import KIND_USER, Label
+    def post(self, request: HttpRequest, profile_slug: str, label_id: int) -> HttpResponse:
+        from urbanlens.dashboard.models.labels.meta import KIND_USER
+        from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)
 
@@ -1075,12 +1042,11 @@ class ProfileTrustView(LoginRequiredMixin, View):
     omit ``rating`` to clear an existing rating.
     """
 
-    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         """Apply a trust rating, or clear it when the value is out of range.
 
         Args:
-            request: The HTTP request. POST param: ``rating`` (1-5, or 0/absent
-                to clear).
+            request: The HTTP request.
             profile_slug: Slug of the profile being rated.
 
         Returns:
@@ -1095,13 +1061,13 @@ class ProfileTrustView(LoginRequiredMixin, View):
             set_trust,
         )
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
 
         try:
-            require_distinct(author, subject, "Cannot rate your own profile.")
+            require_distinct(author, subject, "self-rating attempt")
         except SelfAnnotationError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("trust rating rejected: %s", exc)
+            return HttpResponse("You cannot rate your own profile.", status=400)
 
         try:
             rating = int(request.POST.get("rating", 0))
@@ -1125,25 +1091,33 @@ class ProfileNicknameView(LoginRequiredMixin, View):
     to clear an existing one.
     """
 
-    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         """Set the nickname, or clear it when the submitted value is blank.
 
         Args:
-            request: The HTTP request. POST param: ``nickname``.
+            request: The HTTP request.
             profile_slug: Slug of the profile being nicknamed.
 
         Returns:
             The re-rendered annotation partial, or 400 for a self-nickname.
         """
-        from urbanlens.dashboard.services.profile.profile_annotations import AnnotationError, SelfAnnotationError, clear_nickname, require_distinct, set_nickname
+        from urbanlens.dashboard.services.profile.profile_annotations import (
+            MAX_PROFILE_NICKNAME_LENGTH,
+            AnnotationError,
+            NicknameTooLongError,
+            SelfAnnotationError,
+            clear_nickname,
+            require_distinct,
+            set_nickname,
+        )
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
 
         try:
-            require_distinct(author, subject, "Cannot nickname your own profile.")
+            require_distinct(author, subject, "self-nickname attempt")
         except SelfAnnotationError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("nickname rejected: %s", exc)
+            return HttpResponse("You cannot set a nickname for your own profile.", status=400)
 
         nickname = request.POST.get("nickname", "").strip()
         if not nickname:
@@ -1152,8 +1126,12 @@ class ProfileNicknameView(LoginRequiredMixin, View):
         else:
             try:
                 set_nickname(author, subject, nickname)
+            except NicknameTooLongError as exc:
+                logger.info("nickname rejected: %s", exc)
+                return HttpResponse(f"Nickname must be {MAX_PROFILE_NICKNAME_LENGTH} characters or fewer.", status=400)
             except AnnotationError as exc:
-                return HttpResponse(exc.safe_message, status=400)
+                logger.info("nickname rejected: %s", exc)
+                return HttpResponse("That nickname is invalid.", status=400)
 
         return _render_profile_annotation_partial(request, author, subject)
 
@@ -1175,14 +1153,14 @@ def _render_profile_annotation_partial(
     """
     from urbanlens.dashboard.controllers.custom_fields import rows_for_target
     from urbanlens.dashboard.models.custom_fields.model import CustomFieldEntity
-    from urbanlens.dashboard.models.labels.model import KIND_USER, Label
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
     from urbanlens.dashboard.models.profile.nickname import ProfileNickname
     from urbanlens.dashboard.models.profile.note import ProfileNote
     from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
     viewer_notes = ProfileNote.objects.for_pair(author, subject)
-    user_labels = Label.objects.user_labels().visible_to(author).ordered()
+    user_labels = Label.objects.user_labels().visible_to(author).in_display_order()
     assigned_ids = set(
         ProfileLabelAssignment.objects.filter(author=author, subject=subject).values_list("label_id", flat=True),
     )

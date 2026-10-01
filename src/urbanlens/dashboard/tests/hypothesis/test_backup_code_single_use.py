@@ -1,19 +1,4 @@
-"""A backup code must be consumable exactly once, even under concurrent submission.
-
-``verify_totp_code`` claims a TOTP step with a conditional UPDATE and explains why
-in a comment: reading the marker and then writing it unconditionally lets two
-submissions of one intercepted code - "a phishing proxy replaying it against a
-parallel session" - both pass the check before either writes.
-
-``verify_and_consume_backup_code``, in the same module, had the read-then-write
-shape that comment warns about: it selected unused codes, matched one in Python,
-then wrote ``used_at`` unconditionally. Two racing submissions of the same
-intercepted backup code could therefore both succeed.
-
-The interleaving is simulated deterministically rather than with threads: the
-hash comparison is patched to consume the row first, which is exactly the state
-the losing request would find when it reaches its own write.
-"""
+"""A backup code must be consumable exactly once, even under concurrent submission."""
 
 from __future__ import annotations
 
@@ -58,8 +43,29 @@ class BackupCodeSingleUseTests(TestCase):
         self.backup_code.refresh_from_db()
         self.assertIsNone(self.backup_code.used_at)
 
+    def test_a_code_is_not_matched_against_another_users_backup_codes(self) -> None:
+        """``for_user`` must scope the match - a mutated filter would leak across accounts."""
+        other_user = baker.make(User)
+
+        self.assertFalse(verify_and_consume_backup_code(other_user, _CODE))
+
+        self.backup_code.refresh_from_db()
+        self.assertIsNone(self.backup_code.used_at, "another user's login attempt must not consume this code")
+
+    def test_a_later_candidate_in_the_unused_set_is_still_matched(self) -> None:
+        """A loop that only inspects the first candidate would miss this."""
+        second_code = BackupCode.objects.create(user=self.user, code_hash=make_password("EFGH5678"))
+
+        self.assertTrue(verify_and_consume_backup_code(self.user, "efgh-5678"))
+
+        second_code.refresh_from_db()
+        self.backup_code.refresh_from_db()
+        self.assertIsNotNone(second_code.used_at)
+        self.assertIsNone(self.backup_code.used_at, "matching the second code must not also consume the first")
+
     def test_a_code_consumed_concurrently_is_not_accepted_twice(self) -> None:
         """The losing side of the race must not also report success."""
+
         def consume_then_match(_raw: str, _encoded: str) -> bool:
             # Stand in for a concurrent request that matched and committed its
             # write between this call's read and its own write.

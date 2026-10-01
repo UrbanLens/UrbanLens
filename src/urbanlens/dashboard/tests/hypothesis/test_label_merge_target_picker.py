@@ -30,8 +30,7 @@ class LabelMergeTargetPickerTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="merge-target-search"')
         self.assertContains(response, 'id="merge-target-list"')
-        self.assertContains(response, 'id="merge-target-id"')
-        self.assertContains(response, f'data-id="{target.id}"')
+        self.assertContains(response, f'type="radio" name="target_label_id" value="{target.id}"')
         self.assertContains(response, "Target One")
         self.assertNotContains(response, "merge-target-select")
         self.assertNotContains(response, "<select")
@@ -42,7 +41,21 @@ class LabelMergeTargetPickerTests(TestCase):
 
         response = self.client.get(reverse("label.merge", kwargs={"label_kind": "category", "label_id": source.id}))
 
-        self.assertContains(response, 'id="merge-submit-btn" disabled')
+        self.assertContains(
+            response, 'type="submit" id="merge-submit-btn" data-enabled-by="merge-target-list" disabled'
+        )
+
+    def test_the_merge_is_confirmed_by_htmx_naming_the_label(self) -> None:
+        source = baker.make(Label, profile=self.profile, kind="tag", name="Old Mill")
+        baker.make(Label, profile=self.profile, kind="tag", name="Mill")
+
+        html = self.client.get(
+            reverse("label.merge", kwargs={"label_kind": "tag", "label_id": source.id})
+        ).content.decode()
+
+        self.assertIn('hx-confirm="Merge &quot;Old Mill&quot; into the selected tag? This cannot be undone."', html)
+        self.assertIn('data-confirm-title="Merge Tag"', html)
+        self.assertNotIn("onclick=", html)
 
     def test_empty_state_shown_when_no_other_candidates_exist(self) -> None:
         # Every profile starts with a seeded set of default tags, so an empty

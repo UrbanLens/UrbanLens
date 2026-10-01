@@ -1,0 +1,11 @@
+# Test code is formatted narrower than application code. At the project's
+# 250-column width the formatter's dominant effect on a test is to collapse a
+# deliberately wrapped assertion message or chained queryset onto one unreadable
+# line.
+#
+# This has to live in a config file rather than a flag on one wrapper script:
+# CI runs `ruff format --check src` directly, and an editor runs ruff with no
+# arguments at all. Both find this file by walking up from the file being
+# formatted, so every caller agrees.
+extend = "../../../../pyproject.toml"
+line-length = 120

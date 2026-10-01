@@ -1,16 +1,4 @@
-"""The pre-reveal round payload must not carry anything that names the answer.
-
-``serialize_round`` is the one payload a player receives *before* they guess -
-it is sent over HTTP by every round endpoint and broadcast over the session
-socket as ``round.started``. Photos mode used to add ``image_caption`` to it,
-sourced from the photo's EXIF/IPTC metadata, which routinely reads
-"Old Mill House, Troy NY". The web client never rendered the field, so the leak
-was invisible from the UI - but it was always in the JSON, and a JSON API makes
-it a one-line script that turns the whole game into a lookup.
-
-These tests pin the rule directly on the serializer rather than on any one
-endpoint, because every endpoint and the WebSocket all share this function.
-"""
+"""The pre-reveal round payload must not carry anything that names the answer."""
 
 from __future__ import annotations
 
@@ -37,7 +25,9 @@ _ANSWER_NAMING_CAPTION = "Old Mill House, Troy NY"
 def _make_location() -> Location:
     """A location with coordinates distinct from every other one this module makes."""
     offset = next(_coordinate_counter)
-    return baker.make(Location, latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}", official_name="Old Mill House")
+    return baker.make(
+        Location, latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}", official_name="Old Mill House"
+    )
 
 
 def _make_profile() -> Profile:
@@ -62,7 +52,9 @@ class PreRevealRoundPayloadTests(TestCase):
             image=ContentFile(b"fake image bytes", name="test.jpg"),
         )
         self.session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
-        self.round = GameRound.objects.create(session=self.session, sequence_index=0, location=self.location, image=self.image)
+        self.round = GameRound.objects.create(
+            session=self.session, sequence_index=0, location=self.location, image=self.image
+        )
 
     def test_the_photo_caption_is_absent_before_the_reveal(self) -> None:
         """The caption names the place, so it is not part of the question."""

@@ -1,26 +1,4 @@
-"""Re-requesting somebody you already had a relationship with must point the right way.
-
-`DELETE friends/{uuid}/` and declining a request both leave the `Friendship` row
-in place - `Removed` and `Declined` respectively - and `FriendshipStatus.can_request`
-allows a new request from either. `Friendship.request` reuses that row rather
-than creating a second one, which is correct (there should be one row per pair)
-and was doing it without re-orienting the ends.
-
-The consequence: B removes A, then B asks A to be friends again, and the revived
-row still says A asked B. A's accept looks for an incoming request from B, finds
-none, and answers "Friend request not found". Both people can see the request;
-neither can act on it, permanently.
-
-**Why the existing tests missed it, which is the transferable part.** Every
-friendship test starts from nothing and builds the state it needs. This defect
-requires a *prior* relationship in a particular end state, so no amount of
-testing the happy path from a clean slate reaches it. `docs/TEST_COVERAGE_GAPS.md`
-records it as its own category for that reason: not an adversarial input nobody
-tried, but a starting state nobody started from.
-
-Found by `tests/integration/specs/api/social.spec.ts`, where it showed up only
-as the first test in the file - the one that inherited the previous run's data.
-"""
+"""Re-requesting somebody you already had a relationship with must point the right way."""
 
 from __future__ import annotations
 
@@ -30,7 +8,11 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.services.social.friendship import accept_friend_request, remove_friend, request_or_accept_friendship
+from urbanlens.dashboard.services.social.friendship import (
+    accept_friend_request,
+    remove_friend,
+    request_or_accept_friendship,
+)
 
 
 class RevivedRequestDirectionTests(TestCase):
@@ -108,11 +90,7 @@ class RevivedRequestDirectionTests(TestCase):
     def test_a_mute_follows_its_owner_when_the_row_is_reoriented(self) -> None:
         """`muted_by_*` are positional, so they have to travel with the ends.
 
-        Which column belongs to a viewer depends on which end of the row they
-        are. Swapping the ends without swapping these hands Alice's mute to Bob
-        - silencing the wrong person, which is worse than not muting at all
-        because neither of them can see it happened.
-        """
+        Which column belongs to a viewer depends on which end of the row they are."""
         request_or_accept_friendship(self.alice, self.bob)
         accept_friend_request(self.bob, self.alice)
 
@@ -134,16 +112,9 @@ class RevivedRequestDirectionTests(TestCase):
 class StatusesThatCannotBeRevivedTests(TestCase):
     """The other end of the same rule.
 
-    `docs/TEST_COVERAGE_GAPS.md` suggested generalising the re-orientation
-    above to every status `between()` can return - `Declined`, `Ignored`,
-    `Blocked`. Only the first of those is right: `can_request` admits
-    `Declined` and `Removed` and nothing else, so for `Blocked` and `Ignored`
-    the correct behaviour is a *refusal*, and re-orienting one of those rows
-    would be the defect rather than the fix.
-
-    These exist because the re-orientation sits directly below that guard.
-    Anyone widening one has to walk past a test saying why the other is narrow.
-    """
+    Only the first of those is right: `can_request` admits `Declined` and `Removed` and nothing else, so for
+    `Blocked` and `Ignored` the correct behaviour is a *refusal*, and re-orienting one of those rows would be
+    the defect rather than the fix."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -167,7 +138,9 @@ class StatusesThatCannotBeRevivedTests(TestCase):
     def test_an_ignored_row_is_not_revived_or_reoriented(self) -> None:
         self._existing(FriendshipStatus.IGNORED)
 
-        self.assertIsNone(Friendship.request(self.bob, self.alice), "an ignored request could be re-sent by the other side")
+        self.assertIsNone(
+            Friendship.request(self.bob, self.alice), "an ignored request could be re-sent by the other side"
+        )
 
         row = Friendship.objects.all().between(self.alice, self.bob)
         assert row is not None

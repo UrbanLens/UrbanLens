@@ -1,20 +1,8 @@
-"""Best-effort wireless-device type classification.
-
-A client-supplied ``device_type_guess`` is always trusted over anything this
-module computes (see :func:`resolve_device_type`) - "generally speaking,
-trust the guessed device type they provide" - this module only fills the gap
-when a client sends no guess and the device has never been classified at
-all. Two independent, deliberately modest-confidence signals are tried, name
-first (a manufacturer's own product naming, e.g. "Wyze Cam", is usually more
-specific than a MAC vendor prefix alone can tell you): a device-name
-substring match, then a MAC-OUI vendor table. Neither is authoritative - a
-miss just leaves the device UNKNOWN pending a client guess, which is always
-the safe default; a wrong guess would not be.
-"""
+"""Best-effort wireless-device type classification."""
 
 from __future__ import annotations
 
-from urbanlens.dashboard.models.device_scan.model import DeviceType, DeviceTypeSource
+from urbanlens.dashboard.models.device_scan.model import DeviceType
 
 #: Case-insensitive substrings checked against a device's advertised
 #: name/SSID. The first match wins - kept short and specific rather than
@@ -60,9 +48,7 @@ _OUI_TYPES: dict[str, DeviceType] = {
     "24:6F:28": DeviceType.SENSOR,  # Espressif
 }
 
-#: Fixed, deliberately modest confidence for any heuristic match - this is a
-#: guess, never a certainty, and must never be mistaken for a CLIENT-sourced
-#: classification.
+#: Fixed, deliberately modest confidence for any heuristic match: a guess, used only when no scan reported a type.
 _HEURISTIC_CONFIDENCE = 0.35
 
 
@@ -74,9 +60,7 @@ def guess_device_type(*, mac_address: str, display_name: str) -> tuple[str, floa
         display_name: Advertised device name/SSID, or "".
 
     Returns:
-        ``(DeviceType.UNKNOWN, 0.0)`` when nothing matched, otherwise the
-        matched type and :data:`_HEURISTIC_CONFIDENCE`.
-    """
+        ``(DeviceType.UNKNOWN, 0.0)`` when nothing matched, otherwise the matched type and :data:`_HEURISTIC_CONFIDENCE`."""
     lowered = (display_name or "").lower()
     for substring, device_type in _NAME_SUBSTRINGS:
         if substring in lowered:
@@ -88,41 +72,3 @@ def guess_device_type(*, mac_address: str, display_name: str) -> tuple[str, floa
         return oui_device_type, _HEURISTIC_CONFIDENCE
 
     return DeviceType.UNKNOWN, 0.0
-
-
-def resolve_device_type(
-    *,
-    current_type: str,
-    current_source: str,
-    client_guess: str | None,
-    mac_address: str,
-    display_name: str,
-) -> tuple[str, str]:
-    """Decide a ScannedDevice's device_type/device_type_source for this scan round.
-
-    A client-supplied guess always wins, overwriting any prior heuristic
-    classification. Absent a guess, the heuristic only runs while the device
-    has never been classified at all (``current_source ==
-    DeviceTypeSource.UNSET``); once heuristic- or client-classified, a later
-    scan with no guess of its own leaves the existing classification alone
-    rather than flip-flopping on every upload.
-
-    Args:
-        current_type: The device's current ``device_type`` value.
-        current_source: The device's current ``device_type_source`` value.
-        client_guess: This round's client-supplied guess, or None/empty.
-        mac_address: Normalized MAC address, for the heuristic fallback.
-        display_name: Advertised device name, for the heuristic fallback.
-
-    Returns:
-        ``(device_type, device_type_source)`` to persist.
-    """
-    if client_guess:
-        return client_guess, DeviceTypeSource.CLIENT
-
-    if current_source == DeviceTypeSource.UNSET:
-        guessed_type, confidence = guess_device_type(mac_address=mac_address, display_name=display_name)
-        if confidence > 0:
-            return guessed_type, DeviceTypeSource.HEURISTIC
-
-    return current_type, current_source

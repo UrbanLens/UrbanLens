@@ -1,11 +1,4 @@
-"""Article read/save/history on the external API's wiki surface.
-
-The behavior under the most scrutiny here is optimistic concurrency. Two people
-editing one wiki article is the normal case, not the exceptional one, and a save
-that silently overwrites the other person's work is unrecoverable from the
-client's side. So a stale (or absent) ``base_revision_id`` must refuse the
-write, and must refuse it *without* recording a revision.
-"""
+"""Article read/save/history on the external API's wiki surface."""
 
 from __future__ import annotations
 
@@ -98,7 +91,7 @@ class ArticleConflictTests(WikiArticleTestCase):
         self.assertEqual(get_article(wiki=self.wiki).content, "Someone else's edit")
 
     def test_null_base_revision_conflicts_when_revisions_exist(self) -> None:
-        """"I think this article is new" is wrong here, so the save is refused."""
+        """ "I think this article is new" is wrong here, so the save is refused."""
         response = self.put({"content": "Blind write", "base_revision_id": None})
         self.assertEqual(response.status_code, 409)
         self.assertEqual(get_article(wiki=self.wiki).content, "Original body")

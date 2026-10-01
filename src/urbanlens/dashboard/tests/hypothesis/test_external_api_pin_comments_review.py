@@ -1,17 +1,11 @@
-"""Pin-scoped comments and reviews, plus properties of ``visible_comment_tree``.
-
-These endpoints deliberately use ``pins:read``/``pins:write`` rather than the
-wiki scopes: a pin's comment thread and star rating are the owner's own private
-annotations of their own pin, not shared community content, so a key granted
-only wiki access must not reach them.
-"""
+"""Pin-scoped comments and reviews, plus properties of ``visible_comment_tree``."""
 
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
@@ -41,7 +35,9 @@ class PinCommentsApiTests(TestCase):
         return f"{BASE}/{self.pin.slug or self.pin.uuid}/comments/{suffix}"
 
     def test_post_then_list(self) -> None:
-        created = self.client.post(self.url(), {"text": "Note to self"}, content_type="application/json", **self.headers())
+        created = self.client.post(
+            self.url(), {"text": "Note to self"}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(created.status_code, 201)
 
         rows = self.client.get(self.url(), **self.headers()).json()["results"]
@@ -49,7 +45,9 @@ class PinCommentsApiTests(TestCase):
         self.assertTrue(rows[0]["author_is_self"])
 
     def test_delete_own_comment(self) -> None:
-        comment_id = self.client.post(self.url(), {"text": "Temporary"}, content_type="application/json", **self.headers()).json()["id"]
+        comment_id = self.client.post(
+            self.url(), {"text": "Temporary"}, content_type="application/json", **self.headers()
+        ).json()["id"]
         removed = self.client.delete(self.url(f"{comment_id}/"), **self.headers())
         self.assertEqual(removed.status_code, 204)
 
@@ -137,7 +135,9 @@ class VisibleCommentTreePropertyTests(TestCase):
 
     @settings(max_examples=8, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(mentioned_count=st.integers(min_value=1, max_value=3), plain_count=st.integers(min_value=0, max_value=3))
-    def test_comments_mentioning_unpinned_locations_are_always_dropped(self, mentioned_count: int, plain_count: int) -> None:
+    def test_comments_mentioning_unpinned_locations_are_always_dropped(
+        self, mentioned_count: int, plain_count: int
+    ) -> None:
         """However many there are, none of them survives the gate."""
         self.wiki.comments.all().delete()
 

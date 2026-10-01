@@ -1,16 +1,12 @@
 """Underground structures plugin: mapped subsurface features near a pin, via REData.
-
-Tunnels, culverts, station levels, access shafts and buried utility runs from
-OpenStreetMap - core context for urban exploration. Worldwide but
-volunteer-mapped: an empty answer means "nothing mapped here", never
-"nothing there", so the panel simply hides rather than asserting absence.
-"""
+Worldwide but volunteer-mapped: an empty answer means "nothing mapped here", never "nothing there", so the panel simply hides rather than asserting absence."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
@@ -27,6 +23,7 @@ class UndergroundPanelSource(RedataInfoPanelSource):
 
     key = "redata_underground"
     cache_source = "redata_underground"
+    site_level: ClassVar[bool] = True
     section_id = "underground-section"
     icon = "subway"
     title = "Underground Structures"
@@ -41,11 +38,7 @@ class UndergroundPanelSource(RedataInfoPanelSource):
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
         """Drop each structure's geometry before caching.
-
-        The panel renders names/kinds/flags only; a LineString per tunnel
-        segment would bloat the cache row for nothing. A future map-overlay
-        consumer should fetch its own geometry rather than reading this cache.
-        """
+        A future map-overlay consumer should fetch its own geometry rather than reading this cache."""
         return [{key: value for key, value in structure.items() if key != "geometry"} for structure in rows]
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
@@ -85,6 +78,17 @@ class UndergroundPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Underground Structures"
     description: ClassVar[str] = "Shows OSM-mapped tunnels, culverts, station levels, shafts and buried utility runs near the pin on the detail page, sourced through REData's subsurface-structures registry."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for redata_underground."""
+        return {
+            "redata_underground": ServiceDefaults(
+                display_name="REData Underground Structures",
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Tunnels, culverts, shafts and buried utilities via GET /underground/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_underground_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the underground-structures pin-detail panel."""

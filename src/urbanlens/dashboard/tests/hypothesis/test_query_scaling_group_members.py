@@ -1,16 +1,4 @@
-"""A group's member list must not cost a privacy check per member.
-
-``resolve_visible_identities`` exists precisely to render several people
-together, and it was resolving them one at a time: a loop over
-``resolve_visible_identity``, each call reaching ``can_view_profile`` and
-re-deriving the *viewer's* own friend, trip and pinned-location sets. A group
-member list, a group message list's distinct senders, and (via
-``mask_profile_references``) a trip's participants all paid that per person.
-
-The members dialog is the endpoint measured here because its row count is
-exactly the member count. The fix is inside ``resolve_visible_identities``, so
-the other callers get it too.
-"""
+"""A group's member list must not cost a privacy check per member."""
 
 from __future__ import annotations
 

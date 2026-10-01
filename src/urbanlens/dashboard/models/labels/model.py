@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+import logging
+from typing import TYPE_CHECKING
 
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db.models import (
     CASCADE,
     BooleanField,
@@ -19,13 +20,18 @@ from django.db.models import (
     Q,
     TextField,
     UniqueConstraint,
-    UUIDField,
 )
-from django.db.models.functions import Lower
+from django.db.models.functions import Cast, Lower, Upper
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_CHOICES, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CHOICES, KIND_TAG
 from urbanlens.dashboard.models.labels.queryset import LabelManager
+from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.text_limits import column_max_length
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -36,19 +42,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class Label(abstract.FrontendDashboardModel):
+class Label(HeldUploadModel, abstract.FrontendDashboardModel):
     """A named label that can be applied to pins.
-
-    Labels are either global (profile=None, visible to all users) or user-specific
-    (profile set, only visible to that user and alongside global labels).
-
-    Labels form an arbitrary-depth hierarchy via the parents M2M. Filtering by a label
-    also matches any descendant labels (use get_label_and_descendants for the full set).
-
-    The `kind` field distinguishes between tag-type labels (personal labels) and
-    category-type labels (global shared classification). Labels absorb the functionality
-    of the former PinList model: they carry an icon, custom icon, color, description,
-    and ordering weight that feeds into Pin.effective_icon's priority chain.
+    Labels are either global (profile=None, visible to all users) or user-specific (profile set, only visible to that user and alongside global labels).
     """
 
     name = CharField(max_length=255)
@@ -57,6 +53,8 @@ class Label(abstract.FrontendDashboardModel):
     color = CharField(max_length=50, null=True, blank=True, choices=COLOR_CHOICES)
     icon = CharField(max_length=50, null=True, blank=True)  # emoji char or Material Icons name
     custom_icon = ImageField(upload_to="label_icons/", null=True, blank=True)
+    #: An uploaded icon the sandbox worker has not re-encoded yet; see services.media.held_upload.
+    custom_icon_upload = CharField(max_length=255, blank=True, default="")
     # Discriminates tags from categories (and any future kinds).
     kind = CharField(max_length=20, choices=KIND_CHOICES, default=KIND_TAG, db_index=True)
     # Higher order = checked first in the icon priority chain.
@@ -96,6 +94,24 @@ class Label(abstract.FrontendDashboardModel):
 
     # Per-instance memo for total_pin_count(); not a field.
     _total_pins_memo: int | None = None
+
+    def coerce_colors(self) -> None:
+        """Drop `color` to NULL unless it is a colour this application stores.
+        `choices` is a form-layer constraint, not a database one, so it holds only for the paths that go through a form.
+        """
+        self.color = clean_color(self.color, default=None)
+
+    def coerce_icon(self) -> None:
+        """Drop `icon` to NULL unless it is an icon shape `clean_icon` accepts (P128)."""
+        self.icon = clean_icon(self.icon, max_length=column_max_length(Label, "icon"))
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the label, coercing its colour and icon first.
+        Enforced here rather than at each write because both are interpolated into markup (a `style="..."` attribute, a chip's HTML), so an arbitrary string reaching either column is a stored injection vector - and the writers are spread across forms, the external API and import.
+        """
+        self.coerce_colors()
+        self.coerce_icon()
+        super().save(*args, **kwargs)
 
     def _get_customization(self) -> LabelCustomization | None:
         """Return this user's customization, if the queryset was prefetched."""
@@ -138,98 +154,48 @@ class Label(abstract.FrontendDashboardModel):
 
     @classmethod
     def prime_total_pin_counts(cls, labels: Sequence[Label]) -> None:
-        """Precompute :meth:`total_pin_count` for a whole page of labels at once.
+        """Precompute :meth:`total_pin_count` for a whole page of labels in one query.
 
-        ``total_pin_count`` is correct but per-instance: each call runs its own
-        BFS - which issues one query *per node visited* - plus a `Count`
-        aggregate, and memoizes only on that instance. Rendering N labels
-        therefore costs O(N x subtree) queries. Measured on the Organize page's
-        deferred rows endpoint: 143 labels cost 113-146 queries, growing exactly
-        one-per-label.
-
-        This resolves the same numbers in a fixed three queries by loading the
-        edge list once and doing the traversal in Python, then seeding each
-        instance's memo so the template filter and every later call read it
-        without touching the database. The edge list is scoped to labels
-        owned by *labels*' own profile(s), plus global labels, rather than
-        the whole site's - nothing lets one profile's label parent/child
-        another's, so a rendered label's subtree can never reach an edge
-        outside that set, and this never has to load every other profile's
-        unrelated hierarchy to answer it.
-
-        Safe to skip: any label not primed still computes itself on demand, so
-        callers that render a single label need not change.
+        The subtree walk and the pin count happen in the database, so neither the hierarchy's edges nor
+        its size are loaded into Python. ``UNION`` over ``(root, id)`` dedupes a diamond and ends a cycle,
+        the same as :meth:`get_label_and_descendants`.
 
         Args:
             labels: The label instances about to be rendered. Must be the same
                 objects the template will use - priming a queryset that is
                 re-evaluated later seeds memos on discarded instances.
         """
-        labels = list(labels)
-        if not labels:
+        from django.db import connection
+
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        roots = [label for label in labels if label.pk is not None]
+        if not roots:
             return
-
-        # One query for the edge list, scoped to the profile(s) that own the
-        # rendered labels (plus global labels) instead of every profile's
-        # private hierarchy site-wide. The subtree of a rendered label can
-        # reach labels outside the rendered set (a tag's child that this
-        # kind's filter excluded), so this still spans every label owned by
-        # the relevant profile(s), not only the ones on screen.
-        owning_profile_ids = {label.profile_id for label in labels if label.profile_id is not None}
-        visible_edges = Q(from_label__profile_id__isnull=True) | Q(to_label__profile_id__isnull=True)
-        if owning_profile_ids:
-            visible_edges |= Q(from_label__profile_id__in=owning_profile_ids) | Q(to_label__profile_id__in=owning_profile_ids)
-        children_by_parent: dict[int, list[int]] = {}
-        for child_id, parent_id in cls.parents.through.objects.filter(visible_edges).values_list("from_label_id", "to_label_id"):
-            children_by_parent.setdefault(parent_id, []).append(child_id)
-
-        def descendants(root: int) -> set[int]:
-            """Every id beneath *root*, cycle-safe, matching get_label_and_descendants."""
-            seen: set[int] = set()
-            queue = [root]
-            while queue:
-                current = queue.pop()
-                if current in seen:
-                    continue
-                seen.add(current)
-                queue.extend(children_by_parent.get(current, ()))
-            return seen
-
-        needed: set[int] = set()
-        subtrees: dict[int, set[int]] = {}
-        for label in labels:
-            if label.pk is None:
-                continue
-            subtree = descendants(label.pk)
-            subtrees[label.pk] = subtree
-            needed |= subtree
-
-        # One query for every pin count involved, annotated rather than counted
-        # per label.
-        counts = dict(cls.objects.filter(pk__in=needed).annotate(n=Count("pins")).values_list("pk", "n"))
-
-        for label in labels:
-            if label.pk is None:
-                continue
-            label._total_pins_memo = sum(counts.get(pk, 0) for pk in subtrees[label.pk])  # noqa: SLF001 - seeding this class's own memo on its own instances
+        quote = connection.ops.quote_name
+        edges = cls.parents.through._meta  # noqa: SLF001 - the through model's table is not exposed any other way
+        edge_table = quote(edges.db_table)
+        child = quote(edges.get_field("from_label").column)
+        parent = quote(edges.get_field("to_label").column)
+        pin_labels = Pin._meta.get_field("labels")  # noqa: SLF001 - as above
+        pin_table = quote(pin_labels.m2m_db_table())
+        pin_label = quote(pin_labels.m2m_reverse_name())
+        sql = (
+            "WITH RECURSIVE tree(root, id) AS ("  # noqa: S608 - identifiers from model metadata, quoted by the backend; values bound
+            " SELECT id, id FROM unnest(%s::bigint[]) AS id"
+            " UNION"
+            f" SELECT tree.root, edge.{child} FROM {edge_table} edge JOIN tree ON edge.{parent} = tree.id"
+            f") SELECT tree.root, count(tagged.{pin_label}) FROM tree LEFT JOIN {pin_table} tagged ON tagged.{pin_label} = tree.id GROUP BY tree.root"
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [[label.pk for label in roots]])
+            totals = dict(cursor.fetchall())
+        for label in roots:
+            label._total_pins_memo = totals.get(label.pk, 0)  # noqa: SLF001 - seeding this class's own memo on its own instances
 
     def total_pin_count(self) -> int:
         """Return this label's pin count plus every descendant's pin count (full subtree).
-
-        Walks the full multi-level hierarchy via ``get_label_and_descendants``
-        (BFS, cycle-safe) rather than only direct children, matching how map/pin
-        filtering actually expands a parent label to its whole subtree.
-
-        Uses the annotated ``pin_count`` for this label when the queryset
-        supplied one (``LabelQuerySet.with_pin_counts()``); falls back to a DB
-        query otherwise. Descendant counts beyond the prefetched direct children
-        are always summed via a single aggregate query, since only the
-        direct-children prefetch carries its own annotation.
-
-        The result is memoized on the instance: an Organize label card reads it
-        up to three times (the compact badge, the stats column, and the "View on
-        map" button's empty check), and the BFS plus aggregate behind it is the
-        expensive part of that page.
+        Walks the full multi-level hierarchy via ``get_label_and_descendants`` (BFS, cycle-safe) rather than only direct children, matching how map/pin filtering actually expands a parent label to its whole subtree.
 
         Returns:
             Total pins carried by this label or any label beneath it.
@@ -255,12 +221,8 @@ class Label(abstract.FrontendDashboardModel):
         parent_ids: list[str] | list[int],
     ) -> int | None:
         """Return ``order`` for a new label placed just above its highest-priority parent.
-
-        When parents are chosen at creation time, the new label is placed immediately
-        above the highest-priority parent among them. When multiple parents are
-        selected, the parent with the smallest ``order`` value is used (e.g.
-        Hospital at order 20 rather than Pennsylvania at order 35). The new label
-        receives that parent's ``order`` minus one (20 → 19).
+        When parents are chosen at creation time, the new label is placed immediately above the highest-priority parent among them.
+        Hospital at order 20 rather than Pennsylvania at order 35).
 
         Args:
             profile: Owner profile used to resolve visible parent labels.
@@ -280,30 +242,62 @@ class Label(abstract.FrontendDashboardModel):
 
     @classmethod
     def get_label_and_descendants(cls, label_id: int) -> set[int]:
-        """Return label_id plus all descendant label IDs (BFS, cycle-safe).
+        """Return label_id plus all descendant label IDs (cycle-safe).
 
         Used so that filtering pins by a parent label also surfaces pins carrying
         any of its descendant labels.
+
+        One recursive query rather than a walk: labels are user-created and nest
+        freely, so a walk let whoever built the tree decide how many queries a
+        search costs - a chain N deep cost N queries however the walk was
+        batched. ``UNION`` (not ``UNION ALL``) is what dedupes a diamond and what
+        makes a cycle terminate.
+
+        ``settings.SEARCH_MAX_LABEL_EXPANSION`` is a safety valve on the size of
+        the id list this hands to the pin query, not an operating limit, and it
+        is set well above any real label tree - because truncating is not
+        direction-safe. A short set narrows an ``and``/``or`` group (fewer labels
+        match) but *widens* a ``not`` one, since there is less to exclude. It
+        logs when it trims so that never happens quietly.
+
+        Args:
+            label_id: The label to expand.
+
+        Returns:
+            The label and its descendants, up to the expansion ceiling.
         """
-        visited: set[int] = set()
-        queue: list[int] = [label_id]
-        while queue:
-            current = queue.pop(0)
-            if current in visited:
-                continue
-            visited.add(current)
-            children_ids = list(cls.objects.filter(parents__id=current).values_list("id", flat=True))
-            queue.extend(children_ids)
-        return visited
+        from django.conf import settings
+        from django.db import connection
+
+        through = cls.parents.through._meta  # noqa: SLF001 - the through model's table is not exposed any other way
+        table = connection.ops.quote_name(through.db_table)
+        child = connection.ops.quote_name(through.get_field("from_label").column)
+        parent = connection.ops.quote_name(through.get_field("to_label").column)
+        # Identifiers come from Django's own model metadata and are quoted by the
+        # backend; the two values are bound.
+        sql = (
+            "WITH RECURSIVE descendants(id) AS ("  # noqa: S608
+            # Cast, or Postgres refuses the union: the seed is an integer
+            # literal and the column it unions with is bigint.
+            " SELECT CAST(%s AS bigint)"
+            " UNION"
+            f" SELECT edge.{child} FROM {table} edge JOIN descendants ON edge.{parent} = descendants.id"
+            ") SELECT id FROM descendants LIMIT %s"
+        )
+        ceiling = settings.SEARCH_MAX_LABEL_EXPANSION
+        with connection.cursor() as cursor:
+            # One past the ceiling, so "it was trimmed" comes from the same read.
+            cursor.execute(sql, [label_id, ceiling + 1])
+            found = {row[0] for row in cursor.fetchall()}
+        if len(found) > ceiling:
+            logger.warning("Label %s expands to more than %d descendants; a `not` filter on it will under-exclude.", label_id, ceiling)
+            return set(sorted(found)[:ceiling])
+        return found
 
     @property
     def is_global(self) -> bool:
         """Whether this is a site-wide label rather than one a user owns.
-
-        Reads ``profile_id`` rather than ``profile`` so templates can ask this
-        per row without fetching the owning profile: ``{% if not label.profile %}``
-        issued one query per label per occurrence, and the Organize page asks it
-        several times for each card.
+        Reads ``profile_id`` rather than ``profile`` so templates can ask this per row without fetching the owning profile: ``{% if not label.profile %}`` issued one query per label per occurrence, and the Organize page asks it several times for each card.
 
         Returns:
             True when no profile owns this label.
@@ -321,20 +315,23 @@ class Label(abstract.FrontendDashboardModel):
         get_latest_by = "updated"
         permissions = [("edit_global_label", "Can edit global labels")]
         indexes = [
+            # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
+            Index(fields=["custom_icon_upload"], name="idxdb_label_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
+            # Matches `name__icontains`'s compiled form exactly (`UPPER(name::text) LIKE ...`) - a plain
+            # index on `name` is not usable for that predicate at all. Measured against P123: this does not
+            # change the scan strategy (Postgres still seq-scans the table at this size either way), but the
+            # expression index gives ANALYZE a real cardinality estimate for the predicate instead of a fixed
+            # default, which changes how the enclosing query plans and removes the growth for a matching term.
+            # See docs/archive/PROBLEMS-ARCHIVE.md (formerly P123) and this migration's test for the measured
+            # before/after.
+            GinIndex(OpClass(Upper(Cast("name", output_field=TextField())), name="gin_trgm_ops"), name="idxdb_label_name_upper_trgm"),
         ]
         constraints = [
-            # Case-insensitive, matching how PinAlias/WikiAlias already model the
-            # same "name identifies a row within its parent" relationship, and
-            # matching what callers assume: several sites treat
-            # (profile, name, kind) as identifying, and media_labels.py had to
-            # pre-filter with ``name__iexact`` because ``get_or_create(name=...)``
-            # alone is case-sensitive while the intended identity is not.
-            #
-            # ``nulls_distinct=False`` so global labels (profile IS NULL) are
-            # constrained against each other too - Postgres treats NULLs as
-            # distinct by default, which would leave duplicate globals possible.
-            # Requires Postgres 15+; this project runs 17.
+            # Case-insensitive, matching how PinAlias/WikiAlias already model the same "name
+            # identifies a row within its parent" relationship, and matching what callers assume:
+            # several sites treat (profile, name, kind) as identifying, and media_labels.py had to
+            # pre-filter with ``name__iexact`` because ``get_or_create(name=...)`` alone is
             UniqueConstraint(
                 Lower("name"),
                 "profile",

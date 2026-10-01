@@ -11,10 +11,10 @@ from urbanlens.dashboard.services.admin.infrastructure_stats import (
     _format_duration,
     _postgres_version_label,
     collect_celery_stats,
+    collect_dragonfly_stats,
     collect_infrastructure_service_stats,
     collect_nginx_stats,
     collect_postgres_stats,
-    collect_valkey_stats,
 )
 
 
@@ -49,12 +49,12 @@ class CollectPostgresStatsTests(TestCase):
         self.assertIn("Connections", labels)
 
 
-class CollectValkeyStatsTests(SimpleTestCase):
-    """collect_valkey_stats handles configured and disabled cache backends."""
+class CollectDragonflyStatsTests(SimpleTestCase):
+    """collect_dragonfly_stats handles configured and disabled cache backends."""
 
     def test_returns_disabled_when_url_missing(self) -> None:
         with mock.patch.dict("os.environ", {}, clear=True):
-            stat = collect_valkey_stats()
+            stat = collect_dragonfly_stats()
         self.assertEqual(stat.status, "disabled")
         self.assertEqual(stat.status_label, "Not configured")
 
@@ -63,17 +63,19 @@ class CollectValkeyStatsTests(SimpleTestCase):
         fake_client.ping.return_value = True
         fake_client.info.return_value = {
             "uptime_in_seconds": 3600,
-            "redis_version": "7.2.5",
+            "dragonfly_version": "df-v1.40.2",
             "used_memory_human": "1.00M",
             "connected_clients": 2,
         }
         fake_client.dbsize.return_value = 5
 
         with (
-            mock.patch.dict("os.environ", {"UL_VALKEY_URL": "redis://example:6379/0"}),
-            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.redis.Redis.from_url", return_value=fake_client),
+            mock.patch.dict("os.environ", {"UL_DRAGONFLY_URL": "redis://example:6379/0"}),
+            mock.patch(
+                "urbanlens.dashboard.services.admin.infrastructure_stats.redis.Redis.from_url", return_value=fake_client
+            ),
         ):
-            stat = collect_valkey_stats()
+            stat = collect_dragonfly_stats()
 
         self.assertEqual(stat.status, "healthy")
         self.assertEqual(stat.metrics[-1].value, "5")
@@ -84,7 +86,11 @@ class CollectCeleryStatsTests(SimpleTestCase):
 
     def test_returns_disabled_when_broker_missing(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL", "", create=True),
+            mock.patch(
+                "urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL",
+                "",
+                create=True,
+            ),
             mock.patch("django.core.cache.cache.get", return_value=None),
             mock.patch("django.core.cache.cache.set"),
         ):
@@ -107,7 +113,11 @@ class CollectCeleryStatsTests(SimpleTestCase):
         fake_app.control.inspect.return_value = fake_inspect
 
         with (
-            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL", "redis://example:6379/0", create=True),
+            mock.patch(
+                "urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL",
+                "redis://example:6379/0",
+                create=True,
+            ),
             mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.current_app", fake_app),
             mock.patch("django.core.cache.cache.get", return_value=None),
             mock.patch("django.core.cache.cache.set"),
@@ -142,32 +152,34 @@ _COLLECTOR = "urbanlens.dashboard.services.admin.infrastructure_stats.collect_{}
 
 
 def _stub(key: str) -> InfrastructureServiceStat:
-    return InfrastructureServiceStat(key=key, name=key, icon="x", status="healthy", status_label="Connected", metrics=())
+    return InfrastructureServiceStat(
+        key=key, name=key, icon="x", status="healthy", status_label="Connected", metrics=()
+    )
 
 
 class CollectInfrastructureServiceStatsTests(SimpleTestCase):
     """collect_infrastructure_service_stats returns all expected services.
 
-    The collectors are stubbed rather than run: this function's job is aggregation,
-    and each collector has its own tests above. Running them for real would make
-    these assertions depend on live postgres/valkey/celery/nginx.
-    """
+    The collectors are stubbed rather than run: this function's job is aggregation, and each collector has its
+    own tests above."""
 
     def _patched(self, **overrides):
         """Patch all four collectors, overriding individual ones by key."""
         return [
-            mock.patch(_COLLECTOR.format(key), side_effect=overrides[key]) if key in overrides else mock.patch(_COLLECTOR.format(key), return_value=_stub(key))
-            for key in ("postgres", "valkey", "celery", "nginx")
+            mock.patch(_COLLECTOR.format(key), side_effect=overrides[key])
+            if key in overrides
+            else mock.patch(_COLLECTOR.format(key), return_value=_stub(key))
+            for key in ("postgres", "dragonfly", "celery", "nginx")
         ]
 
-    def test_returns_postgres_valkey_celery_and_nginx(self) -> None:
+    def test_returns_postgres_dragonfly_celery_and_nginx(self) -> None:
         with contextlib.ExitStack() as stack:
             for patcher in self._patched():
                 stack.enter_context(patcher)
             stats = collect_infrastructure_service_stats()
 
         self.assertEqual(len(stats), 4)
-        self.assertEqual([stat.key for stat in stats], ["postgres", "valkey", "celery", "nginx"])
+        self.assertEqual([stat.key for stat in stats], ["postgres", "dragonfly", "celery", "nginx"])
         for stat in stats:
             self.assertIsInstance(stat, InfrastructureServiceStat)
 
@@ -175,18 +187,18 @@ class CollectInfrastructureServiceStatsTests(SimpleTestCase):
         """This page exists to report which service is unhealthy - a service being
         unhealthy in an unanticipated way must not take the whole page down."""
         with contextlib.ExitStack() as stack:
-            for patcher in self._patched(valkey=OSError("name resolution failed")):
+            for patcher in self._patched(dragonfly=OSError("name resolution failed")):
                 stack.enter_context(patcher)
             stats = collect_infrastructure_service_stats()
 
-        self.assertEqual([stat.key for stat in stats], ["postgres", "valkey", "celery", "nginx"])
+        self.assertEqual([stat.key for stat in stats], ["postgres", "dragonfly", "celery", "nginx"])
         by_key = {stat.key: stat for stat in stats}
-        self.assertEqual(by_key["valkey"].status, "unhealthy")
-        self.assertEqual(by_key["valkey"].status_label, "Unavailable")
+        self.assertEqual(by_key["dragonfly"].status, "unhealthy")
+        self.assertEqual(by_key["dragonfly"].status_label, "Unavailable")
         self.assertEqual(by_key["postgres"].status, "healthy", "a healthy service must still be reported")
 
     def test_every_collector_failing_still_returns_four_entries(self) -> None:
-        failures = dict.fromkeys(("postgres", "valkey", "celery", "nginx"), RuntimeError("boom"))
+        failures = dict.fromkeys(("postgres", "dragonfly", "celery", "nginx"), RuntimeError("boom"))
         with contextlib.ExitStack() as stack:
             for patcher in self._patched(**failures):
                 stack.enter_context(patcher)

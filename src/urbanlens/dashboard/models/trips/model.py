@@ -1,27 +1,28 @@
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from django.core.validators import MaxLengthValidator
 from django.db.models import (
     CASCADE,
     SET_NULL,
+    CheckConstraint,
     FloatField,
     ForeignKey,
     ImageField,
     Index,
     IntegerField,
-    Manager as DjangoManager,
     ManyToManyField,
     Max,
-    UUIDField,
+    Q,
 )
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, SlugField, TextField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.comments.location_mention import LocationMentioningModel
 from urbanlens.dashboard.models.trips.queryset import TripCommentManager, TripManager, TripMembershipManager
 from urbanlens.dashboard.services.core.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
@@ -37,6 +38,30 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: The span an activity may be scheduled in; half-open. Wide enough for any real trip, narrow enough that a
+#: typo'd year is refused rather than stored and then planned, synced and forecast around.
+ACTIVITY_SCHEDULE_EARLIEST = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
+ACTIVITY_SCHEDULE_LATEST = datetime.datetime(2200, 1, 1, tzinfo=datetime.UTC)
+
+
+def within_activity_schedule(value: datetime.datetime | None) -> bool:
+    """Whether an activity may be scheduled at *value*; None (unscheduled) always may.
+
+    Args:
+        value: The proposed time. A naive value is read as UTC.
+
+    Returns:
+        True when it is inside the schedulable span.
+    """
+    if value is None:
+        return True
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=datetime.UTC)
+    return ACTIVITY_SCHEDULE_EARLIEST <= aware < ACTIVITY_SCHEDULE_LATEST
+
+
+def _schedule_bound(field: str) -> Q:
+    return Q(**{f"{field}__isnull": True}) | Q(**{f"{field}__gte": ACTIVITY_SCHEDULE_EARLIEST, f"{field}__lt": ACTIVITY_SCHEDULE_LATEST})
+
 
 #: Distinguishes "not yet computed" from a genuine ``None`` result, so a trip with no
 #: dates at all is not re-queried on every read.
@@ -44,23 +69,13 @@ logger = logging.getLogger(__name__)
 
 class Trip(abstract.PublicDashboardModel):
     """A planned trip shared among one or more users.
-
-    The creator is the user who created the trip. Members includes the creator
-    plus any additional users added. Only members can view and edit the trip.
-
-    URLs identify a trip by ``slug`` rather than ``uuid`` or a sequential id -
-    trips are private, and a predictable/sequential identifier (e.g.
-    "detroit-5") would hint at how many other trips exist. The slug is derived
-    from the trip name with a random (not sequential) numeric suffix on
-    collision - see ``PublicDashboardModel._generate_slug``.
+    The creator is the user who created the trip.
+    Only members can view and edit the trip.
     """
 
-    # Global uniqueness (unlike Pin's per-profile slug) since a trip has no
-    # natural per-user namespace - it's shared among all its members.
-    #: Memoized/annotated effective dates. Declared (not assigned) so they stay
-    #: off the model's field list while still giving the properties below a real
-    #: type to return; populated either by ``TripQuerySet.for_list_page``'s
-    #: annotation or by the first read.
+    # Global uniqueness (unlike Pin's per-profile slug) since a trip has no natural per-user
+    # namespace - it's shared among all its members.
+    # Memoized/annotated effective dates.
     _eff_start: date | None
     _eff_end: date | None
 
@@ -123,15 +138,13 @@ class Trip(abstract.PublicDashboardModel):
 
     if TYPE_CHECKING:
         creator_id: int | None
-        activities: DjangoManager[TripActivity]
         # Set by controllers.trip._annotate_viewer_membership on trips list
         # page results - not a real field/annotation, just a per-request
         # shortcut to the viewing profile's own membership row (or None).
         viewer_membership: TripMembership | None
-        # Set by external_api.views._trip_detail_payload, in the same
-        # per-request-decoration spirit as viewer_membership above: the trip
-        # detail response bundles what this particular caller may do, their
-        # calendar-mirroring state, and the roster, none of which are fields.
+        # Set by external_api.views._trip_detail_payload, in the same per-request-decoration spirit
+        # as viewer_membership above: the trip detail response bundles what this particular caller
+        # may do, their calendar-mirroring state, and the roster, none of which are fields.
         viewer: dict[str, Any]
         calendar_sync: dict[str, Any]
         members: list[TripMembership]
@@ -144,18 +157,11 @@ class Trip(abstract.PublicDashboardModel):
     @property
     def effective_start_date(self) -> date | None:
         """``start_date`` if set, else the earliest scheduled activity's date.
-
-        Resolved from a ``_eff_start`` annotation when the queryset supplied one (see
-        ``TripQuerySet.for_list_page``), and otherwise computed once and remembered on
-        the instance. Both matter because this is not a cheap attribute: it falls back
-        to querying the trip's activities, and ``timeline_status`` and ``duration_days``
-        each read it *and* ``effective_end_date``, so one serialized trip used to cost
-        about five activity queries. The annotation makes a list of trips flat; the memo
-        makes a single trip cost one query however many times it is read.
+        Resolved from a ``_eff_start`` annotation when the queryset supplied one (see ``TripQuerySet.for_list_page``), and otherwise computed once and remembered on the instance.
         """
-        # try/except rather than a sentinel: None is a legitimate cached value
-        # here, so "absent" cannot be expressed as a default. The declared
-        # ``_eff_start`` attribute is what lets this return a real ``date | None``
+        # try/except rather than a sentinel: None is a legitimate cached value here, so "absent"
+        # cannot be expressed as a default.
+        # The declared ``_eff_start`` attribute is what lets this return a real ``date | None``
         # instead of the ``object`` a ``getattr(..., sentinel)`` widens to.
         try:
             return self._eff_start
@@ -350,6 +356,10 @@ class TripActivity(abstract.DashboardModel):
         indexes = [
             Index(fields=["trip", "scheduled_at"], name="idxdb_ta_trip_dt"),
         ]
+        constraints = [
+            CheckConstraint(condition=_schedule_bound("scheduled_at"), name="db_ta_scheduled_at_span"),
+            CheckConstraint(condition=_schedule_bound("scheduled_end"), name="db_ta_scheduled_end_span"),
+        ]
 
 
 class TripMembership(abstract.DashboardModel):
@@ -369,11 +379,8 @@ class TripMembership(abstract.DashboardModel):
     ]
 
     # Whether an invited profile has consented to participate in trip planning.
-    # Separate from `rsvp` (are you actually coming?) - this instead gates
-    # whether the member can contribute at all (add/edit activities, comment,
-    # vote, add members). Defaults to "joined" so every pre-existing
-    # membership, and the creator's own row, stay fully functional; invite
-    # flows (TripCreateView, TripMembersView) set "invited" explicitly.
+    # Separate from `rsvp` (are you actually coming?) - this instead gates whether the member can
+    # contribute at all (add/edit activities, comment, vote, add members).
     STATUS_INVITED = "invited"
     STATUS_JOINED = "joined"
     STATUS_CHOICES = [
@@ -420,11 +427,8 @@ class TripMembership(abstract.DashboardModel):
 
 class TripActivityRSVP(abstract.DashboardModel):
     """A member's explicit RSVP override for one trip activity.
-
-    The absence of a row means the activity inherits the member's
-    :class:`TripMembership` RSVP. Keeping only overrides makes a later change
-    to the trip RSVP flow through automatically without overwriting deliberate
-    per-activity choices.
+    The absence of a row means the activity inherits the member's :class:`TripMembership` RSVP.
+    Keeping only overrides makes a later change to the trip RSVP flow through automatically without overwriting deliberate per-activity choices.
     """
 
     rsvp = CharField(max_length=20, choices=TripMembership.RSVP_CHOICES)
@@ -472,8 +476,11 @@ class TripActivityRSVP(abstract.DashboardModel):
         indexes = []
 
 
-class TripComment(abstract.DashboardModel):
+class TripComment(LocationMentioningModel, abstract.DashboardModel):
     """A comment left on a trip by one of its members."""
+
+    #: Names this model's foreign key on CommentLocationMention.
+    mention_owner_field = "trip_comment"
 
     text = TextField(max_length=MAX_COMMENT_TEXT_LENGTH, validators=[MaxLengthValidator(MAX_COMMENT_TEXT_LENGTH)])
     image = ImageField(upload_to="comment_images/", null=True, blank=True)
@@ -499,9 +506,12 @@ class TripComment(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="comments",
     )
+    # CASCADE, matching dashboard.Comment.profile (P25): deleting an account erases the
+    # comments it authored everywhere, trips included - signals.py still tombstones any
+    # reply another member wrote before this row goes.
     author = ForeignKey(
         "dashboard.Profile",
-        on_delete=SET_NULL,
+        on_delete=CASCADE,
         null=True,
         blank=True,
         related_name="trip_comments",
@@ -513,6 +523,11 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+    # Set by this model's own pre_delete signal (see signals.py) on every reply of a comment that's
+    # about to be deleted, before `parent` is nulled out by SET_NULL below.
+    # Without this, a reply to a deleted comment silently becomes an unexplained top-level comment -
+    # mirrors dashboard.Comment.parent_deleted (UL-219), ported here.
+    parent_deleted = BooleanField(default=False)
 
     objects = TripCommentManager()
 
@@ -525,9 +540,7 @@ class TripComment(abstract.DashboardModel):
     @property
     def map_data(self) -> dict | None:
         """Client snapshot of the attached markup map, if any.
-
-        Kept as a property so templates and viewer JS that consumed the old
-        ``map_data`` JSON column keep working against the MarkupMap relation.
+        Kept as a property so templates and viewer JS that consumed the old ``map_data`` JSON column keep working against the MarkupMap relation.
 
         Returns:
             Snapshot dict or None when no map is attached.

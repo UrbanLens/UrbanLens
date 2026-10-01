@@ -1,15 +1,5 @@
 /**
  * Behavioural tests for the shared confirm dialog, against a real document.
- *
- * These are the first tests in this repo that exercise DOM behaviour rather than
- * pure functions, which is what made moving this code out of ``base.html`` safe:
- * before the preload in ``testing/dom-setup.ts`` there was no way to assert that
- * clicking Cancel resolves false, only that the file typechecked.
- *
- * The lazy-binding rule is the one worth guarding. This module loads from the
- * ``<head>`` while ``#confirm-dialog`` is markup further down the body, so an
- * implementation that resolved elements at import time would capture nulls and
- * silently never open - and would still typecheck.
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
@@ -30,11 +20,8 @@ function click(id: string): void {
     document.getElementById(id)?.dispatchEvent(new Event("click"));
 }
 
-/** Wait until the dialog is showing ``title``, then click ``buttonId``.
- *
- * Counting microtasks by hand to line up with an await chain is brittle - it
- * silently becomes a timeout when the implementation gains or loses an await.
- * Waiting on the state the click depends on does not.
+/**
+ * Wait until the dialog is showing ``title``, then click ``buttonId``.
  */
 async function clickWhenTitled(title: string, buttonId: string): Promise<void> {
     for (let attempt = 0; attempt < 200; attempt += 1) {
@@ -47,6 +34,13 @@ async function clickWhenTitled(title: string, buttonId: string): Promise<void> {
     throw new Error(`dialog never showed "${title}"`);
 }
 
+const realFetch = globalThis.fetch;
+const realGlobals = {
+    confirmDialog: window.confirmDialog,
+    deletePinCascade: window.deletePinCascade,
+    urbanlensConfirmExternalLink: window.urbanlensConfirmExternalLink,
+};
+
 beforeEach(() => {
     document.body.innerHTML = DIALOG_MARKUP;
     resetConfirmDialogForTests();
@@ -55,6 +49,8 @@ beforeEach(() => {
 
 afterEach(() => {
     document.body.innerHTML = "";
+    globalThis.fetch = realFetch;
+    Object.assign(window, realGlobals);
 });
 
 describe("confirmDialog", () => {
@@ -68,6 +64,17 @@ describe("confirmDialog", () => {
         const pending = confirmDialog({ message: "Delete it?" });
         click("confirm-dialog-cancel");
         expect(await pending).toBe(false);
+    });
+
+    test("names the cancel button as asked, and goes back to Cancel after", async () => {
+        const first = confirmDialog({ message: "Cancel this check-in?", cancelLabel: "Keep it" });
+        expect(document.getElementById("confirm-dialog-cancel")?.textContent).toBe("Keep it");
+        click("confirm-dialog-cancel");
+        await first;
+        const second = confirmDialog({ message: "Delete it?" });
+        expect(document.getElementById("confirm-dialog-cancel")?.textContent).toBe("Cancel");
+        click("confirm-dialog-cancel");
+        await second;
     });
 
     test("resolves 'alt' when the alternative is offered and chosen", async () => {
@@ -98,10 +105,7 @@ describe("confirmDialog", () => {
     });
 
     test("a second call while one is open settles the first as cancelled instead of leaving it unresolved", async () => {
-        // Without this, the second call's resolveCurrent overwrote the
-        // first's - clicking a button could only ever resolve one of them,
-        // leaving the other's promise pending forever - and the shared
-        // <dialog> being asked to showModal() while already open throws.
+        // Without this, the second call's resolveCurrent overwrote the first's.
         const first = confirmDialog({ message: "First" });
         const second = confirmDialog({ message: "Second" });
         click("confirm-dialog-ok");

@@ -1,11 +1,4 @@
-"""Integration tests for the Facts evidence write path and its call-site hooks.
-
-Every test patches ``tasks.recompute_fact_confidence.delay`` so evidence
-creation never touches a real Celery broker - confidence recomputation
-itself is exercised directly via ``services.facts.confidence.recompute``
-(see ``RecomputeIntegrationTests``), the same "call the task function
-directly instead of via .delay()" pattern used elsewhere in this test suite.
-"""
+"""Integration tests for the Facts evidence write path and its call-site hooks."""
 
 from __future__ import annotations
 
@@ -15,7 +8,12 @@ from django.contrib.gis.geos import Point
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.consensus.model import ConsensusAnswer, ConsensusFieldKind, ConsensusProfile, ConsensusRound, ConsensusSession
+from urbanlens.dashboard.models.consensus.model import (
+    ConsensusAnswer,
+    ConsensusFieldKind,
+    ConsensusRound,
+    ConsensusSession,
+)
 from urbanlens.dashboard.models.facts.model import Fact, FactEvidence, FactSourceKind, FactStatus, FactSubjectType
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
@@ -51,33 +49,59 @@ class RecordEvidenceTests(TestCase):
         # record_evidence enqueues through safely_enqueue_task (broker-outage
         # tolerant) rather than calling .delay directly - patch the seam it
         # actually uses.
-        self.enqueue_mock = self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
+        self.enqueue_mock = self.enterContext(
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
+        )
         self.wiki = baker.make(Wiki, location=baker.make(Location))
 
     def test_creates_the_fact_and_evidence_on_first_call(self) -> None:
-        result = evidence.record_evidence(key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki)
+        result = evidence.record_evidence(
+            key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki
+        )
         self.assertIsNotNone(result)
         self.assertEqual(result.get_value(), "Old Mill")
         fact = Fact.objects.get(wiki=self.wiki, key="wiki_name")
         self.assertEqual(FactEvidence.objects.filter(fact=fact).count(), 1)
 
     def test_reuses_the_existing_fact_on_later_evidence(self) -> None:
-        evidence.record_evidence(key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki)
-        evidence.record_evidence(key="wiki_name", value="Old Mill Sanatorium", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki)
+        evidence.record_evidence(
+            key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki
+        )
+        evidence.record_evidence(
+            key="wiki_name", value="Old Mill Sanatorium", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki
+        )
         self.assertEqual(Fact.objects.filter(wiki=self.wiki, key="wiki_name").count(), 1)
         self.assertEqual(FactEvidence.objects.filter(fact__wiki=self.wiki, fact__key="wiki_name").count(), 2)
 
     def test_an_unregistered_key_creates_nothing(self) -> None:
-        result = evidence.record_evidence(key="not_a_real_key", value="x", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki)
+        result = evidence.record_evidence(
+            key="not_a_real_key", value="x", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki
+        )
         self.assertIsNone(result)
         self.assertEqual(Fact.objects.count(), 0)
 
-    def test_queues_a_confidence_recompute(self) -> None:
+    def test_queues_a_confidence_recompute_once_the_evidence_commits(self) -> None:
         from urbanlens.dashboard.tasks import recompute_fact_confidence
 
-        evidence.record_evidence(key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki)
+        with self.captureOnCommitCallbacks(execute=True):
+            evidence.record_evidence(
+                key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki
+            )
+            self.enqueue_mock.assert_not_called()
         fact = Fact.objects.get(wiki=self.wiki, key="wiki_name")
         self.enqueue_mock.assert_called_once_with(recompute_fact_confidence, fact.pk)
+
+    def test_new_evidence_flags_the_fact_until_a_recompute_reads_it(self) -> None:
+        evidence.record_evidence(
+            key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki
+        )
+        fact = Fact.objects.get(wiki=self.wiki, key="wiki_name")
+        self.assertTrue(fact.needs_recompute)
+
+        confidence.recompute(fact.pk)
+
+        fact.refresh_from_db()
+        self.assertFalse(fact.needs_recompute)
 
 
 class RecordPhotoCoordinateEvidenceTests(TestCase):
@@ -109,7 +133,9 @@ class RecordConsensusAnswerEvidenceTests(TestCase):
         self.session = ConsensusSession.objects.create(host_profile=self.profile)
 
     def _make_round(self, field_kind: str, **kwargs) -> ConsensusRound:
-        return ConsensusRound.objects.create(session=self.session, sequence_index=0, wiki=self.wiki, field_kind=field_kind, **kwargs)
+        return ConsensusRound.objects.create(
+            session=self.session, sequence_index=0, wiki=self.wiki, field_kind=field_kind, **kwargs
+        )
 
     def test_logs_a_text_answer_trust_weighted_by_the_submitters_consensus_profile(self) -> None:
         round_ = self._make_round(ConsensusFieldKind.WIKI_NAME)
@@ -138,7 +164,9 @@ class RecordConsensusAnswerEvidenceTests(TestCase):
 
     def test_photo_coordinates_without_a_target_image_is_a_no_op(self) -> None:
         round_ = self._make_round(ConsensusFieldKind.PHOTO_COORDINATES)
-        answer = ConsensusAnswer.objects.create(round=round_, profile=self.profile, guess_point=Point(-73.76, 42.65, srid=4326))
+        answer = ConsensusAnswer.objects.create(
+            round=round_, profile=self.profile, guess_point=Point(-73.76, 42.65, srid=4326)
+        )
 
         result = evidence.record_consensus_answer_evidence(round_, answer)
 
@@ -147,7 +175,9 @@ class RecordConsensusAnswerEvidenceTests(TestCase):
     def test_photo_coordinates_with_a_target_image_logs_against_the_image(self) -> None:
         image = baker.make(Image, wiki=self.wiki)
         round_ = self._make_round(ConsensusFieldKind.PHOTO_COORDINATES, target_image=image)
-        answer = ConsensusAnswer.objects.create(round=round_, profile=self.profile, guess_point=Point(-73.76, 42.65, srid=4326))
+        answer = ConsensusAnswer.objects.create(
+            round=round_, profile=self.profile, guess_point=Point(-73.76, 42.65, srid=4326)
+        )
 
         result = evidence.record_consensus_answer_evidence(round_, answer)
 
@@ -165,7 +195,9 @@ class RecordWikiEditEvidenceTests(TestCase):
         self.wiki = baker.make(Wiki, location=baker.make(Location))
 
     def test_a_manual_edit_logs_evidence_for_mapped_fields(self) -> None:
-        WikiEdit.objects.create(wiki=self.wiki, editor=self.profile, changes={"name": {"from": "Old", "to": "New Name"}})
+        WikiEdit.objects.create(
+            wiki=self.wiki, editor=self.profile, changes={"name": {"from": "Old", "to": "New Name"}}
+        )
 
         fact = Fact.objects.get(wiki=self.wiki, key="wiki_name")
         row = FactEvidence.objects.get(fact=fact)
@@ -174,15 +206,24 @@ class RecordWikiEditEvidenceTests(TestCase):
         self.assertEqual(row.submitter_id, self.profile.pk)
 
     def test_unmapped_fields_are_skipped(self) -> None:
-        WikiEdit.objects.create(wiki=self.wiki, editor=self.profile, changes={"bounding_box": {"from": None, "to": "POLYGON(...)"}})
+        WikiEdit.objects.create(
+            wiki=self.wiki, editor=self.profile, changes={"bounding_box": {"from": None, "to": "POLYGON(...)"}}
+        )
         self.assertEqual(Fact.objects.count(), 0)
 
     def test_consensus_sourced_edits_are_not_double_logged(self) -> None:
         """services.consensus.session._finish_round already logs this answer directly - the signal must skip it."""
         session = ConsensusSession.objects.create(host_profile=self.profile)
-        round_ = ConsensusRound.objects.create(session=session, sequence_index=0, wiki=self.wiki, field_kind=ConsensusFieldKind.WIKI_NAME)
+        round_ = ConsensusRound.objects.create(
+            session=session, sequence_index=0, wiki=self.wiki, field_kind=ConsensusFieldKind.WIKI_NAME
+        )
 
-        WikiEdit.objects.create(wiki=self.wiki, editor=self.profile, changes={"name": {"from": "Old", "to": "New Name"}}, consensus_round=round_)
+        WikiEdit.objects.create(
+            wiki=self.wiki,
+            editor=self.profile,
+            changes={"name": {"from": "Old", "to": "New Name"}},
+            consensus_round=round_,
+        )
 
         self.assertEqual(Fact.objects.count(), 0)
 
@@ -196,9 +237,13 @@ class RecomputeIntegrationTests(TestCase):
         self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
         self.wiki = baker.make(Wiki, location=baker.make(Location))
 
-    def _log(self, value: str, *, count: int, source_kind: str = FactSourceKind.ADMIN, source_name: str = "admin") -> Fact:
+    def _log(
+        self, value: str, *, count: int, source_kind: str = FactSourceKind.ADMIN, source_name: str = "admin"
+    ) -> Fact:
         for _ in range(count):
-            evidence.record_evidence(key="wiki_indoor_outdoor", value=value, source_kind=source_kind, source_name=source_name, wiki=self.wiki)
+            evidence.record_evidence(
+                key="wiki_indoor_outdoor", value=value, source_kind=source_kind, source_name=source_name, wiki=self.wiki
+            )
         return Fact.objects.get(wiki=self.wiki, key="wiki_indoor_outdoor")
 
     def test_below_minimum_evidence_leaves_the_fact_unresolved(self) -> None:
@@ -250,3 +295,72 @@ class RecomputeIntegrationTests(TestCase):
 
     def test_a_missing_fact_is_a_silent_no_op(self) -> None:
         confidence.recompute(999_999)
+
+    def test_the_recompute_holds_the_facts_row_lock(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        fact = self._log("inside", count=3)
+
+        with CaptureQueriesContext(connection) as queries:
+            confidence.recompute(fact.pk)
+
+        fact_reads = [query["sql"] for query in queries if 'FROM "dashboard_facts"' in query["sql"]]
+        self.assertTrue(fact_reads)
+        self.assertIn("FOR UPDATE", fact_reads[0])
+
+
+class StaleFactConfidenceSweepTests(TestCase):
+    def setUp(self) -> None:
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
+        self.fact = Fact.objects.create(key="wiki_name", data_type="text", wiki=self.wiki)
+
+    def _flag(self, *, age) -> None:
+        from django.utils import timezone
+
+        Fact.objects.filter(pk=self.fact.pk).update(needs_recompute=True, updated=timezone.now() - age)
+
+    def test_a_fact_whose_recompute_never_ran_is_queued(self) -> None:
+        from urbanlens.dashboard.tasks import (
+            STALE_FACT_CONFIDENCE_AGE,
+            recompute_fact_confidence,
+            sweep_stale_fact_confidence,
+        )
+
+        self._flag(age=STALE_FACT_CONFIDENCE_AGE * 2)
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            self.assertEqual(sweep_stale_fact_confidence(), 1)
+
+        enqueue.assert_called_once_with(recompute_fact_confidence, self.fact.pk, durable=False)
+
+    def test_a_freshly_flagged_fact_is_left_to_its_own_enqueue(self) -> None:
+        from datetime import timedelta
+
+        from urbanlens.dashboard.tasks import sweep_stale_fact_confidence
+
+        self._flag(age=timedelta(seconds=5))
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            self.assertEqual(sweep_stale_fact_confidence(), 0)
+
+        enqueue.assert_not_called()
+
+    def test_a_recomputed_fact_is_not_queued(self) -> None:
+        from urbanlens.dashboard.tasks import STALE_FACT_CONFIDENCE_AGE, sweep_stale_fact_confidence
+
+        self._flag(age=STALE_FACT_CONFIDENCE_AGE * 2)
+        confidence.recompute(self.fact.pk)
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            self.assertEqual(sweep_stale_fact_confidence(), 0)
+
+        enqueue.assert_not_called()
+
+    def test_the_sweep_is_on_the_beat_schedule(self) -> None:
+        from django.conf import settings
+
+        from urbanlens.dashboard.tasks import sweep_stale_fact_confidence
+
+        names = {entry["task"] for entry in settings.CELERY_BEAT_SCHEDULE.values()}
+        self.assertIn(sweep_stale_fact_confidence.name, names)

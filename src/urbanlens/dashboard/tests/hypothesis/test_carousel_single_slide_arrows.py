@@ -1,11 +1,4 @@
-"""Street View / Satellite Imagery carousels must not show prev/next arrows for a single slide.
-
-Rendered directly against the template with a controlled `slides` list rather
-than through the real controller endpoints, since those endpoints call out to
-several live external imagery APIs (Google, Esri, USGS, Mapillary, ...) to
-build that list - the arrow-visibility logic itself only depends on the
-slide count, which this isolates cleanly.
-"""
+"""Street View / Satellite Imagery carousels must not show prev/next arrows for a single slide."""
 
 from __future__ import annotations
 
@@ -15,39 +8,53 @@ from django.template.loader import render_to_string
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 
-_STREET_VIEW_SLIDE = {"source": "google", "date": "2024", "heading": None, "latitude": 41.0, "longitude": -73.0, "img_src": "https://example.com/a.jpg"}
+_STREET_VIEW_SLIDE = {
+    "source": "google",
+    "date": "2024",
+    "heading": None,
+    "latitude": 41.0,
+    "longitude": -73.0,
+    "img_src": "https://example.com/a.jpg",
+}
 _SATELLITE_SLIDE = {"source": "esri", "date": "2024", "detail": "High-res", "img_src": "https://example.com/a.jpg"}
 _FAKE_PIN = types.SimpleNamespace(effective_latitude=None, effective_longitude=None)
 
 
 class StreetViewCarouselArrowTests(SimpleTestCase):
     def test_arrows_hidden_with_a_single_slide(self) -> None:
-        html = render_to_string("dashboard/pages/location/street_view.html", {"slides": [_STREET_VIEW_SLIDE], "debug_entries": []})
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html", {"slides": [_STREET_VIEW_SLIDE], "debug_entries": []}
+        )
         self.assertNotIn("sv-prev", html)
         self.assertNotIn("sv-next", html)
 
     def test_arrows_shown_with_multiple_slides(self) -> None:
-        html = render_to_string("dashboard/pages/location/street_view.html", {"slides": [_STREET_VIEW_SLIDE, dict(_STREET_VIEW_SLIDE, source="mapillary")], "debug_entries": []})
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [_STREET_VIEW_SLIDE, dict(_STREET_VIEW_SLIDE, source="mapillary")], "debug_entries": []},
+        )
         self.assertIn("sv-prev", html)
         self.assertIn("sv-next", html)
 
 
 class StreetViewInteractiveEmbedTests(SimpleTestCase):
-    """The interactive Google Street View embed must only render when the FIRST
-    slide is actually a Google-sourced slide - it used to trigger for any
-    provider's coordinates just because an api key was configured, which meant
-    embedding Google's own street-view iframe over e.g. Mapillary-only
-    coordinates, guaranteed to fail (Google has never verified that location)."""
+    """Mapillary-only coordinates, guaranteed to fail (Google has never verified that location)."""
 
     def test_embed_shown_when_first_slide_is_google(self) -> None:
         slide = dict(_STREET_VIEW_SLIDE, source="Google Street View")
-        html = render_to_string("dashboard/pages/location/street_view.html", {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN})
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN},
+        )
         self.assertIn('class="sv-embed"', html)
         self.assertIn("sv-embed-fallback-btn", html)
 
     def test_embed_not_shown_when_first_slide_is_a_different_provider(self) -> None:
         slide = dict(_STREET_VIEW_SLIDE, source="mapillary")
-        html = render_to_string("dashboard/pages/location/street_view.html", {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN})
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN},
+        )
         self.assertNotIn('class="sv-embed"', html)
 
     def test_embed_not_shown_without_an_api_key(self) -> None:
@@ -57,18 +64,95 @@ class StreetViewInteractiveEmbedTests(SimpleTestCase):
 
     def test_static_fallback_image_present_but_hidden_alongside_the_embed(self) -> None:
         slide = dict(_STREET_VIEW_SLIDE, source="Google Street View")
-        html = render_to_string("dashboard/pages/location/street_view.html", {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN})
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN},
+        )
         self.assertIn('class="sv-img sv-img--fallback"', html)
         self.assertRegex(html, r'class="sv-img sv-img--fallback"\s+hidden\s+alt="Google Street View')
+
+    def test_embed_not_shown_when_google_slide_exists_but_is_not_first(self) -> None:
+        """The bug this class guards against: only `forloop.first` used to be missing from the check, so a Google slide anywhere in the list (not just first) would still trigger the embed."""
+        first_slide = dict(_STREET_VIEW_SLIDE, source="mapillary")
+        google_slide = dict(_STREET_VIEW_SLIDE, source="Google Street View")
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {
+                "slides": [first_slide, google_slide],
+                "debug_entries": [],
+                "google_maps_api_key": "test-key",
+                "pin": _FAKE_PIN,
+            },
+        )
+        self.assertNotIn('class="sv-embed"', html)
+        self.assertNotIn("sv-embed-fallback-btn", html)
+
+    def test_embed_not_shown_without_any_resolvable_coordinates(self) -> None:
+        slide = dict(_STREET_VIEW_SLIDE, source="Google Street View", latitude=None, longitude=None)
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN},
+        )
+        self.assertNotIn('class="sv-embed"', html)
+        self.assertNotIn("sv-embed-fallback-btn", html)
+        self.assertIn('class="sv-img"', html)
+
+    def test_embed_uses_pin_coordinates_when_slide_lacks_its_own(self) -> None:
+        slide = dict(_STREET_VIEW_SLIDE, source="Google Street View", latitude=None, longitude=None)
+        pin = types.SimpleNamespace(effective_latitude=40.5, effective_longitude=-74.5)
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": pin},
+        )
+        self.assertIn('class="sv-embed"', html)
+        self.assertIn("location=40.5,-74.5", html)
 
 
 class SatelliteViewCarouselArrowTests(SimpleTestCase):
     def test_arrows_hidden_with_a_single_slide(self) -> None:
-        html = render_to_string("dashboard/pages/location/satellite_view.html", {"slides": [_SATELLITE_SLIDE], "debug_entries": []})
+        html = render_to_string(
+            "dashboard/pages/location/satellite_view.html", {"slides": [_SATELLITE_SLIDE], "debug_entries": []}
+        )
         self.assertNotIn("sat-prev", html)
         self.assertNotIn("sat-next", html)
 
     def test_arrows_shown_with_multiple_slides(self) -> None:
-        html = render_to_string("dashboard/pages/location/satellite_view.html", {"slides": [_SATELLITE_SLIDE, dict(_SATELLITE_SLIDE, source="usgs")], "debug_entries": []})
+        html = render_to_string(
+            "dashboard/pages/location/satellite_view.html",
+            {"slides": [_SATELLITE_SLIDE, dict(_SATELLITE_SLIDE, source="usgs")], "debug_entries": []},
+        )
         self.assertIn("sat-prev", html)
         self.assertIn("sat-next", html)
+
+
+class NoImageryTests(SimpleTestCase):
+    def _render(self, template: str, **context: object) -> str:
+        return render_to_string(f"dashboard/pages/location/{template}", {"slides": [], "debug_entries": [], **context})
+
+    def test_street_view_without_slides_shows_the_callers_error(self) -> None:
+        html = self._render("street_view.html", error="Street view is rate-limited right now.")
+
+        self.assertIn("view-unavailable", html)
+        self.assertIn("Street view is rate-limited right now.", html)
+        self.assertNotIn("sv-slide", html)
+        self.assertNotIn("sv-prev", html)
+
+    def test_street_view_without_slides_or_error_says_it_is_unavailable(self) -> None:
+        html = self._render("street_view.html")
+
+        self.assertIn("view-unavailable", html)
+        self.assertIn("Street view unavailable.", html)
+
+    def test_satellite_view_without_slides_shows_the_callers_error(self) -> None:
+        html = self._render("satellite_view.html", error="Imagery providers did not respond.")
+
+        self.assertIn("view-unavailable", html)
+        self.assertIn("Imagery providers did not respond.", html)
+        self.assertNotIn("sat-slide", html)
+        self.assertNotIn("sat-prev", html)
+
+    def test_satellite_view_without_slides_or_error_says_there_is_no_imagery(self) -> None:
+        html = self._render("satellite_view.html")
+
+        self.assertIn("view-unavailable", html)
+        self.assertIn("No satellite imagery available.", html)

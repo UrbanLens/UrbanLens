@@ -1,17 +1,4 @@
-"""Tests for the passkey-PRF unlock layer (docs/designs/e2ee-passkey-unlock.md).
-
-Three properties carry the design and each gets direct cover here:
-
-1. **Unlock-only passkeys never change how the account signs in** - every 2FA
-   gate filters on ``is_login_factor``, so enrolling a key to decrypt messages
-   must not conscript the user into a login challenge (and an assertion from
-   such a key must not *complete* a login either).
-2. **The wrap endpoints demand the password proof** on password-backed
-   accounts - adding or destroying an unlock path must cost more than a bearer
-   token or a bare session.
-3. **Wraps die with the keypair** - a reset purges them atomically, and the
-   keys endpoint never serves a wrap whose ``bundle_version`` lags the bundle.
-"""
+"""Tests for the passkey-PRF unlock layer (docs/designs/e2ee-passkey-unlock.md)."""
 
 from __future__ import annotations
 
@@ -33,7 +20,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.two_factor import has_second_factor
 from urbanlens.dashboard.services.auth.webauthn import (
     SESSION_AUTHENTICATION_CHALLENGE,
-    WebAuthnError,
+    CredentialNotRegisteredError,
+    NoLoginPasskeysError,
     build_authentication_options,
     build_registration_options,
     has_passkeys,
@@ -142,7 +130,7 @@ class UnlockOnlyPasskeysAreNotLoginFactorsTests(TestCase):
         request = RequestFactory().get("/")
         request.session = {}
 
-        with pytest.raises(WebAuthnError):
+        with pytest.raises(NoLoginPasskeysError):
             build_authentication_options(request, profile.user)
 
     def test_unlock_only_assertion_cannot_complete_login(self) -> None:
@@ -153,7 +141,7 @@ class UnlockOnlyPasskeysAreNotLoginFactorsTests(TestCase):
         request.session = {SESSION_AUTHENTICATION_CHALLENGE: _b64url(os.urandom(32))}
         assertion = json.dumps({"rawId": _b64url(bytes(unlock_cred.credential_id))})
 
-        with pytest.raises(WebAuthnError, match="not registered"):
+        with pytest.raises(CredentialNotRegisteredError):
             verify_authentication(request, profile.user, assertion)
 
 
@@ -217,7 +205,9 @@ class PasskeyWrapEndpointTests(TestCase):
         bundle = _enroll(profile)
         credential = _credential(profile, login_factor=False)
 
-        response = _client_for(profile).post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 201)
         wrap = E2EEPasskeyWrap.objects.get(credential=credential)
@@ -230,9 +220,19 @@ class PasskeyWrapEndpointTests(TestCase):
         credential = _credential(profile)
         client = _client_for(profile)
 
-        missing = client.post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json")
-        wrong = client.post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential, current_password="nope"), content_type="application/json")  # noqa: S106 - deliberately wrong test credential
-        right = client.post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential, current_password=PASSWORD), content_type="application/json")
+        missing = client.post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json"
+        )
+        wrong = client.post(
+            reverse("e2ee.passkey_wrap"),
+            data=_wrap_payload(credential, current_password="nope"),
+            content_type="application/json",
+        )  # noqa: S106 - deliberately wrong test credential
+        right = client.post(
+            reverse("e2ee.passkey_wrap"),
+            data=_wrap_payload(credential, current_password=PASSWORD),
+            content_type="application/json",
+        )
 
         self.assertEqual(missing.status_code, 403)
         self.assertEqual(wrong.status_code, 403)
@@ -244,7 +244,9 @@ class PasskeyWrapEndpointTests(TestCase):
         other = _profile()
         foreign_credential = _credential(other)
 
-        response = _client_for(profile).post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(foreign_credential), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(foreign_credential), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(E2EEPasskeyWrap.objects.exists())
@@ -256,7 +258,9 @@ class PasskeyWrapEndpointTests(TestCase):
         old = _wrap(bundle, credential)
         client = _client_for(profile)
 
-        response = client.post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json")
+        response = client.post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 200)
         wrap = E2EEPasskeyWrap.objects.get(credential=credential)
@@ -266,7 +270,9 @@ class PasskeyWrapEndpointTests(TestCase):
         profile = _profile()
         credential = _credential(profile)
 
-        response = _client_for(profile).post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 404)
 
@@ -283,7 +289,9 @@ class PasskeyWrapEndpointTests(TestCase):
 
         for payload in (bad_input, bad_secret):
             with self.subTest(payload=payload):
-                response = client.post(reverse("e2ee.passkey_wrap"), data=json.dumps(payload), content_type="application/json")
+                response = client.post(
+                    reverse("e2ee.passkey_wrap"), data=json.dumps(payload), content_type="application/json"
+                )
                 self.assertEqual(response.status_code, 400)
 
     def test_delete_removes_the_wrap_with_proof(self) -> None:
@@ -304,16 +312,9 @@ class PasskeyWrapEndpointTests(TestCase):
     def test_delete_without_a_credential_id_is_refused_not_a_crash(self) -> None:
         """``DELETE`` on the collection URL must answer 405, not 500.
 
-        Both routes used to resolve to one view. ``post`` took
-        ``credential_id=None`` precisely so a POST to the item URL could answer
-        405 instead of raising TypeError out of the dispatcher; ``delete`` never
-        got the same treatment, so a DELETE to the *collection* URL called a
-        handler missing a required positional argument and returned a 500.
-
-        Found by reading, while fixing the two operationId collisions these
-        double-routed methods produced in the published schema (see
-        docs/PROBLEMS.md, 2026-08-24).
-        """
+        ``post`` took ``credential_id=None`` precisely so a POST to the item URL could answer 405 instead of
+        raising TypeError out of the dispatcher; ``delete`` never got the same treatment, so a DELETE to the
+        *collection* URL called a handler missing a required positional argument and returned a 500."""
         profile = _profile()
         _enroll(profile)
 
@@ -468,11 +469,7 @@ class CredentialPromptTests(TestCase):
     def test_a_passkey_that_unwraps_nothing_still_prompts(self) -> None:
         """Owning a credential is not the same as owning a way back in.
 
-        An authenticator without PRF support - or one enrolled before unlock
-        wraps existed - leaves the account with encrypted messages it cannot
-        reach on a new device. Counting it as "handled" silenced the prompt for
-        exactly the accounts it exists to reach.
-        """
+        Counting it as "handled" silenced the prompt for exactly the accounts it exists to reach."""
         profile = _profile()
         _enroll(profile)
         _credential(profile, login_factor=True)

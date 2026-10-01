@@ -152,7 +152,7 @@ the sharer's own label.
    checks reachability of the specific wiki. This is the largest open gap.
 2. ~~**Five inline reimplementations of wiki access**~~ — **four fixed 2026-08-24**; the fifth
    was never one. `models/article/queryset.py`, `services/global_search/providers.py` (×4) and
-   `services/map_pins/autocomplete.py` now ask `visible_wiki_location_ids_cached`. They had all
+   `services/map_pins/autocomplete.py` now ask `visible_wiki_locations_cached`. They had all
    restated clause one of four ("a pin on the exact location"), and three added a `created_by`
    clause the authority does not have — wrong in both directions, and both visible to users: a
    pin sharing the place's domain opened the page but found nothing in search, and a creator

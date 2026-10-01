@@ -1,10 +1,4 @@
-"""Every Memories page, requested as a real HTTP GET by a logged-in seeded demo account.
-
-Model-level correctness (test_demo_memories_content.py) proves the data
-exists in the right shape; it does not prove the view/template layer can
-actually render it. This is the closer proof: if a page 500s here, something
-in this batch of seeded content is genuinely wrong, not just untested.
-"""
+"""Every Memories page, requested as a real HTTP GET by a logged-in seeded demo account."""
 
 from __future__ import annotations
 
@@ -55,4 +49,4 @@ class DemoMemoriesPagesRenderTests(TestCase):
         self._assert_ok("memories.journal")
 
     def test_the_photos_page_renders(self) -> None:
-        self._assert_ok("memories.photos")
+        self._assert_ok("vault.photos")

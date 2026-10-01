@@ -25,7 +25,7 @@
         </a>
         {% endif %}
         <button type="button" class="btn btn--primary"
-                onclick="document.getElementById('create-trip-dialog').showModal()">
+                data-dialog-open="create-trip-dialog">
             <i class="material-symbols-outlined">add</i>
             New Trip
         </button>
@@ -75,7 +75,7 @@
         {# -- This month --------------------------------------------------------- #}
         <div class="trips-overview-cal card">
             <div class="card-header">This month</div>
-            {% include "dashboard/partials/trips/_mini_calendar.html" with calendar_data=trips_calendar_data %}
+            {% include "dashboard/partials/trips/_mini_calendar.html" %}
         </div>
 
         <div class="trips-overview-lists">
@@ -116,7 +116,7 @@
         <h2 class="trips-empty-title">No trips yet</h2>
         <p class="trips-empty-text">Create a trip to plan stops, invite friends, and track your route.</p>
         <button type="button" class="btn btn--primary"
-                onclick="document.getElementById('create-trip-dialog').showModal()">
+                data-dialog-open="create-trip-dialog">
             <i class="material-symbols-outlined">add</i>
             New Trip
         </button>
@@ -129,11 +129,3 @@
 {% include "dashboard/partials/trips/_create_trip_dialog.html" with source="overview" %}
 {% endblock %}
 
-{% block scripts %}
-{% include "dashboard/partials/trips/_mini_calendar_script.html" %}
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        if (window.tripsCalRender) { window.tripsCalRender(); }
-    });
-</script>
-{% endblock %}

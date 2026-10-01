@@ -1,11 +1,4 @@
-"""A URL that cannot be parsed must not be printed to admins verbatim.
-
-`_redact_url` hides credentials in the service URLs shown on the infrastructure
-admin page, and one of its inputs is the Celery broker URL, which embeds a
-password. It caught every exception from `urlparse` and returned the *raw* URL,
-so the one case it exists to handle - a URL it cannot make sense of - leaked the
-credential in full. `urlparse` does raise: a malformed IPv6 literal is a ValueError.
-"""
+"""A URL that cannot be parsed must not be printed to admins verbatim."""
 
 from __future__ import annotations
 

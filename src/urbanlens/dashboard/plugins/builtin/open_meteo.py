@@ -1,11 +1,4 @@
-"""Open-Meteo plugin: free, keyless weather forecast fallback.
-
-Registers Open-Meteo's rate-limit defaults for the admin API-limits page.
-The actual wiring is a plain fallback inside ``PinController.weather_forecast``
-(see ``services.apis.weather.forecast``/``open_meteo``) rather than a typed
-plugin contribution point - there is no ``get_weather_providers`` hook today,
-matching how the existing OpenWeatherMap gateway also has no plugin of its own.
-"""
+"""Open-Meteo plugin: free, keyless weather forecast fallback."""
 
 from __future__ import annotations
 
@@ -20,7 +13,7 @@ class OpenMeteoPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "open_meteo"
     verbose_name: ClassVar[str] = "Open-Meteo"
-    description: ClassVar[str] = "Free, keyless weather forecast API - used automatically as a fallback for the pin detail page's weather widget when OpenWeatherMap isn't configured or fails."
+    description: ClassVar[str] = "Free, keyless weather forecast API - used automatically as a fallback for the Private Pin page's weather widget when OpenWeatherMap isn't configured or fails."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

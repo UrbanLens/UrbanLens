@@ -1,0 +1,11 @@
+{% comment %}Rows for a trip picker; the page binds data-pl-action="add-to-trip".{% endcomment %}
+{% for trip in trips %}
+<li>
+    <button type="button" class="pin-list-add-results-item" data-pl-action="add-to-trip" data-trip-slug="{{ trip.slug }}">
+        <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
+    </button>
+</li>
+{% empty %}
+<li class="pin-list-smart-hint">{% if query %}No trips match "{{ query }}".{% else %}You're not on any trips yet.{% endif %}</li>
+{% endfor %}
+{% if truncated %}<li class="pin-list-smart-hint">Showing the most recently updated matches. Type to narrow the list.</li>{% endif %}

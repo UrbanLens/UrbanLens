@@ -1,0 +1,6 @@
+{% load static %}
+{# Synchronous and below the form it wires; entries-classic/auth.ts says why. #}
+{{ e2ee_urls|json_script:"e2ee-urls" }}
+{% if webauthn %}<script src="{% static 'dashboard/js/webauthn.js' %}"></script>
+{% endif %}<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+<script src="{% static 'dashboard/js/auth.js' %}"></script>

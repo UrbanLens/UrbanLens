@@ -23,34 +23,43 @@ env:
   UL_DB_PASS: postgres
   UL_DB_HOST: localhost
   UL_DB_PORT: "5432"
-  UL_VALKEY_URL: redis://localhost:6379/0
+  UL_DRAGONFLY_URL: redis://localhost:6379/0
+  UL_RABBITMQ_URL: amqp://urbanlens:ci-placeholder@localhost:5672/urbanlens
   UL_UNSAFE_ALLOW_HTTP: "True"
+  # Required for the gateway to construct at all. Unroutable on purpose, and the
+  # test suite's network guard refuses a real socket regardless - without it,
+  # every REData test fails here and passes on a developer machine. The key is
+  # checked for presence before any request is built, so a placeholder is what
+  # the tests need and a real credential is what they must not have.
+  UL_REDATA_API_URL: http://redata.invalid/api/
+  UL_REDATA_API_KEY: ci-placeholder-not-a-real-key
   UL_ENVIRONMENT: testing
 
 jobs:
   python-quality:
     name: Python quality and tests
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     services:
-      postgres:
-        image: postgis/postgis:16-3.4
-        env:
-          POSTGRES_DB: urbanlens_ci
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d urbanlens_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      valkey:
-        image: valkey/valkey:7-alpine
+      dragonfly:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
         ports:
           - 6379:6379
         options: >-
-          --health-cmd "valkey-cli ping"
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: urbanlens
+          RABBITMQ_DEFAULT_PASS: ci-placeholder
+          RABBITMQ_DEFAULT_VHOST: urbanlens
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -62,6 +71,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev postgresql-client
+
+      # The deployment's own image (PostGIS and pgvector), which a service container cannot be built from.
+      # Installing pgvector into a running stock image upgraded the server package underneath it, and every
+      # extension the old binary loaded afterwards failed on a missing symbol.
+      - name: Start Postgres
+        run: |
+          docker build -t urbanlens-postgres src/urbanlens/config/postgres
+          docker run -d --name postgres -p 5432:5432 \
+            -e POSTGRES_DB=urbanlens_ci -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+            urbanlens-postgres
+          timeout 120 sh -c 'until docker exec postgres pg_isready -h 127.0.0.1 -U postgres -d urbanlens_ci; do sleep 2; done'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -81,94 +101,48 @@ jobs:
         run: ruff format --check src
 
       - name: Static type check
-        # --show-traceback: the django-stubs plugin runs django.setup() while it
-        # constructs, and mypy reports any failure there as a bare "Error
-        # constructing plugin instance" with nothing to act on.
         run: mypy src --show-traceback
-
-      # Structural, and cheap: every urbanlens.* import in a committed file must
-      # resolve to a file git actually has. Runs in pre-commit too, but that only
-      # protects a developer who has it installed and does not pass --no-verify -
-      # and the incident it was written for (a commit that landed 139 files while
-      # leaving five imported modules untracked) broke model loading for the app,
-      # every management command, both workers and the whole suite.
       - name: Imports resolve in the committed tree
         run: python3 bin/check_imports_tracked.py
-
-      # A citation like `controllers/friendship.py:649` in a 583-line file sends
-      # a reader to nothing, and nothing else notices: the file still exists and
-      # the note still reads as authoritative. Only the unambiguous half is
-      # enforced - that the line exists - since "the line moved" needs a human.
-      - name: Documentation citations point at real lines
-        run: python3 bin/check_doc_line_refs.py
-
-      # makemigrations builds `dependencies` from whatever files are on disk,
-      # tracked or not - so an uncommitted migration can become the parent of a
-      # committed one. Invisible in the checkout that made it; NodeNotFoundError
-      # everywhere else, before the app or the workers can start.
       - name: Migration graph resolves in the committed tree
         run: python3 bin/check_migration_graph.py
-
-      # A pre-commit-only check is defeated by --no-verify, no hooks installed,
-      # or a hookless path like the GitHub web UI - exactly the "worked around,
-      # not fixed" friction docs/GOALS.md calls out. imports-tracked/doc-line-refs/
-      # migration-graph above already made this move; these two were the last
-      # structural pre-commit hooks still missing a CI backstop.
       - name: No swallowed-failure result gets cached as a success
         run: python3 bin/check_outage_not_cached.py
 
       - name: Every notification write honours the mute preference
         run: python3 bin/check_notification_choke_point.py
-
-      # Field provenance is recorded by interception, so a model that declares
-      # versioned_fields without a VersionedQuerySet records instance saves and
-      # silently drops every bulk write - which reads as working.
       - name: Versioned models intercept every write path
         run: python3 bin/check_versioned_writes.py
-
-      # A transition made by queryset update() emits no signal, so a post_save
-      # subscription waiting on it is dead and looks alive. Three rules in the
-      # reputation ledger shipped that way.
       - name: Signal subscriptions are reachable
         run: python3 bin/check_signal_reachable.py
-
-      # resolve_visible_wiki may return a concealed projection, and saving one
-      # writes a single viewer's redacted view over the community's content.
       - name: A wiki resolved for reading is never saved
         run: python3 bin/check_concealed_writes.py
+      - name: No template reads a photo's file without checking it is there
+        run: python3 bin/check_image_file_reads.py
+      - name: Location and Label rows are created only through their get-or-create helpers
+        run: python3 bin/check_canonical_creates.py
+      - name: "Every /static/ URL a template writes goes through the static tag"
+        run: python3 bin/check_static_url_literals.py
+      - name: Template hash-comments close on the line they open
+        run: python3 bin/check_template_comments.py
+      - name: Tracked text files are stored with LF
+        run: python3 bin/check_line_endings.py
 
-      # Nothing else checks this: a model change without its migration only
-      # surfaces if some test happens to touch the field, and otherwise waits
-      # until the column is needed in production.
+      - name: A private pin's fields never reach a community wiki
+        run: python3 bin/check_pin_not_published_to_wiki.py
+      - name: Code cites only docs/ paths that exist
+        run: python3 bin/check_docs_refs.py
+      - name: docs/INDEX.md agrees with the entries it indexes
+        run: python3 bin/check_docs_index.py
+      - name: Every TypeScript file belongs to a tsconfig project
+        run: python3 bin/check_typescript_coverage.py
+      - name: Every var() names a custom property something defines
+        run: python3 bin/check_css_variables.py
       - name: No missing migrations
         run: python src/urbanlens/manage.py makemigrations --check --dry-run
-
-      # ----------------------------------------------------------------------------
-      # Deployment checks, still disabled - but not for the three reasons that used
-      # to be listed here. Re-checked 2026-08-17:
-      #
-      #   - SECURE_HSTS_SECONDS is now set (settings/base.py), so W004 no longer
-      #     reflects a missing setting.
-      #   - The ".env is needed" note is moot: this workflow sets the env vars
-      #     directly in its own `env:` block.
-      #
-      # The blocker is one the old list did not name. This job runs under
-      # DJANGO_SETTINGS_MODULE=...settings.test, where SECURE_SSL_REDIRECT is off
-      # and DEBUG is on *by design* - so `check --deploy` reports W004/W008/W018
-      # against settings that are behaving correctly. Measured: 18 issues, of which
-      # the security ones are all artefacts of running a production check against
-      # test settings (the rest are drf-spectacular enum-naming warnings, tracked
-      # separately in docs/PROBLEMS.md).
-      #
-      # Making this meaningful means evaluating production-like settings, not
-      # relaxing the check - which is a deployment decision, not a CI one.
-      # ----------------------------------------------------------------------------
-      #- name: Django deployment checks
-      #  run: python src/urbanlens/manage.py check --deploy --fail-level WARNING
-
-      - name: Django tests with coverage
+      - name: Tests with coverage
         run: |
-          coverage run --source=src src/urbanlens/manage.py test
+          coverage run --source=src -m pytest
           coverage xml
           coverage report --fail-under=1
 
@@ -186,24 +160,27 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
-      # Pinned to the same exact patch as the Dockerfile (see its comment): bun
-      # 1.4.0 dropped `bun build --format iife` and also changed enough
-      # `preventDefault`/event-dispatch behavior under `bun test` to fail
-      # autosave-guard.test.ts, which passes clean on 1.3.14.
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
       - name: Install frontend dependencies
-        run: npm install
-
-      # Both of these run in pre-commit, which only protects a developer who has
-      # it installed and does not pass --no-verify. Without them here the whole
-      # TypeScript suite - including the contract tests that guard agreements
-      # between a template and the code reading it - never runs in CI, so a pull
-      # request that breaks one merges green.
+        run: bun install --frozen-lockfile
+      # The integration suite is its own npm project - own lockfile, own
+      # TypeScript - and `bun run typecheck` runs it, so the root install alone
+      # leaves every import in it unresolvable. No browsers here; this is the
+      # typecheck's dependencies, not the suite's.
+      - name: Install integration-suite dependencies
+        working-directory: tests/integration
+        # `npm ci`, not `npm install`: with transitives floating, npm resolved
+        # a second copy of playwright-core beside the one `playwright` carries,
+        # and the two disagreed about `Page` - a type error in a file nobody had
+        # touched. The lockfile is committed for that reason.
+        run: npm ci --no-audit --no-fund --ignore-scripts
       - name: TypeScript typecheck
         run: bun run typecheck
 
@@ -215,6 +192,26 @@ jobs:
 
       - name: Build stylesheet
         run: bun run sass
+      - name: Every BEM modifier a template applies has a rule that styles it
+        run: python3 bin/check_bem_modifiers.py
+
+  docs:
+    name: Documentation build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install Python dependencies
+        run: uv sync --frozen
+      - name: Build the documentation
+        run: uv run python bin/build_docs.py
 
   docker:
     name: Docker image build

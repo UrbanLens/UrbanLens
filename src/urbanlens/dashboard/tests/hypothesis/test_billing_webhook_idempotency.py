@@ -1,15 +1,4 @@
-"""Tests for the Stripe webhook receiver's replay protection.
-
-``invoice.payment_succeeded`` is the one handler with a non-idempotent side
-effect: ``banking.apply_payment`` *increments* ``total_paid_cents``, and that
-figure drives the pay-what-you-want usage ledger (i.e. how long access stays
-granted). So "was this event already handled" has to be answered against
-committed state, not against a row read earlier in the same request.
-
-Stripe redelivers on any non-2xx **or timeout**, which is what makes the
-crash-after-side-effect case real rather than theoretical: if the payment is
-credited but the delivery is not marked processed, the retry credits it again.
-"""
+"""Tests for the Stripe webhook receiver's replay protection."""
 
 from __future__ import annotations
 
@@ -28,7 +17,7 @@ from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 
 def _stripe_subscription() -> dict:
-    """The shape ``sync_from_stripe_subscription`` reads: status, plus the first item's price."""
+    """The shape ``subscription_state.apply_subscription`` reads: status, plus the first item's price."""
     return {
         "id": "sub_test",
         "status": "active",
@@ -51,7 +40,9 @@ class StripeWebhookReplayTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.subscription = baker.make(
             RoleSubscription,
             user=self.user,
@@ -69,9 +60,12 @@ class StripeWebhookReplayTests(TestCase):
         # (verify -> record -> handle) still runs.
         with (
             mock.patch.object(app_settings, "stripe_webhook_secret", "whsec_test"),
+            mock.patch.object(app_settings, "stripe_secret_key", "sk_test_123"),
             mock.patch("stripe.Webhook.construct_event", return_value=mock.Mock(to_dict=lambda: event)),
         ):
-            return (client or self.client).post(self.url, data=json.dumps(event), content_type="application/json", HTTP_STRIPE_SIGNATURE="t=1,v1=stub")
+            return (client or self.client).post(
+                self.url, data=json.dumps(event), content_type="application/json", HTTP_STRIPE_SIGNATURE="t=1,v1=stub"
+            )
 
     @mock.patch("stripe.Subscription.retrieve")
     def test_a_redelivered_payment_is_credited_once(self, retrieve: mock.Mock) -> None:
@@ -85,20 +79,27 @@ class StripeWebhookReplayTests(TestCase):
         self.assertEqual(self.subscription.total_paid_cents, 1000)
 
     @mock.patch("stripe.Subscription.retrieve")
+    def test_two_distinct_events_are_each_credited(self, retrieve: mock.Mock) -> None:
+        """The guard keys off ``stripe_event_id``, not "has this subscription ever paid" - a redelivery of the *same* event must be swallowed, but a genuinely new event must not be. Only testing same-event replays could pass a guard that (wrongly) treats any already-seen subscription as fully settled."""
+        retrieve.return_value = mock.Mock(to_dict=_stripe_subscription)
+
+        self.assertEqual(self._post(_event("evt_a", "sub_test", 400)).status_code, 200)
+        self.assertEqual(self._post(_event("evt_b", "sub_test", 700)).status_code, 200)
+
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.total_paid_cents, 1100)
+
+    @mock.patch("stripe.Subscription.retrieve")
     def test_a_delivery_that_fails_after_crediting_does_not_double_credit_on_retry(self, retrieve: mock.Mock) -> None:
         """The crash-after-side-effect case Stripe's retry policy guarantees will happen.
 
-        If the credit commits but the "processed" marker does not, the redelivery sees
-        an unprocessed event and credits a second time. Processing and the marker have
-        to land in the same transaction for the retry to be a genuine no-op.
-        """
+        If the credit commits but the "processed" marker does not, the redelivery sees an unprocessed event and
+        credits a second time."""
         retrieve.return_value = mock.Mock(to_dict=_stripe_subscription)
         event = _event("evt_2", "sub_test", 1000)
 
-        # First delivery: the payment is applied, then marking it processed blows up
-        # (a DB blip, a killed worker, a lost response Stripe reads as a timeout).
-        # Only that write fails - the initial insert of the audit row has to succeed, or
-        # the retry would be handling a brand-new event and prove nothing.
+        # First delivery: the payment is applied, then marking it processed blows up (a DB blip, a killed
+        # worker, a lost response Stripe reads as a timeout).
         original_save = StripeWebhookEvent.save
 
         def fail_only_when_marking_processed(instance, *args, **kwargs):
@@ -106,7 +107,10 @@ class StripeWebhookReplayTests(TestCase):
                 raise RuntimeError("connection lost")
             return original_save(instance, *args, **kwargs)
 
-        with mock.patch.object(StripeWebhookEvent, "save", fail_only_when_marking_processed), self.assertRaises(RuntimeError):
+        with (
+            mock.patch.object(StripeWebhookEvent, "save", fail_only_when_marking_processed),
+            self.assertRaises(RuntimeError),
+        ):
             self._post(event)
 
         # Stripe retries the same event.

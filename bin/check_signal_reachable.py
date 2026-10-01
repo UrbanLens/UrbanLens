@@ -1,38 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when a post_save subscription watches a field only ever set by update().
-
-Three separate rules in the reputation ledger subscribed to ``post_save`` on a
-model whose real transition happens through ``QuerySet.update()``, which emits
-no signal at all - and emits none *deliberately*, because those transitions are
-atomic compare-and-sets:
-
-    FriendInvitation.mark_accepted  -> .update(accepted_at=now)
-    WikiManager.claim_for_location  -> .update(officially_created=True, ...)
-    revert_wiki_edit                -> .update(reverted=False, reverted_by=None)
-
-All three looked right in review. All three could never fire. That is the same
-shape as the defect ``check_notification_choke_point.py`` exists for: a rule
-kept in one place, and a write path that goes around it.
-
-The heuristic: for every model named as a signal sender, collect the field names
-the subscription's predicate mentions, then look for ``.update(field=...)`` on
-that same model anywhere in production code. A match means the write the
-subscription is waiting for happens somewhere the subscription cannot see.
-
-Known limits, stated so nobody trusts a pass further than it deserves:
-  - it matches models and fields by name, so two models sharing a field name can
-    produce a false positive;
-  - it only sees ``Model.objects...update(...)`` and ``Model.objects...filter(
-    ...).update(...)`` spelled with the model's own name;
-  - it cannot see an update built through a variable or a related manager.
-A pass means "no *detected* gap", not "the subscription fires".
-
-Mark a deliberate case with ``signal-update-ok: <ModelName> <why>`` in a comment
-- the model is named in the marker so the exemption stays legible when lines
-move, and it sits next to the decision the way the notification check's does.
-
-Exits non-zero listing each unreachable-looking subscription.
-"""
+"""Fail when a post_save subscription watches a field only ever set by update()."""
 
 from __future__ import annotations
 

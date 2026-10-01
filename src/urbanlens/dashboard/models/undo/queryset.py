@@ -10,7 +10,7 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.undo.model import UndoAction
+    from urbanlens.dashboard.models.undo.model import UndoAction  # noqa: F401 - mypy needs these; ruff does not
 
 
 class UndoActionQuerySet(abstract.FrontendDashboardQuerySet["UndoAction"]):
@@ -32,6 +32,17 @@ class UndoActionQuerySet(abstract.FrontendDashboardQuerySet["UndoAction"]):
 
         return self.filter(created__lt=timezone.now() - UNDO_RETENTION)
 
+    def undoable(self) -> UndoActionQuerySet:
+        """Restrict to entries that have not yet been undone (the undo stack)."""
+        return self.filter(undone_at__isnull=True)
 
-class UndoActionManager(abstract.FrontendDashboardManager.from_queryset(UndoActionQuerySet)):
+    def redoable(self) -> UndoActionQuerySet:
+        """Restrict to entries already undone (the redo stack)."""
+        return self.filter(undone_at__isnull=False)
+
+
+_UndoActionManagerBase = abstract.FrontendDashboardManager.from_queryset(UndoActionQuerySet)
+
+
+class UndoActionManager(_UndoActionManagerBase):
     """Manager for UndoAction."""

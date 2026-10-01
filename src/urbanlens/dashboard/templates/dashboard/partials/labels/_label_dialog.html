@@ -55,6 +55,18 @@
             {% endfor %}
         </ul>
 
+        <form class="tad-create-row" hidden
+              hx-post="{% if membership_route == 'location' %}{% url 'label.location' label_kind=label_url_kind location_slug=obj_uuid %}{% elif membership_route == 'image' %}{% url 'label.image' image_uuid=obj_uuid %}{% else %}{% url 'label.pin' label_kind=label_url_kind pin_slug=obj_uuid %}{% endif %}"
+              hx-target="#{{ panel_id }}" hx-swap="outerHTML">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_and_add">
+            <input type="hidden" name="name" class="tad-create-name" value="">
+            <button type="submit" class="tag-dialog-btn tad-create-btn">
+                <span class="tag-dialog-icon"><i class="material-icons" style="font-size:16px">add</i></span>
+                <span>Create “<span class="tad-create-label"></span>” and apply</span>
+            </button>
+        </form>
+
         <div class="dialog-footer">
             <a href="{% url 'organize.index' %}?tab=tags" class="dialog-manage-link">
                 <i class="material-symbols-outlined">settings</i> Manage labels
@@ -64,11 +76,11 @@
 
     {% if membership_route == "pin" %}
     <div class="tad-top-panel" data-top-panel="lists" hidden>
-        <input type="search" id="add-to-list-search" class="pin-list-add-results-search" placeholder="Search your lists..." oninput="filterAddToListResults(this.value)" autocomplete="off">
+        <input type="search" id="add-to-list-search" class="pin-list-add-results-search" placeholder="Search your lists..." data-list-filter autocomplete="off">
         <ul class="pin-list-add-results" id="add-to-list-results">
             <li data-search="create a new list" id="add-to-list-new-toggle-row">
                 <button type="button" class="pin-list-add-results-item pin-list-add-results-item--new"
-                        onclick="document.getElementById('add-to-list-new-form-row').hidden = false; document.getElementById('add-to-list-new-toggle-row').hidden = true; document.getElementById('add-to-list-new-name').focus();">
+                        data-list-action="show-create">
                     <i class="material-symbols-outlined">add</i> Create a new list
                 </button>
             </li>
@@ -76,12 +88,12 @@
                 <div class="pin-list-add-results-item pin-list-add-results-item--new">
                     <i class="material-symbols-outlined">add</i>
                     <input type="text" id="add-to-list-new-name" placeholder="New list name..." maxlength="100" autocomplete="off">
-                    <button type="button" class="btn btn--primary btn--sm" onclick="createListAndAddPins()">Create</button>
+                    <button type="button" class="btn btn--primary btn--sm" data-list-action="create">Create</button>
                 </div>
             </li>
             {% for pin_list in pin_lists %}
             <li data-search="{{ pin_list.name|lower }}">
-                <button type="button" class="pin-list-add-results-item" onclick="addPinsToList('{{ pin_list.slug }}')">
+                <button type="button" class="pin-list-add-results-item" data-list-action="add" data-list-ref="{{ pin_list.slug }}">
                     <i class="material-symbols-outlined">bookmarks</i> {{ pin_list.name }}
                     <span class="pin-list-add-results-count">{{ pin_list.pin_count }}</span>
                 </button>

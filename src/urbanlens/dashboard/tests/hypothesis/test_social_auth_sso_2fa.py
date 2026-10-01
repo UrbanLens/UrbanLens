@@ -1,14 +1,4 @@
-"""Regression test for a 2FA bypass via SSO login.
-
-python-social-auth normally logs a user in automatically once its pipeline
-finishes, with no built-in equivalent of CustomLoginView's has_second_factor()
-gate - so an account with a passkey/authenticator app could previously sign
-in via Google/Discord SSO and skip 2FA entirely. enforce_two_factor_for_sso
-closes that gap by returning an HttpResponseRedirect, which is
-python-social-auth's documented mechanism for interrupting the pipeline
-(social_core.backends.base.BaseAuth.run_pipeline returns a step's result
-immediately whenever it isn't a dict).
-"""
+"""Regression test for a 2FA bypass via SSO login."""
 
 from __future__ import annotations
 
@@ -21,7 +11,10 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account import TOTPDevice, WebAuthnCredential
-from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER
+from urbanlens.dashboard.services.auth.two_factor import (
+    SESSION_WEBAUTHN_PENDING_REDIRECT,
+    SESSION_WEBAUTHN_PENDING_USER,
+)
 from urbanlens.dashboard.services.social_auth.pipeline import enforce_two_factor_for_sso
 
 

@@ -1,17 +1,63 @@
 """Coercion for numeric values arriving from form or JSON request data.
-
-`int("abc")` raises `ValueError`, and a request body is free to contain "abc" wherever
-a view expects a number. Views that call `int(request.POST.get(...))` directly therefore
-turn a malformed field into a 500 rather than a sensible default - the same shape as an
-unbounded `CharField` write reaching the database.
-
-The codebase had solved this three times locally before this module existed
-(`controllers/labels._safe_int`, `controllers/saved_filters._clamp_opacity`,
-`controllers/map_overlays._clamped_opacity`), and about nineteen other call sites had not
-solved it at all.
-"""
+Views that call `int(request.POST.get(...))` directly therefore turn a malformed field into a 500 rather than a sensible default - the same shape as an unbounded `CharField` write reaching the database."""
 
 from __future__ import annotations
+
+from decimal import Decimal
+import math
+
+#: The range of a Django ``IntegerField`` column; a larger parsed value fails the write rather than the parse.
+DB_INTEGER_MIN = -(2**31)
+DB_INTEGER_MAX = 2**31 - 1
+
+
+def safe_int_or_none(value: object) -> int | None:
+    """Return ``value`` as an int, or ``None`` when it is not one.
+    ``None`` rather than a number is what a row lookup needs.
+
+    Args:
+        value: Raw value from `request.POST`/`request.GET`, a parsed JSON body, or a third party's metadata.
+
+    Returns:
+        The parsed integer, or ``None`` when ``value`` is missing or unparseable."""
+    if isinstance(value, bool):
+        # bool is an int subclass; treating True as 1 here is almost never intended.
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str | float | bytes | bytearray):
+        try:
+            return int(value)
+        except (TypeError, ValueError, OverflowError):
+            # OverflowError is `int(float("inf"))`, and it is reachable: json.loads
+            # accepts the bare literals Infinity/-Infinity/NaN, and several views
+            # pass a parsed body straight in.
+            return None
+    return None
+
+
+#: Bounds for :func:`coordinate_or_none`.
+LATITUDE_BOUND = 90.0
+LONGITUDE_BOUND = 180.0
+
+
+def coordinate_or_none(value: object, *, bound: float) -> float | None:
+    """Return ``value`` as a finite coordinate within ``±bound``, or ``None``.
+
+    Args:
+        value: Raw value from a form post or a parsed JSON body.
+        bound: :data:`LATITUDE_BOUND` or :data:`LONGITUDE_BOUND`.
+
+    Returns:
+        The coordinate, or ``None`` when ``value`` is missing, not a number, not finite, or out of range.
+    """
+    if isinstance(value, bool) or not isinstance(value, str | int | float | Decimal):
+        return None
+    try:
+        parsed = float(value)
+    except (ValueError, OverflowError):
+        return None
+    return parsed if math.isfinite(parsed) and -bound <= parsed <= bound else None
 
 
 def safe_int(value: object, default: int = 0) -> int:
@@ -19,23 +65,12 @@ def safe_int(value: object, default: int = 0) -> int:
 
     Args:
         value: Raw value from `request.POST`/`request.GET` or a parsed JSON body.
-        default: Returned when ``value`` is missing, or is not something an int can be
-            parsed from.
+        default: Returned when ``value`` is missing, or is not something an int can be parsed from.
 
     Returns:
-        The parsed integer, or ``default``.
-    """
-    if isinstance(value, bool):
-        # bool is an int subclass; treating True as 1 here is almost never intended.
-        return default
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str | float | bytes | bytearray):
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-    return default
+        The parsed integer, or ``default``."""
+    parsed = safe_int_or_none(value)
+    return default if parsed is None else parsed
 
 
 def clamp_int(value: object, *, low: int, high: int, default: int) -> int:
@@ -45,11 +80,9 @@ def clamp_int(value: object, *, low: int, high: int, default: int) -> int:
         value: Raw value from request data.
         low: Minimum allowed value.
         high: Maximum allowed value.
-        default: Used when ``value`` is not parseable as an int; it is clamped too, so a
-            caller cannot accidentally widen the range through its own default.
+        default: Used when ``value`` is not parseable as an int; it is clamped too, so a caller cannot accidentally widen the range through its own default.
 
     Returns:
-        An integer within ``[low, high]``.
-    """
+        An integer within ``[low, high]``."""
     parsed = safe_int(value, default)
     return max(low, min(high, parsed))

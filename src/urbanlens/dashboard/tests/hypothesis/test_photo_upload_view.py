@@ -1,21 +1,20 @@
-"""Tests for PhotoUploadView's content-type gate: images, videos, and documents."""
+"""Tests for the Vault Photos upload endpoint's content-type gate: images, videos, and documents."""
 
 from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-
-from urbanlens.core.tests.images import JPEG_BYTES
 from django.test import Client
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.images import JPEG_BYTES
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 
-_UPLOAD_URL = reverse("memories.photos.upload")
+_UPLOAD_URL = reverse("vault.photos.upload")
 
 
 def _grant_feature(*features: str) -> None:
@@ -24,7 +23,7 @@ def _grant_feature(*features: str) -> None:
 
 
 class PhotoUploadViewContentTypeTests(TestCase):
-    """POST /memories/photos/upload/ accepts images always, videos/documents only when permitted."""
+    """POST /vault/photos/upload/ accepts images always, videos/documents only when permitted."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -63,14 +62,22 @@ class PhotoUploadViewContentTypeTests(TestCase):
         self.assertEqual(image.media_type, MediaKind.VIDEO)
 
     def test_document_upload_rejected_without_feature(self) -> None:
-        doc_file = SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        doc_file = SimpleUploadedFile(
+            "notes.docx",
+            b"doc-bytes",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
         response = self.client.post(_UPLOAD_URL, {"image": doc_file})
         self.assertEqual(response.status_code, 403)
         self.assertFalse(Image.objects.filter(profile__user=self.user).exists())
 
     def test_document_upload_allowed_with_feature(self) -> None:
         _grant_feature(SiteFeature.DOCUMENT_UPLOADS)
-        doc_file = SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        doc_file = SimpleUploadedFile(
+            "notes.docx",
+            b"doc-bytes",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
         response = self.client.post(_UPLOAD_URL, {"image": doc_file})
         self.assertEqual(response.status_code, 201)
         image = Image.objects.get(profile__user=self.user)
@@ -101,8 +108,7 @@ class PhotoUploadViewContentTypeTests(TestCase):
     def test_upload_within_max_file_size_allowed(self) -> None:
         settings_obj = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_obj.pk).update(max_upload_file_size_mb=1)
-        # A real JPEG, well under the 1MB cap set above. It has to be a real one
-        # now: the size check passes first, and then the bytes are inspected.
+        # It has to be a real one now: the size check passes first, and then the bytes are inspected.
         small_file = SimpleUploadedFile("photo.jpg", JPEG_BYTES, content_type="image/jpeg")
         response = self.client.post(_UPLOAD_URL, {"image": small_file})
         self.assertEqual(response.status_code, 201)

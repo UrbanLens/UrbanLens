@@ -1,15 +1,4 @@
-"""Tests for the trip detail hero's click-to-edit-in-place name/description.
-
-Covers:
-- TripEditView's partial-update fix: submitting one field must not silently
-  clear the other three (name/description/start_date/end_date) - previously
-  every field was unconditionally overwritten from the request body even
-  when the key was absent, safe only because the pre-existing "Edit Trip"
-  dialog always submitted all four together.
-- The trip hero renders name/description as click-to-edit-in-place for a
-  joined member (including a placeholder when description is empty, rather
-  than hiding it), and as plain read-only text otherwise.
-"""
+"""Tests for the trip detail hero's click-to-edit-in-place name/description."""
 
 from __future__ import annotations
 
@@ -93,7 +82,9 @@ class TripEditPartialUpdateTests(TestCase):
 
     def test_submitting_all_four_together_still_works(self) -> None:
         """Matches the existing "Edit Trip" dialog's behavior - unaffected by the fix."""
-        response = self._post({"name": "New Name", "description": "New desc.", "start_date": "2026-10-01", "end_date": "2026-10-05"})
+        response = self._post(
+            {"name": "New Name", "description": "New desc.", "start_date": "2026-10-01", "end_date": "2026-10-05"}
+        )
         self.assertEqual(response.status_code, 200)
         self.trip.refresh_from_db()
         self.assertEqual(self.trip.name, "New Name")

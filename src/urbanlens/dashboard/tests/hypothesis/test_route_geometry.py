@@ -3,10 +3,10 @@
 Pure-function tests - no models/DB involved, since simplify_and_measure only
 deals with plain point lists and returns a GEOS LineString.
 """
+
 from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure
 

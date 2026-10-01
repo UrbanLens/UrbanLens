@@ -1,4 +1,5 @@
 """Tests for the human_timesince template filter (never say "0 minutes ago")."""
+
 from __future__ import annotations
 
 from datetime import timedelta

@@ -1,8 +1,4 @@
-{% comment %}
-Immich library scan progress fragment - returned by ImmichLibraryScanStartView and
-polled by ImmichLibraryScanProgressView. Mirrors partials/pins/_immich_import_progress.html.
-Context: task_id, state, percent, message, error
-{% endcomment %}
+{% comment %}Immich library scan progress fragment - returned by ImmichLibraryScanStartView and polled by ImmichLibraryScanProgressView.{% endcomment %}
 
 {% if state == "SUCCESS" %}
 <div class="immich-import-progress" id="immich-scan-progress">
@@ -39,11 +35,8 @@ Context: task_id, state, percent, message, error
         <div class="immich-import-progress-bar" style="width: {{ percent|default:0 }}%;"></div>
     </div>
     <div class="immich-import-status-msg">
-        <span class="htmx-indicator-spinner" style="display:inline-block; width:14px; height:14px; border:2px solid var(--ul-grey-4); border-top-color: #1976D2; border-radius:50%; animation: spin .7s linear infinite; flex-shrink:0;"></span>
+        <span class="ul-spinner ul-spinner--surface" aria-hidden="true"></span>
         <span>This can take a while for a large library...</span>
     </div>
 </div>
-<style>
-@keyframes spin { to { transform: rotate(360deg); } }
-</style>
 {% endif %}

@@ -1,20 +1,6 @@
 /**
- * The credentials half of the run configuration.
- *
- * Accounts come from one of two places, checked in this order:
- *
- * 1. A manifest written by `manage.py provision_integration_env --format json`
- *    on the target deployment, pointed at by `UL_E2E_ACCOUNTS_FILE`. This is
- *    the intended path: it provisions every role at once, marks each account
- *    verified and active (sign-up alone leaves an account inactive pending an
- *    emailed link, which a test runner cannot click), and mints API keys with
- *    the scopes the API specs need.
- * 2. Plain environment variables, for a one-off run against an account that
- *    already exists.
- *
- * Roles are resolved lazily. A spec that only needs `primary` runs fine on a
- * deployment where no `secondary` account was provisioned; the specs that do
- * need one skip themselves rather than failing.
+ * The credentials half of the run configuration. Accounts come from one of two places, checked in
+ * this order:
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -46,6 +32,8 @@ export interface IntegrationAccount {
     profileUuid: string | null;
     /** Whether this account has staff/site-admin rights. */
     isStaff: boolean;
+    /** Effective `SiteFeature` values the provisioner reported, e.g. `property_owners` for a subscriber. */
+    features: string[];
 }
 
 /** The shape `provision_integration_env --format json` writes. */
@@ -64,12 +52,24 @@ interface AccountsManifest {
         restricted_scopes?: string[];
         profile_uuid?: string | null;
         is_staff?: boolean;
+        features?: string[];
     }>;
 }
 
 export const PRIMARY_ROLE = "primary";
 export const SECONDARY_ROLE = "secondary";
 export const STAFF_ROLE = "staff";
+/** The account `provision_integration_env --heavy-pins` seeds, for size-dependent specs. */
+export const HEAVY_ROLE = "heavy";
+/** The account `provision_integration_env --subscriber-roles subscriber` grants the suite's subscription role. */
+export const SUBSCRIBER_ROLE = "subscriber";
+/** A friend pair reserved for consent-copy specs (pin shares, DMs, trips), so they never race `social.spec.ts` over primary and secondary. */
+export const SHARER_ROLE = "sharer";
+export const SHAREE_ROLE = "sharee";
+/** Holds the courtyard HRSH pin, so the location suite never gives primary and secondary pins in common. */
+export const NEIGHBOUR_ROLE = "neighbour";
+/** The `SiteFeature` a subscriber holds and every other role must not. */
+export const PROPERTY_OWNERS_FEATURE = "property_owners";
 
 function fromManifest(path: string): Map<string, IntegrationAccount> {
     const absolute = isAbsolute(path) ? path : resolve(INTEGRATION_ROOT, path);
@@ -106,6 +106,7 @@ function fromManifest(path: string): Map<string, IntegrationAccount> {
             restrictedScopes: entry.restricted_scopes ?? [],
             profileUuid: entry.profile_uuid ?? null,
             isStaff: entry.is_staff ?? false,
+            features: entry.features ?? [],
         });
     }
     return accounts;
@@ -132,18 +133,27 @@ function fromEnvironment(): Map<string, IntegrationAccount> {
             password,
             email: process.env[`${prefix}EMAIL`]?.trim() ?? "",
             apiKey: process.env[`${prefix}API_KEY`]?.trim() || null,
-            scopes: (process.env[`${prefix}SCOPES`]?.trim() ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+            scopes: splitList(process.env[`${prefix}SCOPES`]),
             restrictedApiKey: process.env[`${prefix}RESTRICTED_API_KEY`]?.trim() || null,
-            restrictedScopes: (process.env[`${prefix}RESTRICTED_SCOPES`]?.trim() ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+            restrictedScopes: splitList(process.env[`${prefix}RESTRICTED_SCOPES`]),
             profileUuid: process.env[`${prefix}PROFILE_UUID`]?.trim() || null,
             isStaff: role === STAFF_ROLE,
+            features: splitList(process.env[`${prefix}FEATURES`]),
         });
     };
 
     define(PRIMARY_ROLE, "UL_E2E_", true);
     define(SECONDARY_ROLE, "UL_E2E_SECONDARY_", false);
     define(STAFF_ROLE, "UL_E2E_STAFF_", false);
+    define(SUBSCRIBER_ROLE, "UL_E2E_SUBSCRIBER_", false);
+    define(SHARER_ROLE, "UL_E2E_SHARER_", false);
+    define(SHAREE_ROLE, "UL_E2E_SHAREE_", false);
+    define(NEIGHBOUR_ROLE, "UL_E2E_NEIGHBOUR_", false);
     return accounts;
+}
+
+function splitList(raw: string | undefined): string[] {
+    return (raw?.trim() ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
 }
 
 let cached: Map<string, IntegrationAccount> | null = null;
@@ -197,6 +207,11 @@ export function requireApiKey(role: string): string {
         );
     }
     return account.apiKey;
+}
+
+/** Whether `account` holds `feature`, per the provisioning manifest. */
+export function hasFeature(account: IntegrationAccount, feature: string): boolean {
+    return account.features.includes(feature);
 }
 
 /** Path of the browser session state minted for `role` by auth.setup.ts. */

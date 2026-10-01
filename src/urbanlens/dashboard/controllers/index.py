@@ -1,7 +1,6 @@
 # Generic imports
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -11,6 +10,7 @@ from django.views import View
 from djangofoundry.controllers import ListController
 
 from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.home.home_widgets import effective_widget_layout, home_dashboard_context, save_widget_layout
 
 if TYPE_CHECKING:
@@ -31,10 +31,9 @@ class IndexController(ListController):
     def get_context_data(self, **kwargs):
         """Add the page name the stylesheet keys off.
 
-        Every rule in ``_homepage.scss`` is scoped under ``body.page-home``,
-        and ``base.html`` sets that class from ``page_name`` - which this view
-        never supplied, so the landing page rendered with none of its own
-        styles at all.
+        Every rule in ``_homepage.scss`` is scoped under ``body.page-home``, and ``base.html`` sets that
+        class from ``page_name`` - which this view never supplied, so the landing page rendered with none of
+        its own styles at all.
 
         Returns:
             The template context, with ``page_name``.
@@ -42,11 +41,6 @@ class IndexController(ListController):
         context = super().get_context_data(**kwargs)
         context["page_name"] = "home"
         return context
-
-    @staticmethod
-    def page_not_found(request, _exception=None):
-        """Project-wide 404 handler - renders the standard error page."""
-        return render(request, "dashboard/pages/errors/404.html", status=404)
 
 
 class HomeOverviewView(LoginRequiredMixin, View):
@@ -87,10 +81,7 @@ class HomeWidgetLayoutSaveView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = {}
+        body = posted_json_object(request)
         enabled_keys = [str(key) for key in body.get("enabled_keys", []) if isinstance(key, str)]
         saved_keys = save_widget_layout(profile, enabled_keys)
         return JsonResponse({"enabled_keys": saved_keys})

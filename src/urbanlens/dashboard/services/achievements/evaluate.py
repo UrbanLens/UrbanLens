@@ -1,11 +1,5 @@
 """Deciding which achievements a profile has earned, and granting them.
-
-Single-profile evaluation funnels through :func:`evaluate_profile` - signals
-call it with the handful of metric keys their event could have moved. The
-nightly sweep instead goes through :func:`evaluate_profiles_in_range`, one
-bounded pk-range chunk per Celery task, with the metric values computed in
-bulk for the whole chunk.
-"""
+The nightly sweep instead goes through :func:`evaluate_profiles_in_range`, one bounded pk-range chunk per Celery task, with the metric values computed in bulk for the whole chunk."""
 
 # Generic imports
 from __future__ import annotations
@@ -32,20 +26,8 @@ logger = logging.getLogger(__name__)
 def active_metric_keys() -> set[str]:
     """Return the metric keys at least one active achievement measures.
 
-    Signals use this to skip queueing work that provably has nothing to do: with
-    no award defined against ``comments_written``, posting a comment should not
-    cost a Celery message.
-
-    Deliberately uncached. It is one indexed query against a table that holds a
-    handful of admin-authored rows, and caching it bought staleness instead of
-    speed: a rolled-back transaction leaves no signal to invalidate on, so the
-    stale set survives and makes write-path behaviour depend on what ran before
-    it.
-
     Returns:
-        The set of measured metric keys, or an empty set if the table cannot be
-        read yet (mid-migration on a fresh database).
-    """
+        The set of measured metric keys, or an empty set if the table cannot be read yet (mid-migration on a fresh database)."""
     from urbanlens.dashboard.models.achievements.model import Achievement
 
     try:
@@ -64,21 +46,15 @@ def evaluate_profile(
     notify: bool = True,
 ) -> list[UserAchievement]:
     """Grant every active achievement *profile* now qualifies for.
-
-    Only metrics that some active achievement actually uses are computed, so
-    passing a narrow ``metric_keys`` after a single write is cheap.
+    Only metrics that some active achievement actually uses are computed, so passing a narrow ``metric_keys`` after a single write is cheap.
 
     Args:
         profile: The profile to evaluate.
-        metric_keys: Restrict evaluation to achievements measuring these
-            metrics. None evaluates every active achievement.
-        notify: Whether to raise an in-app notification per new award. Turned
-            off for bulk backfills of historical activity.
+        metric_keys: Restrict evaluation to achievements measuring these metrics.
+        notify: Whether to raise an in-app notification per new award.
 
     Returns:
-        The awards newly granted by this call, in grant order. Empty when the
-        profile already held everything it qualifies for.
-    """
+        The awards newly granted by this call, in grant order."""
     from urbanlens.dashboard.models.achievements.model import Achievement, UserAchievement
 
     achievements = Achievement.objects.active()
@@ -109,22 +85,16 @@ def _award_qualifying(
     notify: bool,
 ) -> list[UserAchievement]:
     """Grant whichever of *pending* the precomputed *values* qualify *profile* for.
-
-    The shared award loop behind :func:`evaluate_profile` and
-    :func:`evaluate_profiles_in_range`, so per-write and sweep evaluation
-    cannot drift apart in how a threshold is judged.
+    The shared award loop behind :func:`evaluate_profile` and :func:`evaluate_profiles_in_range`, so per-write and sweep evaluation cannot drift apart in how a threshold is judged.
 
     Args:
         profile: The profile being evaluated.
         pending: Active achievements the profile has not already earned.
-        values: Metric values keyed by metric key. A missing key is treated as
-            not qualifying rather than as zero, so an unknown metric can never
-            accidentally grant.
+        values: Metric values keyed by metric key.
         notify: Whether to raise an in-app notification per new award.
 
     Returns:
-        The awards newly granted, in grant order.
-    """
+        The awards newly granted, in grant order."""
     granted: list[UserAchievement] = []
     for achievement in pending:
         value = values.get(achievement.metric)
@@ -150,8 +120,7 @@ def _grant(profile: Profile, achievement: Achievement, value: int) -> UserAchiev
         value: The metric value that qualified them.
 
     Returns:
-        The new award, or None when another worker granted it first.
-    """
+        The new award, or None when another worker granted it first."""
     from urbanlens.dashboard.models.achievements.model import UserAchievement
 
     try:
@@ -174,20 +143,11 @@ def _grant(profile: Profile, achievement: Achievement, value: int) -> UserAchiev
 
 def _notify(profile: Profile, award: UserAchievement) -> None:
     """Raise an in-app notification for a newly earned award.
-
-    Notification failures must not roll back the award itself, so this swallows
-    and logs rather than propagating.
-    """
+    Notification failures must not roll back the award itself, so this swallows and logs rather than propagating."""
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
 
-    # A missing preferences row raises RelatedObjectDoesNotExist, which is an
-    # AttributeError subclass. Default to SITE rather than NONE so a user who
-    # never opened their settings still hears about this.
-    try:
-        preference = getattr(profile.notification_preferences, "achievement_earned", DeliveryPreference.SITE)
-    except AttributeError:
-        preference = DeliveryPreference.SITE
+    preference = delivery_preference(profile, "achievement_earned")
     if preference == DeliveryPreference.NONE:
         return
 
@@ -196,80 +156,76 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
         url = reverse("profile.view")
     except NoReverseMatch:
         url = None
-
     try:
-        NotificationLog.objects.notify(
-            profile=profile,
-            notification_type=NotificationType.ACHIEVEMENT_EARNED,
+        deliver_notification(
+            profile,
+            preference,
             title=f"Achievement unlocked: {achievement.name}",
             message=achievement.description or achievement.requirement_text,
             url=url,
+            notification_type=NotificationType.ACHIEVEMENT_EARNED,
         )
     except Exception:
         logger.exception("Failed to notify profile %s of achievement %s", profile.pk, achievement.pk)
 
 
-def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = False) -> int:
-    """Grant a single achievement to every profile that already qualifies.
+#: Profiles per backfill range: one bulk metric pass each.
+BACKFILL_CHUNK_SIZE = 1000
 
-    Run when an admin creates or edits an award, so adding one at any time
-    immediately reaches users who earned it long ago.
+
+def evaluate_achievement_in_range(achievement: Achievement, start_pk: int, end_pk: int, *, notify: bool = False) -> int:
+    """Grant one achievement to the profiles in a pk range that qualify and do not have it yet.
+
+    One bulk metric pass for the range, the same one the nightly sweep uses, rather than a metric query per
+    profile.
 
     Args:
         achievement: The award to backfill.
-        notify: Whether to notify each recipient. Off by default - a brand new
-            award backfilling across the whole user base would otherwise fan out
-            a notification to nearly everyone at once.
+        start_pk: Lowest profile pk in the range, inclusive.
+        end_pk: Highest profile pk in the range, inclusive.
+        notify: Whether to notify each recipient.
 
     Returns:
-        How many profiles received the award.
-    """
+        How many profiles received the award."""
     from urbanlens.dashboard.models.achievements.model import UserAchievement
     from urbanlens.dashboard.models.profile import Profile
 
-    metric = get_metric(achievement.metric)
-    if metric is None:
+    if get_metric(achievement.metric) is None:
         logger.warning("Skipping backfill of achievement %s: unknown metric %s", achievement.pk, achievement.metric)
         return 0
     if not achievement.is_active:
         return 0
 
-    already = set(UserAchievement.objects.filter(achievement=achievement).values_list("profile_id", flat=True))
+    holders = UserAchievement.objects.filter(achievement=achievement).values("profile_id")
+    profiles = list(Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=holders).order_by("pk"))
+    if not profiles:
+        return 0
+    values_by_profile = compute_values_bulk(profiles, {achievement.metric})
+    return sum(len(_award_qualifying(profile, [achievement], values_by_profile[profile.pk], notify=notify)) for profile in profiles)
 
-    granted = 0
-    for profile in Profile.objects.exclude(pk__in=already).iterator():
-        value = metric.value_for(profile)
-        if value < achievement.threshold:
-            continue
-        award = _grant(profile, achievement, value)
-        if award is None:
-            continue
-        granted += 1
-        if notify:
-            _notify(profile, award)
 
+def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = False) -> int:
+    """Grant a single achievement to every profile that already qualifies, in this process.
+
+    Production work goes through ``tasks.backfill_achievement``, which runs the same ranges as separate tasks.
+
+    Args:
+        achievement: The award to backfill.
+        notify: Whether to notify each recipient.
+
+    Returns:
+        How many profiles received the award."""
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.core.celery import pk_ranges
+
+    granted = sum(evaluate_achievement_in_range(achievement, first, last, notify=notify) for first, last in pk_ranges(Profile.objects.all(), BACKFILL_CHUNK_SIZE))
     logger.info("Backfilled achievement %s to %s profiles", achievement.pk, granted)
     return granted
 
 
 def evaluate_profiles_in_range(start_pk: int, end_pk: int, *, notify: bool = True) -> int:
     """Re-evaluate every active achievement for one pk-range chunk of profiles.
-
-    One chunk of the nightly safety net, which catches awards no write touches
-    - a "trips attended" threshold crossed simply because a trip's end date
-    passed - and anything an enqueue lost when the broker was down.
-    ``tasks.sweep_achievements`` slices the profile table into bounded ranges
-    and runs each through this in its own Celery task, so no single invocation
-    can approach the hard task time limit and a crashed chunk affects only its
-    own range until the next nightly dispatch re-covers it. (This replaced a
-    single resumable-cursor task over all profiles; the chunking makes the
-    cursor's crash-recovery job redundant.)
-
-    The chunk is priced in metrics, not profiles: values come from
-    :func:`~urbanlens.dashboard.services.achievements.metrics.compute_values_bulk`,
-    which computes each metric for the whole chunk in a constant number of
-    grouped queries. A chunk therefore costs on the order of the active metric
-    count in queries, plus a few per award actually granted.
+    One chunk of the nightly safety net, which catches awards no write touches - a "trips attended" threshold crossed simply because a trip's end date passed - and anything an enqueue lost when the broker was down.
 
     Args:
         start_pk: Lowest profile pk in the chunk, inclusive.
@@ -277,8 +233,7 @@ def evaluate_profiles_in_range(start_pk: int, end_pk: int, *, notify: bool = Tru
         notify: Whether to notify recipients of new awards.
 
     Returns:
-        Total number of awards granted across the chunk.
-    """
+        Total number of awards granted across the chunk."""
     from urbanlens.dashboard.models.achievements.model import Achievement, UserAchievement
     from urbanlens.dashboard.models.profile import Profile
 
@@ -315,16 +270,10 @@ def progress_for_profile(profile: Profile, viewer: Profile | None = None) -> lis
 
     Args:
         profile: The profile whose progress is being described.
-        viewer: Who is looking. Secret awards are listed only when *profile*
-            has earned them, and locked awards' progress bars are shown only to
-            the owner - a stranger should not be able to read off exactly how
-            many pins someone has.
+        viewer: Who is looking.
 
     Returns:
-        One dict per listed achievement with ``achievement``, ``earned``,
-        ``earned_at``, ``value`` and ``percent`` keys, ordered by the model's
-        default ordering.
-    """
+        One dict per listed achievement with ``achievement``, ``earned``, ``earned_at``, ``value`` and ``percent`` keys, ordered by the model's default ordering."""
     from urbanlens.dashboard.models.achievements.model import Achievement, UserAchievement
 
     is_owner = viewer is not None and viewer.pk == profile.pk
@@ -355,6 +304,7 @@ def progress_for_profile(profile: Profile, viewer: Profile | None = None) -> lis
 
 __all__ = [
     "evaluate_achievement_for_all",
+    "evaluate_achievement_in_range",
     "evaluate_profile",
     "evaluate_profiles_in_range",
     "progress_for_profile",

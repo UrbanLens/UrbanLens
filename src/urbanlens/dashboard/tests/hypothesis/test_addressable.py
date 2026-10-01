@@ -3,10 +3,10 @@
 Tests use unsaved Location instances (no DB required) to exercise the
 pure Python properties on AddressableMixin.
 """
+
 from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 
@@ -19,7 +19,7 @@ _ascii_text = st.text(
 )
 _opt_text = st.one_of(st.none(), _ascii_text)
 
-_HYP = dict(max_examples=100, deadline=None)
+_HYP = {"max_examples": 100, "deadline": None}
 
 
 def _loc(**kwargs) -> Location:
@@ -36,12 +36,18 @@ def _loc(**kwargs) -> Location:
 
 # -- address property -----------------------------------------------------------
 
+
 class AddressPropertyTests(SimpleTestCase):
     """AddressableMixin.address builds from street_number, route, locality, state, zipcode."""
 
     def test_all_fields_present(self) -> None:
-        loc = _loc(street_number="123", route="Main St", locality="Springfield",
-            administrative_area_level_1="MA", zipcode="01234")
+        loc = _loc(
+            street_number="123",
+            route="Main St",
+            locality="Springfield",
+            administrative_area_level_1="MA",
+            zipcode="01234",
+        )
         self.assertEqual(loc.address, "123 Main St, Springfield, MA 01234")
 
     def test_returns_none_when_all_empty(self) -> None:
@@ -52,13 +58,21 @@ class AddressPropertyTests(SimpleTestCase):
         loc = _loc(street_number="42")
         self.assertEqual(loc.address, "42")
 
-    def test_route_appends_comma(self) -> None:
+    def test_route_alone_has_no_trailing_comma(self) -> None:
         loc = _loc(route="Elm Ave")
-        self.assertIn("Elm Ave,", loc.address)
+        self.assertEqual(loc.address, "Elm Ave")
 
-    def test_locality_appends_comma(self) -> None:
+    def test_route_followed_by_locality_has_comma(self) -> None:
+        loc = _loc(route="Elm Ave", locality="Boston")
+        self.assertEqual(loc.address, "Elm Ave, Boston")
+
+    def test_locality_alone_has_no_trailing_comma(self) -> None:
         loc = _loc(locality="Boston")
-        self.assertIn("Boston,", loc.address)
+        self.assertEqual(loc.address, "Boston")
+
+    def test_locality_followed_by_state_has_comma(self) -> None:
+        loc = _loc(locality="Boston", administrative_area_level_1="MA")
+        self.assertEqual(loc.address, "Boston, MA")
 
     def test_state_and_zipcode_without_street(self) -> None:
         loc = _loc(administrative_area_level_1="NY", zipcode="10001")
@@ -80,9 +94,7 @@ class AddressPropertyTests(SimpleTestCase):
         zipcode=_opt_text,
     )
     @settings(**_HYP)
-    def test_address_is_none_iff_all_components_are_none(
-        self, street_number, route, locality, state, zipcode
-    ) -> None:
+    def test_address_is_none_iff_all_components_are_none(self, street_number, route, locality, state, zipcode) -> None:
         loc = _loc(
             street_number=street_number,
             route=route,
@@ -110,6 +122,7 @@ class AddressPropertyTests(SimpleTestCase):
 
 
 # -- address_basic property ----------------------------------------------------
+
 
 class AddressBasicPropertyTests(SimpleTestCase):
     """AddressableMixin.address_basic - only street_number and route."""
@@ -154,6 +167,7 @@ class AddressBasicPropertyTests(SimpleTestCase):
 
 # -- address_extended property -------------------------------------------------
 
+
 class AddressExtendedPropertyTests(SimpleTestCase):
     """AddressableMixin.address_extended - street with city, no state/zip."""
 
@@ -165,9 +179,9 @@ class AddressExtendedPropertyTests(SimpleTestCase):
         loc = _loc(route="Abbey Rd", locality="London")
         self.assertEqual(loc.address_extended, "Abbey Rd, London")
 
-    def test_street_number_and_route_without_locality(self) -> None:
+    def test_street_number_and_route_without_locality_has_no_trailing_comma(self) -> None:
         loc = _loc(street_number="7", route="Baker St")
-        self.assertEqual(loc.address_extended, "7 Baker St,")
+        self.assertEqual(loc.address_extended, "7 Baker St")
 
     def test_none_when_all_empty(self) -> None:
         loc = _loc()
@@ -188,6 +202,7 @@ class AddressExtendedPropertyTests(SimpleTestCase):
 
 
 # -- Proxy properties and setters ---------------------------------------------
+
 
 class ProxyPropertyTests(SimpleTestCase):
     """state, county, and city are thin proxies for administrative_area fields."""

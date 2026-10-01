@@ -1,16 +1,10 @@
 /**
- * Shared Markup Engine: geometry helpers + the draw-session factory used by
- * the pin-detail/wiki map annotations toolbar and the safety check-in map's
- * destination-marker drawing. Loaded globally (like LocationSearchEngine)
- * since several independent pages instantiate a draw session against their
- * own Leaflet map instance.
+ * Shared Markup Engine: geometry helpers + the draw-session factory used by the pin-detail/wiki map annotations toolbar and the safety.
  */
 
-// `L` is loaded globally via a CDN <script> tag on pages that use this module
-// (never bundled here) - this local ambient declaration only supplies types
-// for it. A plain `import "leaflet"` would make bun bundle a second, separate
-// copy of the Leaflet runtime into this chunk instead of reusing the one
-// already on window.
+import { escHtml } from "./escape-html";
+
+// `L` is loaded globally via a CDN <script> tag on pages that use this module (never bundled here).
 declare const L: typeof import("leaflet");
 
 export type LatLngTuple = [number, number];
@@ -52,15 +46,13 @@ export function bearing(from: LatLngTuple | { lat: number; lng: number }, to: La
     return Math.atan2(tlng - flng, tlat - flat) * (180 / Math.PI);
 }
 
-function arrowheadSvg(color: string, deg: number, sz = 28, opacity: number | null = 1): string {
+export function arrowheadSvg(color: string, deg: number, sz = 28, opacity: number | null = 1): string {
     const op = opacity == null ? 1 : +opacity;
     const h = sz / 2;
     const tip = -(sz * 0.43);
     const bx = sz * 0.36;
     const by = sz * 0.29;
-    // Validated here, at the sink, rather than trusting the caller: this string
-    // is assigned as a divIcon's innerHTML, and callers do pass colors straight
-    // from a server payload.
+    // Validated here, at the sink, rather than trusting the caller.
     const fill = safeColor(color);
     return (
         `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}"`
@@ -78,12 +70,12 @@ export function arrowheadSize(zoom?: number | null): number {
     return 8;
 }
 
-function textLabelHtml(s: ShapeSpec): string {
+export function textLabelHtml(s: ShapeSpec): string {
     const color = safeColor(s.color, "#e53e3e");
     const sz = safeNumber(s.stroke_width, 8, 96, 16);
     const bg = s.border_color;
     const bgVal = !bg || bg === "none" ? "rgba(255,255,255,0.92)" : safeColor(bg, "rgba(255,255,255,0.92)" as never);
-    const lbl = String(s.label ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+    const lbl = escHtml(s.label);
     return (
         `<span class="markup-text-label" style="color:${color}`
         + `;font-size:${sz}px;background:${bgVal}`
@@ -282,17 +274,11 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
     function startTool(type: string): void {
         cancelShape();
         tool = type;
-        // Disabling map panning while a tool is armed is what makes drag-to-draw
-        // reliable: without this, Leaflet's own panning races the shape-drawing
-        // drag on the same gesture, and since panning keeps the ground point
-        // under the cursor fixed, the start/end coordinates the draw session
-        // records end up nearly identical - producing "0-length" shapes.
+        // Disabling map panning while a tool is armed is what makes drag-to-draw reliable.
         map.doubleClickZoom.disable();
         map.dragging.disable();
         map.getContainer().style.cursor = "crosshair";
-        // Leaflet's `touch-action: none` rides on the drag handler it just
-        // removed, so without this the browser reclaims one-finger drags as
-        // page scrolling and pointercancels the stroke mid-draw.
+        // Leaflet's `touch-action: none` rides on the drag handler it just removed, so without this the browser reclaims one-finger drags.
         map.getContainer().style.touchAction = "none";
         opts.onToolChange?.(type);
         hint();
@@ -445,19 +431,11 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
 
         const container = map.getContainer();
         const target = e.target instanceof Element ? e.target : null;
-        // The map toolbar, the layers panel and Leaflet's own controls all sit
-        // inside the map container: capturing the pointer for a press on one of
-        // those would retarget its click to the container and swallow the button.
+        // The map toolbar, the layers panel and Leaflet's own controls all sit inside the map container.
         if (target !== container && !target?.closest(".leaflet-pane")) return;
 
         const pointerId = e.pointerId;
-        // Deliberately not preventDefault()ed, unlike the app's other pointer
-        // drags: a press that never moves still has to produce the click that
-        // onClick places a point from, and cancelling pointerdown can suppress it.
-        // Capture is taken lazily in onMove, once the gesture is known to be a
-        // drag - capturing here would retarget the follow-up click to the
-        // container, so with a tool armed a click on a marker would stop
-        // reaching that marker's own handler.
+        // Deliberately not preventDefault()ed, unlike the app's other pointer drags.
         dragPointerId = pointerId;
         map.dragging.disable();
 
@@ -472,11 +450,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
         const coarse = e.pointerType === "touch";
         const DRAG_MIN_PX = coarse ? 12 : 6;
 
-        // Freehand samples every point along the drag path (throttled by a
-        // minimum on-screen distance between samples, to keep the point count
-        // reasonable) instead of just recording the start/end of the gesture -
-        // committed as a plain "line" (see onDrawCommit), so it needs no
-        // dedicated markup_type, storage, or rendering of its own.
+        // Freehand samples every point along the drag path.
         const freehandPoints: LatLngTuple[] = [];
         let lastSampleX = startX;
         let lastSampleY = startY;
@@ -499,9 +473,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
             const dy = ev.clientY - startY;
             if (!isDragging && Math.hypot(dx, dy) < DRAG_MIN_PX) return;
             if (!isDragging) {
-                // Now that this is a drag rather than a tap, capture so moves
-                // that leave the container still arrive - and so a touch drag
-                // is not stolen mid-stroke by the browser.
+                // Now that this is a drag rather than a tap, capture so moves that leave the container still arrive.
                 container.setPointerCapture(pointerId);
                 isDragging = true;
             }
@@ -553,9 +525,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
             clearPrev();
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
-            // A freehand stroke can legitimately end near where it started (a
-            // closed squiggle) - judge it by how many points were sampled, not
-            // by net displacement like every other drag-to-draw tool below.
+            // A freehand stroke can legitimately end near where it started (a closed squiggle).
             if (tool === "freehand") {
                 if (freehandPoints.length < 2) return;
             } else if (!isDragging || Math.hypot(dx, dy) < DRAG_MIN_PX) {
@@ -577,9 +547,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
                 const finalPts: LatLngTuple[] = hasPoints ? [...state!.points, [endLL.lat, endLL.lng]] : [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]];
                 commit(tool, finalPts);
             } else if (tool === "text") {
-                // Drag defines an actual bounding box - both corners are committed
-                // (mirroring rect) so the renderer can size/wrap the label to fit it,
-                // instead of just deriving a font size from the drag distance.
+                // Drag defines an actual bounding box - both corners are committed (mirroring rect) so the renderer can size/wrap the label to fit it,.
                 commit("text", [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]], { label: getLabel() });
             }
         }
@@ -624,6 +592,42 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
     return { startTool, deactivate, cancelShape, getCurrentTool, isBusy, canFinish, finishCurrent, destroy };
 }
 
+/**
+ * The capped-listing note's text, or null when the listing was complete.
+ *
+ * It can name how many are shown but not how many exist: the reader fetches one
+ * row past its ceiling instead of counting.
+ */
+export function markupTruncationNotice(shown: number, truncated: unknown): string | null {
+    if (truncated !== true) return null;
+    const count = Math.max(0, Math.floor(shown));
+    return `Showing the ${count} most recent ${count === 1 ? "drawing" : "drawings"}. This map has more than can be shown at once.`;
+}
+
+/**
+ * Show, replace or clear the capped-listing note on a map wrapper.
+ *
+ * At most one note per wrapper, so a reload replaces it and a response that is no
+ * longer capped removes it.
+ */
+export function reportMarkupTruncation(wrapper: Element | null, payload: { markup_items?: unknown[]; truncated?: unknown }): void {
+    if (!wrapper) return;
+    wrapper.querySelector(".markup-truncation-note")?.remove();
+    const message = markupTruncationNotice((payload.markup_items ?? []).length, payload.truncated);
+    if (!message) return;
+    const note = document.createElement("div");
+    note.className = "markup-truncation-note";
+    note.setAttribute("role", "status");
+    const icon = document.createElement("i");
+    icon.className = "material-symbols-outlined";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "info";
+    const text = document.createElement("span");
+    text.textContent = message;
+    note.append(icon, text);
+    wrapper.appendChild(note);
+}
+
 export const MarkupEngine = {
     bearing,
     arrowheadSvg,
@@ -631,6 +635,8 @@ export const MarkupEngine = {
     textLabelHtml,
     renderShape,
     createDrawSession,
+    markupTruncationNotice,
+    reportMarkupTruncation,
 };
 
 export function installGlobalMarkupEngine(): void {

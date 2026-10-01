@@ -41,6 +41,21 @@
             <span class="dev-toolbar__theme-label">{% if dev_toolbar_theme_mode == 'dark' %}Dark{% elif dev_toolbar_theme_mode == 'light' %}Light{% else %}Theme{% endif %}</span>
         </button>
         <button type="button"
+                class="dev-toolbar__tool dev-toolbar__theme-toggle"
+                id="dev-toolbar-map-dark-toggle"
+                title="Toggle map dark mode"
+                aria-label="Toggle map dark mode"
+                data-map-dark-mode="{{ dev_toolbar_map_dark_mode|default:'system' }}"
+                hx-post="{% url 'dev_toolbar.toggle_map_dark_mode' %}"
+                hx-swap="none"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            <span class="dev-toolbar__theme-icons" aria-hidden="true">
+                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--light">map</i>
+                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--dark">dark_mode</i>
+            </span>
+            <span class="dev-toolbar__theme-label">Map</span>
+        </button>
+        <button type="button"
                 class="dev-toolbar__tool"
                 id="dev-toolbar-refresh-pin-cache"
                 title="Clear local pin cache and reload from server"
@@ -324,16 +339,17 @@
         updateNavButton(collapsed);
     }
 
+    // Defaults to collapsed - it stays expanded only once the user has
+    // explicitly opened it (storageKey === '0'), not by default.
     try {
-        if (localStorage.getItem(storageKey) === '1') {
-            setCollapsed(true, true);
-        } else {
+        if (localStorage.getItem(storageKey) === '0') {
             restorePosition();
             updateNavButton(false);
+        } else {
+            setCollapsed(true, true);
         }
     } catch (_) {
-        restorePosition();
-        updateNavButton(false);
+        setCollapsed(true, true);
     }
 
     requestAnimationFrame(function () {
@@ -601,7 +617,7 @@
     if (debugToggleBtn) {
         debugToggleBtn.addEventListener('click', function () {
             if (typeof window.togglePinDebugOverlay !== 'function') {
-                if (window.toastr) toastr.warning('Open a pin detail page to use API debug info.');
+                if (window.toastr) toastr.warning('Open a Private Pin page to use API debug info.');
                 return;
             }
             window.togglePinDebugOverlay();
@@ -612,7 +628,7 @@
     if (clearPageCacheBtn) {
         clearPageCacheBtn.addEventListener('click', function () {
             if (typeof window.clearPinResultCache !== 'function') {
-                if (window.toastr) toastr.warning('Open a pin detail page to clear its API cache.');
+                if (window.toastr) toastr.warning('Open a Private Pin page to clear its API cache.');
                 return;
             }
             if (!window.confirm('Clear cached API results for this pin and reload?')) return;

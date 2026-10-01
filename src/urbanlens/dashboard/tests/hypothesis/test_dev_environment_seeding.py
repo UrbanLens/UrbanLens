@@ -1,16 +1,4 @@
-"""A new dev environment gets an account somebody can actually log into.
-
-``bin/dev_env.py create`` used to hand back a URL onto an empty database: every
-page an empty state, and no way in without building an account by hand. Worse,
-running the demo seeder against it produced zero pins and logged "the location
-pool is empty", which reads as a broken seeder rather than as an un-imported
-catalog.
-
-So the tests here pin the two halves that make the difference: the catalog is
-populated before seeding when it can be, and when it cannot be, the account is
-still created, still has a named landmark pin, and the reason travels back to
-the caller as text instead of only into a log nobody reads.
-"""
+"""A new dev environment gets an account somebody can actually log into."""
 
 from __future__ import annotations
 
@@ -25,7 +13,11 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.demo.seeding import HUDSON_RIVER_STATE_HOSPITAL, seed_dev_environment, seed_landmark_pin
+from urbanlens.dashboard.services.demo.seeding import (
+    HUDSON_RIVER_STATE_HOSPITAL,
+    seed_dev_environment,
+    seed_landmark_pin,
+)
 
 #: Imported inside `redata_demo_locations`, so it is patched where it is defined.
 _CATALOG = "urbanlens.dashboard.services.demo.locations.redata_demo_locations"
@@ -34,8 +26,18 @@ _CATALOG = "urbanlens.dashboard.services.demo.locations.redata_demo_locations"
 _PASSWORD = "demo-a1b2c3"  # noqa: S105 - the point of this feature is that it is not secret
 
 _ENTRIES = [
-    {"latitude": 41.7658, "longitude": -72.6734, "official_name": "Connecticut State Capitol", "wiki": {"name": "Connecticut State Capitol", "aliases": [], "photos": []}},
-    {"latitude": 42.3587, "longitude": -71.0637, "official_name": "Massachusetts State House", "wiki": {"name": "Massachusetts State House", "aliases": [], "photos": []}},
+    {
+        "latitude": 41.7658,
+        "longitude": -72.6734,
+        "official_name": "Connecticut State Capitol",
+        "wiki": {"name": "Connecticut State Capitol", "aliases": [], "photos": []},
+    },
+    {
+        "latitude": 42.3587,
+        "longitude": -71.0637,
+        "official_name": "Massachusetts State House",
+        "wiki": {"name": "Massachusetts State House", "aliases": [], "photos": []},
+    },
 ]
 
 
@@ -116,7 +118,11 @@ class SeedDevEnvironmentTests(TestCase):
     def test_it_refuses_to_run_in_production(self) -> None:
         """It writes real coordinates and a password derived from a hostname - not into real data."""
         for environment in ("production", "staging"):
-            with self.subTest(environment=environment), mock.patch("urbanlens.UrbanLens.settings.app.settings.environment_name", environment), pytest.raises(RuntimeError):
+            with (
+                self.subTest(environment=environment),
+                mock.patch("urbanlens.UrbanLens.settings.app.settings.environment_name", environment),
+                pytest.raises(RuntimeError),
+            ):
                 self._seed()
         self.assertFalse(User.objects.filter(username="demo").exists())
 

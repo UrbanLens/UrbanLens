@@ -1,11 +1,4 @@
-"""The profile content fields round-trip through export and import.
-
-Closes the gap recorded in PROBLEMS.md ("`profile` is exported but never
-imported"): bio, area, dates and every contact handle sat visibly in the
-user's own archive and were silently dropped on re-import. Identity
-(username/email/date_joined) must stay untouched - an archive must not be
-able to overwrite the login identity of the account it is imported into.
-"""
+"""The profile content fields round-trip through export and import."""
 
 from __future__ import annotations
 
@@ -23,10 +16,7 @@ from urbanlens.dashboard.services.import_export.import_data import ImportResult
 def _export_area(key: str, profile, temp_dir: str) -> None:
     """Run one registered export area by key.
 
-    The private ``_export_*`` functions these tests called were replaced by the
-    ``ExportType`` registry. Dispatching by key keeps the round-trip coverage
-    without depending on internals that have already moved once.
-    """
+    The private ``_export_*`` functions these tests called were replaced by the ``ExportType`` registry."""
     from urbanlens.dashboard.services.import_export.export import _REGISTERED_EXPORTERS
 
     _REGISTERED_EXPORTERS[key](profile, temp_dir, base_url="http://testserver")
@@ -102,4 +92,8 @@ class ProfileRoundTripTests(TestCase):
             _import_area("profile", self.profile, temp_dir, ImportResult())
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.bio, "new bio")
-        self.assertEqual(self.profile.phone_number, "+15551234567", "an archive without a contact block must not blank existing handles")
+        self.assertEqual(
+            self.profile.phone_number,
+            "+15551234567",
+            "an archive without a contact block must not blank existing handles",
+        )

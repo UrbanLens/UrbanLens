@@ -1,20 +1,4 @@
-"""Per-viewer media responses must forbid shared caches from storing them.
-
-Every one of these endpoints authorizes its bytes *per viewer*: the same URL
-legitimately returns an image for one profile and a 404 for another. Django
-emits ``Vary: Cookie`` on them, which is right but not sufficient - shared
-caches commonly honour only ``Vary: Accept-Encoding`` and otherwise key on the
-URL alone, and these URLs end in real image extensions, which is exactly what
-extension-based CDN cache rules match. With no ``Cache-Control`` at all (the
-state before ``mark_private_media`` existed) such a cache applies its own
-default TTL to one user's private photo.
-
-The interesting test here is the last one: it asserts that every view in the
-package that serves raw bytes actually routes through the helper. A per-view
-test can only cover the views someone remembered to write a test for, and the
-failure mode is silent - the response is correct in every visible way except
-the missing header.
-"""
+"""Per-viewer media responses must forbid shared caches from storing them."""
 
 from __future__ import annotations
 
@@ -40,7 +24,6 @@ _CONTROLLERS = Path(media_auth.__file__).parent
 _BYTE_SERVING_MODULES = (
     "media.py",
     "media_proxy.py",
-    "media_preview.py",
     "immich.py",
     "pin_suggestions.py",
     "google_photos.py",
@@ -59,7 +42,9 @@ class MarkPrivateMediaTests(SimpleTestCase):
         """``max-age`` alone would *invite* a shared cache to store it."""
         from django.http import HttpResponse
 
-        directives = {part.strip() for part in mark_private_media(HttpResponse(b"")).get("Cache-Control", "").split(",")}
+        directives = {
+            part.strip() for part in mark_private_media(HttpResponse(b"")).get("Cache-Control", "").split(",")
+        }
 
         self.assertIn("private", directives)
 
@@ -112,10 +97,8 @@ class MediaGateCacheDirectiveTests(TestCase):
 class EveryByteServingViewIsMarkedTests(SimpleTestCase):
     """Static check: no byte-serving return escapes ``mark_private_media``.
 
-    Matches on the response *construction* rather than the returned name, so a
-    view that builds its response and returns it a few lines later is still
-    covered.
-    """
+    Matches on the response *construction* rather than the returned name, so a view that builds its response and
+    returns it a few lines later is still covered."""
 
     def _image_body_returns(self, module: str) -> list[int]:
         """Line numbers of ``return HttpResponse(<bytes>, content_type=...)`` not wrapped."""
@@ -144,6 +127,13 @@ class EveryByteServingViewIsMarkedTests(SimpleTestCase):
 
     def test_the_check_would_notice_a_regression(self) -> None:
         """Guard against the scan silently matching nothing at all."""
-        marked = sum((_CONTROLLERS / module).read_text(encoding="utf-8").count("mark_private_media(") for module in _BYTE_SERVING_MODULES)
+        marked = sum(
+            (_CONTROLLERS / module).read_text(encoding="utf-8").count("mark_private_media(")
+            for module in _BYTE_SERVING_MODULES
+        )
 
-        self.assertGreaterEqual(marked, len(_BYTE_SERVING_MODULES), "scan found almost no marked responses - it has stopped measuring anything")
+        self.assertGreaterEqual(
+            marked,
+            len(_BYTE_SERVING_MODULES),
+            "scan found almost no marked responses - it has stopped measuring anything",
+        )

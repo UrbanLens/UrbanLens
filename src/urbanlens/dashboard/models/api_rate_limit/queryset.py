@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from urbanlens.dashboard.models.abstract.queryset import DashboardManager, DashboardQuerySet
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit  # noqa: F401 - mypy needs these; ruff does not
 
-class ApiRateLimitQuerySet(DashboardQuerySet):
+
+class ApiRateLimitQuerySet(DashboardQuerySet["ApiRateLimit"]):
     """QuerySet for ApiRateLimit."""
 
-    def enabled(self) -> ApiRateLimitQuerySet:
-        """Return only enabled rate limit configs."""
-        return self.filter(enabled=True)
+
+_ApiRateLimitManagerBase = DashboardManager.from_queryset(ApiRateLimitQuerySet)
 
 
-class ApiRateLimitManager(DashboardManager):
+class ApiRateLimitManager(_ApiRateLimitManagerBase):
     """Manager for ApiRateLimit."""
-
-    def get_queryset(self) -> ApiRateLimitQuerySet:
-        """Return an ApiRateLimitQuerySet."""
-        return ApiRateLimitQuerySet(self.model, using=self._db)

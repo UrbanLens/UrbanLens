@@ -1,7 +1,4 @@
-{% comment %}
-Import progress fragment - returned by ImportStartView and polled by ImportStatusView.
-Includes hx-get polling while status is pending/running; removes polling when done/error.
-{% endcomment %}
+{% comment %}Import progress fragment - returned by ImportStartView and polled by ImportStatusView.{% endcomment %}
 
 {% if status == "done" %}
 <div class="export-progress-wrap" id="import-status-poll">
@@ -47,7 +44,7 @@ Includes hx-get polling while status is pending/running; removes polling when do
     {% endif %}
 
     <div class="export-done-actions">
-        <button type="button" class="btn btn--ghost" onclick="location.reload()">
+        <button type="button" class="btn btn--ghost" data-reload>
             <i class="material-symbols-outlined">refresh</i>
             Import again
         </button>
@@ -75,8 +72,8 @@ Includes hx-get polling while status is pending/running; removes polling when do
         <i class="material-symbols-outlined">error</i>
         <span>{{ message|default:"Import failed. Please try again." }}</span>
     </div>
-    <div class="export-done-actions" style="margin-top:.75rem;">
-        <button type="button" class="btn btn-secondary" onclick="location.reload()">
+    <div class="export-done-actions">
+        <button type="button" class="btn btn--secondary" data-reload>
             <i class="material-symbols-outlined">refresh</i>
             Try again
         </button>
@@ -101,9 +98,8 @@ Includes hx-get polling while status is pending/running; removes polling when do
         <div class="export-progress-bar" style="width:{{ progress|default:0 }}%;"></div>
     </div>
     <div class="export-status-msg">
-        <span class="htmx-indicator-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid var(--ul-grey-4);border-top-color:#1976D2;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;"></span>
+        <span class="ul-spinner ul-spinner--surface" aria-hidden="true"></span>
         <span>This may take a moment...</span>
     </div>
 </div>
-<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
 {% endif %}

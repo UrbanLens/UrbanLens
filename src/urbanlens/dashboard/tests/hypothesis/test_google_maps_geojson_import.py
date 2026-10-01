@@ -1,21 +1,11 @@
-"""Tests for GoogleMapsGateway.geojson_to_dict() - GeoJSON pin extraction.
+"""Tests for GoogleMapsGateway.geojson_to_dict() - GeoJSON pin extraction."""
 
-This method (renamed from ``takeout_json_to_dict``) handles two shapes:
-
-- Google Takeout's "Saved Places" export: ``Point`` geometry, ``name``/
-  ``description``/``address`` properties. This is the pre-existing behavior
-  and must be unaffected by the broadening below.
-- Generic GeoJSON (Overpass Turbo exports, custom scripts): arbitrary geometry
-  types (reduced to a centroid) and arbitrary property names (via the
-  ``pick_name_and_description`` fallback heuristic).
-"""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
@@ -163,7 +153,13 @@ class GeojsonToDictGenericShapeTests(SimpleTestCase):
     )
     def test_round_trips_arbitrary_point_coordinates(self, lon: float, lat: float):
         text = _feature_collection(
-            [{"type": "Feature", "properties": {"name": "Spot"}, "geometry": {"type": "Point", "coordinates": [lon, lat]}}],
+            [
+                {
+                    "type": "Feature",
+                    "properties": {"name": "Spot"},
+                    "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                }
+            ],
         )
 
         pins = self.gateway.geojson_to_dict(text, self.profile)

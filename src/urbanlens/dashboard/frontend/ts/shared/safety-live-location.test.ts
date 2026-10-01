@@ -332,9 +332,7 @@ describe("when the browser cannot provide a location", () => {
 });
 
 describe("when location permission is denied", () => {
-    // Denial is permanent until the user changes a browser setting, so leaving
-    // the switch on left the server - and the partner watching the check-in -
-    // expecting positions that would never be sent.
+    // Denial is permanent until the user changes a browser setting, so leaving the switch on left the server.
     test("sharing is switched off rather than left looking healthy", async () => {
         const h = setup(true);
         h.emitError(1); // PERMISSION_DENIED
@@ -373,10 +371,7 @@ describe("when location permission is denied", () => {
         expect(posted.filter((p) => p.url === "/update/")).toHaveLength(0);
     });
 
-    // A refused disable is the case this whole path exists to prevent: off
-    // locally, still enabled on the server, partner still watching a stale
-    // marker. A non-ok status resolves like any other response, so it has to
-    // be inspected rather than assumed.
+    // A refused disable is the case this whole path exists to prevent.
     test("a refused disable is reported rather than assumed to have worked", async () => {
         const h = setup(true);
         stubFetch(500);
@@ -405,11 +400,7 @@ describe("when location permission is denied", () => {
         expect(h.errors).toHaveLength(1);
     });
 
-    // The disable waits behind the in-flight enable it is undoing, which means
-    // the intent it represents can be overtaken while it waits: grant the
-    // permission and switch back on, and a stale "off" landing afterwards would
-    // disable sharing on the server under a checked toggle and a live watcher -
-    // every position update then rejected, with the page showing no sign of it.
+    // The disable waits behind the in-flight enable it is undoing, which means the intent it represents can be overtaken while it waits.
     test("a queued disable is abandoned when sharing is switched back on first", async () => {
         const h = setup();
         const deferred = stubDeferredFetch();
@@ -428,10 +419,7 @@ describe("when location permission is denied", () => {
         expect(h.watching()).toBe(true);
     });
 
-    // The same collision one step later: the disable has already been sent, so
-    // dropping it is no longer an option and the re-enable has to land after
-    // it. The flag is last-write-wins server-side, so an "on" sent while the
-    // "off" is still open can be overtaken by it.
+    // The same collision one step later: the disable has already been sent, so dropping it is no longer an option and the re-enable has.
     test("a re-enable is sent after an in-flight disable, not alongside it", async () => {
         const h = setup(true);
         const deferred = stubDeferredFetch();

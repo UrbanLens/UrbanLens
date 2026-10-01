@@ -1,17 +1,6 @@
 /**
- * The stateful dependencies, exercised through the application rather than probed.
- *
- * `/health/ready` answers "the database replied to `SELECT 1`" and "the cache
- * round-tripped a key". Both are worth knowing and neither is what the
- * application needs: it needs to *write* to a database that may be a replica,
- * and it needs a session to still exist on the next request, which is the cache
- * doing a job a ping does not exercise.
- *
- * These also prove the processes agree. A row written through the API and read
- * back through the web UI has crossed from gunicorn to gunicorn via Postgres; a
- * session minted in one worker and honoured by another has crossed via the
- * session store. On a multi-container deployment those are the failures that
- * only appear under real traffic.
+ * The stateful dependencies, exercised through the application rather than probed. `/health/ready`
+ * answers "the database replied to `SELECT 1`" and "the cache round-tripped a key".
  */
 
 import { expect, test } from "../../lib/fixtures.js";

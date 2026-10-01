@@ -35,9 +35,9 @@ coordinates might already exist nearby.
 the one it currently points at.** The two rules compose into a thing worth stating outright,
 because it is not obvious from either alone: since a pin has no coordinates of its own, and a
 location's cannot change, "give this pin its own place at the same point" is not expressible at
-all. That is why detaching a pin from its `Location` refuses with an explanation rather than
-inventing a row (see `controllers/pin_edit.PinRelinkView`, and the 2026-08-13 entry in
-`docs/PROBLEMS.md`).
+all. That is why there is no "detach from this location" action — the only coherent way to stop
+sharing a place's record is to relink to a different place, or move (see
+`controllers/pin_edit.PinRelinkView`, and the 2026-08-13 entry in `docs/PROBLEMS.md`).
 
 ## Wiki visibility — pinned, not public
 
@@ -94,7 +94,7 @@ Per-user visual overrides (color/icon) on a shared global label live in a separa
 ## Label names are unique per owner and kind, case-insensitively
 
 Since migrations 0042/0043, `Label` carries
-`UniqueConstraint(Lower("name"), "profile", "kind", nulls_distinct=False)`. Three consequences that
+`UniqueConstraint(Lower("name"), "profile", "kind", nulls_distinct=False)`. Four consequences that
 are not obvious from the model:
 
 **It is case-insensitive.** "Abandoned" and "abandoned" are the same label. This matches what
@@ -102,7 +102,26 @@ callers already assumed - `services/media/media_labels.py` pre-filtered with `na
 `get_or_create(name=...)` alone is case-sensitive and the intended identity was not. Any lookup that
 feeds a create must use `name__iexact`, or the `get` misses an existing row, the insert violates the
 constraint, and `get_or_create`'s own retry (which repeats the same exact-match `get`) cannot
-recover.
+recover - this is exactly what a raw `Label.objects.get_or_create` did before 97e352b87 (P151),
+which is why create-by-name is now centralized rather than left to each call site: see the next
+paragraph.
+
+**Create-by-name goes through one pair of helpers, never a raw `Label.objects.get_or_create`.**
+`LabelQuerySet.named(profile, name, kind)` (`models/labels/queryset.py`) is the lookup every
+create-by-name path must use - it matches the constraint (`name__iexact`, scoped to `kind`) and
+returns the profile's own labels before global ones, so a personal label already shadows a global
+match. For a profile-scoped kind (`PROFILE_SCOPED_KINDS` in `models/labels/meta.py`: category and
+status) it only ever matches the profile's own labels, since a global category or status would be
+invisible on Organize and uneditable. `Label.objects.resolve_or_create(profile, name, kind, defaults=...)` calls `named()` first
+and reuses what it finds, creating inside a savepoint and re-reading on a raced `IntegrityError`
+rather than trusting the first miss. `Label.objects.create_unique(profile=, name=, kind=, **fields)`
+does the same lookup but refuses instead of reusing, raising `LabelNameConflictError(conflict)` -
+for write paths that must report a collision rather than silently attaching to an existing label.
+`bin/check_canonical_creates.py` (pre-commit hook `canonical-creates`, also run in CI) statically
+refuses `Label.objects.create/get_or_create/update_or_create` outside `tests/`/`migrations/` -
+including through a chained queryset or an aliased import, though not through a related manager
+(`pin.labels.create`) or `self.model.objects` - so a new call site cannot reintroduce the
+raw-lookup mismatch above.
 
 **Global labels are constrained against each other.** A global label has `profile IS NULL`, and
 Postgres treats NULLs as distinct by default - so without `nulls_distinct=False` two identical
@@ -112,7 +131,10 @@ global labels would still be possible. That flag needs Postgres 15+; this projec
 global label with the same name differ in `profile`, so the constraint permits both. The check in
 `services/labels/uniqueness.py` is deliberately wider and refuses it, because two identically-named
 labels in one list are indistinguishable to the user. Migration 0042 merged the pre-existing ones
-into the global label, which survives.
+into the global label, which survives. `find_conflicting_label` (`services/labels/uniqueness.py`)
+delegates its lookup to `Label.objects.named` rather than repeating it, so this wider,
+UI-facing check and the two model-level helpers above can't drift onto different definitions of
+"the same label".
 
 Every write path checks `find_conflicting_label` *before* writing and returns a message (HTML views
 400, external API 409, undo-restore refuses) - reaching the constraint means a 500, so the check is
@@ -134,6 +156,29 @@ scope slug lookups by the owning profile.
 There's also `UniqueConstraint(fields=["location", "profile"], condition=Q(parent_pin__isnull=True))`
 — a user can only have one top-level pin per Location (sub-pins via `parent_pin` are exempt).
 TODO NOTE From Jess: I could be mistaken, but I think there shouldn't be an exception for sub-pins. Sub-pins will be nearby, of course, but the coordinates won't be exactly, precisely the same. This exception allows for two pins to precisely overlap on a map, which surely not very helpful.
+
+## Child pin and child wiki slugs carry a parent prefix
+
+A child pin or child wiki slug is `{parent-prefix}-{name}`, not a bare slugify of the child's
+name. The prefix is the shortest existing alias that is already compact (3–8 characters after
+slugify), or — when every alias is still too long — one derived from the parent's canonical name:
+initials of significant words (`Hudson River State Hospital` → `hrsh`), the first word when the
+initials are too short (`Ford Motors` → `ford`), or a truncation of that word when even the first
+word is too long (`Switzerland` → `switz`).
+
+Only the immediate parent contributes. A grandchild `Boiler Room` under `hrsh-powerhouse` is
+`powerhouse-boiler-room`: the parent's own slug is a candidate like any other name, but at 15
+characters it is too long, and the prefix comes from the parent's name instead. Only a parent slug
+of 8 characters or fewer (`hrsh-gym`) can carry the root's prefix down, and it only wins when the
+parent's name and aliases give no shorter candidate. Chaining prefixes on purpose would break the length bound.
+
+Truncation drops whole trailing words rather than clipping mid-word. Hyphenated compounds
+(`non-contributing`) are one word, so `Staff/Tenant House 1900 (non-contributing)` under HRSH
+becomes `hrsh-stafftenant-house-1900`, not `…-non-contributi`. Dropped words are added back only
+to make a collision unique or a too-short result long enough. Existing slugs are not rewritten.
+
+Wiki pages are routed by `Location.slug`. A child wiki whose location still has a UUID fallback
+slug copies the wiki's prefixed slug onto the location so the URL matches.
 
 ## Matching reads `Place.geometry`, and nothing else
 
@@ -252,7 +297,7 @@ Consequences worth knowing:
 ## The restructure suggestion is one dialog, and it is offered exactly once
 
 `services/pins/pin_restructure.py` answers two questions that are really one — "this pin's hierarchy
-doesn't match the ground" — so they share a single prompt on the pin detail page rather than
+doesn't match the ground" — so they share a single prompt on the Private Pin page rather than
 interrupting twice:
 
 1. buildings on this property with no child pin yet, and
@@ -329,7 +374,7 @@ Load-bearing details:
 
 ## Sub-pin data is never hidden by nesting - but each surface aggregates independently
 
-The pin detail page's "show sub pin details" toggle (`?children=1`) is not one mechanism - every
+The Private Pin page's "show sub pin details" toggle (`?children=1`) is not one mechanism - every
 aggregating view (map markers, photo gallery, visit history, and now Notes/comments) independently
 swaps its own queryset from `pin.<related>` to `<Model>.objects.filter(pin__in=Pin.objects.
 filter(pk=pin.pk).with_descendants())` when the flag is set, and independently threads
@@ -354,7 +399,7 @@ subtree, not just the exact pin in the URL - otherwise deleting an aggregated ch
 - API client code stays a `Gateway` subclass under `dashboard/services/apis/...` with a
   `service_key`; the plugin class is just the manifest wiring it into rate limiting, panels, and
   the admin inventory. Not every service has been converted to a plugin yet — unconverted ones
-  still register defaults directly in `rate_limiter.SERVICE_REGISTRY` (see `TODO.md` UL-294).
+  still register defaults directly in `rate_limiter.SERVICE_REGISTRY` (see the repo-root `ROADMAP.md`, UL-294).
 - Name candidates from `NameProvider`s are quality-gated: address-derived fragments (street names,
   city names) and generically meaningless names are rejected before being persisted as aliases.
 
@@ -399,8 +444,23 @@ migration — don't "simplify" it to a literal list.
 
 ## Undo framework — do not "delete" through save()/post_save
 
-The generic undo system (`services/undo/`, `models/undo/UndoAction`) stages deletions in cache
-before they're finalized. Per-model handlers exist for pin, wiki, safety check-in, and trip.
+The generic undo system (`services/undo/`, `models/undo/UndoAction`) stores the serialized
+payload needed to restore or redo an action directly on the `UndoAction` row itself, not in a
+cache: a cache entry can vanish well before its nominal TTL (no shared Redis/Dragonfly configured,
+so a locmem cache other workers can't see; or early eviction under memory pressure), which used
+to surface as an undo entry that still listed as recent and un-expired but silently failed the
+moment it was actually restored. A dozen per-model/mutation handlers exist under
+`services/undo/handlers/` (pin, wiki, trip, label, label membership, saved filter, pin list,
+safety check-in, markup map, plus `_mutation` variants for pin/wiki/photo field changes) - see
+that package's docstrings for exactly what each does and doesn't restore.
+
+Both `restore_undo_action` and `redo_undo_action` claim the row under `select_for_update()` and
+check `undone_at`/expiry *after* acquiring the lock, so a double-submit (a retried request, a
+race between two tabs) always leaves exactly one winner - the loser gets `UndoAlreadyRestoredError`
+rather than double-applying. See `tests/hypothesis/test_undo_restore_is_single_use.py` and its
+`test_undo_redo_is_single_use.py` sibling, which both prove this with a real two-instance
+double-submit rather than just asserting on the code shape.
+
 Related but broader rule that bit this codebase before: **never call `.save()` inside a
 `post_save` signal handler or in `__str__`** — it causes recursive-save bugs; use
 `queryset.update()` for side-effect-free caching instead, and always set `dispatch_uid` on signal
@@ -408,11 +468,33 @@ connections. The project's linter (ruff) has previously stripped "redundant-look
 guards out of signal handlers — if a guard is load-bearing, make the code redundant enough that
 the linter can't tell, rather than relying on the guard alone.
 
+## One stored file can back several `Image` rows
+
+Two independent features point more than one row at the same storage key rather than duplicating
+bytes: sharing a pin copies its photos by reusing the name
+(`services/sharing/pin_sharing.py`), and a deduplicated upload reuses both the original *and* its
+thumbnail (`services/photos/uploads.attach_deduped_copy`, which also deliberately does not charge
+quota a second time).
+
+The consequence is easy to miss and expensive to get wrong: **anything that deletes or replaces a
+stored file must first ask whether another row still needs it**, via
+`services.media.images.file_still_referenced`. Deleting unconditionally does not error - it leaves
+some other profile's photo pointing at nothing, with a broken image and no trace of why.
+
+Three places do this today, and they are the three that touch stored bytes: `delete_stored_file`
+(row deletion, which also takes the pks being removed in the same batch, or a bulk delete would
+never remove anything), `downscale_stored_image` (re-encode / EXIF strip), and
+`write_image_thumbnail` (preview regeneration). A new one belongs on that list.
+
+Note this defers rather than skips cleanup: `strip_exif_from_stored_photos` walks every row, so the
+last row referencing an old file is the one that removes it. The file still goes; it just goes when
+nothing needs it.
+
 ## Rate limiting and cost tracking
 
 Every external API call should go through a `Gateway` subclass so it's covered by
 `ApiRateLimit`/`ApiCallLog` (calls/min, calls/day, USA-only geo-filter where relevant, enabled
-toggle). This is required groundwork for the still-unbuilt cost-reporting feature (`TODO.md`
+toggle). This is required groundwork for the still-unbuilt cost-reporting feature (the repo-root `ROADMAP.md`,
 UL-52/UL-53) — new integrations should track a running cost estimate per call even before that
 reporting UI exists.
 
@@ -473,11 +555,23 @@ time migrations get re-squashed.
   been chosen. `pytest` avoids it because `TESTING` also checks for `pytest` in `sys.argv`, which is
   true before settings are read.
 
-  CI is unaffected and is *not* misconfigured: `.github/workflows/ci.yml` sets
-  `DJANGO_SETTINGS_MODULE=urbanlens.UrbanLens.settings.test`, and that module sets `TESTING = True`
-  at import - before `STORAGES` is decided. So `manage.py test` under `settings.test` is fine, and
-  only the default settings module hits this. (Established 2026-08-17 while checking whether CI's
-  Django step was silently broken; it is not.)
+  **The paragraph that used to sit here was wrong, and its conclusion was the opposite of the
+  truth.** It said `settings/test.py` sets `TESTING = True` "at import - before `STORAGES` is
+  decided", and therefore that `manage.py test` under `settings.test` is fine. `settings/test.py`
+  begins `from ...base import *`, which runs base.py's `STORAGES` computation, and only *then* sets
+  `TESTING = True` - after, not before. Measured 2026-09-05 under that settings module:
+  `TESTING: True`, `STORAGE: CompressedManifestStaticFilesStorage`.
+
+  The same ordering bit pytest-xdist, whose workers execnet starts with `argv[0] == "-c"` - so the
+  argv check that saves a normal pytest run does not save a worker, and a full suite with `-n 6`
+  produced 287 manifest errors (P77). `settings/test.py` now sets the storage explicitly rather than
+  inheriting a guess, which makes the old claim true for the first time: every runner pointed at
+  that module gets `StaticFilesStorage`.
+
+  CI is unaffected by *this*, but the sentence it used to carry - "(Established 2026-08-17 while
+  checking whether CI's Django step was silently broken; it is not.)" - was also wrong. It was: the
+  step ran `manage.py test` from the repository root and discovered zero tests for its entire
+  existence (P74).
 - `@given` (Hypothesis) and Django's `self.client` don't mix cleanly in this repo's `TestCase` —
   prefer calling the view/service function directly under `@given`, or drop Hypothesis for that
   particular test. TODO NOTE From Jess: We should probably fix TestCase so it does work cleanly.
@@ -612,3 +706,63 @@ Two consequences worth knowing before editing that module:
   point at. Keys live for one document and are never emitted on read.
 
 `labels` is the one field we add, per item, and it is invisible to the upstream shape.
+
+## A lost Celery child fails once; it is not redelivered forever
+
+`CELERY_TASK_ACKS_LATE` stays on — a task is acknowledged after it finishes, so
+a worker that dies mid-run does not swallow the job. `CELERY_TASK_REJECT_ON_WORKER_LOST`
+is off, which is the part worth understanding, because "reject on worker lost"
+sounds like the safer of the two settings and is not.
+
+That setting governs one narrow case: **the child died and the parent survived
+to observe it.** In a prefork worker that means an OOM kill or a segfault inside
+a C decoder — deterministic, caused by the task's own payload, and therefore
+reproduced exactly on the next attempt. Celery's failure handler rejects such a
+message *with requeue*, and nothing bounds the redelivery:
+
+- `max_retries` counts `task.retry()` calls. This redelivery comes from the
+  broker, so no counter is touched.
+- The time limits never engage. A cgroup OOM kill takes seconds.
+- `visibility_timeout` does not pace it. That governs a message whose worker
+  vanished *without* rejecting it; kombu's `_restore` re-queues a rejected
+  message immediately.
+- The Redis/Valkey transport enforces no delivery limit. kombu does stamp
+  `redelivered = True` on the restored message, and Celery currently ignores it.
+
+This was traced against the Redis-family transport, whose `visibility_timeout`
+and `_restore` requeue are kombu-emulated rather than broker-native. The broker
+is now RabbitMQ: native AMQP `basic.reject`/`basic.nack` redelivery has not been
+re-traced the same way, so treat the mechanism above as unconfirmed until it is.
+
+The loop is also silent: that branch sets `send_failed_event = False` and skips
+`mark_as_failure`, so a task looping on this stores no result, sends no
+`task_failure` signal, and emits no `task-failed` event. It is invisible to the
+exporter in `services/core/celery_events.py` — the one place it would otherwise
+show up — while permanently occupying a concurrency slot.
+
+**The usual argument for keeping it on does not apply**, and this is the piece
+that is easy to get wrong: losing a task to an infrastructure event is a
+different code path. When the *whole* worker goes away there is no parent left
+to reject anything, and the message returns via kombu's `restore_unacked_once`
+(clean shutdown) or the visibility timeout (SIGKILL). Both still work with this
+setting off. So the setting's only real domain is the case where retrying is
+wrong by construction.
+
+`CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT` is pinned to Celery's default of True
+for the same reason: set to False it reaches the same unbounded branch for any
+task exceeding `CELERY_TASK_TIME_LIMIT`, which is far easier to hit than an OOM.
+`dashboard.E007` and `dashboard.E008` refuse both combinations at startup, and
+`tests/hypothesis/test_celery_worker_lost.py` drives the real Celery `Request`
+so a version bump that changes this surfaces as a test failure rather than a
+silently different runtime.
+
+Worth being concrete about the cost, because "a task fails twice" undersells it:
+`media-worker` decodes bytes a stranger uploaded and runs `--concurrency=2`, and
+its threat model is decoder memory-corruption bugs - inputs that kill the child.
+A segfault raises the same `WorkerLostError` as an OOM. Under the old settings
+one such upload permanently held one of two slots, silently; two held the whole
+interactive media queue, with the container still reporting healthy.
+
+This is the bound on *how many times*; whether a second run is safe at all is a
+separate question, answered per task — the duplicate-delivery survey in
+`docs/reports/2026-08-11-codebase-audit.md` covers the side-effecting families.

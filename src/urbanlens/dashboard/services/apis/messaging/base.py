@@ -17,11 +17,7 @@ _MESSAGES_URL = "https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messag
 
 @dataclass(slots=True, kw_only=True)
 class TwilioGateway(Gateway):
-    """Base gateway for Twilio's Messaging API (shared by SMS and WhatsApp).
-
-    Subclasses provide the ``from_number`` (and, for WhatsApp, the
-    ``whatsapp:`` address prefix) - the HTTP call and auth are identical.
-    """
+    """Base gateway for Twilio's Messaging API (shared by SMS and WhatsApp)."""
 
     paid_service: ClassVar[bool] = True
 
@@ -46,9 +42,7 @@ class TwilioGateway(Gateway):
             body: Message text.
 
         Returns:
-            True if Twilio accepted the message for delivery, False on failure
-            (logged, never raised - a failed notification shouldn't break the
-            caller's own request/task).
+            True if Twilio accepted the message for delivery, False on failure (logged, never raised - a failed notification shouldn't break the caller's own request/task).
         """
         # Narrowed to local variables (rather than trusting __post_init__'s check
         # of the instance attributes) so the type checker can see these are

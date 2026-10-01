@@ -29,13 +29,7 @@ class PinMergeSuggestionStatus(abstract.TextChoices):
 
 class PinMergeSuggestion(abstract.DashboardModel):
     """A proposal that two of a profile's own pins are the same place and should merge.
-
-    Always self-directed - pin_a and pin_b always belong to the same profile
-    (never a cross-profile suggestion; unlike VisitSuggestion, this never routes
-    through a NotificationLog to another user). pin_a/pin_b carry no ordering
-    meaning - either may end up the survivor; see ``suggested_survivor`` for the
-    precomputed recommendation the UI preselects, which the accepting user may
-    always override.
+    Always self-directed - pin_a and pin_b always belong to the same profile (never a cross-profile suggestion; unlike VisitSuggestion, this never routes through a NotificationLog to another user). pin_a/pin_b carry no ordering meaning - either may end up the survivor; see ``suggested_survivor`` for the precomputed recommendation the UI preselects, which the accepting user may always override.
 
     Attributes:
         profile: Owner of both pins.
@@ -55,12 +49,10 @@ class PinMergeSuggestion(abstract.DashboardModel):
     reason = TextField(blank=True, default="", max_length=MAX_REASON_LENGTH)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="pin_merge_suggestions")
-    # SET_NULL, not CASCADE: accepting a suggestion deletes the losing pin,
-    # and a suggestion always references its own loser via pin_a/pin_b - a
-    # CASCADE here would delete the suggestion itself (the very row recording
-    # that it was accepted) the instant the loser is deleted. SET_NULL just
-    # drops the reference to the now-gone loser; the surviving pin's side
-    # keeps pointing at a real, still-existing Pin.
+    # SET_NULL, not CASCADE: accepting a suggestion deletes the losing pin, and a suggestion always
+    # references its own loser via pin_a/pin_b - a CASCADE here would delete the suggestion itself
+    # (the very row recording that it was accepted) the instant the loser is deleted.
+    # SET_NULL just drops the reference to the now-gone loser; the surviving pin's side keeps
     pin_a = ForeignKey("dashboard.Pin", on_delete=SET_NULL, null=True, blank=True, related_name="merge_suggestions_as_a")
     pin_b = ForeignKey("dashboard.Pin", on_delete=SET_NULL, null=True, blank=True, related_name="merge_suggestions_as_b")
     suggested_survivor = ForeignKey("dashboard.Pin", on_delete=SET_NULL, null=True, blank=True, related_name="+")

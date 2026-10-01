@@ -1,10 +1,4 @@
-"""Tests for AI-assisted pin extraction from uploaded .txt/.docx documents.
-
-Covers the deterministic pieces (extension detection, text extraction, CSV-answer
-parsing) with hypothesis, and the AI-gating/prompt-injection-guard behavior of
-``extract_pins_from_document`` with mocks, following the pattern established in
-``test_label_style_suggestions.py``.
-"""
+"""Tests for AI-assisted pin extraction from uploaded .txt/.docx documents."""
 
 from __future__ import annotations
 
@@ -12,9 +6,9 @@ import os
 import tempfile
 from unittest import mock
 
-from hypothesis import given, settings as hyp_settings, strategies as st
 import pytest
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature
@@ -78,17 +72,7 @@ class ExtractTextTests(TestCase):
 class DocxDecompressionCeilingTests(TestCase):
     """The byte cap bounds what was uploaded; a .docx is the one compressed format.
 
-    `MAX_DOCUMENT_BYTES` and the 20,000-character text limit are both real, but
-    they measure different things and neither measures the middle: a 2 MB .docx
-    is a ZIP whose `document.xml` can decompress to gigabytes, and python-docx
-    materialises the whole part before there is any text to measure. The
-    character check therefore ran after the memory had already been spent.
-
-    Checked against the sizes the ZIP directory declares, which chunk 531
-    established is a sound upper bound - CPython's zipfile truncates a read at
-    the declared size and then fails the CRC, so understating it cannot smuggle
-    bytes past this.
-    """
+    The character check therefore ran after the memory had already been spent."""
 
     def _docx_with_payload(self, payload: bytes) -> bytes:
         """A structurally valid .docx carrying an oversized extra part."""
@@ -102,7 +86,10 @@ class DocxDecompressionCeilingTests(TestCase):
         doc.save(buf)
 
         rebuilt = io.BytesIO()
-        with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as source, zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as target:
+        with (
+            zipfile.ZipFile(io.BytesIO(buf.getvalue())) as source,
+            zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as target,
+        ):
             for info in source.infolist():
                 target.writestr(info.filename, source.read(info.filename))
             target.writestr("word/bomb.xml", payload)
@@ -113,7 +100,9 @@ class DocxDecompressionCeilingTests(TestCase):
         # uncompressed total does not - which is the whole shape of the attack.
         oversized = self._docx_with_payload(b"<a/>" * (document_import.MAX_DOCUMENT_UNCOMPRESSED_BYTES // 2))
 
-        self.assertLess(len(oversized), document_import.MAX_DOCUMENT_BYTES, "precondition: it must pass the upload-byte cap")
+        self.assertLess(
+            len(oversized), document_import.MAX_DOCUMENT_BYTES, "precondition: it must pass the upload-byte cap"
+        )
         with self.assertRaises(document_import.DocumentTooLargeError):
             document_import.extract_text("bomb.docx", oversized)
 
@@ -136,7 +125,15 @@ class ParseCsvRowsTests(SimpleTestCase):
 
         self.assertEqual(
             rows,
-            [{"name": "Old Mill", "description": "Abandoned mill", "address": "123 Mill Rd", "latitude": "", "longitude": ""}],
+            [
+                {
+                    "name": "Old Mill",
+                    "description": "Abandoned mill",
+                    "address": "123 Mill Rd",
+                    "latitude": "",
+                    "longitude": "",
+                }
+            ],
         )
 
     def test_parses_explicit_coordinates(self):
@@ -208,7 +205,10 @@ class ParseExplicitCoordinatesTests(SimpleTestCase):
         self.assertIsNone(document_import._parse_explicit_coordinates("200", "-74.0060"))
         self.assertIsNone(document_import._parse_explicit_coordinates("40.7128", "-200"))
 
-    @given(st.floats(min_value=-90, max_value=90, allow_nan=False), st.floats(min_value=-180, max_value=180, allow_nan=False))
+    @given(
+        st.floats(min_value=-90, max_value=90, allow_nan=False),
+        st.floats(min_value=-180, max_value=180, allow_nan=False),
+    )
     @_hyp
     def test_any_in_range_pair_round_trips(self, lat: float, lng: float):
         result = document_import._parse_explicit_coordinates(str(lat), str(lng))
@@ -234,7 +234,15 @@ class ParseAiCsvResponseTests(SimpleTestCase):
 
         self.assertEqual(
             rows,
-            [{"name": "Old Mill", "description": "Abandoned mill", "address": "123 Mill Rd", "latitude": "", "longitude": ""}],
+            [
+                {
+                    "name": "Old Mill",
+                    "description": "Abandoned mill",
+                    "address": "123 Mill Rd",
+                    "latitude": "",
+                    "longitude": "",
+                }
+            ],
         )
         self.assertEqual(self._tmp_files(), before)
 
@@ -383,7 +391,9 @@ def test_extract_pins_uses_explicit_coordinates_without_geocoding(monkeypatch: p
     )
 
     gateway = mock.Mock()
-    gateway.send_prompt.return_value = "name,description,address,latitude,longitude\nOverlook,Seen from the ridge,,40.7128,-74.0060"
+    gateway.send_prompt.return_value = (
+        "name,description,address,latitude,longitude\nOverlook,Seen from the ridge,,40.7128,-74.0060"
+    )
     gateway.tokens = 10
     gateway.cost = 0
     monkeypatch.setattr("urbanlens.dashboard.services.ai.factory.get_gateway", lambda *_a, **_k: gateway)
@@ -394,7 +404,9 @@ def test_extract_pins_uses_explicit_coordinates_without_geocoding(monkeypatch: p
         geocode_mock,
     )
 
-    result, warning = document_import.extract_pins_from_document("notes.txt", b"GPS: 40.7128, -74.0060 - the Overlook.", profile)
+    result, warning = document_import.extract_pins_from_document(
+        "notes.txt", b"GPS: 40.7128, -74.0060 - the Overlook.", profile
+    )
 
     assert result is not None
     assert result["pins"] == [
@@ -432,9 +444,7 @@ def test_extract_pins_drops_ungeocodable_rows_and_warns(monkeypatch: pytest.Monk
 
 @pytest.mark.django_db
 def test_extract_pins_warns_on_partial_geocode_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When some (but not all) extracted locations fail to geocode, the successful
-    pins must still come through, alongside a warning naming how many were dropped -
-    previously these were dropped with zero visibility to the user."""
+    """When some (but not all) extracted locations fail to geocode, the successful pins must still come through, alongside a warning naming how many were dropped - previously these were dropped with zero visibility to the user."""
     profile = _make_profile(ai_enabled=True)
     monkeypatch.setattr(
         "urbanlens.dashboard.services.ai.document_import.user_has_feature",
@@ -442,7 +452,9 @@ def test_extract_pins_warns_on_partial_geocode_failure(monkeypatch: pytest.Monke
     )
 
     gateway = mock.Mock()
-    gateway.send_prompt.return_value = "name,description,address\nOld Mill,,123 Mill Rd\nNowhere Place,,Nonexistent Address"
+    gateway.send_prompt.return_value = (
+        "name,description,address\nOld Mill,,123 Mill Rd\nNowhere Place,,Nonexistent Address"
+    )
     gateway.tokens = 10
     gateway.cost = 0
     monkeypatch.setattr("urbanlens.dashboard.services.ai.factory.get_gateway", lambda *_a, **_k: gateway)
@@ -473,7 +485,10 @@ def test_extract_pins_rejects_oversized_raw_upload(monkeypatch: pytest.MonkeyPat
     )
     monkeypatch.setattr(document_import, "MAX_DOCUMENT_BYTES", 10)
 
-    with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway") as get_gateway, pytest.raises(document_import.DocumentTooLargeError, match="too large"):
+    with (
+        mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway") as get_gateway,
+        pytest.raises(document_import.DocumentTooLargeError, match="too large"),
+    ):
         document_import.extract_pins_from_document("notes.txt", b"this is more than ten bytes", profile)
 
     get_gateway.assert_not_called()
@@ -495,8 +510,13 @@ def test_extract_pins_rejects_document_over_configured_char_limit(monkeypatch: p
     site.ai_document_import_max_chars = 10
     site.save(update_fields=["ai_document_import_max_chars"])
 
-    with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway") as get_gateway, pytest.raises(document_import.DocumentTooLargeError, match="too long"):
-        document_import.extract_pins_from_document("notes.txt", b"This text is definitely longer than ten characters.", profile)
+    with (
+        mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway") as get_gateway,
+        pytest.raises(document_import.DocumentTooLargeError, match="too long"),
+    ):
+        document_import.extract_pins_from_document(
+            "notes.txt", b"This text is definitely longer than ten characters.", profile
+        )
 
     get_gateway.assert_not_called()
 
@@ -525,7 +545,9 @@ def test_extract_pins_allows_document_within_configured_char_limit(monkeypatch: 
         lambda _self, _place_name: (1.0, 2.0),
     )
 
-    result, warning = document_import.extract_pins_from_document("notes.txt", b"Short document mentioning the Old Mill.", profile)
+    result, warning = document_import.extract_pins_from_document(
+        "notes.txt", b"Short document mentioning the Old Mill.", profile
+    )
 
     assert result is not None
     assert warning is None

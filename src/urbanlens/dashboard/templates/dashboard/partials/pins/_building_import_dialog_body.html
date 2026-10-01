@@ -1,0 +1,95 @@
+{% comment %}The swappable half of the building-import dialog - everything but the header.{% endcomment %}
+{% load map_components %}
+<div id="building-import-dialog-body">
+<form class="building-import-form"
+      data-restructure="{{ restructure|yesno:'1,0' }}"
+      hx-post="{{ form_action }}"
+      hx-target="#building-import-dialog-body" hx-swap="outerHTML"
+      hx-disabled-elt="find button[type='submit']"
+      hx-indicator="find .building-import-submit-spinner"
+      data-ul-on-success="close-dialog">
+    {% csrf_token %}
+    <input type="hidden" name="building_selection" value="1">
+    {% if nestable_rows %}
+    {# Independent of building_selection: a legacy/no-body POST (e.g. an older cached page) must still nest every candidate as before, so. #}
+    <input type="hidden" name="nest_selection" value="1">
+    {% endif %}
+
+    <div class="building-import-layout ul-dialog-body">
+        <div class="building-import-choices">
+            {% if rows %}
+            <h4 class="building-import-section-title">Buildings</h4>
+            <div class="building-import-select-tools">
+                <span><strong data-building-selected-count>{{ building_count }}</strong> of {{ building_count }} selected</span>
+                <button type="button" class="btn btn--ghost btn--sm" data-building-select-all>Uncheck all</button>
+            </div>
+            <ul class="building-import-list">
+                {% for row in rows %}
+                <li>
+                    <label class="building-import-item">
+                        <input type="checkbox" name="building_keys" value="{{ row.selection_key }}" checked>
+                        <span class="building-import-number">{{ row.building_number|default:"&mdash;" }}</span>
+                        <span class="building-import-info">
+                            <strong>{{ row.name|default:"Unnamed building" }}</strong>
+                            <small>
+                                {% if row.year_built %}Built {{ row.year_built }}{% endif %}
+                                {% if row.year_built and row.source_label %} &middot; {% endif %}
+                                {{ row.source_label }}
+                            </small>
+                        </span>
+                    </label>
+                </li>
+                {% endfor %}
+            </ul>
+            {% elif not nestable_rows %}
+            <p class="building-import-empty">There are no new buildings to add.</p>
+            {% endif %}
+
+            {% if nestable_rows %}
+            <h4 class="building-import-section-title">Pins on this property</h4>
+            <p class="building-import-section-hint">
+                Each one becomes a child pin under this property - its own article, photos, and
+                other data stay exactly as they are, only its parent changes.
+            </p>
+            <ul class="building-import-list building-import-pins">
+                {% for entry in nestable_rows %}
+                <li class="building-import-pin-row" data-nest-pk="{{ entry.pin.pk }}">
+                    <label class="building-import-item">
+                        <input type="checkbox" name="nest_keys" value="{{ entry.pin.pk }}" checked>
+                        <span class="building-import-number"><i class="material-symbols-outlined" style="font-size:18px;">location_on</i></span>
+                        <span class="building-import-info">
+                            <strong>{{ entry.pin.effective_name }}</strong>
+                        </span>
+                    </label>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% if rows or nestable_rows %}
+        <div class="building-import-map-wrap">
+            {% map_toolbar "select_building_import" panel_id="building-import-map-buttons" %}
+            <div id="building-import-map" aria-label="Map of buildings and pins to add"></div>
+            {% if nestable_rows %}
+            <div class="building-import-map-legend">
+                <span><i class="building-import-legend-swatch building-import-legend-swatch--building"></i> Building</span>
+                <span><i class="building-import-legend-swatch building-import-legend-swatch--pin"></i> Existing pin</span>
+            </div>
+            {% endif %}
+            <div class="building-import-attribution">Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="dialog-actions">
+        <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
+        <button type="submit" class="btn btn--primary" data-building-import-submit{% if not rows and not nestable_rows %} disabled{% endif %}>
+            <i class="material-symbols-outlined">add_location_alt</i>
+            <span data-building-submit-label>{% if restructure %}Organize property{% else %}Add {{ building_count }} building{{ building_count|pluralize }}{% endif %}</span>
+        </button>
+        <span class="building-import-submit-spinner htmx-indicator"><i class="material-icons spin">autorenew</i> Working...</span>
+    </div>
+</form>
+{{ rows|json_script:"building-import-map-data" }}
+{{ nestable_map_data|json_script:"building-import-nestable-map-data" }}
+</div>

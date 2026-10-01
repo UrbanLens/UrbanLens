@@ -1,25 +1,13 @@
-"""Central hook for "one profile's MarkupMap became visible to another".
-
-Every place a MarkupMap gets handed to a different profile - a DM attachment,
-a standalone map share, or a map attached to an explicit pin share - should
-call :func:`share_markup_map_with_profile` exactly once for that send, so the
-geometry-based pin-share detection in ``services.sharing.map_pin_share_detection``
-lives in one place instead of being reimplemented per send-path. This module
-also holds the "Add to my maps" clone helper (:func:`clone_markup_map`).
-
-Detected pin shares are recorded as ordinary
-:class:`~urbanlens.dashboard.models.pin_share.model.PinShare` rows (with
-``origin=PinShareOrigin.MAP_DETECTED`` and ``status=PinShareStatus.DETECTED``)
-so the existing sharing stats (``PinShare.chain_share_count``, the Memories >
-Sharing page) pick them up transparently - see the model docstrings for why
-that status is never actionable and never materializes a Pin.
-"""
+"""Central hook for "one profile's MarkupMap became visible to another"."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import IntegrityError, transaction
+
 from urbanlens.dashboard.models.markup.model import MarkupMap
+from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.services.sharing.map_pin_share_detection import sync_pin_inferences
 
@@ -37,12 +25,6 @@ INFERRED_SOURCE_SHARE_WINDOW_DAYS = 30
 def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup_map: MarkupMap) -> PinShare | None:
     """Create a MAP_DETECTED PinShare for ``(pin, recipient)`` if one doesn't already exist.
 
-    Skips creation when *any* share (explicit or previously detected) already
-    exists for this exact (pin, recipient) pair - not just a prior detected
-    one - so a map attachment that happens to also reveal the very pin being
-    explicitly shared in the same action doesn't double-count that share in
-    the stats (``PinShare.chain_share_count`` counts rows, not unique pins).
-
     Args:
         sender: The profile whose pin was revealed (owns ``pin``).
         recipient: The profile the map was sent to.
@@ -50,41 +32,35 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
         markup_map: The map whose detection produced this match.
 
     Returns:
-        The newly created PinShare, or None if one already existed for this
-        (pin, recipient) pair (an earlier explicit share, or an earlier
-        send/detection pass).
-    """
+        The newly created PinShare, or None if one already existed for this (pin, recipient) pair (an earlier explicit share, or an earlier send/detection pass)."""
     from urbanlens.dashboard.services.sharing.share_provenance import record_share_exposure, resolve_and_stamp_origin_share
 
     if PinShare.objects.already_shared_with(recipient, pin=pin).exists():
         return None
-    share = PinShare.objects.create(
-        pin=pin,
-        location=pin.location,
-        from_profile=sender,
-        to_profile=recipient,
-        # Same reshare-chain rule as the explicit share flows: the share this
-        # pin was accepted from, a prior exposure at its location, or the
-        # best-effort map heuristic (see services.sharing.share_provenance).
-        parent_share=resolve_and_stamp_origin_share(pin),
-        origin=PinShareOrigin.MAP_DETECTED,
-        status=PinShareStatus.DETECTED,
-        detected_via_map=markup_map,
-    )
-    record_share_exposure(share)
+    try:
+        # The check above is the common case; db_pinshare_one_detected_per_pin_user settles a race.
+        with transaction.atomic():
+            share = PinShare.objects.create(
+                pin=pin,
+                location=pin.location,
+                from_profile=sender,
+                to_profile=recipient,
+                # Same reshare-chain rule as the explicit share flows: the share this
+                # pin was accepted from, a prior exposure at its location, or the
+                # best-effort map heuristic (see services.sharing.share_provenance).
+                parent_share=resolve_and_stamp_origin_share(pin),
+                origin=PinShareOrigin.MAP_DETECTED,
+                status=PinShareStatus.DETECTED,
+                detected_via_map=markup_map,
+            )
+            record_share_exposure(share)
+    except IntegrityError:
+        return None
     return share
 
 
 def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_map: MarkupMap) -> list[PinShare]:
     """Run pin-share detection for a map being sent from ``sender`` to ``recipient``.
-
-    This is the single entrypoint every send-path (DM attach-send, the
-    standalone map-share action, the pin-share dialog's optional map
-    attachment) should call once the underlying send has been decided. It
-    never creates or sends the DM/notification/share itself - only records
-    any pins the map reveals - and never clones or otherwise materializes
-    anything on the recipient's account (see :func:`clone_markup_map` for
-    that, a separate and only user-initiated action).
 
     Args:
         sender: ``markup_map``'s owner at the time of sending.
@@ -92,10 +68,7 @@ def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_ma
         markup_map: The map being shared.
 
     Returns:
-        Newly created PinShare rows (empty if nothing was detected, or
-        everything was already recorded from a prior send of this or another
-        map covering the same pins).
-    """
+        Newly created PinShare rows (empty if nothing was detected, or everything was already recorded from a prior send of this or another map covering the same pins)."""
     pins = sync_pin_inferences(markup_map)
     shares = []
     for pin in pins:
@@ -105,23 +78,85 @@ def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_ma
     return shares
 
 
-def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> MarkupMap:
-    """ "Add to my maps": clone ``source`` (owned by ``sender``) into ``recipient``'s own maps.
+class MapSharePermissionError(PermissionError):
+    """A map share was refused: not the sender's map, or not a connected friend."""
 
-    Reuses ``MarkupMap.to_snapshot()``/``replace_items_from_snapshot()`` - the
-    same round-trip already used by ``materialize_markup_map`` - so item
-    cloning logic isn't duplicated.
+
+def share_markup_map(sender: Profile, recipient: Profile, markup_map: MarkupMap, *, message: str | None = None) -> tuple[MarkupMapShare, bool]:
+    """Share *markup_map* with *recipient*, once: sending it again refreshes the share rather than adding one.
+
+    The recipient is notified only the first time, and only as their ``pin_shared`` delivery preference allows.
+    Pin-share detection runs on every send, so pins added to the map since the last one are picked up.
 
     Args:
-        source: The map being cloned (may or may not still be owned by
-            ``sender`` - ``shared_by`` records who sent it regardless).
-        recipient: The profile the clone will belong to.
-        sender: The profile who most recently sent ``source`` to ``recipient``
-            (shown as "From X" on the clone).
+        sender: The map's owner.
+        recipient: A connected friend of the sender.
+        markup_map: The map being shared.
+        message: Optional note; a resend replaces the previous one.
 
     Returns:
-        The newly created clone, owned by ``recipient``.
+        The ``(share, created)`` pair.
+
+    Raises:
+        MapSharePermissionError: The map is not the sender's, the recipient is the sender, or they are not connected.
     """
+    from urbanlens.dashboard.services.social.connections import are_connections
+
+    if markup_map.profile_id != sender.pk:
+        raise MapSharePermissionError(f"profile {sender.pk} attempted to share map {markup_map.pk}, which it does not own")
+    if recipient.pk == sender.pk or not are_connections(sender, recipient):
+        raise MapSharePermissionError(f"profile {sender.pk} and profile {recipient.pk} are not connected friends")
+
+    with transaction.atomic():
+        share, created = MarkupMapShare.objects.get_or_create(markup_map=markup_map, from_profile=sender, to_profile=recipient, defaults={"message": message})
+        if not created and message and message != share.message:
+            share.message = message
+            share.save(update_fields=["message", "updated"])
+    if created:
+        _notify_map_shared(share)
+    share_markup_map_with_profile(sender, recipient, markup_map)
+    return share, created
+
+
+def _notify_map_shared(share: MarkupMapShare) -> None:
+    """Tell the recipient about a new map share, through the channels their ``pin_shared`` preference picks."""
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+    from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+
+    recipient, sender = share.to_profile, share.from_profile
+    pref = delivery_preference(recipient, "pin_shared")
+    if pref == DeliveryPreference.NONE:
+        return
+    notification = deliver_notification(
+        recipient,
+        pref,
+        title="Map shared with you",
+        message=f"{resolve_visible_identity(recipient, sender)['display_name']} shared a map with you.",
+        url=reverse("markup_map.share.detail", kwargs={"share_id": share.pk}),
+        source_profile=sender,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.MAP_SHARED,
+    )
+    if notification is not None:
+        share.notification = notification
+        share.save(update_fields=["notification", "updated"])
+
+
+def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> MarkupMap:
+    """ "Add to my maps": clone ``source`` (owned by ``sender``) into ``recipient``'s own maps.
+    Reuses ``MarkupMap.to_snapshot()``/``replace_items_from_snapshot()`` - the same round-trip already used by ``materialize_markup_map`` - so item cloning logic isn't duplicated.
+
+    Args:
+        source: The map being cloned (may or may not still be owned by ``sender`` - ``shared_by`` records who sent it regardless).
+        recipient: The profile the clone will belong to.
+        sender: The profile who most recently sent ``source`` to ``recipient`` (shown as "From X" on the clone).
+
+    Returns:
+        The newly created clone, owned by ``recipient``."""
     new_map = MarkupMap.objects.create(profile=recipient, title=source.title, cloned_from=source, shared_by=sender)
     new_map.replace_items_from_snapshot(source.to_snapshot())
     return new_map
@@ -130,27 +165,11 @@ def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> 
 def infer_source_share_for_pin(pin: Pin) -> PinShare | None:
     """Best-effort match of a self-created pin to a prior inbound map-detected share.
 
-    When a profile creates their own Pin (not by accepting a PinShare) near a
-    location that was previously revealed to them via a shared map, this pin
-    has no ``source_share`` to anchor a reshare chain to if they later share
-    it explicitly. This heuristically links it to the most plausible prior
-    detection: the nearest unresolved ``MAP_DETECTED`` share to this profile
-    within :data:`INFERRED_SOURCE_SHARE_RADIUS_METERS` metres and
-    :data:`INFERRED_SOURCE_SHARE_WINDOW_DAYS` days.
-
-    This is inherently approximate (proximity + recency, no user
-    confirmation) - it is only ever used as a fallback when ``source_share``
-    itself is unset, and only at the moment the pin is explicitly shared
-    onward (see ``controllers.pin_sharing.PinShareCreateView``), never at pin
-    creation time.
-
     Args:
-        pin: The pin to find a plausible inbound share for. Must have a
-            ``location``.
+        pin: The pin to find a plausible inbound share for.
 
     Returns:
-        The best-matching PinShare, or None if no plausible match exists.
-    """
+        The best-matching PinShare, or None if no plausible match exists."""
     from datetime import timedelta
 
     from django.contrib.gis.geos import Point

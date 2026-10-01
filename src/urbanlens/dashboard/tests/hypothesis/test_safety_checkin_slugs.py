@@ -29,15 +29,21 @@ class CreateCheckinSlugTests(TestCase):
         self.profile = baker.make(User).profile
 
     def test_slug_is_generated_from_title(self) -> None:
-        checkin = create_checkin(profile=self.profile, title="Weekend Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        checkin = create_checkin(
+            profile=self.profile, title="Weekend Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1)
+        )
         self.assertEqual(checkin.slug, "weekend-hike")
 
     def test_duplicate_titles_get_distinct_slugs(self) -> None:
-        first = create_checkin(profile=self.profile, title="Solo Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        first = create_checkin(
+            profile=self.profile, title="Solo Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1)
+        )
         # A profile may only have one active check-in at a time - resolve the
         # first before creating the second so this only exercises slug uniqueness.
         cancel_checkin(first)
-        second = create_checkin(profile=self.profile, title="Solo Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        second = create_checkin(
+            profile=self.profile, title="Solo Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1)
+        )
         self.assertNotEqual(first.slug, second.slug)
 
 
@@ -46,7 +52,9 @@ class GetCheckinBySlugTests(TestCase):
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile
-        self.checkin = create_checkin(profile=self.profile, title="Eagle Ridge", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        self.checkin = create_checkin(
+            profile=self.profile, title="Eagle Ridge", checkin_by=_future(), grace_period=datetime.timedelta(hours=1)
+        )
 
     def test_finds_by_slug(self) -> None:
         found = _get_checkin_by_slug(self.profile, self.checkin.slug)
@@ -88,7 +96,9 @@ class SafetyCheckinCreateViewValidationTests(TestCase):
         self.assertTrue(checkin.title)
 
     def test_rejects_a_second_active_checkin(self) -> None:
-        create_checkin(profile=self.profile, title="Existing Trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        create_checkin(
+            profile=self.profile, title="Existing Trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1)
+        )
 
         response = self._post({"checkin_by": _future().isoformat(), "grace_period_hours": "1"})
 
@@ -98,7 +108,9 @@ class SafetyCheckinCreateViewValidationTests(TestCase):
     def test_get_redirects_to_the_active_checkin(self) -> None:
         # Uses the Django test client (not RequestFactory) - the view calls
         # django.contrib.messages, which needs full middleware to back it.
-        active = create_checkin(profile=self.profile, title="Existing Trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        active = create_checkin(
+            profile=self.profile, title="Existing Trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1)
+        )
         client = Client()
         client.force_login(self.user)
 
@@ -133,7 +145,9 @@ class SafetyCheckinCreateViewTripScopingTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_general_active_checkin_does_not_block_a_trip_scoped_one(self) -> None:
-        create_checkin(profile=self.profile, title="General trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        create_checkin(
+            profile=self.profile, title="General trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1)
+        )
 
         response = self.client.get(reverse("safety.checkin.create"), {"trip": self.trip.slug})
 
@@ -150,7 +164,13 @@ class SafetyCheckinCreateViewTripScopingTests(TestCase):
         self.assertEqual(checkin.trip_id, self.trip.id)
 
     def test_post_rejects_a_second_active_checkin_for_the_same_trip(self) -> None:
-        create_checkin(profile=self.profile, title="Existing", checkin_by=_future(), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+        create_checkin(
+            profile=self.profile,
+            title="Existing",
+            checkin_by=_future(),
+            grace_period=datetime.timedelta(hours=1),
+            trip=self.trip,
+        )
 
         response = self.client.post(
             reverse("safety.checkin.create"),
@@ -166,10 +186,18 @@ class MarkFoundSafeChatMessageTests(TestCase):
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile
-        self.checkin = create_checkin(profile=self.profile, title="Night Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        self.checkin = create_checkin(
+            profile=self.profile, title="Night Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1)
+        )
 
     def test_creates_a_message_attributed_to_the_contact(self) -> None:
-        contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, contact_profile=None, email="jane@example.com", name="Jane")
+        contact = baker.make(
+            "dashboard.SafetyCheckinContact",
+            checkin=self.checkin,
+            contact_profile=None,
+            email="jane@example.com",
+            name="Jane",
+        )
 
         mark_found_safe(contact)
 

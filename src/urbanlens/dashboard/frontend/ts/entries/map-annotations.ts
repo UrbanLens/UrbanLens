@@ -1,29 +1,32 @@
 /**
- * Shared map annotations page: markup drawing/editing, the unified detail-pin
- * side panel, the typed boundary editor (+ its context menu), the photo
- * layer, and the Details/Photos layers list panel. Used identically by the
- * pin detail page and the Location wiki page.
- *
- * Config comes from data-* attributes on `#map` rather than being baked into
- * the script by the template (see templates/dashboard/pages/location/index.html
- * and wiki.html), which is what lets one compiled bundle serve both pages.
+ * Shared map annotations page: markup drawing/editing, the unified detail-pin side panel, the typed boundary editor.
  */
+import { safeColor } from "../shared/markup-engine";
 import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
-import { createMapLayers, tileLayer } from "../shared/map-layers";
-import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
-import { makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize } from "../shared/photo-map";
+import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, setAttribution, tileLayer } from "../shared/map-layers";
+import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
+import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, reclusterOnDrag, returnToCluster } from "../shared/map-clusters";
+import type { MarkupToolbar } from "../shared/markup-toolbar";
+import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
+import { observeMediaGalleryProcessing, openMediaLightbox } from "../shared/media-lightbox";
+
+// Exposed at module scope, not inside the page-init function below.
+window.mediaOpenLightbox = openMediaLightbox;
+
+// Fired now rather than awaited inside init(): starting this deployment's REData tile catalogue
+// fetch as early as this module loads gives it a head start on the synchronous DOM/config
+// parsing init() does before it ever reaches createMapLayers().
+void registerRedataLayers();
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
-// Triggers TS to pick up @types/leaflet-draw's `declare module "leaflet"`
-// augmentation (L.Draw, L.Control.Draw, L.EditToolbar, ...) - erased at
-// build time, no runtime import (leaflet-draw is loaded via CDN like Leaflet
-// itself, only referenced here as an ambient global via `L`).
-import type {} from "leaflet-draw";
+// Triggers TS to pick up @types/leaflet-draw's `declare module "leaflet"` augmentation (L.Draw, L.Control.Draw, L.EditToolbar,...).
+import type { } from "leaflet-draw";
+import { escHtml } from "../shared/escape-html";
 
 interface DetailPinEntry {
     uuid: string;
@@ -85,18 +88,27 @@ interface BuildingImportRow {
     geometry: object | null;
 }
 
-function escHtml(s: string): string {
-    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+/** One of the owner's own top-level pins standing inside the property - the
+ * "organize" dialog's other kind of candidate, alongside buildings. See
+ * controllers.pin_restructure._nestable_map_data. */
+interface NestableImportRow {
+    pk: number;
+    name: string;
+    latitude: number | null;
+    longitude: number | null;
 }
+
 
 function readConfig(el: HTMLElement) {
     const d = el.dataset;
     return {
         mapCenterLat: Number.parseFloat(d.mapCenterLat ?? "0"),
         mapCenterLng: Number.parseFloat(d.mapCenterLng ?? "0"),
+        markerIconUrl: d.markerIconUrl || "",
+        markerShadowUrl: d.markerShadowUrl || "",
         pinSlug: d.pinSlug || "",
         locationSlug: d.locationSlug || "",
-        defaultMapView: d.defaultMapView || "satellite",
+        defaultMapView: d.defaultMapView || "",
         profileUuid: d.profileUuid || "",
         openweathermapApiKey: d.openweathermapApiKey || "",
         mainMarkerOwnerUuid: d.mainMarkerOwnerUuid || "",
@@ -241,6 +253,8 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
 }
 
 function init(): void {
+    const mediaGalleryGrid = document.getElementById("media-gallery-grid");
+    if (mediaGalleryGrid) observeMediaGalleryProcessing(mediaGalleryGrid);
     const mapEl = document.getElementById("map");
     // Config lives on a dedicated element rather than #map itself: #map is
     // rendered by _map_annotations_panels.html (included from page content,
@@ -268,7 +282,13 @@ function init(): void {
 
     // attributionControl: false - required attribution renders in the page
     // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
-    const map = L.map("map", { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 15);
+    // maxZoom is explicit because the cluster groups below are added before the
+    // first tile layer, and leaflet.markercluster throws on an infinite
+    // getMaxZoom() - see MAP_MAX_ZOOM.
+    const map = L.map("map", { scrollWheelZoom: false, attributionControl: false, maxZoom: MAP_MAX_ZOOM, minZoom: MAP_MIN_ZOOM }).setView(
+        [mapCenterLat, mapCenterLng],
+        15,
+    );
     window.map = map;
 
     // -- Selectable parcel-building import dialog ---------------------------
@@ -294,6 +314,7 @@ function init(): void {
         const dialog = document.getElementById("building-import-dialog") as HTMLDialogElement | null;
         const mapElement = document.getElementById("building-import-map");
         const dataElement = document.getElementById("building-import-map-data");
+        const nestableDataElement = document.getElementById("building-import-nestable-map-data");
         const form = dialog?.querySelector<HTMLFormElement>(".building-import-form");
         if (!dialog || !mapElement || !dataElement || !form) return;
 
@@ -303,13 +324,24 @@ function init(): void {
         } catch {
             buildings = [];
         }
+        let nestablePins: NestableImportRow[];
+        try {
+            nestablePins = JSON.parse(nestableDataElement?.textContent || "[]") as NestableImportRow[];
+        } catch {
+            nestablePins = [];
+        }
 
         buildingImportMap?.remove();
-        const previewMap = L.map(mapElement, { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 16);
+        const previewMap = L.map(mapElement, { scrollWheelZoom: false, attributionControl: false, maxZoom: MAP_MAX_ZOOM, minZoom: MAP_MIN_ZOOM }).setView([mapCenterLat, mapCenterLng], 16);
         buildingImportMap = previewMap;
         tileLayer("street").addTo(previewMap);
 
-        const checkboxes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="building_keys"]'));
+        // Buildings and existing-pin candidates share one selection key space
+        // (a building's selection_key hash vs. a pin's stringified pk never
+        // collide in practice) so select-all/count/rectangle-select treat both
+        // uniformly; only the per-row "child pin vs merge" mode toggle below is
+        // pin-specific.
+        const checkboxes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="building_keys"], input[name="nest_keys"]'));
         const checkboxByKey = new Map(checkboxes.map((checkbox) => [checkbox.value, checkbox] as const));
         const rowByKey = new Map<string, HTMLElement>();
         checkboxes.forEach((checkbox) => {
@@ -321,15 +353,21 @@ function init(): void {
         const submit = form.querySelector<HTMLButtonElement>("[data-building-import-submit]");
         const submitLabel = form.querySelector<HTMLElement>("[data-building-submit-label]");
         const isRestructure = form.dataset.restructure === "1";
-        const canSubmitWithoutBuildings = Number.parseInt(form.dataset.nestableCount || "0", 10) > 0;
 
         const pathsByKey = new Map<string, L.Path[]>();
         const boundsByKey = new Map<string, L.LatLngBounds>();
         const previewBounds = L.latLngBounds([]);
         const selectedStyle: L.PathOptions = { color: "#2563eb", weight: 3, fillColor: "#3b82f6", fillOpacity: 0.45, opacity: 1 };
         const unselectedStyle: L.PathOptions = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
+        const selectedPinStyle: L.PathOptions = { color: "#7c3aed", weight: 3, fillColor: "#a78bfa", fillOpacity: 0.55, opacity: 1 };
+        const unselectedPinStyle: L.PathOptions = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
         const hoverStyle: L.PathOptions = { color: "#f97316", weight: 4 };
-        const styleForKey = (key: string): L.PathOptions => (checkboxByKey.get(key)?.checked ? selectedStyle : unselectedStyle);
+        const pinKeys = new Set(nestablePins.map((candidate) => String(candidate.pk)));
+        const styleForKey = (key: string): L.PathOptions => {
+            const checked = checkboxByKey.get(key)?.checked ?? false;
+            if (pinKeys.has(key)) return checked ? selectedPinStyle : unselectedPinStyle;
+            return checked ? selectedStyle : unselectedStyle;
+        };
 
         // Bidirectional hover sync between the row list and the map preview -
         // row/shape pairs share `selection_key` via rowByKey/pathsByKey.
@@ -350,19 +388,28 @@ function init(): void {
             }
         };
 
+        const buildingCheckboxes = checkboxes.filter((checkbox) => !pinKeys.has(checkbox.value));
+
         const syncSelection = (): void => {
-            let checked = 0;
+            let buildingsChecked = 0;
+            let totalChecked = 0;
             checkboxes.forEach((checkbox) => {
-                if (checkbox.checked) checked += 1;
+                if (!checkbox.checked) return;
+                totalChecked += 1;
+                if (!pinKeys.has(checkbox.value)) buildingsChecked += 1;
             });
             pathsByKey.forEach((paths, key) => {
                 if (key === hoveredKey) return;
                 paths.forEach((path) => path.setStyle(styleForKey(key)));
             });
-            if (selectedCount) selectedCount.textContent = String(checked);
-            if (selectAll) selectAll.textContent = checked === checkboxes.length ? "Uncheck all" : "Check all";
-            if (submit) submit.disabled = checked === 0 && !canSubmitWithoutBuildings;
-            if (submitLabel && !isRestructure) submitLabel.textContent = `Add ${checked} building${checked === 1 ? "" : "s"}`;
+            // "N of M selected" / "(Un)check all" only ever describe the
+            // buildings list - the denominator the template renders
+            // (building_count) is buildings-only, and pins get their own
+            // per-row controls instead of a bulk toggle.
+            if (selectedCount) selectedCount.textContent = String(buildingsChecked);
+            if (selectAll) selectAll.textContent = buildingsChecked === buildingCheckboxes.length ? "Uncheck all" : "Check all";
+            if (submit) submit.disabled = totalChecked === 0;
+            if (submitLabel && !isRestructure) submitLabel.textContent = `Add ${buildingsChecked} building${buildingsChecked === 1 ? "" : "s"}`;
         };
 
         const toggleBuildingKey = (key: string): void => {
@@ -395,13 +442,31 @@ function init(): void {
                 previewBounds.extend(point.getLatLng());
                 boundsByKey.set(building.selection_key, L.latLngBounds(point.getLatLng(), point.getLatLng()));
             }
-            preview?.bindTooltip(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building"));
+            preview?.bindTooltip(escHtml(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building")));
             preview?.on("mouseover", () => setBuildingHover(building.selection_key));
             preview?.on("mouseout", () => setBuildingHover(null));
             preview?.on("click", () => {
                 if (buildingSelectMode) toggleBuildingKey(building.selection_key);
             });
             pathsByKey.set(building.selection_key, paths);
+        });
+
+        // Existing-pin candidates get a plain point marker (no footprint data
+        // to draw) in a visually distinct color from buildings - see the
+        // legend in _building_import_dialog_body.html.
+        nestablePins.forEach((candidate) => {
+            if (candidate.latitude == null || candidate.longitude == null) return;
+            const key = String(candidate.pk);
+            const point = L.circleMarker([candidate.latitude, candidate.longitude], { ...selectedPinStyle, radius: 8 }).addTo(previewMap);
+            point.bindTooltip(escHtml(candidate.name || "Unnamed pin"));
+            point.on("mouseover", () => setBuildingHover(key));
+            point.on("mouseout", () => setBuildingHover(null));
+            point.on("click", () => {
+                if (buildingSelectMode) toggleBuildingKey(key);
+            });
+            previewBounds.extend(point.getLatLng());
+            boundsByKey.set(key, L.latLngBounds(point.getLatLng(), point.getLatLng()));
+            pathsByKey.set(key, [point]);
         });
 
         if (previewBounds.isValid()) previewMap.fitBounds(previewBounds.pad(0.18), { maxZoom: 18 });
@@ -413,8 +478,8 @@ function init(): void {
 
         checkboxes.forEach((checkbox) => checkbox.addEventListener("change", syncSelection));
         selectAll?.addEventListener("click", () => {
-            const shouldCheck = checkboxes.some((checkbox) => !checkbox.checked);
-            checkboxes.forEach((checkbox) => {
+            const shouldCheck = buildingCheckboxes.some((checkbox) => !checkbox.checked);
+            buildingCheckboxes.forEach((checkbox) => {
                 checkbox.checked = shouldCheck;
             });
             syncSelection();
@@ -458,6 +523,7 @@ function init(): void {
         dialog.showModal();
         requestAnimationFrame(initBuildingImportDialog);
     };
+    window.ulHtmxActions?.register("building-import-open", () => window.openBuildingImportDialog());
 
     // Dedicated panes keep markup shapes clickable even when a boundary
     // polygon visually overlaps them - without this, both layer groups share
@@ -488,8 +554,8 @@ function init(): void {
     });
 
     const markerIcon = L.icon({
-        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+        iconUrl: cfg.markerIconUrl,
+        shadowUrl: cfg.markerShadowUrl,
         iconSize: [25, 41],
         shadowSize: [41, 41],
         iconAnchor: [12, 41],
@@ -568,7 +634,7 @@ function init(): void {
         window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 300));
     })();
 
-    // -- Map resize handle (pin detail page only - wiki page has no handle in ---
+    // -- Map resize handle (Private Pin page only - wiki page has no handle in ---
     // its DOM, so this is a silent no-op there). Dragging the bottom border
     // saves the new height (see PinController.set_map_height) so every pin
     // detail page's map opens at that height going forward. Bounds must match
@@ -619,12 +685,28 @@ function init(): void {
     // -- Detail pins layer ---------------------------------------------------
     const detailPinColors: Record<string, string> = { parcel: "#0f766e", building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", stair: "#6b7280", elevator: "#6b7280", other: "#7c3aed", location: "#2563eb" };
     const detailPinIcons: Record<string, string> = { parcel: "crop_free", building: "business", entrance: "door_front", poi: "star", danger: "warning", stair: "stairs", elevator: "elevator", other: "info", location: "place" };
-    // Both sub-layers live inside detailsLayer so one toggle shows/hides everything.
-    const detailPinLayer = L.layerGroup();
+    // Cluster group is added to the map directly (not nested in a LayerGroup) -
+    // MarkerClusterGroup misses zoom events when it is only a child of another
+    // group. Markup stays a sibling; the Details toggle shows/hides both.
+    const detailPinLayer = createPinClusterGroup({}, map);
     const markupLayer = L.layerGroup();
-    const detailsLayer = L.layerGroup([detailPinLayer, markupLayer]).addTo(map);
+    detailPinLayer.addTo(map);
+    markupLayer.addTo(map);
 
-    const photoLayer = L.layerGroup().addTo(map);
+    const photoLayer = createPhotoClusterGroup(map).addTo(map);
+
+    function detailsVisible(): boolean {
+        return map.hasLayer(detailPinLayer);
+    }
+    function toggleDetails(): void {
+        if (detailsVisible()) {
+            map.removeLayer(detailPinLayer);
+            map.removeLayer(markupLayer);
+        } else {
+            detailPinLayer.addTo(map);
+            markupLayer.addTo(map);
+        }
+    }
 
     // -- Nearby pins layer -----------------------------------------------------
     // This profile's other pins near the one being viewed. Off by default and
@@ -703,20 +785,20 @@ function init(): void {
     const mapLayersInstance = createMapLayers(map, {
         root: document.getElementById("detail-map-layers"),
         apiKey: cfg.openweathermapApiKey || null,
-        defaultBase: cfg.defaultMapView,
+        // Empty on a page that names no view, which leaves the panel root's own to decide rather
+        // than overriding it with a literal from here.
+        defaultBase: cfg.defaultMapView || null,
         // Same per-profile key the main map, trip and Memories maps use, so the
-        // remembered layer is one site-wide choice. Null without a uuid: that
-        // makes defaultBase "remember" degrade to street rather than sharing one
-        // unscoped bucket between accounts on a shared browser.
+        // remembered layer is one site-wide choice. Null without a uuid rather than one unscoped
+        // bucket shared between accounts on a shared browser.
         storageKey: cfg.profileUuid ? `ul_layers_v1_${cfg.profileUuid}` : null,
-        onAttribution: (text) => {
-            const el = document.getElementById("page-footer-attribution-text");
-            if (el) el.textContent = text;
-        },
+        // Bound below with "Create child pin here" once those helpers exist.
+        contextMenu: false,
+        onAttribution: setAttribution,
         custom: {
             details: {
-                isActive: () => map.hasLayer(detailsLayer),
-                toggle: () => (map.hasLayer(detailsLayer) ? map.removeLayer(detailsLayer) : detailsLayer.addTo(map)),
+                isActive: () => detailsVisible(),
+                toggle: toggleDetails,
             },
             photos: {
                 isActive: () => map.hasLayer(photoLayer),
@@ -823,10 +905,10 @@ function init(): void {
     const overlayCornersTemplate = cfg.overlayCornersUrlTemplate || "";
     const imageOverlays = overlayCornersTemplate
         ? createMapImageOverlays(L, map, {
-              cornersUrl: (uuid) => overlayCornersTemplate.replace("00000000-0000-0000-0000-000000000000", uuid),
-              csrfToken: getCsrfToken(),
-              onError: (message) => toast.error?.(message),
-          })
+            cornersUrl: (uuid) => overlayCornersTemplate.replace("00000000-0000-0000-0000-000000000000", uuid),
+            csrfToken: getCsrfToken(),
+            onError: (message) => toast.error?.(message),
+        })
         : null;
 
     function overlayToggleKey(uuid: string): string {
@@ -916,6 +998,9 @@ function init(): void {
     let detailPins: DetailPinEntry[] = [];
     let highlightedDpUuid: string | null = null;
     let photoPanelItems: PhotoPanelItem[] = [];
+    //: Whether the server capped the photo map layer, and how many there were.
+    let photoLayerTruncated = false;
+    let photoLayerTotal = 0;
     const photoMarkers: Record<number, { marker: L.Marker; url: string; lat: number; lng: number; highlighted: boolean }> = {};
 
     function hexToRgb(hex: string): string {
@@ -925,9 +1010,22 @@ function init(): void {
         return `${r},${g},${b}`;
     }
 
+    // Mirrors the `is_material_icon` Django filter (dashboard_tags.py): a bare
+    // ligature name renders fine inside a material-icons span, but an
+    // uploaded custom icon's URL rendered the same way shows up as literal
+    // text - far wider than one glyph, which stretched the fixed-size
+    // flex circle into an oval and threw off iconAnchor's centered-square
+    // math. A URL gets an <img> sized to match instead; anything else
+    // (an emoji) is plain text, un-fonted so it isn't mistaken for a glyph.
+    const MATERIAL_ICON_NAME = /^[a-z0-9_]+$/;
+    const ICON_URL = /^(?:https?:)?\//;
+
     function detailIcon(dp: Partial<DetailPinEntry>, highlighted?: boolean): L.DivIcon {
         const pinType = dp.pin_type || "location";
-        const color = dp.color || detailPinColors[pinType] || "#2563eb";
+        // Validated here as well as on write: this is interpolated into a
+        // divIcon's `html`, and a stored value predating the column's own
+        // coercion would otherwise still render.
+        const color = safeColor(dp.color, detailPinColors[pinType] || "#2563eb");
         const icon = dp.icon || detailPinIcons[pinType] || "place";
         const bgColor = dp.bg_color || null;
         const bgOp = bgColor ? (dp.bg_opacity != null ? dp.bg_opacity : 80) / 100 : 0;
@@ -943,9 +1041,15 @@ function init(): void {
         const bdStyle = bdColor ? `border:2px solid rgba(${hexToRgb(bdColor)},${bdOp});` : "";
         const ring = highlighted ? `<span style="position:absolute;inset:-5px;border:2.5px solid ${color};border-radius:50%;opacity:.55;pointer-events:none;"></span>` : "";
 
+        const iconHtml = ICON_URL.test(icon)
+            ? `<img class="detail-map-icon-img" src="${escHtml(icon)}" alt="" style="width:${size}px;height:${size}px;">`
+            : MATERIAL_ICON_NAME.test(icon)
+              ? `<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${escHtml(icon)}</span>`
+              : `<span class="detail-map-icon" style="font-size:${size}px;line-height:1;">${escHtml(icon)}</span>`;
+
         return L.divIcon({
             className: "",
-            html: `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;${bgStyle}${bdStyle}padding:${pad}px;">${ring}<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span></span>`,
+            html: `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;${bgStyle}${bdStyle}padding:${pad}px;">${ring}${iconHtml}</span>`,
             iconSize: [total, total],
             iconAnchor: [total / 2, total],
             popupAnchor: [0, -total - 2],
@@ -993,7 +1097,7 @@ function init(): void {
 
         // -- Pin items --------------------------------------------------------
         detailPins.forEach((dp) => {
-            const color = dp.color || detailPinColors[dp.pin_type] || "#2563eb";
+            const color = safeColor(dp.color, detailPinColors[dp.pin_type] || "#2563eb");
             const icon = dp.icon || detailPinIcons[dp.pin_type] || "place";
             const li = document.createElement("li");
             li.className = "detail-pin-list-item";
@@ -1096,19 +1200,7 @@ function init(): void {
     }
     window._toggleDetailPinListPanel = toggleDetailPinListPanel;
 
-    // Satellite/street-view carousel controls (satellite_view.html / street_view.html
-    // fragments, HTMX-swapped into this page). Defined here - not inside those
-    // fragments' own <script> tags - because HTMX inserts a swapped fragment's DOM
-    // (including <img> tags, which start loading immediately) before it executes any
-    // <script> tags found within that same fragment: a fast-failing image (cached
-    // 404, empty src, ...) can fire its onerror before a same-fragment <script>
-    // defining the handler has run, throwing "X is not defined". Defining these
-    // globals here (this module loads and runs on page load, well before any panel
-    // fragment can be swapped in) guarantees they exist before any swap can happen.
-    // Remembers which provider's slide the user last flipped to (by its
-    // display-name `source`, e.g. "Esri World Imagery"), so the next pin
-    // detail page's satellite carousel opens on that same provider instead
-    // of always starting over at the default order - see _satShowRemembered.
+    // Satellite/street-view carousel controls (satellite_view.html / street_view.html fragments, HTMX-swapped into this page).
     const SAT_LAST_SOURCE_KEY = "ul_sat_last_source";
 
     function _satRememberSource(source: string): void {
@@ -1150,10 +1242,7 @@ function init(): void {
         _satRebuildDots(slides.length);
     }
     function _satRebuildDots(count: number): void {
-        // Prev/next only make sense with more than one slide - the server
-        // already omits them from the initial render when there's just one,
-        // but a broken image can drop the count further at runtime
-        // (_satRemoveSlide), so hide them here too if that happens.
+        // Prev/next only make sense with more than one slide.
         const prev = document.querySelector<HTMLElement>("#sat-carousel .sat-prev");
         const next = document.querySelector<HTMLElement>("#sat-carousel .sat-next");
         if (prev) prev.hidden = count <= 1;
@@ -1171,6 +1260,7 @@ function init(): void {
         }
     }
     window._satRemoveSlide = function (img: HTMLImageElement): void {
+        if (window.urbanlensRetryPendingImage?.(img)) return;
         const slide = img.closest<HTMLElement>(".sat-slide");
         if (!slide) return;
         const wasActive = slide.classList.contains("is-active");
@@ -1203,12 +1293,7 @@ function init(): void {
     };
     window._satShow = _satShow;
 
-    // The interactive embed (see street_view.html's .sv-embed) is a cross-origin
-    // iframe: Google renders its own "no imagery here" state (a blank/black scene)
-    // inside it, which our JS has no way to read to detect - there's no success
-    // signal either, so this can only be a manually-triggered swap
-    // (.sv-embed-fallback-btn below), never an automatic one on a timer with
-    // nothing to cancel it on success.
+    // The interactive embed is a cross-origin iframe.
     function _svSwapToStatic(slide: HTMLElement): void {
         const iframe = slide.querySelector<HTMLIFrameElement>(".sv-embed");
         const staticImg = slide.querySelector<HTMLImageElement>(".sv-img--fallback");
@@ -1239,10 +1324,7 @@ function init(): void {
         _svRebuildDots(slides.length);
     }
     function _svRebuildDots(count: number): void {
-        // Prev/next only make sense with more than one slide - the server
-        // already omits them from the initial render when there's just one,
-        // but a broken image can drop the count further at runtime
-        // (_svRemoveSlide), so hide them here too if that happens.
+        // Prev/next only make sense with more than one slide.
         const prev = document.querySelector<HTMLElement>("#sv-carousel .sv-prev");
         const next = document.querySelector<HTMLElement>("#sv-carousel .sv-next");
         if (prev) prev.hidden = count <= 1;
@@ -1265,6 +1347,7 @@ function init(): void {
         _svSwapToStatic(slide);
     };
     window._svRemoveSlide = function (img: HTMLImageElement): void {
+        if (window.urbanlensRetryPendingImage?.(img)) return;
         const slide = img.closest<HTMLElement>(".sv-slide");
         if (!slide) return;
         const wasActive = slide.classList.contains("is-active");
@@ -1290,10 +1373,7 @@ function init(): void {
     };
     window._svShow = _svShow;
 
-    // Promotes a direct child pin to take this pin's place as the parent -
-    // the child becomes the parent, and this pin becomes its child. Only
-    // ever offered for Pin-backed direct children (entry.slug set, no
-    // owner_name), same gating as the Edit button below.
+    // Promotes a direct child pin to take this pin's place as the parent - the child becomes the parent, and this pin becomes its child.
     async function promotePinToParent(entry: DetailPinEntry): Promise<void> {
         if (!entry.slug || !entry.url) return;
         if (!(await confirmAction({ title: "Make this the parent pin?", message: `"${entry.name || "This pin"}" will become the parent, and the current pin will become its child. Everything else - name, notes, reviews, photos, visit history - stays with each pin.`, confirmLabel: "Swap" }))) {
@@ -1317,22 +1397,19 @@ function init(): void {
             .catch(() => toast.error("Could not swap these pins."));
     }
 
-    // Popup shown when a child pin's marker is clicked: name, which child pin it
-    // belongs to (for nested entries), and a link to that pin's own detail
-    // page - plus Edit/promote-to-parent shortcuts for this pin's own direct
-    // children (no hover tooltip - the click popup already covers this, and a
-    // separate hover tooltip here renders unreadably in dark mode).
+    // Popup shown when a child pin's marker is clicked.
     function detailPinPopupContent(entry: DetailPinEntry): HTMLElement {
         const el = document.createElement("div");
         el.className = "pin-popup child-pin-popup";
         const owner = entry.owner_name ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Inside ${escHtml(entry.owner_name)}</div>` : "";
+        // The title itself is the link to the pin's detail page (when one exists),
+        // same as the root-pin popup - a separate "View Details" link duplicated it.
+        const titleHtml = entry.url ? `<a class="popup-title" href="${escHtml(entry.url)}">${escHtml(entry.name || "Child pin")}</a>` : `<div class="popup-title">${escHtml(entry.name || "Child pin")}</div>`;
         el.innerHTML = `
-            <div class="popup-title">${escHtml(entry.name || "Child pin")}</div>
+            ${titleHtml}
             ${owner}
             ${entry.description ? `<div class="popup-desc">${escHtml(entry.description)}</div>` : ""}
-            <div class="popup-actions">
-                ${entry.url ? `<a href="${escHtml(entry.url)}" class="view-full-pin">View Details</a>` : ""}
-            </div>`;
+            <div class="popup-actions"></div>`;
         if (!entry.owner_name) {
             const actions = el.querySelector(".popup-actions")!;
             const promoteBtn = document.createElement("button");
@@ -1384,11 +1461,7 @@ function init(): void {
     function loadDetailPins(): void {
         fetch(cfg.detailPinsJsonUrl)
             .then((r) => {
-                // Without this, a server error whose body still parses as
-                // JSON (or one with no "detail_pins" key) fell through to
-                // the success branch below, which unconditionally clears
-                // the existing layer - a transient failure wiped every pin
-                // already on the map rather than leaving them alone.
+                // Without this, a server error whose body still parses as JSON (or one with no "detail_pins" key) fell through to the success branch.
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 return r.json();
             })
@@ -1418,12 +1491,8 @@ function init(): void {
                         longitude: dp.longitude,
                         marker: null,
                     };
-                    // Nested entries (owner_name set) belong to a child pin and are
-                    // display-only here - not draggable, edited on their own page.
-                    // No hover tooltip - the click popup below already covers name/
-                    // owner/actions, and a separate hover tooltip here renders
-                    // unreadably in dark mode (dark text on a dark background).
-                    const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name });
+                    // Nested entries (owner_name set) belong to a child pin and are display-only here - not draggable, edited on their own page.
+                    const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name && !detailSelectMode });
                     if (entry.url) {
                         marker.bindPopup(detailPinPopupContent(entry));
                     } else {
@@ -1431,15 +1500,15 @@ function init(): void {
                         // direct click-to-edit behavior there.
                         marker.on("click", () => openDetailPinEditDialog(entry));
                     }
-                    // Select-mode click toggles selection instead of opening the popup
-                    // or the editor - mirrors the main map's marker click handling.
+                    // Select-mode click toggles selection instead of opening the popup or the editor.
                     marker.on("click", (e) => {
-                        if (!detailSelectMode || entry.owner_name) return;
-                        marker.closePopup();
-                        L.DomEvent.stop(e);
-                        toggleDpSelection(entry.uuid);
+                        handleDetailPinSelectClick(entry, marker, e);
                     });
+                    if (!entry.owner_name) {
+                        reclusterOnDrag(marker, detailPinLayer, map, () => detailSelectMode);
+                    }
                     marker.on("dragend", () => {
+                        returnToCluster(marker, detailPinLayer, map);
                         const pos = marker.getLatLng();
                         fetch(`${dpEditBase}${dp.uuid}/`, {
                             method: "POST",
@@ -1459,6 +1528,7 @@ function init(): void {
                             .catch(() => {
                                 toast.error("Failed to save new position.");
                                 marker.setLatLng([entry.latitude, entry.longitude]);
+                                returnToCluster(marker, detailPinLayer, map);
                             });
                     });
                     marker.addTo(detailPinLayer);
@@ -1466,6 +1536,7 @@ function init(): void {
                     detailPins.push(entry);
                 });
                 buildDetailList();
+                syncDpSelectionClasses();
             })
             .catch((err) => {
                 console.warn("Could not load detail pins:", err);
@@ -1474,12 +1545,59 @@ function init(): void {
     }
 
     // -- Detail pin multi-select: act on several child pins at once ------------
-    // Pin-only (cfg.pinSlug is empty on the wiki page, which shares this module
-    // but has no reparentable Pin-backed detail pins to act on) - the button is
-    // removed there. Nested entries (entry.owner_name set) are display-only and
-    // never selectable, matching their existing non-draggable/non-editable state.
+    // Pin-only (cfg.pinSlug is empty on the wiki page, which shares this module but has no reparentable Pin-backed detail pins to act on).
     let detailSelectMode = false;
     const selectedDpUuids = new Set<string>();
+    const dpSelectMemory = new AdditiveSelectMemory();
+
+    function canDetailMultiSelect(): boolean {
+        return !!cfg.pinSlug && detailSelectableEntries().length > 0;
+    }
+
+    function setDetailPinDragging(enabled: boolean): void {
+        detailSelectableEntries().forEach((dp) => {
+            if (enabled) dp.marker?.dragging?.enable();
+            else dp.marker?.dragging?.disable();
+        });
+    }
+
+    function syncDpSelectionClasses(): void {
+        if (!selectedDpUuids.size) return;
+        selectedDpUuids.forEach((uuid) => {
+            detailPins.find((d) => d.uuid === uuid)?.marker?.getElement()?.classList.add("is-selected");
+        });
+    }
+    detailPinLayer.on("animationend spiderfied unspiderfied layeradd", syncDpSelectionClasses);
+    map.on("zoomend moveend", () => {
+        requestAnimationFrame(syncDpSelectionClasses);
+    });
+
+    /**
+ * Consume a marker click for multi-select when appropriate.
+ */
+    function handleDetailPinSelectClick(entry: DetailPinEntry, marker: L.Marker, event: L.LeafletMouseEvent): boolean {
+        if (entry.owner_name || !canDetailMultiSelect()) return false;
+        const additive = isAdditiveClick(event);
+        if (detailSelectMode) {
+            marker.closePopup();
+            L.DomEvent.stop(event);
+            toggleDpSelection(entry.uuid);
+            return true;
+        }
+        if (additive) {
+            marker.closePopup();
+            L.DomEvent.stop(event);
+            map.closePopup();
+            enterDetailPinSelectMode();
+            dpSelectMemory.idsForAdditiveStart(entry.uuid).forEach((uuid) => {
+                if (!selectedDpUuids.has(uuid) && detailPins.some((d) => d.uuid === uuid && !d.owner_name)) toggleDpSelection(uuid);
+            });
+            dpSelectMemory.clear();
+            return true;
+        }
+        dpSelectMemory.remember(entry.uuid);
+        return false;
+    }
 
     function detailSelectableEntries(): DetailPinEntry[] {
         return detailPins.filter((d) => !d.owner_name);
@@ -1494,7 +1612,7 @@ function init(): void {
         }
         const hasSelectable = detailSelectableEntries().length > 0;
         btn.disabled = !hasSelectable;
-        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins" : "This pin has no child pins to select");
+        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins. Ctrl+click a second pin to start." : "This pin has no child pins to select");
         if (!hasSelectable && detailSelectMode) exitDetailPinSelectMode();
     }
 
@@ -1505,14 +1623,13 @@ function init(): void {
     window.toggleDetailPinSelectMode = toggleDetailPinSelectMode;
 
     function enterDetailPinSelectMode(): void {
-        if (detailSelectMode || !detailSelectableEntries().length) return;
+        if (detailSelectMode || !canDetailMultiSelect()) return;
         detailSelectMode = true;
         document.getElementById("select-detail-pins-button")?.classList.add("active");
         document.getElementById("map")?.classList.add("select-mode");
         map.dragging.disable();
-        // Disabling dragging makes Leaflet hand touch panning back to the
-        // browser, which would scroll the page instead of letting the rubber
-        // band consume the gesture.
+        setDetailPinDragging(false);
+        // Disabling dragging makes Leaflet hand touch panning back to the browser, which would scroll the page instead of letting the rubber.
         map.getContainer().style.touchAction = "none";
     }
 
@@ -1522,7 +1639,9 @@ function init(): void {
         document.getElementById("select-detail-pins-button")?.classList.remove("active");
         document.getElementById("map")?.classList.remove("select-mode");
         map.dragging.enable();
+        setDetailPinDragging(true);
         map.getContainer().style.touchAction = "";
+        dpSelectMemory.clear();
         clearDpSelection();
     }
 
@@ -1549,16 +1668,14 @@ function init(): void {
             n,
             n
                 ? {
-                      ...(cfg.detailPinsBulkEditUrl ? { edit: openSelectedDpBulkEditDialog } : {}),
-                      promote: doPromoteSelectedDp,
-                      // "Share" and "Send to wiki" are pin-only - the wiki page shares
-                      // this same module for its own (community) child-wiki toolbar,
-                      // which has neither concept.
-                      ...(cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {}),
-                      ...(cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {}),
-                      delete: doDeleteSelectedDp,
-                      deselect: clearDpSelection,
-                  }
+                    ...(cfg.detailPinsBulkEditUrl ? { edit: openSelectedDpBulkEditDialog } : {}),
+                    promote: doPromoteSelectedDp,
+                    // "Share" and "Send to wiki" are pin-only - the wiki page shares this same module for its own (community) child-wiki toolbar, which has.
+                    ...(cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {}),
+                    ...(cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {}),
+                    delete: doDeleteSelectedDp,
+                    deselect: clearDpSelection,
+                }
                 : {},
         );
     }
@@ -1665,11 +1782,7 @@ function init(): void {
         if (!uuids.length) return;
         const n = uuids.length;
         if (!(await confirmAction({ title: "Promote child pins?", message: `Promote ${n} child pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))) return;
-        // `.catch(() => false)` matters as much as the `.ok`: without it a single
-        // network failure rejects the whole Promise.all, so this function throws
-        // and the user gets no toast, no cleared selection and no refreshed list
-        // after confirming a bulk promote - see doDeleteSelectedDp() below, which
-        // needed the same fix for the same reason.
+        // `.catch(() => false)` matters as much as the `.ok`.
         const results = await Promise.all(
             uuids.map((uuid) => {
                 const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
@@ -1741,11 +1854,7 @@ function init(): void {
         if (!uuids.length) return;
         const n = uuids.length;
         if (!(await confirmAction({ title: "Delete child pins?", message: `Delete ${n} child pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))) return;
-        // `.catch(() => false)` matters as much as the `.ok`: without it a single
-        // network failure rejects the whole Promise.all, so this function throws
-        // and the user gets no toast, no cleared selection and no refreshed list
-        // after confirming a bulk delete. Counting it as "not deleted" instead
-        // routes it into the warning below, which already says the right thing.
+        // `.catch(() => false)` matters as much as the `.ok`.
         const results = await Promise.all(
             uuids.map((uuid) =>
                 fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
@@ -1788,15 +1897,6 @@ function init(): void {
         layerGroupFor: (item) => (item.layer_uuid && customLayerGroups.get(item.layer_uuid)) || markupLayer,
     });
 
-    window.startMarkupDraw = toolbar.startMarkupDraw;
-    window.startShapeDraw = toolbar.startShapeDraw;
-    window.startTextPlacement = toolbar.startTextPlacement;
-    window.closeMarkupPanel = toolbar.closeMarkupPanel;
-    window._liveApplyMarkupEdit = toolbar.liveApplyMarkupEdit;
-    window._closeMarkupDraw = toolbar.closeOrFinishDraw;
-    window.deleteMarkupEdit = toolbar.deleteMarkupEdit;
-    window.openMarkupEditDialog = toolbar.openMarkupEditDialog;
-    window.loadMarkup = toolbar.loadMarkup;
 
     loadDetailPins();
     document.body.addEventListener("pinDetailPinsChanged", () => {
@@ -1805,8 +1905,7 @@ function init(): void {
     });
 
     // -- Photo panel -----------------------------------------------------------
-    // Icon and sizing come from shared/photo-map so this map and an album's map
-    // render a photo identically.
+    // Icon and sizing come from shared/photo-map so this map and an album's map render a photo identically.
     function photoMarkerSize(highlighted?: boolean): number {
         return sharedPhotoMarkerSize(map.getZoom(), highlighted);
     }
@@ -1816,8 +1915,11 @@ function init(): void {
         // Photos belonging to a child pin (ownerName) are display-only on this
         // map - they're repositioned from their own pin's page.
         const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, photoMarkerSize(false), false), draggable: !ownerName });
-        if (ownerName) marker.bindTooltip(`Photo from ${ownerName}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+        tagPhotoMarker(marker, url, imgId);
+        if (ownerName) marker.bindTooltip(`Photo from ${escHtml(ownerName)}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+        if (!ownerName) reclusterOnDrag(marker, photoLayer, map);
         marker.on("dragend", () => {
+            returnToCluster(marker, photoLayer, map);
             const pos = marker.getLatLng();
             const prevLat = photoMarkers[imgId]!.lat;
             const prevLng = photoMarkers[imgId]!.lng;
@@ -1838,6 +1940,7 @@ function init(): void {
                         item.lat = prevLat;
                         item.lng = prevLng;
                     }
+                    returnToCluster(marker, photoLayer, map);
                     buildPhotoPanel();
                 });
             }
@@ -1845,10 +1948,29 @@ function init(): void {
         });
         marker.on("mouseover", () => window._galleryHighlightMarker?.(imgId, true));
         marker.on("mouseout", () => window._galleryHighlightMarker?.(imgId, false));
-        // Open the photo in the gallery lightbox. The url is passed as a
-        // fallback because the gallery grid is paginated - this photo may not
-        // be on the currently rendered gallery page.
+        // Open the photo in the gallery lightbox.
         marker.on("click", () => window.galleryOpenLightbox?.(imgId, { url }));
+        marker.on("contextmenu", (event: L.LeafletMouseEvent) => {
+            L.DomEvent.stop(event);
+            showMapContextMenu({
+                lat: event.latlng.lat,
+                lng: event.latlng.lng,
+                zoom: map.getZoom(),
+                clientX: event.originalEvent.clientX,
+                clientY: event.originalEvent.clientY,
+                extraItems: [
+                    {
+                        icon: "visibility_off",
+                        label: "Hide from map",
+                        onClick: () => {
+                            if (typeof window.gallerySetPhotoMapHidden === "function") {
+                                window.gallerySetPhotoMapHidden(imgId, true);
+                            }
+                        },
+                    },
+                ],
+            });
+        });
         marker.addTo(photoLayer);
         photoMarkers[imgId] = { marker, url, lat, lng, highlighted: false };
     }
@@ -1863,7 +1985,7 @@ function init(): void {
 
     window._galleryAddMarker = (img) => {
         if (!photoPanelItems.find((p) => p.id === img.id)) photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
-        if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+        if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.marker_thumb_url || img.url, img.latitude, img.longitude);
         buildPhotoPanel();
         refreshPanelHeader();
     };
@@ -1883,7 +2005,6 @@ function init(): void {
         if (entry) {
             entry.highlighted = !!on;
             entry.marker.setIcon(makePhotoIcon(entry.url, photoMarkerSize(entry.highlighted), entry.highlighted));
-            if (on) map.panTo([entry.lat, entry.lng]);
         }
         document.querySelectorAll<HTMLElement>(".photo-panel-item").forEach((li) => {
             li.classList.toggle("is-highlighted", +(li.dataset.id ?? "") === imgId && !!on);
@@ -1891,9 +2012,7 @@ function init(): void {
     };
 
     // -- Tap-to-place ----------------------------------------------------------
-    // HTML5 drag-and-drop never fires on touch, so drag-onto-the-map leaves a
-    // photo with no coordinates unplaceable from a phone. An armed item hands
-    // the next map click to the same placement path a drop takes.
+    // HTML5 drag-and-drop never fires on touch, so drag-onto-the-map leaves a photo with no coordinates unplaceable from a phone.
     type PendingPlacement = { kind: "photo"; photoId: number } | { kind: "media"; itemEl: HTMLElement; item: MediaDropItem };
     let pendingPlacement: PendingPlacement | null = null;
     const PLACEMENT_HINT = "Tap the map to place this photo, or press Escape to cancel.";
@@ -1938,7 +2057,13 @@ function init(): void {
     }
 
     document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") disarmPlacement();
+        if (event.key !== "Escape") return;
+        if (document.querySelector("dialog[open]")) return;
+        if (detailSelectMode) {
+            exitDetailPinSelectMode();
+            return;
+        }
+        disarmPlacement();
     });
 
     // Media tiles are server-rendered (partials/pins/pin_media_items.html), so
@@ -1980,6 +2105,17 @@ function init(): void {
             } else if (badge) {
                 badge.remove();
             }
+        }
+        if (photoLayerTruncated) {
+            const note = document.createElement("li");
+            note.className = "photo-panel-note";
+            const shown = String(photoPanelItems.length);
+            const total = String(photoLayerTotal);
+            note.innerHTML =
+                '<i class="material-symbols-outlined">info</i><span></span>';
+            const text = note.querySelector("span");
+            if (text) text.textContent = `Showing ${shown} of ${total} photos, spread across the area.`;
+            ul.appendChild(note);
         }
         if (!photoPanelItems.length) {
             const empty = document.createElement("li");
@@ -2076,17 +2212,11 @@ function init(): void {
         e.preventDefault();
         // A completed drop resolves whatever the user had armed for a tap.
         disarmPlacement();
-        const rect = mapEl.getBoundingClientRect();
-        placePhotoAt(Number.parseInt(idStr, 10), map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
+        // Leaflet's own conversion: it subtracts the container's border and undoes CSS scaling, which a bounding-rect offset does not.
+        placePhotoAt(Number.parseInt(idStr, 10), map.mouseEventToLatLng(e));
     });
 
-    // Drop a Media-section item (external provider result, not yet a real
-    // Image row - see PinController.media_relevance) onto the map: this
-    // materializes it locally (downloads + saves, same as clicking
-    // "relevant") and sets its coordinates in one request, then adds it to
-    // the photo layer exactly like a real gallery photo. Only wired when the
-    // page actually has a Media section (cfg.mediaRelevanceUrl - the wiki
-    // page, which shares this module, has none).
+    // Drop a Media-section item (external provider result, not yet a real Image row - see PinController.media_relevance) onto the map.
     function placeMediaItemAt(itemEl: HTMLElement | undefined, item: MediaDropItem, latlng: L.LatLng): void {
         fetch(cfg.mediaRelevanceUrl, {
             method: "POST",
@@ -2109,7 +2239,7 @@ function init(): void {
             .then((data) => {
                 window.mediaApplyMaterializedDrop?.(itemEl, data);
                 if (data.image_id && data.latitude != null && data.longitude != null) {
-                    window._galleryAddMarker({ id: data.image_id, url: data.image_url, latitude: data.latitude, longitude: data.longitude });
+                    window._galleryAddMarker?.({ id: data.image_id, url: data.image_url, latitude: data.latitude, longitude: data.longitude });
                 } else if (data.materialize_error) {
                     toast.warning(`Couldn't save a local copy: ${data.materialize_error}`);
                 }
@@ -2141,8 +2271,7 @@ function init(): void {
         } catch {
             return;
         }
-        const rect = mapEl.getBoundingClientRect();
-        placeMediaItemAt(itemEl, item, map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
+        placeMediaItemAt(itemEl, item, map.mouseEventToLatLng(e));
     });
 
     // Tab switching.
@@ -2161,9 +2290,15 @@ function init(): void {
         .then((r) => r.json())
         .then((data) => {
             photoPanelItems = [];
+            // The layer is capped for locations with thousands of photos. The
+            // server keeps a spatially spread subset rather than the first N, so
+            // the map still shows the whole site - but the count is not the
+            // whole count, and saying nothing would be a quiet lie.
+            photoLayerTruncated = Boolean(data.truncated);
+            photoLayerTotal = Number(data.total) || 0;
             (data.images || []).forEach((img: any) => {
                 photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
-                if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.url, img.latitude, img.longitude, img.child_pin_name);
+                if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.marker_thumb_url || img.url, img.latitude, img.longitude, img.child_pin_name);
             });
             buildPhotoPanel();
             refreshPanelHeader();
@@ -2171,9 +2306,7 @@ function init(): void {
         .catch((err) => console.warn("Could not load gallery photos for panel:", err));
 
     // -- Boundary editor (property + building) ----------------------------------
-    // Two typed boundaries render in different colors: the property boundary
-    // (parcel/grounds, red) and the building boundary (footprint, blue). Each
-    // is fetched, drawn, and edited independently against the same endpoint.
+    // Two typed boundaries render in different colors.
     const boundaryApiUrl = cfg.boundaryUrl;
     type BoundaryType = "property" | "building";
     const BOUNDARY_STYLES: Record<BoundaryType, L.PathOptions> = {
@@ -2196,10 +2329,7 @@ function init(): void {
     const boundarySources: Record<BoundaryType, string | null> = { property: null, building: null }; // pin|wiki|inherited|generated|circle|null
     let boundaryBoundsFitted = false;
 
-    // Clicking an already-active draw-toolbar tool cancels it instead of no-op
-    // re-enabling it. Prototype-patched dynamically like the original script;
-    // `any` here is deliberate - the patch's whole point is to be generic
-    // across Leaflet.Draw's incompatible per-tool return types.
+    // Clicking an already-active draw-toolbar tool cancels it instead of no-op re-enabling it.
     if (!window._boundaryDrawToggleWired) {
         window._boundaryDrawToggleWired = true;
         ([L.Draw.Polygon, L.EditToolbar.Edit] as any[]).forEach((Ctor) => {
@@ -2227,7 +2357,7 @@ function init(): void {
         // can edit each sub-polygon independently.
         const rings: [number, number][][][] | null = geojson.type === "MultiPolygon" ? geojson.coordinates : geojson.type === "Polygon" ? [geojson.coordinates] : null;
         const bindLabel = (layer: L.Layer) => {
-            if (label) layer.bindTooltip(label, { sticky: true, direction: "top", className: "boundary-tooltip" });
+            if (label) layer.bindTooltip(escHtml(label), { sticky: true, direction: "top", className: "boundary-tooltip" });
             return layer;
         };
         if (rings) {
@@ -2263,9 +2393,7 @@ function init(): void {
             const entry = boundaries[type] || {};
             loadBoundary(type, entry.polygon || null, entry.source || null);
         });
-        // Buildings drawn on detail pins keep the building layer meaningful even
-        // when this pin has no building boundary of its own. When neither
-        // exists, no building layer is shown at all ("no known building here").
+        // Buildings drawn on detail pins keep the building layer meaningful even when this pin has no building boundary of its own.
         detailBuildingItems.clearLayers();
         (data.detail_buildings || []).forEach((entry: any) => {
             if (entry.polygon) addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a child pin)");
@@ -2284,16 +2412,7 @@ function init(): void {
         attachBoundaryClickHandlers();
     }
 
-    // Boundary generation happens in a background task on first view (see
-    // services/external_data.py) - while the server reports pending, poll
-    // until the generated polygons land rather than blocking the page load.
-    // A previously-generated boundary also goes stale after a while (see
-    // SiteSettings.boundary_cache_days) - the server serves the last-known
-    // geometry immediately (already applied below) while refreshing it in
-    // the background, reporting that as "refreshing" rather than "pending"
-    // since there's already something on the map. Poll the same way in both
-    // cases so an already-open page redraws with the newer geometry once it
-    // lands, without ever blocking on it.
+    // Boundary generation happens in a background task on first view.
     function fetchBoundaries(attempt: number): void {
         fetch(boundaryApiUrl)
             .then((r) => r.json())
@@ -2315,13 +2434,7 @@ function init(): void {
                 const editableLayer = layer as L.Layer & { editing?: { _markerGroup?: L.LayerGroup } };
                 if (editableLayer.editing?._markerGroup) {
                     editableLayer.editing._markerGroup.eachLayer((m) => {
-                        // Leaflet's event system has no jQuery-style dot
-                        // namespacing - "contextmenu.rcdelete" was a distinct
-                        // event type nothing ever fires, so right-click
-                        // delete never worked despite the toast advertising
-                        // it. .off() with no listener removes every
-                        // "contextmenu" handler, which is what keeps repeat
-                        // calls (this runs on every EDITSTART) from stacking.
+                        // Leaflet's event system has no jQuery-style dot namespacing.
                         m.off("contextmenu");
                         m.on("contextmenu", (e: L.LeafletMouseEvent) => {
                             L.DomEvent.stopPropagation(e);
@@ -2333,10 +2446,7 @@ function init(): void {
         }, 100);
     }
 
-    // `visible` names the normal (not-editing) state - true hides the boundary
-    // save controls, false shows them. A boundary edit session is started from
-    // the boundary's own right-click context menu (see openBoundaryCtxMenu),
-    // since boundaries have no dedicated toolbar button.
+    // `visible` names the normal (not-editing) state - true hides the boundary save controls, false shows them.
     function setBoundaryEditButtonsVisible(visible: boolean): void {
         const controls = document.getElementById("boundary-save-controls");
         if (controls) controls.style.display = visible ? "none" : "";
@@ -2411,40 +2521,68 @@ function init(): void {
         return null;
     }
 
-    function saveBoundary(options: { type?: BoundaryType; exitEdit?: boolean; quiet?: boolean } = {}): void {
-        const type = options.type || editingBoundaryType;
-        if (!type) return;
-        const layers = boundaryGroups[type].getLayers() as Array<L.Layer & { toGeoJSON: () => any }>;
-        const geometry = layers.length === 0 ? null : { type: "MultiPolygon", coordinates: layers.map((l) => l.toGeoJSON().geometry.coordinates) };
-        fetch(boundaryApiUrl, {
+    function boundaryGeometryOf(type: BoundaryType): { type: string; coordinates: unknown[] } | null {
+        const layers = boundaryGroups[type].getLayers() as Array<L.Layer & { toGeoJSON: () => { geometry: { coordinates: unknown[] } } }>;
+        return layers.length === 0 ? null : { type: "MultiPolygon", coordinates: layers.map((l) => l.toGeoJSON().geometry.coordinates) };
+    }
+
+    async function postBoundary(type: BoundaryType, geometry: { type: string; coordinates: unknown[] } | null): Promise<any> {
+        const response = await fetch(boundaryApiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
             body: JSON.stringify({ boundary_type: type, polygon: geometry }),
-        })
-            .then(async (r) => {
-                if (!r.ok) {
-                    let msg = `HTTP ${r.status}`;
-                    try {
-                        msg = (await r.json()).error || msg;
-                    } catch {
-                        /* keep default */
-                    }
-                    throw new Error(msg);
-                }
-                return r.json();
-            })
+        });
+        if (!response.ok) {
+            let msg = `HTTP ${response.status}`;
+            try {
+                msg = (await response.json()).error || msg;
+            } catch {
+
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    }
+
+    function saveBoundary(options: { type?: BoundaryType; exitEdit?: boolean; quiet?: boolean } = {}): void {
+        const type = options.type || editingBoundaryType;
+        if (!type) return;
+        const geometry = boundaryGeometryOf(type);
+        postBoundary(type, geometry)
             .then((data) => {
                 const exiting = options.exitEdit !== false;
                 if (exiting) exitBoundaryEdit();
-                // The server responds with the full refreshed payload (the clear
-                // path falls back down the resolution chain server-side); only
-                // redraw from it outside active editing so in-progress vertex
-                // edits aren't clobbered.
+                // The server responds with the full refreshed payload (the clear path falls back down the resolution chain server-side).
                 if (exiting || !boundaryDrawControl) applyBoundaryPayload(data);
                 if (data.pending || data.refreshing) fetchBoundaries(0);
                 if (!options.quiet) toast.success(geometry ? "Boundary saved." : "Boundary reset to the default.");
             })
             .catch((err) => toast.error(`Failed to save boundary: ${err.message}`));
+    }
+
+    async function convertBoundary(layer: L.Layer, from: BoundaryType): Promise<void> {
+        const to: BoundaryType = from === "property" ? "building" : "property";
+        boundaryGroups[from].removeLayer(layer);
+        const path = layer as L.Path;
+        path.setStyle(BOUNDARY_STYLES[to]);
+        layer.unbindTooltip();
+        layer.bindTooltip(to === "property" ? "Property boundary" : "Building boundary", {
+            sticky: true,
+            direction: "top",
+            className: "boundary-tooltip",
+        });
+        boundaryGroups[to].addLayer(layer);
+        attachBoundaryClickHandlers();
+        try {
+            await postBoundary(to, boundaryGeometryOf(to));
+            const data = await postBoundary(from, boundaryGeometryOf(from));
+            applyBoundaryPayload(data);
+            if (data.pending || data.refreshing) fetchBoundaries(0);
+            toast.success(to === "building" ? "Converted to a building boundary." : "Converted to a parcel boundary.");
+        } catch (err) {
+            toast.error(`Failed to convert boundary: ${err instanceof Error ? err.message : String(err)}`);
+            fetchBoundaries(0);
+        }
     }
 
     async function clearBoundary(): Promise<void> {
@@ -2526,21 +2664,14 @@ function init(): void {
     }
 
     // -- Unified detail-pin panel (add + edit) -----------------------------------
-    // Same panel/fields for both; instead of a second embedded map, placing or
-    // moving the pin happens by clicking/dragging directly on the main map -
-    // the map stays interactive and in view the whole time.
+    // Same panel/fields for both; instead of a second embedded map, placing or moving the pin happens by clicking/dragging directly.
     let editingDp: DetailPinEntry | null = null;
     let dpMode: "add" | "edit" | null = null;
     let dpActiveMarker: L.Marker | null = null;
     let dpCreatedUuid: string | null = null;
     let dpAutoSaveTimer: ReturnType<typeof setTimeout> | undefined;
     let dpAutoSaveUuid: string | null = null;
-    // Whether the user picked a Type in this panel session. The select's first
-    // option is "Auto", meaning "work out whether this is a building from the
-    // footprint under it" (see services.locations.site_scope) - so pin_type is
-    // only ever submitted when it was deliberately chosen. Submitting it
-    // regardless would mark every autosave as a user decision and freeze (or
-    // overwrite) an automatic classification the server may have just made.
+    // Whether the user picked a Type in this panel session.
     let dpTypeTouched = false;
 
     function currentDpIcon(): L.DivIcon {
@@ -2619,9 +2750,7 @@ function init(): void {
             body: JSON.stringify(collectDpFormData()),
         })
             .then((r) => {
-                // fetch only rejects on a network failure - a validation
-                // error (400) resolved here and was swallowed as success,
-                // so the edit looked saved while the server had discarded it.
+                // fetch only rejects on a network failure - a validation error (400) resolved here and was swallowed as success, so the edit looked.
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
             })
             .catch(() => toast.error("Failed to save detail pin changes."));
@@ -2642,9 +2771,7 @@ function init(): void {
     }
 
     function onMainMapClickForDp(e: L.LeafletMouseEvent): void {
-        // In edit mode the pin already exists on the map and is draggable/self-saving
-        // (see loadDetailPins) - clicking elsewhere should pan/interact with the map
-        // as normal, not silently relocate an existing pin.
+        // In edit mode the pin already exists on the map and is draggable/self-saving.
         if (dpMode === "edit") return;
         const { lat, lng } = e.latlng;
         if (dpActiveMarker) {
@@ -2678,7 +2805,7 @@ function init(): void {
         buildCircleSwatches("dp-border-swatches", "dp-border-color", "", updateDpMarkerIcon);
     }
 
-    function openAddPinDialog(): void {
+    function openAddPinDialog(lat?: number, lng?: number): void {
         // Only one map side-panel open at a time - closing markup autosaves first.
         toolbar.closeMarkupPanel();
         // These modes claim the next map click too.
@@ -2697,6 +2824,9 @@ function init(): void {
         document.getElementById("detail-pin-place-hint-text")!.textContent = "Click anywhere on the map to place the pin.";
         (document.getElementById("detail-pin-panel") as HTMLElement).style.display = "";
         map.on("click", onMainMapClickForDp);
+        if (lat != null && lng != null) {
+            onMainMapClickForDp({ latlng: L.latLng(lat, lng) } as L.LeafletMouseEvent);
+        }
     }
 
     function openDetailPinEditDialog(dp: DetailPinEntry): void {
@@ -2745,9 +2875,7 @@ function init(): void {
 
         (document.getElementById("detail-pin-panel") as HTMLElement).style.display = "";
 
-        // Manipulate the pin's real marker directly rather than a stand-in - it's
-        // already draggable and self-saving (see loadDetailPins); this just keeps
-        // the panel's hidden lat/lon fields in sync with it while open.
+        // Manipulate the pin's real marker directly rather than a stand-in - it's already draggable and self-saving.
         dpActiveMarker = dp.marker;
         dp.marker?.on("dragend", onDpMarkerDragEnd);
         map.on("click", onMainMapClickForDp);
@@ -2756,9 +2884,7 @@ function init(): void {
     function closeDetailPinPanel(): void {
         (document.getElementById("detail-pin-panel") as HTMLElement).style.display = "none";
         map.off("click", onMainMapClickForDp);
-        // A pin created via 'add' mode is already persisted (see createDpImmediately) -
-        // swap the provisional local marker for the fully-wired one loadDetailPins builds
-        // (autosaving drag, click-to-edit, sidebar list entry) instead of discarding it.
+        // A pin created via 'add' mode is already persisted.
         const wasAdding = dpMode === "add" && dpCreatedUuid;
         if (dpActiveMarker) {
             dpActiveMarker.off("dragend", onDpMarkerDragEnd);
@@ -2808,9 +2934,7 @@ function init(): void {
     document.getElementById("detail-pin-form")?.addEventListener("submit", (e) => {
         e.preventDefault();
         if (dpMode === "add") {
-            // Already saved incrementally as each change was made (see
-            // createDpImmediately/scheduleDpAutoSave) - this button just closes
-            // the panel; closeDetailPinPanel flushes any pending debounced save.
+            // Already saved incrementally as each change was made - this button just closes the panel.
             closeDetailPinPanel();
             return;
         }
@@ -2858,85 +2982,87 @@ function init(): void {
             .catch(() => toast.error("Failed to delete detail pin."));
     });
 
-    // -- Boundaries: click a polygon for an Edit/Delete context menu ------------
-    // Leaflet's event system has no jQuery-style dot-namespacing - a listener
-    // registered for the literal string 'click.openEditor' never matches a real
-    // click, which Leaflet always fires as plain 'click'. Bind/unbind a named
-    // handler under the real event name instead.
+    // -- Boundaries: click or right-click a polygon for Edit / Convert / Delete --
+    // Leaflet's event system has no jQuery-style dot-namespacing.
     function onBoundaryLayerClick(e: L.LeafletMouseEvent): void {
         if (boundaryDrawControl) return;
-        // Don't hijack a click that's actually meant to draw a shape onto (or drop
-        // a detail pin inside) this boundary - without this, clicking a boundary
-        // while a tool is armed always opened the context menu instead of placing
-        // the point, making it impossible to draw into a boundary polygon at all.
-        // Not stopping propagation here lets the click keep bubbling to the map's
-        // own click handler (the draw session / detail-pin placement listener).
+        // Don't hijack a click that's actually meant to draw a shape onto (or drop a detail pin inside) this boundary.
         if (toolbar.isDrawBusy() || dpMode === "add") return;
         L.DomEvent.stopPropagation(e);
-        openBoundaryCtxMenu(e.target as L.Layer, e.latlng);
+        openBoundaryCtxMenu(e.target as L.Layer, e);
+    }
+    function onBoundaryLayerContextMenu(e: L.LeafletMouseEvent): void {
+        if (boundaryDrawControl || toolbar.isDrawBusy() || dpMode === "add") return;
+        L.DomEvent.stopPropagation(e);
+        openBoundaryCtxMenu(e.target as L.Layer, e);
     }
     function attachBoundaryClickHandlers(): void {
         (["property", "building"] as BoundaryType[]).forEach((type) => {
             boundaryGroups[type].eachLayer((layer) => {
                 layer.off("click", onBoundaryLayerClick);
                 layer.on("click", onBoundaryLayerClick);
+                layer.off("contextmenu", onBoundaryLayerContextMenu);
+                layer.on("contextmenu", onBoundaryLayerContextMenu);
             });
         });
     }
 
-    // Outside-click handler for the currently-open boundary context menu, so it
-    // behaves like a normal context menu: any interaction elsewhere on the page
-    // (another shape, a toolbar button, a plain map click) dismisses it. Tracked
-    // so a re-opened menu doesn't pile up duplicate listeners.
-    let boundaryCtxOutsideHandler: ((e: MouseEvent) => void) | null = null;
-
-    function openBoundaryCtxMenu(layer: L.Layer, latlng: L.LatLng): void {
-        if (boundaryCtxOutsideHandler) {
-            document.removeEventListener("click", boundaryCtxOutsideHandler, true);
-            boundaryCtxOutsideHandler = null;
-        }
-
-        const content = document.createElement("div");
-        content.className = "boundary-ctx-menu";
-
-        const layerType = boundaryTypeOfLayer(layer);
-
-        const editBtn = document.createElement("button");
-        editBtn.type = "button";
-        editBtn.className = "boundary-ctx-menu__item";
-        editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i> Edit';
-        editBtn.addEventListener("click", () => {
-            map.closePopup();
-            if (layerType) startEditBoundary(layerType);
-        });
-
-        const delBtn = document.createElement("button");
-        delBtn.type = "button";
-        delBtn.className = "boundary-ctx-menu__item boundary-ctx-menu__item--danger";
-        delBtn.innerHTML = '<i class="material-symbols-outlined">delete_outline</i> Delete';
-        delBtn.addEventListener("click", async () => {
-            map.closePopup();
-            if (!layerType) return;
-            if (!(await confirmAction({ title: "Delete Boundary", message: "Delete this boundary polygon?", confirmLabel: "Delete" }))) return;
-            boundaryGroups[layerType].removeLayer(layer);
-            if (layerType === "property" && boundaryGroups.property.getLayers().length === 0) setMainMarkerVisible(true);
-            saveBoundary({ exitEdit: false, type: layerType });
-        });
-
-        content.append(editBtn, delBtn);
-        L.popup({ closeButton: false, className: "boundary-ctx-menu-popup", offset: [0, -2] }).setLatLng(latlng).setContent(content).openOn(map);
-
-        // The click that opened this menu already had propagation stopped (see
-        // onBoundaryLayerClick), so it's safe to attach this immediately - it
-        // only fires on the *next* click anywhere in the document.
-        boundaryCtxOutsideHandler = (e: MouseEvent) => {
-            document.removeEventListener("click", boundaryCtxOutsideHandler!, true);
-            boundaryCtxOutsideHandler = null;
-            if (content.contains(e.target as Node)) return; // the button's own handler drives this close
-            map.closePopup();
-        };
-        document.addEventListener("click", boundaryCtxOutsideHandler, true);
+    function childPinMenuItems(lat: number, lng: number): ContextMenuItem[] {
+        return [
+            {
+                icon: "add_location",
+                label: "Create child pin here",
+                onClick: () => openAddPinDialog(lat, lng),
+            },
+        ];
     }
+
+    function openBoundaryCtxMenu(layer: L.Layer, event: L.LeafletMouseEvent): void {
+        const layerType = boundaryTypeOfLayer(layer);
+        const extraItems: ContextMenuItem[] = [...childPinMenuItems(event.latlng.lat, event.latlng.lng)];
+        if (layerType) {
+            extraItems.push({
+                icon: "edit",
+                label: "Edit boundary",
+                onClick: () => startEditBoundary(layerType),
+            });
+            if (boundarySources[layerType] !== "circle") {
+                extraItems.push({
+                    icon: "swap_horiz",
+                    label: layerType === "property" ? "Convert to building boundary" : "Convert to parcel boundary",
+                    onClick: () => {
+                        void convertBoundary(layer, layerType);
+                    },
+                });
+            }
+            extraItems.push({
+                icon: "delete_outline",
+                label: "Delete boundary",
+                className: "map-context-menu__item--danger",
+                onClick: () => {
+                    void (async () => {
+                        if (!(await confirmAction({ title: "Delete Boundary", message: "Delete this boundary polygon?", confirmLabel: "Delete" }))) return;
+                        boundaryGroups[layerType].removeLayer(layer);
+                        if (layerType === "property" && boundaryGroups.property.getLayers().length === 0) setMainMarkerVisible(true);
+                        saveBoundary({ exitEdit: false, type: layerType });
+                    })();
+                },
+            });
+        }
+        showMapContextMenu({
+            lat: event.latlng.lat,
+            lng: event.latlng.lng,
+            zoom: map.getZoom(),
+            clientX: event.originalEvent.clientX,
+            clientY: event.originalEvent.clientY,
+            extraItems,
+        });
+    }
+
+    bindMapContextMenu(map, {
+        extraItems: (lat, lng) => childPinMenuItems(lat, lng),
+        shouldOpen: () => !toolbar.isDrawBusy() && dpMode !== "add" && !boundaryDrawControl && !pendingPlacement,
+    });
 }
 
 if (document.readyState === "loading") {
@@ -2945,35 +3071,8 @@ if (document.readyState === "loading") {
     init();
 }
 
-interface GalleryImage {
-    id: number;
-    url: string;
-    latitude: number | null;
-    longitude: number | null;
-}
-
 declare global {
     interface Window {
-        // Read by base.html's comment map composer as its default center.
-        _commentMapDefaultLat: number;
-        _commentMapDefaultLng: number;
-        map: L.Map;
-
-        // Markup toolbar functions, exposed for the top-right toolbar's
-        // markup_* buttons / _markup_panel_dialog.html's inline onclick= attributes.
-        startMarkupDraw: (type: string) => void;
-        startShapeDraw: (type: string) => void;
-        startTextPlacement: () => void;
-        closeMarkupPanel: () => void;
-        _closeMarkupDraw: () => void;
-        deleteMarkupEdit: () => Promise<void>;
-        openMarkupEditDialog: (item: MarkupItem) => void;
-        loadMarkup: () => void;
-        // Applies the edit panel's fields (label/width/opacity/security/layer) to
-        // the item being edited - called by _markup_panel_dialog.html's inline
-        // oninput=/onchange= attributes on every field in that panel.
-        _liveApplyMarkupEdit: () => void;
-
         // "Take a screenshot" toolbar button (_map_annotations_panels.html) -
         // opens the shared standalone map composer pre-scoped to this pin/wiki.
         _openMapScreenshot: () => void;
@@ -2983,7 +3082,7 @@ declare global {
         // Detail-pin/boundary functions, exposed for this page's own template onclick= attributes.
         _toggleDetailPinListPanel: () => void;
         toggleDetailPinSelectMode: () => void;
-        openAddPinDialog: () => void;
+        openAddPinDialog: (lat?: number, lng?: number) => void;
         closeDetailPinPanel: () => void;
         startEditBoundary: (type: "property" | "building") => void;
         saveBoundary: (options?: { type?: "property" | "building"; exitEdit?: boolean; quiet?: boolean }) => void;
@@ -2992,9 +3091,7 @@ declare global {
         finishBoundaryEdit: () => void;
         _boundaryDrawToggleWired?: boolean;
 
-        // Satellite/street-view carousel controls, exposed for satellite_view.html /
-        // street_view.html's onclick=/onerror= attributes - see their definitions
-        // above for why they live here instead of in those fragments' own scripts.
+        // Satellite/street-view carousel controls, exposed for satellite_view.html / street_view.html's onclick=/onerror= attributes.
         _satRemoveSlide: (img: HTMLImageElement) => void;
         _satPrev: () => void;
         _satNext: () => void;
@@ -3006,19 +3103,7 @@ declare global {
         _svNext: () => void;
         _svShow: (idx: number) => void;
 
-        // External photo-gallery integration hooks (gallery.ts, out of scope for
-        // this migration) - this page calls out to them and also implements the
-        // three the gallery calls back into.
-        galleryRepositionImage?: (imgId: number, lat: number, lng: number, onRejected: () => void) => void;
-        galleryOpenLightbox?: (imgId: number, opts: { url: string }) => void;
-        _galleryAddMarker: (img: GalleryImage) => void;
-        _galleryRemoveMarker: (imgId: number) => void;
-        _galleryHighlightMarker: (imgId: number, on: boolean) => void;
-
         // Media-section drag-onto-map integration (pages/location/index.html).
-        // The dragged tile's own element, stashed by mediaItemDragStart so the
-        // drop handler above can update its visual state - HTML5 drag-and-drop
-        // only carries string data through dataTransfer, not element refs.
         _mediaDragItemEl?: HTMLElement;
         mediaApplyMaterializedDrop?: (itemEl: HTMLElement | undefined, data: Record<string, unknown>) => void;
         // Touch counterpart to that drag: arms the tile so the next map tap

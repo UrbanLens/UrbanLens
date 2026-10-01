@@ -1,17 +1,7 @@
 /**
- * Friendship, driven from both sides at once.
- *
- * The only domain in the suite that genuinely needs two accounts, and the
- * reason it belongs here rather than in a fixture: a friendship is a single row
- * that two people see differently. The requester sees "sent", the recipient
- * sees "received", and every state change - accept, mute, block - has to be
- * observed from the other seat to be worth anything. A unit test can assert both
- * halves against the same in-process object and be wrong about which side the
- * row is stored on; this cannot.
- *
- * `next_cursor`/`results` rather than the `count`/`next`/`previous`/`results`
- * envelope the rest of the API uses, deliberately: the friend list is a feed a
- * client pages through, not a table it jumps around in.
+ * Friendship, driven from both sides at once. The only domain in the suite that genuinely needs two
+ * accounts, and the reason it belongs here rather than in a fixture: a friendship is a single row
+ * that two people see differently.
  */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";

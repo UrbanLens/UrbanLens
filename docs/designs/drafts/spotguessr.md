@@ -313,7 +313,7 @@ fixes/additions to the existing pin-detail/wiki Media gallery (`services.media.m
   vote re-downloaded and duplicated it.
 - **Local-copy preference.** Marking an external Media gallery item "relevant" already
   downloaded and materialized it into a durable `Image` row (existed before this pass, on the
-  pin-detail page only). What was missing: the gallery never *served* that local copy back -
+  Private Pin page only). What was missing: the gallery never *served* that local copy back -
   every subsequent page load, by anyone, still hot-linked the live provider url straight from
   `LocationCache`. `services.media.media_relevance.local_images_for_gallery_items()` bulk-looks-up
   already-materialized rows for a panel's live results; both the pin-detail and wiki Media

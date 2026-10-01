@@ -43,15 +43,15 @@ class SearchHistoryQuerySet(abstract.DashboardQuerySet["SearchHistory"]):
         return list(self.for_profile(profile)[:limit])
 
 
-class SearchHistoryManager(abstract.DashboardManager.from_queryset(SearchHistoryQuerySet)):
+_SearchHistoryManagerBase = abstract.DashboardManager.from_queryset(SearchHistoryQuerySet)
+
+
+class SearchHistoryManager(_SearchHistoryManagerBase["SearchHistory"]):
     """Manager for SearchHistory with the record/prune helper."""
 
     def record(self, profile: Profile, query: str) -> SearchHistory | None:
         """Remember a search query for a profile, deduplicating repeats.
-
-        Re-running an existing query bumps ``last_used``/``use_count`` instead
-        of inserting a duplicate. History beyond ``MAX_HISTORY_PER_PROFILE``
-        rows is pruned oldest-first.
+        Re-running an existing query bumps ``last_used``/``use_count`` instead of inserting a duplicate.
 
         Args:
             profile: The profile that ran the search.

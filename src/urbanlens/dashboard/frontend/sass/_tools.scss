@@ -1,0 +1,665 @@
+// The Tools pages (pages/tools/index.html, admin.html). Last in style.scss, where it sat when it was a <style> block in the page.
+
+@use 'variables' as *;
+
+.tools-page {
+	max-width: 1000px;
+	margin: 0 auto;
+	padding: 2rem 1.5rem;
+}
+
+.tools-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+	gap: 1.5rem;
+}
+
+/* .tools-grid sets display:grid unconditionally, which otherwise overrides the
+HTML [hidden] attribute the section subnav script toggles - be explicit. */
+.tools-grid[hidden] {
+	display: none;
+}
+
+.tools-card {
+	border-radius: 10px;
+	width: 100%;
+	justify-self: center;
+}
+
+.tools-card--wide {
+	max-width: 520px;
+}
+
+.tools-card-desc {
+	color: var(--ul-grey-6);
+	font-size: .9rem;
+	margin: 0 0 1.25rem;
+	line-height: 1.5;
+}
+
+/* -- Checkbox checkmark override for export/import cards ------------------- */
+
+#export-card .ul-checkbox::after,
+#import-card .ul-checkbox::after {
+	content: 'check';
+	font-family: 'Material Icons';
+	font-size: 14px;
+	line-height: 1;
+	color: #fff;
+	opacity: 0;
+	transition: opacity .1s;
+	/* Clear the default CSS border-trick dimensions */
+	width: auto;
+	height: auto;
+	border: none;
+	transform: none;
+	display: block;
+}
+
+#export-card input[type="checkbox"]:checked ~ .ul-checkbox::after,
+#import-card input[type="checkbox"]:checked ~ .ul-checkbox::after {
+	opacity: 1;
+}
+
+/* Indeterminate - show a dash via Material Icons */
+#export-card input[type="checkbox"]:indeterminate ~ .ul-checkbox {
+	background: var(--ul-accent-purple-bg);
+	border-color: var(--ul-accent-purple-bg);
+}
+
+#export-card input[type="checkbox"]:indeterminate ~ .ul-checkbox::after {
+	content: 'remove';
+	opacity: 1;
+	width: auto;
+	height: auto;
+	border: none;
+	transform: none;
+}
+
+/* -- Export options layout ------------------------------------------------- */
+
+.export-options {
+	margin-bottom: 1.25rem;
+}
+
+.export-select-all {
+	display: flex;
+	align-items: center;
+	gap: .35rem;
+	cursor: pointer;
+	font-size: .85rem;
+	font-weight: 600;
+	color: var(--ul-grey-7);
+	margin-bottom: .75rem;
+	user-select: none;
+}
+
+.export-select-all .ul-checkbox-wrap {
+	width: 26px;
+	height: 26px;
+}
+
+.export-select-all-label {
+	text-transform: uppercase;
+	letter-spacing: .04em;
+	font-size: .75rem;
+	margin-left: 7px;
+}
+
+.export-checkboxes {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: .3rem;
+}
+
+@media (max-width: 480px) {
+	.export-checkboxes {
+		grid-template-columns: 1fr;
+	}
+}
+
+.export-checkbox-item {
+	display: flex;
+	align-items: center;
+	gap: .6rem;
+	cursor: pointer;
+	padding: .45rem .6rem;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	transition: background .15s, border-color .15s;
+	font-size: .875rem;
+	color: var(--ul-grey-8);
+	user-select: none;
+
+	.ul-checkbox-wrap {
+		margin-right: 0.75rem;
+	}
+}
+
+.export-checkbox-item:hover {
+	background: var(--ul-grey-1);
+	border-color: var(--ul-grey-1a);
+}
+
+.export-checkbox-item .ul-checkbox-wrap {
+	width: 24px;
+	height: 24px;
+	flex-shrink: 0;
+}
+
+.export-select-all [type=checkbox]+span:not(.lever):before,
+.export-select-all [type=checkbox]:not(.filled-in)+span:not(.lever):after,
+.export-checkbox-item [type=checkbox]+span:not(.lever):before,
+.export-checkbox-item [type=checkbox]:not(.filled-in)+span:not(.lever):after {
+	display: none;
+}
+
+.export-checkbox-item .material-icons {
+	font-size: 1.05rem;
+	color: var(--ul-grey-5);
+}
+
+/* -- Quick single-file downloads -------------------------------------------- */
+
+.export-quick-downloads {
+	margin-bottom: 1.25rem;
+	padding-bottom: 1rem;
+	border-bottom: 1px solid var(--ul-grey-1a);
+}
+
+.export-quick-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5rem;
+}
+
+.export-quick-link {
+	display: inline-flex;
+	align-items: center;
+	gap: .35rem;
+}
+
+.export-quick-link .material-symbols-outlined {
+	font-size: 1.05rem;
+}
+
+.export-quick-hint {
+	font-size: .78rem;
+	color: var(--ul-grey-5);
+	margin: .5rem 0 0;
+}
+
+/* -- Format section -------------------------------------------------------- */
+
+.export-format-section {
+	margin-top: 1rem;
+	padding-top: .75rem;
+	border-top: 1px solid var(--ul-grey-1a);
+}
+
+.export-format-label {
+	font-size: .7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: .06em;
+	color: var(--ul-grey-5);
+	margin: 0 0 .4rem .65rem;
+}
+
+.export-format-item {
+	align-items: flex-start;
+}
+
+.export-format-item .ul-checkbox-wrap {
+	margin-top: 2px;
+}
+
+.export-format-hint {
+	display: block;
+	font-size: .78rem;
+	color: var(--ul-grey-5);
+	font-weight: 400;
+	margin-top: 1px;
+}
+
+/* -- Actions --------------------------------------------------------------- */
+
+.export-actions,
+.tools-card-actions {
+	padding-top: .75rem;
+	border-top: 1px solid var(--ul-grey-1a);
+	margin-top: .5rem;
+}
+
+// The admin Tools page (pages/tools/admin.html).
+.tools-backup-result {
+	margin-top: 1rem;
+	font-size: .875rem;
+	color: var(--ul-grey-6);
+	min-height: 1.25rem;
+}
+
+.tools-invite-btn,
+.tools-admin-btn,
+.export-submit-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: .4rem;
+}
+
+/* -- Progress area --------------------------------------------------------- */
+
+.export-progress-wrap {
+	margin-top: 1rem;
+}
+
+.export-progress-label {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: .5rem;
+	font-size: .875rem;
+	color: var(--ul-grey-7);
+}
+
+.export-progress-pct {
+	font-weight: 600;
+	color: var(--ul-grey-8);
+}
+
+.export-progress-track {
+	height: 8px;
+	background: var(--ul-grey-2);
+	border-radius: 99px;
+	overflow: hidden;
+}
+
+.export-progress-bar {
+	height: 100%;
+	border-radius: 99px;
+	background: linear-gradient(90deg, $color-blue-700, $color-blue-400);
+	transition: width .4s ease;
+	min-width: 4px;
+}
+
+.export-progress-bar--done {
+	background: linear-gradient(90deg, #388E3C, #66BB6A);
+}
+
+.export-progress-bar--error {
+	background: linear-gradient(90deg, #D32F2F, #EF5350);
+}
+
+.export-status-msg {
+	display: flex;
+	align-items: center;
+	gap: .4rem;
+	margin-top: .6rem;
+	font-size: .875rem;
+	color: var(--ul-grey-6);
+}
+
+.export-status-msg .material-icons {
+	font-size: 1rem;
+}
+
+.export-done-actions {
+	display: flex;
+	align-items: center;
+	gap: .75rem;
+	margin-top: 1rem;
+	flex-wrap: wrap;
+}
+
+.export-error-msg + .export-done-actions {
+	margin-top: .75rem;
+}
+
+.export-error-msg {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	color: #D32F2F;
+	font-size: .875rem;
+	margin-top: .75rem;
+}
+
+/* -- Import upload area ---------------------------------------------------- */
+
+.import-upload-area {
+	position: relative;
+	border: 2px dashed var(--ul-grey-1a);
+	border-radius: 10px;
+	padding: 1.75rem 1.25rem;
+	text-align: center;
+	transition: border-color .15s, background .15s;
+	margin-bottom: .75rem;
+	cursor: pointer;
+}
+
+.import-upload-area:hover,
+.import-upload-area.drag-over {
+	border-color: $color-blue-700;
+	background: rgba(25, 118, 210, .04);
+}
+
+.import-file-input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	cursor: pointer;
+	z-index: 1;
+}
+
+.import-drop-label {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: .4rem;
+	cursor: pointer;
+	pointer-events: none;
+}
+
+.import-drop-icon {
+	font-size: 2.25rem;
+	color: var(--ul-grey-4);
+}
+
+.import-drop-text {
+	font-size: .9rem;
+	color: var(--ul-grey-7);
+}
+
+.import-drop-link {
+	color: $color-blue-700;
+	font-weight: 600;
+	text-decoration: underline;
+}
+
+.import-drop-hint {
+	font-size: .78rem;
+	color: var(--ul-grey-5);
+}
+
+.import-file-chosen {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	justify-content: center;
+	font-size: .9rem;
+	color: var(--ul-grey-8);
+	pointer-events: auto;
+	position: relative;
+	z-index: 2;
+}
+
+.import-file-clear {
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 1.1rem;
+	color: var(--ul-grey-5);
+	line-height: 1;
+	padding: 0 .2rem;
+}
+
+.import-file-clear:hover {
+	color: #D32F2F;
+}
+
+/* Import result summary shown after successful import */
+.import-result-summary {
+	margin-top: .75rem;
+	font-size: .875rem;
+}
+
+.import-result-row {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	padding: .25rem 0;
+	color: var(--ul-grey-7);
+}
+
+.import-result-row .material-icons {
+	font-size: 1rem;
+	color: #388E3C;
+	flex-shrink: 0;
+}
+
+.import-result-row--skipped .material-icons {
+	color: var(--ul-grey-5);
+}
+
+.import-result-row--warn .material-icons {
+	color: #F57C00;
+}
+
+.import-warnings {
+	margin-top: .5rem;
+	padding: .5rem .75rem;
+	background: rgba(245, 124, 0, .07);
+	border-radius: 6px;
+	border-left: 3px solid #F57C00;
+}
+
+.import-warnings-title {
+	font-size: .78rem;
+	font-weight: 600;
+	color: #F57C00;
+	text-transform: uppercase;
+	letter-spacing: .04em;
+	margin-bottom: .3rem;
+}
+
+.import-warning-item {
+	font-size: .82rem;
+	color: var(--ul-grey-7);
+	padding: .1rem 0;
+}
+
+/* -- Photo location scan card ----------------------------------------------- */
+
+.photo-scan-controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .6rem;
+	margin-bottom: 1rem;
+}
+
+/* .btn sets display:inline-flex, which otherwise overrides the HTML [hidden] attribute - be explicit */
+.photo-scan-controls .btn[hidden] {
+	display: none;
+}
+
+.photo-scan-progress {
+	margin-bottom: 1rem;
+}
+
+.photo-scan-progress-label {
+	display: flex;
+	justify-content: space-between;
+	gap: .5rem;
+	font-size: .82rem;
+	color: var(--ul-grey-6);
+	margin-bottom: .3rem;
+}
+
+#photo-scan-progress-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+#photo-scan-progress-count {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.photo-scan-progress-track {
+	height: 6px;
+	border-radius: 3px;
+	background: var(--ul-grey-3);
+	overflow: hidden;
+}
+
+.photo-scan-progress-bar {
+	height: 100%;
+	background: $color-blue-700;
+	transition: width .2s ease;
+}
+
+.photo-scan-results {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	max-height: 320px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: .4rem;
+}
+
+.photo-scan-result-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: .75rem;
+	padding: .5rem .65rem;
+	border: 1px solid var(--ul-grey-3);
+	border-radius: 8px;
+	font-size: .85rem;
+}
+
+.photo-scan-result-item--existing {
+	opacity: .55;
+}
+
+.photo-scan-result-main {
+	display: flex;
+	flex-direction: column;
+	gap: .1rem;
+	min-width: 0;
+}
+
+.photo-scan-result-coords {
+	font-weight: 600;
+	color: var(--ul-grey-8);
+}
+
+.photo-scan-result-meta {
+	font-size: .78rem;
+	color: var(--ul-grey-6);
+}
+
+.photo-scan-result-badge {
+	flex-shrink: 0;
+	font-size: .72rem;
+	padding: .15rem .5rem;
+	border-radius: 999px;
+	background: var(--ul-grey-2);
+	color: var(--ul-grey-7);
+	white-space: nowrap;
+}
+
+.photo-scan-empty {
+	color: var(--ul-grey-6);
+	font-size: .85rem;
+	margin: 0;
+}
+
+.photo-scan-result-item {
+	flex-wrap: wrap;
+}
+
+.photo-scan-picker {
+	flex-basis: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: .35rem;
+}
+
+.photo-scan-picker-caption {
+	font-size: .72rem;
+	color: var(--ul-grey-6);
+}
+
+.photo-scan-thumbs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .4rem;
+}
+
+.photo-scan-thumb {
+	position: relative;
+	width: 56px;
+	height: 56px;
+	border-radius: 6px;
+	overflow: hidden;
+	cursor: pointer;
+	border: 2px solid var(--ul-grey-3);
+	transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.photo-scan-thumb img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+	opacity: .7;
+	transition: opacity .15s ease;
+}
+
+.photo-scan-thumb:hover img {
+	opacity: .9;
+}
+
+.photo-scan-thumb input[type="checkbox"] {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.photo-scan-thumb-badge {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	color: #fff;
+	background: rgba(0, 0, 0, .45);
+	border-radius: 999px;
+	font-size: 16px;
+	line-height: 1;
+	pointer-events: none;
+}
+
+.photo-scan-thumb-badge .material-symbols-outlined {
+	font-size: 16px;
+	display: block;
+}
+
+.photo-scan-thumb--selected {
+	border-color: $color-blue-700;
+	box-shadow: 0 0 0 2px rgba(25, 118, 210, .25);
+}
+
+.photo-scan-thumb--selected img {
+	opacity: 1;
+}
+
+.photo-scan-thumb--selected .photo-scan-thumb-badge {
+	background: $color-blue-700;
+}
+
+.photo-scan-thumb--disabled {
+	opacity: .4;
+	cursor: not-allowed;
+}
+
+.photo-scan-thumb--disabled input[type="checkbox"] {
+	cursor: not-allowed;
+}

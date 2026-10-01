@@ -1,33 +1,28 @@
-"""Tests for services.apis.locations.google.my_activity - Google Takeout My Activity (Maps) import.
-
-Covers:
-- parse_my_activity_entries(): extracting "Directions to X" entries from the flat
-  HTML Google emits, while skipping other Maps activity types (Searched for X,
-  Viewed area around X) and non-Maps entries.
-- _parse_timestamp(): the fast US-timezone-abbreviation path and the dateparser fallback.
-- import_my_activity_streaming(): matched destinations log a PinVisit directly (mirroring
-  the Location History importer); unmatched destinations raise a self-directed
-  VisitSuggestion instead of being discarded or auto-creating a pin, with idempotency
-  on re-import for both branches.
-"""
+"""Tests for services.apis.locations.google.my_activity - Google Takeout My Activity (Maps) import."""
 
 from __future__ import annotations
 
 import datetime
+from decimal import Decimal
 from unittest import mock
 
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.locations.google.my_activity import (
     _parse_timestamp,
-    import_my_activity_streaming,
+    iter_my_activity_events,
     looks_like_my_activity,
     parse_my_activity_entries,
 )
+from urbanlens.dashboard.services.places import resolution
+from urbanlens.dashboard.tests.hypothesis.place_helpers import make_place
 
 # Exact sample block from the real-world MyActivity.html this importer targets.
 _DIRECTIONS_ENTRY = (
@@ -72,6 +67,17 @@ _NON_MAPS_ENTRY = (
 def _wrap_html(*entries: str) -> bytes:
     body = "".join(entries)
     return f"<!DOCTYPE html><html><head><title>My Activity</title></head><body>{body}</body></html>".encode()
+
+
+def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
+    ring = (
+        (lng - delta, lat - delta),
+        (lng + delta, lat - delta),
+        (lng + delta, lat + delta),
+        (lng - delta, lat + delta),
+        (lng - delta, lat - delta),
+    )
+    return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
 class LooksLikeMyActivityTests(SimpleTestCase):
@@ -192,11 +198,15 @@ class ParseTimestampTests(SimpleTestCase):
 
     def test_edt_fast_path(self):
         parsed = _parse_timestamp("Jul 3, 2026, 1:18:25 PM EDT")
-        self.assertEqual(parsed, datetime.datetime(2026, 7, 3, 13, 18, 25, tzinfo=datetime.timezone(datetime.timedelta(hours=-4))))
+        self.assertEqual(
+            parsed, datetime.datetime(2026, 7, 3, 13, 18, 25, tzinfo=datetime.timezone(datetime.timedelta(hours=-4)))
+        )
 
     def test_pst_fast_path(self):
         parsed = _parse_timestamp("Jan 15, 2026, 9:05:00 AM PST")
-        self.assertEqual(parsed, datetime.datetime(2026, 1, 15, 9, 5, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-8))))
+        self.assertEqual(
+            parsed, datetime.datetime(2026, 1, 15, 9, 5, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-8)))
+        )
 
     def test_dateparser_fallback_for_unrecognised_format(self):
         # A format the fast strptime path doesn't match (ISO-style date), exercising
@@ -214,21 +224,15 @@ class ParseTimestampTests(SimpleTestCase):
 
 
 class ImportMyActivityStreamingTests(TestCase):
-    """import_my_activity_streaming() logs visits on matched pins, suggests otherwise."""
+    """iter_my_activity_events() logs visits on matched pins, suggests otherwise."""
 
     def setUp(self):
         self.user = baker.make("auth.User")
         self.profile = self.user.profile
 
     def _run(self, *entries: str) -> list[dict]:
-        import json
-
-        files = [("MyActivity.html", _wrap_html(*entries))]
-        events = []
-        for line in import_my_activity_streaming(files, self.profile):
-            # Each SSE event is "data: {...}\n\n".
-            events.append(json.loads(line.removeprefix("data: ").strip()))
-        return events
+        parsed = list(parse_my_activity_entries(_wrap_html(*entries)))
+        return list(iter_my_activity_events(parsed, self.profile))
 
     def test_matched_destination_creates_history_pinvisit(self):
         location = baker.make("dashboard.Location", latitude="39.204312", longitude="-84.569366")
@@ -273,7 +277,31 @@ class ImportMyActivityStreamingTests(TestCase):
 
         self.assertEqual(VisitSuggestion.objects.filter(suggested_to=self.profile, from_my_activity=True).count(), 1)
 
-    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    def test_accepting_unmatched_suggestion_keeps_coordinate_inside_existing_place_domain(self):
+        from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion
+
+        parcel = make_place(PlaceKind.PARCEL, _square(-84.569366, 39.204312, 0.01), name="Campus")
+        existing_location = Location.objects.create(latitude=Decimal("39.204312"), longitude=Decimal("-84.575000"))
+        resolution.attach_location(existing_location, parcel)
+
+        self._run(_DIRECTIONS_ENTRY)
+        suggestion = VisitSuggestion.objects.get(suggested_to=self.profile)
+        self.assertIsNone(suggestion.location_id)
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
+            visit = accept_visit_suggestion(suggestion, self.profile)
+
+        self.assertNotEqual(visit.pin.location_id, existing_location.pk)
+        self.assertEqual(visit.pin.location.latitude, Decimal("39.204312"))
+        self.assertEqual(visit.pin.location.longitude, Decimal("-84.569366"))
+
+    @mock.patch(
+        "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+        return_value=None,
+    )
     def test_accepting_suggestion_uses_history_visit_source(self, _mock_resolve_name):
         from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion
 
@@ -281,32 +309,25 @@ class ImportMyActivityStreamingTests(TestCase):
         suggestion = VisitSuggestion.objects.get(suggested_to=self.profile)
 
         # No Location exists at these coordinates, so accepting creates one via
-        # _create_location_with_canonical_name(), which resolves a canonical place
+        # resolve_location_for_point(), which resolves a canonical place
         # name from Google - mock that outbound call, same pattern as
         # test_photo_organize.py's CreatePinAndLogVisitTests.
         visit = accept_visit_suggestion(suggestion, self.profile)
 
         self.assertEqual(visit.source, VisitSource.HISTORY)
 
-    def test_no_entries_yields_error_event(self):
-        events = self._run(_SEARCHED_FOR_ENTRY)
-        self.assertEqual(events[-1]["type"], "error")
+    def test_no_entries_imports_nothing(self):
+        self.assertEqual(self._run(_SEARCHED_FOR_ENTRY), [])
+        self.assertFalse(VisitSuggestion.objects.exists())
 
-    def test_multiple_files_combined_into_one_pass(self):
-        location = baker.make("dashboard.Location", latitude="39.204312", longitude="-84.569366")
-        pin = baker.make("dashboard.Pin", profile=self.profile, location=location)
+    def test_visit_logging_off_imports_nothing(self):
+        self.profile.track_pin_visits = False
+        self.profile.save(update_fields=["track_pin_visits"])
 
-        import json
+        events = self._run(_DIRECTIONS_ENTRY)
 
-        files = [
-            ("MyActivity.html", _wrap_html(_DIRECTIONS_ENTRY)),
-            ("MyActivity (1).html", _wrap_html(_SEARCHED_FOR_ENTRY)),
-        ]
-        events = [json.loads(line.removeprefix("data: ").strip()) for line in import_my_activity_streaming(files, self.profile)]
-
-        self.assertEqual(events[-1]["type"], "complete")
-        self.assertEqual(events[-1]["total"], 1)
-        self.assertTrue(PinVisit.objects.filter(pin=pin, source=VisitSource.HISTORY).exists())
+        self.assertEqual([event["type"] for event in events], ["error"])
+        self.assertFalse(VisitSuggestion.objects.exists())
 
 
 class VisitSuggestionFromMyActivityConstraintTests(TestCase):

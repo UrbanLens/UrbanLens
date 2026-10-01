@@ -1,6 +1,4 @@
-{# Reorderable priority list: drag or use the arrow buttons to reorder ranked items; #}
-{# untick an item to drop it to "unranked" (still contributes, just last). Serializes #}
-{# to a single comma-separated hidden input on every change - see _priority_list_script.html. #}
+{# Reorderable priority list: drag or use the arrow buttons to reorder ranked items. #}
 <ul class="priority-list" id="{{ list_id }}" data-hidden-id="{{ hidden_id }}">
     {% for slug, label, ranked in items %}
     <li class="priority-list__item{% if not ranked %} priority-list__item--unranked{% endif %}"

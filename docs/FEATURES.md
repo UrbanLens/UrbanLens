@@ -1,7 +1,7 @@
 # UrbanLens Features
 
 A feature inventory of what UrbanLens currently supports, generated from a codebase audit
-(2026-07-11, last verified/expanded 2026-07-29). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
+(2026-07-11, last verified/expanded 2026-07-29). This is a snapshot, not a promise — see the repo-root `ROADMAP.md` for what's planned or partially
 built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 
 ## Mapping & Pins
@@ -9,6 +9,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Interactive Leaflet map with 9 configurable layers (Street, Terrain, Satellite, Weather, Dark,
   Borders, Places, Pins, Child pins), HTMX-driven panels, and a filter sidebar (labels, rating,
   visited status, date pinned, scores, saved filter configurations)
+- **Map right-click menu** — every map shares the same base actions (copy coordinates, Street View
+  when Google has coverage, directions to that point). The main map adds "Add Pin Here"; Private Pin
+  and wiki maps add "Create child pin here". Clicking or right-clicking a parcel or building
+  boundary on those pages also offers Edit, Convert to the other type, and Delete. The floorplan
+  editor keeps its own specialised menu.
 - **Pin** — a user's personal record for a place (custom name, private notes, icon, priority,
   status, last-visited date, marker coordinates), separate from the shared **Location** record
   it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why
@@ -29,6 +34,26 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   both outlines are drawn. Scope is derived from the place and applies to *every* user's marker on
   it; an explicitly chosen type always wins. A badge in the page header names the scope whenever it
   isn't the neutral default. See `docs/NOTES.md`.
+- **Every building on a property becomes a child pin and a child wiki automatically**
+  (`services.pins.auto_nest`, `services.pins.building_clusters`) — once a top-level pin's property
+  outline is known and it holds several buildings, a background sweep creates one `building` sub pin
+  per physical building, nested the way REData nests them (a chapel inside a hospital block sits
+  under the block), and a matching child wiki under the place's community wiki, which the pin sits on
+  so its hero link and wiki panel open that building's own wiki. Records describing one structure -
+  an overlap REData left unresolved (`overlap_refs`), footprints that mostly coincide, markers
+  within 15 m - collapse into one building, so no two sibling pins stand within 15 m; REData's
+  `parent_ref` nesting always keeps a building apart from the one containing it. Child wikis take
+  the building's public name, else "Building <number>", else its address, else a descriptor such as
+  "Garage (1925) at Hudson River State Hospital" - never the campus's own name or a private pin
+  name, and a later sweep renames one given a placeholder before the campus was named. Each building pin's
+  detail boundary is its own footprint, which the floorplan editor seeds as exterior walls. The sweep
+  runs when the pin is created, when the building list is fetched or refreshed, when the property
+  outline arrives, and when the Buildings panel shows an unpinned building (throttled to once per
+  10 min per pin). It recognises its earlier pins by where they stood
+  (`Pin.auto_nested_buildings`), not by REData `ref`, so a renamed ref duplicates nothing and a
+  child you deleted or moved stays that way. Off with "Organize this property?" → no, the Pin
+  Organization Suggestions setting, or a user-chosen building/entrance type on the pin itself; an
+  owner with community features off gets the pins but no wikis, as with any pin they save
 - **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
   page, covering both halves of the same question: create a sub pin per building here (named and
   numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored into the place's
@@ -39,10 +64,24 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
   Suggestions). Buildings you've already pinned are detected by their real footprint polygon, not a
   fixed radius, so a pin at the far end of a long hall still counts as covering it
-- **Notes (pin comments) are never hidden by nesting** — the pin detail page's "show sub pin
+- **Tree reads in one query** (`models.abstract.tree.TreeQuerySetMixin`, on `PinQuerySet` and
+  `WikiQuerySet`) — `with_descendants()` / `with_ancestors()` return a composable
+  `pk IN (WITH RECURSIVE …)` queryset, `ancestors_of(node)` the ordered chain, `lineage_ids(node)` the
+  keys that may not nest under a node (no query for a root), and `would_close_cycle`. Cycle-safe via
+  `UNION`. Use these rather than walking `parent_pin` / `parent_wiki` level by level
+- **Notes (pin comments) are never hidden by nesting** — the Private Pin page's "show sub pin
   details" toggle (`?children=1`) aggregates a child pin's private notes into its parent's Notes
   tab too, each labelled with a link back to the sub pin it was written on, alongside the map,
   photo gallery, and visit history the toggle already covered
+- **A building child's own details on its property's page** (`services.pins.child_buildings`,
+  `controllers/child_buildings.py`) — a building row in the property's Buildings on this Property
+  list (a building a child pin covers, or a building in its Child pins tab) opens that child's card
+  in place: the owner's description and dates, links to the building's page and wiki, and every
+  info panel declaring `building_level` (CRIS, Building Attributes, Building Characteristics,
+  Historic Registers) fetched for the child, not the property. Nothing is fetched until the row is
+  opened. The page-wide "child pin details" toggle (`?children=`, not a stored preference) starts on
+  for a parcel and for any property holding exactly one building child, but not for a pin its owner
+  typed as a building, whose building child is a structure inside it
 - **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
   matching child wiki for the selected sub pins, skipping ones the wiki already has; "Share with a
   friend" shares just the selected sub pins, not the pin's whole hierarchy. A "pull from wiki"
@@ -59,22 +98,53 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Nesting follows place lineage, so it agrees with access by construction. See `docs/NOTES.md`.
 - **One wiki per place** — creating a wiki for a coordinate that already has one, however far apart
   the two coordinates are on the same property, returns the existing page instead of a second one.
-  A viewer who has earned the page reaches it from their own location's URL.
+  A viewer who has earned the page reaches it from their own location's URL. The one creation path
+  is `Wiki.objects.get_or_create_for_location` (`models/wiki/queryset.py`), which checks both
+  one-to-ones (Location, then its Place) inside a savepoint and re-reads on a raced
+  `IntegrityError`; nothing else should create a Wiki.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
+- **Places layer** (a `SiteFeature.PLACES` feature) - a map click shows historical landmarks (REData or
+  Google, zoom 10+), national parks and geotagged Wikipedia articles nearby, each source per the viewer's
+  profile toggles. Snapped to a ~2 km grid cell and a radius bucket, fetched in parallel under one budget,
+  and cached per source, so one source failing leaves the rest (`services/map/nearby_places.py`)
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
-- Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)
+- Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo). The web select-map toolbar and the external API both call
+  `services.pins.pin_bulk` (`bulk_merge_under`, `bulk_delete_pins`, `bulk_edit_pins`), one atomic
+  service per action so the two surfaces cannot drift; a merge or bulk reparent refits each
+  affected parent's child-fitted boundary once at the end rather than once per moved pin
+  (`services.geo.child_pin_boundaries.deferring_child_boundary_refits`)
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki;
   names are unique per pin/wiki case-insensitively. Deleting an auto-added alias, link, label, or
   property owner is permanent - automatic sources (external name lookups, AI extraction,
-  keyword/AI auto-tagging) won't silently recreate something you removed
+  keyword/AI auto-tagging) won't silently recreate something you removed. Every alias
+  get-or-create goes through `PinAlias`/`WikiAlias.objects.resolve_or_create`
+  (`models/aliases/queryset.py`), which sanitizes the name the way `save()` will store it (NFKC,
+  drops symbols/emoji, collapses whitespace) before the case-insensitive lookup, so a name that
+  only differs after sanitizing is reused rather than colliding on insert; `Location` coordinates
+  have the matching helper, `Location.objects.get_exact_or_create`
+  (`models/location/queryset.py`), for a caller that must keep a submitted point exactly as given
+  rather than snapping it onto a nearby Location the way `get_nearby_or_create`'s dedup radius does
+- **Child pin and child wiki slugs** start with a short parent prefix (the shortest compact alias,
+  or one derived from the parent's long name — `HRSH` for Hudson River State Hospital, `ford` for
+  Ford Motors, `switz` for Switzerland). Trailing words that would overflow a readable length are
+  dropped as a unit, including hyphenated compounds (`non-contributing`), rather than clipped
+  mid-word; dropped words are added back only when the ideal slug is not unique or is too short
 - Private per-pin notes (`PinNote`), independent of public comments
 - **Articles** — Wikipedia-style long-form write-ups (sections, links, references) with full
   **revision history** (every saved version stored, restorable from the Edit History tab); private
   per-pin, or shared/community-editable per-wiki. Edited via a WYSIWYG canvas (click-to-format,
   no Markdown syntax required) with a Markdown "Source" mode for power users/footnotes - saved as
   plain Markdown either way
+- **Article > Sources** — a sub-tab on both the private pin page and the wiki page listing the
+  documents cached for the place (today the CRIS inventory forms and nomination PDFs, each naming
+  its building on a campus), viewable in a same-origin iframe or a new tab. Any cache-backed panel
+  becomes a source by subclassing `DocumentPanelSource`; the PDFs are served by a proxy scoped to
+  what that pin's or wiki's own list names, and only bytes that really are a PDF
+  (`controllers.article_sources`, `services.pins.source_documents`)
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
-  records a provenance chain (`LocationExposure`) of how a location reached each user
+  records a provenance chain (`LocationExposure`) of how a location reached each user.
+  `services.sharing.pin_sharing.create_pin_share` (gated by `require_pin_owner`) is the single
+  path every caller, web and messaging alike, goes through to create one
 - Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
   Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
@@ -83,7 +153,9 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   carries safety check-in history, map annotations, saved searches/routes, pin aliases, and the
   profile's contact/social fields - all importable, with deliberate exceptions: live-status
   safety check-ins never import (a restore must not re-arm reminders), and secondary emails never
-  import (verification state must not transfer)
+  import (verification state must not transfer). Export files are streamed: each exporter reads with
+  `.iterator(chunk_size=EXPORT_CHUNK_SIZE)` and writes through `export.JsonArrayFile`, which appends
+  one element at a time and produces the bytes `json.dump(indent=2)` would
 
 ## Public Locations
 
@@ -108,7 +180,22 @@ never see the rule engine, only vote buttons on a place that already qualifies.
 - **Global search** (navbar, Ctrl+K) across result types (pins, wikis, photos, trips,
   messages, …) with lightweight natural-language parsing ("photos from last summer",
   "pins in Cincinnati", "pins near me", "messages from Alice"), pg_trgm typo tolerance,
-  and a plain-text fallback when no structured interpretation matches
+  and a plain-text fallback when no structured interpretation matches. Pins and wikis also
+  match by external tag ("restaurants", "pin with tag restaurant" — restricted to pins by the
+  existing "pin" type keyword), including any provider's equivalent tag once admin-grouped —
+  see "Tag equivalence mapping" below. The map's own "Jump To" pin search bar matches the same
+  way
+- **Typed search operators** (`type:`, `place:`, `near:`, `visited:`/`created:`/`updated:`, …) —
+  the same query box also accepts exact `key:value` syntax, unrecognized keys fall back to plain
+  text rather than erroring. `label:`/`-label:` narrows/excludes by Label (pins, photos, wikis
+  only — the only types with one); `by:`/`author:` (`by:me` or a name) filters by who created
+  it, per type's own notion of authorship; `has:`/`-has:` (pins only — photos, comments, visits,
+  notes, labels, links, floorplan, markup, wiki, check-ins) and `is:` (`visited`/`unvisited` on
+  pins, `upcoming`/`past` on trips, `archived` on safety check-ins) filter by attached content or
+  state; `sort:` (`recent`/`created`/`updated` on everything, `visited` on pins/visits,
+  `most-visited` and `nearest` on pins) reorders a section instead of the default relevance
+  ranking. A choice with no real backing anywhere (`is:starred`, `has:coords`, …) explains itself
+  next to the results rather than silently returning nothing
 
 ## Lists & Saved Filters
 
@@ -121,7 +208,10 @@ never see the rule engine, only vote buttons on a place that already qualifies.
 - **Saved filters** — reusable filter configurations with full CRUD (managed alongside lists at
   `/lists/`), name suggestion, live match counts, and geographic include/exclude polygon
   regions selected via boundary search; usable from the map's filter sidebar and as smart-list
-  criteria
+  criteria. `SavedFilter.matching_pins()` is a filter's pins as an unevaluated queryset;
+  `PinQuerySet.matching_saved_filters(filters)` ANDs several in as SQL subqueries, and
+  `SavedFilter.objects.for_client_ids(profile, raw)` resolves posted uuids, dropping malformed and
+  foreign ones
 
 ## Locations & Community Wiki
 
@@ -129,22 +219,26 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   immutable after creation (mutable address/geocode metadata only)
 - **Wiki** — opt-in, community-editable page for a Location: description, aliases, community
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
-  edit history with revert (`WikiEdit`)
-- **Wiki Media gallery** — the pin detail page's combined Media section, mirrored on the wiki
+  edit history with revert (`WikiEdit`). A boundary edit (web, external API, or a revert) is
+  written and reverted through `services.geo.wiki_boundary_edits` (`save_wiki_boundary`,
+  `revert_boundary_change`), which compares geometry rather than WKT text and stores each drawn
+  outline once as an immutable `BoundaryRevision`, referenced by id from `WikiEdit.changes` -
+  consecutive edits that redraw the same outline share one revision instead of duplicating it
+- **Wiki Media gallery** — the Private Pin page's combined Media section, mirrored on the wiki
   (`controllers/wiki_media.py`): the same external providers (Wikimedia, Smithsonian, Library of
   Congress, Internet Archive, Web Images (SearXNG), Yelp, Google Images/Maps, LoopNet, CRIS, …)
   appear automatically
   from the shared per-Location cache, alongside a "Photos" tab of images intentionally shared to
   the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
   (net score up − down, highest ranked first); because relevance is stored per-Location
-  (`MediaRelevance`), a relevance mark made on any user's pin detail page already counts here
+  (`MediaRelevance`), a relevance mark made on any user's Private Pin page already counts here
 - **REData photo relevance scoring** — every new photo (upload, Google Places business photo
   backfill, or Media-gallery item materialized via "mark relevant"/"send to wiki") is submitted to
   REData's photo-scoring service with whatever signal is available (capture/location coordinates,
   capture date, uploader/photographer, wiki abandonment date); REData returns a calibrated
   confidence ("is this really a photo of this place") cached on the `Image` row
   (`services.photos.redata_relevance`). Relevant/not-relevant votes on a materialized photo are
-  forwarded too, as REData's training signal - never as a scoring input. The pin detail page's own-
+  forwarded too, as REData's training signal - never as a scoring input. The Private Pin page's own-
   photos preview and the wiki's Photos tab order by this confidence (vote score first on the wiki,
   confidence breaking ties, including when nothing has been voted on at all); a REData outage or
   missing configuration silently falls back to upload-recency ordering
@@ -153,16 +247,31 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   created, edited, reparented, or deleted/converted away (retired, not hard-deleted), and a pin's
   complete current tag/category set is resynced whenever it changes, from any of the ~20 call
   sites that touch `Pin.labels` (`models.labels.signals`, the `Pin.labels` `m2m_changed` receiver
-  in `models.pin.signals`, `services.labels.redata_suggestions`). The pin detail page's "Add
-  Labels" dialog lazily loads a "Suggested for this place" section from REData's suggestion
-  endpoint, scored against that profile's own vocabulary; a management command
+  in `models.pin.signals`, `services.labels.redata_suggestions`). A write that skips `post_save`
+  (the default-label bulk seed's `bulk_create`) queues the batch instead, via
+  `services.labels.redata_suggestions.queue_label_definitions_sync`, which groups the saved labels
+  by owning profile and queues one definitions call per group rather than one per label. The
+  Private Pin page's "Add Labels" dialog lazily loads a "Suggested for this place" section from
+  REData's suggestion endpoint, scored against that profile's own vocabulary; a management command
   (`backfill_redata_labels`) primes REData with taxonomy/assignments that predate this
   integration. A REData outage or missing configuration silently disables sync and suggestions
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
-  confidently-matched Wikipedia article the first time one is cached for its location (converted
-  to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
-  overwrites an existing article, seeded or human-written (`services.wiki.wiki_seed`,
-  `models.cache.signals`)
+  confidently-matched Wikipedia article whenever one is cached for any of its place's Locations,
+  and each pin's article when a match first replaces a miss (converted to Markdown, with a
+  required CC BY-SA attribution footer linking back to the source) - never overwrites an existing
+  article, seeded or human-written (`services.wiki.wiki_seed`, `models.cache.signals`). The match
+  is looked up from public data only - the Location's official or wiki name and its address,
+  backfilled first for a coordinate-only pin - never a pin's own name
+  (`plugins.builtin.wikipedia.public_name_hint`, `match_address_components`)
+- **Automatic public wiki naming** — a community wiki is renamed from the Location's cached public
+  names (Wikipedia, REData/CRIS, OSM, official name, Google last) only while its name is
+  provisional: a placeholder, or an automatic Google/official-name stand-in. A name a person wrote
+  is never replaced, a pin's own name is never a candidate, and each adopted name is kept as an
+  official alias credited to its source (`services.wiki.wiki_naming.adopt_public_name`)
+- Wiki access is gated by one reusable check, `services.wiki.wiki_access.wiki_accessible_to` (a
+  child wiki resolves through its parent); every access-sensitive read or write path, including
+  undo/redo, is expected to call it rather than re-deriving visibility
+- Canonical admin-area spellings for comparing places from different geocoders: `services.locations.naming.canonical_state` ("New York" and "NY" compare equal) and `services.locations.display.canonical_country` (every USA spelling as one)
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
@@ -178,19 +287,29 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   old streets sit on the real ones. Four free corners means a full projective transform, so a scan
   that is rotated, sheared, or trapezoidal (as flatbed scans of century-old paper usually are)
   still lines up — an axis-aligned bounding box cannot express that. The image comes from an
-  upload, a pick from that page's own Media gallery (materialized to a real `Image` first, so it
-  survives the provider rotating its URL), or an external image URL. Per-overlay opacity, a lock
-  to stop a placed sheet drifting, and either its own layers-panel toggle or membership in a
-  custom layer (`models.map_overlay`, `controllers/map_overlays.py`,
-  `frontend/ts/shared/map-image-overlays.ts`)
+  upload (reusing a file you already uploaded to this pin, rather than failing as a duplicate), a
+  pick from that page's own uploaded photos (the full gallery, including child-pin photos - not a
+  short preview of recent ones), or a pasted image URL - **downloaded once and stored**, never
+  referenced live, so the overlay renders the same for every later viewer and nobody's browser
+  fetches the original host. After adding, the overlay appears on the map with corner handles so
+  it can be pinned and warped immediately. Per-overlay opacity, a lock to stop a placed sheet
+  drifting, and either its own layers-panel toggle or membership in a custom layer. Every entry
+  point (the form, the historical-map picker, the archive importer) creates an overlay through
+  `services.map.image_overlays.create_overlay`, which locks the owner row and enforces the
+  12-per-map cap against the whole map regardless of viewer, and `image_from_external_url`, which
+  downloads a pasted URL through the same `materialize_media_item` pipeline an upload uses
+  (`models.map_overlay`, `controllers/map_overlays.py`, `frontend/ts/shared/map-image-overlays.ts`)
 - **Georeferenced historical map overlays** — "Browse georeferenced historical maps" in the same
   manage-overlays dialog lists REData's community-georeferenced sheets covering the location
   (Sanborn plans, cadastral atlases, panoramic views placed by real control points via Allmaps/Map
   Warper) and adds one as a pre-placed, warped **tile** overlay - no corner dragging needed, same
   opacity/visibility/layer controls. Tiles stream through UrbanLens's own authenticated proxy
   (`controllers/historical_map_tiles.py`; 200s and definitive 404s cached, institutional outages
-  never cached) so REData's API key stays server-side
-- **OpenHistoricalMap time slider** (beta) — a compact time slider below the map on pin-detail and
+  never cached) so REData's API key stays server-side. An imported tile overlay naming such a sheet
+  (another deployment's route, REData's own tile URL) is rebuilt onto this route; one naming any
+  other host is drawn through this site and each tile kept once fetched
+  (`services/map/remote_tiles.py`, `controllers/remote_tiles.py`)
+- **OpenHistoricalMap time slider** (beta) — a compact time slider below the map on Private Pin and
   wiki pages lets a beta user scrub through years and see OpenHistoricalMap's dated vector data
   (roads, buildings, land-use tagged with `start_date`/`end_date`) overlaid on the live map, for
   locations where OHM has nearby dated coverage. Gated by `SiteFeature.BETA_FEATURES`; the slider
@@ -259,9 +378,10 @@ floorplan alongside a building; they answer only through their own endpoints
   own plan, then the community one, then REData's (external, none exist upstream yet)
 - **GeoJSON feature endpoint** (`/map/pin/<slug>/floorplan/features/`) — the map-facing counterpart
   to the document, mirroring REData's: flat features filtered by viewport (`?bbox=`), storey
-  (`?level=`) and element kind (`?kind=`), capped and reporting `truncated` rather than silently
-  cutting off. The bbox filter runs in the database on the spatial index, so a renderer asks for a
-  viewport's worth of one storey instead of ten storeys of every wall. Every feature carries the
+  (`?level=`; the ground floor when omitted, every storey for `all`) and element kind (`?kind=`),
+  capped and reporting `truncated` rather than silently cutting off. The viewport is projected to
+  plan-local metres and filtered on the item coordinates in SQL (no spatial index), and the cap is
+  a `LIMIT`, so a read costs the rows returned rather than every row on the floor. Every feature carries the
   uuid it can be edited by, so anything clicked on a map is findable in the document
 - **Photos attach to anything, and pool once** — the item details block offers this pin's own
   photos as thumbnails, and attaching cites a per-plan **reference** row rather than the image, so
@@ -281,9 +401,9 @@ floorplan alongside a building; they answer only through their own endpoints
   they are the most telling records on the card: an open code-enforcement lien and years of
   unpaid tax are what "abandoned" looks like in public records
 
-## External Data Enrichment (Pin Detail Page)
+## External Data Enrichment (Private Pin Page)
 
-On-demand, cached lookups shown as panels on the pin detail page. Many of these are now backed by
+On-demand, cached lookups shown as panels on the Private Pin page. Many of these are now backed by
 REData (`../REData`, a standalone service reached via `UL_REDATA_API_URL`/`UL_REDATA_API_KEY`)
 rather than calling their upstream provider directly - REData pools rate limits/credentials across
 every UrbanLens deployment and normalizes each provider family's response shape. A handful of
@@ -302,15 +422,36 @@ direct-only because REData's contract can't reproduce what they show:
   open (day-grouped from NPS's published hours), its directions page, designation and activities
   (`plugins.builtin.nps`)
 - **Recorded weather on a visit** — each row in a pin's Visit History says what the weather actually
-  was that day (ERA5 reanalysis via REData, worldwide, back to 1940), grouped by location and
-  clustered by date so a page of visits costs one request per place rather than one per visit
-  (`services.locations.visit_weather.recorded_days`)
-- **Historic Registers** — what the historic inventories say about the pin: the nationwide National
-  Register plus 24 state SHPO and city/county registers, from REData's cultural-resources registry.
+  was that day (ERA5 reanalysis via REData, worldwide, back to 1940). The panel reads stored days only
+  and queues `fetch_recorded_weather_at` for the rest, clustered by date so a page of visits costs one
+  request per place rather than one per visit. Days are stored one row per 0.01° cell and day
+  (`RecordedWeatherDay`), shared by nearby places (`services.locations.visit_weather`)
+- **Historic Registers** (a Property Records tab) — what the historic inventories say about the pin:
+  the nationwide National Register plus 24 state SHPO and city/county registers, from REData's
+  cultural-resources registry. Location Data's Overview does not name the listing: it merges only
+  `PanelPlacement.LOCATION` sources, and consults Property Records sources only to hide empty tabs.
   Renders only REData's standardized fields (name, type, status, year built, style, use), so a
   register REData adds appears without a release; which registers cover the point comes from
   `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
   (`plugins.builtin.redata_historic_registers`)
+- **NY Historic Preservation (CRIS)** (New York) — the nearest surveyed building's USN record
+  (eligibility, address, USN number), or the historic district/National Register listing on a
+  parcel-scope pin, plus that building's and site's survey photos and scanned forms in the Media
+  gallery. A parcel-scope pin (a campus) also gathers every CRIS building inside the site record's
+  footprint and any it links, each attachment tagged with the building it documents; REData is
+  asked to warm the whole site with its bulk `fetch-details/`, and each pass live-fetches at most
+  12 buildings REData has not detailed yet (`plugins.builtin.cris_buildings`, P24). That site
+  fetch also answers the campus's building children, so a campus costs one site fetch rather than
+  a REData round trip per building: the payload keeps a `campus_buildings` roster, and each pin or
+  wiki nested under the site whose footprint holds a roster building's CRIS point (or, with no
+  footprint, that stands within 15 m of one) gets its `cris_building_usn` card written,
+  dated as the site's row so it goes stale with it. Its media half is filled when the child is
+  opened, from the same payload, with no REData call unless the site pass left that building
+  undetailed (one detail fetch then), and that is when its documents are queued for extraction.
+  A child opened before its site has an answer fetches the site once for every sibling, waiting
+  on a site fetch already in flight. The sweep that creates building pins seeds them the same way
+  (`external_data.seed_site_descendants`), and background enrichment takes a nested location's
+  card from its site before looking it up. A child the roster does not cover fetches its own.
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
@@ -320,15 +461,19 @@ direct-only because REData's contract can't reproduce what they show:
 - **Digital Commonwealth** (Massachusetts) — photographs, maps, and documents from MA libraries/museums/archives, via REData; Massachusetts pins only
 - **Media previews** — Media-gallery items in formats no browser renders (archival TIFFs, scanned
   PDF inventory/nomination forms, HEIC) are rasterized to JPEG/PNG server-side rather than left as
-  a broken tile or an anonymous document icon (`services.media.previews`). Remote sources go
-  through a signature-gated endpoint (`controllers/media_preview.py`) so it can't be pointed at an
-  arbitrary URL; the in-app REData proxies (CRIS attachments, LoopNet photos) render their own via
-  `?preview=1`, passing already-displayable files straight through
+  a broken tile or an anonymous document icon (`services.media.previews`). A remote item is
+  rendered into this site's copy of it (`services.media.remote_copies`); the in-app REData proxies
+  (CRIS attachments, LoopNet photos) render their own via `?preview=1`, passing already-displayable
+  files straight through
 - **Web Images** — broad web-image search across many engines (Flickr, imgur, Pinterest,
   DeviantArt, Openverse, Unsplash, …) via REData's web-search image mode, using an aggressive
-  three-clause relevance query (all non-nickname aliases · state/country + municipality · the site's
+  relevance query (all non-nickname aliases · state/country + municipality · the site's
   urbex/abandoned subject vocabulary) so a same-named place or operating business elsewhere is
-  excluded (`plugins.builtin.searxng_images`)
+  excluded; a child pin (a building nested under a parent parcel/site pin) adds a required clause
+  of the parent's own names too, since a generic building label ("Staff House") carries no
+  identifying power alone (`plugins.builtin.searxng_images`). The public Flickr search and the
+  general web-search panel apply the same parent-name qualifier for child pins
+  (`services.apis.flickr.search`, `Pin.get_unique_search_name`)
 - **National Park Service** (USA) — nearest park info, via REData
 - **Yelp** — nearby business details, via REData
 - **LoopNet** (USA) — commercial real-estate listings
@@ -342,16 +487,39 @@ direct-only because REData's contract can't reproduce what they show:
   and any `WikiOwner` the community typed in themselves
 - **USGS Historical Topo Maps** (USA) — historical topographic maps, direct-only (a gallery of
   individually-dated scans, a shape REData's imagery contract doesn't offer)
+- **Historical Features** — retrospectively-mapped buildings, roads, water features, railways, land
+  use, places and venues that once stood near the pin (mostly demolished, mostly never formally
+  designated), via REData's `/historical-features/` (self-hosted OpenHistoricalMap/Overpass-backed,
+  worldwide but volunteer-traced/city-scale coverage) (`plugins.builtin.redata_historical_features`).
+  Distinct from Historic Registers (a body's own designation) and USGS Historical Topo Maps (a
+  scanned page) — this is per-feature data with its own validity interval. `start_year` is
+  frequently the date of the *source map* a feature was traced from, not a construction year, and
+  the panel never presents it as an age
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim
   structured data, kept direct-only for its OSM extratags REData doesn't normalize; Photon
   nearest-feature lookup, via REData)
-- **Regional Data** — US Census, Wildlife (iNaturalist), Seismic (USGS earthquakes), and EPA data
-  loaded on demand per sub-tab; the Wildlife/Seismic/EPA nearby-facility lookups are via REData
+- **Panel placement** — an info panel declares where the Private Pin page shows it:
+  `InfoPanelSource.placement` is `PanelPlacement.STANDALONE` (a card of its own, the default),
+  `REGIONAL` or `LOCATION` (a tab in one of the two cards below), with `tab_label` and `tab_order`.
+  A plugin panel picks its card by declaration; the controller holds no list of keys
+  (`services.pins.external_data.tabbed_panels`)
+- **Regional Data** — data about the area rather than the site: US Census, Wildlife (iNaturalist),
+  Seismic (USGS earthquakes), Disasters (Fire & Disaster History), Water (Water & Hydrology), Air
+  Quality and EPA, each loaded when its tab is opened; the first tab with data opens by default,
+  and a tab with nothing to show says "No data available."
+- **Location Data** — data about this place: an Overview merging every tab's
+  `overview_summary()` into one unattributed list, then Nominatim, Photon, Building
+  Characteristics, Elevation and Historic Registers. Tabs that settle with nothing to show are
+  removed
 - **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
-  that building, or offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
+  that building at any depth - every record of one physical building links to the same pin - or
+  offers to create the ones that have none (`plugins.builtin.parcel_buildings`). On a pin's page it
+  is also where child pins are listed: a Child pins tab has every direct child of any type, a child
+  pin with children of its own gets that list alone, and the header adds a child pin or pulls the
+  wiki's in. CRIS's campus buildings are in this list, not repeated on the CRIS tab.
   Also shown on the wiki page
 - **News** — recent news coverage scoped to the location (appears for notable locations), via
   REData's GDELT-backed search
@@ -371,15 +539,20 @@ direct-only because REData's contract can't reproduce what they show:
   (`plugins.builtin.redata_permits`); flags when a dense block capped the result
 - **Reported Incidents** (US cities) — block-scale police-incident reports from city open-data
   portals as visit-safety context, via REData (`plugins.builtin.redata_incidents`); traffic
-  collisions excluded, block-scale location precision stated on the panel
-- **Water & Hydrology** (USA) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
+  collisions excluded, block-scale location precision stated on the panel. **Incident History is
+  subscriber-only** (`SiteFeature.INCIDENT_HISTORY`) — a deeper, separately-gated sibling panel
+  pulling REData's full 25-year window as a year-by-year trend, instead of the free panel's last 3
+  years/top 6 rows; the free panel is unaffected and stays free (see D10,
+  `docs/designs/incident-history-feature-gate.md`, for why it isn't folded into
+  `SiteFeature.NEARBY_RESEARCH`)
+- **Water & Hydrology** (USA, a Regional Data tab) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
   the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
 - **Site Conditions** (USA) — NLCD land cover, EPA walkability index (incl. transit distance), and
   USDA SSURGO soil composition (dominant-first, no invented averages) folded into one panel, via
   REData (`plugins.builtin.redata_site_conditions`)
-- **Air Quality** — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
+- **Air Quality** (a Regional Data tab) — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
   average — of nearby community sensors, via REData (`plugins.builtin.redata_air_quality`)
-- **Fire & Disaster History** (USA) — NIFC wildfire perimeters that reached the site (back to
+- **Fire & Disaster History** (USA, the Regional Data "Disasters" tab) — NIFC wildfire perimeters that reached the site (back to
   ~1900) and FEMA disaster declarations for its county (since 1953, with which assistance
   programmes were authorised), via REData's hazards registry (`plugins.builtin.hazard_history`)
 - The Property Records card also lists the parcel's **assessment history** (annual assessor
@@ -388,15 +561,16 @@ direct-only because REData's contract can't reproduce what they show:
   `/parcels/{uuid}/sale-records/`) feed the Sale History cards — matched to the parcel by
   address/PIN before attribution, with non-arms-length transfers excluded (see
   `docs/designs/redata-integration.md`)
-- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
-- **What the weather was** — a finished trip's weather panel used to be empty, because the forecast
-  can say nothing about a day that has passed. Past activities now show the *recorded* conditions for
-  their day (high/low, rainfall, snowfall, peak wind and gust) from REData's `/weather/history/`
-  (Open-Meteo ERA5 reanalysis, worldwide, back to 1940). One request covers a whole date range, so a
-  week-long trip costs one lookup per location; a recorded day never changes, so it is cached
-  permanently rather than under the external-data freshness window. Days inside ERA5's ~6-day
-  publication lag are not requested at all, so they are never cached as blank
-- **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
+- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the Private Pin page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
+- **What the weather was** — past trip activities show the *recorded* conditions for their day
+  (high/low, rainfall, snowfall, peak wind and gust) from REData's `/weather/history/` (ERA5, worldwide,
+  back to 1940). The panel reads stored `RecordedWeatherDay` rows and queues the missing days, fetched
+  in clustered ranges so activities decades apart never become one request for every day between them;
+  while anything is still arriving it asks once more after a few seconds. Days inside ERA5's ~6-day
+  publication lag are not requested, so they are never stored blank. Upcoming activities get a forecast
+  only within `FORECAST_HORIZON` (`controllers/trip.py`), cached per place for an hour and fetched under
+  `WeatherForecastUpstream`. Activity times are bounded to 1900-2199 by the trip services and a DB check
+- **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the Private Pin page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are
   direct; additional providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) via REData
 - Street-view carousel: Google Street View is direct; Mapillary, KartaView, and Panoramax are via
@@ -411,7 +585,11 @@ cost estimate (`ApiCallLog.cost_estimate`, from `ServiceDefaults.cost_per_call`)
 services with a known published rate - `null` means "not priced," not "confirmed free," since
 most services don't have a rate configured yet. Aggregated into a per-service 30-day cost
 breakdown on the site-admin API usage report; the public `/costs/` transparency page (below) shows
-a coarser blended figure instead, not a per-service breakdown.
+a coarser blended figure instead, not a per-service breakdown. Calls that bypass a gateway session
+(vision, and the budgeted LLM features: article expansion/safety, trivia moderation, answer check
+and wiki incorporation) reserve their ledger row before calling through
+`rate_limiter.api_call_slot()`, so their admin limits and enable switches apply, and a limiter that
+cannot read its counts refuses billable services.
 
 Beyond on-demand fetches, an hourly **background enrichment** task drips high-value lookups
 (official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
@@ -422,26 +600,108 @@ buffer, per-run caps).
 ## Extensibility: Plugin System
 
 Third-party integrations are packaged as **plugins** (`dashboard/plugins/builtin/`) — see
-`docs/designs/plugins.md` for the full contribution API. A plugin can add rate-limited services, pin-detail
+`docs/designs/plugins.md` for the full contribution API. A plugin can add rate-limited services, Private Pin
 panels, satellite/street-view providers, place-name providers, and lifecycle hooks. Plugins are
 discoverable from bundled modules, an env-var module list, or pip entry points, and can be
 enabled/disabled per-install or per-service without a restart. Inventory at `/site-admin/plugins/`.
 
-## Photos & Memories
+## Vault (Photos, Documents & Albums)
 
+- **Vault** is the top-level nav section for a user's personal media library - `/vault/`. It
+  replaced the old Memories → Photos page (bookmarked `/memories/photos/*` links permanently
+  redirect to their `/vault/photos/*` equivalents) and added a parallel Documents page, a
+  personal (pin/wiki-independent) album space, and a landing page, none of which existed before.
+- **Vault home** (`/vault/`) — quick-link tiles into Photos/Documents/Albums with live counts, a
+  storage usage summary (used/quota/remaining, shared with the Settings → Storage section), and a
+  recent-uploads strip mixing the most recently added photos, videos and documents, and a
+  listed Videos section (videos have no page of their own - this is where they are reachable).
+- **Vault → Photos** (`/vault/photos/`) — the site-wide photo library: matches unfiled photos (by
+  GPS + timestamp) to existing pins and proposes **visit suggestions** for confirmation; an
+  organize queue surfaces photos that still need a pin, a location, or suggestion review, plus
+  pending upload failures and caption/GPS metadata conflicts to pick between. The grid is a
+  windowed/virtualized infinite scroll (skeleton tiles while the first page loads, off-screen
+  thumbnails pruned via IntersectionObserver as you scroll so memory stays bounded on a library of
+  hundreds of photos) with a sort control (Recent / Oldest / Taken / Name).
+- **Vault → Documents** (`/vault/documents/`) — a parallel page for non-photo files (PDF, Word,
+  Excel, PowerPoint, plain text), sharing Photos' grid/skeleton/pruning/sort infrastructure with
+  document-appropriate tiles (a type icon + filename) and a lightbox that swaps the image viewer
+  for an inline `<iframe>` preview. Gated behind the `document_uploads` subscription feature/site
+  default; the page itself always renders, just without the upload dropzone when the viewer lacks
+  the feature.
+- **Vault gallery kinds** — Photos and Documents are one set of views
+  (`controllers/vault_media.py`, routed with a `kind` kwarg), one page template
+  (`pages/vault/media_page.html`), and one client (`shared/vault-media-grid.ts`,
+  `shared/vault-uploader.ts`), with what differs in `MEDIA_KIND_SPECS` (`models/images/kinds.py`).
+  Another kind is a spec entry, its routes, a child template, a tile partial and a TS tile renderer.
+- **Vault albums** — a personal, pin/wiki-independent album space (create/rename/delete, add/
+  remove/reorder photos) using the same `Album`/`AlbumItem` infrastructure as pin/wiki albums
+  below, with a toggle to also surface your existing pin albums from across all your pins
+  alongside them. No owner-slug segment (one Vault per profile), no move-to-another-pin or
+  floorplan-overlay actions, and no cover-hero banner - those stay pin/wiki-specific.
+- **Lightbox associations** (Vault Photos/Documents) — the shared lightbox shows a photo's pin/
+  wiki filing (or "unfiled") and its pin/wiki album memberships, plus actions to **file it to a
+  pin** (autocomplete search, only offered while unfiled - an already-filed photo links to its pin
+  instead of silently reassigning it), **send it to a wiki** (wiki search/picker, attaches the
+  photo the same way the pin gallery's bulk "Send to wiki" action does - a photo can carry both a
+  pin and a wiki simultaneously), and **share it with a friend** (a lightweight single-photo DM
+  share, distinct from a whole-pin share - repeatable shares of an already-shared photo create a
+  quota-exempt duplicate copy rather than reusing the original DM attachment).
 - Photo galleries on pins and wikis: drag-drop upload, reordering, lightbox, EXIF/GPS extraction,
-  checksum-based duplicate detection
-- Site-wide photo library (Memories → Photos) that matches unfiled photos (by GPS + timestamp) to
-  existing pins and proposes **visit suggestions** for confirmation
+  checksum-based duplicate detection. On a private pin, the lightbox's more-actions menu offers
+  **Use as floorplan overlay**, which adds the photo as a georeferenced blueprint and opens the
+  floorplan editor to warp it.
+- **Albums** (Photos tab on Private Pin and wiki): named groupings of a place's photos (plain,
+  visit, area, timelapse). Photos default to newest-uploaded; dragging one
+  freezes a custom order for that album (later uploads stay at the end). Date
+  and name sorts follow live metadata, so a caption or EXIF edit does not
+  rewrite anyone else's position. Photos are always drag-reorderable. The album list shows covers plus
+  photos not in any album, and pages its album cards as you scroll the way the photo grids do. The
+  add/move-to-album dialog loads its own pages of albums when opened and searches every album by
+  name on the server. Drag photos (including a multi-selection) onto an album card to file
+  them. Multi-select uses the shared floating bulk toolbar (add to album, and inside an album also
+  set cover / move / remove). Clicking a photo opens the shared lightbox; in select mode, click
+  selects instead. Right-click on an uploaded photo (albums, pin gallery, wiki gallery) offers
+  open / download / add to album / set as album cover / remove / send to wiki / share with a friend
+  / delete. Set-as-cover is also in the lightbox and the photo-options menu. An album can be moved
+  between a parent pin and a child pin from album options. When "show child pin details" is on,
+  the Photos tab lists albums and unfiled photos from descendant pins as well. Dropping a file
+  that's already been uploaded into an album files the existing photo rather than erroring.
+  Uploading the same bytes to a different pin of yours reuses the stored file (no second quota
+  charge); caption/GPS conflicts surface on Vault → Photos to pick. Failed or broken uploads
+  toast and can be retried from Vault → Photos. Removing a photo from an album updates the grid
+  immediately. Small grid thumbnails and a tiny (~44px) WebP map-marker thumbnail are generated in
+  the background after upload (and backfilled on a schedule for photos that predate that); album
+  grids load further pages as you scroll, unloading off-screen bitmaps so large albums stay usable
+  on a phone. Photo map markers can be right-clicked to hide a photo from the map without clearing
+  its stored GPS; the lightbox offers "show this photo on the map" to put it back. A stored
+  photo's filename is always an opaque, year-prefixed-when-known token (never the uploaded file's
+  own name, which can encode anything from a capture timestamp to a location) - the true filename
+  is kept only on the row (`Image.original_filename`, encrypted), and a date parsed from a
+  camera-app filename convention (e.g. `PXL_20260709_...`) is tracked separately
+  (`filename_taken_at`) from EXIF-confirmed `taken_at`. In `services/photos/albums.py`,
+  `visible_album_items(album, viewer)` is an album's viewer-visible membership rows as an unevaluated
+  queryset (page, count, or `.values("image_id")` as a subquery), and `describe_albums` /
+  `describe_album` compute count, cover and date range in SQL, in a fixed number of queries.
+  `Pin.objects.tree_root_id(pk)` finds a pin's root in one recursive query.
+- The lightbox lets you browse, search, and create+apply a media label in one step.
+
+## Memories
+
 - **Memories** page — aggregated timeline/map view of routes, trips, visits, and photos, including
   an "on this day" retrospective and a prompt to log visits for pins already marked visited; tabs
-  for Timeline, Photos, Maps, Sharing, Journal, and Visits; date range filter with presets
+  for Timeline, Maps, Sharing, Journal, Visits (hidden when there's nothing unlogged), and
+  Locations (hidden when there are no pending pin suggestions); date range filter with presets
   (Last 90 days / Last year / All time); "Import routes & history" for importing GPS tracks and
-  location history (separate from the map's pin import flow)
+  location history (the map's import wizard, with its own copy). Its own Photos tab moved to
+  **Vault → Photos** (see above).
 - **Pin suggestions** — batch photo-location ingestion (a client-side local-folder scanner on
   the Tools page, or a full Immich library sweep) matches photo GPS against existing pins and
   clusters the rest into suggested new pins, reviewed on a multi-select map with bulk accept,
-  pagination, and opt-in photo import
+  pagination, and opt-in photo import. Bulk accept and the Visits tab's bulk unlogged-visit
+  logging both run each row under its own savepoint via `services.core.bulk_outcome.run_each`,
+  so a row that crashes rolls back only its own writes, and report failed rows apart from merely
+  skipped ones through the shared `reportBulkOutcome` frontend helper
+  (`frontend/ts/shared/pin-select-map.ts`)
 - Storage quota accounting per user (role-based), automatic downscaling/WebP conversion on upload
 - **HEIC/HEIF uploads are accepted and re-encoded to a format browsers render** (JPEG, or WebP when
   the uploader's policy asks for it). The transcode is not part of the downscale policy: it runs even
@@ -454,21 +714,42 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Multi-stop trip planning shared among friends: activities, scheduling, map view
 - RSVP per member with trip-wide defaults and per-activity overrides; per-activity thumbs up/down voting on proposed activities
 - Trip comments with emoji reactions
-- List and calendar views of trips, sortable
+- List and calendar views of trips, sortable. The list pages (`TRIP_LIST_PAGE_SIZE`) with ordering,
+  including "soonest first", done in SQL; the calendar is rendered one month at a time on the
+  server (`services/trips/trip_calendar.py`, `trips.calendar.month`). `TripQuerySet` has
+  `with_effective_dates()` (subquery columns), `with_timeline_status()`, `timeline_counts()`,
+  `overlapping(start, end)` and `search_for_member(profile, q, limit)`, which backs the capped trip
+  picker (`trips.picker`)
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
-  (attendees become friend invites), export trip activities to Calendar
+  (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
+  to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
+  when more exist; the import runs in the `import_calendar_events` task behind a progress poll
 - Trip settings controlling member/organizer permissions
+- **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
+  in the external API). The inviter sees the address listed as invited whether or not it has an
+  account; delivery runs in a Celery task so latency tells nothing, and the email budget is charged
+  either way. An account that proved it owns the address (`find_verified_user_by_email`) gets an
+  in-app notification; anything else gets the email. The invitee's page (`/trips/invitations/<token>/`)
+  asks "join the trip?" and "become friends?" separately; signing up answers neither. Only the account
+  that verified the invited address can answer, so a forwarded link is useless; someone who would rather
+  not simply ignores the email. The creator sees and can withdraw every open invitation; a
+  member's lapse on removal, or when they lose the right to add people (`services/trips/trip_invitations.py`)
 
 ## Safety Check-ins
 
 - "I didn't come home" style safety net: create a check-in with expected return time and
-  emergency contacts (registered friends or external email contacts)
+  emergency contacts (registered friends or external email contacts). A contact added by email is shown as
+  the address typed, never matched to an account for the owner; the account that verified it still gets
+  the in-app alerts (`_contact_account` in `services/visits/safety.py`) and sees the check-in under "Shared
+  with you" (`SafetyCheckinContact.objects.reaching`, matched on `email_normalized`)
 - Escalation on missed check-in: emails emergency contacts, optionally posts to the location's
   community wiki, notifies pin owners
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
 - Reusable saved emergency contacts, per-contact opt-out, auto-delete retention policy
+- Community-wiki posting is gated by `services.visits.safety.find_visible_community_wiki` and
+  `community_wiki_opt_in`, so a check-in can only notify or link a wiki its owner can actually see
 
 ## Device Scanning
 
@@ -488,13 +769,23 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Attribution to the uploader's account is a privacy preference (`track_device_scans`, Settings →
   History, default on) independent of authentication, which is always required; turning it off
   stores the same scan data anonymously instead of skipping it.
+- `client_session_uuid` is an idempotency key (unique when non-blank): a retried upload gets the
+  original upload back and is neither stored nor queued twice.
 - **Individual scans are never retrievable through any API** — only the cumulative, unattributed
   marker per (device, wiki) is ever readable, and only for wikis the caller has already discovered.
 - No manual marker-placement UI yet; markers are maintained entirely by the background pipeline.
 
 ## Social Layer
 
-- Friendships: request/accept/reject/ignore/remove/block/mute, invite by email
+- Friendships: request/accept/reject/ignore/remove/block/mute, invite by email. Whether a request may be
+  sent is `may_send_friend_request` (`services/social/friendship.py`), shared by the web view and the
+  external API; every refusal (self, community off, a block, the target's `friend_request_visibility`)
+  gives one generic answer, so none reveals which applied.
+- **Invite by email** (friends page, external API, and tagging a visit participant with an address).
+  The sender's pending entry looks the same whether or not the address has an account. An account that
+  proved it owns the address is asked in-app; anything else gets the email. The invitee accepts or
+  declines on `/dashboard/friendship/invitations/<token>/`, signed in as the account that verified the
+  address (`services/social/friend_invitations.py`)
 - **Mute is per-person and actually silences** — one column per side of the shared relationship
   row, so muting someone does not mute you to them. It suppresses the in-app notification and
   everything that hangs off it (live toast, WhatsApp/SMS, native push) for every notification type
@@ -551,23 +842,97 @@ parent/child picker are separate, bespoke implementations that predate those fac
 them (the organize page's picker) doesn't even share the `@mixin tad-tabs` styling, by its own
 code comment ("underline style, not pill buttons").
 
+**Create-by-name is centralized.** Every write path that creates a label by name goes through
+`Label.objects.resolve_or_create` (reuse the profile's own label, then a global one, before
+creating) or `Label.objects.create_unique` (refuse with `LabelNameConflictError` instead of
+reusing), both built on `Label.objects.named` - the `(lower(name), profile, kind)` lookup, own
+labels before global (own only, for the profile-scoped category and status kinds). Both create inside their own savepoint and re-read on a raced
+`IntegrityError` rather than trusting the first miss. `bin/check_canonical_creates.py` (pre-commit
+manual hook `canonical-creates`, also run in CI) statically refuses a hand-written
+`Label.objects.create/get_or_create/update_or_create` outside `tests/`/`migrations/`, so a new call
+site cannot reintroduce the raw-lookup mismatch these replaced.
+
+## External Category/Tag Data
+
+`PlaceExternalTag` (`models/place/external_tag.py`) captures raw classification data external
+providers report about a `Place` - **strictly separate** from the `Label` system above; a Label
+is a user-curated organizational concept (including its own `kind=category`), this is unedited
+provider vocabulary. Currently captured, per `Place`, with zero dedicated API calls (both piggyback
+on data panels already fetch for their own purposes):
+
+- **OpenStreetMap** — via the existing Nominatim reverse-geocode panel/enrichment source: its
+  primary `category`/`type` tag pair (e.g. `amenity`/`restaurant`), plus `building`/`amenity`/
+  `tourism`/`historic` when they add information beyond that pair.
+- **Overture Maps** — via the existing "Building Characteristics" panel: a building's `subtype`
+  and `class_`. Deliberately excludes that panel's "nearby places" data, which describes other
+  points of interest near the coordinate, not the building itself.
+
+Stored per-`Place` (not per-`Location`/pin) so every `Location` resolving onto the same building
+shares one tag set rather than each re-deriving and storing its own near-duplicate copy; a
+`Location` with no resolved `Place` yet simply isn't captured until one resolves.
+`PlaceExternalTag.is_fresh_for()` further skips re-deriving tags a nearby Location already synced
+recently. Shown read-only on the wiki page as chips visually matching the Label chip style
+(`_external_tag_chips.html`, reusing the `.tag-chip` CSS with no edit/remove affordance).
+
+**Tag equivalence mapping.** Different providers often describe the same real-world concept
+differently (OSM `amenity=restaurant` vs. Overture `building_subtype=restaurant`), which would
+otherwise show as two near-duplicate chips. `ExternalTagVocabularyEntry`
+(`models/place/external_tag_group.py`) is a persisted, admin-curated record of every distinct
+`(source, key, value)` tag ever seen - auto-registered as new tags appear, never auto-deleted -
+which an admin can place into an `ExternalTagGroup` and mark one member `is_preferred`. With no
+explicit group, two entries are still treated as equivalent by default whenever they humanize to
+the same display text (`services.locations.external_tag_groups.default_group_key`) - an admin can
+override a coincidental default match by putting the colliding entries into their own separate
+(even single-member) explicit groups, since an explicit group always wins over the default.
+`visible_tags_for_place()` resolves, for one Place's actual tags, which single tag to show per
+equivalence group (the wiki chips only ever render this deduplicated set, via the
+`visible_external_tags` template filter) - fed by the admin page at **Site Admin → Tag Mapping**
+(`/site-admin/external-tags/`), which lists every known tag, surfaces unconfirmed default matches
+for review, and supports fast bulk grouping (click/shift-click multi-select, or drag-and-drop
+between groups via Sortable.js) rather than a dialog per pair.
+
+**Search** — global search (pins and wikis) and the map's "Jump To" pin search both match by
+external tag, including any provider's equivalent tag once admin-grouped or default-matched by
+display text (`services.locations.external_tag_groups.matching_vocabulary`/`tag_match_q`) - see
+"Search & Navigation" above.
+
+**Not yet built, by design**: automatically suggesting Labels from this data, choosing pin icons
+from it, or matching a tag *category* against its members ("Food and Beverage" finding a place
+tagged "Restaurant") - neither OSM nor Overture data as ingested today carries that kind of
+parent/child relationship, so there's nothing yet to curate it from.
+
 ## Notifications
 
 - In-app notification center (bell dropdown), mark read/unread, per-type delivery preferences
+- Actionable notifications (visit suggestions, friend requests, pin shares) leave the bell
+  inbox when answered - with a short removal transition when acted on from the dropdown -
+  and remain available on **Notifications → View all** (`/notifications/`) as history
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
-- Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
+- Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls. `notification_delivery.send_notification_email` queues `send_notification_email_task` on commit, so no request waits on SMTP; `send_notification_email_now` is the send itself
+- **Per-type delivery** (`services/notifications/notification_delivery.py`): `delivery_preference(profile, field)`
+  reads one `DeliveryPreference` (SITE when the profile has no preferences row), and
+  `deliver_notification(recipient, preference, title=, message=, url=, **log_fields)` writes the in-app row through
+  `NotificationLog.objects.notify` (so mute applies) for SITE/BOTH and queues `send_notification_email` for
+  EMAIL/BOTH, returning the row. New notification producers use these instead of branching on the preference.
 - **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notifications/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
 - **Native-app push** (`models/push_device`, `services/notifications/push.py`): a backgrounded app
   holds no WebSocket, so it registers a push destination instead. **UnifiedPush** — an app-chosen,
   self-hostable push server such as ntfy — is the default transport, matching the project's
   self-hosted ethos and keeping an F-Droid build free of Play Services. An FCM row kind exists for
-  a future Play-Store flavour and is deliberately not dispatched yet
-- Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
+  a future Play-Store flavour and is deliberately not dispatched yet. Each task delivers at most
+  `PUSH_BATCH_SIZE` devices, `PUSH_CONCURRENCY` at a time, and hands the rest to `dispatch_push_to_devices`
+- Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications),
+  routed per event in SiteSettings: pin import errors, safety check-in archival failures, and
+  uploads stuck waiting for storage (`services/media/upload_retry.py`)
 
 ## Custom Fields
 
-User-defined private fields for **pins**, **photos**, **people**, and **maps**. Power-user feature for tracking non-standard attributes (e.g. access status, personal reference IDs, condition notes). Managed in Settings → Advanced.
+User-defined private fields for **pins**, **photos**, **people**, and **maps**. Power-user feature for tracking non-standard attributes (e.g. access status, personal reference IDs, condition notes). Managed in Settings → Advanced. Text values are capped at
+`services.core.text_limits.MAX_CUSTOM_FIELD_TEXT_LENGTH`; a link-typed value is validated against
+`services.security.link_urls.clean_link_url`, the one http(s)-only rule every stored link (custom
+fields, pin/wiki links, the archive importer, and the three external-API serializers via
+`external_api.fields.LinkUrlField`) is checked against before it can end up in an `href`.
 
 ## External Photo Integrations
 
@@ -580,6 +945,26 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 
 - Email/password signup with verification, plus Google and Discord OAuth (social-auth pipeline)
 - Password reset (themed to match the app, not bare Django pages)
+- **A password change ends the delegated access that predates it.**
+  `revoke_credentials_on_password_change` (`services/auth/credential_revocation.py`) is called by
+  every path that sets a password - email reset, settings change, an SSO account's first password,
+  Django admin, and E2EE enrollment - with a `PasswordChangeKind`. It re-signs the requester's own
+  session, deletes every OAuth2 token, ID token and authorization/device code, and revokes API keys
+  only when the owner (or admin) ticks the box the reset page, the settings form and the admin form
+  all offer. `REENCODE` (enrollment re-deriving the same password) revokes nothing. Other browser
+  sessions end by Django's password-hash check; open WebSockets follow within
+  `_CREDENTIAL_REVALIDATION_INTERVAL_SECONDS` (session sockets close with the transient
+  `CREDENTIALS_CHANGED_CLOSE_CODE`, so the tab that made the change reconnects).
+  `bin/check_password_change_revokes.py` (pre-commit) fails a `set_password` call that skips it.
+- **An SSO sign-in cannot claim an address it has not proved.** `resolve_sso_email`
+  (`services/social_auth/pipeline.py`, before `create_user`) lets a provider address become the
+  primary only when the provider verified it and `address_holder` finds no other account; an
+  unverified one is left off and claimed through `email_claims.claim_address` by
+  `claim_unverified_sso_email`, the same whether or not someone holds it; a verified address
+  another account holds refuses the sign-in (only its owner can see that). `email` is in
+  `SOCIAL_AUTH_PROTECTED_USER_FIELDS`, so a provider never rewrites it. `Profile.verified_primary_email`
+  is unique (migration 0068); `email_claims.mark_primary_verified` is its one writer, and the
+  User post_save signal clears it when the primary moves.
 - **Passkeys** (Face ID, Windows Hello, security keys, Bitwarden-compatible) and **TOTP 2FA** (Google Authenticator, Authy, Bitwarden TOTP); backup codes available once passkey or TOTP is configured
 - OAuth accounts can set a password separately to enable new-device encryption unlock without the recovery key
 - Self-service account deletion (request with grace period, cancel)
@@ -587,6 +972,35 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   in-product help tooltips on first visit to key sections (e.g. trip permissions, itinerary),
   with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
+- Signup verification mail is capped per address inside the deferred task (`signup.charge_verification_mail`,
+  on the pending account's `EmailSendLog` ledger: one per `VERIFICATION_RESEND_COOLDOWN_SECONDS`, within
+  its email budget), so rotating IPs cannot mail-bomb a pending address and the response never changes.
+  Whether a resend should rotate the live token at all (G2-31) is undecided.
+- **Any spelling of a username or address names the account.** Addresses fold by
+  `normalize_email` (`services/auth/email_normalization.py`): lowercase everywhere; for
+  `gmail.com`/`googlemail.com`, dots and a `+tag` are dropped and the domain becomes `gmail.com`.
+  Other domains keep dots and tags. Usernames fold by `normalize_username_key`
+  (`services/auth/username.py`): NFKC casefold, every non-alphanumeric dropped, look-alike digits
+  mapped (`foo.bar`, `_f-o-o-b-a-r-`, `F00_Bar` → `foobar`'s key), stored as the indexed
+  `Profile.username_key`. `find_user_by_identifier` (`services/auth/identity.py`) is the one
+  resolver behind the auth backend, E2EE login-params, lockout keys, password reset, and admin
+  grants; `find_user_by_username`/`username_search_q` back trip and check-in invites by username
+  and the DM/group/global-search pickers. Email invites (friend, trip, visit tag) already matched
+  through the normalized forms and verified secondaries. Registration refuses any spelling of a
+  taken username with the same "isn't available" it gives a malformed or reserved one (P149); a taken
+  address creates no account (P147). A key two legacy accounts share
+  resolves to neither (only the exact username works); `googlemail.com` hashes stored before
+  migration 0062 on `ExternalVisitParticipant` and `EmailSendLog` cannot be recomputed.
+- **Outbound-mail guard** (`services/security/mail_guard.py`, `EMAIL_BACKEND`): every message
+  passes `RecipientGuardEmailBackend`, which drops recipients no mailbox can exist at - reserved
+  domains, and Gmail names holding characters Gmail never issues - and hands the rest to
+  `UL_EMAIL_BACKEND`. A message left with nobody raises `SMTPRecipientsRefused`, as a relay would.
+- **Enforced Content-Security-Policy** (`settings/base.py` `_CSP_DIRECTIVES`; `UL_CSP_ENFORCE=false`
+  is an escape hatch to report-only). Violations are logged through `report-uri /csp-report/`.
+  htmx features that need `'unsafe-eval'` are replaced by declarative request actions
+  (`data-ul-on-success`, `data-ul-after-request`, `data-ul-before-request`; see
+  `frontend/ts/shared/htmx-actions.ts`), lazy sections (`data-ul-lazy-section`) and
+  `data-ul-min-query`. The Playwright page guard fails a spec on any violation. See N28.
 - **External API keys** (Settings → Security → API keys): create/revoke/view API keys that let a
   third-party application act on the user's behalf with a scoped grant, drawn from a ~30-value
   `ApiKeyScope` vocabulary (pins, photos, wikis, trips, messaging, friends, notifications, safety
@@ -607,7 +1021,15 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   cache) restorable for a retention window. Restores pre-check the constraints the recreate
   could violate and refuse cleanly rather than 500ing; relational pieces that were never part
   of the deletion (a list's member pins, a label's parents, a map's annotation authors)
-  restore leniently, skipping whatever has since been deleted
+  restore leniently, skipping whatever has since been deleted. Mutations (moving a pin,
+  adding/removing labels or aliases, album membership, photo map position/metadata) stash a
+  before/after payload on the same stack. Undo stamps the row rather than deleting it, so
+  redo is a second pass over the same entry; a new action discards the redo stack
+- Floating undo/redo buttons at the bottom-right of every authenticated page, hidden until
+  an action is available, with Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y). They lift above other
+  floating chrome (saved filters, floorplan floors, toasts, the page footer) rather than
+  covering it. The floorplan editor's in-memory history drives the same buttons while that
+  page is open
 - Settings → Undo History page to review and restore recently undo-able actions
 
 ## Achievements
@@ -694,6 +1116,145 @@ a daily `sync_stripe_subscriptions` task re-syncs from Stripe as a safety net fo
 deliveries. `user_has_feature()`/`active_subscription_roles()` treat an active, threshold-met
 paid subscription the same as an admin-issued grant. Service layer lives in `services/billing/`.
 
+Billing infrastructure to reuse rather than rebuild:
+
+- `services/billing/subscription_state.py` - the only writer of Stripe-owned `RoleSubscription`
+  fields (`apply_subscription`, `mark_canceled`, `mark_past_due`). Each re-reads the row under
+  `RoleSubscription.objects.locked(pk)`, ignores state older than `stripe_state_at` (an event's
+  `created`, or a retrieve's send time via `retrieve_subscription`), and never moves a row out of
+  `TERMINAL_SUBSCRIPTION_STATUSES` (`canceled`, `incomplete_expired`).
+- `stripe_client.idempotency_key(kind, *parts)` - a Stripe idempotency key namespaced by
+  `SITE_URL`, for any create against Stripe; `stripe_client.lock_billing_owner(user)` - the
+  per-user row lock around customer creation and first sightings of new subscriptions;
+  `stripe_client.configure()` - call at every entry point that reaches the SDK (the key is
+  process-global).
+- `services/billing/sync.py` - one `Subscription.list` page per task, then chunked retrieves of
+  live rows no page reached (`RoleSubscriptionQuerySet.unsynced_since`).
+- `RoleSubscriptionQuerySet.not_terminal()` (the rows the one-live-subscription constraint counts)
+  and `ledger_advance_due()` (the PWYW rows whose ledger could move).
+- Webhook payloads follow the endpoint's configured API version while SDK calls use the pinned one
+  (`2026-06-24.dahlia`), so `webhooks._invoice_subscription_id` / `_charge_subscription_id` read
+  both shapes.
+
+What a role's `features` field can gate is any individual `SiteFeature`, not only broad tiers -
+a site admin can bundle a single Private Pin panel behind its own paid role rather than an
+all-or-nothing "premium" tier. Two examples: `SiteFeature.PROPERTY_OWNERS` restricts owner
+names/contact info on the Property Records card (see above; the parcel/tax/assessment facts stay
+free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Incident History panel
+(see "Reported Incidents" above) while its sibling free panel is untouched.
+
+## Media Storage & Serving
+
+- **Every `/media/...` request is authenticated and authorized** by
+  `dashboard.controllers.media.MediaGateView`, against a default-deny table keyed by the file's
+  `upload_to` prefix (`services/media/access.py`). A family with no registered authorizer is
+  refused, and `manage.py check` turns that into a startup error - so a new media field cannot
+  ship without a read policy. See `docs/MEDIA_PIPELINE.md`. An avatar is served to whoever its
+  profile is visible to (`authorize_avatar`, through `can_view_profile`), the rule
+  `resolve_visible_identity` masks by; generated emoji avatars are open to every member.
+- **Filesystem or object store**, chosen by `UL_MEDIA_STORAGE_BACKEND` (`filesystem` default,
+  `s3` for Garage/MinIO/AWS). The switch changes nothing about who may read a file: `FileField.url`
+  still returns `/media/...` and every read still passes the gate. `exports/`, `imports/` and
+  `preview_sources/` stay on local disk either way.
+- **Four delivery paths, one authorization path** — `X-Accel-Redirect` to nginx off the media
+  volume, `FileResponse` off disk, `X-Accel-Redirect` to an internal nginx proxy carrying a URL
+  Django signed, or a stream from the object store through Django. Adding a fifth is a
+  `MediaByteSource` subclass. See `docs/designs/media-object-storage.md`.
+- **Uploads from their own origin** — `UL_MEDIA_BASE_URL` moves every media URL onto a separate
+  hostname authenticated by a media-only signed cookie, so anything that slips past validation
+  executes where there is no session cookie and no app data.
+- **One profile's uploads are stored one at a time** — `services/media/storage.reserve_upload(profile,
+  size)` holds a per-profile Postgres advisory lock for the transaction and admits the bytes against
+  `SUM(file_size)` read under it; a second upload waits (20 s in a request, 120 s in an import task),
+  then gets a 429. Duplicate-checksum lookups, caps and allowances that decide whether a row may be
+  written go inside the block, next to the insert. D21 has the reasoning.
+- **Upload size is capped to what the ingress will carry** — `UL_MAX_REQUEST_BODY_MB` lowers the
+  site-wide limit, the import form's and the export-import view's, and feeds the browser's own
+  pre-check, so an oversized file is refused before it is sent rather than by a proxy the app
+  never hears from.
+
+## Outbound Requests to User-Chosen Hosts
+
+- **`request_public_url` / `open_public_url`** (`services/security/url_safety.py`) - the one way to
+  send a request to a host a user or a stored row chose: any method, `params`/`json`/`data`, every
+  hop resolved, pinned to the checked address and peer-checked, redirects followed by hand within
+  `allowed_redirect_hosts` (`max_redirects=0` refuses all), credential headers dropped when a
+  redirect changes host, a byte cap (`max_bytes`, or `read_limited` inside `open_public_url`), and a
+  wall-clock `total_deadline` that cuts the sockets, header phase included. Refusals raise
+  `UnsafeUrlError`/`RedirectRefusedError`; `ResponseTooLargeError` and `DeadlineExceededError` are
+  `requests.RequestException`s. `fetch_public_url` is the streamed GET wrapper over the same loop,
+  with no overall deadline. Used by UnifiedPush dispatch, the Immich gateway, the OAuth avatar
+  download, the Wayback save and media materialisation.
+- **`KeyedUpstreamSlots`** (`services/core/upstream_slots.py`) - a fleet-wide cap on concurrent
+  upstream work per key (usually a profile), leased in the shared cache and failing open, beside the
+  per-process `UpstreamSlots`. The Immich thumbnail routes hold one of each
+  (`controllers/immich.immich_thumbnail_response`) and are throttled per account.
+- **`start_drip_server`** (`core/tests/slow_servers.py`) - a loopback server that answers a byte at a
+  time, for testing a deadline against real sockets.
+
+## Shared Infrastructure for Views, Tasks and Upstreams
+
+- **`RequestUpstream`** (`services/core/request_upstream.py`) - the one policy for calling an upstream
+  while a user waits: cache (`bounded_cache`), then a per-account `throttle.allow` on misses only, then a
+  non-blocking slot, then a deadline. The slot is held by the fetching thread, so a fetch the request
+  abandoned still counts until it returns, and it still caches what it gets; a raised error is never
+  cached. `start()` + `wait_all()` run several under one budget. Each upstream is a subclass in
+  `services/apis/request_upstreams.py` with its own slots, deadline and rate; `refusal_json` maps an
+  unanswered result to 429/502/503 with `Retry-After`. Used by place search/resolve/details, the Places
+  layer (`services/map/nearby_places.py`), trip forecasts, historical-map browse, the REData media proxies
+  and Flickr album lookup.
+- **`call_with_deadline` / `submit_bounded`** (`services/core/timeout_utils.py`) - run a blocking call on a
+  small shared pool and stop waiting after a wall-clock budget (the call itself cannot be killed and runs
+  on); `submit_bounded` returns the future for callers that wait on several or must know whether an
+  abandoned call ever started. Each run closes its DB connections.
+- **`UpstreamSlots`** (`services/core/upstream_slots.py`) - a per-process, never-blocking cap on in-flight
+  fetches to one upstream; subclass it and implement `limit()`. The tile proxies and `RequestUpstream`
+  build on it; `KeyedUpstreamSlots` (above) is the fleet-wide per-key form.
+- **`throttled` / `allow` / `account_or_address`** (`services/security/throttle.py`) - a fixed-window
+  per-caller rate limit: `throttled(scope, Rate(...), methods=..., identify=...)` wraps a view and answers
+  429 with `Retry-After`; `allow()` is the same check for code that is not a view. Fails open when the
+  cache is down. The scope and rate are readable off the URLconf.
+- **`bounded_cache`** (`services/core/bounded_cache.py`) - reads and writes against
+  `settings.PROXIED_BYTES_CACHE` that treat an unreachable or full cache as a miss rather than an error,
+  and `set_if_small` to refuse bodies over a ceiling while still serving them.
+- **`read_capped`** (`services/core/gateway.py`) - read a `stream=True` response up to a byte ceiling,
+  refusing (not truncating) anything larger and refusing a response that was not streamed.
+- **`reorder_id_ceiling`** (`services/core/reorder_limits.py`) - the most ids a drag-and-drop reorder may
+  name: the container's own item limit, or that setting's validator maximum when it is unlimited.
+- **`beat_lock` / `acquire_lock` / `release_lock`** (`services/core/locks.py`) - a named overlap lock in
+  the cache for scheduled sweeps; release deletes the key only while the caller's token still holds it.
+
+## Background Work (Celery)
+
+- **`safely_enqueue_task`** (`services/core/celery.py`) - the one way to queue a task. When the
+  broker refuses a message it writes a `TaskOutboxEntry` in the caller's transaction (`durable=True`,
+  the default), and `drain_task_outbox` (beat, every minute) queues it again, keeping its remaining
+  `countdown`, its `expires` and its queue. A caller that handles `None` itself (reports the
+  failure, runs inline, releases a claim, or is a sweep that will find the work again) passes
+  `durable=False`. `bin/check_enqueue_durability.py` (manual pre-commit hook) fails any caller
+  that uses the result without choosing.
+- **Per-queue time limits** (`services/core/task_limits.py`) - a task that declares no
+  `soft_time_limit`/`time_limit` gets its queue's (`QueueTimeLimits`, the `task_annotations`
+  setting): interactive 120/150 s, panel 110/130, ai 90/120, sandbox 720/780, maintenance
+  2700/3000, other batch queues the global 2700/3600. Startup check `dashboard.E013` fails a task
+  whose limits are missing, inverted, or above its queue's ceiling (interactive 300 s; batch queues
+  the broker visibility timeout less ten minutes).
+- **A soft limit `except Exception` cannot swallow** - `UrbanLensTask` (the app's `task_cls`)
+  replaces billiard's soft-limit signal handler, in prefork children, with one raising
+  `TaskSoftTimeLimit`, a `BaseException`, and turns it back into `SoftTimeLimitExceeded` at the task
+  boundary. Code that cleans up on a soft limit catches `SOFT_TIME_LIMIT_ERRORS`.
+- **`pk_ranges` / `dispatch_pk_ranges`** (`services/core/celery.py`) - keyset-page a queryset into
+  `(first_pk, last_pk)` ranges and queue one subtask per range, holding one chunk of keys at a time.
+  Used by `sweep_achievements`, `sweep_reputation` and `backfill_achievement`.
+- **Stall sweeps** that recover work a lost enqueue or a dead worker dropped, each keyed on a
+  marker set in the same transaction as the change: `requeue_stalled_device_scans` (PENDING/
+  PROCESSING uploads), `sweep_stale_fact_confidence` (`Fact.needs_recompute`),
+  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`).
+- **Retention sweeps** (`services/core/retention.py`, nightly) - `prune_expired_sessions`
+  (`clearsessions`) and `prune_read_notifications`, deleting in bounded primary-key batches. The period is
+  `SiteSettings.notification_retention_days` ("Data retention" in the Django admin; 0 keeps rows for ever).
+  Device scans are never deleted, and an account's scans outlive it with `profile` cleared (Jess, 2026-09-29).
+
 ## Site Administration
 
 - The api-limits page also shows a **REData capabilities** card - every domain the connected
@@ -704,10 +1265,26 @@ paid subscription the same as an admin-issued grant. Service layer lives in `ser
   achievement definitions, cost tracking, UI component showcase, dev toolbar (theme/map-dark-mode
   toggles, session reset)
 - Data export/import tooling and on-demand/scheduled database backups
+- **Per-account row limits** (`services/core/capacity.py`) — `SiteSettings` caps on saved filters,
+  pin lists, personal labels, custom fields, active push devices and photos per album (`0` =
+  unlimited). Every add goes through `reserve(capacity, owner_pk, adding=n)`, which serialises one
+  owner's adds on an advisory lock, counts, and raises `CapacityExceededError` (`user_message` for
+  the response); `reserve_each` for several owners, `ensure_room` for an unlocked early refusal
+  before an upload, `Capacity.ceiling()` to bound a posted id list. Import steps skip the overflow
+  with one warning; undo restores raise `UndoExpiredError` via `undo.base.restore_capacity`
 - Subscription roles grant feature flags (`SiteFeature`) per user; pending grants can attach to an
   email invite for users who haven't joined yet
 - `/health/` returns a liveness response for Docker healthchecks and load-balancer probes
   (`controllers/health.py`, `AllowAny`) - the compose stack gates `app`/`app-ws`/`nginx` startup on it
+- `/health/ready` and `/health/primary` reuse the migration state (30s) and connection count (5s) per
+  process through `services/core/process_memo.ProcessMemo`, a generic per-process TTL memo that holds
+  nothing its `keep` predicate refuses; database and cache reachability are probed on every call
+- Deployment configuration fails closed at import (`settings/_env.require_deployment_setting`):
+  outside local/development/testing, a missing `DJANGO_SECRET_KEY`, `UL_SITE_URL` (or a loopback
+  one), broker or Dragonfly URL, or `DJANGO_DEBUG=true`, refuses to start. `UL_ENVIRONMENT` is
+  resolved once by `environments.meta.environment_from_env` (unset is production). See P156.
+- `services/core/site_urls.absolute_url(path)` builds request-less links (mail, SMS, Celery) on
+  `SITE_URL`; nothing else may join onto it (`test_site_urls.py`)
 - `/thanks/` credits page, rendering live contributor data pulled from the GitHub API
   (`controllers/thanks.py` via `services/apis/infra/github/contributors.py`)
 
@@ -730,6 +1307,38 @@ paid subscription the same as an admin-issued grant. Service layer lives in `ser
   review page (`/ai/extractions/`) for results that couldn't be applied automatically, and a
   completion notification
 - **Local keyword tagging** — entirely local (no AI or network call), keyword-match auto-categorize / auto-tag / auto-status on pin save; master toggle + per-type sub-toggles in Settings → Connections
+
+## AI Assistant
+
+- A global, tool-calling chat assistant reachable from every authenticated page - a floating
+  bottom-right button and the `?`/Shift+`?` hotkey open an overlay (`window.location.pathname`
+  is sent along, resolved server-side into page context under the same access rules the real
+  page's own view would apply); `/assistant/` remains as a deep link / no-JS fallback. Gated
+  behind a site-wide flag, a per-user entitlement, and a per-profile `ai_enabled`/
+  `external_apis_enabled` pair - an ungated user sees no button, no hotkey binding, and every
+  turn endpoint 404s
+- Runs entirely off an isolated sandbox tier (`ai-worker` draining its own Celery queue, plus a
+  Django-free `ai-inference` service holding only provider API keys), never inline in the web
+  process, and never reachable to REData or the open web except through an allowlisting egress
+  proxy - see `docs/AI_PIPELINE.md` for the full architecture and threat model
+- A typed registry of read-only tools the model can call, each scoped to what the requesting
+  profile can already see: search/list the user's own pins and unvisited pins; list/create trips
+  and add trip activities; look up page help and recently-dismissed onboarding
+  explainers/tooltips (and reopen one on request); peek and undo the user's last undoable action;
+  straight-line distance and (when routing succeeds) drive time between two of the user's pins or
+  coordinates; a weather forecast for one of the user's pins or coordinates; evidence of tunnels
+  or below-grade levels at a pin (floorplan, photo captions/labels, wiki comments); and whether
+  the user has visited a pin (a confirmed logged visit vs. a merely-nearby GPS track or pending
+  visit suggestion, never conflated)
+- Every write the assistant can perform (creating a trip, adding a trip activity, undoing the
+  last action) is proposal-then-confirm: the model can never execute a write directly, only
+  produce a confirm button whose action is bound server-side to the caller's own profile
+- Answers are grounded, never fabricated: page-help text comes from a static per-page dictionary,
+  dismissed-explainer text is exactly what the user's own page rendered (captured client-side,
+  re-validated server-side), and every tool result the model sees is scanned and delimited before
+  being added to its context
+- Turns run asynchronously (enqueue-then-poll) on both the website and the external API - see
+  `docs/EXTERNAL_API.md`'s "AI Assistant" section for the wire protocol
 
 ## REST API
 
@@ -758,13 +1367,19 @@ for the boundary rationale:
   indicators, read receipts, or delete-for-self (only the sender's delete-for-everyone exists). A
   group whose creator leaves becomes permanently unmanaged (no ownership transfer). Extending any
   of these is a product decision, not a bug fix.
+- Group size (`SiteSettings.max_group_chat_members`) and how many groups one person may be in
+  (`max_group_chats_per_user`) are admin settings, enforced when a group is created or extended
+- The inbox is `services/messaging/inbox.py:InboxFeed`: one SQL `UNION` of the per-partner DM
+  aggregate and the annotated group memberships (`group_inbox_rows`), ordered by last activity and
+  sliced in the database, with only the slice built into conversation dicts. The sidebar lists 50
+  with "Show more"; the dropdown and the external API take their slice from it
 - Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji. The
   map composer dialog has two tabs - draw a new map, or choose one of your existing maps (search
   by title) - both attach the same way
 - Fallback (initial-letter) avatars use a deterministic per-person color that's guaranteed
   distinct from everyone else shown in the same list (e.g. a group chat's member dialog), so two
   people without photos never look identical there
-- Read receipts, online status indicator, typing indicator (visibility of each configurable per user)
+- Read receipts, online status indicator, typing indicator (visibility of each configurable per user). Online status is per-socket membership renewed on the socket heartbeat, so a socket whose worker died stops counting within 15 minutes
 - Per-message emoji reactions
 - Message search — within a single conversation or across all of them, with jump-to-message
   scroll and highlight
@@ -778,6 +1393,8 @@ for the boundary rationale:
 
 ## Real-time (WebSockets)
 
+- The Channels layer has its own Dragonfly (`channel-layer` in compose, `UL_CHANNEL_LAYER_URL`),
+  falling back to the shared store where it is not provisioned - D22
 - `ws/notifications/` — live notification push per logged-in user
 - `ws/messages/` — direct-message delivery, typing indicators, read/open tracking, and
   reaction updates for DMs and group chats (with an HTTP fallback for sending)
@@ -788,6 +1405,58 @@ for the boundary rationale:
 - `ws/spotguessr/session/<id>/`, `ws/trivia/session/<id>/`, `ws/consensus/session/<id>/` — one
   channel-layer group per game session. Every state change stays a durable HTTP POST that
   broadcasts over the socket; the only client-to-server frame these accept is a chat message
+
+## Concurrency, limits and locks (shared infrastructure)
+
+Reuse these rather than hand-rolling a counter, a lock or a check-then-insert.
+
+- **Counters** - `services/core/counters.py`: `hit(key, ttl, on_outage=..., sliding=...)`, `peek`,
+  `refund`, `clear`. One atomic Lua call on Dragonfly (`ResilientRedisCache.incr_window`), one
+  locked step in tests (`AtomicLocMemCache`). The caller picks `Outage.REFUSE` (raise; for limits
+  guarding an upstream's budget) or `Outage.LOCAL` (count in-process for the outage). The request
+  throttle, login/2FA lockout and the WebSocket frame/fanout/message budgets all use it.
+- **Store operations that do not guess** - `core/cache_backend.py`: `AtomicCacheOps`
+  (`incr_window`, `peek_int`, `decr_if_positive`, `delete_if_value`) raise
+  `CacheUnavailableError` (a `ValueError`) instead of answering as an empty cache.
+- **Inbound throttle** - `services/security/throttle.py`: `throttled(scope, Rate(limit, window,
+  on_outage=...), methods, identify=account_or_address)` wraps a URLconf entry; the wrapper exposes
+  `throttle_scope`/`throttle_rate`/`throttle_methods`/`throttle_identify` so tests can assert a route
+  is guarded.
+- **Overlap locks** - `services/core/locks.py`: `acquire_lock`/`release_lock`/`beat_lock`; release
+  is an atomic compare-and-delete, so an overrunning holder never drops its successor's lock.
+- **Live connections** - `services/core/connection_registry.py`: `ConnectionRegistry`, a sorted set
+  per identity that forgets unrenewed members. Backs the per-account socket allowance and DM
+  presence.
+- **Paid-API reservation** - `rate_limiter.api_call_slot(service, endpoint=...)`, for calls outside
+  a gateway session.
+- **Trip roster** - `services/trips/trip_seats.py`: `reserve_trip_seat` / `lock_trip_roster`, the
+  only way a trip's roster grows under `max_trip_members`.
+- **Guarded transitions** - pin-share accept/reject settle once (`apply_pin_share_response`);
+  `Friendship.accept()` locks both profiles; `apply_wiki_edit(..., base_revision_id=...)` refuses
+  an edit over a newer write (`WikiEditConflictError`, 409); `share_markup_map()` is the one
+  map-share path (one row per map and pair).
+- **Client: one request at a time** - `frontend/ts/shared/single-flight.ts`: `singleFlight(task)`;
+  calls made mid-flight share one trailing run, so an older response never lands last. Wraps the
+  map's full pin refresh (`window._refreshAllPins`). Hand the wrapper to other bundles rather than
+  wrapping twice: each bundle carries its own copy of the module.
+- **Client: background polling** - `frontend/ts/shared/poller.ts`: `startPoller(tick, {intervalMs,
+  element, immediate})`, also `window.ulStartPoller` for inline scripts. No overlapping ticks,
+  paused while the tab is hidden, stops once `element` leaves the document. A bare `setInterval`
+  poll fails `poller.contract.test.ts`.
+
+## Games: shared infrastructure
+
+- `services/core/session_access.SessionAccess[S]` - the one "is this profile an active participant
+  of this session" rule for every participant-session game, backed by each participant queryset's
+  `active()`. Controllers use `controllers.games.participant_session_or_404`, consumers
+  `_session_access()`, and `SessionChat.send` enforces it itself
+- `services/core/session_chat.SessionChat[S, M]` - session chat send/history
+- `services/games/glicko2.py` (rating math) and `models/abstract/ratings.py` (Glicko-2 defaults and
+  the `Glicko2RatingFields` display-scale mixin), shared by SpotGuessr and Trivia
+- **Friend invite picker** - `GET /games/friends/?exclude=<ids>` (`controllers.games.GameFriendPickerView`)
+  renders friends as `ul-checkbox` inputs named `invite_profile_ids`. Pages include
+  `partials/games/_friend_picker.html` (htmx-loaded); `frontend/ts/shared/friend-picker.ts` reads the
+  ticked ids, offers a retry on a failed load, and builds the mid-game "invite more" dialog
 
 ## Games: SpotGuessr
 
@@ -913,7 +1582,8 @@ Everything below the line is not yet built.
   literally nobody answered), the host can end an in-progress or not-yet-started game
   immediately at any time, and any participant can voluntarily leave (or decline an invite) -
   or be removed by the host from the pre-game lobby roster - at which point the host role
-  transfers automatically if the host themselves leaves
+  transfers automatically if the host themselves leaves. A departed player loses every route
+  back in (HTTP, WebSocket connect, chat send) until the host invites them again
 
 Not yet built: a moderation review UI for AI-rejected questions (the only way to inspect why a
 question was rejected today is direct DB access) - explicitly decided against, not just
@@ -937,7 +1607,7 @@ so a new answerable field is a registry entry rather than new game code.
   across sessions, and the `PENDING → APPLIED/DISMISSED` lifecycle the model defines is otherwise
   dead code (no controller, task, or admin path ever drives it past `PENDING`). An unsettled
   disagreement today just accumulates support forever rather than ever resolving. See
-  `docs/FEATURES_CODE_AUDIT.md`'s Consensus section for the open question this raises.
+  `docs/audits/FEATURES_CODE_AUDIT.md`'s Consensus section for the open question this raises.
 - **Trust, tracked but not yet gating the write.** `ConsensusProfile` carries a real Beta-Bernoulli
   posterior (`trust_alpha`/`trust_beta`) updated from trust-check rounds — rounds whose answer is
   already known — starting from a weakly-informative prior so a new player is neither trusted nor
@@ -949,7 +1619,7 @@ so a new answerable field is a registry entry rather than new game code.
   same immediacy as a maximally-trusted veteran's. Points and levels are Consensus-only and
   deliberately not shared with SpotGuessr/Trivia's Glicko-2 ratings, and are awarded for out-of-game
   manual wiki edits too (`models/wiki_edit/signals.py`)
-- **Session flow** under `games/consensus/`: home, friends, start, lobby, invite, join, begin,
+- **Session flow** under `games/consensus/`: home, start, lobby, invite, join, begin,
   round, answer, vote, end — with `ws/consensus/session/<id>/` pushing round and resolution
   updates, and a stall sweep (`sweep_stalled_consensus_sessions`) reclaiming abandoned sessions
 - Answers feed the same fact-confidence machinery documented under the wiki sections

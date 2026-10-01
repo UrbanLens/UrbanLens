@@ -1,17 +1,15 @@
 /**
  * Tests for the projective transform behind georeferenced map image overlays.
- *
- * The homography is the whole feature: it is what lets a user skew a scanned
- * Sanborn sheet onto real streets rather than only scaling an axis-aligned
- * box. These check it against cases whose answer is known independently -
- * identity, translation, scale - and then verify the general four-corner case
- * by pushing the source corners back through the matrix and confirming they
- * land on the destinations the user dragged them to.
  */
 
 import { describe, expect, it } from "bun:test";
 
-import { matrix3dForCorners, overlaySubmitEnabled } from "./map-image-overlays";
+import { followRenamedOverlayImage, matrix3dForCorners, OVERLAY_PANE_ALIGNING_ZINDEX, OVERLAY_PANE_IDLE_ZINDEX, overlaySubmitEnabled, renderPickerThumb } from "./map-image-overlays";
+import { settleProcessingThumb } from "./photo-processing";
+
+// map-annotations.ts's boundaryPane/markupPane z-indexes this must clear while an overlay is being aligned.
+const BOUNDARY_PANE_EDITING_ZINDEX = 560;
+const MARKUP_PANE_ZINDEX = 550;
 
 /** Parse a `matrix3d(...)` string back into its 16 column-major numbers. */
 function parseMatrix(css: string): number[] {
@@ -68,9 +66,7 @@ describe("matrix3dForCorners", () => {
     });
 
     it("places every corner where it was dragged, for an arbitrary quadrilateral", () => {
-        // Deliberately not a parallelogram: a scanned sheet dragged onto real
-        // streets is trapezoidal, which is exactly what an affine-only
-        // transform cannot represent.
+        // Deliberately not a parallelogram: a scanned sheet dragged onto real streets is trapezoidal, which is exactly what an affine-only.
         const targets = [
             { x: 10, y: 20 },
             { x: 240, y: 5 },
@@ -95,9 +91,7 @@ describe("matrix3dForCorners", () => {
     });
 
     it("returns null for a degenerate shape instead of a NaN matrix", () => {
-        // Three corners collapsed onto one point: dragging into this state
-        // must leave the previous transform alone rather than making the
-        // overlay vanish with no handle left to drag back.
+        // Three corners collapsed onto one point: dragging into this state must leave the previous transform alone rather than making.
         const css = matrix3dForCorners(
             [
                 { x: 0, y: 0 },
@@ -146,5 +140,93 @@ describe("overlaySubmitEnabled", () => {
 
     it("is enabled once an existing photo is picked", () => {
         expect(overlaySubmitEnabled({ hasFile: false, urlValue: "", imageIdValue: "42" })).toBe(true);
+    });
+});
+
+describe("overlay pane z-index", () => {
+    it("sits below map-annotations.ts's boundary/markup panes while idle", () => {
+        // Idle overlays are not the bug being guarded against; this just documents
+        // that the idle value is unchanged from Leaflet's own default pane.
+        expect(Number(OVERLAY_PANE_IDLE_ZINDEX)).toBe(400);
+    });
+
+    it("clears every boundary/markup pane z-index while an overlay is aligning", () => {
+        // Regression guard for the reported bug: an overlay's handles were unclickable while dragging because a boundary polygon's pane sat.
+        const raised = Number(OVERLAY_PANE_ALIGNING_ZINDEX);
+        expect(raised).toBeGreaterThan(BOUNDARY_PANE_EDITING_ZINDEX);
+        expect(raised).toBeGreaterThan(MARKUP_PANE_ZINDEX);
+    });
+});
+
+describe("overlay media picker thumb", () => {
+    const READY = { id: 5, url: "https://m.test/media/pin_images/a/p.webp", caption: "Plan", processing: false, processing_failed: false };
+    const PENDING = { id: 6, url: null, caption: "Fresh", processing: true, processing_failed: false };
+
+    it("a ready photo is an image that can be chosen", () => {
+        const chosen: number[] = [];
+        const button = renderPickerThumb(READY, "", (id) => chosen.push(id));
+        expect(button.querySelector("img")?.getAttribute("src")).toBe(READY.url);
+        button.click();
+        expect(chosen).toEqual([5]);
+    });
+
+    it("a photo still being processed is a placeholder that cannot be chosen yet", () => {
+        const chosen: number[] = [];
+        const button = renderPickerThumb(PENDING, "", (id) => chosen.push(id));
+        document.body.append(button);
+        expect(button.querySelector("img")).toBeNull();
+        expect(button.querySelector(".media-processing")).not.toBeNull();
+        expect(button.dataset.processing).toBe("pending");
+        expect(button.dataset.id).toBe("6");
+        button.click();
+        expect(chosen).toEqual([]);
+
+        settleProcessingThumb(button, { ...PENDING, processing: false, url: "https://m.test/media/pin_images/b/f.webp" }, "", "full");
+        button.click();
+
+        expect(button.querySelector("img")?.getAttribute("src")).toBe("https://m.test/media/pin_images/b/f.webp");
+        expect(chosen).toEqual([6]);
+        button.remove();
+    });
+
+    it("marks the current selection", () => {
+        expect(renderPickerThumb(READY, "5", () => undefined).classList.contains("is-selected")).toBe(true);
+    });
+});
+
+describe("an overlay whose photo was renamed", () => {
+    const RAW = "https://m.test/media/pin_images/r/upload.jpg";
+    const LINK = "https://m.test/media/image/0b0c/";
+
+    it("loads the row's stable link once the raw upload is gone", () => {
+        const img = document.createElement("img");
+        img.src = RAW;
+        followRenamedOverlayImage(img, LINK);
+
+        img.dispatchEvent(new Event("error"));
+
+        expect(img.src).toBe(LINK);
+    });
+
+    it("gives up after one retry rather than looping on a link that also fails", () => {
+        const img = document.createElement("img");
+        img.src = RAW;
+        followRenamedOverlayImage(img, LINK);
+        img.dispatchEvent(new Event("error"));
+        img.src = RAW;
+
+        img.dispatchEvent(new Event("error"));
+
+        expect(img.src).toBe(RAW);
+    });
+
+    it("leaves an image that loads alone", () => {
+        const img = document.createElement("img");
+        img.src = RAW;
+        followRenamedOverlayImage(img, LINK);
+
+        img.dispatchEvent(new Event("load"));
+
+        expect(img.src).toBe(RAW);
     });
 });

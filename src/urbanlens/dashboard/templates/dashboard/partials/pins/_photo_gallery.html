@@ -1,35 +1,25 @@
 {% load static %}
-{% comment %}
-Photo gallery panel - used on pin detail, location wiki, and safety check-in pages.
-
-Context:
-  images       - filtered Image queryset visible to the current viewer
-  profile      - current viewer's Profile
-  context_type - "pin", "wiki", or "safety"
-  pin          - Pin instance (when context_type == "pin")
-  location     - Location instance (when context_type == "wiki")
-  checkin      - SafetyCheckin instance (when context_type == "safety")
-{% endcomment %}
+{% comment %}Photo gallery panel - used on pin detail, location wiki, and safety check-in pages.{% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
+     data-processing-url="{% url 'vault.photos.processing' %}"
+     data-gallery-context="{{ context_type }}"
+     data-gallery-url="{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}"
      data-collapse-scope="{{ context_type }}" data-collapse-section="gallery"
-     {% if context_type == "pin" %}hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
+     {% comment %}Both urls, and the same one twice: the pin endpoint answers delete and send-to-wiki alike, so splitting them costs nothing here.{% endcomment %}
+     {% if context_type == "pin" %}data-gallery-bulk-url="{% url 'pin.gallery.bulk' pin.slug %}" data-gallery-wiki-url="{% url 'pin.gallery.bulk' pin.slug %}" hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML" hx-select="#photo-gallery" hx-disinherit="hx-select"{% endif %}>
   <div class="card-header">
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
     {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
     {% if context_type == "pin" %}
-    {# .card-header-actions is the shared multi-action wrapper (see panel-header-grid #}
-    {# mixin) - without it, these buttons have no grid-area of their own and fall to #}
-    {# CSS Grid auto-placement, landing on an implicit second row below the title. #}
+    {# .card-header-actions is the shared multi-action wrapper. #}
     <div class="card-header-actions">
       {% if profile.external_apis_enabled %}
-      <button type="button" class="gallery-import-photos-btn" title="Import Photos"
-              onclick="document.getElementById('pin-import-photos-dialog').showModal(); var t = document.querySelector('#pin-import-photos-dialog .import-photos-tab'); if (t) t.click();">
+      <button type="button" class="gallery-import-photos-btn" title="Import Photos" data-pin-action="import-photos">
         <i class="material-symbols-outlined">add_photo_alternate</i>
       </button>
       {% endif %}
-      <button type="button" class="gallery-import-photos-btn" id="photos-select-btn" title="Select media"
-              onclick="window.photosToggleSelectMode()">
+      <button type="button" class="gallery-import-photos-btn" id="photos-select-btn" title="Select media" data-gallery-action="select-mode">
         <i class="material-symbols-outlined">checklist</i>
       </button>
     </div>
@@ -38,7 +28,7 @@ Context:
       <button type="button" class="gallery-import-photos-btn" title="Import a Flickr Album"
               hx-get="{% url 'location.wiki.flickr_album.dialog' location.slug %}"
               hx-target="#flickr-album-dialog" hx-swap="innerHTML"
-              onclick="document.getElementById('flickr-album-dialog').showModal();">
+              data-dialog-open="flickr-album-dialog">
         <i class="material-symbols-outlined">photo_camera</i>
       </button>
     </div>
@@ -46,35 +36,46 @@ Context:
   </div>
 
   {# Hidden file input - triggered by clicking the empty state or the add-photos item #}
-  <input type="file" id="gallery-file-input" accept="image/*" multiple hidden
-         onchange="galleryHandleFiles(this.files)">
+  <input type="file" id="gallery-file-input" accept="image/*" multiple hidden>
 
   {# -- Gallery grid ---------------------------------------------------------- #}
   <ul class="gallery-grid" id="gallery-grid">
     {% for img in images %}
     <li class="gallery-item" id="gallery-item-{{ img.pk }}"
         data-id="{{ img.pk }}"
-        data-url="{{ img.image.url }}"
+        data-uuid="{{ img.uuid }}"
+        data-url="{% if not img.pending_scan %}{{ img.display_url }}{% endif %}"
+        data-thumb-url="{% if not img.pending_scan %}{{ img.thumb_url }}{% endif %}"
+        {% if img.pending_scan %}data-processing="{% if img.processing_failed %}failed{% else %}pending{% endif %}"{% endif %}
         data-lat="{{ img.latitude|default:'' }}"
         data-lng="{{ img.longitude|default:'' }}"
         data-mine="{% if img.profile == profile %}true{% else %}false{% endif %}"
         data-author="{{ img.author|default:'' }}"
         data-copyright="{{ img.copyright|default:'' }}"
         data-source-url="{{ img.source_url|default:'' }}"
+        data-copied-from-label="{{ img.copied_from_label|default:'' }}"
         data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
         data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
-        data-uploaded="{% if img.source == 'upload' %}true{% else %}false{% endif %}"
-        onmouseenter="galleryHover({{ img.pk }}, true)"
-        onmouseleave="galleryHover({{ img.pk }}, false)">
-      {% if img.profile == profile %}
-      <button type="button" class="gallery-select-check" title="Select photo" onclick="window.photosToggleSelect(event, this)" hidden>
+        data-uploaded="{% if img.is_own_contribution %}true{% else %}false{% endif %}"
+        data-on-pin="{% if img.profile == profile and img.pin_id %}true{% else %}false{% endif %}"
+        data-map-hidden="{% if img.map_hidden %}true{% else %}false{% endif %}">
+      {% if img.profile == profile %}{% if not include_children or context_type != "pin" or img.pin_id == pin.id %}
+      <button type="button" class="gallery-select-check" title="Select photo" data-gallery-action="select" hidden>
         <i class="material-symbols-outlined">check_circle</i>
       </button>
+      {% endif %}{% endif %}
+      {% if img.pending_scan %}
+      <button type="button" class="gallery-thumb-btn" disabled
+              aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="gallery-thumb gallery-thumb--placeholder" failed=img.processing_failed %}
+      {% else %}
+      <button type="button" class="gallery-thumb-btn" data-gallery-action="open">
+        <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
       {% endif %}
-      <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
-        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
-        {% if include_children and img.pin_id != pin.id %}
+        {% if include_children and context_type == "pin" and img.pin_id != pin.id %}
         <span class="gallery-child-ribbon" title="Photo from the child pin {{ img.pin.effective_name }}">{{ img.pin.effective_name }}</span>
+        {% elif include_children and context_type == "wiki" and img.wiki_id != wiki.id %}
+        <span class="gallery-child-ribbon" title="Photo from the child wiki {{ img.wiki.name }}">{{ img.wiki.name }}</span>
         {% endif %}
         {% if img.latitude and img.longitude %}
         <span class="gallery-has-coords" title="Has GPS coordinates">
@@ -83,22 +84,26 @@ Context:
         {% endif %}
       </button>
       {% if img.profile == profile %}
-      {% if include_children and img.pin_id != pin.id %}
+      {% if include_children and context_type == "pin" and img.pin_id != pin.id %}
       {# Child-pin photos are managed from their own pin's page. #}
       <a class="gallery-delete-btn gallery-open-child-btn" title="Open {{ img.pin.effective_name }}"
          href="{% url 'pin.details' img.pin.slug|default:img.pin.uuid %}">
         <i class="material-symbols-outlined">open_in_new</i>
       </a>
+      {% elif include_children and context_type == "wiki" and img.wiki_id != wiki.id %}
+      <a class="gallery-delete-btn gallery-open-child-btn" title="Open {{ img.wiki.name }}"
+         href="{% url 'location.wiki' img.wiki.location.slug %}">
+        <i class="material-symbols-outlined">open_in_new</i>
+      </a>
       {% else %}
-      <button type="button" class="gallery-delete-btn" title="Delete photo"
-              onclick="galleryDelete({{ img.pk }})">
+      <button type="button" class="gallery-delete-btn" title="Delete photo" data-gallery-action="delete">
         <i class="material-symbols-outlined">delete</i>
       </button>
       {% endif %}
       <button type="button" class="gallery-label-btn" title="Media labels (helps you find this in search)"
               hx-get="{% url 'label.image' image_uuid=img.uuid %}"
               hx-target="#photo-label-panel-slot" hx-swap="innerHTML"
-              hx-on::after-request="if(event.detail.successful){document.getElementById('media-label-dialog-{{ img.uuid }}').showModal()}">
+              data-ul-on-success="show-modal:media-label-dialog-{{ img.uuid }}">
         <i class="material-symbols-outlined">sell</i>
       </button>
       {% endif %}
@@ -135,31 +140,19 @@ Context:
 <script src="{% static 'js/bulk-toolbar.js' %}"></script>
 {% endif %}
 
-{# -- Lightbox (shared component - same as Memories > Photos and the profile page) -- #}
-{% if context_type == "pin" %}
-{% url "pin.cover_photo" pin.slug as cover_photo_url %}
-{% url "pin.media.relevance" pin.slug as pin_media_relevance_url %}
-{# The pin hero has no display preference gating it - it's always live-updatable. #}
-{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url pin_media_relevance_url=pin_media_relevance_url current_cover_image_id=pin.cover_photo_id cover_hero_key="pin" cover_hero_enabled=True %}
-{% elif context_type == "wiki" %}
-{% url "location.wiki.cover_photo" location.slug as cover_photo_url %}
-{# The wiki hero only ever renders when the viewer's show_wiki_cover_photos preference is on - respect that for the live-created version too. #}
-{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url current_cover_image_id=wiki.cover_photo_id cover_hero_key="wiki" cover_hero_enabled=profile.show_wiki_cover_photos %}
-{% else %}
+{# -- Lightbox (shared component - same as Vault > Photos and the profile page) -- #}
+{# The pin and wiki pages include the lightbox themselves: a pin gallery refresh swaps in this whole response, and each copy would stack. #}
+{% if context_type != "pin" and context_type != "wiki" %}
 {% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=False %}
 {% endif %}
 
 {% if context_type == "wiki" %}
-{# -- Import a public Flickr album by URL - the pin detail page's own copy  #}
-{# of this dialog lives in location/index.html instead, alongside its      #}
-{# "Import Photos" button at the Media-section level. #}
+{# Import a public Flickr album by URL - the Private Pin page's own copy of this dialog lives in location/index.html instead, alongside. #}
 <dialog id="flickr-album-dialog" class="ul-dialog" aria-label="Flickr album"></dialog>
 {% endif %}
 
 {# -- Full-page drop overlay (shown when user drags files onto the page) ------- #}
-<div id="gallery-drop-overlay" class="gallery-drop-overlay" hidden
-     ondragover="event.preventDefault()"
-     ondrop="_galleryOverlayDrop(event)">
+<div id="gallery-drop-overlay" class="gallery-drop-overlay" hidden>
   <div class="gallery-drop-overlay-inner">
     <i class="material-symbols-outlined">cloud_upload</i>
     <p>Drop photos to upload</p>
@@ -169,399 +162,4 @@ Context:
   </div>
 </div>
 
-<script>
-(function () {
-  // -- State ------------------------------------------------------------------
-  var UPLOAD_URL = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
-  var REPOSITION_BASE = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
-  var CSRF_TOKEN = '{{ csrf_token }}';
-  var CONTEXT_TYPE = '{{ context_type }}';
-
-  // Build an ordered list of image ids for lightbox navigation.
-  var _items = Array.from(document.querySelectorAll('.gallery-item')).map(function (el) {
-    return {
-      id: parseInt(el.dataset.id, 10),
-      url: el.dataset.url,
-      lat: el.dataset.lat ? parseFloat(el.dataset.lat) : null,
-      lng: el.dataset.lng ? parseFloat(el.dataset.lng) : null,
-      mine: el.dataset.mine === 'true',
-      author: el.dataset.author || '',
-      copyright: el.dataset.copyright || '',
-      sourceUrl: el.dataset.sourceUrl || '',
-      takenAt: el.dataset.takenAt || '',
-    };
-  });
-
-  // -- Page-level drag-to-upload detection ------------------------------------
-  // Depth counting handles enter/leave bubbling from child elements.
-  var _dragDepth = 0;
-  var _overlay   = document.getElementById('gallery-drop-overlay');
-
-  // On the pin detail page, this partial is nested inside the "Mine" media
-  // sub-tab (see location/index.html's #pin-gallery-panel, hidden whenever
-  // "All" is the active view) - a hidden ancestor hides this overlay
-  // regardless of its own `hidden` state, so setting `_overlay.hidden = false`
-  // below had no visible effect unless "Mine" already happened to be
-  // selected. Re-parenting to <body> escapes that ancestor entirely; harmless
-  // on the standalone wiki/safety-checkin pages that render this partial
-  // directly under <body> anyway, since this is then a same-parent no-op.
-  // Drops any pre-existing body-level overlay first in case this script runs
-  // more than once for the same panel (e.g. an htmx reload of the "Mine"
-  // panel), so a stale duplicate never lingers with the same id.
-  if (_overlay && _overlay.parentElement !== document.body) {
-    var _stalePageOverlay = document.body.querySelector('#gallery-drop-overlay');
-    if (_stalePageOverlay && _stalePageOverlay !== _overlay) _stalePageOverlay.remove();
-    document.body.appendChild(_overlay);
-  }
-
-  // Drags that originate inside the page (photo thumbnails, panel items, etc.)
-  // must never open the drop-to-upload overlay - browsers attach the image file
-  // to such drags, so treating them as uploads would re-upload an existing
-  // photo. OS file drags never fire dragstart inside the page, which is what
-  // distinguishes them.
-  var _internalDrag = false;
-  document.addEventListener('dragstart', function () { _internalDrag = true; });
-  document.addEventListener('dragend', function () { _internalDrag = false; });
-
-  function _isFilesDrag(e) {
-    return !_internalDrag && e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
-  }
-
-  document.addEventListener('dragenter', function (e) {
-    if (!_isFilesDrag(e)) return;
-    _dragDepth++;
-    if (_overlay) _overlay.hidden = false;
-  });
-
-  document.addEventListener('dragleave', function (e) {
-    if (!_isFilesDrag(e) && _dragDepth === 0) return;
-    _dragDepth = Math.max(0, _dragDepth - 1);
-    if (_dragDepth === 0 && _overlay) _overlay.hidden = true;
-  });
-
-  // Drop anywhere outside the overlay hides it without uploading
-  document.addEventListener('drop', function (e) {
-    _dragDepth = 0;
-    _internalDrag = false;
-    if (_overlay) _overlay.hidden = true;
-  });
-
-  // ESC closes the overlay
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && _overlay && !_overlay.hidden) {
-      _dragDepth = 0;
-      _overlay.hidden = true;
-    }
-  });
-
-  // Drop ON the overlay uploads the files (never for an in-page drag - the
-  // overlay shouldn't be visible then, but guard against races anyway).
-  window._galleryOverlayDrop = function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-    _dragDepth = 0;
-    if (_overlay) _overlay.hidden = true;
-    if (_internalDrag) { _internalDrag = false; return; }
-    galleryHandleFiles(e.dataTransfer.files);
-  };
-
-  // -- Upload -----------------------------------------------------------------
-  window.galleryHandleFiles = function (files) {
-    if (!files || !files.length) return;
-    var progress = document.getElementById('gallery-upload-progress');
-    var bar = document.getElementById('gallery-upload-bar');
-    if (progress) progress.hidden = false;
-    var total = files.length;
-    var done = 0;
-
-    function _finishOne() {
-      done++;
-      if (bar) bar.style.width = Math.round(done / total * 100) + '%';
-      if (done === total) {
-        setTimeout(function () {
-          if (progress) progress.hidden = true;
-          if (bar) bar.style.width = '0';
-        }, 800);
-      }
-    }
-
-    Array.from(files).forEach(function (file) {
-      var fd = new FormData();
-      fd.append('image', file);
-      fd.append('csrfmiddlewaretoken', CSRF_TOKEN);
-
-      fetch(UPLOAD_URL, { method: 'POST', body: fd })
-        .then(function (r) {
-          // Surface server-side rejections (e.g. 409 duplicate photo) as errors.
-          return r.json().catch(function () { return {}; }).then(function (data) {
-            if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
-            return data;
-          });
-        })
-        .then(function (img) {
-          _finishOne();
-          _addItemToGrid(img);
-          if (window._galleryAddMarker) window._galleryAddMarker(img);
-          var empty = document.getElementById('gallery-empty');
-          if (empty) empty.remove();
-        })
-        .catch(function (err) {
-          _finishOne();
-          if (window.toastr) toastr.error('Upload failed: ' + (err.message || 'unknown error'));
-        });
-    });
-  };
-
-  // Upload/delete mutate the grid directly (no htmx refetch, see comment above)
-  // but previously left the header's photo-count badge showing its value as of
-  // last page load - keep it in sync with the same direct DOM edit.
-  function _updateGalleryCountLabel(delta) {
-    var header = document.querySelector('#photo-gallery .card-header');
-    if (!header) return;
-    var badge = header.querySelector('.badge');
-    var next = Math.max(0, (badge ? Number.parseInt(badge.textContent, 10) || 0 : 0) + delta);
-    if (next === 0) {
-      if (badge) badge.remove();
-      return;
-    }
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.className = 'badge';
-      header.appendChild(badge);
-    }
-    badge.textContent = next;
-  }
-
-  function _addItemToGrid(img) {
-    var grid = document.getElementById('gallery-grid');
-    var li = document.createElement('li');
-    li.className = 'gallery-item';
-    li.id = 'gallery-item-' + img.id;
-    li.dataset.id = img.id;
-    li.dataset.url = img.url;
-    li.dataset.lat = img.latitude !== null ? img.latitude : '';
-    li.dataset.lng = img.longitude !== null ? img.longitude : '';
-    li.dataset.mine = 'true';
-    li.dataset.author = img.author || '';
-    li.dataset.copyright = img.copyright || '';
-    li.dataset.sourceUrl = img.source_url || '';
-    li.dataset.takenAt = img.taken_at || '';
-    li.dataset.onWiki = img.on_wiki ? 'true' : 'false';
-    li.dataset.uploaded = img.uploaded === false ? 'false' : 'true';
-    li.addEventListener('mouseenter', function () { galleryHover(img.id, true); });
-    li.addEventListener('mouseleave', function () { galleryHover(img.id, false); });
-
-    var coordIcon = (img.latitude !== null && img.longitude !== null)
-      ? '<span class="gallery-has-coords" title="Has GPS coordinates"><i class="material-symbols-outlined">place</i></span>'
-      : '';
-    li.innerHTML =
-      '<button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox(' + img.id + ')">' +
-      '<img src="' + img.url + '" alt="" class="gallery-thumb">' + coordIcon + '</button>' +
-      '<button type="button" class="gallery-delete-btn" title="Delete photo" onclick="galleryDelete(' + img.id + ')">' +
-      '<i class="material-symbols-outlined">delete</i></button>';
-
-    // Insert before the add-photos button if it exists; append otherwise.
-    var addBtn = document.getElementById('gallery-add-btn');
-    if (addBtn) {
-      grid.insertBefore(li, addBtn);
-    } else {
-      grid.appendChild(li);
-      // First upload: swap the empty state for the add-photos button.
-      var addLi = document.createElement('li');
-      addLi.className = 'gallery-add-item';
-      addLi.id = 'gallery-add-btn';
-      addLi.innerHTML = '<label for="gallery-file-input" class="gallery-add-label" title="Add more photos"><i class="material-symbols-outlined">add_photo_alternate</i></label>';
-      grid.appendChild(addLi);
-    }
-
-    // Keep internal list in sync.
-    _items.push({
-      id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true,
-      author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
-    });
-    _updateGalleryCountLabel(1);
-  }
-
-  // -- Delete -----------------------------------------------------------------
-  window.galleryDelete = function (imgId) {
-    var tile = document.getElementById('gallery-item-' + imgId);
-    var onWiki = CONTEXT_TYPE === 'pin' && tile && tile.dataset.onWiki === 'true';
-    var uploaded = tile && tile.dataset.uploaded === 'true';
-    var withdraw = false;
-
-    if (!onWiki) {
-      if (!confirm('Delete this photo?\n\nThis cannot be undone - the file is removed permanently.')) return;
-    } else if (!uploaded) {
-      // Fetched from a URL: it was a public resource online before we saw it,
-      // so there is nothing here to withdraw and nothing to ask about. Taking
-      // it off the wiki is done on the wiki.
-      if (!confirm('Remove this photo from your pin?\n\nIt stays on the community wiki - remove it there if you want it gone from the wiki too.')) return;
-    } else {
-      if (!confirm('Remove this photo from your pin?\n\nYou also contributed it to the community wiki. It stays there unless you say otherwise on the next prompt.')) return;
-      // Cancel keeps it on the wiki. Silence is not consent to withdraw a
-      // contribution, so the safe answer is the one that needs no action.
-      withdraw = confirm('Also remove it from the community wiki?\n\nOK removes it from the wiki as well, permanently.\nCancel leaves it on the wiki.');
-    }
-
-    fetch(REPOSITION_BASE + imgId + '/' + (withdraw ? '?from_wiki=1' : ''), {
-      method: 'DELETE',
-      headers: { 'X-CSRFToken': CSRF_TOKEN },
-    }).then(function (r) {
-      if (r.status !== 204) {
-        // Silence here is the worst possible answer: the user has just
-        // confirmed a "this cannot be undone" prompt, and a tile that stays
-        // put with no message reads as a delete that quietly failed *or* one
-        // that quietly worked - they cannot tell which.
-        if (window.toastr) toastr.error('Could not delete that photo.');
-        return;
-      }
-      var el = document.getElementById('gallery-item-' + imgId);
-      if (el) el.remove();
-      _items = _items.filter(function (i) { return i.id !== imgId; });
-      if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
-      _updateGalleryCountLabel(-1);
-      if (window.toastr) toastr.success(onWiki && !withdraw ? 'Removed from this pin. Still on the wiki.' : 'Photo deleted.');
-    }).catch(function () {
-      if (window.toastr) toastr.error('Could not delete that photo.');
-    });
-  };
-
-  // -- Lightbox -----------------------------------------------------------------
-  // Opens the shared lightbox (dashboard/partials/_photo_lightbox.html,
-  // included below) with this grid's own items. `fallback` ({url, caption})
-  // covers photos not on the currently rendered (paginated) gallery page -
-  // e.g. opened from a map thumbnail marker.
-  window.galleryOpenLightbox = function (imgId, fallback) {
-    var list = _items.map(function (i) {
-      return {
-        url: i.url, caption: '', author: i.author, copyright: i.copyright,
-        sourceUrl: i.sourceUrl, sourceName: '', takenAt: i.takenAt,
-        imageId: i.id, canRelevance: false, relevant: null,
-        latitude: i.lat, longitude: i.lng,
-      };
-    });
-    var idx = _items.findIndex(function (i) { return i.id === imgId; });
-    if (idx < 0 && fallback && fallback.url) {
-      list = [{ url: fallback.url, caption: fallback.caption || '', author: '', copyright: '', sourceUrl: '', sourceName: '', takenAt: '', imageId: null, canRelevance: false, relevant: null }];
-      idx = 0;
-    }
-    window.galleryOpenLightboxItem(list, Math.max(idx, 0));
-  };
-
-  // -- Map hover sync ---------------------------------------------------------
-  window.galleryHover = function (imgId, on) {
-    if (window._galleryHighlightMarker) window._galleryHighlightMarker(imgId, on);
-  };
-
-  // -- Reposition callback (called from map panel when user finishes dragging) --
-  // `onError`, if given, is invoked with no args when the server rejects the
-  // move - the caller uses it to snap the marker back to its prior position.
-  window.galleryRepositionImage = function (imgId, lat, lng, onError) {
-    fetch(REPOSITION_BASE + imgId + '/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify({ latitude: lat, longitude: lng }),
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (data) {
-        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
-        return data;
-      });
-    }).then(function (data) {
-      var el = document.getElementById('gallery-item-' + imgId);
-      if (el) {
-        el.dataset.lat = data.latitude;
-        el.dataset.lng = data.longitude;
-        var coordIcon = el.querySelector('.gallery-has-coords');
-        if (!coordIcon) {
-          var btn = el.querySelector('.gallery-thumb-btn');
-          if (btn) {
-            var span = document.createElement('span');
-            span.className = 'gallery-has-coords';
-            span.title = 'Has GPS coordinates';
-            span.innerHTML = '<i class="material-symbols-outlined">place</i>';
-            btn.appendChild(span);
-          }
-        }
-      }
-      var item = _items.find(function (i) { return i.id === imgId; });
-      if (item) { item.lat = data.latitude; item.lng = data.longitude; }
-    }).catch(function (err) {
-      if (window.toastr) toastr.error('Failed to reposition photo: ' + (err.message || 'unknown error'));
-      if (typeof onError === 'function') onError();
-    });
-  };
-
-  // -- Multi-select mode (own photos only: delete / send to wiki) -------------
-  var BULK_URL = '{% if context_type == "pin" %}{% url "pin.gallery.bulk" pin.slug %}{% endif %}';
-  var photosSelecting = false;
-  var photosSelected = new Set();
-
-  window.photosToggleSelectMode = function () {
-    photosSelecting = !photosSelecting;
-    photosSelected.clear();
-    var gallery = document.getElementById('photo-gallery');
-    var btn = document.getElementById('photos-select-btn');
-    if (gallery) gallery.classList.toggle('photo-gallery--selecting', photosSelecting);
-    if (btn) btn.classList.toggle('is-active', photosSelecting);
-    document.querySelectorAll('#gallery-grid .gallery-item').forEach(function (item) { item.classList.remove('is-selected'); });
-    if (window.ulBulkToolbar) window.ulBulkToolbar.clear('photos');
-  };
-
-  window.photosToggleSelect = function (evt, checkEl) {
-    evt.stopPropagation();
-    var item = checkEl.closest('.gallery-item');
-    if (!item) return;
-    var id = parseInt(item.dataset.id, 10);
-    var nowSelected = !item.classList.contains('is-selected');
-    item.classList.toggle('is-selected', nowSelected);
-    if (nowSelected) photosSelected.add(id); else photosSelected.delete(id);
-    if (window.ulBulkToolbar) {
-      window.ulBulkToolbar.sync('photos', photosSelected.size, {
-        delete: function () { window.photosBulkDelete(); },
-        wiki: function () { window.photosBulkSendToWiki(); },
-        deselect: function () { window.photosToggleSelectMode(); },
-      });
-    }
-  };
-
-  window.photosBulkDelete = function () {
-    var ids = Array.from(photosSelected);
-    if (!ids.length) return;
-    if (!confirm('Delete ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) return;
-    fetch(BULK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify({ action: 'delete', image_ids: ids }),
-    }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function () {
-      ids.forEach(function (id) {
-        var el = document.getElementById('gallery-item-' + id);
-        if (el) el.remove();
-      });
-      _items = _items.filter(function (i) { return ids.indexOf(i.id) === -1; });
-      if (window.toastr) toastr.success('Deleted ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '.');
-      window.photosToggleSelectMode();
-    }).catch(function () { if (window.toastr) toastr.error('Failed to delete photos.'); });
-  };
-
-  window.photosBulkSendToWiki = function () {
-    var ids = Array.from(photosSelected);
-    if (!ids.length) return;
-    if (!confirm('Send ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + ' to the community wiki for this location? This makes them visible to everyone.')) return;
-    fetch(BULK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify({ action: 'send_to_wiki', image_ids: ids }),
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (data) {
-        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
-        return data;
-      });
-    }).then(function () {
-      if (window.toastr) toastr.success('Sent ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + ' to the wiki.');
-      window.photosToggleSelectMode();
-    }).catch(function (err) {
-      if (window.toastr) toastr.error(err.message || 'Failed to send photos to the wiki.');
-    });
-  };
-})();
-</script>
+<script type="module" src="{% static 'dashboard/js/photo-gallery.js' %}"></script>

@@ -1,19 +1,4 @@
-"""Tests for wiki_access.location_visible_to's "same place" matching.
-
-Originally, a profile could only see a wiki by having a pin at the EXACT SAME
-Location row the wiki pointed to. Nearly-identical coordinates routinely
-resolve to distinct Location rows, so a profile whose pin genuinely sat on the
-same building was denied access to that place's wiki entirely.
-
-The fix used to be expressed as containment against the wiki location's own
-copy of the boundary polygon ("boundary mates"). Since the Place model landed,
-it is expressed directly: two coordinates that resolve onto the same
-real-world thing share its access domain, so no polygon comparison happens at
-read time at all. These tests keep the original scenarios and assert the same
-outcomes through the new mechanism - including the anti-gaming invariants,
-which are now structural (the access predicate does not read the ``Boundary``
-table at all).
-"""
+"""Tests for wiki_access.location_visible_to's "same place" matching."""
 
 from __future__ import annotations
 
@@ -92,7 +77,9 @@ class LocationVisibleToSamePlaceTests(TestCase):
         far_location = Location.objects.create(latitude=40.5, longitude=-74.5)
         resolution.resolve_location_place(far_location)
         far_pin = baker.make(Pin, profile=self.profile, location=far_location)
-        Boundary.objects.create(location=self.wiki_location, pin=far_pin, profile=self.profile, generated_polygon=_square(-74.0, 40.0, 1.0))
+        Boundary.objects.create(
+            location=self.wiki_location, pin=far_pin, profile=self.profile, generated_polygon=_square(-74.0, 40.0, 1.0)
+        )
 
         self.assertFalse(location_visible_to(self.wiki_location, self.profile))
 
@@ -110,7 +97,12 @@ class LocationVisibleToSamePlaceTests(TestCase):
     def test_building_boundary_type_still_resolves_for_display(self) -> None:
         """Unrelated to access, but the two used to share one mechanism."""
         building = make_place(PlaceKind.BUILDING, _square(-74.001, 40.001, 0.0002), parent=self.parcel)
-        self.assertEqual(Boundary.objects.official_polygons_by_location_id([self.wiki_location.pk], BoundaryType.PROPERTY)[self.wiki_location.pk], self.parcel.geometry)
+        self.assertEqual(
+            Boundary.objects.official_polygons_by_location_id([self.wiki_location.pk], BoundaryType.PROPERTY)[
+                self.wiki_location.pk
+            ],
+            self.parcel.geometry,
+        )
         self.assertIsNotNone(building.geometry)
 
     def test_wiki_page_reachable_via_same_place_pin(self) -> None:

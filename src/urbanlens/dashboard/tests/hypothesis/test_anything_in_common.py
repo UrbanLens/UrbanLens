@@ -1,20 +1,4 @@
-"""Tests for the "Users with anything in common" visibility option and the
-friends-always-qualify rule.
-
-Covers:
-- VisibilityChoice contains ANYTHING_IN_COMMON and is ordered least → most restrictive
-- New-profile defaults changed from ANYONE to ANYTHING_IN_COMMON, except
-  friend_request_visibility, which was moved back to ANYONE (see
-  models/profile/model.py's comment on the field): invite_by_email's
-  unregistered-address branch always sends the invite, so gating the
-  registered-account branch behind ANYTHING_IN_COMMON made having an account
-  strictly harder to reach by friend request than not having one.
-- Accepted friends qualify for every relationship-based visibility option
-  (everything except NO_ONE) across profile, contact, image, trip-activity,
-  and friend-request checks
-- ANYTHING_IN_COMMON permits users sharing a pin, a friend, or a trip - or who
-  are already friends - and blocks complete strangers
-"""
+"""Tests for the "Users with anything in common" visibility option and the friends-always-qualify rule."""
 
 from __future__ import annotations
 
@@ -30,7 +14,9 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trips.trip_visibility import apply_trip_visibility_filter as _apply_trip_visibility_filter
+from urbanlens.dashboard.services.trips.trip_visibility import (
+    apply_trip_visibility_filter as _apply_trip_visibility_filter,
+)
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -97,8 +83,7 @@ class VisibilityChoiceEnumTests(SimpleTestCase):
 
 
 class VisibilityDefaultsTests(TestCase):
-    """New profiles default to ANYTHING_IN_COMMON where they previously used ANYONE -
-    except friend_request_visibility, moved back to ANYONE (see module docstring)."""
+    """New profiles default to ANYTHING_IN_COMMON where they previously used ANYONE - except friend_request_visibility, moved back to ANYONE (see module docstring)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -209,13 +194,8 @@ class ImageVisibilityFriendTests(TestCase):
         # unshared photo would only ever re-assert the first gate.
         wiki = baker.make("dashboard.Wiki")
         self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=wiki)
-        # visible_to()'s container gate asks whether the VIEWER can reach this
-        # specific wiki (earned only by a pin at its place - see
-        # models/wiki/CLAUDE.md), not merely whether the photo sits on *some*
-        # wiki. Giving the viewer their own pin there opens that gate without
-        # giving the uploader one, so no common-pin relationship is created as
-        # a side effect - keeping these tests isolated to the relationship
-        # gate the class is named for.
+        # visible_to()'s container gate asks whether the VIEWER can reach this specific wiki (earned only by a
+        # pin at its place - see models/wiki/CLAUDE.md), not merely whether the photo sits on *some* wiki.
         Pin.objects.create(profile=self.viewer, location=wiki.location)
 
     def _set_upload_visibility(self, visibility: str) -> None:
@@ -236,6 +216,20 @@ class ImageVisibilityFriendTests(TestCase):
     def test_shared_trip_qualifies_for_anything_in_common(self) -> None:
         self._set_upload_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
         _share_trip(self.uploader, self.viewer)
+        self.assertIn(self.image, Image.objects.visible_to(self.viewer))
+
+    def test_shared_pin_qualifies_for_anything_in_common(self) -> None:
+        # Image visibility resolves common-pin/common-friend/common-trip itself
+        # (queryset._relationship_allows), rather than delegating to
+        # Profile.visibility_permits, so this needs its own coverage per
+        # relationship kind rather than trusting the shared-trip case above.
+        self._set_upload_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
+        _share_pin(self.uploader, self.viewer)
+        self.assertIn(self.image, Image.objects.visible_to(self.viewer))
+
+    def test_shared_friend_qualifies_for_anything_in_common(self) -> None:
+        self._set_upload_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
+        _share_friend(self.uploader, self.viewer)
         self.assertIn(self.image, Image.objects.visible_to(self.viewer))
 
     def test_viewer_filter_anything_in_common_respects_friendship(self) -> None:
@@ -307,8 +301,9 @@ class FriendRequestVisibilityTests(TestCase):
         self.target.save(update_fields=["friend_request_visibility"])
 
     def test_anything_in_common_blocks_stranger(self) -> None:
+        # A stranger who cannot see the profile is refused as if no profile held the id.
         self._set_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
-        self.assertEqual(self._request_friend().status_code, 403)
+        self.assertEqual(self._request_friend().status_code, 404)
 
     def test_anything_in_common_allows_shared_pin(self) -> None:
         # Non-HTMX success redirects back to the profile page (302).
@@ -330,7 +325,13 @@ class FriendRequestVisibilityTests(TestCase):
         self.assertTrue(Profile.visibility_permits(VisibilityChoice.COMMON_TRIP, self.target, self.requester))
 
     def test_common_pin_still_blocks_stranger(self) -> None:
+        # A stranger who cannot see the profile is refused as if no profile held the id.
         self._set_visibility(VisibilityChoice.COMMON_PIN)
+        self.assertEqual(self._request_friend().status_code, 404)
+
+    def test_no_one_blocks_even_an_existing_friend(self) -> None:
+        self._set_visibility(VisibilityChoice.NO_ONE)
+        _befriend(self.requester, self.target)
         self.assertEqual(self._request_friend().status_code, 403)
 
 
@@ -349,7 +350,9 @@ class PendingRequestVisibilityTests(TestCase):
         super().setUp()
         self.sender = _make_profile()
         self.recipient = _make_profile()
-        self.request_row = Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED)
+        self.request_row = Friendship.objects.create(
+            from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED
+        )
 
     def test_recipient_passes_every_relationship_gate_on_sender(self) -> None:
         for choice in self._RELATIONSHIP_CHOICES:

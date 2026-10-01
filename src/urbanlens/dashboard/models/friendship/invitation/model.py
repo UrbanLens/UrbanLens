@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import uuid
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, DateTimeField, EmailField, ForeignKey, TextField, UUIDField
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, EmailField, ForeignKey, UUIDField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -17,10 +17,11 @@ from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MES
 
 
 class FriendInvitation(abstract.DashboardModel):
-    """Sent when a user invites someone by email who is not yet registered.
+    """An invitation to connect, addressed to an email, whether or not an account holds it.
 
-    On sign-up the new user's email is matched against open invitations and
-    a friend request is automatically sent from the inviter.
+    The inviter's pending entry is this row until the invitee accepts, so nothing they see depends on the
+    address having an account. An account proven to own the address, or one that signs up through the link,
+    is bound as the invitee and asked; signing up answers nothing.
     """
 
     inviter = ForeignKey(
@@ -29,13 +30,22 @@ class FriendInvitation(abstract.DashboardModel):
         related_name="sent_invitations",
     )
     email = EmailField(db_index=True)
+    # Canonical form of `email` (lowercased, Gmail dots/+suffix stripped - see normalize_email) kept
+    # in sync in save() below, mirroring Profile.primary_email_normalized.
+    # `email` itself stays as typed since it's still the literal send-target/display value; every
+    # cross-account match (signup auto-accept, re-invite dedup) must go through this field instead,
+    email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
     token = UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
+    # The account shown the invitation: the one proven to own the address, or the one that signed up through it.
+    # Never shown to the inviter, whose pending entry stays this row until the invitee accepts.
+    invitee = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="received_friend_invitations")
+    # Set when the invitee declines; the inviter still sees the entry as pending until it expires.
+    declined_at = DateTimeField(null=True, blank=True)
     # Optional note the inviter attached, shown in the join-invite email.
-    # Encrypted: user-authored text about a person who does not yet have an
-    # account, only ever read as an attribute. `email` above cannot follow -
-    # it is indexed and exact-matched at signup to find open invitations.
+    # Encrypted: user-authored text about a person who does not yet have an account, only ever read
+    # as an attribute.
     message = EncryptedTextField(
         null=True,
         blank=True,
@@ -46,6 +56,7 @@ class FriendInvitation(abstract.DashboardModel):
 
     if TYPE_CHECKING:
         inviter_id: int
+        invitee_id: int | None
 
     objects = FriendInvitationManager()
 
@@ -53,8 +64,11 @@ class FriendInvitation(abstract.DashboardModel):
         pass
 
     def save(self, *args, **kwargs):
+        from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
         if not self.pk and not self.expires_at:
             self.expires_at = timezone.now() + timedelta(days=14)
+        self.email_normalized = normalize_email(self.email) if self.email else ""
         super().save(*args, **kwargs)
 
     def is_expired(self) -> bool:
@@ -67,25 +81,19 @@ class FriendInvitation(abstract.DashboardModel):
 
     def mark_accepted(self) -> bool:
         """Claim the invitation with a conditional write, without a full-model save.
-
-        The ``accepted_at__isnull=True`` condition makes this a write-time
-        claim: of any number of concurrent redemptions of the same invitation
-        (e.g. a double-clicked verification link), exactly one caller sees
-        ``True``. Callers must run this *before* the acceptance side effects
-        and skip them when it returns ``False``.
+        The ``accepted_at__isnull=True`` condition makes this a write-time claim: of any number of concurrent redemptions of the same invitation (e.g. a double-clicked verification link), exactly one caller sees ``True``.
 
         Returns:
             True when this call transitioned the invitation to accepted;
-            False when it was already accepted (or no longer exists).
+            False when it was already accepted or declined (or no longer exists).
         """
         now = timezone.now()
-        claimed = FriendInvitation.objects.filter(pk=self.pk, accepted_at__isnull=True).update(accepted_at=now) == 1
+        claimed = FriendInvitation.objects.filter(pk=self.pk, accepted_at__isnull=True, declined_at__isnull=True).update(accepted_at=now) == 1
         if claimed:
             self.accepted_at = now
-            # Recorded here rather than by a post_save subscription: this
-            # transition is a queryset update() precisely so it is an atomic
-            # compare-and-set, and update() fires no signal. A rule subscribed
-            # to FriendInvitation saves would never see an acceptance.
+            # Recorded here rather than by a post_save subscription: this transition is a queryset
+            # update() precisely so it is an atomic compare-and-set, and update() fires no signal.
+            # A rule subscribed to FriendInvitation saves would never see an acceptance.
             from urbanlens.dashboard.services.reputation.scoring import record_event
 
             record_event(self.inviter_id, "invite_accepted", target=self)

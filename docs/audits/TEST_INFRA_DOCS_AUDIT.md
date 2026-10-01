@@ -3,7 +3,7 @@
 Generated 2026-08-25, by reading the actual test-infrastructure implementation for concrete
 claims in `docs/CONTRACT_TESTS.md` (the schemathesis suite, `tests/contract/`) and
 `docs/INTEGRATION_TESTS.md` (the on-demand Playwright suite, `tests/integration/`). A different
-surface again from `docs/GOALS_CODE_AUDIT.md` and `docs/FEATURES_CODE_AUDIT.md`: this round checks
+surface again from `docs/audits/GOALS_CODE_AUDIT.md` and `docs/audits/FEATURES_CODE_AUDIT.md`: this round checks
 whether the docs describing *how the test suites themselves work* still match the actual test
 code - not app behavior. One topic (the integration suite's production-write guard) was
 deliberately chosen as the highest-stakes claim in either doc: a wrong claim there could leave

@@ -8,7 +8,7 @@ from urbanlens.dashboard.models.labels.model import Label
 
 
 class LabelSerializer(serializers.ModelSerializer):
-    """Serializes Label for API and HTMX responses."""
+    """Serialize Label for API and HTMX responses."""
 
     custom_icon_url = serializers.SerializerMethodField()
     pin_count = serializers.SerializerMethodField()

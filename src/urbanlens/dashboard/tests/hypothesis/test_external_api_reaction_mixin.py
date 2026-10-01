@@ -1,30 +1,4 @@
-"""Guards on ``_ReactionMixin``, the shared reaction toggle for the external API.
-
-Wiki comments, pin comments and group messages all expose
-``PUT/DELETE .../reactions/{emoji}/`` with identical semantics over one
-polymorphic ``Reaction`` table. The mixin exists so those semantics are written
-once; these tests pin the parts that a per-domain reimplementation gets wrong
-in ways nobody notices until a user complains:
-
-1. **Declarative, not toggling.** A retried PUT over a flaky mobile link must
-   not undo the reaction the first attempt applied, and a repeated DELETE must
-   stay a no-op.
-2. **PUT and DELETE agree about the emoji vocabulary.** Before the extraction,
-   validation only ran on the branch that actually called the service, so
-   ``DELETE`` of an unsupported emoji answered 200 and told a buggy client its
-   emoji were fine.
-3. **The emoji check cannot be used to probe ids.** It runs before the target
-   is resolved, so a junk emoji answers 400 whether or not the comment exists.
-4. **The 404 discipline holds.** A comment id belonging to another wiki - or
-   to a wiki the caller cannot see - is not found, never forbidden.
-5. **The declarative wiring is actually declarative.** The service functions
-   must be ``staticmethod``-wrapped; a bare function in the class body would be
-   bound and silently receive the *view* as its first argument.
-
-The wiki reaction endpoint is the concrete subject because it is the one route
-already wired; every assertion here is about mixin-owned behaviour, so the
-upcoming pin-comment and group-message endpoints inherit these guarantees.
-"""
+"""Guards on ``_ReactionMixin``, the shared reaction toggle for the external API."""
 
 from __future__ import annotations
 
@@ -55,11 +29,8 @@ class ReactionMixinWiringTests(SimpleTestCase):
     def test_service_hooks_are_staticmethods_not_bound_methods(self) -> None:
         """A bare function in the class body would receive the view as ``profile``.
 
-        Functions are descriptors, so ``reaction_toggle = toggle_reaction``
-        (without ``staticmethod``) type-checks at the call site and only fails
-        deep inside the service with a nonsensical argument. Asserting identity
-        against the underlying service function is what catches that.
-        """
+        Functions are descriptors, so ``reaction_toggle = toggle_reaction`` (without ``staticmethod``)
+        type-checks at the call site and only fails deep inside the service with a nonsensical argument."""
         self.assertIs(WikiCommentReactionView.reaction_toggle, toggle_reaction)
         self.assertIs(WikiCommentReactionView.reaction_summarizer, aggregate_reactions)
         view = WikiCommentReactionView()
@@ -69,10 +40,8 @@ class ReactionMixinWiringTests(SimpleTestCase):
     def test_target_field_names_a_real_reaction_foreign_key(self) -> None:
         """``reaction_target_field`` is passed straight into a queryset filter.
 
-        A typo would raise ``FieldError`` at request time rather than at import
-        time, so the endpoint would look fine until someone reacted to
-        something.
-        """
+        A typo would raise ``FieldError`` at request time rather than at import time, so the endpoint would look
+        fine until someone reacted to something."""
         reaction_fields = {field.name for field in Reaction._meta.get_fields()}
         self.assertIn(WikiCommentReactionView.reaction_target_field, reaction_fields)
 
@@ -113,20 +82,17 @@ class ReactionMixinBehaviourTests(TestCase):
             raw_key: A raw key to use instead of the fixture's.
 
         Returns:
-            Request kwargs carrying the Authorization header.
-        """
+            Request kwargs carrying the Authorization header."""
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _url(self, emoji: str, comment_id: int | None = None) -> str:
         """The reaction URL for one emoji on one comment.
 
         Args:
-            emoji: Percent-encoded emoji for the URL's last segment.
-            comment_id: Comment to address; defaults to the fixture comment.
+            emoji: Percent-encoded emoji for the URL's last segment. comment_id: Comment to address; defaults to the fixture comment.
 
         Returns:
-            The fully-built reaction URL.
-        """
+            The fully-built reaction URL."""
         pk = self.comment.pk if comment_id is None else comment_id
         return f"{BASE}/{self.location.ensure_slug()}/comments/{pk}/reactions/{emoji}/"
 
@@ -137,8 +103,7 @@ class ReactionMixinBehaviourTests(TestCase):
             scopes: Raw scope values to store on the row.
 
         Returns:
-            The raw key value.
-        """
+            The raw key value."""
         api_key, raw = generate_api_key(self.user, "Scoped")
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
@@ -173,10 +138,8 @@ class ReactionMixinBehaviourTests(TestCase):
     def test_summary_is_fresh_after_the_write(self) -> None:
         """The response must reflect the toggle, not the pre-request state.
 
-        The summary is read off the target's ``reactions`` relation, so a stale
-        prefetch cache would make a successful PUT look like it did nothing and
-        send the client into a retry loop.
-        """
+        The summary is read off the target's ``reactions`` relation, so a stale prefetch cache would make a
+        successful PUT look like it did nothing and send the client into a retry loop."""
         other = Profile.objects.get(user=baker.make(User))
         Reaction.objects.create(profile=other, comment=self.comment, emoji="👍")
 
@@ -192,21 +155,17 @@ class ReactionMixinBehaviourTests(TestCase):
     def test_unsupported_emoji_is_rejected_on_delete_too(self) -> None:
         """DELETE must not answer 200 to an emoji PUT would have refused.
 
-        Before the mixin, validation only happened on the branch that called
-        the service, so a client sending a junk emoji got a 400 from PUT and a
-        cheerful 200 from DELETE - which reads as "that emoji is fine".
-        """
+        Before the mixin, validation only happened on the branch that called the service, so a client sending a
+        junk emoji got a 400 from PUT and a cheerful 200 from DELETE - which reads as "that emoji is fine"."""
         response = self.client.delete(self._url(SKULL), **self._headers())
         self.assertEqual(response.status_code, 400)
 
     def test_unsupported_emoji_on_a_nonexistent_comment_is_still_400(self) -> None:
         """The emoji check cannot be used to probe which comment ids exist.
 
-        Validating the emoji before resolving the target keeps the response
-        identical for a real id and an invented one; resolving first would
-        answer 404 for ids the caller cannot reach and 400 for ones they can,
-        turning a junk emoji into an existence oracle.
-        """
+        Validating the emoji before resolving the target keeps the response identical for a real id and an
+        invented one; resolving first would answer 404 for ids the caller cannot reach and 400 for ones they
+        can, turning a junk emoji into an existence oracle."""
         response = self.client.put(self._url(SKULL, comment_id=self.comment.pk + 9999), **self._headers())
         self.assertEqual(response.status_code, 400)
 
@@ -236,18 +195,8 @@ class ReactionMixinBehaviourTests(TestCase):
     def test_reacting_to_someone_elses_comment_is_allowed(self) -> None:
         """Reactions are not owner-scoped - a wiki thread is shared community content.
 
-        Worth pinning explicitly: the neighbouring DELETE-comment endpoint *is*
-        author-scoped, and a mixin that copied that scoping would break the
-        feature outright while looking more secure.
-
-        The author is given ``comment_visibility = ANYONE`` deliberately. The
-        default is ``ANYTHING_IN_COMMON``, under which a brand-new profile's
-        comment is invisible to this caller - so a fixture at the default was
-        asserting that a comment the *list* endpoint hides can still be reacted
-        to by id, which is the enumeration hole ``comment_is_visible`` closes,
-        not the not-owner-scoped behavior this test is for. ANYONE isolates the
-        property under test.
-        """
+        Worth pinning explicitly: the neighbouring DELETE-comment endpoint *is* author-scoped, and a mixin that
+        copied that scoping would break the feature outright while looking more secure."""
         other = Profile.objects.get(user=baker.make(User))
         other.comment_visibility = VisibilityChoice.ANYONE
         other.save(update_fields=["comment_visibility"])
@@ -260,12 +209,8 @@ class ReactionMixinBehaviourTests(TestCase):
     def test_reacting_to_a_comment_hidden_from_the_caller_is_not_found(self) -> None:
         """A comment the thread listing drops cannot be reached by guessing its id.
 
-        The counterpart to the test above: wiki scope alone left every comment
-        on a visible wiki reactable by sequential id, including those
-        ``visible_comment_tree`` withholds. Reacting returned a summary (so the
-        id was confirmed) and notified an author whose comments this caller is
-        not permitted to read.
-        """
+        The counterpart to the test above: wiki scope alone left every comment on a visible wiki reactable by
+        sequential id, including those ``visible_comment_tree`` withholds."""
         other = Profile.objects.get(user=baker.make(User))
         other.comment_visibility = VisibilityChoice.FRIENDS
         other.save(update_fields=["comment_visibility"])

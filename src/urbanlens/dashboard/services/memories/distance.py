@@ -1,23 +1,10 @@
-"""Total travel-distance computation for the Memories page.
-
-"Distance traveled" combines two sources:
-
-1. **Recorded routes** - the geodesic length of every imported/recorded Route.
-2. **Travel between visits** - the great-circle distance between each pair of
-   consecutive PinVisits (ordered chronologically). If a user logged a visit in
-   New York, then California, then Oregon, this adds NY->CA plus CA->OR even
-   though no route was recorded for those legs.
-
-All values are returned in kilometres; convert to the viewer's unit at display
-time with ``services.core.units``.
-"""
+"""Total travel-distance computation for the Memories page."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from django.db.models import Sum
-from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.routes.model import Route
@@ -35,18 +22,13 @@ def recorded_route_distance_km(profile: Profile) -> float:
 
 def inter_visit_distance_km(profile: Profile) -> float:
     """Return the summed great-circle distance between consecutive visits, in km.
-
-    Visits are ordered by ``visited_at`` and use each pin's coordinates (read from
-    its linked Location). Any visit without a resolvable coordinate is skipped, and
-    the leg is measured between the two nearest coordinate-bearing visits so a
-    single gap does not break the chain.
+    Any visit without a resolvable coordinate is skipped, and the leg is measured between the two nearest coordinate-bearing visits so a single gap does not break the chain.
 
     Args:
         profile: The profile whose visit history to measure.
 
     Returns:
-        Total point-to-point travel distance across the visit sequence, in km.
-    """
+        Total point-to-point travel distance across the visit sequence, in km."""
     coords = PinVisit.objects.filter(pin__profile=profile).order_by("visited_at").values_list("pin__location__latitude", "pin__location__longitude")
 
     total_km = 0.0

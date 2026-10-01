@@ -1,11 +1,4 @@
-"""Tests for the REData building-attributes plugin.
-
-Retrieval calls REData's parcel/buildings endpoints (see the module docstring
-in plugins.builtin.redata_building_attributes) - RedataGateway itself is
-mocked, so no real network access occurs. Covers nearest-building selection
-among multiple returned buildings, fetch()'s graceful degradation, and
-render_context/plugin-contribution shapes.
-"""
+"""Tests for the REData building-attributes plugin."""
 
 from __future__ import annotations
 
@@ -25,10 +18,27 @@ from urbanlens.dashboard.plugins.builtin.redata_building_attributes import (
     _nearest_building,
     _render_building_attributes,
 )
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    PropertyRecordsUnavailableError,
+    RedataGateway,
+)
 
-_NEAR_BUILDING = {"source": "cris", "name": "Old Mill", "building_number": "72", "year_built": 1937, "latitude": 42.6501, "longitude": -73.7501}
-_FAR_BUILDING = {"source": "county_gis", "name": "Warehouse B", "building_number": "", "year_built": None, "latitude": 43.0, "longitude": -74.0}
+_NEAR_BUILDING = {
+    "source": "cris",
+    "name": "Old Mill",
+    "building_number": "72",
+    "year_built": 1937,
+    "latitude": 42.6501,
+    "longitude": -73.7501,
+}
+_FAR_BUILDING = {
+    "source": "county_gis",
+    "name": "Warehouse B",
+    "building_number": "",
+    "year_built": None,
+    "latitude": 43.0,
+    "longitude": -74.0,
+}
 
 #: 20 m east and 25 m north of (42.65, -73.75), as degree offsets. At that
 #: latitude a degree of longitude is only cos(42.65 deg) ~ 0.736 as long as a
@@ -55,12 +65,8 @@ class NearestBuildingTests(SimpleTestCase):
     def test_ranks_by_ground_distance_not_degrees(self) -> None:
         """A degree of longitude is shorter than a degree of latitude away from the equator.
 
-        Comparing raw degree deltas therefore over-weights east-west separation and
-        can rank a genuinely farther building first. The existing cases above never
-        caught it: their far building is a third of a degree away, so no correction
-        changes the answer. This pair is the case that matters - both buildings on
-        one parcel, comparable distances, different bearings.
-        """
+        Comparing raw degree deltas therefore over-weights east-west separation and can rank a genuinely farther
+        building first."""
         lat, lng = 42.65, -73.75
         east = {"name": "East Wing", "latitude": lat, "longitude": lng + _EAST_20M_DEGREES}
         north = {"name": "North Wing", "latitude": lat + _NORTH_25M_DEGREES, "longitude": lng}
@@ -97,20 +103,24 @@ class FetchBuildingPayloadTests(TestCase):
         """REData saying "nothing here" is a result; caching it stops a re-ask."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("no_data_found", "nothing")),
+            patch.object(
+                RedataGateway,
+                "lookup_parcel_uuid",
+                side_effect=PropertyRecordsUnavailableError("no_data_found", "nothing"),
+            ),
         ):
             self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
 
     def test_a_transient_outage_propagates_rather_than_caching_emptiness(self) -> None:
         """A LocationCache row marks the source fetched, so an outage must not write one.
 
-        This returned ``{}`` until 2026-08-19, which blanked the card for the
-        whole external-data cache window after any REData hiccup - the defect
-        ``test_outage_not_cached_as_empty.py`` exists to prevent.
-        """
+        This returned ``{}`` until 2026-08-19, which blanked the card for the whole external-data cache window
+        after any REData hiccup - the defect ``test_outage_not_cached_as_empty.py`` exists to prevent."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
+            patch.object(
+                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
+            ),
             self.assertRaises(PropertyRecordsUnavailableError),
         ):
             _fetch_building_payload(42.65, -73.75)
@@ -118,19 +128,13 @@ class FetchBuildingPayloadTests(TestCase):
     def test_an_unconfigured_gateway_propagates_too(self) -> None:
         """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
-        The unconfigured state is simulated rather than left to the ambient
-        environment: an install that *does* configure REData (any dev machine
-        with UL_REDATA_API_URL set) would otherwise reach the real API here
-        instead of exercising this branch. ``__post_init__`` is what raises
-        that ValueError, and it's the only patchable seam - RedataGateway is a
-        slotted dataclass, so ``base_url`` itself is read-only on the class.
-
-        The panel's own gate keeps it from ever being scheduled in that state;
-        this covers the background enrichment and wiki paths, which reach the
-        fetch by other routes.
-        """
+        The unconfigured state is simulated rather than left to the ambient environment: an install that *does*
+        configure REData (any dev machine with UL_REDATA_API_URL set) would otherwise reach the real API here
+        instead of exercising this branch."""
         with (
-            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            patch.object(
+                RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
+            ),
             self.assertRaises(ValueError),
         ):
             _fetch_building_payload(42.65, -73.75)
@@ -182,7 +186,9 @@ class PanelFetchTests(TestCase):
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             RedataBuildingAttributesPanelSource().fetch(self.pin)
-        mock_set.assert_called_once_with(self.location, "redata_building_attributes", _NEAR_BUILDING, query_key="42.65000,-73.75000")
+        mock_set.assert_called_once_with(
+            self.location, "redata_building_attributes", _NEAR_BUILDING, query_key="42.65000,-73.75000"
+        )
 
     def test_render_context_delegates_to_shared_renderer(self) -> None:
         ctx = RedataBuildingAttributesPanelSource().render_context(self.pin, _NEAR_BUILDING)
@@ -235,14 +241,18 @@ class EnrichmentSourceTests(TestCase):
         `run_enrichment_cycle` consults `gate()` once via `self_reported_skip`;
         without it the cycle shortlists candidates and every fetch raises.
         """
-        with patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False):
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False
+        ):
             self.assertFalse(RedataBuildingAttributesEnrichmentSource().gate())
 
     def test_fetch_propagates_when_unconfigured_rather_than_caching_empty(self) -> None:
         """Reached only by a caller that skipped the gate; must still not write a row."""
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
         with (
-            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            patch.object(
+                RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
+            ),
             self.assertRaises(ValueError),
         ):
             RedataBuildingAttributesEnrichmentSource().fetch(location)
@@ -272,11 +282,8 @@ class PluginContributionsTests(SimpleTestCase):
 class NearestBuildingExclusionTests(SimpleTestCase):
     """The nearest record is not always the right record.
 
-    REData labels three kinds of record this card cannot honour, and ranking
-    the raw list let each of them win on distance. The chosen building's name is
-    given outright priority when naming a detail pin's location, so a wrong pick
-    renames the user's pin.
-    """
+    REData labels three kinds of record this card cannot honour, and ranking the raw list let each of them win
+    on distance."""
 
     def _far(self, **extra) -> dict:
         return {"name": "Far", "latitude": 42.6510, "longitude": -73.7510, **extra}

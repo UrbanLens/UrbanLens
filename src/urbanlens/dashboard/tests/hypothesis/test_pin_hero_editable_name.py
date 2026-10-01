@@ -1,4 +1,4 @@
-"""Tests for the pin detail page hero: click-to-rename title, and the layout
+"""Tests for the Private Pin page hero: click-to-rename title, and the layout
 fix that stopped the eyebrow/title/subtitle/back-link/wiki-box from
 overlapping (see _pin_detail_hero_body.html, _page_hero.scss).
 """
@@ -73,3 +73,31 @@ class PinHeroLayoutTests(TestCase):
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         self.assertContains(response, "pin-detail-hero-body")
         self.assertContains(response, "pin-detail-hero-main")
+
+
+class PinHeroChildPinHierarchyTests(TestCase):
+    """A nested child pin's own name is the hero title; the parent is a smaller link."""
+
+    def setUp(self) -> None:
+        baker.make(User)
+        user = baker.make(User)
+        self.profile = Profile.objects.get(user=user)
+        self.parent = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, name="Campus", name_is_user_provided=True
+        )
+        self.child = baker.make_recipe(
+            "dashboard.pin",
+            profile=self.profile,
+            name="Boiler Room",
+            name_is_user_provided=True,
+            parent_pin=self.parent,
+        )
+        self.client.force_login(user)
+
+    def test_child_name_is_the_hero_title(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.child.slug]))
+        self.assertContains(response, 'id="pin-detail-hero-title"')
+        self.assertContains(response, 'data-raw-name="Boiler Room"')
+        self.assertContains(response, "pin-detail-hero-parent")
+        self.assertContains(response, "Part of Campus")
+        self.assertNotContains(response, "pin-detail-hero-child-name")

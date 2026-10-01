@@ -1,22 +1,6 @@
 """Georeferenced image overlays drawn on a pin's or wiki's map.
-
-A user pins a historical map image - a Sanborn fire-insurance sheet, a site
-plan, a hand-drawn survey - onto the live map and drags its four corners until
-its streets line up with the real ones. Scans are never axis-aligned or square
-to north, and a flatbed scan of a century-old sheet is usually a little
-trapezoidal, so four independently-placed corners (a full projective
-transform) are the honest unit rather than a bounding box plus a rotation.
-
-The corners are stored as WGS-84 coordinates rather than as a transform
-matrix: they mean the same thing at every zoom level and after any base-layer
-change, and they stay correct if the rendering ever moves off Leaflet. The
-matrix is recomputed client-side per frame from those four points.
-
-Attaches to a Pin or a Wiki with the same one-of-two-parents convention
-:class:`~urbanlens.dashboard.models.markup.model.PinMarkup` and
-:class:`~urbanlens.dashboard.models.markup.model.CustomLayer` use, and may
-optionally sit inside a ``CustomLayer`` so it toggles with that layer's other
-markup instead of on its own.
+A user pins a historical map image - a Sanborn fire-insurance sheet, a site plan, a hand-drawn survey - onto the live map and drags its four corners until its streets line up with the real ones.
+Scans are never axis-aligned or square to north, and a flatbed scan of a century-old sheet is usually a little trapezoidal, so four independently-placed corners (a full projective transform) are the honest unit rather than a bounding box plus a rotation.
 """
 
 from __future__ import annotations
@@ -33,17 +17,18 @@ from django.db.models import (
     ForeignKey,
     Index,
     IntegerField,
-    URLField,
+    Q,
 )
+from django.db.models.constraints import CheckConstraint
+from django.urls import reverse
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayManager
 
-#: Corner order used everywhere this model is serialized, drawn, or edited:
-#: north-west, north-east, south-east, south-west - clockwise from the top
-#: left of the *image*, not of the map. "North-west" names the corner's
-#: starting position, not a constraint: a rotated overlay legitimately ends up
-#: with its ``nw`` corner east of its ``ne`` one.
+#: Corner order used everywhere this model is serialized, drawn, or edited: north-west, north-east,
+#: south-east, south-west - clockwise from the top left of the *image*, not of the map.
+#: "North-west" names the corner's starting position, not a constraint: a rotated overlay
+#: legitimately ends up with its ``nw`` corner east of its ``ne`` one.
 CORNERS = ("nw", "ne", "se", "sw")
 
 
@@ -57,15 +42,13 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             upload or from a Media-gallery item the user picked (gallery items
             are materialized into a real ``Image`` first, so the overlay keeps
             working when the provider's URL rots).
-        image_url: An external image URL instead, for a user who would rather
-            reference a remote sheet than store a copy.
         tile_url_template: An XYZ tile URL template (``.../{z}/{x}/{y}.png``)
             instead of an image - used for already-georeferenced historical
             maps served as warped tile pyramids (REData's ``/maps/``, via
             UrbanLens's tile proxy). A tile overlay is pre-placed by its
             georeference, so the corner handles don't apply to it; the corner
             fields store its bounds for zoom-to-extent. Exactly one of
-            ``image``, ``image_url`` and this is set.
+            ``image`` and this is set.
         nw_latitude: Latitude of the image's top-left corner. Likewise for the
             other three corners, in :data:`CORNERS` order.
         opacity: Percent opacity, so a user can see the real map underneath -
@@ -93,7 +76,6 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
         blank=True,
         related_name="map_overlays",
     )
-    image_url = URLField(max_length=1000, blank=True, default="")
     tile_url_template = CharField(max_length=500, blank=True, default="")
 
     nw_latitude = FloatField()
@@ -152,6 +134,12 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             Index(fields=["parent_pin", "order"], name="idx_overlay_pin_order"),
             Index(fields=["parent_wiki", "order"], name="idx_overlay_wiki_order"),
         ]
+        constraints = [
+            CheckConstraint(
+                name="db_overlay_one_source",
+                condition=(Q(image__isnull=False) & Q(tile_url_template="")) | (Q(image__isnull=True) & ~Q(tile_url_template="")),
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name or f"Image overlay {self.uuid}"
@@ -161,13 +149,22 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
         """The URL the browser should load the image from.
 
         Returns:
-            The stored file's URL when this overlay owns an ``Image``, else the
-            external ``image_url``, else ``""`` (an overlay whose backing image
-            was deleted - the map skips it rather than rendering a broken tile).
+            The stored file's URL, or ``""`` for a tile overlay or an image with no file yet.
         """
         if self.image_id and self.image and self.image.image:
             return self.image.image.url
-        return self.image_url
+        return ""
+
+    @property
+    def image_link(self) -> str | None:
+        """The backing ``Image`` row's stable link (``media.image``), or None for a tile overlay.
+
+        ``source_url`` names the upload's raw file while it is being re-encoded, because the aligner opens on it
+        at once; the renderer falls back to this link if that file is gone by the time it loads.
+        """
+        if self.image_id and self.image:
+            return reverse("media.image", args=[self.image.uuid])
+        return None
 
     def corners(self) -> list[list[float]]:
         """The four corners as ``[[lat, lng], ...]`` in :data:`CORNERS` order."""
@@ -199,14 +196,15 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
         """Compact serialisation for the map's overlay renderer and edit dialog.
 
         Returns:
-            dict with uuid, name, url, corners, opacity, order, visibility,
-            lock state, and the uuid of the custom layer it belongs to (or
-            None).
+            dict with uuid, name, url, the backing row's stable link, corners,
+            opacity, order, visibility, lock state, and the uuid of the custom
+            layer it belongs to (or None).
         """
         return {
             "uuid": str(self.uuid),
             "name": self.name,
             "url": self.source_url,
+            "image_link": self.image_link,
             "tile_url_template": self.tile_url_template,
             "corners": self.corners(),
             "opacity": self.opacity,

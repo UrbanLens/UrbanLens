@@ -1,4 +1,4 @@
-"""Tests for the pin detail page's drag-to-resize map height preference.
+"""Tests for the Private Pin page's drag-to-resize map height preference.
 
 Covers PinController.set_map_height (save/clamp/validate) and the pin
 details page's rendering of the saved height as an inline style.
@@ -68,7 +68,9 @@ class SetMapHeightViewTests(TestCase):
 
     def test_unauthenticated_request_redirects_to_login(self) -> None:
         client = Client()
-        response = client.post(reverse("pin.map_height"), data=json.dumps({"height": 600}), content_type="application/json")
+        response = client.post(
+            reverse("pin.map_height"), data=json.dumps({"height": 600}), content_type="application/json"
+        )
         self.assertIn(response.status_code, (301, 302))
 
 

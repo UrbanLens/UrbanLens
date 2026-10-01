@@ -1,0 +1,47 @@
+{% comment %}Lightbox side-panel strip: where one of the owner's own photos is filed (pin/wiki) and which albums it belongs.{% endcomment %}
+<div class="lightbox-associations">
+    {% if pin or can_file %}
+    <div class="lightbox-association-row">
+        {% if pin %}
+        <a href="{{ pin.url }}" class="lightbox-association-line">
+            <i class="material-symbols-outlined">location_on</i>
+            <span>Pin: {{ pin.name }}</span>
+        </a>
+        {% else %}
+        <button type="button" class="lightbox-association-action" data-lightbox-action="pin-picker">
+            <i class="material-symbols-outlined">push_pin</i> File to a pin
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% if wiki or can_file %}
+    <div class="lightbox-association-row">
+        {% if wiki %}
+        <a href="{{ wiki.url }}" class="lightbox-association-line">
+            <i class="material-symbols-outlined">public</i>
+            <span>Wiki: {{ wiki.name }}</span>
+        </a>
+        {% endif %}
+        {% if can_file %}
+        <button type="button" class="lightbox-association-action" data-lightbox-action="wiki-picker">
+            <i class="material-symbols-outlined">public</i> {% if wiki %}Change wiki{% else %}Send to a wiki{% endif %}
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% if albums %}
+    <div class="lightbox-associations-title">
+        <i class="material-symbols-outlined">photo_album</i> In albums
+    </div>
+    <ul class="lightbox-associations-list">
+        {% for album in albums %}
+        <li>
+            <a href="{{ album.url }}">
+                <span class="lightbox-association-album-name">{{ album.name }}</span>
+                <small class="lightbox-association-album-owner">{{ album.owner_label }}{% if album.owner_name %} · {{ album.owner_name }}{% endif %}</small>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>

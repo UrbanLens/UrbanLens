@@ -1,19 +1,4 @@
-"""Shared REST client for REData's "near-a-coordinate" location-context endpoints.
-
-REData's geocode, elevation, weather, imagery, natural-hazards,
-nature-observations, reference-documents, points-of-interest, and media
-families - plus ``/parks/nearby/`` - all share one request/response contract
-(``../REData/docs/api-reference.md``, "Near-a-coordinate endpoints"): the same
-``lat``/``lng``/``radius_meters``/``provider``/``force_refresh`` query
-parameters, and the same ``{"count", "complete", "results", "providers"}``
-response envelope. This module implements that shared contract exactly once;
-a domain-specific gateway (``RedataElevationGateway``, ``RedataWeatherGateway``,
-...) subclasses it and adds only its own path, params, and typed accessors.
-
-Mirrors ``services.apis.property_records.redata_gateway.RedataGateway``'s
-auth/error-handling shape for the rest of REData's API surface, which predates
-this shared envelope and so implements its own per-endpoint parsing instead.
-"""
+"""Shared REST client for REData's "near-a-coordinate" location-context endpoints."""
 
 from __future__ import annotations
 
@@ -21,7 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, NoReturn
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -47,25 +32,28 @@ class LocationContextUnavailableError(GatewayRequestError):
     """Raised when a REData location-context request fails or answers with a blackout.
 
     Attributes:
-        reason: One of the module's ``REASON_*`` constants, or REData's own
-            ``error`` code verbatim for a ``400`` (e.g. ``"invalid_coordinates"``,
-            ``"unknown_provider"``) - REData's fixed reason taxonomy for these
-            endpoints (see the module docstring).
-    """
+        reason: One of the module's ``REASON_*`` constants, or REData's own ``error`` code verbatim for a ``400`` (e.g. ``"invalid_coordinates"``, ``"unknown_provider"``) - REData's fixed reason taxonomy for these endpoints (see the module docstring)."""
 
     def __init__(self, reason: str, message: str) -> None:
         self.reason = reason
         super().__init__(message)
 
 
+class LocationContextBusyError(LocationContextUnavailableError, UpstreamBusyError):
+    """REData throttled this key, so the request was refused or not made; a caller may retry after ``retry_after`` seconds."""
+
+    def __init__(self, message: str, *, retry_after: int) -> None:
+        super().__init__(REASON_RATE_LIMITED, message)
+        self.retry_after = retry_after
+
+
 def redata_configured() -> bool:
     """Whether REData is configured for this install (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY``).
+    Always ``False`` under :attr:`~services.sandbox.guard.ProcessRole.AI`: the assistant's tool loop must never reach REData, regardless of whether ``ai-worker``'s environment happens to carry the credentials (it shouldn't, per the compose anchors)."""
+    from urbanlens.dashboard.services.sandbox.guard import ProcessRole, current_role
 
-    Shared by every location-context resolution module (weather, routing,
-    geocode, imagery, ...) so "is REData available" is decided identically
-    everywhere, matching ``places_resolution.py``/``cid_resolution.py``'s
-    existing precedent for the same check.
-    """
+    if current_role() is ProcessRole.AI:
+        return False
     return bool(settings.redata_api_url and settings.redata_api_key)
 
 
@@ -75,15 +63,9 @@ class LocationContextEnvelope:
 
     Attributes:
         count: Number of entries in ``results``.
-        complete: False when any source covering the coordinate failed to
-            answer (``unavailable``/``rate_limited`` in ``providers``) - the
-            results are a floor, not a total.
-        results: The provider-tagged result dicts - shape is endpoint-specific,
-            see each domain gateway's own accessor.
-        providers: Per-provider status entries (``provider``, ``status``,
-            ``count``, ``message``, ``radius_meters``) - empty for the few
-            endpoints with no provider registry behind them.
-    """
+        complete: False when any source covering the coordinate failed to answer (``unavailable``/``rate_limited`` in ``providers``) - the results are a floor, not a total.
+        results: The provider-tagged result dicts - shape is endpoint-specific, see each domain gateway's own accessor.
+        providers: Per-provider status entries (``provider``, ``status``, ``count``, ``message``, ``radius_meters``) - empty for the few endpoints with no provider registry behind them."""
 
     count: int
     complete: bool
@@ -93,17 +75,11 @@ class LocationContextEnvelope:
 
 @dataclass(slots=True, kw_only=True)
 class RedataLocationContextGateway(Gateway):
-    """Base REST client for REData's near-a-coordinate location-context endpoints.
+    """Base REST client for REData's near-a-coordinate location-context endpoints."""
 
-    Concrete per-domain subclasses set their own ``service_key`` (for
-    UrbanLens's own rate-limit/cost tracking - REData pools its own outbound
-    budget across these endpoints server-side regardless, see REData's
-    ``docs/api-reference.md`` "Rate limiting") and add typed accessor methods
-    that call :meth:`near_point` with their own path.
-    """
-
-    base_url: str | None = settings.redata_api_url
-    api_key: str | None = settings.redata_api_key
+    # default_factory so settings changes apply per instance; a bare default freezes at import.
+    base_url: str | None = field(default_factory=lambda: settings.redata_api_url)
+    api_key: str | None = field(default_factory=lambda: settings.redata_api_key)
 
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
@@ -151,9 +127,7 @@ class RedataLocationContextGateway(Gateway):
             The parsed :class:`LocationContextEnvelope`.
 
         Raises:
-            LocationContextUnavailableError: A total blackout (every source
-                covering the coordinate failed), a REData-side validation
-                error, or the request itself failed outright.
+            LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), a REData-side validation error, or the request itself failed outright.
         """
         params: dict[str, Any] = {"lat": latitude, "lng": longitude}
         if radius_meters is not None:
@@ -170,25 +144,17 @@ class RedataLocationContextGateway(Gateway):
 
     def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
         """GET any REData endpoint outside the near-a-coordinate envelope and return its raw JSON body.
-
-        For endpoints that share this gateway's auth/error handling but not
-        its ``{"count","complete","results","providers"}`` shape - e.g. a
-        by-name search (``/reference-documents/search/``) or a plain
-        ``{"count","results"}`` envelope with no ``providers`` block
-        (``/search/web/``, ``/search/news/``). Use :meth:`near_point` instead
-        for anything shaped like REData's near-a-coordinate contract.
+        Use :meth:`near_point` instead for anything shaped like REData's near-a-coordinate contract.
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional).
             params: Query-string parameters, if any.
 
         Returns:
-            The raw decoded JSON body (whatever type - object or array - the
-            endpoint actually returns).
+            The raw decoded JSON body (whatever type - object or array - the endpoint actually returns).
 
         Raises:
-            LocationContextUnavailableError: A REData-side validation error,
-                or the request itself failed outright.
+            LocationContextUnavailableError: A REData-side validation error, or the request itself failed outright.
         """
         response = self._request(path, params or {})
         if response.status_code == 200:
@@ -200,10 +166,7 @@ class RedataLocationContextGateway(Gateway):
 
     def post_json(self, path: str, json_body: dict[str, Any]) -> Any:
         """POST a JSON body to a REData endpoint and return its raw JSON response.
-
-        For write-shaped/non-cacheable endpoints (e.g. ``POST /routes/``) that
-        share this gateway's auth/error handling but take a body rather than
-        query params.
+        ``POST /routes/``) that share this gateway's auth/error handling but take a body rather than query params.
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional).
@@ -213,20 +176,20 @@ class RedataLocationContextGateway(Gateway):
             The raw decoded JSON body.
 
         Raises:
-            LocationContextUnavailableError: A REData-side validation error,
-                or the request itself failed outright.
+            LocationContextUnavailableError: A REData-side validation error, or the request itself failed outright.
         """
         base_url = self.base_url
         if base_url is None:
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         try:
             response = self.session.post(f"{base_url.rstrip('/')}/{path.lstrip('/')}", json=json_body, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except UpstreamBusyError as exc:
+            raise LocationContextBusyError(str(exc), retry_after=exc.retry_after) from exc
         except OSError as exc:
-            # str(exc) on a requests/urllib3 connection error routinely embeds the full
-            # request URL, including the lat/lng (or address) query params callers pass
-            # in - which would undo every redact_coordinate()/redact_text() call a
-            # caller wraps its *own* logging in. The exception type is enough for an
-            # operator to diagnose a network failure without re-leaking the coordinate.
+            # str(exc) on a requests/urllib3 connection error routinely embeds the full request URL,
+            # including the lat/lng (or address) query params callers pass in - which would undo
+            # every redact_coordinate()/redact_text() call a caller wraps its *own* logging in.
+            # The exception type is enough for an operator to diagnose a network failure without
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {type(exc).__name__}") from exc
 
         if response.status_code == 200:
@@ -262,19 +225,18 @@ class RedataLocationContextGateway(Gateway):
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         try:
             return self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except UpstreamBusyError as exc:
+            raise LocationContextBusyError(str(exc), retry_after=exc.retry_after) from exc
         except OSError as exc:
-            # str(exc) on a requests/urllib3 connection error routinely embeds the full
-            # request URL, including the lat/lng (or address) query params callers pass
-            # in - which would undo every redact_coordinate()/redact_text() call a
-            # caller wraps its *own* logging in. The exception type is enough for an
-            # operator to diagnose a network failure without re-leaking the coordinate.
+            # str(exc) on a requests/urllib3 connection error routinely embeds the full request URL,
+            # including the lat/lng (or address) query params callers pass in - which would undo
+            # every redact_coordinate()/redact_text() call a caller wraps its *own* logging in.
+            # The exception type is enough for an operator to diagnose a network failure without
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {type(exc).__name__}") from exc
 
     def _raise_for_error_status(self, response: requests.Response, path: str) -> NoReturn:
         """Translate a non-200 REData response into a :class:`LocationContextUnavailableError`.
-
-        Always raises - callers reach this only once ``response.status_code != 200``.
-        """
+        Always raises - callers reach this only once ``response.status_code != 200``."""
         if response.status_code in (400, 503):
             try:
                 body = response.json()
@@ -284,4 +246,6 @@ class RedataLocationContextGateway(Gateway):
             raise LocationContextUnavailableError(reason, body.get("message", ""))
 
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
+        if response.status_code == 429:
+            raise LocationContextBusyError("REData throttled this key.", retry_after=upstream_retry_after(response) or 1)
         raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")

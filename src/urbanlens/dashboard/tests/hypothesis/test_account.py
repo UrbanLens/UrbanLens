@@ -1,11 +1,14 @@
-﻿"""Tests for EmailVerification model (dashboard/models/account/).
+"""Tests for EmailVerification model (dashboard/models/account/).
 
 All tests are DB-backed; EmailVerification.created is auto_now_add so we
 back-date it via queryset.update() where time-sensitivity matters.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import patch
+import uuid
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -37,9 +40,7 @@ class EmailVerificationIsValidTests(TestCase):
         return baker.make(EmailVerification, user=user, **kwargs)
 
     def _backdate(self, ev: EmailVerification, hours: float) -> EmailVerification:
-        EmailVerification.objects.filter(pk=ev.pk).update(
-            created=timezone.now() - timedelta(hours=hours)
-        )
+        EmailVerification.objects.filter(pk=ev.pk).update(created=timezone.now() - timedelta(hours=hours))
         ev.refresh_from_db()
         return ev
 
@@ -69,6 +70,19 @@ class EmailVerificationIsValidTests(TestCase):
         # Even a brand-new token is invalid once marked verified.
         ev = self._make_ev(verified_at=timezone.now())
         self.assertFalse(ev.is_valid())
+
+    def test_token_exactly_at_48h_boundary_is_invalid(self) -> None:
+        # Pins the strict `<` in is_valid(): a `<=` regression would flip this to True.
+        ev = self._make_ev(verified_at=None)
+        boundary = ev.created + timedelta(hours=48)
+        with patch("django.utils.timezone.now", return_value=boundary):
+            self.assertFalse(ev.is_valid())
+
+    def test_token_one_microsecond_before_48h_boundary_is_valid(self) -> None:
+        ev = self._make_ev(verified_at=None)
+        just_before = ev.created + timedelta(hours=48) - timedelta(microseconds=1)
+        with patch("django.utils.timezone.now", return_value=just_before):
+            self.assertTrue(ev.is_valid())
 
 
 class EmailVerificationMarkVerifiedTests(TestCase):
@@ -111,3 +125,15 @@ class EmailVerificationMarkVerifiedTests(TestCase):
         ev.mark_verified()
         ev.refresh_from_db()
         self.assertEqual(ev.token, original_token)
+
+    def test_mark_verified_does_not_persist_other_unsaved_field_changes(self) -> None:
+        # token never changes in practice, so the assertion above would still pass
+        # even if mark_verified() called plain save() instead of
+        # save(update_fields=["verified_at"]). Dirty an actually-mutable field
+        # in memory first so a regression to plain save() is caught.
+        ev = self._fresh_ev()
+        self.assertIsNone(ev.pending_invite_token)
+        ev.pending_invite_token = uuid.uuid4()
+        ev.mark_verified()
+        ev.refresh_from_db()
+        self.assertIsNone(ev.pending_invite_token)

@@ -1,18 +1,5 @@
-"""Tests for MapController.view_map and MapController.map_pins_meta.
+"""Tests for MapController.view_map and MapController.map_pins_meta."""
 
-Invariants verified:
-  - view_map requires authentication; unauthenticated requests are redirected.
-  - view_map populates key context variables: pin_count, use_pin_cache,
-    map_center_mode, and map_default_zoom from the user's profile.
-  - pin_count in context equals the real number of root pins for the profile.
-  - GPS mode sets map_center_lat/lng to None in the context, but populates
-    gps_fallback_lat/lng with the pin-cluster centroid when pins exist.
-  - GPS mode sets gps_fallback_lat/lng to None when the profile has no pins.
-  - CUSTOM mode with stored coordinates sets map_center_lat/lng correctly.
-  - CUSTOM / AUTO modes always set gps_fallback_lat/lng to None.
-  - map_pins_meta returns null when the profile has no pins, and an ISO
-    timestamp equal to the most-recently-updated pin's timestamp otherwise.
-"""
 from __future__ import annotations
 
 import decimal
@@ -20,10 +7,9 @@ import json
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.urls import reverse
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -174,13 +160,13 @@ class ViewMapContextTests(TestCase):
         Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=True)
         resp = self.client.get(_MAP_URL)
         self.assertTrue(resp.context["geolocation_tracking_allowed"])
-        self.assertIn(b"_GEOLOCATION_TRACKING_ALLOWED = true;", resp.content)
+        self.assertIn(b'"geolocationTrackingAllowed": true', resp.content)
 
     def test_geolocation_tracking_allowed_false_from_profile(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=False)
         resp = self.client.get(_MAP_URL)
         self.assertFalse(resp.context["geolocation_tracking_allowed"])
-        self.assertIn(b"_GEOLOCATION_TRACKING_ALLOWED = false;", resp.content)
+        self.assertIn(b'"geolocationTrackingAllowed": false', resp.content)
 
     def test_geolocate_button_shown_when_tracking_allowed(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=True)
@@ -199,20 +185,11 @@ class ViewMapContextTests(TestCase):
 
 
 class RootPinCountQueryTests(TestCase):
-    """MapController.view_map's ``pin_count`` is computed as
-    ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that
-    query returns exactly the number of root pins created, for arbitrary N.
+    """MapController.view_map's ``pin_count`` is computed as ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that query returns exactly the number of root pins created, for arbitrary N.
 
-    Kept in its own class, entirely separate from any Django test-client
-    usage: per this repo's CLAUDE.md, hypothesis's per-example DB flush (via
-    hypothesis.extra.django's _pre_setup/_post_teardown) doesn't interact
-    safely with self.client's session state. See test_safety_partners.py's
-    IsOwnerOrAcceptedPartnerHypothesisTests (and its sibling
-    IsOwnerOrAcceptedPartnerTests) for the same split applied there: a
-    @given-decorated pure-logic test in its own class, with any view-level
-    smoke test living as a plain (non-@given) method elsewhere - here, that's
-    ViewMapContextTests.test_pin_count_reflects_actual_root_pin_count above.
-    """
+    Kept in its own class, entirely separate from any Django test-client usage: per this repo's CLAUDE.md,
+    hypothesis's per-example DB flush (via hypothesis.extra.django's _pre_setup/_post_teardown) doesn't interact
+    safely with self.client's session state."""
 
     @given(n=st.integers(min_value=0, max_value=6))
     @_db_settings
@@ -272,6 +249,7 @@ class ShowPinCountTests(TestCase):
 
 # -- map_pins_meta -------------------------------------------------------------
 
+
 class MapPinsMetaTests(TestCase):
     """map_pins_meta must return the latest pin update timestamp or null."""
 
@@ -297,6 +275,7 @@ class MapPinsMetaTests(TestCase):
         self.assertIsNotNone(data["last_updated"])
         # Must be parseable as ISO 8601.
         from datetime import datetime
+
         datetime.fromisoformat(data["last_updated"])
 
     def test_timestamp_matches_most_recently_updated_pin(self) -> None:

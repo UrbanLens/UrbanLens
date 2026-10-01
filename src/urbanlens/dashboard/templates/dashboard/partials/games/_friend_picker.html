@@ -1,0 +1,5 @@
+{% comment %}A game's invite picker; takes picker_id. Options come from GameFriendPickerView; failure and selection are handled by shared/friend-picker.ts.{% endcomment %}
+<div class="ul-game-friend-picker" id="{{ picker_id }}" data-friend-picker
+     hx-get="{% url 'games.friends' %}" hx-trigger="load, ul:friend-picker-reload" hx-swap="innerHTML">
+    <p class="ul-game-friend-picker__hint">Loading friends&hellip;</p>
+</div>

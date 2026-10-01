@@ -1,11 +1,4 @@
-"""End-to-end tests for Consensus round resolution (services.consensus.session).
-
-Builds a wiki that's missing exactly one piece of data (a description) so
-round selection is deterministic - see ``_make_wiki_missing_description``.
-Competitive sessions are constructed directly (bypassing the friend-only
-invite flow, which is exercised separately in the controller tests) so
-these can focus purely on answer/vote resolution.
-"""
+"""End-to-end tests for Consensus round resolution (services.consensus.session)."""
 
 from __future__ import annotations
 
@@ -61,20 +54,17 @@ def _start_competitive_session_directly(host: Profile, invitees: list[Profile]) 
     """Create an ACTIVE, fully-joined competitive session - bypasses the friend-only invite flow."""
     session = ConsensusSession.objects.create(host_profile=host, status=ConsensusSessionStatus.ACTIVE)
     for profile in [host, *invitees]:
-        ConsensusSessionParticipant.objects.create(session=session, profile=profile, status=ConsensusSessionParticipantStatus.JOINED)
+        ConsensusSessionParticipant.objects.create(
+            session=session, profile=profile, status=ConsensusSessionParticipantStatus.JOINED
+        )
     return session
 
 
 class SoloRoundFlowTests(TestCase):
     def setUp(self) -> None:
-        # These tests are about answer/vote *resolution*, not trust-check
-        # injection (covered separately in test_consensus_trust.py) - the
-        # test wiki deliberately confirms every field except description so
-        # round selection is deterministic, but that same "confirmed" state
-        # also makes it a valid *check*-round candidate, which would
-        # otherwise flakily hijack the round at random (see
-        # services.consensus.trust.CHECK_PROBABILITY_MIN/MAX).
-        self.enterContext(mock.patch("urbanlens.dashboard.services.consensus.selection.should_inject_check", return_value=False))
+        self.enterContext(
+            mock.patch("urbanlens.dashboard.services.consensus.selection.should_inject_check", return_value=False)
+        )
 
     def test_solo_answer_applies_immediately_and_awards_points(self) -> None:
         profile = _make_profile()
@@ -123,14 +113,16 @@ class SoloRoundFlowTests(TestCase):
         round_ = consensus_session.get_or_create_round(session)
         consensus_session.submit_answer(round_, profile, "First answer.")
 
-        with self.assertRaises(consensus_session.ConsensusError):
+        with self.assertRaises(consensus_session.RoundAlreadySettledError):
             consensus_session.submit_answer(round_, profile, "Second answer.")
 
 
 class CompetitiveRoundFlowTests(TestCase):
     def setUp(self) -> None:
         # See SoloRoundFlowTests.setUp - same determinism rationale.
-        self.enterContext(mock.patch("urbanlens.dashboard.services.consensus.selection.should_inject_check", return_value=False))
+        self.enterContext(
+            mock.patch("urbanlens.dashboard.services.consensus.selection.should_inject_check", return_value=False)
+        )
 
     def test_full_agreement_applies_once_and_pays_everyone_equally(self) -> None:
         alice = _make_profile()
@@ -150,7 +142,9 @@ class CompetitiveRoundFlowTests(TestCase):
         self.assertIn(wiki.description, ("Old Mill", "old mill"))
         self.assertEqual(WikiEdit.objects.filter(wiki=wiki).count(), 1)
         for profile in (alice, bob):
-            self.assertEqual(ConsensusProfile.objects.get(profile=profile).total_points, points.COMPETITIVE_AGREE_POINTS)
+            self.assertEqual(
+                ConsensusProfile.objects.get(profile=profile).total_points, points.COMPETITIVE_AGREE_POINTS
+            )
 
     def test_disagreement_then_vote_consensus_applies_winner_and_pays_winners_more(self) -> None:
         alice = _make_profile()

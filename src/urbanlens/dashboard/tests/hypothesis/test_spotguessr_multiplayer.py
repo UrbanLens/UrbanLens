@@ -26,7 +26,13 @@ from urbanlens.dashboard.models.spotguessr.model import (
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
-    SpotGuessrError,
+    InviteeNotFriendError,
+    LobbyClosedForInviteError,
+    LobbyClosedForJoinError,
+    NotSessionHostForInviteError,
+    NotSessionHostForStartError,
+    ParticipantNotInvitedError,
+    SessionAlreadyStartedError,
     begin_session,
     get_or_create_round,
     invite_to_session,
@@ -88,24 +94,29 @@ class InviteToSessionTests(TestCase):
         self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [])
 
     def test_non_host_cannot_invite(self) -> None:
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(NotSessionHostForInviteError):
             invite_to_session(self.session, self.guest, self.guest)
 
     def test_cannot_invite_a_non_friend(self) -> None:
         stranger = _make_profile()
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(InviteeNotFriendError):
             invite_to_session(self.session, self.host, stranger)
 
     def test_cannot_invite_once_the_game_has_started(self) -> None:
         self.session.status = GameSessionStatus.ACTIVE
         self.session.save(update_fields=["status"])
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(LobbyClosedForInviteError):
             invite_to_session(self.session, self.host, self.guest)
 
     def test_inviting_twice_does_not_double_notify(self) -> None:
         invite_to_session(self.session, self.host, self.guest)
         invite_to_session(self.session, self.host, self.guest)
-        self.assertEqual(NotificationLog.objects.filter(profile=self.guest, notification_type=NotificationType.SPOTGUESSR_INVITE).count(), 1)
+        self.assertEqual(
+            NotificationLog.objects.filter(
+                profile=self.guest, notification_type=NotificationType.SPOTGUESSR_INVITE
+            ).count(),
+            1,
+        )
         self.assertEqual(GameSessionParticipant.objects.filter(session=self.session, profile=self.guest).count(), 1)
 
 
@@ -118,7 +129,7 @@ class JoinSessionTests(TestCase):
 
     def test_uninvited_profile_cannot_join(self) -> None:
         outsider = _make_profile()
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(ParticipantNotInvitedError):
             join_session(self.session, outsider)
 
     def test_invited_profile_can_join(self) -> None:
@@ -133,7 +144,7 @@ class JoinSessionTests(TestCase):
     def test_cannot_join_after_the_roster_is_locked(self) -> None:
         self.session.status = GameSessionStatus.ACTIVE
         self.session.save(update_fields=["status"])
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(LobbyClosedForJoinError):
             join_session(self.session, self.guest)
 
     def test_an_already_joined_profile_can_still_be_fetched_after_the_roster_locks(self) -> None:
@@ -152,12 +163,19 @@ class BeginSessionTests(TestCase):
         self.location = _make_location()
         baker.make(Pin, profile=self.host, location=self.location)
         baker.make(Pin, profile=self.guest, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
         self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest])
         join_session(self.session, self.guest)
 
     def test_non_host_cannot_begin(self) -> None:
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(NotSessionHostForStartError):
             begin_session(self.session, self.guest)
 
     def test_host_begins_the_game(self) -> None:
@@ -169,7 +187,7 @@ class BeginSessionTests(TestCase):
 
     def test_cannot_begin_twice(self) -> None:
         begin_session(self.session, self.host)
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(SessionAlreadyStartedError):
             begin_session(self.session, self.host)
 
     @patch("urbanlens.dashboard.services.spotguessr.realtime.broadcast")
@@ -194,9 +212,18 @@ class JoinedOnlyRoundAndGuessTests(TestCase):
         baker.make(Pin, profile=self.guest, location=self.location)
         # Deliberately no pin for `never_joins` - if their pins were required,
         # this location would be ineligible and the round could never be created.
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
 
-        self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest, self.never_joins])
+        self.session = start_multiplayer_session(
+            self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest, self.never_joins]
+        )
         join_session(self.session, self.guest)
         round_ = begin_session(self.session, self.host)
         assert round_ is not None
@@ -237,7 +264,14 @@ class JoinedOnlyRoundAndGuessTests(TestCase):
         second_location = _make_location()
         baker.make(Pin, profile=self.host, location=second_location)
         baker.make(Pin, profile=self.guest, location=second_location)
-        baker.make(Image, location=second_location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=second_location))
+        baker.make(
+            Image,
+            location=second_location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=second_location),
+        )
 
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
         submit_guess(self.round_, self.host, guess_point)

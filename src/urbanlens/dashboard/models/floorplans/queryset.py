@@ -42,10 +42,8 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
 
     def at(self, place: Place, on_date: datetime.date | None = None, *, profile=None, community: bool = False) -> Floorplan | None:
         """The plan in force on a date, or the most current when no date given.
-
-        A version applies from its ``valid_from`` until the next dated
-        version; the undated original applies from the beginning of time. So
-        the answer is simply the latest version not after the date.
+        A version applies from its ``valid_from`` until the next dated version; the undated original applies from the beginning of time.
+        So the answer is simply the latest version not after the date.
 
         Args:
             place: The building. Never ``None`` - see :meth:`for_place`.
@@ -84,5 +82,8 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
         return versions.order_by(F("valid_from").desc(nulls_last=True), "-created").first()
 
 
-class FloorplanManager(FrontendDashboardManager.from_queryset(FloorplanQuerySet)):
+_FloorplanManagerBase = FrontendDashboardManager.from_queryset(FloorplanQuerySet)
+
+
+class FloorplanManager(_FloorplanManagerBase):
     """Manager exposing :class:`FloorplanQuerySet`."""

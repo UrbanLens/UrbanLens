@@ -1,4 +1,4 @@
-import { applyAllOrgFilters, clearOrgFilter, syncOrgFilterBarVisibility, syncOrgFilterUI, toggleOrgFilter, type OrgNamespace } from "./organize-filter-engine";
+import { applyAllOrgFilters, clearOrgFilter, ORG_FILTER_NAMESPACES, ORG_TAB_KEY_BY_NS, syncOrgFilterBarVisibility, syncOrgFilterUI, toggleOrgFilter, type OrgNamespace } from "./organize-filter-engine";
 
 export interface OrgTabConfig {
     filterTitle: string;
@@ -11,15 +11,12 @@ export interface OrgTabConfig {
     onCreate: () => void;
 }
 
-const TAB_FILTER_NS: Record<string, OrgNamespace> = { categories: "cat", tags: "tag", status: "status", people: "people" };
+const TAB_FILTER_NS = new Map<string, OrgNamespace>(ORG_FILTER_NAMESPACES.map((ns) => [ORG_TAB_KEY_BY_NS[ns], ns]));
 
 class OrganizeHeader {
     private tabs = new Map<string, OrgTabConfig>();
     private activeTab: string;
-    // The persisted preference - only ever changed by an explicit view-button
-    // click (setSharedView). Rendering never reads this directly; it always
-    // goes through effectiveView(), which is what keeps a transient narrow
-    // window from being confused with the user actually asking for "list".
+    // The persisted preference - only ever changed by an explicit view-button click (setSharedView).
     private sharedView: string;
     private lastEffectiveView: string | null = null;
     private actionsEl: HTMLElement | null = null;
@@ -50,7 +47,7 @@ class OrganizeHeader {
     }
 
     getFilterNs(): OrgNamespace | null {
-        return TAB_FILTER_NS[this.activeTab] ?? null;
+        return TAB_FILTER_NS.get(this.activeTab) ?? null;
     }
 
     /** Gallery doesn't fit a narrow viewport, so a "gallery" preference
@@ -67,11 +64,7 @@ class OrganizeHeader {
 
     setSharedView(view: string): void {
         this.sharedView = view;
-        // Best-effort: remembering the preference must never stop the view from
-        // actually changing. setItem throws on a full quota - which this app can
-        // genuinely reach, since the map caches every pin under `ul_pins_v5_*` -
-        // and an uncaught throw here skips syncViewButtons/applyView/filters
-        // below, so the click appears to do nothing at all.
+        // Best-effort: remembering the preference must never stop the view from actually changing. setItem throws on a full quota.
         try {
             localStorage.setItem("organize_view", view);
         } catch {
@@ -139,12 +132,8 @@ class OrganizeHeader {
     }
 
     /**
-     * Re-render for the current viewport, without ever touching the stored
-     * preference - a resize firing continuously through a drag, or a user
-     * genuinely on a narrow device, must not overwrite a "gallery" choice
-     * made on desktop. Widening back past the breakpoint restores it with
-     * no extra bookkeeping, since sharedView itself was never changed.
-     */
+ * Re-render for the current viewport, without ever touching the stored preference.
+ */
     private enforceMobileGalleryFallback(): void {
         if (this.effectiveView() === this.lastEffectiveView) return;
         this.renderEffectiveView();
@@ -280,18 +269,60 @@ export function installOrgTabSwitching(): void {
     });
 }
 
-// ── Section switching (Labels | Lists | Filters) --------------------------
-// A second, independent tab tier above `.organize-tab`/`.organize-panel`:
-// switches between the three top-level sections of the Organize page. Lists
-// and Filters lazy-load their content via HTMX the first time they're shown
-// (hx-trigger="revealed" on `.organize-section-panel`, see organize/index.html) -
-// this only ever toggles which section is visible, it never touches that content.
-// Kept in sync with the server-side hero branch in organize/index.html's
-// {% block hero %} - the section switch below is client-side only (no page
-// reload), so the hero has to be updated here too or it stays stuck on
-// whatever section was active on the initial page load.
+// ── Tab content prewarming ------------------------------------------------- Every `.organize-panel`.
+function isRenderedVisible(el: HTMLElement): boolean {
+    return el.offsetParent !== null;
+}
+
+function prewarmOrgPanel(panels: HTMLElement[], index: number): void {
+    if (index >= panels.length) return;
+    const panel = panels[index];
+    const url = panel?.getAttribute("hx-get");
+    const targetSel = panel?.getAttribute("hx-target");
+    // Cleared before firing, not after: a click on this tab while the prewarm request is in flight must not also fire htmx's own "revealed".
+    panel?.removeAttribute("hx-trigger");
+    panel?.removeAttribute("hx-get");
+    panel?.removeAttribute("hx-target");
+    panel?.removeAttribute("hx-swap");
+
+    const advance = () => prewarmOrgPanel(panels, index + 1);
+    if (!url || !targetSel) {
+        advance();
+        return;
+    }
+    const targetEl = document.querySelector<HTMLElement>(targetSel);
+    if (!targetEl) {
+        advance();
+        return;
+    }
+    targetEl.addEventListener("htmx:afterSwap", advance, { once: true });
+    targetEl.addEventListener("htmx:responseError", advance, { once: true });
+    window.htmx?.ajax("GET", url, { target: targetSel, swap: "innerHTML" });
+}
+
+export function installOrgTabPrewarm(): void {
+    const panels = Array.from(document.querySelectorAll<HTMLElement>(".organize-panel[hx-get]"));
+    if (!panels.length) return;
+    const activePanel = panels.find((p) => !p.hidden && isRenderedVisible(p));
+    const toPrewarm = panels.filter((p) => p !== activePanel);
+    if (!toPrewarm.length) return;
+
+    const start = () => prewarmOrgPanel(toPrewarm, 0);
+    const activeTargetSel = activePanel?.getAttribute("hx-target");
+    const activeTarget = activeTargetSel ? document.querySelector<HTMLElement>(activeTargetSel) : null;
+    if (!activeTarget) {
+        // Nothing else is loading right now (e.g. Display Order is the active
+        // tab, which never defers) - safe to start immediately.
+        start();
+        return;
+    }
+    activeTarget.addEventListener("htmx:afterSwap", start, { once: true });
+    activeTarget.addEventListener("htmx:responseError", start, { once: true });
+}
+
+// ── Section switching (Labels | Lists | Filters) -------------------------- A second, independent tab tier above.
 const ORG_SECTION_HERO: Record<string, { icon: string; title: string; subtitle: string }> = {
-    labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, and people labels used to organize your data." },
+    labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, people, and media labels used to organize your data." },
     lists: { icon: "bookmarks", title: "Lists", subtitle: "Group your pins into curated collections you can browse, share, and filter by." },
     filters: { icon: "filter_alt", title: "Filters", subtitle: "Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." },
 };
@@ -304,12 +335,7 @@ function updateOrgSectionHero(section: string): void {
     const subtitleEl = document.querySelector<HTMLElement>(".ul-page-hero__subtitle");
     if (iconEl) iconEl.textContent = hero.icon;
     if (titleEl) {
-        // _page_hero.html's server-rendered markup is `<h1>{icon}{title}</h1>`,
-        // which Django's whitespace between tags turns into a whitespace-only
-        // text node BEFORE the icon too - `.find()` without filtering picked
-        // that one, so the title got written before the icon instead of after
-        // it, leaving the real (never-updated) title text node still showing
-        // the old section's name next to the icon.
+        // _page_hero.html's server-rendered markup is `<h1>{icon}{title}</h1>`, which Django's whitespace between tags turns into.
         const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim());
         if (textNode) textNode.textContent = ` ${hero.title} `;
     }
@@ -331,9 +357,7 @@ export function installOrgSectionSwitching(): void {
             });
             updateOrgSectionHero(section);
             const url = new URL(window.location.href);
-            // "labels" isn't a real ?tab= value server-side - it's implied by
-            // whichever label sub-tab (tags/categories/...) was last active,
-            // which installOrgTabSwitching persists to localStorage.
+            // "labels" isn't a real ?tab= value server-side.
             const tabParam = section === "labels" ? (localStorage.getItem("organize_tab") ?? "tags") : section;
             url.searchParams.set("tab", tabParam);
             window.history.replaceState({}, "", url.toString());

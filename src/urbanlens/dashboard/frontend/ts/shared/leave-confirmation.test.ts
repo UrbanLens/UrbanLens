@@ -1,17 +1,9 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { installLeaveConfirmation } from "./leave-confirmation";
 
 /**
- * Each case installs its own guard, as separate pages do. `afterEach` uninstalls
- * every guard from the case that just ran, so `document`/`window` do not
- * accumulate a listener per test for the rest of the run - including this
- * file's very last test, whose guard would otherwise survive into whichever
- * test file bun runs next in the same process and answer *its* beforeunload/
- * click dispatches. A `beforeEach` only protects the next test in this same
- * file, which does nothing for the last one. Guards are also disarmed
- * defensively - each closes over its *own* armed flag, so even a leftover
- * would stay inert rather than answering the current test's dialog.
+ * Each case installs its own guard, as separate pages do.
  */
 interface Guard {
     /** Arm this guard - i.e. the page now has something worth losing. */
@@ -24,6 +16,11 @@ function stubConfirm(answer: boolean): ReturnType<typeof mock> {
     window.confirmDialog = fn as unknown as typeof window.confirmDialog;
     return fn;
 }
+
+const realConfirm = window.confirm;
+const realLocation = window.location;
+/** Where the guard sent the page; a real navigation would replace the DOM every later test file shares. */
+let navigations: string[] = [];
 
 /** Every guard ever installed, so previous cases' guards can be torn down. */
 const installed: { armed: boolean }[] = [];
@@ -53,11 +50,19 @@ function link(html = '<a id="go" href="/elsewhere/">Elsewhere</a>'): HTMLElement
     return document.getElementById("go")!;
 }
 
-async function clickLink(el: HTMLElement, init: MouseEventInit = {}): Promise<MouseEvent> {
+/** Whether the guard stopped the click. The click is then cancelled either way, or happy-dom would follow the link. */
+async function clickLink(el: HTMLElement, init: MouseEventInit = {}): Promise<{ defaultPrevented: boolean }> {
     const event = new MouseEvent("click", { bubbles: true, cancelable: true, ...init });
+    let defaultPrevented = false;
+    const settle = (e: Event) => {
+        defaultPrevented = e.defaultPrevented;
+        e.preventDefault();
+    };
+    window.addEventListener("click", settle, { once: true });
     el.dispatchEvent(event);
+    window.removeEventListener("click", settle);
     await new Promise((resolve) => setTimeout(resolve, 5));
-    return event;
+    return { defaultPrevented };
 }
 
 function beforeUnload(): Event {
@@ -66,11 +71,22 @@ function beforeUnload(): Event {
     return event;
 }
 
+beforeEach(() => {
+    navigations = [];
+    const location = {
+        get href(): string {
+            return realLocation.href;
+        },
+        set href(url: string) {
+            navigations.push(url);
+        },
+    };
+    Object.defineProperty(window, "location", { value: location, configurable: true });
+});
+
 afterEach(() => {
-    // Unbind this case's listeners so `document`/`window` do not accumulate one
-    // per test, and disarm their flags so nothing lingering can answer a later
-    // case - in this file or, since these listeners are global, in whichever
-    // file bun runs next.
+    Object.defineProperty(window, "location", { value: realLocation, configurable: true });
+    // Unbind this case's listeners so `document`/`window` do not accumulate one per test, and disarm their flags so nothing lingering can.
     handles.splice(0).forEach((handle) => {
         handle.uninstall();
     });
@@ -79,6 +95,7 @@ afterEach(() => {
     });
     document.body.innerHTML = "";
     delete window.confirmDialog;
+    window.confirm = realConfirm;
 });
 
 describe("when nothing is at stake", () => {
@@ -152,9 +169,7 @@ describe("when the page is blocked", () => {
 
 describe("after agreeing to leave", () => {
     test("the browser does not ask a second time", async () => {
-        // The navigation we start ourselves re-enters beforeunload. Without
-        // suppression the user answers the same question twice - once in our
-        // dialog, once in the browser's.
+        // The navigation we start ourselves re-enters beforeunload.
         const guard = install();
         guard.arm(); // still true: the page's own condition has not changed
         stubConfirm(true);
@@ -170,6 +185,7 @@ describe("after agreeing to leave", () => {
 
         await clickLink(link());
         expect(guard.onConfirmed).toHaveBeenCalled();
+        expect(navigations).toEqual(["https://urbanlens.test/elsewhere/"]);
     });
 
     test("a second link click is not challenged again", async () => {
@@ -214,9 +230,7 @@ describe("hrefs that are not navigations", () => {
         ["an empty href", '<a id="go" href="">Empty</a>'],
         ["a new-tab link", '<a id="go" href="/elsewhere/" target="_blank">New tab</a>'],
         ["a mixed-case scheme past whitespace", '<a id="go" href="  JavaScript:void(0)">Sneaky</a>'],
-        // Saves a file without navigating. It also must not be confirmed, because
-        // confirming permanently disarms the guard and the page would stay behind
-        // unprotected.
+        // Saves a file without navigating.
         ["a download link", '<a id="go" href="/export.zip" download>Download</a>'],
     ];
 

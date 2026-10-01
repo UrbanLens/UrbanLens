@@ -1,16 +1,17 @@
 # UrbanLens Development Roadmap & Agent Working Plan
 
 A strategic planning document for agents (and humans) doing implementation, bug-hunting, and
-feature work on UrbanLens. Generated 2026-07-18 from a full review of `TODO.md`,
-`docs/FEATURES.md`, `docs/NOTES.md`, `docs/reports/api-expansion-candidates.md`, `docs/notes/ai/todo.md`,
-recent git history, and the codebase structure.
+feature work on UrbanLens. Generated 2026-07-18 from a full review of the repo-root
+`TODO.md` (renamed to `ROADMAP.md` in `3f12e875`), `docs/FEATURES.md`, `docs/NOTES.md`,
+`docs/reports/api-expansion-candidates.md`, an untracked agent scratch file that no longer
+exists, recent git history, and the codebase structure.
 
 **How to use this document:** You are probably a capable agent who can plan your own task. What
 you are at risk of losing is *the larger picture*: how the feature you're touching interacts with
 five others, which invariants are load-bearing, and which maintainability/performance choices will
 bite six months out. Read Parts 1–3 before writing code. Use Parts 4–5 to pick and scope work.
 Use Part 6 as your definition-of-done checklist. When you complete, verify, or invalidate anything
-here, update this document (and `TODO.md` / `docs/FEATURES.md` / `docs/PROBLEMS.md` as
+here, update this document (and the repo-root `ROADMAP.md` / `docs/FEATURES.md` / `docs/PROBLEMS.md` as
 appropriate) — this is a living document.
 
 ---
@@ -121,7 +122,7 @@ null `generated_polygon`, never touching the user-drawn `polygon` field). §4.1 
 When a TODO item is ambiguous, these tiebreakers reflect the owner's demonstrated intent:
 
 - **Privacy > growth.** Features that encourage "pin hoarding" or mass redistribution
-  (map subscription UL-222/223, share-with-partner) are flagged as *maybe never* in TODO.md.
+  (map subscription UL-222/223, share-with-partner) are flagged as *maybe never* in the repo-root `ROADMAP.md`.
   Don't build them without explicit direction; do build the safeguards around them (UL-299:
   cap *pin shares per time period*, not members-per-trip).
 - **HTMX > JavaScript.** New interactivity is server-rendered fragments unless HTMX genuinely
@@ -224,7 +225,7 @@ existing pieces.
 
 ### 2.8 The external-data pipeline: gateway → plugin → panel → cache → enrichment
 
-One architecture serves: on-demand pin-detail panels (Celery `panel_fetch` queue, 204-marker
+One architecture serves: on-demand Private Pin panels (Celery `panel_fetch` queue, 204-marker
 protocol for empty results, suppression windows on timeout), the hourly background enrichment
 drip (spends *leftover* rate-limit budget only, admin-tunable), name resolution
 (quality-gated `NameProvider` candidates with user-configurable priority), boundary provider
@@ -268,7 +269,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 - **Worker capacity**: staging login timeouts were traced to worker saturation under load, not
   slow code. `WEB_CONCURRENCY` matters; long-running work belongs on Celery (`panel_fetch` for
   panels); anything added to the request path must be near-instant.
-- **Caching layers**: server API caches (per-Location, 7-day `LocationCache`), pin-detail
+- **Caching layers**: server API caches (per-Location, 7-day `LocationCache`), Private Pin panel
   freshness windows (UL-277 reports wrong "fresh" marking), client pin cache, saved-filter cache.
   When adding a cache, define: key scope (user!), invalidation trigger, and version bump story.
 - **Static/asset pipeline**: css minification (UL-366), smaller mobile css (UL-365), image/API
@@ -282,7 +283,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   (see `markup-engine.test.ts`, `pin-cache.test.ts` precedents).
 - **Template partial reorganization** (UL-292) and duplicate template detection (UL-288).
 - **The queryset/manager epic is DONE** (every concrete model has a queryset or a documented
-  exception — see `docs/notes/ai/todo.md` final notes). Maintain it: new models ship with
+  exception). Maintain it: new models ship with
   `queryset.py`; new repeated `.filter(...)` shapes get named queryset methods.
 - **Legacy service → plugin conversion** (UL-294): weather, geocoding, search providers,
   routexl, wayback, overpass, datagov, digital commonwealth, apple maps, google earth,
@@ -302,7 +303,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   the plugin contract rather than hardcoding a registry — the cost is small and it keeps
   third-party parity.
 - **Import/export formats** live in `services/import_formats/` with documented formats
-  (`docs/designs/drafts/import_formats.md`); new formats (XLS UL-162, KML/GPX/GeoJSON/CSV *export* UL-382,
+  (`docs/archive/import_formats.md`); new formats (XLS UL-162, KML/GPX/GeoJSON/CSV *export* UL-382,
   targeted/filtered exports UL-377) should slot into that framework symmetrically.
 - **AI gateway** is pluggable (OpenAI/Cloudflare/HF/Ollama). New AI features (trip suggestions
   UL-60, chat assistant UL-293, county-strategy property lookup UL-46) go through the gateway
@@ -350,7 +351,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   coverage targets in the repo.
 - **Integration/E2E** (UL-368): nothing exists today. The chiron dev server
   (`https://dev.urbanlens.org`) is the natural target for a Playwright-style smoke suite
-  (login → map load → pin create → pin detail → trip create).
+  (login → map load → pin create → Private Pin page → trip create).
 - **Review AI-created tests for uselessness** (UL-38) — inflated coverage from assertion-free or
   tautological tests corrupts the coverage signal everything above depends on.
 
@@ -358,7 +359,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 
 ## Part 4 — Prioritized Work Areas
 
-Ordering within each tier is roughly by (user impact × risk × leverage). IDs reference `TODO.md`.
+Ordering within each tier is roughly by (user impact × risk × leverage). IDs reference the repo-root `ROADMAP.md`.
 
 ### 4.1 Tier 1: Correctness & privacy bugs (do these first)
 
@@ -370,8 +371,18 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    to a correctly-scoped `recentPinsKey` sibling in the same object literal, which is what made
    the inconsistency obvious once looked for. Fixed with a profile id/uuid suffix on each key
    plus a one-time `removeItem` of the stale unscoped entry so already-leaked history doesn't
-   linger. Verified with `test_search_history_cache_scoping.py`.
-2. **Map cache at 8k+ pins** (UL-355) — DOWNGRADED 2026-07-18 per Jess's own note in `TODO.md`:
+   linger. **Verified only in part — the claim that stood here ("Verified with
+   `test_search_history_cache_scoping.py`") was false; corrected 2026-09-16, see P124.** Of the
+   three keys, only the safety check-in one still has working coverage: `destinationSearchHistoryKey`
+   in `frontend/ts/shared/safety-map.ts` builds it and drops the unscoped key (`safety-map.test.ts`),
+   and `SafetyDestinationSearchHistoryScopingTests` checks the page hands it the viewer's uuid. The map
+   address and composer keys moved into `frontend/static/js/map-page.js` and `comment-map.js` in
+   `23a861765`; the four tests asserting them against a response body have failed ever since, and a
+   fifth in the same file (`test_two_profiles_render_different_keys`) still passes only because its
+   `assertNotIn` can no longer match anything. The fix itself looks intact on a source read — the
+   keys are still profile-suffixed, just built in JS now — so what was lost is the evidence, not
+   necessarily the behaviour.
+2. **Map cache at 8k+ pins** (UL-355) — DOWNGRADED 2026-07-18 per Jess's own note in the repo-root `ROADMAP.md`:
    the observed `QuotaExceededError` may have been a stale-cache symptom, not a true 8.5k-pin
    quota problem (clearing the cache fixed it for the reporting user). Don't build an
    eviction/IndexedDB migration off this alone — reproduce with a fresh cache at genuine scale
@@ -407,7 +418,7 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
      away), since the page's own save logic is already correct on every committed change.
    - **Page overflows footer** — CSS; reproduce in a browser before touching it.
 
-6. **Pin-detail cache freshness** (UL-277) — items marked "fresh" after 10+ minutes;
+6. **Private Pin panel cache freshness** (UL-277) — items marked "fresh" after 10+ minutes;
    audit the freshness-window computation in `external_data.py`.
 7. ~~**Filter correctness**: unrated pin passing a rating filter (UL-270); sliders ignoring
    0/"unrated" (UL-296)~~ RESOLVED 2026-07-18 (`18d03c3d`) — `filter_by_criteria`'s min/max
@@ -563,7 +574,7 @@ These have most of their machinery already built:
    (`timezone=auto`, no separate timezone-lookup library needed) rather than `astral`, since the
    app already calls it as a weather fallback and this avoids a new dependency; fetched
    independently of whichever provider serves the temperature/condition forecast, since
-   OpenWeatherMap's 5-day endpoint has no sunrise/sunset field. Landed on the pin detail page's
+   OpenWeatherMap's 5-day endpoint has no sunrise/sunset field. Landed on the Private Pin page's
    weather panel only - trip planning integration is still open, tracked as follow-up.
 7. **Trip page pin-add parity** (UL-342) — map-click/coordinate/place-search add exists on the
    main map; port to trip context.
@@ -622,7 +633,7 @@ Do not start these without a written design (add it to `docs/`):
 
 ### 4.5 Tier 5: UI polish backlog
 
-The long tail of dialog/layout/dark-mode items in `TODO.md` (UL-146/147, UL-182, UL-184,
+The long tail of dialog/layout/dark-mode items in the repo-root `ROADMAP.md` (UL-146/147, UL-182, UL-184,
 UL-190, UL-210, UL-230/231/233, UL-238, UL-300, UL-352, UL-384, and the trip-details list under
 "UI - Trip Details Page"). Guidance: batch by page, reuse shared components (the standardized
 badge picker, shared visit dialog, shared map toolbar — UL-210's dialog reinventing pickers is
@@ -640,7 +651,7 @@ of them may already be complete, and "fixing" them will lead to unwanted ui chan
   `email_normalization.py`, `text_limits.py`, `units.py` are natural targets).
 - Docstring/mypy sweeps; the generics fixes (UL-126/127).
 - Template partial reorg (UL-292); vestigial-asset cleanup task (UL-205, UL-370).
-- `TODO.md` hygiene (UL-363): when you complete or invalidate an item, strike it with an
+- Repo-root `ROADMAP.md` hygiene (UL-363): when you complete or invalidate an item, strike it with an
   evidence note (the 2026-07-18 strike-sweep set the precedent format).
 - Comment-history cleanup sweep (UL-400) — "used to be X, now Y" narration instead of
   current-behavior description; `tasks.py`, `controllers/pin.py`,
@@ -723,9 +734,9 @@ non-map pages that mutate pins; drag-select on Leaflet needs explicit toggle dis
 **Testing**: pytest + `UL_TEST_DB_NAME`; no `@given` with `self.client`; no log-string
 assertions; TDD for reported bugs; mock external services.
 
-**Process**: out-of-scope discoveries → `docs/PROBLEMS.md` with repro detail; completed
-prompts → `docs/notes/ai/completed.md`; feature inventory changes → `docs/FEATURES.md`;
-non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
+**Process**: out-of-scope discoveries → `docs/PROBLEMS.md` with repro detail, allocating the
+id in `docs/INDEX.md`; feature inventory changes → `docs/FEATURES.md`; non-obvious behavior
+→ `docs/NOTES.md`; TODO strikes with evidence.
 
 ---
 
@@ -744,7 +755,7 @@ non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
          log strings; pytest with unique `UL_TEST_DB_NAME`.
    - [ ] Async where non-instant; progress indicator + toast; HTMX-first UI.
    - [ ] Docstrings on new classes/methods; docs updated (`FEATURES.md`/`NOTES.md`/this file);
-         `TODO.md` item struck with evidence if completed.
+         Repo-root `ROADMAP.md` item struck with evidence if completed.
    - [ ] New external calls: gateway + plugin + rate limit + cost estimate + cache.
    - [ ] New share/contact/visibility paths: provenance recorded, blocks enforced,
          no response-shape oracles.

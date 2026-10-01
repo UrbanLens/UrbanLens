@@ -1,16 +1,4 @@
-"""A photo somebody may see does not come with the bookkeeping around it.
-
-`build_photo_payload` is the one place the external API turns an Image into JSON,
-and it already withholds the owner-only parts: which pin the photo is filed
-under, which visit it belongs to, whether its owner has dismissed it from
-organising. Those are correct today, and this file exists so they stay that way -
-adding a field to a payload is the easiest possible change to make, and the
-hardest to notice is one that carries private context along with a public
-picture.
-
-The distinction the payload draws is the useful one: a photo can be visible
-through a pin gallery while the *fact that it is filed under that pin* is not.
-"""
+"""A photo somebody may see does not come with the bookkeeping around it."""
 
 from __future__ import annotations
 
@@ -39,7 +27,9 @@ class PhotoPayloadWithholdsOwnerContextTests(TestCase):
         self.owner = baker.make(User).profile
         self.neighbour = baker.make(User).profile
         self.location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
-        self.owner_pin = baker.make(Pin, profile=self.owner, location=self.location, parent_pin=None, name=PRIVATE_PIN_NAME)
+        self.owner_pin = baker.make(
+            Pin, profile=self.owner, location=self.location, parent_pin=None, name=PRIVATE_PIN_NAME
+        )
         baker.make(Pin, profile=self.neighbour, location=self.location, parent_pin=None)
         # Shared as widely as possible, so the photo itself is legitimately
         # visible and only the context around it is in question.
@@ -83,4 +73,6 @@ class PhotoPayloadWithholdsOwnerContextTests(TestCase):
 
         self.assertIn("owner_slug", payload)
         if payload["owner_slug"] is not None:
-            self.assertEqual(payload["owner_slug"], self.owner.slug, "owner_slug should be the owner's own slug when not masked")
+            self.assertEqual(
+                payload["owner_slug"], self.owner.slug, "owner_slug should be the owner's own slug when not masked"
+            )

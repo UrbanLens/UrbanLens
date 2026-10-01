@@ -1,21 +1,4 @@
-"""Gateway for REData's ``/incidents/`` near-a-coordinate endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /incidents/ - reported police
-incidents". Providers are *cities* (nine municipal open-data portals), radius
-pinned at 500 m (block scale) for every one; outside every registered city
-the answer is ``not_applicable``, which is different from "nothing happened
-here".
-
-Contract points any consumer must respect:
-
-- ``location_precision``: every publisher fuzzes location before release
-  (block centroid / nearest intersection / hundred block). A point is NOT
-  evidence about a specific building.
-- ``arrest_made`` is nullable and null is not false - only two of the nine
-  cities publish it.
-- ``attributes.completeness_lag_days``, where present, marks a recent window
-  the publisher itself says is incomplete.
-"""
+"""Gateway for REData's ``/incidents/`` near-a-coordinate endpoint."""
 
 from __future__ import annotations
 
@@ -80,18 +63,10 @@ class RedataIncidentsGateway(RedataLocationContextGateway):
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope. Entries carry ``category``,
-            ``offense_description``, ``occurred_at``/``reported_at`` (real
-            instants resolved in the city's own zone; the two routinely
-            differ by days), ``location_precision``, nullable
-            ``arrest_made``/``domestic``, and the publisher's own
-            class/wording plus collapse bookkeeping (``offenses``,
-            ``source_row_count``) under ``attributes``.
+            The parsed envelope.
 
         Raises:
-            LocationContextUnavailableError: The covering source failed to
-                answer, the request itself failed, or a filter value was
-                rejected.
+            LocationContextUnavailableError: The covering source failed to answer, the request itself failed, or a filter value was rejected.
         """
         extra_params: dict[str, Any] = {}
         if categories:

@@ -1,15 +1,6 @@
 /**
- * Preflight, run once before anything else.
- *
- * Its whole job is to turn "forty tests timed out" into one sentence saying
- * why. A deployment that is down, a URL with a typo in it, a manifest that was
- * never written, a proxy presenting a certificate the runner does not trust -
- * each of those produces an identical wall of timeouts thirty seconds in, and
- * each is diagnosable in under a second up front.
- *
- * It also prints what the run is pointed at. On a suite whose target is an
- * environment variable, "which deployment did that report come from" is a
- * question somebody always ends up asking.
+ * Preflight, run once before anything else. Its whole job is to turn "forty tests timed out" into
+ * one sentence saying why.
  */
 
 import { request, type FullConfig } from "@playwright/test";
@@ -17,6 +8,7 @@ import { request, type FullConfig } from "@playwright/test";
 import { allAccounts, reportedSiteUrl } from "../lib/accounts.js";
 import { env } from "../lib/env.js";
 import { publicRoutes } from "../lib/routes.js";
+import { detectGitSha, writeRunInfo } from "../lib/run.js";
 
 /** How long a healthy deployment gets to answer a liveness probe. */
 const PROBE_TIMEOUT_MS = 20_000;
@@ -27,13 +19,17 @@ const LIVENESS_BODY = "Okay!";
 export default async function globalSetup(_config: FullConfig): Promise<void> {
     const accounts = allAccounts();
     const roles = [...accounts.keys()];
+    const gitSha = detectGitSha();
+    writeRunInfo({ runId: env.runId, startedAt: new Date().toISOString(), gitSha, baseUrl: env.baseUrl });
+    // Workers are spawned after this and inherit it, so their env.runId matches run.json.
+    process.env.UL_E2E_RUN_ID ??= env.runId;
 
     process.stdout.write(
         [
             "",
             "  UrbanLens integration suite",
             `  target      ${env.baseUrl}`,
-            `  run id      ${env.runId}`,
+            `  run id      ${env.runId}   commit ${gitSha ?? "unknown"}`,
             `  accounts    ${roles.join(", ")}`,
             `  workers     ${env.workers}   retries ${env.retries}`,
             "",

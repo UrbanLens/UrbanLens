@@ -28,9 +28,7 @@ function splitShell(): { walls: Wall[]; west: Face; east: Face; faces: Face[] } 
 
 describe("splitRoomBoundary", () => {
     test("a room does not own the building's side", () => {
-        // The reverted bug: topologically `west` bounds only the west room, so
-        // a purely topological rule hands it over and dragging the room tears
-        // the side off the building.
+        // The reverted bug: topologically `west` bounds only the west room, so a purely topological rule hands it over and dragging the room.
         const { walls, west } = splitShell();
 
         const boundary = splitRoomBoundary(west, walls);
@@ -40,10 +38,7 @@ describe("splitRoomBoundary", () => {
     });
 
     test("a room owns the partitions on its boundary", () => {
-        // In a planar subdivision every interior partition borders two faces,
-        // so requiring "borders nothing else" left a closet inside a building
-        // owning nothing at all - and a room with no walls of its own declines
-        // to be moved, turned or deleted.
+        // In a planar subdivision every interior partition borders two faces, so requiring "borders nothing else" left a closet inside.
         const { walls, west } = splitShell();
 
         const boundary = splitRoomBoundary(west, walls);
@@ -78,9 +73,7 @@ describe("splitRoomBoundary", () => {
     });
 
     test("a structure bounded only by exterior wall owns all of it", () => {
-        // A shed, or a building nobody has subdivided. Its walls bound it and
-        // nothing else, so there is no side of anything else to tear off - and
-        // without this such a room could be named but never moved or deleted.
+        // A shed, or a building nobody has subdivided.
         const walls = [wall("n", "exterior"), wall("s", "exterior"), wall("e", "exterior"), wall("w", "exterior")];
         const shed = face(["n", "s", "e", "w"]);
 

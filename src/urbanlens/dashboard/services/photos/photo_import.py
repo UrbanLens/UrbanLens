@@ -1,13 +1,4 @@
-"""Shared photo-import mode constants and pin-visit-date lookup.
-
-Used by provider controllers whose connected library supports server-side
-filtering (Immich, Flickr) to offer three ways of finding candidate photos
-for a pin: near its coordinates, taken on a day the user recorded a
-:class:`~urbanlens.dashboard.models.visits.model.PinVisit` there, or browsed
-unfiltered. Providers that can't filter at all (Google Photos' Picker API,
-where the user always browses their whole library in Google's own UI) don't
-use this module.
-"""
+"""Shared photo-import mode constants and pin-visit-date lookup."""
 
 from __future__ import annotations
 
@@ -41,8 +32,7 @@ def visit_dates_for_pin(pin: Pin, limit: int = MAX_VISIT_DATES) -> list[datetime
         limit: Maximum number of distinct dates to return, most recent first.
 
     Returns:
-        Distinct visit dates, newest first. Empty if the pin has no recorded visits.
-    """
+        Distinct visit dates, newest first."""
     dates: list[datetime.date] = []
     for visited_at in pin.visit_history.order_by("-visited_at").values_list("visited_at", flat=True):
         day = visited_at.date()

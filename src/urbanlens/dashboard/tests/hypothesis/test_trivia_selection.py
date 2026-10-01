@@ -13,7 +13,9 @@ from urbanlens.dashboard.services.trivia.selection import pick_next_question
 
 
 def _make_question() -> TriviaQuestion:
-    return baker.make(TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937")
+    return baker.make(
+        TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937"
+    )
 
 
 class PickNextQuestionTests(TestCase):

@@ -1,26 +1,4 @@
-"""Background-enrichment sources that cache small, wiki-attached location photos.
-
-Three sources, contributed to the hourly scheduled-enrichment cycle
-(``services.locations.enrichment.run_enrichment_cycle``) by ``plugins.builtin.google_places``
-(:class:`PlacePhotoEnrichmentSource`) and ``plugins.builtin.google_maps``
-(:class:`StreetViewEnrichmentSource`, :class:`SatelliteEnrichmentSource`):
-
-- Google Places business photos.
-- A static Street View image.
-- A static satellite image.
-
-Each is persisted as an ordinary, small (resized + WebP) ``Image`` row, attached to the
-location's Wiki (lazily created if absent, exactly like the "share to wiki" action any user can
-already take) rather than a pin or profile - these are site-owned, publicly-sourced reference
-imagery, not anyone's private upload, so there is no profile to charge storage quota against and
-no privacy concern in making them wiki-visible. Attaching to the wiki is deliberate: it means
-these photos become eligible for SpotGuessr's Photos mode (``services.spotguessr.photos``)
-through that mode's existing, unmodified ``Image.wiki_id`` gate - no changes needed there at all.
-
-Each source tracks its own "attempted, even if nothing was found" completion via a dedicated
-``LocationCache`` marker row, mirroring ``services.locations.enrichment.AddressEnrichmentSource`` - so a
-location with no coverage/photos is tried exactly once, never retried forever.
-"""
+"""Background-enrichment sources that cache small, wiki-attached location photos."""
 
 from __future__ import annotations
 
@@ -48,9 +26,33 @@ MAX_PLACE_PHOTOS = 3
 #: full-resolution original nobody asked to keep.
 _PLACE_PHOTO_MAX_DIMENSION = 1024
 
-#: Street View Static / Static Maps responses already come back ~640x400 - this mostly just
 #: forces the WebP re-encode rather than actually shrinking anything.
 _STATIC_IMAGE_MAX_DIMENSION = 800
+
+#: Longest edge for a provider photo whose own source is not in the table below.
+#: Applied rather than skipping the downscale: that call is also what strips the
+#: provider's EXIF (GPS included), so "no policy" must never mean "no strip".
+DEFAULT_ENRICHED_MAX_DIMENSION = 1024
+
+
+def enriched_max_dimension(source: str) -> int:
+    """The longest-edge cap a provider photo from *source* was stored under.
+
+    Args:
+        source: The row's ``ImageSource`` value.
+
+    Returns:
+        The longest-edge cap in pixels."""
+    # dict[str, int], not dict[ImageSource, int]: ImageSource members are str
+    # subclasses (TextChoices) but a distinct type to mypy, and source (a raw
+    # values_list() column, not an ImageSource instance) is looked up as one.
+    sizes: dict[str, int] = {
+        ImageSource.GOOGLE_MAPS: _PLACE_PHOTO_MAX_DIMENSION,
+        ImageSource.GOOGLE_STREET_VIEW: _STATIC_IMAGE_MAX_DIMENSION,
+        ImageSource.GOOGLE_SATELLITE: _STATIC_IMAGE_MAX_DIMENSION,
+    }
+    return sizes.get(source, DEFAULT_ENRICHED_MAX_DIMENSION)
+
 
 #: Shared with plugins.builtin.google_places.GoogleMapsPhotosPanelSource.cache_source - reusing
 #: the same LocationCache key lets this source skip the API call entirely when a user's own
@@ -70,13 +72,14 @@ def _save_enriched_image(location: Location, content: bytes, *, source: str, sou
         max_dimension: Longest-edge cap passed to ``downscale_stored_image``.
 
     Returns:
-        The persisted Image row (already resized/WebP-converted where possible).
-    """
+        The persisted Image row, still ``pending_scan`` and still at the provider's own dimensions - ``tasks.process_image_upload`` scans, strips and resizes it."""
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.wiki.model import Wiki
-    from urbanlens.dashboard.services.media.images import compute_checksum, downscale_stored_image
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import compute_checksum
+    from urbanlens.dashboard.tasks import process_image_upload
 
     # Deliberate, not a "lazy side effect of viewing/editing content" (the case
     # Wiki.objects.get_or_create_for_location's docstring warns against) - making this photo
@@ -96,34 +99,21 @@ def _save_enriched_image(location: Location, content: bytes, *, source: str, sou
         caption=caption.strip() or None,
         checksum=checksum,
         file_size=len(content),
+        # Provider bytes, decoded nowhere yet.
+        # This function runs inside the enrichment tasks, which hold every third-party API key -
+        # exactly the process a decoder bug must not be reachable from.
+        pending_scan=True,
     )
-    from PIL.Image import DecompressionBombError as PILDecompressionBombError
 
-    try:
-        new_size = downscale_stored_image(image, max_dimension=max_dimension, convert_webp=True)
-    except (OSError, ValueError, PILDecompressionBombError) as exc:
-        # DecompressionBombError inherits straight from Exception rather than
-        # from OSError/ValueError like the rest of Pillow's failures, so it
-        # escapes a two-tuple handler. `tasks.py`'s call to this same function
-        # already carries that fix and the comment explaining it; this second
-        # call site was left behind, and an over-89MP photo from an external
-        # source took the enrichment run down instead of degrading to the
-        # logged warning every other unprocessable image gets.
-        logger.warning("Downscaling failed for enriched image %s: %s", image.pk, exc, exc_info=True)
-        return image
-    if new_size is not None:
-        image.file_size = new_size
-        image.save(update_fields=["image", "file_size", "updated"])
+    # max_dimension has to be passed explicitly: these rows are profile-less, so
+    # process_image_upload has no subscriber plan to read a downscale policy from
+    # and would otherwise leave the provider's full-size original in place.
+    safely_enqueue_task(process_image_upload, image.pk, max_dimension)
     return image
 
 
 class _BackfillMarkerSource(EnrichmentSource):
-    """Shared "attempted once, ever" completion tracking via a LocationCache marker row.
-
-    Same contract as ``services.locations.enrichment.AddressEnrichmentSource``: the marker is written
-    regardless of whether anything was actually found, so a location that turns out to have no
-    coverage/photos isn't retried every cycle forever.
-    """
+    """Shared "attempted once, ever" completion tracking via a LocationCache marker row."""
 
     #: LocationCache source recording that a backfill attempt happened.
     marker_source: ClassVar[str] = ""
@@ -147,13 +137,7 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
     @property
     def service_keys(self) -> tuple[str, ...]:
         """Whichever of REData/Google Places ``places_resolution`` would actually dispatch to.
-
-        Not a fixed ``ClassVar`` like most sources: which service this source's calls are
-        actually billed/rate-limited against depends on runtime REData configuration, exactly
-        like ``services.apis.locations.places_resolution``'s own internal dispatch. Budgeting
-        against the *other*, unused path (e.g. a REData-only install's disabled/never-touched
-        ``google_places`` service row) would wrongly throttle or skip this source.
-        """
+        Budgeting against the *other*, unused path (e.g. a REData-only install's disabled/never-touched ``google_places`` service row) would wrongly throttle or skip this source."""
         if _redata_configured():
             return ("redata_places",)
         return ("google_places",)
@@ -169,7 +153,6 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
-        from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         api_key = app_settings.google_unrestricted_api_key or ""
@@ -192,8 +175,10 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
             except (PhotoNotFoundError, GatewayRequestError, requests.exceptions.RequestException) as exc:
                 logger.info("Place photo %s unavailable for location=%s: %s", photo_name, location.pk, exc)
                 continue
-            image = _save_enriched_image(location, content, source=ImageSource.GOOGLE_MAPS, source_url=page_url, max_dimension=_PLACE_PHOTO_MAX_DIMENSION)
-            queue_photo_submission(image)
+            # No queue_photo_submission here: _save_enriched_image hands the row
+            # to process_image_upload, whose tail submits it - after the
+            # downscale, so REData is offered the file that will be served.
+            _save_enriched_image(location, content, source=ImageSource.GOOGLE_MAPS, source_url=page_url, max_dimension=_PLACE_PHOTO_MAX_DIMENSION)
             created += 1
 
         LocationCache.set(location, self.marker_source, {"created": created, "found": len(photo_names)})

@@ -20,7 +20,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, refuse_unless_joined
 from urbanlens.dashboard.models.consensus.model import (
     ConsensusAnswer,
     ConsensusFieldKind,
@@ -32,7 +32,8 @@ from urbanlens.dashboard.models.consensus.model import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.consensus import chat as consensus_chat, fields, serializers, session as consensus_session
-from urbanlens.dashboard.services.social.connections import get_connections
+from urbanlens.dashboard.services.consensus.access import session_access
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -42,20 +43,8 @@ def _current_profile(request: HttpRequest) -> Profile:
     return profile
 
 
-def _participant_session(profile: Profile, session_id: int) -> ConsensusSession:
-    """The session, only if ``profile`` participates in it (any status) - 404 otherwise.
-
-    404 (not 403) mirrors ``controllers.spotguessr``'s convention - a
-    session another profile is playing shouldn't even reveal that it exists.
-    """
-    participant = ConsensusSessionParticipant.objects.filter(session_id=session_id, profile=profile).select_related("session").first()
-    if participant is None:
-        raise Http404("No such session for this profile.")
-    return participant.session
-
-
 def _joined_participant(profile: Profile, session: ConsensusSession) -> ConsensusSessionParticipant:
-    participant = ConsensusSessionParticipant.objects.filter(session=session, profile=profile).first()
+    participant = session_access.active_participants(session.pk).filter(profile=profile).first()
     if participant is None:
         raise Http404("No such session for this profile.")
     return participant
@@ -71,10 +60,7 @@ class ConsensusHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         profile = _current_profile(request)
         consensus_profile = ConsensusProfile.objects.get_or_create_for(profile)
 
-        initial_session_id = None
-        raw_session_id = request.GET.get("session")
-        if raw_session_id and ConsensusSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
-            initial_session_id = raw_session_id
+        initial_session_id = deep_link_session_id(session_access, profile, request.GET.get("session"))
 
         profile_summary = serializers.serialize_consensus_profile(consensus_profile)
         # points_for_next_level is the cumulative lifetime threshold for the next
@@ -107,26 +93,13 @@ class ConsensusHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         )
 
 
-class ConsensusFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The profile's friends, for the multiplayer invite picker.
-
-    GET /games/consensus/friends/
-    """
-
-    def get(self, request: HttpRequest) -> HttpResponse:
-        profile = _current_profile(request)
-        friends = get_connections(profile)
-        return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
-
-
 class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or competitive (a lobby to invite friends into).
 
-    POST /games/consensus/start/   body: ``total_rounds``, optional ``invite_profile_ids`` (repeated).
+    POST /games/consensus/start/ body: ``total_rounds``, optional ``invite_profile_ids`` (repeated).
 
-    A solo start for a profile with no visited pins never creates a
-    ``ConsensusSession`` - responds with ``{"error_code": "no_eligible_wikis"}``
-    instead, matching ``SpotGuessrStartView``'s convention.
+    A solo start for a profile with no visited pins never creates a ``ConsensusSession`` - responds with
+    ``{"error_code": "no_eligible_wikis"}`` instead, matching ``SpotGuessrStartView``'s convention.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -143,8 +116,12 @@ class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             invitees = list(Profile.objects.filter(pk__in=invite_ids))
             try:
                 game_session = consensus_session.start_competitive_session(profile, invitees, total_rounds=total_rounds)
+            except consensus_session.NotFriendError as exc:
+                logger.info("consensus start rejected: %s", exc)
+                return JsonResponse({"error": "You can only invite friends to a session."}, status=400)
             except consensus_session.ConsensusError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=400)
+                logger.info("consensus start rejected: %s", exc)
+                return JsonResponse({"error": "That session couldn't be started."}, status=400)
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
         if not consensus_session.has_eligible_wikis([profile]):
@@ -153,7 +130,8 @@ class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         try:
             game_session = consensus_session.start_solo_session(profile, total_rounds=total_rounds)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus start rejected: %s", exc)
+            return JsonResponse({"error": "That session couldn't be started."}, status=400)
 
         round_ = consensus_session.get_or_create_round(game_session)
         if round_ is None:
@@ -171,7 +149,7 @@ class ConsensusLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(serializers.serialize_session(game_session))
 
 
@@ -183,7 +161,7 @@ class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             invitee = Profile.objects.get(pk=request.POST.get("profile_id"))
@@ -192,8 +170,18 @@ class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             participant = consensus_session.invite_to_session(game_session, profile, invitee)
+        except consensus_session.NotHostError as exc:
+            logger.info("consensus invite rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can invite players."}, status=400)
+        except consensus_session.LobbyClosedError as exc:
+            logger.info("consensus invite rejected: %s", exc)
+            return JsonResponse({"error": "You can't invite once the game has started."}, status=400)
+        except consensus_session.NotFriendError as exc:
+            logger.info("consensus invite rejected: %s", exc)
+            return JsonResponse({"error": "You can only invite friends."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus invite rejected: %s", exc)
+            return JsonResponse({"error": "That invite couldn't be sent."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -205,12 +193,19 @@ class ConsensusJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             participant = consensus_session.join_session(game_session, profile)
+        except consensus_session.NotInvitedError as exc:
+            logger.info("consensus join rejected: %s", exc)
+            return JsonResponse({"error": "You weren't invited to this session."}, status=400)
+        except consensus_session.LobbyClosedError as exc:
+            logger.info("consensus join rejected: %s", exc)
+            return JsonResponse({"error": "This game has already started - you can no longer join."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus join rejected: %s", exc)
+            return JsonResponse({"error": "You couldn't be added to this session."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -222,12 +217,19 @@ class ConsensusBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             round_ = consensus_session.begin_session(game_session, profile)
+        except consensus_session.NotHostError as exc:
+            logger.info("consensus begin rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can start the game."}, status=400)
+        except consensus_session.LobbyClosedError as exc:
+            logger.info("consensus begin rejected: %s", exc)
+            return JsonResponse({"error": "This session has already started."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus begin rejected: %s", exc)
+            return JsonResponse({"error": "That session couldn't be started."}, status=400)
 
         if round_ is None:
             if consensus_session.rounds_played(game_session) == 0:
@@ -245,12 +247,19 @@ class ConsensusEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vie
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             consensus_session.end_session_now(game_session, profile)
+        except consensus_session.NotHostError as exc:
+            logger.info("consensus end rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can end the game."}, status=400)
+        except consensus_session.SessionAlreadyEndedError as exc:
+            logger.info("consensus end rejected: %s", exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus end rejected: %s", exc)
+            return JsonResponse({"error": "That session couldn't be ended."}, status=400)
         return JsonResponse({"finished": True, "summary": consensus_session.session_summary(game_session)})
 
 
@@ -262,7 +271,9 @@ class ConsensusRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
+        if refusal := refuse_unless_joined(session_access, game_session, profile):
+            return refusal
 
         round_ = consensus_session.get_or_create_round(game_session)
         if round_ is None:
@@ -305,7 +316,7 @@ class ConsensusAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -317,8 +328,18 @@ class ConsensusAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             answer = consensus_session.submit_answer(round_, profile, value)
+        except consensus_session.NotJoinedError as exc:
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "Join this session before playing."}, status=400)
+        except consensus_session.RoundAlreadySettledError as exc:
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "This round has already been resolved."}, status=400)
+        except consensus_session.DuplicateAnswerError as exc:
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "You've already answered this round."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "That answer couldn't be submitted."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse({"answer_id": answer.pk, "round": serializers.serialize_round(round_)})
@@ -332,7 +353,7 @@ class ConsensusSkipView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -340,8 +361,18 @@ class ConsensusSkipView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         round_ = get_object_or_404(ConsensusRound, pk=round_id, session=game_session)
         try:
             consensus_session.skip_round(round_, profile)
+        except consensus_session.NotJoinedError as exc:
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "Join this session before playing."}, status=400)
+        except consensus_session.RoundAlreadySettledError as exc:
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "This round has already been resolved."}, status=400)
+        except consensus_session.DuplicateAnswerError as exc:
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "You've already answered this round."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "That round couldn't be skipped."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse({"round": serializers.serialize_round(round_)})
@@ -355,7 +386,7 @@ class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -364,11 +395,21 @@ class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         if round_.resolution != ConsensusRoundResolution.VOTE_OPEN:
             return JsonResponse({"error": "This round isn't open for voting."}, status=400)
 
-        chosen_answer = get_object_or_404(ConsensusAnswer, pk=request.POST.get("answer_id"), round=round_)
+        chosen_answer = get_object_or_404(ConsensusAnswer, pk=safe_int_or_none(request.POST.get("answer_id")), round=round_)
         try:
             consensus_session.submit_vote(round_, profile, chosen_answer)
+        except consensus_session.NotJoinedError as exc:
+            logger.info("consensus vote rejected: %s", exc)
+            return JsonResponse({"error": "Join this session before voting."}, status=400)
+        except consensus_session.VotingClosedError as exc:
+            logger.info("consensus vote rejected: %s", exc)
+            return JsonResponse({"error": "This round isn't open for voting."}, status=400)
+        except consensus_session.VoteRejectedError as exc:
+            logger.info("consensus vote rejected: %s", exc)
+            return JsonResponse({"error": "That vote couldn't be recorded."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus vote rejected: %s", exc)
+            return JsonResponse({"error": "That vote couldn't be submitted."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse({"round": serializers.serialize_round(round_)})
@@ -377,23 +418,23 @@ class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Upload a photo of the spot during a round - reuses the Memories upload pipeline.
 
-    POST /games/consensus/session/<session_id>/round/<round_id>/photo/   body: an ``image`` file
+    POST /games/consensus/session/<session_id>/round/<round_id>/photo/ body: an ``image`` file
 
-    Attaches the photo to the round's wiki directly (an explicit "share this
-    with the wiki" action, unlike an ordinary private pin-gallery upload) and
-    awards a small bonus for helping a wiki that's short on photos.
+    Attaches the photo to the round's wiki directly (an explicit "share this with the wiki" action,
+    unlike an ordinary private pin-gallery upload) and awards a small bonus for helping a wiki that's
+    short on photos.
     """
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.consensus import photos as consensus_photos, points as consensus_points
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -403,27 +444,32 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
 
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        # Scanned asynchronously instead: prepare_photo_upload below marks the row
+        # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
         if upload_error:
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
-        if Image.objects.filter(profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this file."}, status=409)
-
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-            image = Image.objects.create(
-                image=image_file,
-                profile=profile,
-                wiki=round_.wiki,
-                checksum=checksum,
-                file_size=image_file.size,
-                media_type=MediaKind.PHOTO,
-            )
+        try:
+            with reserve_upload(profile, None) as reservation:
+                if Image.objects.filter(profile=profile, checksum=checksum).exists():
+                    return JsonResponse({"error": "You already uploaded this file."}, status=409)
+                reservation.reserve(image_file.size or 0)
+                # Stored already stripped - see services.media.images.prepare_photo_upload.
+                prepared = prepare_photo_upload(image_file, profile)
+                image = Image.objects.create(
+                    image=prepared.file,
+                    profile=profile,
+                    wiki=round_.wiki,
+                    checksum=checksum,
+                    file_size=prepared.size,
+                    media_type=MediaKind.PHOTO,
+                    **prepared.metadata,
+                )
+        except UploadRefusedError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status)
 
         safely_enqueue_task(process_image_upload, image.pk)
         consensus_photos.record_in_round_upload(round_, image, profile)
@@ -439,7 +485,7 @@ class ConsensusChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         messages = consensus_chat.recent_messages(game_session)
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
@@ -452,5 +498,5 @@ class ConsensusSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(consensus_session.session_summary(game_session))

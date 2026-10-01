@@ -1,24 +1,9 @@
 /**
- * A WebSocket that stays up: it heartbeats through idle timeouts and reconnects
- * after a drop.
- *
- * Every socket in this project reaches the browser through a Cloudflare tunnel,
- * which closes a connection that has carried no traffic for roughly 100 seconds.
- * A lobby waiting for the host to start, or a chat nobody is typing in, is idle
- * by definition, so without a heartbeat those sockets die on their own and the
- * client is left believing it is still connected. The three game clients also
- * had no reconnect at all - their close handler set ``ws = null`` and stopped,
- * so a single drop meant no more live rounds, scores, or chat until a reload.
- *
- * The two inline template clients (``_notification_push.html``,
- * ``_chat_panel.html``) cannot import this - they carry their own copy of the
- * heartbeat interval and point back here for the reasoning.
+ * A WebSocket that stays up: it heartbeats through idle timeouts and reconnects after a drop.
  */
 
 /**
- * Cloudflare's idle cutoff is ~100s and is not configurable below an Enterprise
- * plan, so the interval has to fit inside it with room to spare: at 45s a ping
- * that gets lost still leaves another one before the cutoff.
+ * Cloudflare's idle cutoff is ~100s and is not configurable below an Enterprise plan, so the interval has to fit inside it with room.
  */
 const HEARTBEAT_MS = 45000;
 
@@ -36,13 +21,28 @@ const RECONNECT_MAX_MS = 30000;
 const RECONNECT_JITTER = 0.25;
 
 /**
- * The close code every consumer in ``dashboard/consumers.py`` uses for "not
- * authorized, and retrying will not change that" - a revoked contact token, a
- * player the host kicked, a credential that lost its scope. Reconnecting on it
- * is a busy loop against a refusal, not a recovery, so it stops the socket for
- * good.
+ * The close code every consumer in ``dashboard/consumers.py`` uses for "not authorized, and retrying will not change that".
  */
-const CLOSE_UNAUTHORIZED = 4404;
+export const CLOSE_UNAUTHORIZED = 4404;
+
+/**
+ * The close code the consumers use for "this account already holds as many
+ * sockets as it may" (``services/security/socket_budget.py``).
+ *
+ * Unlike 4404 this is not permanent - closing a tab frees a place - so the
+ * socket must keep trying. But it must not try *eagerly*: the ordinary backoff
+ * starts at a second, and ``retryNow`` resets it to that on every tab focus and
+ * every ``online`` event, so a browser sitting one socket over the allowance
+ * would hammer a refusal every time the user switched windows. Each attempt is a
+ * full handshake, an auth resolution and a store round trip, which is the cost
+ * the cap exists to bound - a limiter that provokes the load it prevents is not
+ * a limiter.
+ *
+ * So a capacity refusal waits the full ceiling, and the triggers that normally
+ * shortcut the wait do not apply: coming back online does not free somebody
+ * else's socket.
+ */
+export const CLOSE_OVER_LIMIT = 4429;
 
 export interface LiveSocketOptions {
     /** Same-origin path, e.g. ``/ws/notifications/``; the scheme and host are this page's. */
@@ -52,6 +52,8 @@ export interface LiveSocketOptions {
     onOpen?(): void;
     /** The server refused this connection for good (close 4404); nothing further will arrive. */
     onPermanentClose?(): void;
+    /** The connection went away other than by ``close()``: a drop, or a refusal (before ``onPermanentClose``). */
+    onClose?(code: number): void;
     /** Override only for a route whose idle timeout differs - the default suits the tunnel. */
     heartbeatMs?: number;
 }
@@ -66,20 +68,15 @@ export interface LiveSocketHandle {
 
 /**
  * Open a managed connection to *path* and keep it open.
- *
- * Args:
- *     options: The path to connect to and the callbacks that consume it.
- *
- * Returns:
- *     A handle for sending frames and for shutting the whole thing down.
  */
 export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
-    const { path, onMessage, onOpen, onPermanentClose, heartbeatMs = HEARTBEAT_MS } = options;
+    const { path, onMessage, onOpen, onPermanentClose, onClose, heartbeatMs = HEARTBEAT_MS } = options;
 
     let socket: WebSocket | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let reconnect: ReturnType<typeof setTimeout> | null = null;
     let backoffMs = RECONNECT_MIN_MS;
+    let refusedForCapacity = false;
     let stopped = false;
 
     function clearHeartbeat(): void {
@@ -95,9 +92,7 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
     }
 
     function startHeartbeat(): void {
-        // Cleared first because every reconnect passes through here: an interval
-        // per reconnect outlives the socket that started it, and a helper that
-        // leaks one is worse than the hand-rolled sockets it replaces.
+        // Cleared first because every reconnect passes through here.
         clearHeartbeat();
         heartbeat = setInterval(() => {
             if (socket?.readyState === WebSocket.OPEN) socket.send(HEARTBEAT_FRAME);
@@ -119,9 +114,7 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
         try {
             data = JSON.parse(String(event.data));
         } catch {
-            // A frame that cannot be read is not a reason to drop the connection,
-            // but it is worth saying so - a socket quietly ignoring everything the
-            // server sends looks identical to a socket with nothing to deliver.
+            // A frame that cannot be read is not a reason to drop the connection, but it is worth saying so.
             console.warn(`live-socket: ignoring unparseable frame on ${path}`);
             return;
         }
@@ -134,11 +127,16 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
         socket = null;
         clearHeartbeat();
         if (stopped) return;
+        onClose?.(event.code);
         if (event.code === CLOSE_UNAUTHORIZED) {
             stopped = true;
             removeRetryTriggers();
             onPermanentClose?.();
             return;
+        }
+        if (event.code === CLOSE_OVER_LIMIT) {
+            refusedForCapacity = true;
+            backoffMs = RECONNECT_MAX_MS;
         }
         scheduleReconnect();
     }
@@ -159,6 +157,10 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
         }
         socket.addEventListener("open", () => {
             backoffMs = RECONNECT_MIN_MS;
+            // A place came free, so the eager retries are useful again. Left set,
+            // one refusal would make this socket slow to recover for the life of
+            // the page.
+            refusedForCapacity = false;
             startHeartbeat();
             onOpen?.();
         });
@@ -168,7 +170,10 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
 
     /** Coming back online, or back to the tab, beats waiting out the backoff. */
     function retryNow(): void {
-        if (stopped || socket !== null) return;
+        // A capacity refusal is left on its own schedule: the pending attempt is
+        // already queued at the ceiling, and neither coming back online nor
+        // returning to the tab frees a socket somebody else is holding.
+        if (stopped || socket !== null || refusedForCapacity) return;
         backoffMs = RECONNECT_MIN_MS;
         clearReconnect();
         connect();

@@ -1,19 +1,4 @@
-"""Tests for the data-consolidating pin merge and its PinMergeSuggestion review queue.
-
-Covers:
-- PinMergeSuggestion.objects.upsert - order-independent dedup of pending
-  suggestions for the same pair, and the default-survivor heuristic.
-- plan_merge_conflicts - only Article/Boundary/CustomFieldValue collisions
-  surface as a real conflict needing a user decision.
-- merge_pins - every rule in its per-relation table (safe bulk reassigns,
-  auto-dedup, ask-the-user conflicts, child-pin reparenting), atomicity, and
-  that the loser is gone with a PinTombstone left behind.
-- accept_pin_merge_suggestion / reject_pin_merge_suggestion.
-- PinMergeSuggestionActionView over HTTP - ownership, already-handled, and
-  unresolved-conflict guards.
-- The legacy-CID collision trigger raising exactly one suggestion, deduped
-  across repeated collisions.
-"""
+"""Tests for the data-consolidating pin merge and its PinMergeSuggestion review queue."""
 
 from __future__ import annotations
 
@@ -30,26 +15,41 @@ from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.article.model import Article
 from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
 from urbanlens.dashboard.models.boundary.model import Boundary
-from urbanlens.dashboard.models.comments.model import Comment
-from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
+from urbanlens.dashboard.models.custom_fields.model import (
+    CustomField,
+    CustomFieldEntity,
+    CustomFieldType,
+    CustomFieldValue,
+)
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.links.model import PinLink
-from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
+from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
-from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion, PinMergeSuggestionOrigin, PinMergeSuggestionStatus
-from urbanlens.dashboard.models.pin_share.meta import PinShareOrigin, PinShareStatus
+from urbanlens.dashboard.models.pin_merge_suggestions.model import (
+    PinMergeSuggestion,
+    PinMergeSuggestionOrigin,
+    PinMergeSuggestionStatus,
+)
+from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.pin_share.model import PinShare
-from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
 from urbanlens.dashboard.models.pin_tombstone.model import PinTombstone
 from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import repair_legacy_pin_coordinates
-from urbanlens.dashboard.services.pins.pin_merge import UnresolvedMergeConflictError, merge_pins, plan_merge_conflicts
-from urbanlens.dashboard.services.pins.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
+from urbanlens.dashboard.services.pins.pin_merge import (
+    UnresolvedMergeConflictError,
+    merge_pins,
+    plan_merge_conflicts,
+    plan_merge_conflicts_bulk,
+)
+from urbanlens.dashboard.services.pins.pin_merge_suggestions import (
+    accept_pin_merge_suggestion,
+    reject_pin_merge_suggestion,
+)
 
 
 class MergeSuggestionUpsertTests(TestCase):
@@ -65,47 +65,94 @@ class MergeSuggestionUpsertTests(TestCase):
 
     def test_creates_a_pending_suggestion(self) -> None:
         suggestion = PinMergeSuggestion.objects.upsert(
-            profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
         )
         self.assertEqual(suggestion.status, PinMergeSuggestionStatus.PENDING)
         self.assertEqual({suggestion.pin_a_id, suggestion.pin_b_id}, {self.pin_a.pk, self.pin_b.pk})
 
     def test_second_call_same_order_returns_existing(self) -> None:
-        first = PinMergeSuggestion.objects.upsert(profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION)
-        second = PinMergeSuggestion.objects.upsert(profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION)
+        first = PinMergeSuggestion.objects.upsert(
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+        )
+        second = PinMergeSuggestion.objects.upsert(
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+        )
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(PinMergeSuggestion.objects.count(), 1)
 
     def test_reversed_pair_still_dedupes(self) -> None:
-        first = PinMergeSuggestion.objects.upsert(profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION)
-        second = PinMergeSuggestion.objects.upsert(profile=self.profile, pin_a=self.pin_b, pin_b=self.pin_a, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION)
+        first = PinMergeSuggestion.objects.upsert(
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+        )
+        second = PinMergeSuggestion.objects.upsert(
+            profile=self.profile,
+            pin_a=self.pin_b,
+            pin_b=self.pin_a,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+        )
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(PinMergeSuggestion.objects.count(), 1)
 
     def test_new_suggestion_created_after_prior_one_resolved(self) -> None:
-        first = PinMergeSuggestion.objects.upsert(profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION)
+        first = PinMergeSuggestion.objects.upsert(
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+        )
         first.status = PinMergeSuggestionStatus.REJECTED
         first.save(update_fields=["status"])
-        second = PinMergeSuggestion.objects.upsert(profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION)
+        second = PinMergeSuggestion.objects.upsert(
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+        )
         self.assertNotEqual(first.pk, second.pk)
         self.assertEqual(PinMergeSuggestion.objects.count(), 2)
 
     def test_explicit_survivor_overrides_heuristic(self) -> None:
         baker.make(PinVisit, pin=self.pin_b, source="manual")  # pin_b would win the heuristic
         suggestion = PinMergeSuggestion.objects.upsert(
-            profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION, suggested_survivor=self.pin_a,
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+            suggested_survivor=self.pin_a,
         )
         self.assertEqual(suggestion.suggested_survivor_id, self.pin_a.pk)
 
     def test_default_survivor_prefers_more_visits(self) -> None:
         baker.make(PinVisit, pin=self.pin_b, source="manual")
-        suggestion = PinMergeSuggestion.objects.upsert(profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION)
+        suggestion = PinMergeSuggestion.objects.upsert(
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+        )
         self.assertEqual(suggestion.suggested_survivor_id, self.pin_b.pk)
 
     def test_default_survivor_falls_back_to_older_pin(self) -> None:
         Pin.objects.filter(pk=self.pin_a.pk).update(created=self.pin_b.created - timedelta(days=5))
         self.pin_a.refresh_from_db()
-        suggestion = PinMergeSuggestion.objects.upsert(profile=self.profile, pin_a=self.pin_a, pin_b=self.pin_b, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION)
+        suggestion = PinMergeSuggestion.objects.upsert(
+            profile=self.profile,
+            pin_a=self.pin_a,
+            pin_b=self.pin_b,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+        )
         self.assertEqual(suggestion.suggested_survivor_id, self.pin_a.pk)
 
 
@@ -129,16 +176,26 @@ class PlanMergeConflictsTests(TestCase):
         self.assertEqual([c.key for c in conflicts], ["article"])
 
     def test_boundary_conflict_only_for_matching_type(self) -> None:
-        baker.make(Boundary, pin=self.pin_a, location=self.pin_a.location, profile=self.profile, boundary_type="property")
-        baker.make(Boundary, pin=self.pin_b, location=self.pin_b.location, profile=self.profile, boundary_type="building")
+        baker.make(
+            Boundary, pin=self.pin_a, location=self.pin_a.location, profile=self.profile, boundary_type="property"
+        )
+        baker.make(
+            Boundary, pin=self.pin_b, location=self.pin_b.location, profile=self.profile, boundary_type="building"
+        )
         self.assertEqual(plan_merge_conflicts(self.pin_a, self.pin_b), [])
-        baker.make(Boundary, pin=self.pin_b, location=self.pin_b.location, profile=self.profile, boundary_type="property")
+        baker.make(
+            Boundary, pin=self.pin_b, location=self.pin_b.location, profile=self.profile, boundary_type="property"
+        )
         conflicts = plan_merge_conflicts(self.pin_a, self.pin_b)
         self.assertEqual([c.key for c in conflicts], ["boundary:property"])
 
     def test_custom_field_conflict_only_for_shared_field(self) -> None:
-        field = CustomField.objects.create(profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT)
-        other_field = CustomField.objects.create(profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Gate Code", field_type=CustomFieldType.TEXT)
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT
+        )
+        other_field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Gate Code", field_type=CustomFieldType.TEXT
+        )
         CustomFieldValue.objects.create(field=field, pin=self.pin_a, value_text="Good")
         CustomFieldValue.objects.create(field=other_field, pin=self.pin_b, value_text="1234")
         self.assertEqual(plan_merge_conflicts(self.pin_a, self.pin_b), [])
@@ -149,11 +206,109 @@ class PlanMergeConflictsTests(TestCase):
     def test_multiple_simultaneous_conflicts(self) -> None:
         Article.objects.create(pin=self.pin_a, content="A")
         Article.objects.create(pin=self.pin_b, content="B")
-        field = CustomField.objects.create(profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT)
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT
+        )
         CustomFieldValue.objects.create(field=field, pin=self.pin_a, value_text="Good")
         CustomFieldValue.objects.create(field=field, pin=self.pin_b, value_text="Fair")
         keys = {c.key for c in plan_merge_conflicts(self.pin_a, self.pin_b)}
         self.assertEqual(keys, {"article", f"custom_field:{field.pk}"})
+
+
+class PlanMergeConflictsBulkTests(TestCase):
+    """The batched form answers identically, in three queries however many pairs.
+
+    The dialog behind "Organize this property" plans conflicts for every candidate pin standing inside the
+    property before the owner picks anything, and that list is capped at 500 - so per-pair queries there are the
+    whole cost of the page."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT
+        )
+
+    def _pin(self, *, article: bool = False, boundary: bool = False, custom_field: bool = False):
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        if article:
+            Article.objects.create(pin=pin, content=f"article for {pin.pk}")
+        if boundary:
+            baker.make(Boundary, pin=pin, location=pin.location, profile=self.profile, boundary_type="property")
+        if custom_field:
+            CustomFieldValue.objects.create(field=self.field, pin=pin, value_text=f"value {pin.pk}")
+        return pin
+
+    def test_one_pair_costs_three_queries(self) -> None:
+        pair = (self._pin(article=True), self._pin(article=True))
+        with self.assertNumQueries(3):
+            plan_merge_conflicts_bulk([pair])
+
+    def test_many_pairs_cost_the_same_three_queries(self) -> None:
+        """The assertion that would have caught this."""
+        survivor = self._pin(article=True, boundary=True, custom_field=True)
+        pairs = [(survivor, self._pin(article=True, boundary=True, custom_field=True)) for _ in range(6)]
+        with self.assertNumQueries(3):
+            conflicts = plan_merge_conflicts_bulk(pairs)
+        self.assertEqual(len(conflicts), 6)
+        for _, candidate in pairs:
+            self.assertEqual(
+                [c.key for c in conflicts[(survivor.pk, candidate.pk)]],
+                ["article", "boundary:property", f"custom_field:{self.field.pk}"],
+            )
+
+    def test_no_pairs_costs_no_queries(self) -> None:
+        with self.assertNumQueries(0):
+            self.assertEqual(plan_merge_conflicts_bulk([]), {})
+
+    def test_it_matches_the_single_pair_function_for_every_combination(self) -> None:
+        """Eight combinations, compared as whole lists - order and summaries included."""
+        for article in (False, True):
+            for boundary in (False, True):
+                for custom_field in (False, True):
+                    with self.subTest(article=article, boundary=boundary, custom_field=custom_field):
+                        pin_a = self._pin(article=article, boundary=boundary, custom_field=custom_field)
+                        pin_b = self._pin(article=article, boundary=boundary, custom_field=custom_field)
+                        self.assertEqual(
+                            plan_merge_conflicts_bulk([(pin_a, pin_b)])[(pin_a.pk, pin_b.pk)],
+                            plan_merge_conflicts(pin_a, pin_b),
+                        )
+
+    def test_a_mirrored_pair_keeps_its_own_summaries(self) -> None:
+        """The key is ordered, so (b, a) is not (a, b) with the sides swapped."""
+        pin_a = self._pin(custom_field=True)
+        pin_b = self._pin(custom_field=True)
+
+        conflicts = plan_merge_conflicts_bulk([(pin_a, pin_b), (pin_b, pin_a)])
+
+        forward = conflicts[(pin_a.pk, pin_b.pk)][0]
+        backward = conflicts[(pin_b.pk, pin_a.pk)][0]
+        self.assertEqual(
+            (forward.pin_a_summary, forward.pin_b_summary), (backward.pin_b_summary, backward.pin_a_summary)
+        )
+        self.assertNotEqual(forward.pin_a_summary, forward.pin_b_summary)
+
+    def test_an_unsaved_pin_has_nothing_to_collide_with(self) -> None:
+        """It can hold none of the three relations, so the answer is "no conflicts".
+
+        Worth pinning because the batched fetch has to skip it - there is no id to query for - and the
+        comparison then has to answer rather than fail on the missing entry."""
+        saved = self._pin(article=True, boundary=True, custom_field=True)
+        unsaved = Pin(profile=self.profile, location=saved.location)
+
+        self.assertEqual(plan_merge_conflicts(unsaved, saved), [])
+        self.assertEqual(plan_merge_conflicts_bulk([(unsaved, saved)])[(None, saved.pk)], [])
+
+    def test_the_single_pair_function_still_reads_current_state(self) -> None:
+        """``merge_pins`` deletes the loser's row when it sees no conflict, so a
+        cached answer here would be silent data loss rather than a stale warning."""
+        pin_a = self._pin(article=True)
+        pin_b = self._pin(article=True)
+        self.assertEqual([c.key for c in plan_merge_conflicts(pin_a, pin_b)], ["article"])
+
+        Article.objects.filter(pin=pin_b).delete()
+
+        self.assertEqual(plan_merge_conflicts(pin_a, pin_b), [])
 
 
 class MergePinsTests(TestCase):
@@ -186,9 +341,16 @@ class MergePinsTests(TestCase):
         markup_map = baker.make(MarkupMap, pin=self.loser)
         markup_item = baker.make_recipe("dashboard.pin_markup", parent_pin=self.loser)
         property_sale = PinPropertySale.objects.create(pin=self.loser)
-        other_field = CustomField.objects.create(profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Related", field_type=CustomFieldType.REFERENCE)
+        other_field = CustomField.objects.create(
+            profile=self.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name="Related",
+            field_type=CustomFieldType.REFERENCE,
+        )
         ref_value = CustomFieldValue.objects.create(field=other_field, pin=self.survivor, ref_pin=self.loser)
-        other_suggestion = PinSuggestion.objects.create(profile=self.profile, pin=self.loser, latitude="1.0", longitude="1.0", origin=PinSuggestionOrigin.IMMICH)
+        other_suggestion = PinSuggestion.objects.create(
+            profile=self.profile, pin=self.loser, latitude="1.0", longitude="1.0", origin=PinSuggestionOrigin.IMMICH
+        )
         label = baker.make("dashboard.Label", profile=self.profile, kind="tag", name="Neat")
         self.loser.labels.add(label)
 
@@ -260,18 +422,28 @@ class MergePinsTests(TestCase):
 
     def test_duplicate_pending_share_to_same_recipient_is_deduped(self) -> None:
         recipient = baker.make(User).profile
-        PinShare.objects.create(pin=self.survivor, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.PENDING)
-        PinShare.objects.create(pin=self.loser, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.PENDING)
+        PinShare.objects.create(
+            pin=self.survivor, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.PENDING
+        )
+        PinShare.objects.create(
+            pin=self.loser, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.PENDING
+        )
 
         merge_pins(self.survivor, self.loser, self.profile)
 
-        self.assertEqual(PinShare.objects.filter(pin=self.survivor, to_profile=recipient, status=PinShareStatus.PENDING).count(), 1)
+        self.assertEqual(
+            PinShare.objects.filter(pin=self.survivor, to_profile=recipient, status=PinShareStatus.PENDING).count(), 1
+        )
 
     def test_share_to_a_different_recipient_is_reassigned_not_dropped(self) -> None:
         recipient_a = baker.make(User).profile
         recipient_b = baker.make(User).profile
-        PinShare.objects.create(pin=self.survivor, from_profile=self.profile, to_profile=recipient_a, status=PinShareStatus.PENDING)
-        share_b = PinShare.objects.create(pin=self.loser, from_profile=self.profile, to_profile=recipient_b, status=PinShareStatus.PENDING)
+        PinShare.objects.create(
+            pin=self.survivor, from_profile=self.profile, to_profile=recipient_a, status=PinShareStatus.PENDING
+        )
+        share_b = PinShare.objects.create(
+            pin=self.loser, from_profile=self.profile, to_profile=recipient_b, status=PinShareStatus.PENDING
+        )
 
         merge_pins(self.survivor, self.loser, self.profile)
 
@@ -357,14 +529,22 @@ class MergePinsTests(TestCase):
         self.assertEqual(loser_article.pin_id, self.survivor.pk)
 
     def test_boundary_conflict_without_resolution_raises(self) -> None:
-        baker.make(Boundary, pin=self.survivor, location=self.survivor.location, profile=self.profile, boundary_type="property")
-        baker.make(Boundary, pin=self.loser, location=self.loser.location, profile=self.profile, boundary_type="property")
+        baker.make(
+            Boundary, pin=self.survivor, location=self.survivor.location, profile=self.profile, boundary_type="property"
+        )
+        baker.make(
+            Boundary, pin=self.loser, location=self.loser.location, profile=self.profile, boundary_type="property"
+        )
         with self.assertRaises(UnresolvedMergeConflictError):
             merge_pins(self.survivor, self.loser, self.profile)
 
     def test_boundary_conflict_resolved_to_loser(self) -> None:
-        baker.make(Boundary, pin=self.survivor, location=self.survivor.location, profile=self.profile, boundary_type="property")
-        loser_boundary = baker.make(Boundary, pin=self.loser, location=self.loser.location, profile=self.profile, boundary_type="property")
+        baker.make(
+            Boundary, pin=self.survivor, location=self.survivor.location, profile=self.profile, boundary_type="property"
+        )
+        loser_boundary = baker.make(
+            Boundary, pin=self.loser, location=self.loser.location, profile=self.profile, boundary_type="property"
+        )
 
         merge_pins(self.survivor, self.loser, self.profile, resolutions={"boundary:property": self.loser.pk})
 
@@ -372,14 +552,18 @@ class MergePinsTests(TestCase):
         self.assertEqual(remaining.pk, loser_boundary.pk)
 
     def test_custom_field_conflict_without_resolution_raises(self) -> None:
-        field = CustomField.objects.create(profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT)
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT
+        )
         CustomFieldValue.objects.create(field=field, pin=self.survivor, value_text="Good")
         CustomFieldValue.objects.create(field=field, pin=self.loser, value_text="Fair")
         with self.assertRaises(UnresolvedMergeConflictError):
             merge_pins(self.survivor, self.loser, self.profile)
 
     def test_custom_field_conflict_resolved_to_loser(self) -> None:
-        field = CustomField.objects.create(profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT)
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT
+        )
         CustomFieldValue.objects.create(field=field, pin=self.survivor, value_text="Good")
         CustomFieldValue.objects.create(field=field, pin=self.loser, value_text="Fair")
 
@@ -411,7 +595,9 @@ class MergePinsTests(TestCase):
 
     def test_lineage_gap_filled_from_loser_when_survivor_has_none(self) -> None:
         recipient = baker.make(User).profile
-        share = PinShare.objects.create(pin=None, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.ACCEPTED)
+        share = PinShare.objects.create(
+            pin=None, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.ACCEPTED
+        )
         self.loser.source_share = share
         self.loser.save(update_fields=["source_share"])
 
@@ -422,8 +608,12 @@ class MergePinsTests(TestCase):
 
     def test_lineage_not_overwritten_when_survivor_already_has_one(self) -> None:
         recipient = baker.make(User).profile
-        survivor_share = PinShare.objects.create(pin=None, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.ACCEPTED)
-        loser_share = PinShare.objects.create(pin=None, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.ACCEPTED)
+        survivor_share = PinShare.objects.create(
+            pin=None, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.ACCEPTED
+        )
+        loser_share = PinShare.objects.create(
+            pin=None, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.ACCEPTED
+        )
         self.survivor.source_share = survivor_share
         self.survivor.save(update_fields=["source_share"])
         self.loser.source_share = loser_share
@@ -443,7 +633,10 @@ class MergePinsTests(TestCase):
     def test_other_pending_suggestion_mentioning_loser_is_repointed(self) -> None:
         third_pin = baker.make_recipe("dashboard.pin", profile=self.profile)
         other_suggestion = PinMergeSuggestion.objects.upsert(
-            profile=self.profile, pin_a=self.loser, pin_b=third_pin, origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+            profile=self.profile,
+            pin_a=self.loser,
+            pin_b=third_pin,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
         )
 
         merge_pins(self.survivor, self.loser, self.profile)
@@ -453,7 +646,10 @@ class MergePinsTests(TestCase):
 
     def test_atomicity_nothing_persists_when_a_merge_step_fails(self) -> None:
         PinAlias.objects.create(pin=self.loser, name="Should not move")
-        with mock.patch("urbanlens.dashboard.services.pins.pin_merge._merge_lineage", side_effect=RuntimeError("boom")), self.assertRaises(RuntimeError):
+        with (
+            mock.patch("urbanlens.dashboard.services.pins.pin_merge._merge_lineage", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
             merge_pins(self.survivor, self.loser, self.profile)
 
         # The alias reassignment that ran before the forced failure must have
@@ -535,7 +731,10 @@ class PinMergeSuggestionActionViewTests(TestCase):
 
     def test_accept_merges_and_returns_200(self) -> None:
         suggestion = self._suggestion()
-        response = self.client.post(reverse("memories.locations.merge.action", args=[suggestion.pk, "accept"]), {"survivor_pk": str(self.pin_a.pk)})
+        response = self.client.post(
+            reverse("memories.locations.merge.action", args=[suggestion.pk, "accept"]),
+            {"survivor_pk": str(self.pin_a.pk)},
+        )
         self.assertEqual(response.status_code, 200)
         suggestion.refresh_from_db()
         self.assertEqual(suggestion.status, PinMergeSuggestionStatus.ACCEPTED)
@@ -559,7 +758,9 @@ class PinMergeSuggestionActionViewTests(TestCase):
         other = baker.make(User)
         other_pin_a = baker.make_recipe("dashboard.pin", profile=other.profile)
         other_pin_b = baker.make_recipe("dashboard.pin", profile=other.profile)
-        suggestion = self._suggestion(profile=other.profile, pin_a=other_pin_a, pin_b=other_pin_b, suggested_survivor=other_pin_a)
+        suggestion = self._suggestion(
+            profile=other.profile, pin_a=other_pin_a, pin_b=other_pin_b, suggested_survivor=other_pin_a
+        )
         response = self.client.post(reverse("memories.locations.merge.action", args=[suggestion.pk, "accept"]))
         self.assertEqual(response.status_code, 404)
         suggestion.refresh_from_db()
@@ -578,7 +779,10 @@ class PinMergeSuggestionActionViewTests(TestCase):
         Article.objects.create(pin=self.pin_b, content="B's article")
         suggestion = self._suggestion()
 
-        response = self.client.post(reverse("memories.locations.merge.action", args=[suggestion.pk, "accept"]), {"survivor_pk": str(self.pin_a.pk)})
+        response = self.client.post(
+            reverse("memories.locations.merge.action", args=[suggestion.pk, "accept"]),
+            {"survivor_pk": str(self.pin_a.pk)},
+        )
 
         self.assertEqual(response.status_code, 200)
         suggestion.refresh_from_db()
@@ -616,20 +820,27 @@ class LegacyCidCollisionTriggerTests(TestCase):
         from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import LEGACY_COORDINATE_CUTOFF
 
         wrong_location = baker.make_recipe("dashboard.location", latitude="42.500000", longitude="-73.500000")
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
             wrong_location.cid = 12345
         legacy_pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=wrong_location, name="Old Tower")
         Pin.objects.filter(pk=legacy_pin.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
         legacy_pin.refresh_from_db()
 
         correct_location, _ = Location.objects.get_nearby_or_create(42.600000, -73.600000)
-        existing_pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=correct_location, name="Correct Tower")
+        existing_pin = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, location=correct_location, name="Correct Tower"
+        )
         return legacy_pin, existing_pin
 
     def test_collision_raises_a_merge_suggestion_with_the_correct_pin_as_survivor(self) -> None:
         legacy_pin, existing_pin = self._setup_collision()
 
-        result = repair_legacy_pin_coordinates(profile=self.profile, cid=12345, name="Old Tower", latitude=42.600000, longitude=-73.600000)
+        result = repair_legacy_pin_coordinates(
+            profile=self.profile, cid=12345, name="Old Tower", latitude=42.600000, longitude=-73.600000
+        )
 
         self.assertIsNone(result)
         suggestion = PinMergeSuggestion.objects.get(profile=self.profile)
@@ -640,7 +851,11 @@ class LegacyCidCollisionTriggerTests(TestCase):
     def test_repeated_collision_does_not_duplicate_the_suggestion(self) -> None:
         self._setup_collision()
 
-        repair_legacy_pin_coordinates(profile=self.profile, cid=12345, name="Old Tower", latitude=42.600000, longitude=-73.600000)
-        repair_legacy_pin_coordinates(profile=self.profile, cid=12345, name="Old Tower", latitude=42.600000, longitude=-73.600000)
+        repair_legacy_pin_coordinates(
+            profile=self.profile, cid=12345, name="Old Tower", latitude=42.600000, longitude=-73.600000
+        )
+        repair_legacy_pin_coordinates(
+            profile=self.profile, cid=12345, name="Old Tower", latitude=42.600000, longitude=-73.600000
+        )
 
         self.assertEqual(PinMergeSuggestion.objects.filter(profile=self.profile).count(), 1)

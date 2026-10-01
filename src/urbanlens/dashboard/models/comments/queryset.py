@@ -4,24 +4,113 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
+from django.db.models import Exists, OuterRef, Q
+
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.models.comments.model import Comment  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.profile.model import Profile
 
 
-class CommentQuerySet(abstract.FrontendDashboardQuerySet):
-    def top_level(self) -> Self:
-        """Return only top-level comments (not replies)."""
-        return self.filter(parent__isnull=True)
+class CommentQuerySet(abstract.FrontendDashboardQuerySet["Comment"]):
+    def reachable_by(self, profile: Profile) -> Self:
+        """Comments *profile* wrote, or that sit on a pin of theirs or a wiki they can reach.
 
-    def for_pin(self, pin: Pin) -> Self:
-        return self.filter(pin=pin, parent__isnull=True)
+        The candidate scope behind comment search - not the full visibility gate, which
+        :meth:`visible_to` is. Each disjunct is resolved to ids on the comment table's own columns
+        rather than left as a join, so the whole predicate can be answered from three indexes.
+        Written as joins it cannot be: Postgres reads the comment table instead, which at capacity
+        scale was a sequential scan of 8,000 comments discarding 7,980 to answer a search for a
+        viewer who had 20 - a cost that is the site's comment count rather than the viewer's.
 
-    def for_wiki(self, wiki: Wiki) -> Self:
-        return self.filter(wiki=wiki, parent__isnull=True)
+        The pin and wiki ids are read first, so this costs two statements before the query it
+        bounds. That trade is the module's whole subject: see :mod:`urbanlens.core.semijoin`.
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            The comments they may be shown, before concealment.
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
+
+        scope = Q(profile=profile)
+        if pin_ids := Pin.objects.filter(profile=profile).match_ids():
+            scope |= Q(pin__pk__anyof=pin_ids)
+        if wiki_ids := Wiki.objects.filter(location_id__in=visible_wiki_locations_cached(profile)).match_ids():
+            scope |= Q(wiki__pk__anyof=wiki_ids)
+        return self.filter(scope)
+
+    def mentions_all_visible_to(self, profile: Profile) -> Self:
+        """Drop comments naming a location *profile* has not pinned.
+
+        Gate 3 of the comment visibility rules, as SQL - see
+        ``services.comments.comments`` for what the gate is for and
+        ``models.comments.location_mention`` for where the rows come from.
+        Comments naming nothing pass, which is the overwhelming majority.
+
+        The viewer's pins stay a subquery rather than a materialised uuid set:
+        the cost of reading a comment list should not grow with how many pins
+        the reader happens to have.
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            The subset whose every named location the viewer has pinned.
+        """
+        from urbanlens.dashboard.models.comments.location_mention import CommentLocationMention
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        pinned = Pin.objects.filter(profile=profile).exclude(location__isnull=True).values("location__uuid")
+        unpinned_mention = CommentLocationMention.objects.filter(comment_id=OuterRef("pk")).exclude(location_uuid__in=pinned)
+        return self.filter(~Exists(unpinned_mention))
+
+    def visible_to(self, profile: Profile) -> Self:
+        """Gates 1-3 of the comment visibility rules, entirely in SQL.
+
+        The queryset counterpart to ``comments.comment_is_visible``, and held
+        to it across the product of every visibility setting and every
+        relationship by ``test_comment_visibility_is_a_queryset``. Gate 4
+        (identity masking) is absent: it shapes how a surviving author is
+        displayed, not whether a row is admitted.
+
+        Gate 1 comes from ``Profile.visibility_permits_q``, which is exact
+        rather than the superset ``Profile.related_profile_ids`` offers - a
+        superset would be safe, but it leaves the gate to run again in Python
+        after the page is cut, which is what makes a page come back short of
+        the size it asked for.
+
+        Answering these in SQL is what lets a caller page a comment list with
+        LIMIT instead of building the whole thread and slicing the result.
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            The subset *profile* may see.
+        """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+        from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
+        # Gate 1 lives next to the predicate it mirrors, so the one rule has one
+        # SQL form - trip comments ask the same question of the same field.
+        author_permits = ProfileModel.visibility_permits_q(profile, author_path="profile", visibility_field="comment_visibility")
+        # Profile._barred_subject_pks: a deactivated author, or one who blocked the viewer, whatever the setting.
+        blocked_by = Friendship.objects.filter(to_profile_id=profile.pk, status=FriendshipStatus.BLOCKED).values("from_profile_id")
+        barred = (Q(profile__user__is_active=False) | Q(profile_id__in=blocked_by)) & ~Q(profile_id=profile.pk)
+        # Gate 2: an image awaiting the async malware scan is visible only to
+        # its own uploader.
+        unscanned_and_not_mine = Q(pending_scan=True) & ~Q(profile_id=profile.pk)
+        return self.filter(author_permits).exclude(barred).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
 
 
-class CommentManager(abstract.FrontendDashboardManager.from_queryset(CommentQuerySet)):
+_CommentManagerBase = abstract.FrontendDashboardManager.from_queryset(CommentQuerySet)
+
+
+class CommentManager(_CommentManagerBase["Comment"]):
     pass

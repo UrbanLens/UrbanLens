@@ -89,21 +89,17 @@ class PinLinkViewTests(TestCase):
 class PinDetailsPageLinksCardTests(TestCase):
     """Links moved out of the Details card into their own standalone card
 
-    The card lives directly in pages/location/index.html (a static block, not
-    part of the pin.overview HTMX partial - PinOverviewView/pin_overview_partial.html
-    only ever cover the Details card) - these tests render the full pin detail
-    page (pin.details), not pin.overview, to actually exercise it. Previously
-    pointed at pin.overview/pin_overview_partial.html, which has never
-    contained a Links card at any point this session has touched the code -
-    caught as a fully pre-existing, all-8-tests-failing regression while
-    working on the same card for the "live refresh" feature (see
-    test_pin_panel_live_refresh.py) and fixed here rather than left broken."""
+    The card lives directly in pages/location/index.html (a static block, not part of the pin.overview HTMX
+    partial - PinOverviewView/pin_overview_partial.html only ever cover the Details card) - these tests render
+    the full pin detail page (pin.details), not pin.overview, to actually exercise it."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # first user is auto-promoted to bootstrap site admin
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
-        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Old Mill", description="A creaky old mill.")
+        self.pin = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, name="Old Mill", description="A creaky old mill."
+        )
         self.client.force_login(self.user)
 
     def test_links_card_renders_with_its_own_heading(self) -> None:
@@ -131,11 +127,9 @@ class PinDetailsPageLinksCardTests(TestCase):
         self.assertLess(details_pos, links_card_pos)
 
     def test_add_link_header_button_opens_the_dialog(self) -> None:
-        """Regression guard: this used to inline-reveal the row's own add-form,
-        whose Cancel button only hid the form (not the row), leaving a stray
-        icon visible where the inputs had been - see _pin_link_add_dialog.html."""
+        """Regression guard: this used to inline-reveal the row's own add-form, whose Cancel button only hid the form (not the row), leaving a stray icon visible where the inputs had been - see _pin_link_add_dialog.html."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
-        self.assertContains(response, "document.getElementById('pin-link-add-dialog').showModal()")
+        self.assertContains(response, 'data-dialog-open="pin-link-add-dialog"')
 
     def test_row_never_renders_its_own_inline_form(self) -> None:
         """The row's inline add-toggle/form only exists for the wiki page now -
@@ -164,11 +158,7 @@ class PinDetailsPageLinksCardTests(TestCase):
         self.assertContains(response, "pinLinksChanged from:body")
 
     def test_links_card_header_badge_updates_via_oob_swap_on_add(self) -> None:
-        """Regression guard: the header badge lives in the card's static
-        header (pages/location/index.html) rather than the row that actually
-        swaps on add/delete (_pin_links_row.html) - without an OOB fragment
-        carrying the new count, the badge would go stale until a full page
-        reload."""
+        """Regression guard: the header badge lives in the card's static header (pages/location/index.html) rather than the row that actually swaps on add/delete (_pin_links_row.html) - without an OOB fragment carrying the new count, the badge would go stale until a full page reload."""
         response = self.client.post(reverse("pin.links", args=[self.pin.slug]), {"url": "https://example.com/story"})
         content = response.content.decode()
         self.assertIn('id="pin-links-count-badge" hx-swap-oob="true">1</span>', content)
@@ -202,7 +192,9 @@ class LocationLinkViewTests(TestCase):
     def test_requires_the_requester_to_have_this_location_pinned(self) -> None:
         outsider = baker.make("auth.User")
         self.client.force_login(outsider)
-        response = self.client.post(reverse("location.wiki.links", args=[self.location.slug]), {"url": "https://example.org"})
+        response = self.client.post(
+            reverse("location.wiki.links", args=[self.location.slug]), {"url": "https://example.org"}
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_empty_row_shows_placeholder_text(self) -> None:
@@ -210,14 +202,9 @@ class LocationLinkViewTests(TestCase):
         self.assertContains(response, "No links yet.")
 
     def test_uses_the_shared_add_link_dialog_not_an_inline_form(self) -> None:
-        """Regression guard: the row used to always-reveal its own inline
-        add-form, whose Cancel button only hid the form (not the row) and
-        whose CSS (`display: inline-flex`) had equal specificity to - and so
-        defeated - the `hidden` attribute on it, leaving the "Site name"/URL
-        fields visible before the user ever clicked "add a link" at all. See
-        _pin_link_add_dialog.html, now shared with the pin details page."""
+        """See _pin_link_add_dialog.html, now shared with the pin details page."""
         response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))
-        self.assertContains(response, "document.getElementById('wiki-link-add-dialog').showModal()")
+        self.assertContains(response, 'data-dialog-open="wiki-link-add-dialog"')
         self.assertNotContains(response, 'class="pin-link-add-form"')
 
     def test_row_keeps_its_field_label(self) -> None:

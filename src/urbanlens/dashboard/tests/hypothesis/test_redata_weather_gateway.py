@@ -30,7 +30,12 @@ class GetWeatherTests(SimpleTestCase):
                 "count": 2,
                 "complete": True,
                 "results": [
-                    {"provider": "open_meteo", "current": {"temperature_c": 20.0}, "forecast": [], "sun": {"sunrise": "2026-06-15T05:32:00"}},
+                    {
+                        "provider": "open_meteo",
+                        "current": {"temperature_c": 20.0},
+                        "forecast": [],
+                        "sun": {"sunrise": "2026-06-15T05:32:00"},
+                    },
                     {"provider": "openweathermap", "current": {"temperature_c": 21.0}, "forecast": [], "sun": {}},
                 ],
                 "providers": [],

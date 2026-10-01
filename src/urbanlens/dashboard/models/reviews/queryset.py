@@ -1,11 +1,8 @@
-# Generic imports
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
 
-# Django Imports
-# App Imports
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
@@ -16,12 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class QuerySet(abstract.DashboardQuerySet):
-    """
-    A custom queryset. All models below will use this for interacting with results from the db.
-    """
+    """Custom queryset for Review."""
 
     def for_pair(self, profile: Profile, pin: Pin) -> QuerySet:
-        """The review row (at most one - unique on profile+pin) for a pair.
+        """The review row (at most one) for a pair.
 
         Args:
             profile: The reviewing profile.
@@ -33,7 +28,8 @@ class QuerySet(abstract.DashboardQuerySet):
         return self.filter(profile=profile, pin=pin)
 
 
-class Manager(abstract.DashboardManager.from_queryset(QuerySet)):
-    """
-    A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
-    """
+_ManagerBase = abstract.DashboardManager.from_queryset(QuerySet)
+
+
+class Manager(_ManagerBase):
+    """Custom manager for Review."""

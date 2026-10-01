@@ -1,26 +1,11 @@
 """Delete community wikis nobody is actually using.
 
-A ``Wiki`` is auto-created (as an unofficial draft) for a Location well before
-anyone asks for one, so background enrichment has a head start - see
-``dashboard.tasks.enrich_wiki_location``. Most of those never attract a
-community: no one else pins the place, and no one ever edits the page. This
-command finds them and, with ``--yes``, deletes them.
+Most of those never attract a community: no one else pins the place, and no one ever edits the page.
 
-Two independent criteria, either of which qualifies a wiki for deletion:
-
-* **Too few pin owners** - at most :data:`MIN_PIN_OWNERS` distinct *profiles*
-  hold a pin linked to the wiki. Counted per profile rather than per pin,
-  because one person pinning several locations onto a wiki is still one
-  person's interest, not a community's.
-* **No active user edit** - nobody has edited the page in a way that still
-  stands. A reverted edit didn't survive, and a null-editor edit is a
-  seed/system write rather than a person, so neither counts. This mirrors how
-  every other engagement signal in the project reads edit history (see
-  ``WikiEditQuerySet.active`` and ``services.achievements.metrics``).
-
-Dry run by default: deleting community content is not something to do as a
-side effect of running a report, so the destructive half is behind an explicit
-``--yes``.
+- **Too few pin owners** - at most :data:`MIN_PIN_OWNERS` distinct *profiles* hold a pin linked to
+  the wiki. Counted per profile rather than per pin, because o...
+- **No active user edit** - nobody has edited the page in a way that still stands. A reverted edit
+  didn't survive, and a null-editor edit is a seed/system writ...
 """
 
 from __future__ import annotations
@@ -30,9 +15,8 @@ from django.db.models import Count, Q
 
 from urbanlens.dashboard.models.wiki.model import Wiki
 
-#: A wiki with at most this many distinct pin owners is not a community page.
-#: Inclusive - a wiki sitting exactly on the threshold qualifies for deletion,
-#: since two people is a coincidence rather than a community.
+#: A wiki with at most this many distinct pin owners is not a community page. Inclusive - a wiki sitting exactly
+#: on the threshold qualifies for deletion, since two people is a coincidence rather than a community.
 MIN_PIN_OWNERS = 2
 
 
@@ -56,9 +40,8 @@ class Command(BaseCommand):
         for wiki in matches:
             self.stdout.write(f"[pk={wiki.pk}] {wiki.name!r} pin_owners={wiki.pin_owner_count} user_edits={wiki.user_edit_count}")
 
-        # Reported separately because a child is deleted for its parent's lack
-        # of engagement, not its own - a busy child wiki disappearing is the
-        # surprising part of this command, so it should never be silent.
+        # Reported separately because a child is deleted for its parent's lack of engagement, not its own - a
+        # busy child wiki disappearing is the surprising part of this command, so it should never be silent.
         cascaded = Wiki.objects.filter(parent_wiki__in=pks).exclude(pk__in=pks).count()
         if cascaded:
             self.stdout.write(f"...plus {cascaded} child wiki(s), deleted with their parent regardless of their own engagement.")
@@ -74,14 +57,12 @@ class Command(BaseCommand):
     def _matching_wikis():
         """Wikis qualifying for deletion, annotated with the counts that decided it.
 
-        Both counts are ``distinct=True`` because they annotate across two
-        separate reverse relations in one query: joining ``pins`` and ``edits``
-        together fans out to their cross product, which would otherwise
-        multiply each count by the other relation's row count.
+        Both counts are ``distinct=True`` because they annotate across two separate reverse relations in one
+        query: joining ``pins`` and ``edits`` together fans out to their cross product, which would
+        otherwise multiply each count by the other relation's row count.
 
         Returns:
-            A ``Wiki`` queryset annotated with ``pin_owner_count`` and
-            ``user_edit_count``.
+            A ``Wiki`` queryset annotated with ``pin_owner_count`` and ``user_edit_count``.
         """
         return (
             Wiki.objects.annotate(

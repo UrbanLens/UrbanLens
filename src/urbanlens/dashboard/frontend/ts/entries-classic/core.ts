@@ -1,64 +1,105 @@
 /**
- * "Core" globals bundle: LocationSearchEngine + MarkupEngine + the
- * createMarkupToolbar factory.
- *
- * Unlike the other entries (categories/tags/organize), this one is built and
- * loaded as a classic (non-module) IIFE script - see package.json's build/
- * deploy scripts - rather than `type="module"`. It's included in base.html's
- * <head>, synchronously, exactly where the two inline <script> tags it
- * replaces used to live: several pages (map/index.html, the safety check-in
- * maps, the markup toolbar) have their own classic <script> tags later in
- * the document that call `LocationSearchEngine.create(...)` /
- * `MarkupEngine.createDrawSession(...)` / `createMarkupToolbar(...)`
- * synchronously as soon as they run - not inside a DOMContentLoaded handler.
- * `type="module"` scripts are always deferred until after the document has
- * finished parsing, which would run this *after* those classic scripts and
- * leave the globals undefined when they're needed. Loading as a blocking
- * classic script preserves the exact head-executes-before-body ordering the
- * site already depends on.
+ * "Core" globals bundle: LocationSearchEngine + MarkupEngine + the createMarkupToolbar factory.
  */
+import { installGlobalArticleSubtabs } from "../shared/article-subtabs";
+import { installGlobalAssistantOverlay } from "../shared/assistant-overlay";
 import { installGlobalAutosaveGuard } from "../shared/autosave-guard";
 import { installGlobalCollapsibleSections } from "../shared/collapsible-sections";
 import { installGlobalCommentCompose } from "../shared/comment-compose";
+import { installGlobalCommentMapExpand } from "../shared/comment-map-expand";
 import { installGlobalConfirmDialog } from "../shared/confirm-dialog";
+import { installGlobalCoverHero } from "../shared/cover-hero";
 import { installGlobalDialogBackdrop } from "../shared/dialog-backdrop";
+import { installDeclarativeActions } from "../shared/declarative-actions";
+import { installGlobalDialogTriggers } from "../shared/dialog-triggers";
+import { installGlobalDualRangeSlider } from "../shared/dual-range-slider";
+import { installGlobalDismissalRing } from "../shared/dismissal-ring";
 import { installGlobalFetchJson } from "../shared/fetch-json";
 import { installGlobalFlyToDismiss } from "../shared/fly-to-dismiss";
+import { installGlobalFooterInset } from "../shared/footer-inset";
+import { installGlobalHtmxActions } from "../shared/htmx-actions";
+import { installLabelDialogs } from "../shared/label-dialog";
 import { installGlobalLabelPicker } from "../shared/label-picker";
 import { installGlobalLeaveConfirmation } from "../shared/leave-confirmation";
 import { installGlobalLocationSearchEngine } from "../shared/location-search-engine";
+import { installGlobalMapContextMenu } from "../shared/map-context-menu";
 import { installGlobalMapExport } from "../shared/map-export";
 import { installGlobalMapLayers } from "../shared/map-layers";
+import { installGlobalMaplibreMarkup } from "../shared/maplibre-markup";
+import { installGlobalMaplibreRasterStyle } from "../shared/maplibre-raster-style";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
+import { installMemoriesNav } from "../shared/memories-nav";
+import { installGlobalPhotoLightbox } from "../shared/photo-lightbox";
+import { installGlobalPhotoProcessing } from "../shared/photo-processing";
 import { installGlobalPinCachePurge } from "../shared/pin-cache";
+import { installGlobalPoller } from "../shared/poller";
+import { installPrivacyHints } from "../shared/privacy-hint";
+import { installGlobalPriorityList } from "../shared/priority-list";
 import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
 import { installGlobalReactionPicker } from "../shared/reaction-picker";
+import { installGlobalRegionDelete } from "../shared/region-delete";
 import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location";
 import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
+import { installGlobalSectionTabs } from "../shared/section-tabs";
+import { installUndoBar } from "../shared/undo-bar";
+import { installVisitDialog } from "../shared/visit-dialog";
+import { installVisitForm } from "../shared/visit-form";
 import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
+import { installGlobalThumbMapBudget } from "../shared/thumb-map-budget";
+import { installGlobalWebGLSupport } from "../shared/webgl-support";
+import { installSiteRuntime } from "../shared/site-runtime";
 
+// First: the rest may toast, and body scripts read window.csrftoken.
+installSiteRuntime();
+installGlobalArticleSubtabs();
+installGlobalAssistantOverlay();
 installGlobalAutosaveGuard();
 installGlobalCollapsibleSections();
 installGlobalCommentCompose();
 installGlobalConfirmDialog();
+installGlobalCoverHero();
 installGlobalDialogBackdrop();
+installGlobalDialogTriggers();
+installDeclarativeActions();
+installGlobalCommentMapExpand();
+installGlobalDualRangeSlider();
+installGlobalDismissalRing();
 installGlobalFetchJson();
 installGlobalFlyToDismiss();
+installGlobalFooterInset();
+installGlobalHtmxActions();
 installGlobalMentionAutocomplete();
+installMemoriesNav();
+installVisitDialog();
+installVisitForm();
+installGlobalPoller();
+installGlobalPriorityList();
+installPrivacyHints();
 installGlobalPopupDismiss();
 installGlobalReactionPicker();
 installGlobalSafetyLiveLocation();
 installGlobalScrollToHash();
+installGlobalSectionTabs();
 installGlobalUndoMapRefresh();
+installUndoBar();
 installGlobalLocationSearchEngine();
+installGlobalMapContextMenu();
 installGlobalMapLayers();
 installGlobalMarkupEngine();
 installGlobalMapExport();
 installGlobalLabelPicker();
+installLabelDialogs();
+installGlobalRegionDelete();
 installGlobalLeaveConfirmation();
 installGlobalPinCachePurge();
+installGlobalPhotoLightbox();
+installGlobalPhotoProcessing();
+installGlobalWebGLSupport();
+installGlobalMaplibreRasterStyle();
+installGlobalMaplibreMarkup();
+installGlobalThumbMapBudget();
 
 window.createMarkupToolbar = createMarkupToolbar;
 

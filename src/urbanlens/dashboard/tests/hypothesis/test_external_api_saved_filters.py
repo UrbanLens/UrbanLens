@@ -1,16 +1,4 @@
-"""Tests for the external API's saved-filter surface.
-
-The load-bearing case here is ``test_criteria_change_resyncs_derived_lists``:
-``PinList.smart_filter`` is a one-time copy of a SavedFilter's criteria, not a
-live reference, so a PATCH that changes criteria without resyncing leaves every
-derived smart list silently stale. That is the single easiest correctness bug in
-this feature, and the ``lists_resynced`` count is what proves it didn't happen.
-
-Also covers the criteria-ownership check, which has no internal equivalent: the
-web form constrains its label and custom-field pickers in the UI, not at the
-data layer, so a naive port would let a client probe other users' primary-key
-space through result counts.
-"""
+"""Tests for the external API's saved-filter surface."""
 
 from __future__ import annotations
 
@@ -22,7 +10,6 @@ from model_bakery import baker
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
@@ -194,7 +181,9 @@ class SavedFilterDetailTests(SavedFilterApiTestCase):
         self.assertEqual(self.client.get(f"{_BASE}{uuid4()}/", **_bearer(self.raw_key)).status_code, 404)
 
     def test_rename_reports_no_resync(self) -> None:
-        response = self.client.patch(self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["lists_resynced"], 0)
 

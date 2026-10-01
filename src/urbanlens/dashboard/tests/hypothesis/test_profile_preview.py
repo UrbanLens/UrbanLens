@@ -1,13 +1,4 @@
-"""Tests for the "view my profile as another user" preview feature.
-
-Covers:
-- preview_modes() mirroring the settings-page VisibilityChoice options
-- create_ghost_viewer() building the correct relationship per mode
-- ProfilePreviewMiddleware end-to-end: simulated rendering, banner injection,
-  rollback of all ghost rows, write blocking, and auto-exit on navigation
-- The property that each simulated audience sees exactly what the owner's
-  profile_visibility setting permits
-"""
+"""Tests for the "view my profile as another user" preview feature."""
 
 from __future__ import annotations
 
@@ -160,6 +151,20 @@ class ProfilePreviewFlowTests(TestCase):
         self.assertIn("profile-preview-banner", content)
         self.assertIn(reverse("profile.preview.exit"), content)
 
+    def test_previewed_page_does_not_try_to_enroll_the_ghost_in_encryption(self) -> None:
+        """The ghost has no password or keys, so the page would POST an enrollment the preview then refuses with a 403 toast."""
+        user = self.owner.user
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        self.client.force_login(user)
+        self.assertIn("e2ee-oauth-enroll-bootstrap", self.client.get(reverse("profile.view")).content.decode())
+
+        self._start_preview(VisibilityChoice.ANYONE)
+        response = self.client.get(self.profile_path)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("profile-preview-banner", response.content.decode())
+        self.assertNotIn("e2ee-oauth-enroll-bootstrap", response.content.decode())
+
     def test_ghost_rows_are_rolled_back(self) -> None:
         self._start_preview(VisibilityChoice.COMMON_TRIP)
         users_before = User.objects.count()
@@ -244,10 +249,8 @@ class PreviewVisibilityPropertyTests(TestCase):
     def test_preview_matches_profile_visibility(self) -> None:
         """The previewed page is visible iff the real audience would pass the check.
 
-        Exhaustive over every (simulated audience, profile_visibility) pair: a
-        ghost sees the profile when it is visible to any logged-in user, or
-        when the ghost's relationship satisfies Profile.visibility_permits().
-        """
+        Exhaustive over every (simulated audience, profile_visibility) pair: a ghost sees the profile when it is
+        visible to any logged-in user, or when the ghost's relationship satisfies Profile.visibility_permits()."""
         for mode, _label in preview_modes():
             for visibility in VisibilityChoice.values:
                 with self.subTest(mode=mode, visibility=visibility):

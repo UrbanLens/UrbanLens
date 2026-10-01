@@ -1,26 +1,4 @@
-"""What the weather actually was, on the visit surfaces.
-
-REData's ``GET /weather/history/`` reached UrbanLens on the trip weather panel
-first; the visit surfaces the design doc named before it stayed empty. A visit
-row is where it belongs most - a photograph of a flooded basement means
-something different once the row above it says three inches of rain fell that
-day.
-
-Two things here are not obvious and are what these tests hold.
-
-**Sparse days are not a range.** ``recorded_range`` fetches ``min..max`` in one
-request, which is right for a trip's activities and wrong for a page of visits
-to the same ruin: those can span decades, and the range form would fetch and
-cache every day in between to display ten. ``recorded_days`` clusters instead.
-
-**The panel never makes the call itself.** It renders a page of visits inline,
-and a page render must not block on an outbound request - behind a spinner or
-not, a slow REData would hold up the whole visit list for a decorative line of
-text. It reads the cache and queues the gap, which is the same
-fetch-behind/render-from-cache split every pin-detail panel already uses. Two
-unrelated tests found this the hard way, by tripping the suite's
-localhost-only network guard the moment the panel started fetching inline.
-"""
+"""What the weather actually was, on the visit surfaces."""
 
 from __future__ import annotations
 
@@ -75,7 +53,13 @@ class ClusterTests(SimpleTestCase):
         """The case the range form gets wrong: 7,000 days fetched to show two."""
         days = [datetime.date(2005, 5, 1), datetime.date(2024, 5, 1)]
 
-        self.assertEqual(_clusters(days), [(datetime.date(2005, 5, 1), datetime.date(2005, 5, 1)), (datetime.date(2024, 5, 1), datetime.date(2024, 5, 1))])
+        self.assertEqual(
+            _clusters(days),
+            [
+                (datetime.date(2005, 5, 1), datetime.date(2005, 5, 1)),
+                (datetime.date(2024, 5, 1), datetime.date(2024, 5, 1)),
+            ],
+        )
 
     def test_order_and_duplicates_do_not_matter(self) -> None:
         days = [datetime.date(2024, 5, 3), datetime.date(2024, 5, 1), datetime.date(2024, 5, 3)]
@@ -95,7 +79,9 @@ class RecordedDaysTests(TestCase):
     def test_two_visits_decades_apart_are_two_bounded_requests(self) -> None:
         days = [datetime.date(2005, 5, 1), datetime.date(2024, 5, 1)]
 
-        with patch(_FETCH, side_effect=lambda _lat, _lng, start, _end: {start.isoformat(): _row(start.isoformat())}) as fetch:
+        with patch(
+            _FETCH, side_effect=lambda _lat, _lng, start, _end: {start.isoformat(): _row(start.isoformat())}
+        ) as fetch:
             recorded = recorded_days(self.location, days)
 
         self.assertEqual(fetch.call_count, 2)
@@ -180,7 +166,9 @@ class SummaryTests(SimpleTestCase):
     """The one-line description a visit row shows."""
 
     def test_a_full_day_reads_as_a_sentence(self) -> None:
-        day = RecordedDay(day=datetime.date(2024, 5, 1), high_f=72.0, low_f=54.0, precipitation_in=0.3, gust_max_mph=31.0)
+        day = RecordedDay(
+            day=datetime.date(2024, 5, 1), high_f=72.0, low_f=54.0, precipitation_in=0.3, gust_max_mph=31.0
+        )
 
         self.assertEqual(day.summary, "72° / 54°F · 0.30 in rain · gusts 31 mph")
 
@@ -218,6 +206,11 @@ class VisitHistoryPanelTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        configured = patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        )
+        configured.start()
+        self.addCleanup(configured.stop)
         baker.make(User)
         self.user: User = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
@@ -227,7 +220,11 @@ class VisitHistoryPanelTests(TestCase):
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None)
 
     def _visit(self, when: datetime.date) -> PinVisit:
-        return baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(datetime.datetime(when.year, when.month, when.day, 12, 0)))
+        return baker.make(
+            PinVisit,
+            pin=self.pin,
+            visited_at=timezone.make_aware(datetime.datetime(when.year, when.month, when.day, 12, 0)),
+        )
 
     def _url(self) -> str:
         return reverse("pin.visits", args=[self.pin.slug])
@@ -256,7 +253,7 @@ class VisitHistoryPanelTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["visit_weather"], {})
         self.assertNotIn("visit-weather", response.content.decode())
-        self.assertEqual(enqueue.call_args.args[1:], (self.location.pk, ["2024-05-01"]))
+        self.assertEqual(enqueue.call_args.args[1:], (41.73, -73.92, ["2024-05-01"]))
 
     def test_nothing_is_queued_once_everything_is_cached(self) -> None:
         """Otherwise every render of every visit list re-queues the same days."""
@@ -289,17 +286,15 @@ class VisitHistoryPanelTests(TestCase):
             response = self.client_.get(f"{self._url()}?children=1")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(enqueue.call_count, 2, "one job per location, not one per visit")
-        self.assertEqual({call.args[1] for call in enqueue.call_args_list}, {self.location.pk, elsewhere.pk})
+        self.assertEqual(enqueue.call_count, 2, "one job per place, not one per visit")
+        self.assertEqual({call.args[1:3] for call in enqueue.call_args_list}, {(41.73, -73.92), (42.65, -73.75)})
 
     def test_a_visit_has_a_place_by_construction(self) -> None:
         """Documents why `_visit_weather` carries no missing-location guard.
 
-        `PinVisit.pin`, `Pin.location` and `Location.latitude`/`longitude` are
-        all non-null, so "a visit with nowhere to ask about" is not a state the
-        database can hold - and a guard for it would be code no test could
-        reach.
-        """
+        `PinVisit.pin`, `Pin.location` and `Location.latitude`/`longitude` are all non-null, so "a visit with
+        nowhere to ask about" is not a state the database can hold - and a guard for it would be code no test
+        could reach."""
         for model, field in ((PinVisit, "pin"), (Pin, "location"), (Location, "latitude"), (Location, "longitude")):
             with self.subTest(field=f"{model.__name__}.{field}"):
                 self.assertFalse(model._meta.get_field(field).null)

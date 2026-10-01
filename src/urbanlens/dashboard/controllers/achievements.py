@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.achievements.model import (
     Achievement,
     UserAchievement,
 )
-from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORIES
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.achievements.evaluate import progress_for_profile
 from urbanlens.dashboard.services.achievements.metrics import all_metrics, grouped_metric_choices, streak_summary
@@ -30,6 +30,7 @@ from urbanlens.dashboard.services.achievements.metrics import all_metrics, group
 # App Imports
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.media.held_upload import discard_held_upload, hold_upload, queue_held_upload
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -50,9 +51,9 @@ def _viewer_profile(request: HttpRequest) -> Profile | None:
 def _visible_profile_or_404(request: HttpRequest, profile_slug: str) -> tuple[Profile, Profile | None]:
     """Return (subject, viewer), raising 404 when the viewer may not see the subject.
 
-    Achievements are shown to exactly the audience that can see the profile
-    itself, so this reuses ``Profile.can_view_profile`` rather than inventing a
-    second visibility rule that could drift from it.
+    Achievements are shown to exactly the audience that can see the profile itself, so this reuses
+    ``Profile.can_view_profile`` rather than inventing a second visibility rule that could drift from
+    it.
     """
     profile = get_object_or_404(Profile, slug=profile_slug)
     viewer = _viewer_profile(request)
@@ -99,6 +100,7 @@ class AchievementListView(LoginRequiredMixin, View):
         profile, viewer = _visible_profile_or_404(request, profile_slug)
         is_owner = viewer is not None and viewer.pk == profile.pk
         rows = progress_for_profile(profile, viewer=viewer)
+        earned_count = sum(1 for row in rows if row["earned"])
         return render(
             request,
             "dashboard/pages/achievements/index.html",
@@ -107,7 +109,8 @@ class AchievementListView(LoginRequiredMixin, View):
                 "is_owner": is_owner,
                 "profile_url": reverse("profile.view") if is_owner else reverse("profile.view_user", args=[profile.slug]),
                 "rows": rows,
-                "earned_count": sum(1 for row in rows if row["earned"]),
+                "earned_count": earned_count,
+                "has_achievements": bool(earned_count),
                 "streaks": streak_summary(profile),
             },
         )
@@ -164,10 +167,9 @@ def _admin_context(**extra: Any) -> dict[str, Any]:
 def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
     """Return the submitted custom-icon file, if any.
 
-    Mirrors ``labels._uploaded_custom_icon``: the icon picker partial names its
-    file input ``custom_icon-<picker_id>`` (scoped per widget instance), so the
-    create form and every row's edit form can share one page without their
-    uploads colliding on field name.
+    Mirrors ``labels._uploaded_custom_icon``: the icon picker partial names its file input
+    ``custom_icon-<picker_id>`` (scoped per widget instance), so the create form and every row's edit
+    form can share one page without their uploads colliding on field name.
     """
     for field_name in request.FILES:
         if field_name == "custom_icon" or field_name.startswith("custom_icon-"):
@@ -175,16 +177,23 @@ def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
     return None
 
 
-def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
+#: The fields :func:`_apply_form` always sets.
+_FORM_FIELDS = ("name", "description", "metric", "threshold", "icon", "color", "order", "is_active", "is_secret")
+
+
+def _apply_form(achievement: Achievement, request: HttpRequest) -> list[str]:
     """Copy submitted form values onto *achievement* without saving it.
 
     Args:
         achievement: The instance to populate.
         request: The request carrying the POSTed form.
 
+    Returns:
+        The fields it set, for the save.
+
     Raises:
-        ValidationError: When a required field is missing or unparseable, so the
-            caller can report it without a half-populated row being written.
+        ValidationError: When a required field is missing or unparseable, so the caller can report it
+        without a half-populated row being written.
     """
     name = (request.POST.get("name") or "").strip()
     if not name:
@@ -198,9 +207,9 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
 
     achievement.name = name
     achievement.description = (request.POST.get("description") or "").strip() or None
-    # Truncated to the column widths: these are assigned straight from POST, and
-    # CharField max_length is enforced by full_clean(), which save() does not call -
-    # so an over-long value reached the database and returned a 500.
+    # Truncated to the column widths: these are assigned straight from POST, and CharField max_length is
+    # enforced by full_clean(), which save() does not call - so an over-long value reached the database and
+    # returned a 500.
     achievement.metric = (request.POST.get("metric") or "").strip()[: Achievement._meta.get_field("metric").max_length]  # noqa: SLF001 - _meta is public API
     achievement.threshold = threshold
     achievement.icon = (request.POST.get("icon") or "").strip()[: Achievement._meta.get_field("icon").max_length] or None  # noqa: SLF001
@@ -216,16 +225,19 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
         upload_error = image_upload_error(uploaded, MediaKind.PHOTO)
         if upload_error:
             raise ValidationError({"custom_icon": upload_error[0]})
-        achievement.custom_icon = uploaded
-    elif request.POST.get("clear_custom_icon"):
-        # Clearing the field alone leaves the file on disk (Django never
-        # deletes FileField storage), where the media gate's icon branch keeps
-        # serving it - the same orphan class as deleted comment photos.
+        achievement.full_clean(exclude=["slug", "uuid"])
+        return [*_FORM_FIELDS, hold_upload(achievement, "custom_icon", uploaded)]
+    if request.POST.get("clear_custom_icon"):
+        # Clearing the field alone leaves the file on disk (Django never deletes FileField storage), where the
+        # media gate's icon branch keeps serving it - the same orphan class as deleted comment photos.
         if achievement.custom_icon:
             achievement.custom_icon.delete(save=False)
         achievement.custom_icon = None
+        achievement.full_clean(exclude=["slug", "uuid"])
+        return [*_FORM_FIELDS, "custom_icon", discard_held_upload(achievement, "custom_icon")]
 
     achievement.full_clean(exclude=["slug", "uuid"])
+    return list(_FORM_FIELDS)
 
 
 class SiteAdminAchievementsView(_AchievementAdminMixin, View):
@@ -251,6 +263,7 @@ class SiteAdminAchievementsView(_AchievementAdminMixin, View):
             )
 
         achievement.save()
+        queue_held_upload(achievement, "custom_icon")
         messages.success(request, f"Created achievement “{achievement.name}”. Backfilling existing users…")
         return render(request, "dashboard/partials/admin/_achievement_rows.html", _admin_context())
 
@@ -265,7 +278,7 @@ class SiteAdminAchievementEditView(_AchievementAdminMixin, View):
     def post(self, request: HttpRequest, achievement_id: int) -> HttpResponse:
         achievement = get_object_or_404(Achievement, pk=achievement_id)
         try:
-            _apply_form(achievement, request)
+            fields = _apply_form(achievement, request)
         except ValidationError as exc:
             return render(
                 request,
@@ -274,16 +287,17 @@ class SiteAdminAchievementEditView(_AchievementAdminMixin, View):
                 status=400,
             )
 
-        achievement.save()
+        # Named, so an icon the sandbox published since the achievement was read is not written back.
+        achievement.save(update_fields=[*fields, "updated"])
+        queue_held_upload(achievement, "custom_icon")
         messages.success(request, f"Updated achievement “{achievement.name}”.")
         return render(request, "dashboard/partials/admin/_achievement_rows.html", _admin_context())
 
     def delete(self, request: HttpRequest, achievement_id: int) -> HttpResponse:
         achievement = get_object_or_404(Achievement, pk=achievement_id)
         name = achievement.name
-        # Cascades to every UserAchievement. Deactivating is the non-destructive
-        # option and is what the UI steers toward; this is the deliberate escape
-        # hatch for an award created by mistake.
+        # Cascades to every UserAchievement. Deactivating is the non-destructive option and is what the UI
+        # steers toward; this is the deliberate escape hatch for an award created by mistake.
         achievement.delete()
         messages.success(request, f"Deleted achievement “{name}”.")
         return render(request, "dashboard/partials/admin/_achievement_rows.html", _admin_context())
@@ -296,11 +310,12 @@ class SiteAdminAchievementBackfillView(_AchievementAdminMixin, View):
     """
 
     def post(self, request: HttpRequest, achievement_id: int) -> HttpResponse:
-        from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import backfill_achievement
 
         achievement = get_object_or_404(Achievement, pk=achievement_id)
-        granted = evaluate_achievement_for_all(achievement)
-        messages.success(request, f"“{achievement.name}” granted to {granted} more user(s).")
+        safely_enqueue_task(backfill_achievement, achievement.pk)
+        messages.success(request, f"Re-checking “{achievement.name}” against every user; new awards appear as each batch finishes.")
         return render(request, "dashboard/partials/admin/_achievement_rows.html", _admin_context())
 
 
