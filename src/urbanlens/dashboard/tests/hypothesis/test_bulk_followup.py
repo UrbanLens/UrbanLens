@@ -187,9 +187,14 @@ class BatchingFollowOnWorkContextTests(SimpleTestCase):
 
     def test_leaving_the_context_after_an_exception_still_flushes(self) -> None:
         """A failed import must not silently drop the follow-on work for the rows it did finish."""
-        with mock.patch(ENQUEUE) as enqueue, self.assertRaises(RuntimeError), batching_follow_on_work(chunk_size=5):
-            enqueue_follow_on(ITEM_TASK, BATCH_TASK, 1, queue=Queue.BULK)
-            raise RuntimeError("the import blew up partway through")
+
+        def interrupted_import() -> None:
+            with batching_follow_on_work(chunk_size=5):
+                enqueue_follow_on(ITEM_TASK, BATCH_TASK, 1, queue=Queue.BULK)
+                raise RuntimeError("the import blew up partway through")
+
+        with mock.patch(ENQUEUE) as enqueue:
+            self.assertRaises(RuntimeError, interrupted_import)
 
         enqueue.assert_called_once_with(BATCH_TASK, [1], queue=Queue.BULK)
 

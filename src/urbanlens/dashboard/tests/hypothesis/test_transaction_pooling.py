@@ -60,8 +60,11 @@ class ProbeScopeHoldsNoSessionStateTests(TestCase):
             self.assertEqual(_seqscan(), "on")
 
     def test_a_scope_that_raises_leaves_nothing_behind(self) -> None:
-        with self.assertRaises(RuntimeError), probe_scope():
-            raise RuntimeError
+        def failing_scope() -> None:
+            with probe_scope():
+                raise RuntimeError
+
+        self.assertRaises(RuntimeError, failing_scope)
         self.assertEqual(_seqscan(), "on")
 
 

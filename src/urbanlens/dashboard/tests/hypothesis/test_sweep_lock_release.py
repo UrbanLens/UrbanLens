@@ -73,10 +73,12 @@ class SweepLockReleaseTests(SimpleTestCase):
         self.assertIsNotNone(acquire_lock(_KEY, 60), "the block did not release on exit")
 
     def test_the_context_manager_releases_when_the_body_raises(self) -> None:
-        with self.assertRaises(RuntimeError), beat_lock(_KEY, 60) as acquired:
-            self.assertTrue(acquired)
-            raise RuntimeError("sweep blew up")
+        def crashing_sweep() -> None:
+            with beat_lock(_KEY, 60) as acquired:
+                self.assertTrue(acquired)
+                raise RuntimeError("sweep blew up")
 
+        self.assertRaises(RuntimeError, crashing_sweep)
         self.assertIsNotNone(acquire_lock(_KEY, 60), "a crashed sweep left its lock behind")
 
     def test_an_expired_lock_with_no_new_holder_does_not_warn(self) -> None:

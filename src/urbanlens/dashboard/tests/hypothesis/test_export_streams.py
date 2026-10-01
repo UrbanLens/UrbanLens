@@ -46,10 +46,13 @@ class JsonArrayFileInterruptedTests(SimpleTestCase):
     def test_an_interrupted_array_is_removed_rather_than_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = os.path.join(temp_dir, "rows.json")
-            with self.assertRaises(RuntimeError), JsonArrayFile(path) as writer:
-                writer.append({"a": 1})
-                raise RuntimeError("row two failed")
 
+            def interrupted_export() -> None:
+                with JsonArrayFile(path) as writer:
+                    writer.append({"a": 1})
+                    raise RuntimeError("row two failed")
+
+            self.assertRaises(RuntimeError, interrupted_export)
             self.assertFalse(os.path.exists(path))
 
 
@@ -58,7 +61,7 @@ class ExportReadsInChunksTests(TestCase):
         super().setUp()
         self.profile = baker.make("auth.User").profile
         label = Label.objects.create(profile=self.profile, name="Tag")
-        self.pins = []
+        self.pins: list[Pin] = []
         for index in range(5):
             pin = baker.make(Pin, profile=self.profile, name=f"Pin {index}")
             pin.labels.add(label)

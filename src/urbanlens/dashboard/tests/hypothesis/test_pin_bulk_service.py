@@ -144,9 +144,13 @@ class DeferredRefitContextTests(TestCase):
             request_child_boundary_refit,
         )
 
-        with patch(_REFIT) as refit, self.assertRaises(RuntimeError), deferring_child_boundary_refits():
-            request_child_boundary_refit(1)
-            raise RuntimeError
+        def failing_batch() -> None:
+            with deferring_child_boundary_refits():
+                request_child_boundary_refit(1)
+                raise RuntimeError
+
+        with patch(_REFIT) as refit:
+            self.assertRaises(RuntimeError, failing_batch)
 
         refit.assert_not_called()
 

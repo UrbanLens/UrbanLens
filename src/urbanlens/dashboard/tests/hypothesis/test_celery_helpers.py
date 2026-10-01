@@ -187,8 +187,12 @@ class SuppressedEnqueuesTests(SimpleTestCase):
 
     def test_enqueues_again_once_the_block_exits_even_on_error(self) -> None:
         task = mock.Mock()
-        with self.assertRaises(ValueError), suppressed_enqueues():
-            raise ValueError
+
+        def failing_block() -> None:
+            with suppressed_enqueues():
+                raise ValueError
+
+        self.assertRaises(ValueError, failing_block)
         safely_enqueue_task(task, 1)
         task.apply_async.assert_called_once_with(args=(1,), kwargs={})
 

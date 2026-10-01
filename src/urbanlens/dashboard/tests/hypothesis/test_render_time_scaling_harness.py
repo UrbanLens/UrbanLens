@@ -8,13 +8,14 @@ import pytest
 
 from urbanlens.core.tests.query_scaling import QueryScalingMixin
 from urbanlens.core.tests.render_scaling import RenderTimeScalingMixin
+from urbanlens.core.tests.scaling import SeedScalingMixin
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.achievements.model import Achievement
 
 _URLCONF = "urbanlens.dashboard.tests.urls_render_scaling"
 
 
-class _AchievementSeedMixin:
+class _AchievementSeedMixin(SeedScalingMixin):
     """Both pages list every achievement, so both seed the same way."""
 
     def seed_rows(self, count: int) -> None:

@@ -91,8 +91,11 @@ class TheSlotTests(TestCase):
         self.assertEqual(ran, [])
 
     def test_a_block_that_raises_is_recorded_as_failed(self) -> None:
-        with self.assertRaises(RuntimeError), api_call_slot("trivia_moderation", endpoint="model-x"):
-            raise RuntimeError("provider exploded")
+        def failing_call() -> None:
+            with api_call_slot("trivia_moderation", endpoint="model-x"):
+                raise RuntimeError("provider exploded")
+
+        self.assertRaises(RuntimeError, failing_call)
         row = ApiCallLog.objects.filter(service="trivia_moderation").get()
         self.assertFalse(row.success)
         self.assertEqual(row.endpoint, "model-x")
