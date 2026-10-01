@@ -127,13 +127,15 @@ def login_params_for_identifier(identifier: str) -> dict[str, str]:
         identifier: The username or email from the login form.
 
     Returns:
-        Dict with ``mode`` (``legacy``/``derived``) and ``auth_salt`` (real for enrolled accounts, deterministic decoy otherwise).
-        ``legacy`` goes only to an active account with a password, the one case a raw-password login can succeed."""
+        Dict with ``mode`` (``legacy``/``derived``) and ``auth_salt`` (real for active enrolled accounts, deterministic
+        decoy otherwise). ``legacy`` goes only to an active account with a password, the one case a raw-password login
+        can succeed. An inactive account answers as an unknown one: only its exact username resolves to it, so a real
+        salt there beside a decoy for every other spelling would say it exists."""
     user = resolve_login_user(identifier)
-    if user is not None:
+    if user is not None and user.is_active:
         kdf = AccountKdf.objects.for_user(user).first()
         if kdf is not None:
             return {"mode": AUTH_MODE_DERIVED, "auth_salt": kdf.auth_salt}
-        if user.is_active and user.has_usable_password():
+        if user.has_usable_password():
             return {"mode": AUTH_MODE_LEGACY, "auth_salt": ""}
     return {"mode": AUTH_MODE_DERIVED, "auth_salt": fake_auth_salt(identifier)}

@@ -117,6 +117,31 @@ class LoginParamsTests(TestCase):
         self.assertEqual(params["mode"], "derived")
         self.assertEqual(params["auth_salt"], AccountKdf.objects.get(user=profile.user).auth_salt)
 
+    def test_a_pending_enrolled_account_gets_the_decoy_in_every_spelling(self) -> None:
+        """A real salt for the exact username beside a decoy for its other spellings would say the account exists."""
+        profile = _profile(username="pending_user", password="pw")
+        real_salt = _b64(os.urandom(16))
+        AccountKdf.objects.create(user=profile.user, auth_salt=real_salt)
+        type(profile.user).objects.filter(pk=profile.user_id).update(is_active=False)
+
+        answers = {
+            spelling: login_params_for_identifier(spelling)
+            for spelling in ("pending_user", "Pending_User", " PENDING_USER ")
+        }
+
+        self.assertEqual(len({params["auth_salt"] for params in answers.values()}), 1, answers)
+        self.assertEqual(answers["pending_user"], {"mode": "derived", "auth_salt": fake_auth_salt("pending_user")})
+        self.assertNotEqual(answers["pending_user"]["auth_salt"], real_salt)
+
+    def test_a_pending_enrolled_account_answers_like_an_unknown_one(self) -> None:
+        profile = _profile(username="pending_twin", password="pw")
+        AccountKdf.objects.create(user=profile.user, auth_salt=_b64(os.urandom(16)))
+        type(profile.user).objects.filter(pk=profile.user_id).update(is_active=False)
+        pending = login_params_for_identifier("pending_twin")
+        type(profile.user).objects.filter(pk=profile.user_id).delete()
+
+        self.assertEqual(pending, login_params_for_identifier("pending_twin"))
+
 
 # -- Endpoints -------------------------------------------------------------------
 
