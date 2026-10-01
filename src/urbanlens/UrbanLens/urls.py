@@ -38,6 +38,7 @@ from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.controllers.media import MediaGateView, StableImageView
 from urbanlens.dashboard.controllers.oauth_authorize import ConsentAuthorizationView
+from urbanlens.dashboard.controllers.oauth_introspect import ActiveOwnerIntrospectTokenView
 from urbanlens.dashboard.services.security.throttle import ANONYMOUS_EXPENSIVE, throttled
 from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -92,8 +93,9 @@ urlpatterns = [
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
     path("resend-verification/", throttled("resend_verification", ANONYMOUS_EXPENSIVE)(ResendVerificationView.as_view()), name="resend_verification"),
     path("dashboard/", include(dashboard_urls), name="dashboard"),
-    # OAuth2 provider for native clients; see external_api.views. Shadows the toolkit's own authorize route.
+    # OAuth2 provider for native clients; see external_api.views. Shadows the toolkit's own authorize and introspect routes.
     path("oauth/authorize/", ConsentAuthorizationView.as_view()),
+    path("oauth/introspect/", ActiveOwnerIntrospectTokenView.as_view()),
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("csp-report/", throttled("csp_report", CSP_REPORT_RATE)(CspReportView.as_view()), name="csp.report"),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),

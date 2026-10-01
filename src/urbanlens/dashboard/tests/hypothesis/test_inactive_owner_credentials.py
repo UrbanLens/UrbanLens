@@ -2,12 +2,15 @@
 
 Deactivation is how an account is suspended, and a session already ends with it. An OAuth token or an API key
 is a way into the same account, so each entry point that takes one refuses it once its owner is inactive: the
-external API, the token endpoint's refresh grant, a socket's connect, and a socket already open.
+external API, the token endpoint's refresh and code grants, token introspection, a socket's connect, and a socket
+already open.
 """
 
 from __future__ import annotations
 
+import base64
 from datetime import timedelta
+import hashlib
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -18,7 +21,12 @@ from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
-from oauth2_provider.models import get_access_token_model, get_application_model, get_refresh_token_model
+from oauth2_provider.models import (
+    get_access_token_model,
+    get_application_model,
+    get_grant_model,
+    get_refresh_token_model,
+)
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer, _credential_is_still_valid
@@ -31,6 +39,7 @@ from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 Application = get_application_model()
 AccessToken = get_access_token_model()
 RefreshToken = get_refresh_token_model()
+Grant = get_grant_model()
 
 
 def _oauth_token(user: User, suffix: str, *, scope: str = "profile:read") -> tuple[AccessToken, RefreshToken]:
@@ -96,6 +105,60 @@ class OAuthOverHttpTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "invalid_grant")
+
+    def test_a_deactivated_owners_authorization_code_is_not_exchanged(self) -> None:
+        verifier = "v" * 64
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+        grant = Grant.objects.create(
+            user=self.user,
+            application=self.access.application,
+            code="code-owner",
+            expires=timezone.now() + timedelta(minutes=5),
+            redirect_uri="urbanlens://oauth/callback",
+            scope="profile:read",
+            code_challenge=challenge,
+            code_challenge_method="S256",
+        )
+        _deactivate(self.user)
+
+        response = self.client.post(
+            reverse("oauth2_provider:token"),
+            {
+                "grant_type": "authorization_code",
+                "code": grant.code,
+                "redirect_uri": grant.redirect_uri,
+                "client_id": grant.application.client_id,
+                "code_verifier": verifier,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "invalid_grant")
+
+    def _introspect(self) -> dict:
+        secret = "resource-server-secret"
+        server = Application.objects.create(
+            name="Resource server",
+            client_type=Application.CLIENT_CONFIDENTIAL,
+            authorization_grant_type=Application.GRANT_CLIENT_CREDENTIALS,
+            client_secret=secret,
+        )
+        credentials = base64.b64encode(f"{server.client_id}:{secret}".encode()).decode()
+        response = self.client.post(
+            reverse("oauth2_provider:introspect"),
+            {"token": self.access.token},
+            HTTP_AUTHORIZATION=f"Basic {credentials}",
+        )
+        self.assertEqual(response.status_code, 200)
+        return response.json()
+
+    def test_introspection_reports_an_active_owners_token_active(self) -> None:
+        self.assertTrue(self._introspect()["active"])
+
+    def test_introspection_reports_a_deactivated_owners_token_inactive(self) -> None:
+        _deactivate(self.user)
+
+        self.assertEqual(self._introspect(), {"active": False})
 
 
 def _run(coro):

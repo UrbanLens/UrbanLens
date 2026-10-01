@@ -19,8 +19,25 @@ class ActiveOwnerOAuth2Validator(OAuth2Validator):
     A deactivated account cannot sign in, but a token it issued earlier is a way into the same account, and
     django-oauth-toolkit only checks a token's expiry and scope. This covers every entry point that validates
     through ``OAUTH2_PROVIDER["OAUTH2_VALIDATOR_CLASS"]``: the external API, media authentication and the token
-    endpoint. Sockets resolve tokens themselves (``websocket_auth``).
+    endpoint. Sockets resolve tokens themselves (``websocket_auth``), and introspection reads the token row
+    (``controllers.oauth_introspect``).
     """
+
+    def validate_code(self, client_id: str, code: str, client: Any, request: Any, *args: Any, **kwargs: Any) -> bool:
+        """Exchange an authorization code only while the account that granted it is active.
+
+        Args:
+            client_id: The client's id.
+            code: The authorization code.
+            client: The client presenting it.
+            request: The oauthlib request, given the grant's user on success.
+            *args: Passed through.
+            **kwargs: Passed through.
+
+        Returns:
+            True when the code is valid for this client and its owner active.
+        """
+        return super().validate_code(client_id, code, client, request, *args, **kwargs) and _owner_is_active(request)
 
     def validate_bearer_token(self, token: str, scopes: list[str], request: Any) -> bool:
         """Accept a bearer token only while its owner is active.
