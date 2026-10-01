@@ -76,7 +76,7 @@ describe("the broken-thumbnail fallback", () => {
         const fallback = scope.urbanlensMediaThumbFallback;
         if (!fallback) throw new Error("the script did not define urbanlensMediaThumbFallback");
 
-        for (let attempt = 1; attempt <= 6; attempt++) {
+        for (let attempt = 1; attempt <= 10; attempt++) {
             fallback(img, "broken_image");
             timers.shift()?.();
             expect(attributes.src).toBe(`/map/media-copy/ab/?_r=${attempt}`);
@@ -141,6 +141,22 @@ describe("the broken-thumbnail fallback", () => {
 
         expect(scope.urbanlensRetryPendingImage?.(img)).toBe(true);
         expect(img.dataset.previewRetry).toBe("1");
+    });
+
+    test("a copy keeps retrying for as long as a slow provider's download can take", () => {
+        // P180: the server allows a first download 90 s; a page that gave up sooner showed an icon for an image that arrived.
+        const delays: number[] = [];
+        const scope: { urbanlensRetryPendingImage?: (img: HTMLImageElement) => boolean } = {};
+        new Function("window", "setTimeout", SCRIPT)(scope, (callback: () => void, delay: number) => {
+            delays.push(delay);
+            callback();
+        });
+        const img = document.createElement("img");
+        img.setAttribute("src", "/map/media-copy/slow/");
+        while (scope.urbanlensRetryPendingImage?.(img)) {
+            // Each scheduled retry already swapped in its URL; the next error asks again.
+        }
+        expect(delays.reduce((total, delay) => total + delay, 0)).toBeGreaterThanOrEqual(100_000);
     });
 
     test("an image marked data-fade-in is marked loaded once it has", () => {

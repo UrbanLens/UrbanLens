@@ -535,13 +535,15 @@ paths use it:
   `media-copy/<digest>/`). Every provider image the site shows is its own copy.
   The `RemoteImageCopy` row, written when a page linking the image was built,
   is what authorises the fetch: a digest the site never issued is a 404 with no
-  request made. The web process downloads through `RemoteImageCopyUpstream`
-  (25MB, `MAX_REMOTE_COPY_SOURCE_BYTES`), stages the bytes
+  request made. The view only queues `tasks.fetch_remote_image_copy` on the
+  interactive worker, which downloads the source (25MB,
+  `MAX_REMOTE_COPY_SOURCE_BYTES`, up to `DOWNLOAD_TIMEOUT_SECONDS` since some
+  providers take half a minute) without parsing it, stages the bytes
   (`previews.stage_preview_source`) and queues
-  `tasks.render_remote_image_copy`, which re-encodes them (1200px) and keeps
-  the result for good. Until then the endpoint answers 503. A failed download
-  or decode backs off, 1h doubling to at most 7 days, and answers 404
-  meanwhile.
+  `tasks.render_remote_image_copy`, which re-encodes them (1200px) in the
+  sandbox and keeps the result for good. Until then the endpoint answers 503.
+  A failed download or decode backs off, 1h doubling to at most 7 days, and
+  answers 404 meanwhile.
 - **A tile of another host's map** (`controllers/remote_tiles.RemoteTileView`,
   `map/tile-copies/<digest>/<z>/<x>/<y>.png`). An imported overlay whose
   template is not a sheet this site draws itself is recorded as a

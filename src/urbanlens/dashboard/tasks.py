@@ -1540,13 +1540,49 @@ def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int
     return True
 
 
+@shared_task(queue=Queue.INTERACTIVE)
+def fetch_remote_image_copy(copy_id: int) -> bool:
+    """Download a third-party image for its first copy and hand the bytes to the sandbox to decode.
+
+    Runs on an ordinary worker because the sandbox has no egress. Nothing here parses the bytes.
+
+    Args:
+        copy_id: The ``RemoteImageCopy`` being made.
+
+    Returns:
+        True when the bytes were staged and their render queued.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.previews import discard_preview_source, fetch_remote_source, stage_preview_source
+    from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS, MAX_REMOTE_COPY_SOURCE_BYTES, pending_marker, record_failure
+
+    copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
+    if copy is None or copy.file.name:
+        return False
+    marker = pending_marker(copy.url_digest)
+    fetched = fetch_remote_source(copy.source_url, max_bytes=MAX_REMOTE_COPY_SOURCE_BYTES, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+    if fetched is None:
+        record_failure(copy)
+        cache.delete(marker)
+        return False
+    descriptor = stage_preview_source(f"copy_{copy.url_digest}", *fetched)
+    if safely_enqueue_task(render_remote_image_copy, copy.pk, descriptor, durable=False) is None:
+        discard_preview_source(descriptor)
+        cache.delete(marker)
+        return False
+    return True
+
+
 @shared_task(queue=SANDBOX_QUEUE)
 def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
     """Decode one downloaded third-party image and keep its re-encoded copy.
 
     Args:
         copy_id: The ``RemoteImageCopy`` being made.
-        descriptor: Where the web process staged the source (``previews.stage_preview_source``).
+        descriptor: Where :func:`fetch_remote_image_copy` staged the source (``previews.stage_preview_source``).
 
     Returns:
         True when the copy was stored.

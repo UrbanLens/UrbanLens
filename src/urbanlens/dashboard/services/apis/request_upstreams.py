@@ -89,17 +89,6 @@ class FlickrAlbumUpstream(RequestUpstream):
     rate = Rate(limit=20, window_seconds=60)
 
 
-class RemoteImageCopyUpstream(RequestUpstream):
-    """The first download of a third-party image this site keeps a copy of (``services.media.remote_copies``).
-
-    A new gallery asks for every tile at once; a request over the slots answers "busy" and the page retries.
-    """
-
-    name = "media.remote_copy"
-    deadline = 25.0
-    rate = Rate(limit=600, window_seconds=60)
-
-
 class RemoteTileUpstream(RequestUpstream):
     """The first download of a foreign map tile this site keeps (``services.map.remote_tiles``).
 

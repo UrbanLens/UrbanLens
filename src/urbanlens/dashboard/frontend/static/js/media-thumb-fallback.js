@@ -19,7 +19,8 @@ window.urbanlensRetryPendingImage = function (img) {
     // The count belongs to one address: an element reused for another image starts again.
     var base = src.replace(/([?&])_r=\d+$/, '');
     var attempt = img.dataset.previewRetryFor === base ? parseInt(img.dataset.previewRetry || '0', 10) : 0;
-    if (!retries || attempt >= (isCopy ? 6 : 2)) return false;
+    // A copy's first download runs on a worker for up to 90 s (DOWNLOAD_TIMEOUT_SECONDS); ten retries wait 110 s.
+    if (!retries || attempt >= (isCopy ? 10 : 2)) return false;
     img.dataset.previewRetry = String(attempt + 1);
     img.dataset.previewRetryFor = base;
     // A new query param, not the same URL again: the browser has already negatively cached this exact one.

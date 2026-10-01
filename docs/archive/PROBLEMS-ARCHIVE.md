@@ -19409,3 +19409,20 @@ owner's next visit; shared Location fields may fill in, but only by containment)
 `tests/hypothesis/test_cross_user_pin_isolation.py` compares another account's pin, row for row, before and after
 each of these. `tests/integration/specs/api/cross-user-isolation.spec.ts` does the same end to end. The building
 place stored with no geometry is P182.
+
+## RESOLVED 2026-10-01: A third-party image slower than 20 s to download was never copied, so its tile showed an icon
+
+`id: P180` · `status: fixed` · `resolved: 2026-10-01`
+
+`RemoteImageCopyView` made a remote image's first copy inside the web request: `fetch_remote_source` gave up after
+20 s, under a 25 s request deadline, and the failure then answered 404 for an hour. The USGS National Map satellite
+export a private pin's page shows took 18 s and 31 s on direct fetches from chiron, with no UrbanLens code in the
+path, so the slowness is the provider's own: its MapServer renders each export on request. Eighteen location
+specs failed on that one 404.
+
+Fixed (Jess 2026-10-01: slow work belongs on a worker) by moving the download to one. The view now only checks the
+caller's rate, marks the copy pending and queues `tasks.fetch_remote_image_copy` on the interactive worker. That task
+downloads with `DOWNLOAD_TIMEOUT_SECONDS` (90), stages the bytes without parsing them, and queues the sandbox render
+as before. The page retries a pending copy for about 110 s rather than 42 s, so a slow provider's image still lands
+on the visit that asked for it. Each copy is still made once and kept, so the wait is paid once per image.
+

@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -31,6 +32,18 @@ MAX_REMOTE_COPY_SOURCE_BYTES = 25 * 1024 * 1024
 #: The first retry after a failed download; each further failure doubles it, up to :data:`MAX_RETRY_DELAY`.
 FIRST_RETRY_DELAY = timedelta(hours=1)
 MAX_RETRY_DELAY = timedelta(days=7)
+
+#: How long the download may take. It runs on a worker, so a slow provider costs no web request: the USGS
+#: National Map's export took 18 s and 31 s to answer (P180).
+DOWNLOAD_TIMEOUT_SECONDS = 90
+
+#: How long a copy stays pending before another request may start it again: the download, the render, and the
+#: queues ahead of each.
+COPY_PENDING_TTL = 300
+
+#: First downloads one caller may start per window. A page asks for every tile at once.
+COPY_RATE = Rate(limit=600, window_seconds=60)
+COPY_THROTTLE_SCOPE = "media.remote_copy"
 
 
 @dataclass(frozen=True, slots=True)

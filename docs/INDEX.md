@@ -215,5 +215,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | X31 | holds | 2026-09-30 | One chat message costs ~30-60 ms of CPU and ~25 queries where it is handled, so one sender saturates the single daphne process at ~15-30 messages/s; that, not notifications, is the DoS threshold; chat now allows a burst of 30 then 4/s | [`docs/notes/chat-message-cost-measured.md`](notes/chat-message-cost-measured.md) |
 | P177 | open | 2026-09-30 | When the sign-in page cannot fetch an account's sign-in parameters, it submits the raw password | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P179 | open | 2026-10-01 | `panel_fetch`'s threads pool enforces none of its tasks' declared soft or hard time limits | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P180 | open | 2026-10-01 | A third-party image slower than 20 s to download is never copied, so its tile shows an icon | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P182 | open | 2026-10-01 | The campus sweep stores building places with no geometry, so containment can never reach them | [`docs/PROBLEMS.md`](PROBLEMS.md) |

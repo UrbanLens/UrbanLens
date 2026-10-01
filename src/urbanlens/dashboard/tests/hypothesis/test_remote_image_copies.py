@@ -32,7 +32,7 @@ from urbanlens.dashboard.services.media.remote_copies import (
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
 
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-remote-copies-")
-_FETCH = "urbanlens.dashboard.controllers.remote_copies.fetch_remote_source"
+_FETCH = "urbanlens.dashboard.services.media.previews.fetch_remote_source"
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 
 
@@ -92,12 +92,28 @@ class CopyEndpointTests(TestCase):
         self.copy = RemoteImageCopy.objects.get()
         self.addCleanup(cache.delete, pending_marker(self.copy.url_digest))
 
-    def _first_request(self, body: bytes) -> MagicMock:
-        with patch(_FETCH, return_value=(body, "image/jpeg")) as fetch, patch(_ENQUEUE) as enqueue:
+    def _first_request(self) -> None:
+        """The page's request: it starts the download and answers at once, whatever the provider's speed."""
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        with patch(_FETCH, side_effect=AssertionError("downloaded while the page waited")), patch(_ENQUEUE) as enqueue:
             response = self.client.get(self.url)
         self.assertEqual(response.status_code, 503)
         self.assertTrue(response.has_header("Retry-After"))
-        fetch.assert_called_once_with(self.source, max_bytes=fetch.call_args.kwargs["max_bytes"])
+        enqueue.assert_called_once()
+        self.assertEqual(enqueue.call_args.args[:2], (fetch_remote_image_copy, self.copy.pk))
+
+    def _download(self, body: bytes | None) -> MagicMock:
+        """The worker's download: the provider's bytes, staged for the sandbox render it queues."""
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        with (
+            patch(_FETCH, return_value=(body, "image/jpeg") if body is not None else None) as fetch,
+            patch(_ENQUEUE) as enqueue,
+        ):
+            fetch_remote_image_copy(self.copy.pk)
+        fetch.assert_called_once()
+        self.assertEqual(fetch.call_args.args, (self.source,))
         return enqueue
 
     def _render(self, enqueue: MagicMock) -> bool:
@@ -106,28 +122,45 @@ class CopyEndpointTests(TestCase):
         _task, copy_id, descriptor = enqueue.call_args.args
         return render_remote_image_copy(copy_id, descriptor)
 
+    def _make(self, body: bytes) -> bool:
+        self._first_request()
+        return self._render(self._download(body))
+
     def test_a_digest_this_site_never_issued_is_refused_without_fetching(self) -> None:
-        with patch(_FETCH) as fetch:
+        with patch(_FETCH) as fetch, patch(_ENQUEUE) as enqueue:
             response = self.client.get(reverse("media.remote_copy", args=[url_digest("https://evil.test/internal")]))
 
         self.assertEqual(response.status_code, 404)
         fetch.assert_not_called()
+        enqueue.assert_not_called()
 
-    def test_requests_while_the_copy_is_being_made_do_not_fetch_again(self) -> None:
-        self._first_request(_jpeg())
-        with patch(_FETCH) as fetch:
+    def test_a_slow_provider_gets_longer_than_a_web_request_would_wait(self) -> None:
+        """P180: the USGS export took 18 s and 31 s, and the in-request fetch gave up at 20."""
+        from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        with patch(_FETCH, return_value=(_jpeg(), "image/jpeg")) as fetch, patch(_ENQUEUE):
+            fetch_remote_image_copy(self.copy.pk)
+
+        self.assertEqual(fetch.call_args.kwargs["timeout"], DOWNLOAD_TIMEOUT_SECONDS)
+        self.assertGreaterEqual(DOWNLOAD_TIMEOUT_SECONDS, 60)
+
+    def test_requests_while_the_copy_is_being_made_do_not_start_it_again(self) -> None:
+        self._first_request()
+        with patch(_ENQUEUE) as enqueue:
             for _ in range(3):
                 self.assertEqual(self.client.get(self.url).status_code, 503)
 
-        fetch.assert_not_called()
+        enqueue.assert_not_called()
 
     def test_once_made_the_copy_is_served_without_the_provider(self) -> None:
-        self.assertTrue(self._render(self._first_request(_jpeg())))
+        self.assertTrue(self._make(_jpeg()))
 
-        with patch(_FETCH, side_effect=AssertionError("fetched the provider again")):
+        with patch(_FETCH, side_effect=AssertionError("fetched the provider again")), patch(_ENQUEUE) as enqueue:
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
+        enqueue.assert_not_called()
         self.assertEqual(b"".join(response.streaming_content)[:2], b"\xff\xd8")
         self.copy.refresh_from_db()
         self.assertTrue(self.copy.file.name.startswith("remote_copies/"))
@@ -141,54 +174,47 @@ class CopyEndpointTests(TestCase):
 
         from urbanlens.dashboard.services.media.remote_copies import REMOTE_COPY_MAX_DIMENSION
 
-        self._render(self._first_request(_jpeg((REMOTE_COPY_MAX_DIMENSION * 2, 50))))
+        self._make(_jpeg((REMOTE_COPY_MAX_DIMENSION * 2, 50)))
 
         self.copy.refresh_from_db()
         with self.copy.file.open("rb") as stored, PILImage.open(stored) as image:
             self.assertLessEqual(max(image.size), REMOTE_COPY_MAX_DIMENSION)
 
     def test_a_failed_download_is_not_retried_until_its_backoff_runs_out(self) -> None:
-        with patch(_FETCH, return_value=None):
+        self._first_request()
+        self._download(None).assert_not_called()
+        with patch(_ENQUEUE) as enqueue:
             self.assertEqual(self.client.get(self.url).status_code, 404)
-        with patch(_FETCH) as fetch:
-            self.assertEqual(self.client.get(self.url).status_code, 404)
-        fetch.assert_not_called()
+        enqueue.assert_not_called()
 
         RemoteImageCopy.objects.filter(pk=self.copy.pk).update(
             last_failed_at=timezone.now() - FIRST_RETRY_DELAY - timedelta(minutes=1)
         )
-        with patch(_FETCH, return_value=None) as fetch:
-            self.client.get(self.url)
-        fetch.assert_called_once()
+        self._first_request()
+        self._download(None)
         self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 2)
 
-    def test_a_request_over_the_download_slots_is_told_to_retry_without_counting_a_failure(self) -> None:
-        from urbanlens.dashboard.services.apis.request_upstreams import RemoteImageCopyUpstream
-
-        semaphore = RemoteImageCopyUpstream.semaphore()
-        held = 0
-        while semaphore.acquire(blocking=False):
-            held += 1
-        try:
-            with patch(_FETCH) as fetch:
-                response = self.client.get(self.url)
-        finally:
-            for _ in range(held):
-                semaphore.release()
+    def test_a_caller_over_the_download_rate_is_told_to_retry_without_counting_a_failure(self) -> None:
+        with (
+            patch("urbanlens.dashboard.services.security.throttle.allow", return_value=False),
+            patch(_ENQUEUE) as enqueue,
+        ):
+            response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 503)
-        fetch.assert_not_called()
+        self.assertTrue(response.has_header("Retry-After"))
+        enqueue.assert_not_called()
         self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 0)
-        self._first_request(_jpeg())
+        self._first_request()
 
     def test_bytes_that_are_not_an_image_are_a_failure_not_a_copy(self) -> None:
-        self.assertFalse(self._render(self._first_request(b"<html>not an image</html>")))
+        self.assertFalse(self._make(b"<html>not an image</html>"))
 
         self.copy.refresh_from_db()
         self.assertEqual((self.copy.file.name, self.copy.failed_attempts), ("", 1))
-        with patch(_FETCH) as fetch:
+        with patch(_ENQUEUE) as enqueue:
             self.assertEqual(self.client.get(self.url).status_code, 404)
-        fetch.assert_not_called()
+        enqueue.assert_not_called()
 
 
 class GalleryUrlTests(TestCase):

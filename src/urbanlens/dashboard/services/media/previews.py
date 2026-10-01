@@ -117,12 +117,13 @@ _MAX_REDIRECTS = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
-def fetch_remote_source(url: str, *, max_bytes: int) -> tuple[bytes, str] | None:
+def fetch_remote_source(url: str, *, max_bytes: int, timeout: float = _FETCH_TIMEOUT) -> tuple[bytes, str] | None:
     """Download a remote file for a server-side render, pinning each hop to the address it validated to.
 
     Args:
         url: The absolute http(s) URL to fetch.
         max_bytes: Largest body accepted.
+        timeout: Per-request timeout, in seconds.
 
     Returns:
         ``(body, content_type)``, or None when the URL was unsafe, the fetch failed, or the body was over *max_bytes*.
@@ -133,7 +134,7 @@ def fetch_remote_source(url: str, *, max_bytes: int) -> tuple[bytes, str] | None
     from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
     try:
-        response = fetch_public_url(url, headers={"User-Agent": _USER_AGENT}, timeout=_FETCH_TIMEOUT, max_redirects=_MAX_REDIRECTS)
+        response = fetch_public_url(url, headers={"User-Agent": _USER_AGENT}, timeout=timeout, max_redirects=_MAX_REDIRECTS)
     except UnsafeUrlError:
         logger.info("Remote source rejected as unsafe: %s", redact_text(url))
         return None
