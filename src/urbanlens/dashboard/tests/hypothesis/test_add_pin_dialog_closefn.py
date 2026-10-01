@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+
+_SCRIPT_SOURCE = (Path(__file__).resolve().parents[3] / "dashboard/frontend/ts/entries/map-page.ts").read_text()
 
 
 class AddPinDialogUsesSharedCloseHandlerTests(TestCase):
@@ -29,10 +33,9 @@ class AddPinDialogUsesSharedCloseHandlerTests(TestCase):
 
     def test_close_add_pin_dialog_still_does_its_cleanup(self) -> None:
         """closeAddPinDialog() must still exist with its real cleanup logic - the shared handler calls it by name (window['closeAddPinDialog']()) rather than a bare dialog.close(), specifically so this cleanup still runs on a backdrop click, not just on explicit Cancel/Escape."""
-        body = self.client.get(reverse("map.view")).content.decode()
-        fn_index = body.find("function closeAddPinDialog()")
+        fn_index = _SCRIPT_SOURCE.find("function closeAddPinDialog()")
         self.assertNotEqual(fn_index, -1)
-        fn_body_end = body.find("\n    }", fn_index)
-        fn_body = body[fn_index:fn_body_end]
+        fn_body = _SCRIPT_SOURCE[fn_index : _SCRIPT_SOURCE.find("\n}", fn_index)]
         self.assertIn("_addPinClickMode = false", fn_body)
         self.assertIn("map.removeLayer(_addPinMarker)", fn_body)
+        self.assertIn("window.closeAddPinDialog = closeAddPinDialog", _SCRIPT_SOURCE)

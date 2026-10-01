@@ -626,13 +626,19 @@ class CeleryQueueDepthCollectorTests(SimpleTestCase):
     def test_it_reads_this_projects_broker_whichever_app_is_current(self) -> None:
         """``celery.current_app`` is the last app anything created; a stray one points at its own default broker."""
         from celery import Celery
+        from kombu import Connection
 
         from urbanlens.dashboard.services.core import celery_metrics
 
         Celery("stray", broker="amqp://guest@127.0.0.1:1//", set_as_current=True)
         self.addCleanup(celery_metrics.app.set_current)
 
-        self.assertIsNotNone(celery_metrics.CeleryQueueDepthCollector()._read_depths())
+        # The project app's own broker is whatever the environment configured; only which app is asked is under test.
+        with mock.patch.object(
+            celery_metrics.app, "connection_for_read", return_value=Connection("memory://")
+        ) as asked:
+            self.assertIsNotNone(celery_metrics.CeleryQueueDepthCollector()._read_depths())
+        asked.assert_called_once()
 
     def test_label_values_come_from_the_queue_enum(self) -> None:
         # Cardinality is fixed by the code, not by anything a request influences.

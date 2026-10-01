@@ -35,6 +35,12 @@ def _holders() -> list[object]:
     return [module for module in list(sys.modules.values()) if getattr(module, "safely_enqueue_task", None) is original]
 
 
+def _restore_module(name: str, module: object) -> None:
+    sys.modules[name] = module
+    parent, _dot, child = name.rpartition(".")
+    setattr(sys.modules[parent], child, module)
+
+
 class ThePatchReachesTheCallersTests(TestCase):
     def test_a_module_that_bound_the_name_at_import_sees_the_mock(self) -> None:
         from urbanlens.dashboard.services.core import channel_broadcast
@@ -131,7 +137,10 @@ class AModuleImportedInsideTheBlockTests(TestCase):
 
         original = celery_module.safely_enqueue_task
         name = "urbanlens.dashboard.services.media.upload_failures"
-        sys.modules.pop(name, None)
+        previous = sys.modules.pop(name, None)
+        if previous is not None:
+            # Later tests patch the module by name while holding functions from this one.
+            self.addCleanup(_restore_module, name, previous)
 
         with tasks_run_inline():
             import urbanlens.dashboard.services.media.upload_failures as late  # noqa: PLC0415

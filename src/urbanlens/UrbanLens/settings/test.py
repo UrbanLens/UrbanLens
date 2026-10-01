@@ -18,6 +18,10 @@ STORAGES = {**STORAGES, "staticfiles": {"BACKEND": "django.contrib.staticfiles.s
 # Query fingerprints land beside tests as reviewable diffs; CI fails on missing records instead.
 PERF_REC = {"MODE": "none" if os.getenv("CI") else "once"}
 
+# Django streams media itself, whatever UL_ENVIRONMENT says, so CI ("testing") serves like a dev runner; tests of
+# the nginx hand-off turn it on themselves.
+MEDIA_X_ACCEL = False
+
 # Production hashing is pure overhead in tests and can blow handshake timeouts.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
