@@ -32,6 +32,7 @@ VIEW_SECONDS = 0.6
 DEADLOCK_SECONDS = 5.0
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
+_middleware_entered = threading.Event()
 _middleware_returned = threading.Event()
 
 
@@ -50,6 +51,7 @@ class _SyncMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
+        _middleware_entered.set()
         try:
             return self.get_response(request)
         finally:
@@ -83,7 +85,9 @@ async def _cancel_then_disconnect(handler) -> dict[str, float]:
         return None
 
     application = asyncio.create_task(handler(_scope(), inbox.get, send))
-    await asyncio.sleep(VIEW_SECONDS / 12)
+    # Once the request thread is in the middleware, about to wait on the loop in async_to_sync, as daphne's threads
+    # were. Not a fixed delay: a slow first request may not have reached the middleware yet, and then nothing deadlocks.
+    await asyncio.to_thread(_middleware_entered.wait, DEADLOCK_SECONDS)
     application.cancel()
     await asyncio.sleep(VIEW_SECONDS / 12)
     await inbox.put({"type": "http.disconnect"})

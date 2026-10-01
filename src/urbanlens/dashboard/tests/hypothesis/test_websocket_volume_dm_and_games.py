@@ -281,10 +281,14 @@ class TriviaSessionVolumeTests(TransactionTestCase):
 
         for index in range(6):
             await comm.send_to(text_data=json.dumps({"body": f"message {index}"}))
-        frames = await _drain(comm)
+        # Accepted messages answer this socket with nothing, so silence is no sign the refusal has been reached.
+        # receive_from fails on a close, which is the other half of what this test holds.
+        frames = [await comm.receive_json_from(timeout=10)]
+        while frames[-1].get("type") != "error":
+            frames.append(await comm.receive_json_from(timeout=10))
+        frames += await _drain(comm)
 
         self.assertTrue(any(frame.get("type") == "error" for frame in frames), "no error frame was sent")
-        self.assertTrue(await comm.receive_nothing(timeout=0.2))
         await comm.disconnect()
 
     @override_settings(UL_WEBSOCKET_FRAMES_PER_MINUTE=2)
