@@ -327,6 +327,9 @@ def delete_pin(pin: Pin, *, children_mode: str = "") -> PinDeletion:
     from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
 
     with transaction.atomic(), deferring_child_boundary_refits():
+        # Before the collect: a background write to one of these pins then waits for the delete, or finishes first
+        # and is collected, rather than committing a child in between that fails the delete's foreign-key check.
+        list(Pin.objects.select_for_update().filter(pk__in=[node.pk for node in subtree]).values_list("pk", flat=True))
         if descendant_count and children_mode == "keep":
             deferred_ids = _promote_children(pin)
             deleted = [pin]

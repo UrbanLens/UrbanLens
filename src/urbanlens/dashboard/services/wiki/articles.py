@@ -349,33 +349,39 @@ def save_article(
         Tuple of (article, revision) - revision is None for a no-op save.
 
     Raises:
-        ValueError: Neither or both hosts were provided."""
+        ValueError: Neither or both hosts were provided.
+        Pin.DoesNotExist: The host pin was deleted before the save could hold it."""
     from urbanlens.dashboard.models.article.model import Article, ArticleRevision
+    from urbanlens.dashboard.models.pin.model import Pin
 
     if (pin is None) == (wiki is None):
         raise ValueError("Exactly one of pin or wiki must be provided.")
 
     content = localize_article_images((content or "").replace("\r\n", "\n").rstrip())
-    article = get_article(pin=pin, wiki=wiki)
-    if article is None:
-        article = Article(pin=pin, wiki=wiki)
-    elif article.content == content:
-        return article, None
+    with transaction.atomic():
+        # Held until the revision commits, so a delete of the pin (pin_edit.delete_pin) waits or is waited for.
+        if pin is not None and not Pin.objects.select_for_update(no_key=True).filter(pk=pin.pk).values_list("pk", flat=True):
+            raise Pin.DoesNotExist(f"Pin {pin.pk} was deleted before its article could be saved.")
+        article = get_article(pin=pin, wiki=wiki)
+        if article is None:
+            article = Article(pin=pin, wiki=wiki)
+        elif article.content == content:
+            return article, None
 
-    rendered = render_article(content)
-    article.content = content
-    article.content_html = rendered.html
-    article.toc = [{"level": entry.level, "title": entry.title, "anchor": entry.anchor} for entry in rendered.toc]
-    article.last_edited_by = editor
-    article.save()
+        rendered = render_article(content)
+        article.content = content
+        article.content_html = rendered.html
+        article.toc = [{"level": entry.level, "title": entry.title, "anchor": entry.anchor} for entry in rendered.toc]
+        article.last_edited_by = editor
+        article.save()
 
-    revision = ArticleRevision.objects.create(
-        article=article,
-        editor=editor,
-        content=content,
-        edit_summary=(edit_summary or "").strip()[:255],
-        restored_from=restored_from,
-    )
+        revision = ArticleRevision.objects.create(
+            article=article,
+            editor=editor,
+            content=content,
+            edit_summary=(edit_summary or "").strip()[:255],
+            restored_from=restored_from,
+        )
     return article, revision
 
 

@@ -19485,3 +19485,19 @@ for a timeout rather than returning None as it does for a refusal, and the task 
 same way. The first timeout in the hour (`remote_copies.forgive_timeout`) clears the pending mark without counting a
 failure, so the next request tries again at once; a second one counts and backs off as before. A body that breaks off
 mid-download is now a failure rather than an uncaught error.
+
+## RESOLVED 2026-10-01: Deleting a pin while a background task wrote to it answered 500
+
+`id: P185` · `status: fixed` · `resolved: 2026-10-01` · `found by: the v0.8.0 location run on v080e2e, 2026-10-01`
+
+`hrsh-place-identity` deleted a probe pin two seconds after creating it, and the API answered 500 twice:
+`dashboard_articles_pin_id` and then `dashboard_article_revisions.article_id` were still referenced at commit. The
+new-pin Wikipedia seed was writing the pin's article and revision meanwhile. Django collects a pin's children in
+Python and the foreign keys are checked at commit, so a child committed between the collect and the commit failed
+the delete.
+
+Fixed by serializing the two. `pin_edit.delete_pin` locks its pins (`FOR UPDATE`) before collecting, so a direct
+child either commits first and is collected, or waits and then fails its own foreign-key check. `save_article`
+holds the host pin (`FOR NO KEY UPDATE`) until its revision commits, and raises `Pin.DoesNotExist` when the pin is
+already gone; the seed treats that as nothing to do. `test_pin_delete_races_child_writes.py` starts each writer from
+`pre_delete` on a second connection and reproduced both 500s first.

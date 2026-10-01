@@ -85,7 +85,12 @@ def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
     if content is None:
         return None
 
-    article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, pin=pin)
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    try:
+        article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, pin=pin)
+    except Pin.DoesNotExist:
+        return None
     apply_wikipedia_cover_if_missing(pin=pin)
     logger.debug("Seeded pin %s's article from Wikipedia", pin.pk)
     return article
