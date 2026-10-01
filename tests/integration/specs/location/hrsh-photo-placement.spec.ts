@@ -35,8 +35,11 @@ function uniqueTinyJpeg(): Buffer {
     return Buffer.concat([TINY_JPEG_BASE, Buffer.from(`${Date.now()}-${Math.random()}`)]);
 }
 
-/** How close the server-saved coordinate must land to the pixel the test dropped on. */
-const PLACEMENT_TOLERANCE_METRES = 5;
+/**
+ * How close the server-saved coordinate must land to the pixel the test dropped on. Leaflet scales a drop's
+ * position by the container's fractional height, so a correct drop lands a fraction of a pixel off.
+ */
+const PLACEMENT_TOLERANCE_PIXELS = 1;
 
 const pinGalleryUploadPath = (slug: string) => `/dashboard/map/pin/${slug}/gallery/`;
 const pinGalleryImagePath = (slug: string, imageId: number) => `/dashboard/map/pin/${slug}/gallery/${imageId}/`;
@@ -94,6 +97,21 @@ async function mapContainerPoint(page: Page, latlng: Coordinate): Promise<{ x: n
 
 async function mapLatLngAt(page: Page, point: { x: number; y: number }): Promise<{ lat: number; lng: number }> {
     return page.evaluate((p) => (window as unknown as { __hrshMaps: MinimalLeafletMap[] }).__hrshMaps[0]!.containerPointToLatLng([p.x, p.y]), point);
+}
+
+/** Moves a container point onto a whole client pixel: a drop event reports whole pixels, and `#map` can sit at a fractional offset. */
+async function onWholeClientPixel(page: Page, point: { x: number; y: number }): Promise<{ x: number; y: number }> {
+    const origin = await page.locator("#map").evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        return { left: rect.left, top: rect.top };
+    });
+    return { x: Math.round(origin.left + point.x) - origin.left, y: Math.round(origin.top + point.y) - origin.top };
+}
+
+async function metresPerPixelAt(page: Page, point: { x: number; y: number }): Promise<number> {
+    const here = await mapLatLngAt(page, point);
+    const east = await mapLatLngAt(page, { x: point.x + 1, y: point.y });
+    return metresBetween({ label: "here", latitude: here.lat, longitude: here.lng }, { label: "one pixel east", latitude: east.lat, longitude: east.lng });
 }
 
 /**
@@ -245,8 +263,9 @@ test.describe("Hudson River State Hospital - placing a photo by dragging it onto
             recordMetric({ name: "hrsh.photo_placement.upload_to_visible_seconds", value: Math.round((Date.now() - uploadStartedAt) / 100) / 10, unit: "s" });
 
             const target = offsetCoordinate(campus.origin, 30, 20);
-            const point = await mapContainerPoint(page, target);
+            const point = await onWholeClientPixel(page, await mapContainerPoint(page, target));
             const expectedLatLng = await mapLatLngAt(page, point);
+            const toleranceMetres = PLACEMENT_TOLERANCE_PIXELS * (await metresPerPixelAt(page, point));
 
             const dragStartedAt = Date.now();
             let repositionResponse: Response | null = null;
@@ -295,8 +314,8 @@ test.describe("Hudson River State Hospital - placing a photo by dragging it onto
                 expect(
                     errorMetres,
                     `the saved coordinate is ${errorMetres.toFixed(1)} m from the pixel the test dropped on (expected ~${expected.latitude.toFixed(6)},${expected.longitude.toFixed(6)}, ` +
-                        `got ${actual.latitude.toFixed(6)},${actual.longitude.toFixed(6)}). Check map.containerPointToLatLng's client-coordinate math in the #map "drop" listener`,
-                ).toBeLessThanOrEqual(PLACEMENT_TOLERANCE_METRES);
+                        `got ${actual.latitude.toFixed(6)},${actual.longitude.toFixed(6)}, tolerance ${toleranceMetres.toFixed(1)} m). Check the client-coordinate math in the #map "drop" listener`,
+                ).toBeLessThanOrEqual(toleranceMetres);
             });
 
             await test.step("the placement survives a reload", async () => {
