@@ -19410,6 +19410,11 @@ owner's next visit; shared Location fields may fill in, but only by containment)
 each of these. `tests/integration/specs/api/cross-user-isolation.spec.ts` does the same end to end. The building
 place stored with no geometry is P182.
 
+Locations v0.7.0's sweep already attached stay on their building place after the fix. Containment can never reach a
+building place with no outline, and nothing current attaches to one, so `manage.py reresolve_fiat_building_places`
+re-resolves every Location on one by containment. It is a v0.8.0 deploy step; a dry run of its logic on `v080e2e`
+found 27 such Locations, all of which containment returns to the HRSH parcel.
+
 ## RESOLVED 2026-10-01: A third-party image slower than 20 s to download was never copied, so its tile showed an icon
 
 `id: P180` · `status: fixed` · `resolved: 2026-10-01`
