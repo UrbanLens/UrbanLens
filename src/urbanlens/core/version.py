@@ -53,7 +53,7 @@ def get_app_version() -> str:
     r"""Return the app version from pyproject.toml or installed metadata.
 
     Returns:
-        Semantic version string such as ``0.8.0b0``.
+        Semantic version string such as ``0.9.0``.
     """
     try:
         with PYPROJECT_PATH.open("rb") as pyproject_file:

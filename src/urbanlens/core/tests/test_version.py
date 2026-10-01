@@ -5,10 +5,12 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 import subprocess
+import tomllib
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.core.version import (
+    PYPROJECT_PATH,
     _git_fetch,
     apply_pending_migrations,
     format_short_commit,
@@ -33,8 +35,10 @@ class AppVersionTests(TestCase):
             self.assertTrue(part.isdigit(), msg=f"Expected numeric semver segment, got {part!r}")
 
     def test_pyproject_is_preferred_source(self) -> None:
-        version = get_app_version()
-        self.assertEqual(version, "0.8.0b0")
+        with PYPROJECT_PATH.open("rb") as pyproject_file:
+            expected = tomllib.load(pyproject_file)["project"]["version"]
+        with mock.patch("urbanlens.core.version.pkg_version", return_value="0.0.0-installed"):
+            self.assertEqual(get_app_version(), expected)
 
     def test_falls_back_to_installed_package_when_pyproject_unreadable(self) -> None:
         missing_path = Path("nonexistent") / "pyproject.toml"
