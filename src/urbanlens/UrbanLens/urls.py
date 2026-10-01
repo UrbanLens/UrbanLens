@@ -10,6 +10,7 @@ from django.contrib.auth import views as auth_views
 from django.http import HttpResponseServerError
 from django.shortcuts import render
 from django.urls import include, path, re_path
+from oauth2_provider import urls as oauth2_urls
 
 from urbanlens.dashboard.controllers.account import (
     PASSPHRASE_SUGGEST_METHODS,
@@ -49,6 +50,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 admin.autodiscover()
+
+# Clients are provisioned (provision_mobile_oauth_client), never registered by an account: of the toolkit's
+# management pages only an account's own connected apps are mounted.
+_OAUTH2_ROUTES = [
+    *oauth2_urls.base_urlpatterns,
+    *(route for route in oauth2_urls.management_urlpatterns if route.name and route.name.startswith("authorized-token")),
+    *oauth2_urls.oidc_urlpatterns,
+]
 
 
 def _render_404_page(request: HttpRequest) -> HttpResponse:
@@ -96,7 +105,7 @@ urlpatterns = [
     # OAuth2 provider for native clients; see external_api.views. Shadows the toolkit's own authorize and introspect routes.
     path("oauth/authorize/", ConsentAuthorizationView.as_view()),
     path("oauth/introspect/", ActiveOwnerIntrospectTokenView.as_view()),
-    path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
+    path("oauth/", include((_OAUTH2_ROUTES, oauth2_urls.app_name), namespace="oauth2_provider")),
     path("csp-report/", throttled("csp_report", CSP_REPORT_RATE)(CspReportView.as_view()), name="csp.report"),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     # Split probes; /health/ stays for compose healthchecks.

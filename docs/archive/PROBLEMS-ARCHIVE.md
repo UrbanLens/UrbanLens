@@ -19426,3 +19426,35 @@ downloads with `DOWNLOAD_TIMEOUT_SECONDS` (90), stages the bytes without parsing
 as before. The page retries a pending copy for about 110 s rather than 42 s, so a slow provider's image still lands
 on the visit that asked for it. Each copy is still made once and kept, so the wait is paid once per image.
 
+The move left those downloads uncapped on the interactive worker, which also fires safety deadlines, and on k3s one
+worker drains every queue at concurrency 2. A first download now claims one of `DOWNLOAD_SLOTS` (1) site-wide
+before it is queued, and a request finding none free answers 503 without queueing. The task's soft time limit
+(100 s) bounds a provider that trickles bytes under the per-read timeout.
+
+## RESOLVED 2026-10-01: Any account could register an OAuth client, and a password-grant client signed in without the second factor
+
+`id: P183` · `status: fixed` · `resolved: 2026-10-01`
+
+`path("oauth/", include("oauth2_provider.urls"))` mounted django-oauth-toolkit's application management pages
+along with the token endpoints. Any signed-in account could POST `/oauth/applications/register/` and create a
+confidential client of any grant type. With the password grant, that client traded a username and password for
+tokens at `/oauth/token/`, without the TOTP or passkey step sign-in asks for. Under E2EE the password the server
+checks is derived from the real one with public parameters, so knowing someone's password was enough. A
+client-credentials client got a token that belongs to no account, which the external API answered with a 500.
+
+The same review found two doors that skipped the deactivated-owner checks of #184: `/oauth/introspect/`
+reported a suspended account's token active, and an authorization code granted before deactivation could still be
+exchanged.
+
+Fixed:
+
+- Only the toolkit's token, authorize, revoke, introspect, device and OIDC routes, plus an account's own connected
+  apps (`authorized-token-*`), are mounted. Clients come from `provision_mobile_oauth_client` and the migration.
+- `ActiveOwnerOAuth2Validator` refuses the password and client-credentials grants (`REFUSED_GRANTS`), any bearer
+  token with no account, and an inactive account's authorization code.
+- `controllers.oauth_introspect.ActiveOwnerIntrospectTokenView` shadows the introspect route and reports a token
+  inactive unless an active account owns it.
+
+`tests/hypothesis/test_oauth_client_registration.py` and `test_inactive_owner_credentials.py` reproduce each attack.
+Applications registered through the open page before the fix are still in the database. Listing them on production
+(`Application.objects.exclude(client_id=<first-party>)`) and deciding what happens to them is for Jess.

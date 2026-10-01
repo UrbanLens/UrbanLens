@@ -6,15 +6,17 @@ from typing import Any
 
 from oauth2_provider.oauth2_validators import OAuth2Validator
 
+#: Grants that would mint a token without an account's own consent and second factor, or for no account at all.
+REFUSED_GRANTS = frozenset({"password", "client_credentials"})
+
 
 def _owner_is_active(request: Any) -> bool:
     user = getattr(request, "user", None)
-    # A client-credentials token has no resource owner to have been deactivated.
-    return user is None or user.is_active
+    return user is not None and user.is_active
 
 
 class ActiveOwnerOAuth2Validator(OAuth2Validator):
-    """Refuses a deactivated account's access and refresh tokens.
+    """Refuses a deactivated account's access and refresh tokens, a token with no account, and :data:`REFUSED_GRANTS`.
 
     A deactivated account cannot sign in, but a token it issued earlier is a way into the same account, and
     django-oauth-toolkit only checks a token's expiry and scope. This covers every entry point that validates
@@ -22,6 +24,22 @@ class ActiveOwnerOAuth2Validator(OAuth2Validator):
     endpoint. Sockets resolve tokens themselves (``websocket_auth``), and introspection reads the token row
     (``controllers.oauth_introspect``).
     """
+
+    def validate_grant_type(self, client_id: str, grant_type: str, client: Any, request: Any, *args: Any, **kwargs: Any) -> bool:
+        """Refuse :data:`REFUSED_GRANTS`.
+
+        Args:
+            client_id: The client's id.
+            grant_type: The grant asked for.
+            client: The client asking.
+            request: The oauthlib request.
+            *args: Passed through.
+            **kwargs: Passed through.
+
+        Returns:
+            True when the client may use this grant.
+        """
+        return grant_type not in REFUSED_GRANTS and super().validate_grant_type(client_id, grant_type, client, request, *args, **kwargs)
 
     def validate_code(self, client_id: str, code: str, client: Any, request: Any, *args: Any, **kwargs: Any) -> bool:
         """Exchange an authorization code only while the account that granted it is active.
