@@ -47,7 +47,8 @@ class AnthropicAdapter(ProviderAdapter):
         if tools:
             kwargs["tools"] = tools
         if request.temperature is not None:
-            kwargs["temperature"] = request.temperature
+            # The SDK no longer takes sampling parameters; models that still accept them read them from the body.
+            kwargs["extra_body"] = {"temperature": request.temperature}
 
         client = self._client
         if request.timeout_seconds is not None:
