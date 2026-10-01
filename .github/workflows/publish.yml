@@ -7,7 +7,7 @@ on:
   # deploys it: UrbanLens/infrastructure's app-image.yml follows :main, pins the
   # matching :sha-<7>, and sends it through its CI-gated deploy branch to both
   # k3s sites. Nothing between this push and production is a human step.
-  # UrbanLens/infrastructure docs/runbooks/app-deploys.md has the whole path.
+  # ../infrastructure/docs/runbooks/app-deploys.md (the UrbanLens/infrastructure repo) has the whole path.
   push:
     branches: [main]
   workflow_dispatch:

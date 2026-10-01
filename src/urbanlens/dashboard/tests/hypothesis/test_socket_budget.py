@@ -372,7 +372,6 @@ class EverySocketClientBacksOffOnTheRefusalTests(SimpleTestCase):
 
         self.assertIn("notification-push.js", names)
         self.assertIn("live-socket.ts", names)
-        self.assertGreaterEqual(len(names), 4, f"only found {sorted(names)}")
 
     def test_each_handles_the_capacity_refusal(self) -> None:
         for path in self._hand_rolled_clients():

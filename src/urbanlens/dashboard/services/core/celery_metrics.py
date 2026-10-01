@@ -6,11 +6,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from celery import current_app
+from amqp.exceptions import AMQPError
 from kombu.exceptions import KombuError
 from prometheus_client.core import GaugeMetricFamily
 
 from urbanlens.dashboard.services.sandbox.queues import Queue
+from urbanlens.UrbanLens.celery import app
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -60,7 +61,7 @@ class CeleryQueueDepthCollector:
         Returns:
             Mapping of queue name to depth, or ``None`` when the broker could not be reached or the transport cannot answer the question."""
         try:
-            with current_app.connection_for_read(transport_options={"socket_timeout": _BROKER_TIMEOUT_SECONDS}) as connection:
+            with app.connection_for_read(transport_options={"socket_timeout": _BROKER_TIMEOUT_SECONDS}) as connection:
                 channel = connection.default_channel
                 # _size is kombu's own per-transport primitive for this, which is why it is used in
                 # preference to reaching for a redis client: the memory:// transport used by the
@@ -70,7 +71,7 @@ class CeleryQueueDepthCollector:
                     logger.debug("Broker transport %r cannot report queue depth", type(channel).__name__)
                     return None
                 return {queue.value: int(sizer(queue.value)) for queue in self.QUEUES}
-        except (KombuError, OSError, AttributeError, ValueError):
+        except (KombuError, AMQPError, OSError, AttributeError, ValueError):
             # Broad on purpose.
             # This runs inside a scrape, and a broker problem must surface as broker_up=0 - a raised
             # exception here would fail the whole /metrics response, taking the request metrics down

@@ -610,8 +610,29 @@ class CeleryQueueDepthCollectorTests(SimpleTestCase):
         # Celery problem would become a total observability outage.
         from urbanlens.dashboard.services.core import celery_metrics
 
-        with mock.patch.object(celery_metrics.current_app, "connection_for_read", side_effect=OSError("broker gone")):
+        with mock.patch.object(celery_metrics.app, "connection_for_read", side_effect=OSError("broker gone")):
             self.assertIsNone(celery_metrics.CeleryQueueDepthCollector()._read_depths())
+
+    def test_a_broker_refusing_the_login_is_broker_down(self) -> None:
+        """py-amqp's errors are not kombu's, and a wrong password must not fail the scrape either."""
+        from amqp.exceptions import AccessRefused
+
+        from urbanlens.dashboard.services.core import celery_metrics
+
+        refused = AccessRefused("Login was refused using authentication mechanism PLAIN.")
+        with mock.patch.object(celery_metrics.app, "connection_for_read", side_effect=refused):
+            self.assertIsNone(celery_metrics.CeleryQueueDepthCollector()._read_depths())
+
+    def test_it_reads_this_projects_broker_whichever_app_is_current(self) -> None:
+        """``celery.current_app`` is the last app anything created; a stray one points at its own default broker."""
+        from celery import Celery
+
+        from urbanlens.dashboard.services.core import celery_metrics
+
+        Celery("stray", broker="amqp://guest@127.0.0.1:1//", set_as_current=True)
+        self.addCleanup(celery_metrics.app.set_current)
+
+        self.assertIsNotNone(celery_metrics.CeleryQueueDepthCollector()._read_depths())
 
     def test_label_values_come_from_the_queue_enum(self) -> None:
         # Cardinality is fixed by the code, not by anything a request influences.

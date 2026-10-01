@@ -41,19 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 240
     services:
-      postgres:
-        image: postgis/postgis:16-3.4
-        env:
-          POSTGRES_DB: urbanlens_ci
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d urbanlens_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
       dragonfly:
         image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
         ports:
@@ -85,13 +72,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev postgresql-client
 
-      - name: Install pgvector into the postgres service container
-        # A service container can't take a custom Dockerfile the way docker-compose's
-        # db build can, so the extension is installed into the running container instead.
-        # Package name tracks the service image's major version (16), not docker-compose's (17).
+      # The deployment's own image (PostGIS and pgvector), which a service container cannot be built from.
+      # Installing pgvector into a running stock image upgraded the server package underneath it, and every
+      # extension the old binary loaded afterwards failed on a missing symbol.
+      - name: Start Postgres
         run: |
-          docker exec ${{ job.services.postgres.id }} sh -c "apt-get update && apt-get install -y --no-install-recommends postgresql-16-pgvector"
-          docker exec ${{ job.services.postgres.id }} psql -U postgres -d urbanlens_ci -c "CREATE EXTENSION IF NOT EXISTS vector"
+          docker build -t urbanlens-postgres src/urbanlens/config/postgres
+          docker run -d --name postgres -p 5432:5432 \
+            -e POSTGRES_DB=urbanlens_ci -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+            urbanlens-postgres
+          timeout 120 sh -c 'until docker exec postgres pg_isready -h 127.0.0.1 -U postgres -d urbanlens_ci; do sleep 2; done'
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
