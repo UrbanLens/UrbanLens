@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
-from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +25,3 @@ class HuggingFaceGateway(LLMGateway):
         raise NotImplementedError(
             "HuggingFaceGateway is not yet implemented. Implement abstractmethods, and generics, similar to cloudflare.py",
         )
-
-        if not self.api_url:
-            self.api_url = settings.huggingface_ai_endpoint
-        if not self.api_key:
-            self.api_key = settings.huggingface_ai_api_key
-
-        super().setup(**kwargs)
-
-        if not self.api_url or not self.api_key:
-            raise ValueError("Cloudflare AI Gateway requires an API URL and API Key.")
