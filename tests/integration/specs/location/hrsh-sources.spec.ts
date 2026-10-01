@@ -33,6 +33,9 @@ skipUnlessLocationDataEnabled();
 /** Buildings sampled per test - matches the requirement's "several buildings", kept small since each one that fails pays its full poll budget. */
 const SAMPLE_SIZE = 3;
 
+/** Child wikis tried before giving up on finding SAMPLE_SIZE with a document: CRIS has none at all for some buildings (BLDG 49, STOREHOUSE). */
+const CHILD_WIKI_ATTEMPTS = SAMPLE_SIZE * 2;
+
 /** This reads already-cached CRIS attachments rather than fetching fresh ones, so the budget is short relative to `hrsh-media.spec.ts`'s gallery. */
 const SOURCES_SETTLE_MS = 60_000;
 const SOURCES_POLL_INTERVAL_MS = 5_000;
@@ -233,28 +236,34 @@ test.describe("Hudson River State Hospital - CRIS document sources", () => {
                     "coverage. hrsh-buildings.spec.ts reports a shortfall of child pins as its own finding - check that first.",
             ).toBeGreaterThanOrEqual(SAMPLE_SIZE);
 
-            const sample = children.slice(0, SAMPLE_SIZE);
-            const findings: string[] = [];
+            const missingWikis: string[] = [];
+            const withoutDocuments: string[] = [];
+            let withDocuments = 0;
 
-            for (const child of sample) {
+            for (const child of children.slice(0, CHILD_WIKI_ATTEMPTS)) {
+                if (withDocuments >= SAMPLE_SIZE) break;
                 const detail = await readPin(campus.api, child.slug);
                 const wiki = await waitForWiki(campus.api, detail.location_slug, { timeoutMs: 180_000, intervalMs: 15_000 });
                 if (!wiki) {
-                    findings.push(`${child.name} (${child.slug}): no wiki ever appeared at wikis/${detail.location_slug}/ within 3 minutes`);
+                    missingWikis.push(`${child.name} (${child.slug}): no wiki ever appeared at wikis/${detail.location_slug}/ within 3 minutes`);
                     continue;
                 }
                 await page.goto(hrshRoutes.wiki(detail.location_slug));
                 await openSourcesPanel(page, `wiki for ${child.name}`);
                 const count = await waitForSourcesToPopulate(page, `a CRIS document in ${child.name}'s wiki Sources tab`, { scope: "building_wiki", slug: child.slug });
                 if (count === 0) {
-                    findings.push(`${child.name} (${child.slug}): the wiki exists but its Sources tab lists no CRIS document`);
+                    withoutDocuments.push(`${child.name} (${child.slug})`);
+                } else {
+                    withDocuments += 1;
                 }
             }
 
+            expect(missingWikis, `building child wikis that never appeared:\n${missingWikis.join("\n")}`).toEqual([]);
             expect(
-                findings,
-                `${findings.length} of ${sample.length} sampled building child wikis have no CRIS document under Article > Sources:\n${findings.join("\n")}`,
-            ).toEqual([]);
+                withDocuments,
+                `${withDocuments} of the ${withDocuments + withoutDocuments.length} building child wikis checked list a CRIS document under Article > Sources. ` +
+                    `Without one:\n${withoutDocuments.join("\n")}`,
+            ).toBeGreaterThanOrEqual(SAMPLE_SIZE);
         });
 
         test("a Sources entry on the wiki page opens as a real, embedded PDF", async ({ campus, page }) => {
