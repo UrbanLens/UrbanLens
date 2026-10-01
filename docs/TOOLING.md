@@ -78,6 +78,16 @@ container's copy on purpose and expecting failures. Without it the parity guard
 refuses the run, which is otherwise exactly what you want — a file restored on
 the host but not re-copied is how the audit's only red consolidation happened.
 
+### `bun run test:ts`
+
+Runs every frontend test file in its own global (`bun test --isolate`). In one shared global, a file that left
+something installed broke files that ran after it, so the result depended on file order: requiring the whole
+`core` entry left its window globals and document listeners behind, and `photo-gallery`'s delete tests then
+reached core's confirm dialog instead of their own stub. Measured 2026-10-01: 49 s isolated against 29 s shared,
+and every `--randomize` seed tried (1 and 3-8) passes isolated, where five of them failed shared. CI's bun
+(1.3.14) has the flag too. To hunt a leak on purpose, drop `--isolate` and replay an order with `./`-prefixed
+paths.
+
 ### `bin/sync_app.sh`
 
 The same copy-into-a-container sequence as `run_tests.sh`, pointed at a running

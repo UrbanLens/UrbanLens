@@ -23,7 +23,7 @@
     "pre-commit": "uv run pre-commit run --all-files",
     "test": "bash bin/run_tests.sh",
     "test:host": "bash bin/host_pytest.sh",
-    "test:ts": "bun test src/urbanlens/dashboard/frontend/ts",
+    "test:ts": "bun test --isolate src/urbanlens/dashboard/frontend/ts",
     "test:perf": "bun test tests/perf",
     "test:browser": "bun test --timeout 60000 src/urbanlens/dashboard/frontend/browser",
     "test:full": "bun run pre-commit && bun run check && bun run typecheck && bun run test:ts && bun run test:perf && bun run test",
