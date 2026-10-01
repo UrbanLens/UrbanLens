@@ -5,6 +5,7 @@
 
 import { expect, test } from "../../lib/fixtures.js";
 import { apiUrl, env, resourceName } from "../../lib/env.js";
+import { waitFor } from "../../lib/waiting.js";
 
 /**
  * A 1x1 transparent PNG.
@@ -45,8 +46,12 @@ test.describe("media storage", () => {
         expect(photo.uuid, `the upload response carries no uuid: ${JSON.stringify(photo).slice(0, 200)}`).toBeTruthy();
         api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
 
-        const detail = await api.json<Photo>("get", `photos/${photo.uuid}/`);
-        expect(detail.url, "the stored photo has no url, so no client can display it").toBeTruthy();
+        // The sandboxed upload pipeline stores the file after the request returns; until then `url` is null.
+        const detail = await waitFor(
+            () => api.json<Photo>("get", `photos/${photo.uuid}/`),
+            (value) => Boolean(value.url),
+            { what: "the uploaded photo's stored url", timeoutMs: 90_000, intervalMs: 2_000, describe: (value) => `url: ${value.url}` },
+        );
 
         // The URL may be same-origin (a proxy view) or absolute (an object
         // store). Both are legitimate deployments, so resolve rather than
