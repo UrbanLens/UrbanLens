@@ -383,10 +383,11 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
         # visibility preference left to enforce - the tree builder's own
         # `c.author is not None and ...` says the same thing.
         author_permits = ProfileModel.visibility_permits_q(profile, author_path="author", visibility_field="comment_visibility", permit_null_author=True)
-        # Profile._barred_subject_pks' block veto: everything someone who blocked the viewer wrote, not only what followed the block.
+        # Profile._barred_subject_pks: a deactivated author, and everything someone who blocked the viewer wrote,
+        # not only what followed the block.
         blocked_by = Friendship.objects.filter(to_profile_id=profile.pk, status=FriendshipStatus.BLOCKED).values("from_profile_id")
         unscanned_and_not_mine = Q(pending_scan=True) & ~Q(author_id=profile.pk)
-        visible = self.filter(author_permits).exclude(author_id__in=blocked_by).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
+        visible = self.filter(author_permits).exclude(author_id__in=blocked_by).exclude(author__user__is_active=False).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
         return SharedSpaceBlocks.for_viewer(profile).exclude_hidden(visible, author_field="author_id")
 
     def for_member(self, profile: Profile) -> TripCommentQuerySet:

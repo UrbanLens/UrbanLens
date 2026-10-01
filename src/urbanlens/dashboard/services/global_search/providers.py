@@ -1191,7 +1191,6 @@ class CommentSearchProvider(SearchProvider):
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.comments import Comment
-        from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
         from urbanlens.dashboard.models.trips.model import TripComment
 
         if not parsed.terms:
@@ -1206,7 +1205,7 @@ class CommentSearchProvider(SearchProvider):
         with probe_scope():
             # reachable_by carries the same domain-aware access rule as the wiki page itself, not just
             # an exact-Location pin match.
-            comment_qs = Comment.objects.reachable_by(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("pin", "wiki__location", "profile__user").order_by("-created")
+            comment_qs = Comment.objects.reachable_by(profile).visible_to(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("pin", "wiki__location", "profile__user").order_by("-created")
             if (author_match := author_clause("profile", parsed, profile)) is not None:
                 author_ann, author_q = author_match
                 comment_qs = comment_qs.annotate(**author_ann).filter(author_q)
@@ -1245,8 +1244,7 @@ class CommentSearchProvider(SearchProvider):
                     ),
                 )
 
-            trip_comment_qs = TripComment.objects.for_member(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").order_by("-created")
-            trip_comment_qs = SharedSpaceBlocks.for_viewer(profile).exclude_hidden(trip_comment_qs, author_field="author_id")
+            trip_comment_qs = TripComment.objects.for_member(profile).visible_to(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").order_by("-created")
             if (author_match := author_clause("author", parsed, profile)) is not None:
                 author_ann, author_q = author_match
                 trip_comment_qs = trip_comment_qs.annotate(**author_ann).filter(author_q)

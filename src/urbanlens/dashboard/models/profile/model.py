@@ -1113,10 +1113,14 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
         Evaluated through ``author``'s ``comment_visibility`` setting - a
         comment is community content, but its author may still restrict who
-        on that page can see (and react to) what they wrote.
+        on that page can see (and react to) what they wrote. A deactivated
+        author, or one who blocked this profile, is barred whatever the setting,
+        as :meth:`visible_comment_author_pks` bars them.
         """
         if self == author:
             return True
+        if not author.user.is_active or author.has_blocked(self):
+            return False
         return self.visibility_permits(author.comment_visibility, author, self)
 
     def can_view_contact_info(self, viewer: Profile | None) -> bool:

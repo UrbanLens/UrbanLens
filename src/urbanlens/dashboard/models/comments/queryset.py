@@ -93,15 +93,20 @@ class CommentQuerySet(abstract.FrontendDashboardQuerySet["Comment"]):
         Returns:
             The subset *profile* may see.
         """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
         from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
         # Gate 1 lives next to the predicate it mirrors, so the one rule has one
         # SQL form - trip comments ask the same question of the same field.
         author_permits = ProfileModel.visibility_permits_q(profile, author_path="profile", visibility_field="comment_visibility")
+        # Profile._barred_subject_pks: a deactivated author, or one who blocked the viewer, whatever the setting.
+        blocked_by = Friendship.objects.filter(to_profile_id=profile.pk, status=FriendshipStatus.BLOCKED).values("from_profile_id")
+        barred = (Q(profile__user__is_active=False) | Q(profile_id__in=blocked_by)) & ~Q(profile_id=profile.pk)
         # Gate 2: an image awaiting the async malware scan is visible only to
         # its own uploader.
         unscanned_and_not_mine = Q(pending_scan=True) & ~Q(profile_id=profile.pk)
-        return self.filter(author_permits).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
+        return self.filter(author_permits).exclude(barred).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
 
 
 _CommentManagerBase = abstract.FrontendDashboardManager.from_queryset(CommentQuerySet)

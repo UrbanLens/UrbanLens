@@ -81,6 +81,11 @@ class ArticleSearchDomainAccessTests(_BoundaryMateFixture):
 class CommentSearchDomainAccessTests(_BoundaryMateFixture):
     def setUp(self) -> None:
         super().setUp()
+        from urbanlens.dashboard.models.profile.model import VisibilityChoice
+
+        # The author's own visibility gate is test_comment_search_visibility's; here only the domain rule decides.
+        self.content_owner.comment_visibility = VisibilityChoice.ANYONE
+        self.content_owner.save(update_fields=["comment_visibility"])
         self.comment = baker.make(
             "dashboard.Comment", wiki=self.wiki, profile=self.content_owner, text="a very distinctive comment string"
         )
