@@ -117,6 +117,10 @@ _MAX_REDIRECTS = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
+class RemoteSourceTimeoutError(Exception):
+    """The remote host did not answer within the timeout, which may say nothing about the next try."""
+
+
 def fetch_remote_source(url: str, *, max_bytes: int, timeout: float = _FETCH_TIMEOUT) -> tuple[bytes, str] | None:
     """Download a remote file for a server-side render, pinning each hop to the address it validated to.
 
@@ -127,6 +131,9 @@ def fetch_remote_source(url: str, *, max_bytes: int, timeout: float = _FETCH_TIM
 
     Returns:
         ``(body, content_type)``, or None when the URL was unsafe, the fetch failed, or the body was over *max_bytes*.
+
+    Raises:
+        RemoteSourceTimeoutError: The host did not answer within *timeout*.
     """
     import requests
 
@@ -138,6 +145,9 @@ def fetch_remote_source(url: str, *, max_bytes: int, timeout: float = _FETCH_TIM
     except UnsafeUrlError:
         logger.info("Remote source rejected as unsafe: %s", redact_text(url))
         return None
+    except requests.Timeout as exc:
+        logger.info("Remote source timed out: %s", redact_text(url))
+        raise RemoteSourceTimeoutError from exc
     except requests.RequestException:
         logger.info("Remote source fetch failed: %s", redact_text(url))
         return None
@@ -146,11 +156,15 @@ def fetch_remote_source(url: str, *, max_bytes: int, timeout: float = _FETCH_TIM
         if response.status_code != 200:
             return None
         body = bytearray()
-        for chunk in response.iter_content(64 * 1024):
-            body.extend(chunk)
-            if len(body) > max_bytes:
-                logger.info("Remote source exceeded the size cap: %s", redact_text(url))
-                return None
+        try:
+            for chunk in response.iter_content(64 * 1024):
+                body.extend(chunk)
+                if len(body) > max_bytes:
+                    logger.info("Remote source exceeded the size cap: %s", redact_text(url))
+                    return None
+        except requests.RequestException:
+            logger.info("Remote source broke off mid-body: %s", redact_text(url))
+            return None
         return bytes(body), response.headers.get("Content-Type", "")
 
 

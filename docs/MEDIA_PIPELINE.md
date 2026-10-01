@@ -548,7 +548,9 @@ paths use it:
   every slot busy answers 503 without queueing. The task's soft time limit
   bounds a provider that trickles bytes under the per-read timeout.
   A failed download or decode backs off, 1h doubling to at most 7 days, and
-  answers 404 meanwhile.
+  answers 404 meanwhile. The first timeout in an hour is not counted
+  (`forgive_timeout`, P184): a provider that usually answers in seconds
+  sometimes takes longer than the timeout.
 - **A tile of another host's map** (`controllers/remote_tiles.RemoteTileView`,
   `map/tile-copies/<digest>/<z>/<x>/<y>.png`). An imported overlay whose
   template is not a sheet this site draws itself is recorded as a

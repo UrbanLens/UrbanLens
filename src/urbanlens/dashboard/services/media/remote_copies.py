@@ -106,6 +106,23 @@ def release_download_slot(key: str, holder: str) -> None:
         counters.delete_if_value(key, holder)
 
 
+def forgive_timeout(copy: RemoteImageCopy) -> bool:
+    """Whether a timed-out download may go uncounted: the first in :data:`FIRST_RETRY_DELAY` does.
+
+    A provider that usually answers in seconds sometimes takes longer than the timeout (P184), and counting that
+    like a refusal would show an icon for the next hour.
+
+    Args:
+        copy: The copy whose download timed out.
+
+    Returns:
+        True when this timeout is forgiven, so the next request may try again at once.
+    """
+    from django.core.cache import cache
+
+    return bool(cache.add(f"ul_remote_copy_timeout_{copy.url_digest}", 1, int(FIRST_RETRY_DELAY.total_seconds())))
+
+
 def pending_marker(digest: str) -> str:
     """Cache key standing while a copy's render is queued, so concurrent requests fetch its source once."""
     return f"ul_remote_copy_{digest}"

@@ -19466,3 +19466,22 @@ Fixed:
 `tests/hypothesis/test_oauth_client_registration.py` and `test_inactive_owner_credentials.py` reproduce each attack.
 Applications registered through the open page before the fix are still in the database. Listing them on production
 (`Application.objects.exclude(client_id=<first-party>)`) and deciding what happens to them is for Jess.
+
+## RESOLVED 2026-10-01: A third-party image whose provider once answered slower than 90 s showed an icon for an hour or more
+
+`id: P184` · `status: fixed` · `resolved: 2026-10-01` · `found by: the v0.8.0 location run on v080e2e, 2026-10-01`
+
+P180 moved a remote image's first download onto a worker with `DOWNLOAD_TIMEOUT_SECONDS` (90). On v080e2e the USGS
+National Map export for the HRSH pin was first requested at 08:35:28; the worker recorded a failed download at
+08:36:59, about 91 s later, which fits the 90 s timeout firing (the log says only that the request failed). Direct fetches of the same URL
+from chiron and from inside the worker took 17.5 s and 19 s minutes later. One slow answer counts as a failure like
+any other, so the copy answers 404 for `FIRST_RETRY_DELAY` (1 h), doubling with each failure, and the pin page
+shows an icon throughout. This copy had three failures, two of them from before P180.
+
+Twenty of the run's location failures were this one 404: every later visit to the HRSH pin page logged it.
+
+Fixed by forgiving one slow answer per `FIRST_RETRY_DELAY`. `fetch_remote_source` raises `RemoteSourceTimeoutError`
+for a timeout rather than returning None as it does for a refusal, and the task treats its own soft time limit the
+same way. The first timeout in the hour (`remote_copies.forgive_timeout`) clears the pending mark without counting a
+failure, so the next request tries again at once; a second one counts and backs off as before. A body that breaks off
+mid-download is now a failure rather than an uncaught error.

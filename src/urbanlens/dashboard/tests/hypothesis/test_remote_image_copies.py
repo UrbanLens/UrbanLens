@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.media.previews import gallery_thumb_urls, gallery_urls
@@ -233,19 +233,41 @@ class CopyEndpointTests(TestCase):
         self.assertIsNotNone(slot, "the download slot was kept")
         release_download_slot(slot, "next-copy")
 
-    def test_a_download_past_its_time_limit_is_a_failure_and_frees_its_slot(self) -> None:
-        from celery.exceptions import SoftTimeLimitExceeded
-
+    def _time_out(self, error: BaseException) -> None:
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 
         self._first_request()
-        with patch(_FETCH, side_effect=SoftTimeLimitExceeded()), patch(_ENQUEUE) as enqueue:
+        with patch(_FETCH, side_effect=error), patch(_ENQUEUE) as enqueue:
             self.assertFalse(fetch_remote_image_copy(*self._queued))
-
         enqueue.assert_not_called()
-        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 1)
         self.assertIsNone(cache.get(pending_marker(self.copy.url_digest)))
         self._assert_slot_free()
+
+    def test_one_slow_answer_costs_the_image_nothing_and_the_next_request_tries_again(self) -> None:
+        """USGS answers in under 20 s but once took over 90 (P184); an hour of icons for that is the wrong trade."""
+        from urbanlens.dashboard.services.media.previews import RemoteSourceTimeoutError
+
+        self._time_out(RemoteSourceTimeoutError())
+
+        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 0)
+        self._first_request()
+
+    def test_a_second_slow_answer_within_the_hour_is_a_failure(self) -> None:
+        from urbanlens.dashboard.services.media.previews import RemoteSourceTimeoutError
+
+        self._time_out(RemoteSourceTimeoutError())
+        self._time_out(RemoteSourceTimeoutError())
+
+        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 1)
+
+    def test_a_download_past_its_time_limit_counts_as_a_slow_answer(self) -> None:
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        self._time_out(SoftTimeLimitExceeded())
+        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 0)
+
+        self._time_out(SoftTimeLimitExceeded())
+        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 1)
 
     def test_a_time_limit_while_staging_the_bytes_clears_the_pending_mark(self) -> None:
         from celery.exceptions import SoftTimeLimitExceeded
@@ -305,6 +327,34 @@ class CopyEndpointTests(TestCase):
         with patch(_ENQUEUE) as enqueue:
             self.assertEqual(self.client.get(self.url).status_code, 404)
         enqueue.assert_not_called()
+
+
+class FetchRemoteSourceTests(SimpleTestCase):
+    _FETCH_PUBLIC_URL = "urbanlens.dashboard.services.security.url_safety.fetch_public_url"
+
+    def test_a_timeout_is_told_apart_from_other_failures(self) -> None:
+        import requests
+
+        from urbanlens.dashboard.services.media.previews import RemoteSourceTimeoutError, fetch_remote_source
+
+        with (
+            patch(self._FETCH_PUBLIC_URL, side_effect=requests.ReadTimeout()),
+            self.assertRaises(RemoteSourceTimeoutError),
+        ):
+            fetch_remote_source("https://provider.test/slow.jpg", max_bytes=100)
+        with patch(self._FETCH_PUBLIC_URL, side_effect=requests.ConnectionError()):
+            self.assertIsNone(fetch_remote_source("https://provider.test/refused.jpg", max_bytes=100))
+
+    def test_a_body_that_breaks_off_is_a_failure_not_an_error(self) -> None:
+        import requests
+
+        from urbanlens.dashboard.services.media.previews import fetch_remote_source
+
+        response = MagicMock(status_code=200)
+        response.__enter__.return_value = response
+        response.iter_content.side_effect = requests.ConnectionError()
+        with patch(self._FETCH_PUBLIC_URL, return_value=response):
+            self.assertIsNone(fetch_remote_source("https://provider.test/cut.jpg", max_bytes=100))
 
 
 class GalleryUrlTests(TestCase):

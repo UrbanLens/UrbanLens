@@ -1563,23 +1563,25 @@ def fetch_remote_image_copy(copy_id: int, slot: str = "") -> bool:
 
     from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.media.previews import discard_preview_source, fetch_remote_source, stage_preview_source
-    from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS, MAX_REMOTE_COPY_SOURCE_BYTES, pending_marker, record_failure, release_download_slot
+    from urbanlens.dashboard.services.media.previews import RemoteSourceTimeoutError, discard_preview_source, fetch_remote_source, stage_preview_source
+    from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS, MAX_REMOTE_COPY_SOURCE_BYTES, forgive_timeout, pending_marker, record_failure, release_download_slot
 
+    timed_out = False
     try:
         copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
         if copy is None or copy.file.name:
             return False
         try:
             fetched = fetch_remote_source(copy.source_url, max_bytes=MAX_REMOTE_COPY_SOURCE_BYTES, timeout=DOWNLOAD_TIMEOUT_SECONDS)
-        except SoftTimeLimitExceeded:
-            fetched = None
+        except (RemoteSourceTimeoutError, SoftTimeLimitExceeded):
+            fetched, timed_out = None, True
     finally:
         release_download_slot(slot, str(copy_id))
     queued = False
     try:
         if fetched is None:
-            record_failure(copy)
+            if not (timed_out and forgive_timeout(copy)):
+                record_failure(copy)
             return False
         descriptor = stage_preview_source(f"copy_{copy.url_digest}", *fetched)
         if safely_enqueue_task(render_remote_image_copy, copy.pk, descriptor, durable=False) is None:
