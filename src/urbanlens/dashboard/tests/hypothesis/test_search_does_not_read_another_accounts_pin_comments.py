@@ -36,9 +36,10 @@ TERM = "quokka"
 #: A word the viewer never searches for, for comments that must be scanned to be rejected.
 OTHER = "wombat"
 
-#: Comments the stranger holds before and after the growth step.
+#: Comments the stranger holds before and after the growth step. Large enough that reading them all costs clearly
+#: more than the viewer's own scope: at 400, CI's planner twice chose a full index walk that the costs barely separate.
 FIRST_BATCH = 2
-SECOND_BATCH = 400
+SECOND_BATCH = 2000
 
 #: Rows the measurement may drift by without meaning the stranger's comments were read.
 TOLERANCE = 20
@@ -67,9 +68,11 @@ class _PinCommentCase(TestCase):
     def seed_strangers_comments(self, count: int, *, matching: bool = True) -> None:
         """Give the stranger's pin *count* more comments, then re-analyse."""
         word = TERM if matching else OTHER
-        for _ in range(count):
-            self.commented += 1
-            baker.make(Comment, pin=self.their_pin, profile=self.stranger, text=f"{word} theirs {self.commented}")
+        Comment.objects.bulk_create(
+            Comment(pin=self.their_pin, profile=self.stranger, text=f"{word} theirs {self.commented + n}")
+            for n in range(1, count + 1)
+        )
+        self.commented += count
         with connection.cursor() as cursor:
             cursor.execute(f"ANALYZE {Comment._meta.db_table}, {Pin._meta.db_table}")  # noqa: S608
 
