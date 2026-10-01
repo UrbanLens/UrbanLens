@@ -63,7 +63,7 @@ class RemoteImageCopyView(View):
             return _not_yet(throttle.retry_after(COPY_THROTTLE_SCOPE, caller, COPY_RATE))
         if not cache.add(marker, RENDER_QUEUED, COPY_PENDING_TTL):
             return _not_yet()
-        if (slot := take_download_slot(digest)) is None:
+        if (slot := take_download_slot(str(copy.pk))) is None:
             cache.delete(marker)
             return _not_yet()
 
@@ -71,6 +71,6 @@ class RemoteImageCopyView(View):
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 
         if safely_enqueue_task(fetch_remote_image_copy, copy.pk, slot, durable=False) is None:
-            release_download_slot(slot, digest)
+            release_download_slot(slot, str(copy.pk))
             cache.delete(marker)
         return _not_yet()

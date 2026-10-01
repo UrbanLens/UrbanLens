@@ -1566,8 +1566,8 @@ def fetch_remote_image_copy(copy_id: int, slot: str = "") -> bool:
     from urbanlens.dashboard.services.media.previews import discard_preview_source, fetch_remote_source, stage_preview_source
     from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS, MAX_REMOTE_COPY_SOURCE_BYTES, pending_marker, record_failure, release_download_slot
 
-    copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
     try:
+        copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
         if copy is None or copy.file.name:
             return False
         try:
@@ -1575,8 +1575,7 @@ def fetch_remote_image_copy(copy_id: int, slot: str = "") -> bool:
         except SoftTimeLimitExceeded:
             fetched = None
     finally:
-        if copy is not None:
-            release_download_slot(slot, copy.url_digest)
+        release_download_slot(slot, str(copy_id))
     marker = pending_marker(copy.url_digest)
     if fetched is None:
         record_failure(copy)

@@ -75,11 +75,11 @@ def url_digest(url: str, edition: str = "") -> str:
     return hashlib.sha256(f"{url}\n{edition}".encode() if edition else url.encode()).hexdigest()
 
 
-def take_download_slot(digest: str) -> str | None:
+def take_download_slot(holder: str) -> str | None:
     """Claim one of the site-wide :data:`DOWNLOAD_SLOTS` for a copy's first download.
 
     Args:
-        digest: The copy being downloaded, which the slot holds so only its download frees it.
+        holder: What the slot is held for (the copy's id), so only that download frees it.
 
     Returns:
         The slot's key, or None when every slot is busy.
@@ -88,22 +88,22 @@ def take_download_slot(digest: str) -> str | None:
 
     for index in range(DOWNLOAD_SLOTS):
         key = f"ul_remote_copy_download_slot_{index}"
-        if cache.add(key, digest, DOWNLOAD_SLOT_TTL):
+        if cache.add(key, holder, DOWNLOAD_SLOT_TTL):
             return key
     return None
 
 
-def release_download_slot(key: str, digest: str) -> None:
+def release_download_slot(key: str, holder: str) -> None:
     """Give back a slot :func:`take_download_slot` returned, unless it already expired and went to another copy.
 
     Args:
         key: The slot's key.
-        digest: The copy that took it.
+        holder: What took it.
     """
     from urbanlens.dashboard.services.core import counters
 
     if key:
-        counters.delete_if_value(key, digest)
+        counters.delete_if_value(key, holder)
 
 
 def pending_marker(digest: str) -> str:

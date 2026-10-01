@@ -247,6 +247,18 @@ class CopyEndpointTests(TestCase):
         self.assertIsNone(cache.get(pending_marker(self.copy.url_digest)))
         self._assert_slot_free()
 
+    def test_a_download_whose_copy_is_gone_frees_its_slot(self) -> None:
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        self._first_request()
+        RemoteImageCopy.objects.filter(pk=self.copy.pk).delete()
+
+        with patch(_FETCH) as fetch:
+            self.assertFalse(fetch_remote_image_copy(*self._queued))
+
+        fetch.assert_not_called()
+        self._assert_slot_free()
+
     def test_a_download_that_cannot_be_queued_frees_its_slot(self) -> None:
         with patch(_ENQUEUE, return_value=None):
             self.assertEqual(self.client.get(self.url).status_code, 503)
