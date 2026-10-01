@@ -59,15 +59,19 @@ test.describe("Hudson River State Hospital - child pins for every building", () 
         await waitForChildPins(campus, { min: 1 });
 
         const settled = (await waitForBuildingsPanel(campus)) ?? buildings!;
-        const pinned = settled.filter((row) => row.child_pin_uuid);
-        const unpinned = settled.filter((row) => !row.child_pin_uuid);
+        // A CRIS survey record with no coordinates or footprint is listed (P172) but has nowhere to put a pin.
+        const placeable = settled.filter((row) => row.latitude !== null || row.has_geometry);
+        const pinned = placeable.filter((row) => row.child_pin_uuid);
+        const unpinned = placeable.filter((row) => !row.child_pin_uuid);
 
         recordMetric({ name: "hrsh.parcel_buildings.count", value: settled.length, unit: "count" });
+        recordMetric({ name: "hrsh.parcel_buildings.unplaceable_count", value: settled.length - placeable.length, unit: "count" });
         recordMetric({ name: "hrsh.parcel_buildings.unpinned_count", value: unpinned.length, unit: "count" });
 
+        expect(placeable.length, "no listed building has a location, so nothing here could be pinned").toBeGreaterThan(0);
         expect(
             unpinned.map((row) => row.name || row.building_number || "(unnamed building)"),
-            `${unpinned.length} of ${settled.length} buildings on the property have no child pin (${pinned.length} do). The requirement is ` +
+            `${unpinned.length} of ${placeable.length} located buildings on the property have no child pin (${pinned.length} do). The requirement is ` +
                 'every building; auto_nest only pins "confident" buildings (confident_buildings() in parcel_buildings.py drops any record ' +
                 'carrying overlap_refs), leaving an ambiguous one for the manual "Organize this property?" dialog instead of an automatic pin',
         ).toEqual([]);

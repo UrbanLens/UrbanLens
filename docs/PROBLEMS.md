@@ -3990,3 +3990,23 @@ page and submits nothing. The other failures still fall back.
 Refusing them too would mean a legacy-mode account cannot sign in while the endpoint is down. Nothing has been
 changed for those cases.
 
+## P180 — A third-party image slower than 20 s to download is never copied, so its tile shows an icon
+
+`id: P180` · `status: open` · `updated: 2026-10-01` · `found by: the location integration project on v080e2e, 2026-10-01`
+
+`RemoteImageCopyView` makes a remote image's first copy inside the web request
+(`controllers/remote_copies.py`): `fetch_remote_source` with `_FETCH_TIMEOUT = 20`
+(`services/media/previews.py`), under `RemoteImageCopyUpstream.deadline = 25.0`. A fetch that runs past that is
+recorded as a failure, and the URL then answers 404 until `retry_is_due`; the page draws an icon tile.
+
+The USGS National Map satellite export a private pin's page asks for
+(`basemap.nationalmap.gov/.../USGSImageryOnly/MapServer/export?...&size=640,400`) took 18 s and 31 s on two
+direct fetches from chiron, both returning 200 with a 100 KB JPEG. In the location run it failed after 20 s
+(row created 03:21:51, `last_failed_at` 03:22:11). Six specs failed on that one 404 alone (`hrsh-child-pins` map
+and Buildings card, all four `hrsh-media` tests).
+
+Before v0.8.0 the browser loaded these images from the provider directly, so a slow provider was slow, not
+missing. Raising the in-request timeout would hold a web worker for the provider's full latency. Moving the first
+fetch to a worker (the view already answers 503 and the page retries while a copy is pending) would not.
+
+Not decided: whether slow first fetches move to a worker for every source or only for sources known to be slow.
