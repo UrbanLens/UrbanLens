@@ -853,6 +853,15 @@ class PinActionsFabVisibilityTests(TestCase):
         self.assertContains(response, "pin-actions-fab")
         self.assertContains(response, "Child pin details")
 
+    def test_the_hierarchy_controls_are_named_by_what_they_do_not_by_their_icon(self) -> None:
+        """An icon font's ligature is the link's text, so without a label a screen reader says "toggle_on"."""
+        parent = _make_pin(self.profile, name="Campus")
+        child = _make_pin(self.profile, name="Boiler", parent_pin=parent)
+        _make_pin(self.profile, name="Valve", parent_pin=child)
+        content = self._page(child).content.decode()
+        for label in ('aria-label="Child pin details"', 'aria-label="Open parent pin"', 'aria-label="Actions"'):
+            self.assertIn(label, content)
+
     def test_toggle_hidden_on_a_childless_nested_pin_but_parent_actions_remain(self) -> None:
         parent = _make_pin(self.profile, name="Campus")
         child = _make_pin(self.profile, name="Boiler", parent_pin=parent)

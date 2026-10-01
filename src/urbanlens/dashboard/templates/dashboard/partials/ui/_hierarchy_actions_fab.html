@@ -22,18 +22,18 @@
         {% if has_children %}
         <a class="map-btn-icon{% if include_children %} is-active{% endif %}"
            href="{{ request.path }}?children={% if include_children %}0{% else %}1{% endif %}"
-           title="Child pin details" data-tooltip="Child pin details {% if include_children %}on{% else %}off{% endif %}"
+           title="Child pin details" data-tooltip="Child pin details {% if include_children %}on{% else %}off{% endif %}" aria-label="Child pin details"
            aria-pressed="{% if include_children %}true{% else %}false{% endif %}">
             <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
         </a>
         {% endif %}
         {% if parent_url %}
-        <a class="map-btn-icon" href="{{ parent_url }}" title="{{ parent_item_label|default:'Open parent pin' }}" data-tooltip="{{ parent_item_label|default:'Open parent pin' }}">
+        <a class="map-btn-icon" href="{{ parent_url }}" title="{{ parent_item_label|default:'Open parent pin' }}" data-tooltip="{{ parent_item_label|default:'Open parent pin' }}" aria-label="{{ parent_item_label|default:'Open parent pin' }}">
             <i class="material-symbols-outlined">arrow_upward</i>
         </a>
         {% if detach_url %}
         <button type="button" class="map-btn-icon"
-                title="Detach from parent" data-tooltip="Detach from parent"
+                title="Detach from parent" data-tooltip="Detach from parent" aria-label="Detach from parent"
                 hx-post="{{ detach_url }}"
                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                 hx-confirm="Detach this pin from {{ parent_name }}? It becomes a top-level pin on your main map again."
@@ -47,7 +47,7 @@
             <i class="material-symbols-outlined">visibility_off</i>
         </button>
     </div>
-    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn" hidden title="Actions">
+    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn" hidden title="Actions" aria-label="Actions">
         <i class="material-symbols-outlined">account_tree</i>
         <span class="pin-actions-fab-label">Actions</span>
     </button>
