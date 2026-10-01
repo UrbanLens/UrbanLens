@@ -15,15 +15,16 @@ exposes it as ``own_pks()`` and ``semijoin()``, so every model in the app has it
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 import threading
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import FieldDoesNotExist
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Q
 from django.db.models.fields.reverse_related import ForeignObjectRel
+from psycopg.pq import TransactionStatus
 
 import urbanlens.core.lookups  # noqa: F401  - registers the __anyof every bound below uses
 
@@ -225,6 +226,10 @@ def current_scope() -> ProbeScope | None:
     return scope
 
 
+#: Turns sequential scans off for the transaction and returns the value to restore; ``OFFSET 0`` reads it first.
+_SEQSCAN_OFF = "SELECT prior, set_config('enable_seqscan', 'off', true) FROM (SELECT current_setting('enable_seqscan') AS prior OFFSET 0) AS before"
+
+
 @contextmanager
 def probe_scope() -> Iterator[ProbeScope]:
     """Hold ``enable_seqscan = off`` and one pk cache for the block, entering once however nested.
@@ -243,14 +248,23 @@ def probe_scope() -> Iterator[ProbeScope]:
         yield scope
         return
     scope = _probe_state.scope = ProbeScope()
-    with connection.cursor() as cursor:
-        cursor.execute("SET enable_seqscan = off")
+    # Transaction-local, so a pooled server connection never keeps it. The probes share one transaction: the
+    # caller's, or one opened here, whose commit then ends the setting without a restore.
+    owns_transaction = not connection.in_atomic_block
     try:
-        yield scope
+        with transaction.atomic() if owns_transaction else nullcontext():
+            with connection.cursor() as cursor:
+                cursor.execute(_SEQSCAN_OFF)
+                prior, _off = cursor.fetchone()
+            try:
+                yield scope
+            finally:
+                # An aborted transaction refuses the restore, and its rollback undoes the setting anyway.
+                if not owns_transaction and connection.connection.info.transaction_status != TransactionStatus.INERROR:
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT set_config('enable_seqscan', %s, true)", [prior])
     finally:
         _probe_state.scope = None
-        with connection.cursor() as cursor:
-            cursor.execute("RESET enable_seqscan")
 
 
 def probe_statement(model: type[Model], condition: Q, outer_pks: list[Any]) -> list[Any]:

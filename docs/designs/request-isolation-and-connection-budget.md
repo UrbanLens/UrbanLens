@@ -157,8 +157,12 @@ container has a 2 GB limit. The goal is fewer, reused, attributed backends — n
 
 **pgbouncer is deferred, with triggers**: adopt it in transaction mode when the sum of role limits
 exceeds ~80, when k8s web replicas exceed 2, or when connection setup shows up in `db` CPU. Its
-prerequisites are already satisfied by this design (role-level GUCs rather than client `options=`),
-except `DISABLE_SERVER_SIDE_CURSORS`, which the `.iterator()` callers tolerate.
+prerequisites are satisfied by this design (role-level GUCs rather than client `options=`), and
+`UL_DB_DISABLE_SERVER_SIDE_CURSORS=true` sets `DISABLE_SERVER_SIDE_CURSORS` for a pooled tier. With it on,
+`.iterator()` fetches the whole result client-side: the per-account exports stay bounded by one account, but the
+site-wide management commands (`stored_field`, `find_missing_image_files`, the backfills) hold every row they walk.
+Run those against the primary directly. `core/semijoin.probe_scope` keeps `enable_seqscan` transaction-local, so no
+pooled server connection inherits it.
 
 **psycopg3 is deferred and unblocked.** `django-postgres-extra` is installed but never imported
 anywhere in `src/` — it is not the blocker it was assumed to be. Django 6's native pool needs

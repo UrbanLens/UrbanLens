@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from django.db import connection
+from django.db import connection, transaction
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -48,7 +48,7 @@ def session_preamble(
     captured: Sequence[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
     index: int,
 ) -> list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]:
-    """The ``SET``/``RESET`` statements *captured* before position *index*.
+    """The ``SET``/``RESET`` and ``set_config`` statements *captured* before position *index*.
 
     A statement's plan depends on session GUCs active when it ran, not just its SQL text - a
     scan node bracketed by ``SET enable_seqscan = off`` / ``RESET enable_seqscan`` (see
@@ -62,9 +62,13 @@ def session_preamble(
         index: The position of the statement being explained.
 
     Returns:
-        Its preceding ``SET``/``RESET`` statements, in the order they ran.
+        Its preceding setting changes, in the order they ran.
     """
-    return [(sql, params) for sql, params in captured[:index] if sql.lstrip().upper().startswith(("SET ", "RESET"))]
+    return [
+        (sql, params)
+        for sql, params in captured[:index]
+        if sql.lstrip().upper().startswith(("SET ", "RESET")) or "set_config(" in sql
+    ]
 
 
 def plan_of(
@@ -78,24 +82,20 @@ def plan_of(
     Args:
         sql: A statement, with ``%s`` placeholders if it takes parameters.
         params: The parameters, as captured alongside the statement.
-        preamble: ``SET``/``RESET`` statements to replay on the same cursor immediately before the
-            ``EXPLAIN``, so a session GUC scoped around the real statement is active for this one
-            too. See ``session_preamble``. Every touched GUC is ``RESET`` again afterward, so this
-            call does not itself leak session state to whatever runs on this connection next.
+        preamble: Setting changes to replay on the same cursor immediately before the ``EXPLAIN``,
+            so a GUC scoped around the real statement is active for this one too. See
+            ``session_preamble``. They run in a savepoint that is rolled back, which undoes session
+            and transaction-local settings alike, so this call leaks none of them.
 
     Returns:
         The root plan node.
     """
-    touched = {pre_sql.split()[1].rstrip(";").lower() for pre_sql, _ in preamble}
-    with connection.cursor() as cursor:
+    with transaction.atomic(), connection.cursor() as cursor:
         for pre_sql, pre_params in preamble:
             cursor.execute(pre_sql, pre_params)
-        try:
-            cursor.execute(f"EXPLAIN (ANALYZE, FORMAT JSON) {sql}", params)  # noqa: S608 - a captured statement, not built from input
-            row = cursor.fetchone()
-        finally:
-            for name in touched:
-                cursor.execute(f"RESET {name}")
+        cursor.execute(f"EXPLAIN (ANALYZE, FORMAT JSON) {sql}", params)  # noqa: S608 - a captured statement, not built from input
+        row = cursor.fetchone()
+        transaction.set_rollback(True)
     raw = row[0] if row else "[]"
     plan = raw if isinstance(raw, list) else json.loads(raw)
     return dict(plan[0]["Plan"])

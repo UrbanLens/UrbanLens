@@ -224,6 +224,8 @@ DATABASES = {
         # Persistent connections for deployments reaching the DB over high-latency links.
         "CONN_MAX_AGE": persistent_connection_seconds(),
         "CONN_HEALTH_CHECKS": os.getenv("UL_DB_CONN_HEALTH_CHECKS", "").lower() in {"1", "true", "yes"},
+        # Required behind a transaction-mode pooler: .iterator() outside atomic() holds a cursor across transactions.
+        "DISABLE_SERVER_SIDE_CURSORS": env_bool("UL_DB_DISABLE_SERVER_SIDE_CURSORS", False),
         # Fail fast on unreachable DB so a request errors instead of holding a worker.
         "OPTIONS": {
             "connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10")),
