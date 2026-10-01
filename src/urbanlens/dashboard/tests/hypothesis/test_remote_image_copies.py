@@ -102,19 +102,26 @@ class CopyEndpointTests(TestCase):
         self.assertTrue(response.has_header("Retry-After"))
         enqueue.assert_called_once()
         self.assertEqual(enqueue.call_args.args[:2], (fetch_remote_image_copy, self.copy.pk))
+        self._queued = enqueue.call_args.args[1:]
 
     def _download(self, body: bytes | None) -> MagicMock:
-        """The worker's download: the provider's bytes, staged for the sandbox render it queues."""
+        """The worker's download of what the page queued: the bytes, staged for the sandbox render it queues."""
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 
         with (
             patch(_FETCH, return_value=(body, "image/jpeg") if body is not None else None) as fetch,
             patch(_ENQUEUE) as enqueue,
         ):
-            fetch_remote_image_copy(self.copy.pk)
+            fetch_remote_image_copy(*self._queued)
         fetch.assert_called_once()
         self.assertEqual(fetch.call_args.args, (self.source,))
         return enqueue
+
+    def _hold_every_download_slot(self) -> None:
+        from urbanlens.dashboard.services.media.remote_copies import release_download_slot, take_download_slot
+
+        while (slot := take_download_slot("another-copy")) is not None:
+            self.addCleanup(release_download_slot, slot, "another-copy")
 
     def _render(self, enqueue: MagicMock) -> bool:
         from urbanlens.dashboard.tasks import render_remote_image_copy
@@ -139,8 +146,9 @@ class CopyEndpointTests(TestCase):
         from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 
+        self._first_request()
         with patch(_FETCH, return_value=(_jpeg(), "image/jpeg")) as fetch, patch(_ENQUEUE):
-            fetch_remote_image_copy(self.copy.pk)
+            fetch_remote_image_copy(*self._queued)
 
         self.assertEqual(fetch.call_args.kwargs["timeout"], DOWNLOAD_TIMEOUT_SECONDS)
         self.assertGreaterEqual(DOWNLOAD_TIMEOUT_SECONDS, 60)
@@ -193,6 +201,58 @@ class CopyEndpointTests(TestCase):
         self._first_request()
         self._download(None)
         self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 2)
+
+    def test_while_every_download_slot_is_busy_a_new_copy_waits_its_turn(self) -> None:
+        """Downloads share the interactive worker with safety deadlines; slow providers must not take all of it."""
+        self._hold_every_download_slot()
+
+        with patch(_ENQUEUE) as enqueue:
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(response.has_header("Retry-After"))
+        enqueue.assert_not_called()
+        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 0)
+        self.assertIsNone(
+            cache.get(pending_marker(self.copy.url_digest)), "a copy that never started is marked pending"
+        )
+
+    def test_a_download_gives_its_slot_back_whether_it_worked_or_not(self) -> None:
+        for body in (None, _jpeg()):
+            RemoteImageCopy.objects.filter(pk=self.copy.pk).update(last_failed_at=None, failed_attempts=0)
+            cache.delete(pending_marker(self.copy.url_digest))
+            self._first_request()
+            self._download(body)
+
+            self._assert_slot_free()
+
+    def _assert_slot_free(self) -> None:
+        from urbanlens.dashboard.services.media.remote_copies import release_download_slot, take_download_slot
+
+        slot = take_download_slot("next-copy")
+        self.assertIsNotNone(slot, "the download slot was kept")
+        release_download_slot(slot, "next-copy")
+
+    def test_a_download_past_its_time_limit_is_a_failure_and_frees_its_slot(self) -> None:
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        self._first_request()
+        with patch(_FETCH, side_effect=SoftTimeLimitExceeded()), patch(_ENQUEUE) as enqueue:
+            self.assertFalse(fetch_remote_image_copy(*self._queued))
+
+        enqueue.assert_not_called()
+        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 1)
+        self.assertIsNone(cache.get(pending_marker(self.copy.url_digest)))
+        self._assert_slot_free()
+
+    def test_a_download_that_cannot_be_queued_frees_its_slot(self) -> None:
+        with patch(_ENQUEUE, return_value=None):
+            self.assertEqual(self.client.get(self.url).status_code, 503)
+
+        self.assertIsNone(cache.get(pending_marker(self.copy.url_digest)))
+        self._assert_slot_free()
 
     def test_a_caller_over_the_download_rate_is_told_to_retry_without_counting_a_failure(self) -> None:
         with (

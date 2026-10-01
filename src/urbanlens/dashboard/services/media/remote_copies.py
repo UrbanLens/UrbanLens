@@ -45,6 +45,12 @@ COPY_PENDING_TTL = 300
 COPY_RATE = Rate(limit=600, window_seconds=60)
 COPY_THROTTLE_SCOPE = "media.remote_copy"
 
+#: First downloads in flight at once, site-wide. They run on the interactive worker beside safety deadlines (and,
+#: on k3s, on the one worker that drains every queue), so slow providers must leave it room.
+DOWNLOAD_SLOTS = 1
+#: A slot outlives the queue wait and the download; past this a worker that died holding one gives it back.
+DOWNLOAD_SLOT_TTL = DOWNLOAD_TIMEOUT_SECONDS + 60
+
 
 @dataclass(frozen=True, slots=True)
 class RemoteImage:
@@ -67,6 +73,37 @@ class RemoteImage:
 def url_digest(url: str, edition: str = "") -> str:
     """The key a remote image is stored under."""
     return hashlib.sha256(f"{url}\n{edition}".encode() if edition else url.encode()).hexdigest()
+
+
+def take_download_slot(digest: str) -> str | None:
+    """Claim one of the site-wide :data:`DOWNLOAD_SLOTS` for a copy's first download.
+
+    Args:
+        digest: The copy being downloaded, which the slot holds so only its download frees it.
+
+    Returns:
+        The slot's key, or None when every slot is busy.
+    """
+    from django.core.cache import cache
+
+    for index in range(DOWNLOAD_SLOTS):
+        key = f"ul_remote_copy_download_slot_{index}"
+        if cache.add(key, digest, DOWNLOAD_SLOT_TTL):
+            return key
+    return None
+
+
+def release_download_slot(key: str, digest: str) -> None:
+    """Give back a slot :func:`take_download_slot` returned, unless it already expired and went to another copy.
+
+    Args:
+        key: The slot's key.
+        digest: The copy that took it.
+    """
+    from urbanlens.dashboard.services.core import counters
+
+    if key:
+        counters.delete_if_value(key, digest)
 
 
 def pending_marker(digest: str) -> str:

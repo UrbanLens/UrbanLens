@@ -542,6 +542,11 @@ paths use it:
   (`previews.stage_preview_source`) and queues
   `tasks.render_remote_image_copy`, which re-encodes them (1200px) in the
   sandbox and keeps the result for good. Until then the endpoint answers 503.
+  At most `DOWNLOAD_SLOTS` downloads run at once site-wide (a cache slot the
+  view claims and the task frees), since the interactive worker also fires
+  safety deadlines and on k3s one worker drains every queue; a request finding
+  every slot busy answers 503 without queueing. The task's soft time limit
+  bounds a provider that trickles bytes under the per-read timeout.
   A failed download or decode backs off, 1h doubling to at most 7 days, and
   answers 404 meanwhile.
 - **A tile of another host's map** (`controllers/remote_tiles.RemoteTileView`,

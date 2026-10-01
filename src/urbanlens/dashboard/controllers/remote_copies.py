@@ -13,7 +13,7 @@ from urbanlens.dashboard.controllers.media import resolve_media_path, serve_medi
 from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
 from urbanlens.dashboard.services.media.origin import apply_media_response_headers
 from urbanlens.dashboard.services.media.previews import PREVIEW_RETRY_AFTER_SECONDS, RENDER_QUEUED
-from urbanlens.dashboard.services.media.remote_copies import COPY_PENDING_TTL, COPY_RATE, COPY_THROTTLE_SCOPE, pending_marker, retry_is_due
+from urbanlens.dashboard.services.media.remote_copies import COPY_PENDING_TTL, COPY_RATE, COPY_THROTTLE_SCOPE, pending_marker, release_download_slot, retry_is_due, take_download_slot
 from urbanlens.dashboard.services.security import throttle
 from urbanlens.dashboard.services.security.throttle import account_or_address
 
@@ -63,10 +63,14 @@ class RemoteImageCopyView(View):
             return _not_yet(throttle.retry_after(COPY_THROTTLE_SCOPE, caller, COPY_RATE))
         if not cache.add(marker, RENDER_QUEUED, COPY_PENDING_TTL):
             return _not_yet()
+        if (slot := take_download_slot(digest)) is None:
+            cache.delete(marker)
+            return _not_yet()
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 
-        if safely_enqueue_task(fetch_remote_image_copy, copy.pk, durable=False) is None:
+        if safely_enqueue_task(fetch_remote_image_copy, copy.pk, slot, durable=False) is None:
+            release_download_slot(slot, digest)
             cache.delete(marker)
         return _not_yet()
