@@ -24,6 +24,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`infrastructure-per-tier-database-roles.md`](infrastructure-per-tier-database-roles.md) — staging and production need `UL_DB_APP_PASS` before their next deploy; k8s needs the per-tier roles | outbound, `UrbanLens/infrastructure` | SENT 2026-09-15 |
 | [`redata-maplibre-catalogue-wiring.md`](redata-maplibre-catalogue-wiring.md) — reply to REData's T8: the dormant tile catalogue is wired and called, the map count is corrected, and the MapLibre migration itself is deferred to PL8 | inbound, `../REData` | PARTIALLY ANSWERED 2026-09-19 |
 | [`redata-cris-attachment-500-and-places-429.md`](redata-cris-attachment-500-and-places-429.md) — some CRIS attachment downloads 500 with an HTML page, and nearby Places answers 503 on a Google 429 | outbound, `../REData` | OPEN 2026-10-01 |
+| [`redata-survey-roster-marks-other-surveys-on-property.md`](redata-survey-roster-marks-other-surveys-on-property.md) — every building on any survey naming one HRSH building comes back on the property; about 200 of HRSH's 300 | outbound, `../REData` | OPEN 2026-10-01 |
 
 ## The convention
 
