@@ -19,7 +19,7 @@ from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
 
-from urbanlens.core.tests.explain import relations_read, rows_examined, session_preamble
+from urbanlens.core.tests.explain import relations_read, rows_examined, scan_nodes, session_preamble
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments import Comment
 from urbanlens.dashboard.models.location.model import Location
@@ -114,11 +114,14 @@ class _PinCommentCase(TestCase):
             per_relation = [
                 relations_read(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements
             ]
+            # The plan, because a flip this file does not reproduce alone (see core.tests.explain) is only
+            # diagnosable from the run that saw it.
+            nodes = [scan_nodes(sql, params, preamble=session_preamble(captured, i)) for i, sql, params in statements]
             kind = "matching" if matching else "non-matching"
             self.fail(
                 f"the viewer's comment search read {before} rows, then {after} after a stranger added {count} "
                 f"{kind} comments to a pin of their own - {after - before} more rows for a pin the viewer cannot "
-                f"see. Rows read per relation: {per_relation}",
+                f"see. Rows read per relation: {per_relation}. Scans: {nodes}",
             )
 
 

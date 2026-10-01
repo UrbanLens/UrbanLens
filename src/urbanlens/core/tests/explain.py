@@ -148,3 +148,33 @@ def relations_read(
 
     walk(plan_of(sql, params, preamble=preamble))
     return totals
+
+
+def scan_nodes(
+    sql: str,
+    params: Sequence[Any] | Mapping[str, Any] | None = None,
+    *,
+    preamble: Sequence[tuple[str, Sequence[Any] | Mapping[str, Any] | None]] = (),
+) -> list[str]:
+    """One line per node that read a relation, for saying *how* a statement walked it.
+
+    Args:
+        sql: A statement, with ``%s`` placeholders if it takes parameters.
+        params: The parameters, as captured alongside the statement.
+        preamble: See ``plan_of``.
+
+    Returns:
+        ``"<node type> <relation> [<index>] rows=<read> loops=<loops>"``, in plan order.
+    """
+    lines: list[str] = []
+
+    def walk(node: dict[str, Any]) -> None:
+        if name := node.get("Relation Name"):
+            index = f" [{node['Index Name']}]" if node.get("Index Name") else ""
+            read = node.get("Actual Rows", 0) + node.get("Rows Removed by Filter", 0)
+            lines.append(f"{node['Node Type']} {name}{index} rows={read} loops={node.get('Actual Loops', 1)}")
+        for child in node.get("Plans", []):
+            walk(child)
+
+    walk(plan_of(sql, params, preamble=preamble))
+    return lines
