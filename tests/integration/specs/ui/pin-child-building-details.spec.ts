@@ -1,6 +1,6 @@
 /**
- * The "child pin details" toggle on a property's page brings its building child's own details up to the top level.
- * Only the building section's own requests are let through, so no panel is fetched and no upstream is spent.
+ * A building child's own details open in place from its property's "Buildings on this Property" list (P172).
+ * Only that list's own requests are let through, so no panel is fetched and no upstream is spent by the page.
  */
 
 import { expect, test } from "../../lib/fixtures.js";
@@ -12,7 +12,7 @@ import { pinDetail } from "../../lib/routes.js";
 const CHILD_OFFSET_DEG = 0.000045;
 
 test.describe("pin detail - child pin details", () => {
-    test("a building child's details show on its property's page only while the toggle is on", async ({ page, api, guard }) => {
+    test("a building child's details open in place from its property's list", async ({ page, api, guard }) => {
         // htmx logs each request this test aborts.
         guard.allow(/htmx:(sendAbort|sendError|afterRequest)/);
         const parent = await api.createPin();
@@ -32,34 +32,26 @@ test.describe("pin detail - child pin details", () => {
         await page.route("**/*", (route) => {
             const request = route.request();
             if (!["xhr", "fetch"].includes(request.resourceType())) return route.continue();
-            return /\/(child-buildings|building-card)\//.test(request.url()) ? route.continue() : route.abort("aborted");
+            return /\/(buildings|building-card)\/(\?|$)/.test(request.url()) ? route.continue() : route.abort("aborted");
         });
 
         const detail = new PinDetailPage(page);
-        await page.goto(`${pinDetail(parent.slug)}?children=1`);
+        await page.goto(pinDetail(parent.slug));
         await detail.expectLoaded();
 
-        const section = page.locator('[data-tab-panel="overview"] .pin-overview-stack > #child-buildings-section');
-        await expect(section, "the building section never loaded at the top of the Overview").toBeVisible();
-        const heading = `Building: ${name}`;
-        const card = section.locator(".child-building-card", { hasText: heading });
-        if ((await card.count()) === 0) {
-            // A sweep may have given the property other buildings, one of which holds the pin.
-            await section.locator(".child-building-row summary", { hasText: heading }).click();
-        }
-        await expect(card, `no "${heading}" card on the property's page`).toBeVisible();
+        // Pending until the property's building data has been fetched, which a fresh location has to wait for.
+        const section = page.locator("#parcel-buildings-section");
+        await expect(section, "the property's list of buildings and child pins never loaded").toBeVisible({ timeout: 120_000 });
+        const childrenTab = section.locator(".card-tab", { hasText: "Child pins" });
+        if ((await childrenTab.count()) > 0) await childrenTab.click();
+
+        const row = section.locator('[data-pb-panel="children"] .child-pin-row', { hasText: name });
+        await expect(row, `"${name}" is not among the property's child pins`).toHaveCount(1);
+        await row.locator("summary .parcel-building-chevron").click();
+
+        const card = row.locator(".child-building-detail");
+        await expect(card, `"${name}" did not open in place`).toBeVisible();
         await expect(card).toContainText(description);
         await expect(card.getByRole("link", { name: /open/i })).toHaveAttribute("href", new RegExp(`${child.slug}/?$`));
-
-        await page.locator("#pin-actions-fab-btn").click();
-        const toggle = page.locator(".pin-actions-item", { hasText: "Child pin details" });
-        await expect(toggle.locator(".pin-actions-state")).toHaveText("On");
-        await toggle.click();
-        await page.waitForURL(/[?&]children=0/);
-        await detail.expectLoaded();
-
-        await expect(page.locator("#child-buildings-section"), "the building section is still on the page with the toggle off").toHaveCount(0);
-        await expect(page.getByText(heading), "the building's details are still on its property's page with the toggle off").toHaveCount(0);
-        await expect(page.getByText(description)).toHaveCount(0);
     });
 });

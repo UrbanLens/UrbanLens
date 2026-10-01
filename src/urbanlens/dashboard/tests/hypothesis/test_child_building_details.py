@@ -194,6 +194,45 @@ class BuildingCardTests(_Base):
         )
 
 
+class ChildPinsWithoutBuildingDataTests(_Base):
+    """A property whose building data cannot be fetched still lists its child pins (P172)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.building = _building(self.parent, "Carriage House", description="Slate roof.")
+
+    def _list(self, *, schedulable: bool) -> HttpResponse:
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=schedulable
+        ):
+            return self.client.get(reverse("pin.parcel_buildings", args=[self.parent.slug]))
+
+    def test_a_fetch_that_cannot_be_scheduled_still_lists_the_children(self) -> None:
+        response = self._list(schedulable=False)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Carriage House")
+        self.assertContains(response, f'hx-get="{reverse("pin.child_building", args=[self.building.slug])}"')
+
+    def test_polling_that_has_given_up_still_lists_the_children(self) -> None:
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS
+
+        with mock.patch("urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True):
+            response = self.client.get(
+                reverse("pin.parcel_buildings", args=[self.parent.slug]), {"attempt": MAX_POLL_ATTEMPTS}
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Carriage House")
+
+    def test_a_fetch_under_way_still_waits_for_the_buildings(self) -> None:
+        response = self._list(schedulable=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Carriage House")
+
+    def test_no_children_and_no_fetch_is_still_nothing_to_show(self) -> None:
+        self.building.delete()
+        self.assertEqual(self._list(schedulable=False).status_code, 204)
+
+
 class ToggleDefaultTests(_Base):
     """When the toggle starts on without being asked."""
 

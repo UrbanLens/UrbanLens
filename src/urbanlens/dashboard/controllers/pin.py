@@ -1563,10 +1563,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         rows: list[dict] = []
         unpinned_count = 0
         debug = None
+        cached = None
         if panel is not None and panel.gate(pin):
             cached = LocationCache.get_fresh(pin.location, PARCEL_BUILDINGS_CACHE_SOURCE)
             if cached is None:
-                return self._pending_panel(request, pin, PARCEL_BUILDINGS_CACHE_SOURCE)
+                pending = self._pending_panel(request, pin, PARCEL_BUILDINGS_CACHE_SOURCE)
+                # Building data that will never arrive must not hide the child pins.
+                if pending.status_code != 204 or not child_rows:
+                    return pending
+        if cached is not None:
             buildings = (cached.data or {}).get("buildings") or []
             descendants = list(pin.descendants().select_related("location"))
             external_rows, unmatched = match_buildings_to_children(buildings, descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
