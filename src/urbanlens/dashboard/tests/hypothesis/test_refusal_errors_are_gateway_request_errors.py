@@ -13,12 +13,18 @@ from __future__ import annotations
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.exceptions import DashboardError
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import (
+    UPSTREAM_BUSY_DEFAULT_SECONDS,
+    GatewayRateLimitedError,
+    GatewayRequestError,
+    UpstreamBusyError,
+)
 from urbanlens.dashboard.services.core.rate_limiter import (
     RateLimiterUnavailableError,
     RateLimitExceededError,
     RequestCancelledError,
     ServiceDisabledError,
+    UpstreamThrottledError,
 )
 
 
@@ -56,3 +62,32 @@ class ExistingNarrowCatchesStillWorkTests(SimpleTestCase):
         exc = RateLimitExceededError("overture_maps")
         self.assertEqual(str(exc), "Rate limit exceeded for service 'overture_maps'")
         self.assertEqual(exc.service, "overture_maps")
+
+
+class UpstreamThrottledErrorTests(SimpleTestCase):
+    """The throttled refusal is all four things its callers catch it as, carrying the upstream's wait."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.retry_after = UPSTREAM_BUSY_DEFAULT_SECONDS + 7
+        self.exc = UpstreamThrottledError("redata_places", retry_after=self.retry_after)
+
+    def test_it_is_caught_by_every_family_it_belongs_to(self) -> None:
+        for family in (
+            RateLimitExceededError,
+            RequestCancelledError,
+            UpstreamBusyError,
+            GatewayRateLimitedError,
+            GatewayRequestError,
+        ):
+            with self.subTest(family=family.__name__):
+                self.assertIsInstance(self.exc, family)
+
+    def test_it_carries_the_upstreams_wait_not_the_default(self) -> None:
+        self.assertEqual(self.exc.retry_after, self.retry_after)
+
+    def test_its_message_and_service_name_the_throttled_upstream(self) -> None:
+        message = f"'redata_places' is throttled upstream for another {self.retry_after}s"
+        self.assertEqual(str(self.exc), message)
+        self.assertEqual(self.exc.args, (message,))
+        self.assertEqual(self.exc.service, "redata_places")

@@ -834,10 +834,14 @@ class RequestCancelledError(DashboardError, GatewayRequestError):
 
 
 class RateLimitExceededError(RequestCancelledError):
-    """Raised when a rate limit prevents an API call from proceeding."""
+    """Raised when a rate limit prevents an API call from proceeding.
 
-    def __init__(self, service: str) -> None:
-        super().__init__(service, f"Rate limit exceeded for service '{service}'")
+    Args:
+        service: The rate-limiter service key.
+        message: Optional message override for subclasses."""
+
+    def __init__(self, service: str, message: str | None = None) -> None:
+        super().__init__(service, message or f"Rate limit exceeded for service '{service}'")
 
 
 class UpstreamThrottledError(RateLimitExceededError, UpstreamBusyError, GatewayRateLimitedError):
@@ -849,7 +853,7 @@ class UpstreamThrottledError(RateLimitExceededError, UpstreamBusyError, GatewayR
     """
 
     def __init__(self, service: str, *, retry_after: int) -> None:
-        RequestCancelledError.__init__(self, service, f"'{service}' is throttled upstream for another {retry_after}s")
+        super().__init__(service, f"'{service}' is throttled upstream for another {retry_after}s")
         self.retry_after = retry_after
 
 
