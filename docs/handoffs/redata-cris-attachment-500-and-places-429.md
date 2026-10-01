@@ -8,6 +8,7 @@
 ## 1. `GET /api/v1/cultural-resources/<uuid>/attachments/<id>/download/` returns 500 for some attachments
 
 Reproducible on every request: a `text/html` "Something went wrong - REData" page, 1,157 bytes, no request ID header.
+Still 500 for `480501` and `480502` at 17:30 UTC the same day. They are 11 of the 19 failures in UrbanLens's location e2e run.
 The resource itself (`GET /api/v1/cultural-resources/<uuid>/`) answers 200 and lists the attachment.
 
 | Resource | Attachment | Listed as | Download |
