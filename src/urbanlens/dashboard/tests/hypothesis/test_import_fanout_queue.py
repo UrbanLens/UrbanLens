@@ -13,6 +13,7 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.signals import ensure_wiki_for_pin_location
 from urbanlens.dashboard.models.reputation import signals as reputation_signals
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -201,10 +202,13 @@ class WikiEnrichmentFollowsTheWikiTests(SimpleTestCase):
         with (
             mock.patch.object(Location.objects, "filter") as locations,
             mock.patch.object(Wiki.objects, "get_or_create_for_location", return_value=(wiki, True)),
+            # An owner who allows outbound lookups; without one there is no enrichment to route.
+            mock.patch.object(Pin.objects, "filter") as pins,
             mock.patch("urbanlens.dashboard.services.wiki.wiki_seed.seed_wiki_article_from_wikipedia"),
             mock.patch(ENQUEUE) as enqueue,
         ):
             locations.return_value.first.return_value = mock.Mock(pk=55)
+            pins.return_value.exists.return_value = True
             ensure_wiki_for_location.apply(args=(55,), **delivery).get()
         return enqueue
 

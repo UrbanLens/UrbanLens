@@ -71,9 +71,11 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
         longer exists.
     """
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.core.bulk_followup import enqueue_follow_on
     from urbanlens.dashboard.services.core.celery import follow_on_queue
+    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran
 
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
@@ -81,8 +83,11 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
         return None
 
     wiki, created = Wiki.objects.get_or_create_for_location(location)
-    if created:
+    # Enrichment sends the coordinate to outside providers, so it waits for an owner who allows that.
+    consented = Pin.objects.filter(location=location, profile__external_apis_enabled=True).exists()
+    if consented and (created or not boundary_generation_ran(location)):
         enqueue_follow_on(enrich_wiki_location, enrich_wiki_locations, wiki.pk, queue=follow_on_queue())
+    if created:
         from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
 
         seed_wiki_article_from_wikipedia(location)
