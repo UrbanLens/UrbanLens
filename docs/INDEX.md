@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P184` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N32`
+**Next free id:** `P185` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N32`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -216,3 +216,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P177 | open | 2026-09-30 | When the sign-in page cannot fetch an account's sign-in parameters, it submits the raw password | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P179 | open | 2026-10-01 | `panel_fetch`'s threads pool enforces none of its tasks' declared soft or hard time limits | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P182 | open | 2026-10-01 | A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P184 | open | 2026-10-01 | A third-party image whose provider once answers slower than 90 s shows an icon for an hour or more | [`docs/PROBLEMS.md`](PROBLEMS.md) |

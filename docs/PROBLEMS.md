@@ -4010,3 +4010,18 @@ the only Overpass record. `building_footprint` and `_as_multipolygon` handle pol
 UrbanLens stores what it was given. Asked of REData in
 [`handoffs/redata-osm-relation-building-returned-as-point.md`](handoffs/redata-osm-relation-building-returned-as-point.md).
 
+## P184 — A third-party image whose provider once answers slower than 90 s shows an icon for an hour or more
+
+`id: P184` · `status: open` · `updated: 2026-10-01` · `found by: the v0.8.0 location run on v080e2e, 2026-10-01`
+
+P180 moved a remote image's first download onto a worker with `DOWNLOAD_TIMEOUT_SECONDS` (90). On v080e2e the USGS
+National Map export for the HRSH pin was first requested at 08:35:28; the worker recorded a failed download at
+08:36:59, about 91 s later, which fits the 90 s timeout firing (the log says only that the request failed). Direct fetches of the same URL
+from chiron and from inside the worker took 17.5 s and 19 s minutes later. One slow answer counts as a failure like
+any other, so the copy answers 404 for `FIRST_RETRY_DELAY` (1 h), doubling with each failure, and the pin page
+shows an icon throughout. This copy had three failures, two of them from before P180.
+
+`fetch_remote_source` returns None for every failure: an unsafe URL, a non-200, an oversized body, and a request
+error. The task cannot tell a timeout from a refusal. Options, not chosen: retry a timed-out download once before
+recording a failure; give timeouts a short first backoff; lengthen the timeout. Each one costs download-slot time
+on the interactive worker (2cba24f15).
