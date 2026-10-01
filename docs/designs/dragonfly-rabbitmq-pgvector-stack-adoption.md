@@ -76,6 +76,12 @@ Both `db` and `test-db` in `docker-compose.yml` build from it. The Dockerfile pi
 this drifts with the PGDG repo; checked against the built `urbanlens_development_main_db` container
 this session with `dpkg -l postgresql-17-pgvector`, which resolved `0.8.6-1.pgdg11+1`.
 
+The base is Debian 11 (bullseye), and by 2026-10-01 PGDG had dropped `bullseye-pgdg` from
+`apt.postgresql.org` (404), which broke the build in CI. The Dockerfile now points the base image's
+`pgdg.list` at `apt-archive.postgresql.org`, which still serves it and resolved the same 0.8.6. The
+archived suite was last published 2026-08-26, so `pgvector` likely stops drifting on this base. A newer base would bring a newer glibc,
+whose collation changes need a reindex of existing data directories, so the move is a separate decision.
+
 The extension is enabled by a `RunSQL` in `src/urbanlens/dashboard/migrations/0032_v0_8_0.py`
 (`RunSQL("CREATE EXTENSION IF NOT EXISTS vector")`), matching the exact pattern
 `0001_initial.py:58` used to enable postgis itself — deliberately not postgis's
