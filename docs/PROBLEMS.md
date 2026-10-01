@@ -3990,9 +3990,9 @@ page and submits nothing. The other failures still fall back.
 Refusing them too would mean a legacy-mode account cannot sign in while the endpoint is down. Nothing has been
 changed for those cases.
 
-## P182 — The campus sweep stores building places with no geometry, so containment can never reach them
+## P182 — A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it
 
-`id: P182` · `status: open` · `updated: 2026-10-01` · `found by: P181's investigation, 2026-10-01`
+`id: P182` · `status: open, upstream` · `updated: 2026-10-01` · `found by: P181's investigation, 2026-10-01`
 
 `BuildingNester` (`services/pins/pin_restructure.py`, via `ensure_building_places`) creates a building place for
 each building record it mirrors. For HRSH's Kirkbride (OSM relation 10813427) on v080e2e that place, 483, was stored
@@ -4003,6 +4003,10 @@ The sweep used to hide this by pointing the Location at the building place direc
 removed for P181 because the Location is shared; the owner's building pin and the building's wiki still read as
 buildings (`places/scope.implied_pin_type`), and the wiki keeps its own `place`.
 
-Not established: whether a relation's multipolygon is dropped on purpose, and which building sources have
-geometry at all (CRIS buildings are points).
+**Cause: REData sent no outline.** The `parcel_buildings` record for `overpass:relation/10813427` has a Point
+`geometry` (the relation's centre) and no `residual_geometry`, though its source's attributes say
+`type: multipolygon`. Every Overture record in the same answer, and 17 of the CRIS ones, carry polygons; it is
+the only Overpass record. `building_footprint` and `_as_multipolygon` handle polygons and multipolygons, so
+UrbanLens stores what it was given. Asked of REData in
+[`handoffs/redata-osm-relation-building-returned-as-point.md`](handoffs/redata-osm-relation-building-returned-as-point.md).
 

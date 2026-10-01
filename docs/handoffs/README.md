@@ -25,6 +25,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`redata-maplibre-catalogue-wiring.md`](redata-maplibre-catalogue-wiring.md) — reply to REData's T8: the dormant tile catalogue is wired and called, the map count is corrected, and the MapLibre migration itself is deferred to PL8 | inbound, `../REData` | PARTIALLY ANSWERED 2026-09-19 |
 | [`redata-cris-attachment-500-and-places-429.md`](redata-cris-attachment-500-and-places-429.md) — some CRIS attachment downloads 500 with an HTML page, and nearby Places answers 503 on a Google 429 | outbound, `../REData` | OPEN 2026-10-01 |
 | [`redata-survey-roster-marks-other-surveys-on-property.md`](redata-survey-roster-marks-other-surveys-on-property.md) — every building on any survey naming one HRSH building comes back on the property; about 200 of HRSH's 300 | outbound, `../REData` | OPEN 2026-10-01 |
+| [`redata-osm-relation-building-returned-as-point.md`](redata-osm-relation-building-returned-as-point.md) — Kirkbride, an OSM multipolygon relation, comes back as its centre point, so its building place has no outline (P182) | outbound, `../REData` | OPEN 2026-10-01 |
 
 ## The convention
 
