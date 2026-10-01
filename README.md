@@ -72,6 +72,8 @@ UrbanLens uses GitHub Actions for automated quality gates, security checks, rele
 - Security automation runs CodeQL, dependency review for pull requests, and scheduled weekly scans.
 - Dependabot opens weekly updates for GitHub Actions, Python, npm, and Docker dependencies.
 - Releases are managed with [Release Please](https://github.com/googleapis/release-please). Use Conventional Commit messages such as `feat: add route export` or `fix: handle empty weather data` — merges to `main` update a release PR, and merging that PR creates the version tag, changelog, and GitHub release.
+- A release branch reaches `main` as one squash commit, and Release Please reads only its message. Title it as a Conventional Commit (`feat: v0.9.0 (#123)`) or put `Release-As: 0.9.0` in its body; a bare `v0.9.0 (#123)` gives Release Please nothing to release. `.release-please-manifest.json` holds the last released version, never the one in development, because the next version is computed from it.
+- `main` accepts only signed commits, including every commit on a pull request's branch.
 - Published GitHub releases build Python distributions and a provenance-attested container image in GitHub Container Registry (`ghcr.io/UrbanLens/UrbanLens`), tagged with the semantic version and `latest` for stable releases.
 
 
