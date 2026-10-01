@@ -83,3 +83,17 @@ class PostgresIsSizedForItsContainerTests(SimpleTestCase):
         for name in ("shared_buffers", "effective_cache_size", "random_page_cost", "pg_stat_statements.track_planning"):
             with self.subTest(setting=name):
                 self.assertTrue(self.settings_given[name].startswith("${"), f"{name} is not env-driven")
+
+
+class PostgresIsHealthyOnlyOnceItTakesConnectionsTests(SimpleTestCase):
+    """On a fresh volume the image runs its init scripts under a temporary server that listens on the Unix socket
+    alone, then restarts. A socket probe reports healthy during that window and db-setup's TCP connection is refused,
+    which failed a new environment's first start (2026-10-01)."""
+
+    def test_every_postgres_service_probes_over_tcp(self) -> None:
+        services = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())["services"]
+        for name in ("db", "test-db"):
+            with self.subTest(service=name):
+                probe = " ".join(services[name]["healthcheck"]["test"])
+                self.assertIn("pg_isready", probe)
+                self.assertRegex(probe, r"-h (127\.0\.0\.1|localhost)\b")
