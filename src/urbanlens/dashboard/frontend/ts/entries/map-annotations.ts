@@ -2212,8 +2212,8 @@ function init(): void {
         e.preventDefault();
         // A completed drop resolves whatever the user had armed for a tap.
         disarmPlacement();
-        const rect = mapEl.getBoundingClientRect();
-        placePhotoAt(Number.parseInt(idStr, 10), map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
+        // Leaflet's own conversion: it subtracts the container's border and undoes CSS scaling, which a bounding-rect offset does not.
+        placePhotoAt(Number.parseInt(idStr, 10), map.mouseEventToLatLng(e));
     });
 
     // Drop a Media-section item (external provider result, not yet a real Image row - see PinController.media_relevance) onto the map.
@@ -2271,8 +2271,7 @@ function init(): void {
         } catch {
             return;
         }
-        const rect = mapEl.getBoundingClientRect();
-        placeMediaItemAt(itemEl, item, map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
+        placeMediaItemAt(itemEl, item, map.mouseEventToLatLng(e));
     });
 
     // Tab switching.

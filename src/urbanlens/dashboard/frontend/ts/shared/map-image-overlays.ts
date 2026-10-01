@@ -213,9 +213,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
             // while the user is trying to move one corner.
             map.dragging.disable();
             const move = (moveEvent: PointerEvent) => {
-                const rect = map.getContainer().getBoundingClientRect();
-                const containerPoint = leaflet.point(moveEvent.clientX - rect.left, moveEvent.clientY - rect.top);
-                const latLng = map.containerPointToLatLng(containerPoint);
+                const latLng = map.mouseEventToLatLng(moveEvent);
                 item.entry.corners[index] = [latLng.lat, latLng.lng];
                 redraw(item);
             };
