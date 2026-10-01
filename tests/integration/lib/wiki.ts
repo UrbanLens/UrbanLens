@@ -171,3 +171,41 @@ export async function csrfHeaders(page: Page): Promise<Record<string, string>> {
     expect(token, "no csrftoken cookie after loading a signed-in page, so every session POST would fail CSRF instead of reaching the view").toBeTruthy();
     return { "X-CSRFToken": token ?? "", Referer: `${env.baseUrl}${appRoutes.home}` };
 }
+
+/** How long after load the boundary vote dialog opens itself (`boundary-vote.ts`'s AUTO_OPEN_MS), with room for a slow page. */
+const BOUNDARY_PROMPT_MS = 3_000;
+
+/**
+ * Answers the boundary vote dialog with "Not now" if it opens by itself, as a person would before using the page.
+ *
+ * It opens while a place has two candidate outlines and nobody has voted, and as a modal it takes every click
+ * meant for the page behind it.
+ */
+export async function dismissBoundaryVotePrompt(page: Page): Promise<void> {
+    const dialog = page.locator("dialog#boundary-vote-dialog[data-auto-open]");
+    if ((await dialog.count()) === 0) {
+        return;
+    }
+    const opened = await dialog.evaluate((element: HTMLDialogElement, timeoutMs) => new Promise<boolean>((resolve) => {
+        if (element.open) {
+            resolve(true);
+            return;
+        }
+        const observer = new MutationObserver(() => {
+            if (element.open) {
+                observer.disconnect();
+                resolve(true);
+            }
+        });
+        observer.observe(element, { attributes: true, attributeFilter: ["open"] });
+        setTimeout(() => {
+            observer.disconnect();
+            resolve(element.open);
+        }, timeoutMs);
+    }), BOUNDARY_PROMPT_MS);
+    if (opened) {
+        await page.locator("#boundary-vote-not-now").click();
+        await expect(dialog, "the boundary vote dialog did not close on \"Not now\"").not.toHaveAttribute("open");
+    }
+}
+

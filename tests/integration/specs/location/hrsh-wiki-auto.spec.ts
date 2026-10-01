@@ -7,6 +7,7 @@ import { HRSH_NAME_PATTERN, hrshRoutes } from "../../lib/hrsh.js";
 import { recordMetric } from "../../lib/metrics.js";
 import { pinDetail } from "../../lib/routes.js";
 import { waitForOrNull } from "../../lib/waiting.js";
+import { dismissBoundaryVotePrompt } from "../../lib/wiki.js";
 import {
     CAMPUS_PRIVATE_NAME,
     ensureCampusWiki,
@@ -141,6 +142,7 @@ test.describe("Hudson River State Hospital - the community wiki, automatically",
         ).not.toBeNull();
 
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
+        await dismissBoundaryVotePrompt(page);
         await page.click('a[data-tab="article"]');
         // The panel may already have loaded with the page, so wait for its content rather than for a swap.
         await expect(page.locator("#article-panel .wiki-loading"), "the Article tab never finished loading").toHaveCount(0, { timeout: 20_000 });
@@ -209,7 +211,7 @@ test.describe("Hudson River State Hospital - the community wiki, automatically",
 
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
         await expect(
-            page.locator(".pin-actions-item").filter({ hasText: "Child pin details" }),
+            page.getByRole("link", { name: "Child pin details" }),
             'the campus wiki page has no "Child pin details" toggle, which only renders when has_child_wikis is true',
         ).toBeAttached();
 

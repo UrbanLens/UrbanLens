@@ -26,6 +26,7 @@ import { ensureCampusWiki, expect, locationDataTest as test, openPrivatePin, rea
 import { hrshRoutes } from "../../lib/hrsh.js";
 import { recordMetric, type MetricTags } from "../../lib/metrics.js";
 import { waitForOrNull } from "../../lib/waiting.js";
+import { dismissBoundaryVotePrompt } from "../../lib/wiki.js";
 
 skipUnlessLocationDataEnabled();
 
@@ -56,6 +57,7 @@ function sourceItems(page: Page) {
 
 /** Clicks into the Article tab, then its Sources subtab - failing with a precise pointer at the UI contract if either is missing. */
 async function openSourcesPanel(page: Page, context: string): Promise<void> {
+    await dismissBoundaryVotePrompt(page);
     await page.locator('[data-tab="article"]').click();
     const tab = page.getByRole("tab", { name: "Sources" });
     await expect(

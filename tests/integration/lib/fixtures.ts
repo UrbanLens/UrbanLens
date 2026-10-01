@@ -238,7 +238,9 @@ export const test = base.extend<IntegrationOptions & IntegrationFixtures, Integr
         }
         // Only raised when the test otherwise passed. A test that already failed
         // has a better error, and burying it under a console dump helps nobody.
-        if (testInfo.status === testInfo.expectedStatus) {
+        // A skipped test's status equals its expected status too, and raising
+        // there turned a skip into a failure that its retry then called flaky.
+        if (testInfo.status === "passed") {
             throw new Error(`${report}\n\nSet test.use({ strictConsole: false }) or call guard.allow(...) if this is expected.`);
         }
         await testInfo.attach("page-problems.txt", { body: report, contentType: "text/plain" });
