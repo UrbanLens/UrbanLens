@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import {
     type FetchInit,
@@ -12,6 +12,8 @@ import {
 } from "./site-runtime";
 
 const shown: Array<[string, string]> = [];
+const realToastr = window.toastr;
+const realCsrfToken = window.csrftoken;
 
 beforeEach(() => {
     shown.length = 0;
@@ -24,6 +26,11 @@ beforeEach(() => {
     };
     document.head.innerHTML = "";
     document.body.innerHTML = "";
+});
+
+afterEach(() => {
+    window.toastr = realToastr;
+    window.csrftoken = realCsrfToken;
 });
 
 function stubFetch(result: Response | Error): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {

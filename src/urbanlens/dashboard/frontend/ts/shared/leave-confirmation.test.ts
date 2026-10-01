@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { installLeaveConfirmation } from "./leave-confirmation";
 
@@ -16,6 +16,11 @@ function stubConfirm(answer: boolean): ReturnType<typeof mock> {
     window.confirmDialog = fn as unknown as typeof window.confirmDialog;
     return fn;
 }
+
+const realConfirm = window.confirm;
+const realLocation = window.location;
+/** Where the guard sent the page; a real navigation would replace the DOM every later test file shares. */
+let navigations: string[] = [];
 
 /** Every guard ever installed, so previous cases' guards can be torn down. */
 const installed: { armed: boolean }[] = [];
@@ -45,11 +50,19 @@ function link(html = '<a id="go" href="/elsewhere/">Elsewhere</a>'): HTMLElement
     return document.getElementById("go")!;
 }
 
-async function clickLink(el: HTMLElement, init: MouseEventInit = {}): Promise<MouseEvent> {
+/** Whether the guard stopped the click. The click is then cancelled either way, or happy-dom would follow the link. */
+async function clickLink(el: HTMLElement, init: MouseEventInit = {}): Promise<{ defaultPrevented: boolean }> {
     const event = new MouseEvent("click", { bubbles: true, cancelable: true, ...init });
+    let defaultPrevented = false;
+    const settle = (e: Event) => {
+        defaultPrevented = e.defaultPrevented;
+        e.preventDefault();
+    };
+    window.addEventListener("click", settle, { once: true });
     el.dispatchEvent(event);
+    window.removeEventListener("click", settle);
     await new Promise((resolve) => setTimeout(resolve, 5));
-    return event;
+    return { defaultPrevented };
 }
 
 function beforeUnload(): Event {
@@ -58,7 +71,21 @@ function beforeUnload(): Event {
     return event;
 }
 
+beforeEach(() => {
+    navigations = [];
+    const location = {
+        get href(): string {
+            return realLocation.href;
+        },
+        set href(url: string) {
+            navigations.push(url);
+        },
+    };
+    Object.defineProperty(window, "location", { value: location, configurable: true });
+});
+
 afterEach(() => {
+    Object.defineProperty(window, "location", { value: realLocation, configurable: true });
     // Unbind this case's listeners so `document`/`window` do not accumulate one per test, and disarm their flags so nothing lingering can.
     handles.splice(0).forEach((handle) => {
         handle.uninstall();
@@ -68,6 +95,7 @@ afterEach(() => {
     });
     document.body.innerHTML = "";
     delete window.confirmDialog;
+    window.confirm = realConfirm;
 });
 
 describe("when nothing is at stake", () => {
@@ -157,6 +185,7 @@ describe("after agreeing to leave", () => {
 
         await clickLink(link());
         expect(guard.onConfirmed).toHaveBeenCalled();
+        expect(navigations).toEqual(["https://urbanlens.test/elsewhere/"]);
     });
 
     test("a second link click is not challenged again", async () => {

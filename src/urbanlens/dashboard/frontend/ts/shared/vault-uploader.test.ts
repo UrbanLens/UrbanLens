@@ -28,6 +28,10 @@ let requests: Request[];
 let respond: (request: Request) => Response;
 const realFetch = globalThis.fetch;
 const realConfirm = window.confirm;
+const realToastr = window.toastr;
+const realCsrfToken = window.csrftoken;
+const realHtmx = window.htmx;
+const realOpenLightboxItem = window.galleryOpenLightboxItem;
 
 function file(name: string, type: string, size = 10): File {
     return new File([new Uint8Array(size)], name, { type });
@@ -99,6 +103,10 @@ beforeEach(() => {
 afterEach(() => {
     globalThis.fetch = realFetch;
     window.confirm = realConfirm;
+    window.toastr = realToastr;
+    window.csrftoken = realCsrfToken;
+    window.htmx = realHtmx;
+    window.galleryOpenLightboxItem = realOpenLightboxItem;
     document.body.innerHTML = "";
 });
 

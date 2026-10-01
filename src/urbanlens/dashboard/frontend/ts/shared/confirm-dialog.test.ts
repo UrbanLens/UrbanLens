@@ -34,6 +34,13 @@ async function clickWhenTitled(title: string, buttonId: string): Promise<void> {
     throw new Error(`dialog never showed "${title}"`);
 }
 
+const realFetch = globalThis.fetch;
+const realGlobals = {
+    confirmDialog: window.confirmDialog,
+    deletePinCascade: window.deletePinCascade,
+    urbanlensConfirmExternalLink: window.urbanlensConfirmExternalLink,
+};
+
 beforeEach(() => {
     document.body.innerHTML = DIALOG_MARKUP;
     resetConfirmDialogForTests();
@@ -42,6 +49,8 @@ beforeEach(() => {
 
 afterEach(() => {
     document.body.innerHTML = "";
+    globalThis.fetch = realFetch;
+    Object.assign(window, realGlobals);
 });
 
 describe("confirmDialog", () => {
