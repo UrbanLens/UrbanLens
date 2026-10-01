@@ -83,6 +83,18 @@ class _FutureLocationPanelSource(InfoPanelSource):
 class PlacementDeclarationTests(SimpleTestCase):
     """Each source declares its own placement; the controller holds no list of keys."""
 
+    def test_a_tabbed_panel_never_takes_its_cards_id(self) -> None:
+        """A tab's panel renders inside the card, so the same id twice is two elements answering to one."""
+        card_ids = {"property-records-section", "location-data-section", "pin-plugin-tabs-section"}
+        clashes = {
+            source.key: source.section_id
+            for source in panel_sources().values()
+            if isinstance(source, InfoPanelSource)
+            and source.placement != PanelPlacement.STANDALONE
+            and source.section_id in card_ids
+        }
+        self.assertEqual(clashes, {})
+
     def test_regional_sources_declare_regional(self) -> None:
         wrong = {
             key: _info_panel(key).placement

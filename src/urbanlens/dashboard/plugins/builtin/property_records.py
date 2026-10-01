@@ -590,7 +590,7 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
     cache_source = _CACHE_SOURCE
     #: A building pin stands on its site's parcel.
     site_level: ClassVar[bool] = True
-    section_id = "property-records-section"
+    section_id = "property-records-overview-section"
     icon = "home_work"
     title = "Property Records"
     placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
