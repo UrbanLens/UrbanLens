@@ -21,8 +21,9 @@ class ActiveOwnerOAuth2Validator(OAuth2Validator):
     A deactivated account cannot sign in, but a token it issued earlier is a way into the same account, and
     django-oauth-toolkit only checks a token's expiry and scope. This covers every entry point that validates
     through ``OAUTH2_PROVIDER["OAUTH2_VALIDATOR_CLASS"]``: the external API, media authentication and the token
-    endpoint. Sockets resolve tokens themselves (``websocket_auth``), and introspection reads the token row
-    (``controllers.oauth_introspect``).
+    endpoint. Sockets resolve tokens themselves (``websocket_auth``), introspection reads the token row
+    (``controllers.oauth_introspect``), and the device grant takes its account from the device row
+    (``oauth_device``).
     """
 
     def validate_grant_type(self, client_id: str, grant_type: str, client: Any, request: Any, *args: Any, **kwargs: Any) -> bool:

@@ -19454,6 +19454,9 @@ Fixed:
   token with no account, and an inactive account's authorization code.
 - `controllers.oauth_introspect.ActiveOwnerIntrospectTokenView` shadows the introspect route and reports a token
   inactive unless an active account owns it.
+- The device-code grant sets its account from the device row, past the validator, so
+  `services.auth.oauth_device.refuse_an_inactive_account` runs after the toolkit's own pre-token step
+  (`OAUTH_PRE_TOKEN_VALIDATION`).
 
 `tests/hypothesis/test_oauth_client_registration.py` and `test_inactive_owner_credentials.py` reproduce each attack.
 Applications registered through the open page before the fix are still in the database. Listing them on production

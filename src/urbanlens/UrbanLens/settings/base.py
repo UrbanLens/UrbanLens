@@ -8,7 +8,9 @@ from celery.schedules import crontab
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 from dotenv import find_dotenv, load_dotenv
+from oauth2_provider.utils import set_oauthlib_user_to_device_request_user
 
+from urbanlens.dashboard.services.auth.oauth_device import refuse_an_inactive_account
 from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS, environment_from_env
 from urbanlens.UrbanLens.settings._env import (
     deployment_settings_required,
@@ -1265,6 +1267,8 @@ SPECTACULAR_SETTINGS = {
 OAUTH2_PROVIDER = {
     "PKCE_REQUIRED": True,
     "OAUTH2_VALIDATOR_CLASS": "urbanlens.dashboard.services.auth.oauth_validator.ActiveOwnerOAuth2Validator",
+    # The toolkit's own step sets the device grant's account; the next refuses a deactivated one.
+    "OAUTH_PRE_TOKEN_VALIDATION": [set_oauthlib_user_to_device_request_user, refuse_an_inactive_account],
     # Custom scheme + loopback for native apps; https for future web clients.
     "ALLOWED_REDIRECT_URI_SCHEMES": ["https", "http", "urbanlens"],
     # Duplicates ApiKeyScope (settings load before models; tests assert parity).

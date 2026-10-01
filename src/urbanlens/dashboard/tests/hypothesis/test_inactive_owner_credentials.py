@@ -2,7 +2,7 @@
 
 Deactivation is how an account is suspended, and a session already ends with it. An OAuth token or an API key
 is a way into the same account, so each entry point that takes one refuses it once its owner is inactive: the
-external API, the token endpoint's refresh and code grants, token introspection, a socket's connect, and a socket
+external API, the token endpoint's refresh, code and device grants, token introspection, a socket's connect, and a socket
 already open.
 """
 
@@ -24,6 +24,7 @@ from model_bakery import baker
 from oauth2_provider.models import (
     get_access_token_model,
     get_application_model,
+    get_device_grant_model,
     get_grant_model,
     get_refresh_token_model,
 )
@@ -40,6 +41,7 @@ Application = get_application_model()
 AccessToken = get_access_token_model()
 RefreshToken = get_refresh_token_model()
 Grant = get_grant_model()
+DeviceGrant = get_device_grant_model()
 
 
 def _oauth_token(user: User, suffix: str, *, scope: str = "profile:read") -> tuple[AccessToken, RefreshToken]:
@@ -134,6 +136,46 @@ class OAuthOverHttpTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "invalid_grant")
+
+    def _device_token(self):
+        application = Application.objects.create(
+            name="Television",
+            user=self.user,
+            client_type=Application.CLIENT_PUBLIC,
+            authorization_grant_type=Application.GRANT_DEVICE_CODE,
+        )
+        device = DeviceGrant.objects.create(
+            user=self.user,
+            device_code="device-owner",
+            user_code="ABCD1234",
+            scope="profile:read",
+            expires=timezone.now() + timedelta(minutes=10),
+            status=DeviceGrant.AUTHORIZED,
+            client_id=application.client_id,
+        )
+        return self.client.post(
+            reverse("oauth2_provider:token"),
+            {
+                "grant_type": Application.GRANT_DEVICE_CODE,
+                "device_code": device.device_code,
+                "client_id": application.client_id,
+            },
+        )
+
+    def test_an_active_owners_approved_device_gets_a_token(self) -> None:
+        response = self._device_token()
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn("access_token", response.json())
+
+    def test_a_deactivated_owners_approved_device_gets_no_token(self) -> None:
+        _deactivate(self.user)
+
+        response = self._device_token()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "invalid_grant")
+        self.assertFalse(AccessToken.objects.filter(user=self.user).exclude(pk=self.access.pk).exists())
 
     def _introspect(self) -> dict:
         secret = "resource-server-secret"
