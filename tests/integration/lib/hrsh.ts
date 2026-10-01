@@ -97,8 +97,12 @@ export const NRHP_TITLE = "Hudson River State Hospital, Main Building";
 export const WIKIPEDIA_TITLE = "Hudson River State Hospital";
 export const WIKIPEDIA_URL_FRAGMENT = "wikipedia.org/wiki/Hudson_River_State_Hospital";
 
-/** The CRIS building nearest {@link COURTYARD_PIN}, which must be a building child pin rather than the parcel's alias. */
-export const BLDG45_NAME = "BLDG 45/MORTUARY & LAB (1896)";
+/**
+ * The CRIS building nearest {@link COURTYARD_PIN} (survey subject "BLDG 45/MORTUARY & LAB (1896)"), which must be a
+ * building child pin rather than the parcel's alias. Its pin takes the building's public name; the number and year
+ * are separate fields.
+ */
+export const BLDG45_NAME = "MORTUARY & LAB";
 
 /** The service road Nominatim reverse-geocodes {@link COURTYARD_PIN} to (OSM way/352353227). Never a name for the place. */
 export const COURTYARD_ROAD = "Courtyard Drive";

@@ -4010,3 +4010,31 @@ missing. Raising the in-request timeout would hold a web worker for the provider
 fetch to a worker (the view already answers 503 and the page retries while a copy is pending) would not.
 
 Not decided: whether slow first fetches move to a worker for every source or only for sources known to be slow.
+
+## P181 — A building's mirrored wiki can take over another account's root pin standing at the building's point
+
+`id: P181` · `status: open` · `updated: 2026-10-01` · `found by: hrsh-naming.spec.ts (courtyard) on v080e2e, 2026-10-01`
+
+The HRSH courtyard pin (e2e-neighbour, 41.73266, -73.92736, the P145 point) now reads a wiki titled
+"Kirkbride (Admin Building)", and the pin itself was retyped `building`. On v080e2e:
+
+- 03:27:07: the neighbour's root pin creates Location 393; its own wiki is queued (`ensure_wiki_for_location`).
+- 03:27:26: the campus sweep creates building place 483 for OSM relation 10813427 (Kirkbride), with no geometry.
+- 03:27:27: `BuildingNester._place_wiki` (`services/pins/pin_restructure.py`) picks Kirkbride's point, which
+  quantizes to Location 393. `_location_for_child_wiki` (`controllers/detail_pins.py`) treats a point as taken
+  only when a wiki stands there, and the neighbour's wiki did not exist yet. So it `attach_location`s 393 to
+  place 483 and creates the building's wiki on it.
+
+Kirkbride's footprint has its courtyards as holes, and its OSM centre falls in one, which is where the pin is.
+Containment, asked again, answers the parcel (`Place.objects.resolve_for_point` → place 50). Both points still
+share the property; `hrsh-naming.spec.ts`'s "different properties" message is wrong about the cause.
+
+Three things went wrong, and they may want separate fixes:
+
+1. A point holding someone's root pin counts as free for a building's wiki.
+2. `attach_location` overrides containment for a Location other pins stand on; the code's own reason
+   ("this import knows which structure the marker is for") holds for a marker it creates, not for one it finds.
+3. Place 483 was stored with no geometry, so nothing could ever contain the point; whether the relation's
+   multipolygon was dropped on purpose is not established.
+
+Not decided: whether a building's wiki skips a point another pin holds, or the building gets a fresh point.
