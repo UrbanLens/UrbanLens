@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P179` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N32`
+**Next free id:** `P180` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N32`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -214,3 +214,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N31 | current | 2026-09-29 | Decisions agents made without Jess's input (deletions, caps, throttles, refusals, policy values, N30 "Kept"), awaiting her review | [`docs/notes/agent-decisions-awaiting-review.md`](notes/agent-decisions-awaiting-review.md) |
 | X31 | holds | 2026-09-30 | One chat message costs ~30-60 ms of CPU and ~25 queries where it is handled, so one sender saturates the single daphne process at ~15-30 messages/s; that, not notifications, is the DoS threshold; chat now allows a burst of 30 then 4/s | [`docs/notes/chat-message-cost-measured.md`](notes/chat-message-cost-measured.md) |
 | P177 | open | 2026-09-30 | When the sign-in page cannot fetch an account's sign-in parameters, it submits the raw password | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P179 | open | 2026-10-01 | `panel_fetch`'s threads pool enforces none of its tasks' declared soft or hard time limits | [`docs/PROBLEMS.md`](PROBLEMS.md) |

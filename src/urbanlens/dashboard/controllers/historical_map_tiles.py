@@ -112,12 +112,13 @@ class HistoricalMapTileView(LoginRequiredMixin, View):
                 return HttpResponse(status=503, headers={"Retry-After": "1"})
             try:
                 status, body, content_type = RedataHistoricalMapsGateway().download_tile(georeference_uuid, z, x, y)
+            except RequestCancelledError as exc:
+                # Rate-limited or switched off: one per tile while panning, so not a warning. First, because it is
+                # also a GatewayRequestError.
+                logger.debug("%s fetch refused: %s", label, exc)
+                return HttpResponse(status=503)
             except (LocationContextUnavailableError, GatewayRequestError, OSError) as exc:
                 logger.warning("%s fetch failed: %s", label, exc)
-                return HttpResponse(status=503)
-            except RequestCancelledError as exc:
-                # Rate-limited or switched off: one per tile while panning, so not a warning.
-                logger.debug("%s fetch refused: %s", label, exc)
                 return HttpResponse(status=503)
 
         if status == 200:

@@ -158,3 +158,23 @@ class AHistoricalOverlayTileIsNeverADocumentTests(_TileCase):
         responses, _download = self._serve(b"\x89PNG\r\n\x1a\n", "image/png")
 
         self.assertEqual(responses[0]["X-Content-Type-Options"], "nosniff")
+
+
+class AHistoricalTileRefusalIsNotAWarningTests(_TileCase):
+    """A rate-limited or disabled upstream refuses once per tile while the map pans; that is routine, not a fault."""
+
+    def test_a_refused_fetch_answers_503_without_a_warning(self) -> None:
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
+        url = reverse(
+            "map.historical_tiles",
+            kwargs={"georeference_uuid": "00000000-0000-4000-8000-000000000000", "z": 12, "x": 1204, "y": 1539},
+        )
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_HISTORICAL_GATEWAY}.download_tile", side_effect=RateLimitExceededError("redata")),
+            self.assertNoLogs("urbanlens.dashboard.controllers.historical_map_tiles", level="WARNING"),
+        ):
+            response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 503)
