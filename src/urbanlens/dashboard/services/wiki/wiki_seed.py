@@ -91,6 +91,28 @@ def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
     return article
 
 
+def seed_pin_from_cached_wikipedia(pin: Pin) -> None:
+    """Give a pin the article and link its location's cached Wikipedia match offers.
+
+    Called only for the pin owner's own activity: a match another account's lookup cached reaches
+    this pin when its owner next opens it.
+
+    Args:
+        pin: The pin to seed.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.services.locations.external_links import add_pin_link
+
+    if pin.location_id is None:
+        return
+    cached = LocationCache.objects.filter(location_id=pin.location_id, source=_WIKIPEDIA_CACHE_SOURCE).first()
+    if cached is None or not (cached.data or {}).get("title"):
+        return
+    seed_pin_article_from_wikipedia(pin)
+    if url := cached.data.get("url"):
+        add_pin_link(pin, url, "Wikipedia")
+
+
 def _seed_content_for_location(location: Location) -> str | None:
     """Build seed-ready Markdown from the location's cached Wikipedia match, if any.
 

@@ -249,11 +249,15 @@ def classify_building_pin_type(target: Pin | Wiki) -> bool:
     return True
 
 
-def reclassify_markers_on_place(place) -> int:
-    """Re-derive the cached scope of every marker standing on a place.
+def reclassify_markers_on_place(place, *, owner=None) -> int:
+    """Re-derive the cached scope of the wikis standing on a place, and of *owner*'s pins there.
+
+    Another account's pins are never retyped from here: shared place data does not write to a private pin.
+    Its owner's next visit re-derives it (:func:`rederive_pin_type`).
 
     Args:
         place: The place whose markers to re-derive.
+        owner: The profile whose own action changed the place, if any.
 
     Returns:
         How many pins and wikis were retyped."""
@@ -268,7 +272,35 @@ def reclassify_markers_on_place(place) -> int:
         return 0
 
     scoped = {PinType.LOCATION_MARKER, PinType.PARCEL, PinType.BUILDING}
-    retyped = 0
-    retyped += Pin.objects.filter(location__place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied).update(pin_type=implied)
-    retyped += Wiki.objects.filter(place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied).update(pin_type=implied)
-    return retyped
+    wikis = Wiki.objects.filter(place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied)
+    pins = Pin.objects.filter(profile=owner, location__place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied) if owner is not None else Pin.objects.none()
+    if implied == PinType.PARCEL:
+        # The parcel's own buildings - see implied_pin_type.
+        wikis = wikis.exclude(pin_type=PinType.BUILDING, parent_wiki__isnull=False)
+        pins = pins.exclude(pin_type=PinType.BUILDING, parent_pin__isnull=False)
+    return wikis.update(pin_type=implied) + pins.update(pin_type=implied)
+
+
+def rederive_pin_type(pin: Pin) -> bool:
+    """Store the type an owner's pin now reads as, which place changes since its last visit may have moved.
+
+    A stored building is never demoted to a plain marker: it records a footprint under the pin, and its parent's
+    building count reads it.
+
+    Args:
+        pin: The pin, being opened by its owner.
+
+    Returns:
+        True when the stored type changed."""
+    from urbanlens.dashboard.models.pin.model import Pin, PinType
+    from urbanlens.dashboard.services.places.scope import effective_pin_type
+
+    scoped = {PinType.LOCATION_MARKER, PinType.PARCEL, PinType.BUILDING}
+    if pin.pin_type_is_user_provided or pin.pin_type not in scoped:
+        return False
+    implied = effective_pin_type(pin)
+    if implied == pin.pin_type or implied not in scoped or (pin.pin_type == PinType.BUILDING and implied == PinType.LOCATION_MARKER):
+        return False
+    Pin.objects.filter(pk=pin.pk).update(pin_type=implied)
+    pin.pin_type = implied
+    return True

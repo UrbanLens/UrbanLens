@@ -578,10 +578,11 @@ class BuildingNester:
         """Re-derive the marker types on the parcel and every building place."""
         from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
 
+        owner = self.pin.profile
         if (parcel := self.parcel()) is not None:
-            reclassify_markers_on_place(parcel)
+            reclassify_markers_on_place(parcel, owner=owner)
         for place in {place.pk: place for place in self.places().values()}.values():
-            reclassify_markers_on_place(place)
+            reclassify_markers_on_place(place, owner=owner)
 
     # Wikis
 
@@ -653,7 +654,6 @@ class BuildingNester:
         from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.places.resolution import attach_location
 
         for latitude, longitude in self.points(cluster):
             try:
@@ -664,8 +664,6 @@ class BuildingNester:
                     continue
                 # Usually the root wiki a building pin's own save queued before its child wiki existed.
                 return self._adopt(occupant, parent, cluster, campus, place), False
-            if place is not None:
-                attach_location(location, place)
             wiki = Wiki.objects.create(
                 # created_by unset: mirrored from building data, not placed by anyone - which is what lets a
                 # concealed viewer keep seeing them.
@@ -728,14 +726,12 @@ class BuildingNester:
             Position to the pin created for it.
         """
         from urbanlens.dashboard.services.pins.building_clusters import match_clusters
-        from urbanlens.dashboard.services.places.resolution import attach_location
 
         wikis = wikis or {}
         existing: list[Pin | SweptBuilding] = [*building_markers(self.pin.descendants().select_related("location")), *swept]
         matched, _unmatched = match_clusters(self.clusters, existing)
         pins: dict[int, Pin] = {index: marker for index, marker in matched.items() if isinstance(marker, Pin)}
         created: dict[int, Pin] = {}
-        places = self.places()
         with transaction.atomic():
             for index, cluster in enumerate(self.clusters):
                 if index in matched or index not in wanted:
@@ -744,10 +740,6 @@ class BuildingNester:
                 if location is None:
                     logger.debug("create_pins: every point on building %s already carries one of this profile's pins", sorted(cluster.refs))
                     continue
-                if (place := places.get(index)) is not None and location.place_id != place.pk:
-                    # Attached directly rather than by containment: this import knows which structure the marker
-                    # is for, and the marker can legitimately fall on a smaller overlapping footprint.
-                    attach_location(location, place)
                 parent_index = self.index_of(cluster.parent)
                 parent = pins.get(parent_index, self.pin) if parent_index is not None else self.pin
                 child = Pin.objects.create(

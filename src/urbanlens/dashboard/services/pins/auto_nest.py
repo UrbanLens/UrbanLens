@@ -190,6 +190,6 @@ def _refresh_property_names(pin: Pin) -> None:
     if pin.location is None:
         return
     try:
-        update_location_name_from_external_sources(pin.location)
+        update_location_name_from_external_sources(pin.location, profile=pin.profile)
     except Exception:
         logger.exception("auto_nest: name refresh failed for location %s", pin.location_id)

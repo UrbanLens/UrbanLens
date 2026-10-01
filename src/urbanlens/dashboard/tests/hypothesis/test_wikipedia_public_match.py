@@ -183,7 +183,7 @@ class PrefetchFindsTheArticleForACoordinateOnlyPinTests(TestCase):
             ),
             self.captureOnCommitCallbacks(execute=True),
         ):
-            tasks.prefetch_location_external_data(self.location.pk, profile_id=self.profile.pk)
+            tasks.prefetch_location_external_data(self.location.pk, profile_id=self.profile.pk, pin_id=self.pin.pk)
 
     def test_the_article_is_matched_and_names_the_wiki_and_location(self) -> None:
         self._prefetch()

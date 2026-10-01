@@ -14,7 +14,7 @@ from django.db import transaction
 from django.db.models import Q, QuerySet
 
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.place.model import Place, PlaceStatus, implausible_area_q
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.places import lineage, resolution
@@ -99,7 +99,6 @@ def detach_oversized_place(place: Place) -> DetachOutcome:
     for location in Location.objects.filter(pk__in=location_ids).select_related("place"):
         resolution.resolve_location_place(location)
         implied = pin_type_for_place(location.place) or PinType.LOCATION_MARKER
-        Pin.objects.filter(location=location, pin_type_is_user_provided=False, pin_type__in=_SCOPED_PIN_TYPES).exclude(pin_type=implied).update(pin_type=implied)
         Wiki.objects.filter(location=location, pin_type_is_user_provided=False, pin_type__in=_SCOPED_PIN_TYPES).exclude(pin_type=implied).update(pin_type=implied)
     outcome.locations = len(location_ids)
     outcome.unplaced = Location.objects.filter(pk__in=location_ids, place__isnull=True).update(place_resolved_at=None)

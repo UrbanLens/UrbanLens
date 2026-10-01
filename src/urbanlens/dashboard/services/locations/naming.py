@@ -554,24 +554,24 @@ def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
     return changed
 
 
-def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) -> bool:
-    """Persist external name candidates as official PinAlias rows on every pin at this location.
-    A Location can have several Pins (one per user who's pinned it), so this attaches the same candidate set to each of them independently.
+def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate], profile: Profile | None) -> bool:
+    """Persist external name candidates as official PinAlias rows on one account's pins at this location.
 
     Args:
         location: The location whose pins should receive aliases; skipped when unsaved (no pins can exist yet).
         candidates: Cleaned candidates to persist.
+        profile: The account whose own activity this is; other accounts' pins are never written. None writes no pin.
 
     Returns:
         True when at least one alias row was created."""
-    if location is None or not getattr(location, "pk", None):
+    if profile is None or location is None or not getattr(location, "pk", None):
         return False
     from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
     from urbanlens.dashboard.services.locations.name_tiers import aliasable
 
     candidates = [candidate for candidate in candidates if aliasable(candidate.tier)]
-    pins = list(location.pins.all())
+    pins = list(location.pins.filter(profile=profile))
     if not pins or not candidates:
         return False
 
@@ -598,17 +598,18 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
     return changed
 
 
-def _prune_inadmissible_aliases(location: Location, wiki, rejected: Sequence[NameCandidate]) -> bool:
+def _prune_inadmissible_aliases(location: Location, wiki, rejected: Sequence[NameCandidate], profile: Profile | None) -> bool:
     """Remove official aliases automation added that the naming rules no longer admit.
 
-    A building's name on a campus and a road's name are pruned from the wiki and the location's pins.
-    A person's alias (``source="user"``) and the wiki's current name are never touched, and nothing is
+    A building's name on a campus and a road's name are pruned from the wiki and from ``profile``'s pins at the
+    location. A person's alias (``source="user"``) and the wiki's current name are never touched, and nothing is
     tombstoned: the name comes back if it becomes admissible, e.g. when a parcel turns out to hold one building.
 
     Args:
         location: The location whose pins to prune.
         wiki: The wiki its names feed, or None.
         rejected: Candidates the rules turned away.
+        profile: The account whose own activity this is; other accounts' pins are never pruned. None prunes no pin.
 
     Returns:
         True when any alias was removed.
@@ -627,7 +628,8 @@ def _prune_inadmissible_aliases(location: Location, wiki, rejected: Sequence[Nam
     removed = 0
     if wiki is not None and getattr(wiki, "pk", None):
         removed += WikiAlias.objects.filter(pk__in=_doomed(WikiAlias.objects.filter(wiki=wiki))).delete()[0]
-    removed += PinAlias.objects.filter(pk__in=_doomed(PinAlias.objects.filter(pin__location=location))).delete()[0]
+    if profile is not None:
+        removed += PinAlias.objects.filter(pk__in=_doomed(PinAlias.objects.filter(pin__location=location, pin__profile=profile))).delete()[0]
     return bool(removed)
 
 
@@ -708,11 +710,12 @@ def _retire_rejected_name(location: Location, wiki, rejected: Sequence[NameCandi
     return True, wiki_renamed
 
 
-def persist_official_aliases_for_location(location: Location) -> bool:
-    """Backfill official aliases for a location's wiki and pins from cached candidates.
+def persist_official_aliases_for_location(location: Location, *, profile: Profile | None = None) -> bool:
+    """Backfill official aliases for a location's wiki, and ``profile``'s pins there, from cached candidates.
 
     Args:
         location: The location whose wiki and pins should receive official aliases.
+        profile: The account whose pins to backfill; None backfills only the wiki.
 
     Returns:
         True when at least one alias row was created or pruned."""
@@ -721,8 +724,8 @@ def persist_official_aliases_for_location(location: Location) -> bool:
     wiki = wiki_named_by_location(location)
     candidates, rejected = _gather_candidates(location)
     changed = _add_wiki_aliases(wiki, candidates)
-    changed = _add_pin_aliases(location, candidates) or changed
-    return _prune_inadmissible_aliases(location, wiki, _alias_rejects(candidates, rejected)) or changed
+    changed = _add_pin_aliases(location, candidates, profile) or changed
+    return _prune_inadmissible_aliases(location, wiki, _alias_rejects(candidates, rejected), profile) or changed
 
 
 def update_location_name_from_external_sources(
@@ -739,7 +742,7 @@ def update_location_name_from_external_sources(
         location: The location to refresh.
         extra_candidates: Optional ``(source, raw_value)`` pairs considered ahead of plugin candidates.
         save: Whether to persist the changes; False computes without writing.
-        profile: The profile whose action triggered this refresh, if any - see :func:`~urbanlens.dashboard.services.locations.name_resolution.default_name_resolver`.
+        profile: The profile whose action triggered this refresh, if any. Only its pins' aliases are written.
 
     Returns:
         True when the location name, wiki name, or alias list changed."""
@@ -751,7 +754,7 @@ def update_location_name_from_external_sources(
     candidates += _property_candidates(location, wiki, candidates, rejected)
 
     aliases_changed = _add_wiki_aliases(wiki, candidates)
-    aliases_changed = _add_pin_aliases(location, candidates) or aliases_changed
+    aliases_changed = _add_pin_aliases(location, candidates, profile) or aliases_changed
 
     resolved = default_name_resolver(profile, location=location).resolve(candidates, location)
     changed_fields: set[str] = set()
@@ -770,6 +773,6 @@ def update_location_name_from_external_sources(
         if official_cleared:
             changed_fields.add("official_name")
     if save:
-        aliases_changed = _prune_inadmissible_aliases(location, wiki, _alias_rejects(candidates, rejected)) or aliases_changed
+        aliases_changed = _prune_inadmissible_aliases(location, wiki, _alias_rejects(candidates, rejected), profile) or aliases_changed
 
     return bool(changed_fields) or wiki_changed or aliases_changed

@@ -383,24 +383,32 @@ class UpdateLocationNameResolutionTests(TestCase):
         self.assertEqual(alias.kind, "official")
         self.assertEqual(alias.source, "wikipedia")
 
-    def test_pin_at_the_location_also_receives_an_official_alias(self) -> None:
-        """Regression guard: name providers used to populate WikiAlias only, never PinAlias, despite update_location_name_from_external_sources' own docstring claiming otherwise for both."""
+    def test_the_acting_accounts_pin_also_receives_an_official_alias(self) -> None:
         loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.201000", lng="-73.201000")
         pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
-            self.assertTrue(update_location_name_from_external_sources(loc))
+            self.assertTrue(update_location_name_from_external_sources(loc, profile=pin.profile))
         alias = pin.aliases.get(name="Old Mill")
         self.assertEqual(alias.kind, "official")
         self.assertEqual(alias.source, "wikipedia")
 
-    def test_every_pin_at_a_shared_location_gets_the_alias(self) -> None:
-        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.202000", lng="-73.202000")
-        pin_a: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
-        pin_b: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+    def test_another_accounts_pin_at_a_shared_location_is_left_alone(self) -> None:
+        loc, wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.202000", lng="-73.202000")
+        mine: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+        theirs: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+        with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
+            update_location_name_from_external_sources(loc, profile=mine.profile)
+        self.assertTrue(mine.aliases.filter(name="Old Mill").exists())
+        self.assertTrue(wiki.aliases.filter(name="Old Mill").exists())
+        self.assertFalse(theirs.aliases.exists())
+
+    def test_a_refresh_nobody_triggered_writes_no_pin(self) -> None:
+        loc, wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.202500", lng="-73.202500")
+        pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
             update_location_name_from_external_sources(loc)
-        self.assertTrue(pin_a.aliases.filter(name="Old Mill").exists())
-        self.assertTrue(pin_b.aliases.filter(name="Old Mill").exists())
+        self.assertTrue(wiki.aliases.filter(name="Old Mill").exists())
+        self.assertFalse(pin.aliases.exists())
 
     def test_no_pins_at_the_location_is_not_an_error(self) -> None:
         loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.203000", lng="-73.203000")
@@ -416,7 +424,7 @@ class UpdateLocationNameResolutionTests(TestCase):
         pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
         PinAlias.objects.create(pin=pin, name="Old Mill", kind=AliasType.NICKNAME, source="user")
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
-            update_location_name_from_external_sources(loc)
+            update_location_name_from_external_sources(loc, profile=pin.profile)
         alias = pin.aliases.get(name="Old Mill")
         self.assertEqual(alias.kind, "nickname")
         self.assertEqual(alias.source, "user")

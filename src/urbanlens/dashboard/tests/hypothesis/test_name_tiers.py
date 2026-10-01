@@ -317,7 +317,7 @@ class AliasRuleTests(_Fixture):
         LocationCache.set(
             self.location, "wikipedia", {"title": _WIKIPEDIA, "url": "https://en.wikipedia.org/wiki/x"}, query_key="q"
         )
-        update_location_name_from_external_sources(self.location)
+        update_location_name_from_external_sources(self.location, profile=self.pin.profile)
         aliases = self._wiki_aliases()
         self.assertIn(_NRHP, aliases)
         self.assertIn(_WIKIPEDIA, aliases)
@@ -334,7 +334,7 @@ class AliasRuleTests(_Fixture):
         PinAlias.objects.create(pin=self.pin, name=_ROAD, kind=AliasType.OFFICIAL, source="wiki_sync")
         self._parcel(buildings=42)
         self._register(contains=True)
-        update_location_name_from_external_sources(self.location)
+        update_location_name_from_external_sources(self.location, profile=self.pin.profile)
         self.assertNotIn(_BLDG45, self._wiki_aliases())
         self.assertNotIn(_ROAD, self._wiki_aliases())
         self.assertFalse(PinAlias.objects.filter(pin=self.pin, name__in=[_BLDG45, _ROAD]).exists())
@@ -342,7 +342,7 @@ class AliasRuleTests(_Fixture):
     def test_a_persons_alias_is_never_pruned(self) -> None:
         PinAlias.objects.create(pin=self.pin, name=_BLDG45, kind=AliasType.ALTERNATE, source="user")
         self._parcel(buildings=42)
-        update_location_name_from_external_sources(self.location)
+        update_location_name_from_external_sources(self.location, profile=self.pin.profile)
         self.assertTrue(PinAlias.objects.filter(pin=self.pin, name=_BLDG45).exists())
 
 
@@ -415,10 +415,10 @@ class SecondRootPinOnThePropertyTests(_Fixture):
             Pin, profile=self.other_profile, location=self.courtyard, name="notes", parent_pin=None
         )
 
-    def test_the_property_wikis_register_title_reaches_the_other_pin(self) -> None:
+    def test_the_property_wikis_register_title_reaches_the_other_pin_on_its_owners_refresh(self) -> None:
         self._register(contains=True)
         update_location_name_from_external_sources(self.location)
-        update_location_name_from_external_sources(self.courtyard)
+        update_location_name_from_external_sources(self.courtyard, profile=self.other_profile)
         self.courtyard.refresh_from_db()
         self.assertEqual(self.courtyard.official_name, _NRHP)
         self.assertIn(_NRHP, set(PinAlias.objects.filter(pin=self.courtyard_pin).values_list("name", flat=True)))

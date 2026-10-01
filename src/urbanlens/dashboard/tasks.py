@@ -908,24 +908,17 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
 
 
 def _seed_new_pin_from_cached_wikipedia(location: Location, pin_id: int) -> None:
-    """Give a new pin the article and link its location's cached Wikipedia match would have given it.
+    """Give a new pin the article and link its location's cached Wikipedia match offers.
 
     Args:
         location: The pin's location.
         pin_id: PK of the new pin.
     """
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.locations.external_links import add_pin_link
-    from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_article_from_wikipedia
+    from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_from_cached_wikipedia
 
-    pin = Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()
-    cached = LocationCache.objects.filter(location=location, source="wikipedia").first()
-    if pin is None or cached is None or not (cached.data or {}).get("title"):
-        return
-    seed_pin_article_from_wikipedia(pin)
-    if url := cached.data.get("url"):
-        add_pin_link(pin, url, "Wikipedia")
+    if (pin := Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()) is not None:
+        seed_pin_from_cached_wikipedia(pin)
 
 
 @dataclass

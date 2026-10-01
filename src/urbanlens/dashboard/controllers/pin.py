@@ -36,10 +36,12 @@ from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_if_
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.core.request_body import drf_data_object
+from urbanlens.dashboard.services.locations.site_scope import rederive_pin_type
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
 from urbanlens.dashboard.services.search.search import format_search_date, search_web
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.dashboard.services.security.throttle import Rate
+from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_from_cached_wikipedia
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -169,6 +171,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         pin.backfill_wiki_link_slugs()
         pin.mark_viewed()
+        # What other accounts' lookups found reaches the pin only on its owner's own visit.
+        rederive_pin_type(pin)
+        seed_pin_from_cached_wikipedia(pin)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 

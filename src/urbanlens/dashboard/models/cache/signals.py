@@ -39,11 +39,11 @@ def remember_previous_wikipedia_title(sender: type[LocationCache], instance: Loc
 
 @receiver(post_save, sender=LocationCache, dispatch_uid="location_cache_seed_articles_from_wikipedia")
 def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance: LocationCache, created: bool = False, **kwargs) -> None:
-    """Seed articles, add the Wikipedia link and refresh names whenever a location's Wikipedia match is (re)cached.
+    """Seed the wiki's article, add its Wikipedia link and refresh names whenever a location's Wikipedia match is (re)cached.
 
-    The wiki's article is seeded on every write (a no-op once one exists). Each pin's article is
-    seeded only when this write turns a miss into a match, so an article an owner deleted is not
-    recreated by a routine refresh. A new title also drops article images cached for an older one.
+    The wiki's article is seeded on every write (a no-op once one exists). A new title also drops article
+    images cached for an older one. Pins take the match only from their owner's own activity, through
+    :func:`~urbanlens.dashboard.services.wiki.wiki_seed.seed_pin_from_cached_wikipedia`.
 
     Args:
         sender: The model class.
@@ -59,27 +59,20 @@ def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance
 
     def _run() -> None:
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.locations.external_links import add_pin_link, add_wiki_link
+        from urbanlens.dashboard.services.locations.external_links import add_wiki_link
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
-        from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
+        from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
 
         location = instance.location
         url = (instance.data or {}).get("url") or ""
-        link_name = "Wikipedia"
 
         if title and title != previous_title:
             LocationCache.objects.filter(location=location, source=_WIKIPEDIA_MEDIA).exclude(query_key=title).delete()
 
         seed_wiki_article_from_wikipedia(location)
 
-        if title and not previous_title:
-            for pin in location.pins.select_related("profile").all():
-                seed_pin_article_from_wikipedia(pin)
-                if url:
-                    add_pin_link(pin, url, link_name)
-
         if url and (wiki := Wiki.objects.existing_for_location(location)) is not None:
-            add_wiki_link(wiki, url, link_name)
+            add_wiki_link(wiki, url, "Wikipedia")
 
         if title:
             try:

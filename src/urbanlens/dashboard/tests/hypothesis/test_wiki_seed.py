@@ -19,6 +19,7 @@ from urbanlens.dashboard.services.wiki.wiki_seed import (
     _extract_html_to_markdown,
     _infobox_markdown,
     seed_pin_article_from_wikipedia,
+    seed_pin_from_cached_wikipedia,
     seed_wiki_article_from_wikipedia,
 )
 
@@ -330,7 +331,7 @@ class SeedPinArticleFromWikipediaTests(TestCase):
 
 
 class WikipediaCacheSignalTriggersSeedingTests(TestCase):
-    """models.cache.signals: a fresh "wikipedia" LocationCache write seeds the wiki AND every pin's article."""
+    """models.cache.signals: a "wikipedia" LocationCache write seeds the wiki, and leaves every pin to its owner."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -345,53 +346,37 @@ class WikipediaCacheSignalTriggersSeedingTests(TestCase):
 
         self.assertTrue(Article.objects.filter(wiki=wiki).exists())
 
-    def test_caching_a_matched_article_seeds_every_pin_at_the_location(self) -> None:
+    def test_caching_a_matched_article_leaves_every_pin_alone(self) -> None:
         location = _location()
-        pin_a = baker.make(Pin, profile=self.profile, location=location)
-        other_profile = baker.make(User).profile
-        pin_b = baker.make(Pin, profile=other_profile, location=location)
+        pins = [
+            baker.make(Pin, profile=self.profile, location=location),
+            baker.make(Pin, profile=baker.make(User).profile, location=location),
+        ]
 
         with self.captureOnCommitCallbacks(execute=True):
             LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
 
-        self.assertTrue(Article.objects.filter(pin=pin_a).exists())
-        self.assertTrue(Article.objects.filter(pin=pin_b).exists())
-
-    def test_pin_owner_opted_out_is_skipped_but_others_still_seed(self) -> None:
-        self.profile.auto_create_pin_article_from_wikipedia = False
-        self.profile.save(update_fields=["auto_create_pin_article_from_wikipedia"])
-        location = _location()
-        opted_out_pin = baker.make(Pin, profile=self.profile, location=location)
-        other_profile = baker.make(User).profile
-        opted_in_pin = baker.make(Pin, profile=other_profile, location=location)
-
-        with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
-
-        self.assertFalse(Article.objects.filter(pin=opted_out_pin).exists())
-        self.assertTrue(Article.objects.filter(pin=opted_in_pin).exists())
+        for pin in pins:
+            self.assertFalse(Article.objects.filter(pin=pin).exists())
+            self.assertFalse(pin.links.exists())
 
     def test_caching_a_no_match_result_does_not_create_an_article(self) -> None:
         location = _location()
         wiki = baker.make(Wiki, location=location)
-        pin = baker.make(Pin, profile=self.profile, location=location)
 
         with self.captureOnCommitCallbacks(execute=True):
             LocationCache.set(location, "wikipedia", {}, query_key="Some Query")
 
         self.assertFalse(Article.objects.filter(wiki=wiki).exists())
-        self.assertFalse(Article.objects.filter(pin=pin).exists())
 
     def test_other_cache_sources_do_not_trigger_seeding(self) -> None:
         location = _location()
         wiki = baker.make(Wiki, location=location)
-        pin = baker.make(Pin, profile=self.profile, location=location)
 
         with self.captureOnCommitCallbacks(execute=True):
             LocationCache.set(location, "nominatim", _ARTICLE_DATA)
 
         self.assertFalse(Article.objects.filter(wiki=wiki).exists())
-        self.assertFalse(Article.objects.filter(pin=pin).exists())
 
     def test_location_with_no_wiki_and_no_pins_does_not_crash(self) -> None:
         location = _location()
@@ -409,64 +394,80 @@ class WikipediaCacheSignalTriggersSeedingTests(TestCase):
         link = wiki.links.get(url=_ARTICLE_DATA["url"])
         self.assertEqual(link.name, "Wikipedia")
 
-    def test_caching_a_matched_article_adds_the_link_to_every_pin(self) -> None:
-        location = _location()
-        pin_a = baker.make(Pin, profile=self.profile, location=location)
-        other_profile = baker.make(User).profile
-        pin_b = baker.make(Pin, profile=other_profile, location=location)
-
-        with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
-
-        self.assertTrue(pin_a.links.filter(url=_ARTICLE_DATA["url"]).exists())
-        self.assertTrue(pin_b.links.filter(url=_ARTICLE_DATA["url"]).exists())
-
-    def test_pin_opted_out_of_article_seeding_still_gets_the_link(self) -> None:
-        """Link-adding is independent of the article auto-create opt-out."""
-        self.profile.auto_create_pin_article_from_wikipedia = False
-        self.profile.save(update_fields=["auto_create_pin_article_from_wikipedia"])
-        location = _location()
-        pin = baker.make(Pin, profile=self.profile, location=location)
-
-        with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
-
-        self.assertFalse(Article.objects.filter(pin=pin).exists())
-        self.assertTrue(pin.links.filter(url=_ARTICLE_DATA["url"]).exists())
-
     def test_no_match_result_does_not_add_a_link(self) -> None:
         location = _location()
         wiki = baker.make(Wiki, location=location)
-        pin = baker.make(Pin, profile=self.profile, location=location)
 
         with self.captureOnCommitCallbacks(execute=True):
             LocationCache.set(location, "wikipedia", {}, query_key="Some Query")
 
         self.assertEqual(wiki.links.count(), 0)
-        self.assertEqual(pin.links.count(), 0)
 
-    def test_link_is_not_duplicated_on_repeated_cache_writes(self) -> None:
-        location = _location()
-        pin = baker.make(Pin, profile=self.profile, location=location)
 
+class SeedPinFromCachedWikipediaTests(TestCase):
+    """The owner's own activity gives their pin what the location's cached match offers."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make(User).profile
+        self.location = _location()
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location)
+
+    def _cache(self, data: dict) -> None:
         with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
-        with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+            LocationCache.set(self.location, "wikipedia", data, query_key="Eighteenth District School")
 
-        self.assertEqual(pin.links.filter(url=_ARTICLE_DATA["url"]).count(), 1)
+    def test_a_match_gives_the_pin_its_article_and_link(self) -> None:
+        self._cache(_ARTICLE_DATA)
 
-    def test_a_previously_removed_link_is_not_recreated(self) -> None:
+        seed_pin_from_cached_wikipedia(self.pin)
+
+        self.assertTrue(Article.objects.filter(pin=self.pin).exists())
+        self.assertEqual(self.pin.links.get(url=_ARTICLE_DATA["url"]).name, "Wikipedia")
+
+    def test_an_owner_opted_out_of_articles_still_gets_the_link(self) -> None:
+        self.profile.auto_create_pin_article_from_wikipedia = False
+        self.profile.save(update_fields=["auto_create_pin_article_from_wikipedia"])
+        self._cache(_ARTICLE_DATA)
+
+        seed_pin_from_cached_wikipedia(Pin.objects.get(pk=self.pin.pk))
+
+        self.assertFalse(Article.objects.filter(pin=self.pin).exists())
+        self.assertTrue(self.pin.links.filter(url=_ARTICLE_DATA["url"]).exists())
+
+    def test_a_miss_gives_nothing(self) -> None:
+        self._cache({})
+
+        seed_pin_from_cached_wikipedia(self.pin)
+
+        self.assertFalse(Article.objects.filter(pin=self.pin).exists())
+        self.assertEqual(self.pin.links.count(), 0)
+
+    def test_seeding_twice_adds_one_link(self) -> None:
+        self._cache(_ARTICLE_DATA)
+
+        seed_pin_from_cached_wikipedia(self.pin)
+        seed_pin_from_cached_wikipedia(self.pin)
+
+        self.assertEqual(self.pin.links.filter(url=_ARTICLE_DATA["url"]).count(), 1)
+
+    def test_a_link_the_owner_removed_is_not_recreated(self) -> None:
         from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 
-        location = _location()
-        pin = baker.make(Pin, profile=self.profile, location=location)
-        PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LINK, value=_ARTICLE_DATA["url"])
+        PinAutoRemoval.objects.record(pin=self.pin, kind=AutoRemovalKind.LINK, value=_ARTICLE_DATA["url"])
+        self._cache(_ARTICLE_DATA)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+        seed_pin_from_cached_wikipedia(self.pin)
 
-        self.assertFalse(pin.links.filter(url=_ARTICLE_DATA["url"]).exists())
+        self.assertFalse(self.pin.links.filter(url=_ARTICLE_DATA["url"]).exists())
+
+    def test_a_match_replacing_an_earlier_miss_is_given(self) -> None:
+        self._cache({})
+        self._cache(_ARTICLE_DATA)
+
+        seed_pin_from_cached_wikipedia(self.pin)
+
+        self.assertTrue(Article.objects.filter(pin=self.pin).exists())
 
 
 class WikipediaMatchArrivingAfterAMissTests(TestCase):
@@ -477,26 +478,6 @@ class WikipediaMatchArrivingAfterAMissTests(TestCase):
         self.profile = baker.make(User).profile
         self.location = _location()
         LocationCache.set(self.location, "wikipedia", {}, query_key="")
-
-    def test_a_match_replacing_an_earlier_miss_seeds_every_pin(self) -> None:
-        pin = baker.make(Pin, profile=self.profile, location=self.location)
-
-        with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
-
-        self.assertTrue(Article.objects.filter(pin=pin).exists())
-        self.assertTrue(pin.links.filter(url=_ARTICLE_DATA["url"]).exists())
-
-    def test_rewriting_the_same_match_does_not_reseed_an_article_the_owner_deleted(self) -> None:
-        pin = baker.make(Pin, profile=self.profile, location=self.location)
-        with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
-        Article.objects.filter(pin=pin).delete()
-
-        with self.captureOnCommitCallbacks(execute=True):
-            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
-
-        self.assertFalse(Article.objects.filter(pin=pin).exists())
 
     def test_a_new_title_drops_article_images_cached_before_it(self) -> None:
         LocationCache.set(self.location, "wikipedia_media", {"items": []}, query_key="")

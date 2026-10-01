@@ -275,12 +275,11 @@ class LocationAliasNicknameTests(TestCase):
 
 
 class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
-    """persist_official_aliases_for_location() backfills PinAlias rows too, not just WikiAlias.
+    """persist_official_aliases_for_location() backfills the named account's PinAlias rows too, not just WikiAlias.
 
-    Regression coverage: it used to only call _add_wiki_aliases, so a pin whose location's external data was
-    cached by something other than that pin's own panel fetch (background enrichment, another user's pin at the
-    same location triggering the fetch first, ...) could go on showing no aliases indefinitely even after the
-    wiki for the same location had them."""
+    A pin whose location's names were cached by something other than its own panel fetch (background enrichment,
+    another account's pin at the same location) takes them when its owner opens the aliases panel.
+    """
 
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
@@ -302,11 +301,23 @@ class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
             "urbanlens.dashboard.services.locations.naming._gather_candidates",
             return_value=(self._candidates(), []),
         ):
-            changed = persist_official_aliases_for_location(self.location)
+            changed = persist_official_aliases_for_location(self.location, profile=self.profile)
 
         self.assertTrue(changed)
         self.assertTrue(self.wiki.aliases.filter(name="External Name").exists())
         self.assertTrue(self.pin.aliases.filter(name="External Name").exists())
+
+    def test_another_accounts_pin_is_left_alone(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import persist_official_aliases_for_location
+
+        theirs = baker.make(Pin, profile=baker.make("auth.User").profile, location=self.location, name=None)
+        with patch(
+            "urbanlens.dashboard.services.locations.naming._gather_candidates",
+            return_value=(self._candidates(), []),
+        ):
+            persist_official_aliases_for_location(self.location, profile=self.profile)
+
+        self.assertFalse(theirs.aliases.exists())
 
     def test_pin_alias_view_triggers_the_backfill(self) -> None:
         self.client.force_login(self.user)
@@ -316,7 +327,7 @@ class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
             response = self.client.get(reverse("pin.aliases", args=[self.pin.slug]))
 
         self.assertEqual(response.status_code, 200)
-        mocked.assert_called_once_with(self.location)
+        mocked.assert_called_once_with(self.location, profile=self.profile)
 
 
 class SharedAliasesExplainerDismissalTests(TestCase):

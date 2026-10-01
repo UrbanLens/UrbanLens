@@ -19376,3 +19376,36 @@ hook that loaded each building's card. `_child_buildings_section.html` and `_chi
 still render and are tested, and the expanded card names its building again (`c3b9b0abc`), but nothing
 on screen requests them. Either the section gets a trigger back on the parcel's pin page, or the
 section, card, their routes and tests are removed. Which one is a product decision.
+
+## RESOLVED 2026-10-01: Another account's campus sweep retyped a private pin and repointed its Location
+
+`id: P181` · `status: fixed` · `resolved: 2026-10-01`
+
+The HRSH courtyard pin (e2e-neighbour, 41.73266, -73.92736) was retyped `building` and read as Kirkbride after
+another account's campus sweep. Kirkbride's OSM centre falls in one of its courtyards, which is where the pin is.
+The sweep's `BuildingNester._place_wiki` created the building's wiki on that coordinate's Location and
+`attach_location`ed the Location to a building place that has no geometry, overriding containment's answer (the
+parcel). Then `reclassify_markers_on_place` retyped every pin on that place, whoever owned it.
+
+What was wrong was the writes to another account's data, not where the wiki stands. The original entry listed "a
+point holding someone's root pin counts as free for a building's wiki" as a fault. Jess corrected that: a wiki at a
+point where someone has a private pin is expected, points can carry many things, and skipping or refusing a point
+because of a private pin would tell the other account it is there.
+
+Fixed (ruled by Jess 2026-10-01: nothing on another account's pin changes; a derived type is re-derived on the
+owner's next visit; shared Location fields may fill in, but only by containment):
+
+- The sweep never points a Location at a place by fiat. A Location is placed by containment alone, whoever
+  stands on it, so whether another account has a pin there changes nothing the sweep does.
+- `reclassify_markers_on_place` retypes wikis and the acting account's pins only. `detach_oversized_place` retypes
+  no pins. The owner's visit stores the type the pin reads as (`site_scope.rederive_pin_type`).
+- A child typed as a building on a multi-building parcel keeps reading as a building
+  (`places/scope.implied_pin_type`), so the sweep's own building pins and wikis still read as buildings.
+- The same audit found other writes from one account's activity onto other accounts' pins: a Wikipedia match
+  seeded an article and a link on every pin at the location, and name refreshes added and pruned official
+  aliases on every pin there. Each now writes only the acting account's pins. Other pins take the match on their
+  owner's pin page and aliases panel.
+
+`tests/hypothesis/test_cross_user_pin_isolation.py` compares another account's pin, row for row, before and after
+each of these. `tests/integration/specs/api/cross-user-isolation.spec.ts` does the same end to end. The building
+place stored with no geometry is P182.

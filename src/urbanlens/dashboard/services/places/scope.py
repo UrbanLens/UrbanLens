@@ -114,6 +114,29 @@ def scope_badge(target: Pin | Wiki) -> dict[str, str]:
     return {"scope_type": scope, "scope_label": label, "scope_help": help_text}
 
 
+def implied_pin_type(target: Pin | Wiki) -> str | None:
+    """The type a marker's place implies for it, or None when the place implies nothing.
+
+    A child stored as a building on a multi-building parcel is one of that parcel's buildings. Its own building
+    place may have no footprint, and the shared Location is placed only by containment, so the parcel is often
+    the nearest place the coordinate knows.
+
+    Args:
+        target: The pin or wiki.
+
+    Returns:
+        A :class:`~urbanlens.dashboard.models.pin.model.PinType` value, or None.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin, PinType
+
+    place = target.location.place if target.location_id and target.location is not None else None
+    implied = pin_type_for_place(place)
+    is_child = (target.parent_pin_id if isinstance(target, Pin) else target.parent_wiki_id) is not None
+    if implied == PinType.PARCEL and target.pin_type == PinType.BUILDING and is_child:
+        return PinType.BUILDING
+    return implied
+
+
 def effective_pin_type(target: Pin | Wiki) -> str:
     """The type a pin or wiki actually reads as, user choice included.
 
@@ -128,8 +151,7 @@ def effective_pin_type(target: Pin | Wiki) -> str:
     if target.pin_type_is_user_provided:
         return target.pin_type
 
-    place = target.location.place if target.location_id and target.location is not None else None
-    if (implied := pin_type_for_place(place)) is not None:
+    if (implied := implied_pin_type(target)) is not None:
         return implied
 
     # Placeless: no provider knows this coordinate, so fall back to the shape
