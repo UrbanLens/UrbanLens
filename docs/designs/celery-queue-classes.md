@@ -106,7 +106,7 @@ problems on its first run is a check somebody switches off.
 | `classify_trivia_submission` | INTERACTIVE | a player is waiting on the verdict |
 | `detect_dm_address_mentions` | INTERACTIVE | message is being read now |
 | `dispatch_native_push` | INTERACTIVE | a person is waiting for the notification |
-| `enrich_wiki_location` | INTERACTIVE | on-demand enrichment; bulk when queued from a batch task (`services/core/celery.py::follow_on_queue`, P109) |
+| `enrich_wiki_location` | PANEL_FETCH | waits on Google, OSM and REData for up to four minutes; on the interactive pool four of them held every slot and new pins' wikis took over two minutes to appear (integration suite, 2026-10-01). Bulk when queued from a batch task (`services/core/celery.py::follow_on_queue`, P109) |
 | `ensure_wiki_for_location` | INTERACTIVE | on-demand; bulk when queued from a batch task (`follow_on_queue`) |
 | `escalate_overdue_checkins` | INTERACTIVE | safety: someone is overdue and help is being notified |
 | `fetch_panel_source` | INTERACTIVE | feeds a progress UI; PANEL_FETCH already exists for this and is not used |

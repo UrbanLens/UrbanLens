@@ -218,3 +218,19 @@ class SafetyOverridesTheBeatRuleTests(SimpleTestCase):
         for name in _BULK_TASKS:
             self.assertIn(name, tasks)
             self.assertEqual(str(tasks[name].queue), str(Queue.BULK), f"{name} is on {tasks[name].queue}")
+
+
+class UpstreamWorkStaysOffTheInteractivePoolTests(SimpleTestCase):
+    """A new pin's wiki is created on the interactive pool; enriching it waits on Google, OSM and REData for up to
+    four minutes. On one pool, four enrichments held every slot and new pins' wikis took over two minutes to appear
+    (the integration suite, 2026-10-01)."""
+
+    def test_wiki_enrichment_runs_on_the_upstream_pool(self) -> None:
+        from urbanlens.dashboard.tasks import enrich_wiki_location
+
+        self.assertEqual(str(enrich_wiki_location.queue), str(Queue.PANEL_FETCH))
+
+    def test_creating_the_wiki_stays_interactive(self) -> None:
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location
+
+        self.assertEqual(str(ensure_wiki_for_location.queue), str(Queue.INTERACTIVE))
