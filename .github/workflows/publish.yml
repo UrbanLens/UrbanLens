@@ -3,6 +3,13 @@ name: Publish Release Artifacts
 on:
   release:
     types: [published]
+  # Every push to main publishes :main and :sha-<7>, and the infrastructure repo
+  # deploys it: UrbanLens/infrastructure's app-image.yml follows :main, pins the
+  # matching :sha-<7>, and sends it through its CI-gated deploy branch to both
+  # k3s sites. Nothing between this push and production is a human step.
+  # UrbanLens/infrastructure docs/runbooks/app-deploys.md has the whole path.
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
@@ -36,7 +43,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name || inputs.ref || github.ref }}
+          ref: ${{ github.event.release.tag_name || inputs.ref || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -65,11 +72,13 @@ jobs:
   publish-container:
     name: Publish container image
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name || inputs.ref || github.ref }}
+          ref: ${{ github.event.release.tag_name || inputs.ref || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -90,7 +99,10 @@ jobs:
             type=match,pattern=v(.*),group=1,enable=${{ github.event_name == 'release' }}
             type=match,pattern=v(\d+\.\d+)\.\d+$,group=1,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
-            type=ref,event=branch,enable=${{ github.event_name != 'release' }}
+            # :main only from a real push to main. It is what the infrastructure
+            # repo deploys, so a workflow_dispatch of some other ref must never
+            # move it; a dispatch still gets its :sha- tag.
+            type=ref,event=branch,enable=${{ github.event_name == 'push' }}
             type=sha,prefix=sha-
 
       - name: Build and push image
@@ -117,3 +129,40 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+  notify-infrastructure:
+    # A wake-up for UrbanLens/infrastructure's app-image.yml, so the deploy starts
+    # within a minute instead of at that workflow's next 10-minute poll. OPTIONAL:
+    # without INFRA_DISPATCH_TOKEN this step says so and succeeds, and the poll
+    # still deploys the image. The payload is informational - the infrastructure
+    # side re-reads :main from ghcr rather than trusting it, because two pushes a
+    # minute apart can deliver their dispatches out of order.
+    #
+    # The token: a fine-grained PAT (or GitHub App token) scoped to the ONE
+    # repository UrbanLens/infrastructure with "Contents: read and write" - the
+    # permission GitHub requires for POST /repos/{owner}/{repo}/dispatches. That
+    # is also enough to push there, so it is a real credential; the
+    # infrastructure repo's runbook says what it costs and what it saves.
+    name: Tell the infrastructure repo
+    needs: publish-container
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: repository_dispatch to UrbanLens/infrastructure
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          SHA: ${{ github.sha }}
+          DIGEST: ${{ needs.publish-container.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "INFRA_DISPATCH_TOKEN is not set - the infrastructure repo will pick this image up on its next poll (<= ~10 min)"
+            exit 0
+          fi
+          gh api --method POST repos/UrbanLens/infrastructure/dispatches \
+            -f event_type=urbanlens-image-published \
+            -f "client_payload[sha]=${SHA}" \
+            -f "client_payload[tag]=sha-${SHA:0:7}" \
+            -f "client_payload[digest]=${DIGEST}"
+          echo "dispatched urbanlens-image-published for ${SHA}"
