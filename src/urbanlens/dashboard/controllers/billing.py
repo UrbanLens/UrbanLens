@@ -132,7 +132,10 @@ class BillingPledgeUpdateView(LoginRequiredMixin, View):
     """POST /settings/billing/<id>/pledge/ - change an existing pay-what-you-want pledge."""
 
     def post(self, request: HttpRequest, subscription_id: int) -> HttpResponse:
-        subscription = get_object_or_404(RoleSubscription, pk=subscription_id, user=request.user)
+        subscription = get_object_or_404(RoleSubscription.objects.select_related("role"), pk=subscription_id, user=request.user)
+        if not subscription.role.pay_what_you_want:
+            response = render(request, _SECTION_PARTIAL, _section_context(request), status=400)
+            return _with_toast(response, "This membership has a fixed price.", level="error")
         amount_cents = _parse_amount_cents(request.POST.get("amount_dollars"))
         if amount_cents is None or amount_cents < pricing.STRIPE_MINIMUM_CHARGE_CENTS:
             response = render(request, _SECTION_PARTIAL, _section_context(request), status=400)

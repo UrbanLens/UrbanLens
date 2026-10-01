@@ -66,12 +66,13 @@ def _credential_is_still_valid(credential: Any) -> bool:
     Returns:
         True when the connection may continue - including for None, since a
         session connection has no credential to revoke and its own separate
-        checks (if any) are unaffected by this one.
+        checks (if any) are unaffected by this one. False once the credential
+        is gone, revoked or expired, or its owner deactivated.
     """
     if credential is None:
         return True
-    refreshed = type(credential).objects.filter(pk=credential.pk).first()
-    if refreshed is None:
+    refreshed = type(credential).objects.select_related("user").filter(pk=credential.pk).first()
+    if refreshed is None or refreshed.user is None or not refreshed.user.is_active:
         return False
     if getattr(refreshed, "revoked_at", None) is not None:
         return False

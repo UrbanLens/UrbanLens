@@ -1264,6 +1264,7 @@ SPECTACULAR_SETTINGS = {
 # Native-client auth; scopes mirror ApiKeyScope so both credentials share checks.
 OAUTH2_PROVIDER = {
     "PKCE_REQUIRED": True,
+    "OAUTH2_VALIDATOR_CLASS": "urbanlens.dashboard.services.auth.oauth_validator.ActiveOwnerOAuth2Validator",
     # Custom scheme + loopback for native apps; https for future web clients.
     "ALLOWED_REDIRECT_URI_SCHEMES": ["https", "http", "urbanlens"],
     # Duplicates ApiKeyScope (settings load before models; tests assert parity).

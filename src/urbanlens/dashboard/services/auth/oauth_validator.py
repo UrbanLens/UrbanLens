@@ -1,0 +1,51 @@
+"""OAuth2 token validation that ends with the owning account."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from oauth2_provider.oauth2_validators import OAuth2Validator
+
+
+def _owner_is_active(request: Any) -> bool:
+    user = getattr(request, "user", None)
+    # A client-credentials token has no resource owner to have been deactivated.
+    return user is None or user.is_active
+
+
+class ActiveOwnerOAuth2Validator(OAuth2Validator):
+    """Refuses a deactivated account's access and refresh tokens.
+
+    A deactivated account cannot sign in, but a token it issued earlier is a way into the same account, and
+    django-oauth-toolkit only checks a token's expiry and scope. This covers every entry point that validates
+    through ``OAUTH2_PROVIDER["OAUTH2_VALIDATOR_CLASS"]``: the external API, media authentication and the token
+    endpoint. Sockets resolve tokens themselves (``websocket_auth``).
+    """
+
+    def validate_bearer_token(self, token: str, scopes: list[str], request: Any) -> bool:
+        """Accept a bearer token only while its owner is active.
+
+        Args:
+            token: The bearer token.
+            scopes: The scopes the resource requires.
+            request: The oauthlib request, given the token's user on success.
+
+        Returns:
+            True when the token is valid and its owner active.
+        """
+        return super().validate_bearer_token(token, scopes, request) and _owner_is_active(request)
+
+    def validate_refresh_token(self, refresh_token: str, client: Any, request: Any, *args: Any, **kwargs: Any) -> bool:
+        """Exchange a refresh token only while its owner is active.
+
+        Args:
+            refresh_token: The refresh token.
+            client: The client presenting it.
+            request: The oauthlib request, given the token's user on success.
+            *args: Passed through.
+            **kwargs: Passed through.
+
+        Returns:
+            True when the token is valid for this client and its owner active.
+        """
+        return super().validate_refresh_token(refresh_token, client, request, *args, **kwargs) and _owner_is_active(request)

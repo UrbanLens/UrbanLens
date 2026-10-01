@@ -114,14 +114,14 @@ class ApiKeyAuthMiddleware:
             token: The raw access-token string.
 
         Returns:
-            ``(user, access_token)``, or None for an unknown or expired token, or for a client-credentials
-            token that has no resource owner at all...
+            ``(user, access_token)``, or None for an unknown or expired token, for a deactivated owner's, or for a
+            client-credentials token that has no resource owner at all...
         """
         from oauth2_provider.models import get_access_token_model
 
         access_token_model = get_access_token_model()
         access_token = access_token_model.objects.select_related("user").filter(token=token).first()
-        if access_token is None or access_token.is_expired() or access_token.user is None:
+        if access_token is None or access_token.is_expired() or access_token.user is None or not access_token.user.is_active:
             return None
         return (access_token.user, access_token)
 
