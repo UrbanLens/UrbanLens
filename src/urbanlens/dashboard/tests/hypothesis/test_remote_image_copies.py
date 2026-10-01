@@ -247,6 +247,24 @@ class CopyEndpointTests(TestCase):
         self.assertIsNone(cache.get(pending_marker(self.copy.url_digest)))
         self._assert_slot_free()
 
+    def test_a_time_limit_while_staging_the_bytes_clears_the_pending_mark(self) -> None:
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        self._first_request()
+        with (
+            patch(_FETCH, return_value=(_jpeg(), "image/jpeg")),
+            patch(
+                "urbanlens.dashboard.services.media.previews.stage_preview_source", side_effect=SoftTimeLimitExceeded()
+            ),
+            self.assertRaises(SoftTimeLimitExceeded),
+        ):
+            fetch_remote_image_copy(*self._queued)
+
+        self.assertIsNone(cache.get(pending_marker(self.copy.url_digest)), "the next request would wait out its TTL")
+        self._assert_slot_free()
+
     def test_a_download_whose_copy_is_gone_frees_its_slot(self) -> None:
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 

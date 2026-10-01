@@ -1576,17 +1576,21 @@ def fetch_remote_image_copy(copy_id: int, slot: str = "") -> bool:
             fetched = None
     finally:
         release_download_slot(slot, str(copy_id))
-    marker = pending_marker(copy.url_digest)
-    if fetched is None:
-        record_failure(copy)
-        cache.delete(marker)
-        return False
-    descriptor = stage_preview_source(f"copy_{copy.url_digest}", *fetched)
-    if safely_enqueue_task(render_remote_image_copy, copy.pk, descriptor, durable=False) is None:
-        discard_preview_source(descriptor)
-        cache.delete(marker)
-        return False
-    return True
+    queued = False
+    try:
+        if fetched is None:
+            record_failure(copy)
+            return False
+        descriptor = stage_preview_source(f"copy_{copy.url_digest}", *fetched)
+        if safely_enqueue_task(render_remote_image_copy, copy.pk, descriptor, durable=False) is None:
+            discard_preview_source(descriptor)
+            return False
+        queued = True
+        return True
+    finally:
+        # The render clears the mark once it is queued; any other way out leaves the next request free to start again.
+        if not queued:
+            cache.delete(pending_marker(copy.url_digest))
 
 
 @shared_task(queue=SANDBOX_QUEUE)
