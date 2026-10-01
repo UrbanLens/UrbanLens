@@ -21,6 +21,9 @@ const SHARED_LOCATION_FIELDS = ["address", "official_name", "city", "state", "co
 
 /** How long A's background work gets to reach B's pin, and how often B's pin is read meanwhile. */
 const SETTLE_MS = 60_000;
+/** B's own new pin is enriched in the background too; it has settled once two reads this far apart agree. */
+const QUIET_MS = 15_000;
+const OWN_SETTLE_MS = 120_000;
 /** About 5 m north. */
 const NEIGHBOURING_DEG = 0.000045;
 const SAMPLE_MS = 10_000;
@@ -35,6 +38,21 @@ async function recordOf(api: ApiClient, slug: string): Promise<PinRecord> {
     return record;
 }
 
+/** B's record once B's own background work (naming, wiki aliases, the Wikipedia match) has stopped changing it. */
+async function settledRecordOf(api: ApiClient, slug: string): Promise<PinRecord> {
+    const deadline = Date.now() + OWN_SETTLE_MS;
+    let previous = await recordOf(api, slug);
+    for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
+        const current = await recordOf(api, slug);
+        if (JSON.stringify(current) === JSON.stringify(previous)) {
+            return current;
+        }
+        expect(Date.now() < deadline, `my own pin was still changing after ${OWN_SETTLE_MS / 1000} s`).toBeTruthy();
+        previous = current;
+    }
+}
+
 async function ok(response: { ok(): boolean; status(): number; text(): Promise<string> }, what: string): Promise<void> {
     expect(response.ok(), `${what} answered ${response.status()}: ${(await response.text()).slice(0, 200)}`).toBeTruthy();
 }
@@ -47,7 +65,7 @@ test.describe("another account's activity", () => {
         await ok(await secondaryApi.post(`pins/${mine.slug}/notes/`, { text: resourceName("my note") }), "B's note");
         await ok(await secondaryApi.post(`pins/${mine.slug}/aliases/`, { name: resourceName("my alias") }), "B's alias");
         await ok(await secondaryApi.post(`pins/${mine.slug}/links/`, { url: "https://example.invalid/mine", name: resourceName("my link") }), "B's link");
-        const before = await recordOf(secondaryApi, mine.slug);
+        const before = await settledRecordOf(secondaryApi, mine.slug);
 
         // A's own pin a few metres away, so its building child can stand exactly on my coordinate (P181).
         const theirs = await api.createPin({ name: resourceName("their pin beside my spot"), latitude: mine.latitude + NEIGHBOURING_DEG, longitude: mine.longitude });
