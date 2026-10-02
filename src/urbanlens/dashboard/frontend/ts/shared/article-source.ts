@@ -45,6 +45,11 @@ interface SerializerState {
     closeBlock(node: ProseMirrorNode): void;
 }
 
+/** A link destination Markdown reads back as *url*: whitespace, controls and angle brackets are percent-encoded. */
+function markdownDestination(url: string): string {
+    return url.replace(/[\s\x00-\x1f\x7f<>]/g, encodeURIComponent).replace(/[()\\]/g, "\\$&");
+}
+
 /**
  * Markdown for the article's block-level image node. tiptap-markdown's default writes it like an inline image and
  * never closes the block, gluing the next block onto the image's line.
@@ -52,7 +57,7 @@ interface SerializerState {
 export const blockImageMarkdown = {
     serialize(state: SerializerState, node: ProseMirrorNode) {
         const title = node.attrs.title ? ` "${String(node.attrs.title).replace(/["\\]/g, "\\$&")}"` : "";
-        state.write(`![${state.esc(String(node.attrs.alt ?? ""))}](${String(node.attrs.src ?? "").replace(/[()\\]/g, "\\$&")}${title})`);
+        state.write(`![${state.esc(String(node.attrs.alt ?? ""))}](${markdownDestination(String(node.attrs.src ?? ""))}${title})`);
         state.closeBlock(node);
     },
     parse: {},
