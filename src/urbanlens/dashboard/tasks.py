@@ -1609,7 +1609,7 @@ def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
 
     from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
     from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
-    from urbanlens.dashboard.services.media.remote_copies import REMOTE_COPY_MAX_DIMENSION, pending_marker, record_failure, store
+    from urbanlens.dashboard.services.media.remote_copies import REMOTE_COPY_MAX_DIMENSION, REMOTE_COPY_TILE_DIMENSION, pending_marker, record_failure, store, wants_tile_copy
 
     copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
     try:
@@ -1617,10 +1617,11 @@ def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
         rendered = render_preview(*source, max_dimension=REMOTE_COPY_MAX_DIMENSION) if copy is not None and source is not None else None
         if copy is None:
             return False
-        if rendered is None:
+        if rendered is None or source is None:
             record_failure(copy)
             return False
-        store(copy, *rendered)
+        tile = render_preview(*source, max_dimension=REMOTE_COPY_TILE_DIMENSION) if wants_tile_copy(rendered[0]) else None
+        store(copy, *rendered, tile=tile)
         return True
     finally:
         discard_preview_source(descriptor)

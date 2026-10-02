@@ -144,9 +144,24 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
         self.assertEqual(item["author"], "Daniel Case")
         self.assertEqual(item["page_url"], "https://commons.wikimedia.org/wiki/File:HRSH_1.jpg")
         self.assertEqual(item["url"], "https://upload.wikimedia.org/hrsh/1.jpg")
-        self.assertEqual(item["thumb_url"], _copy_of("https://upload.wikimedia.org/hrsh/thumb/1.jpg"))
+        self.assertEqual(item["thumb_url"], _copy_of("https://upload.wikimedia.org/hrsh/thumb/1.jpg") + "?size=thumb")
         self.assertEqual(item["key"], media_item_key("https://upload.wikimedia.org/hrsh/1.jpg"))
         self.assertFalse(item["is_mine"])
+
+    def test_the_lightbox_is_given_this_sites_copy_of_the_original(self) -> None:
+        """img-src refuses provider hosts, so the provider's own address would show nothing in the lightbox."""
+        self._cache("wikimedia", [_wikimedia_item(1)])
+
+        [item] = self._all("external")
+
+        self.assertEqual(item["view_url"], _copy_of("https://upload.wikimedia.org/hrsh/1.jpg"))
+
+    def test_an_item_whose_address_is_a_page_has_no_view_to_offer(self) -> None:
+        self._cache("loc", [_wikimedia_item(1, source="loc", url="https://www.loc.gov/item/123/")])
+
+        [item] = self._all("external")
+
+        self.assertEqual(item["view_url"], "")
 
     def test_photos_from_several_sources_are_all_listed(self) -> None:
         for n, source in enumerate(("wikimedia", "loc", "smithsonian")):
@@ -219,7 +234,7 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
 
         [item] = self._all("external")
 
-        self.assertEqual(item["thumb_url"], _copy_of("https://upload.wikimedia.org/hrsh/scan.tif"))
+        self.assertEqual(item["thumb_url"], _copy_of("https://upload.wikimedia.org/hrsh/scan.tif") + "?size=thumb")
 
     def test_pages_are_bounded(self) -> None:
         self._cache("wikimedia", [_wikimedia_item(n) for n in range(MAX_PAGE_SIZE + 30)])

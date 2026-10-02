@@ -53,6 +53,7 @@ class ExternalPhoto:
         key: ``media_item_key(url)``, the item's identity across the Media panel, relevance marks and materialized copies.
         url: The full-size image: a local copy when one exists, else the provider's own.
         thumb_url: A URL a browser can render, converted through the preview route when needed.
+        view_url: This site's copy of ``url`` for the lightbox, ``""`` when ``url`` is already local or not a picture.
         caption: The provider's caption or title.
         author: Who to credit for the photo itself.
         page_url: The item's page on the provider's site.
@@ -68,6 +69,7 @@ class ExternalPhoto:
     author: str
     page_url: str
     relevant: bool | None
+    view_url: str = ""
 
     def to_json(self) -> dict[str, Any]:
         """The Photos tab's client payload for this photo."""
@@ -79,6 +81,7 @@ class ExternalPhoto:
             "key": self.key,
             "url": self.url,
             "thumb_url": self.thumb_url,
+            "view_url": self.view_url,
             "caption": self.caption,
             "author": self.author,
             "page_url": self.page_url,
@@ -139,7 +142,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
     from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
-    from urbanlens.dashboard.services.media.previews import gallery_thumb_urls
+    from urbanlens.dashboard.services.media.previews import gallery_urls
 
     listing = ExternalPhotoListing()
     location = pin.location
@@ -171,13 +174,13 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
         if not items or not gate_allows(source, pin):
             continue
         local = local_images_for_gallery_items(location, source.key, [item.url for item in items])
-        for item, remote_thumb in zip(items, gallery_thumb_urls(items, provider=source.key), strict=True):
+        for item, remote in zip(items, gallery_urls(items, provider=source.key), strict=True):
             key = media_item_key(item.url)
             mark = relevance.get((source.key, key))
             if mark is False:
                 continue
             local_url = local[item.url].file_url if item.url in local else ""
-            thumb = (local[item.url].thumb_url if item.url in local else "") or remote_thumb
+            thumb = (local[item.url].thumb_url if item.url in local else "") or remote.thumb
             if not thumb:
                 continue
             candidates.append(
@@ -187,6 +190,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
                     key=key,
                     url=local_url or item.url,
                     thumb_url=thumb,
+                    view_url="" if local_url else remote.view,
                     caption=item.caption or "",
                     author=item.author or "",
                     page_url=item.page_url or item.url,

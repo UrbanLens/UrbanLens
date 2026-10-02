@@ -3900,16 +3900,3 @@ the first account's private name. Google Images searches by address only and is 
 Not changed, because it trades recall for privacy: a Location with no official name would find nothing for its
 first pins. One option is to build shared-cache queries only from Location- and wiki-level names, and to treat a
 pin-name-driven search as the owner's own, cached per pin.
-
-## P190 — A gallery tile for a third-party item with no provider thumbnail loads a 1200 px copy
-
-`id: P190` · `status: open` · `updated: 2026-10-02` · `found by: the HRSH Photos-tab slowness report (P189), 2026-10-02`
-
-A third-party copy is stored at `REMOTE_COPY_MAX_DIMENSION` (`services/media/remote_copies.py`, 1200 px). A tile
-copies the provider's own thumbnail where it names one, but an item with none copies the original
-(`previews._thumb_source`), and the tile and the lightbox share that one copy, so the tile loads up to 1200 px into
-a ~120 px box. How often providers omit a thumbnail was not measured.
-
-A tile-sized copy would be a second `RemoteImageCopy` of the same source (an `edition`, as monthly satellite
-exports use), rendered at 400 px - which means a second download of the source from the provider for every such
-item. Worth measuring how many items lack a thumbnail before paying that.

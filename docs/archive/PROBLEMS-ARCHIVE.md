@@ -19591,3 +19591,24 @@ pin_lists_panel). Organize's active label tab is P66.
 The lesson the nine fixes shared: the slice is rarely the whole fix. Each had a count that gated an empty state, a
 numbering defined against the whole set, a group-by that had to move into SQL first, or a per-row query that
 outlived the cap.
+
+## RESOLVED 2026-10-02: A gallery tile for a third-party item gets a 400 px copy made from the same download
+
+`id: P190` · `status: fixed` · `resolved: 2026-10-02`
+
+A third-party copy is stored at 1200 px, and a tile for an item with no provider thumbnail copied the original, so
+the tile and the lightbox shared that one copy and the tile loaded up to 1200 px into a ~120 px box.
+
+`render_remote_image_copy` now also keeps a 400 px `RemoteImageCopy.thumb_file` (`REMOTE_COPY_TILE_DIMENSION`),
+rendered in the same sandbox job from the same staged bytes, when the copy is larger than that. No second download
+from the provider, which is what the first idea here (a second `edition` row) would have cost. Every gallery tile asks
+for `media-copy/<digest>/?size=thumb` (`remote_copies.tile_copy_url`) and is served the tile file, else the copy; the
+lightbox asks without it. A copy made before migration 0036 has no tile file and keeps serving the copy.
+
+The Photos tab's public-source items now carry `view_url`, this site's copy of the original, which the lightbox shows
+instead of the provider's address: since P165's `img-src` allowlist the provider's host is refused, so the lightbox
+showed only the tile. The Thanks page's GitHub avatars are copies too, for the same reason.
+
+Tests: `test_remote_image_copies.py` (`test_a_tile_gets_a_tile_sized_copy_from_the_same_download`,
+`test_a_small_image_is_kept_once_and_a_tile_gets_it`), `test_pin_photos_tab_is_comprehensive.py` (view_url),
+`external-photos.test.ts`, `test_thanks_page_avatars.py`.

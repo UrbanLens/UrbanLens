@@ -545,7 +545,10 @@ paths use it:
   providers take half a minute) without parsing it, stages the bytes
   (`previews.stage_preview_source`) and queues
   `tasks.render_remote_image_copy`, which re-encodes them (1200px) in the
-  sandbox and keeps the result for good. Until then the endpoint answers 503.
+  sandbox and keeps the result for good, plus a 400px `thumb_file` from the
+  same bytes when the copy is larger. A gallery tile asks for `?size=thumb`
+  and gets that, else the copy; the lightbox asks without it. Until then the
+  endpoint answers 503.
   At most `DOWNLOAD_SLOTS` downloads run at once site-wide (a cache slot the
   task claims when it starts and frees when the download ends), since the
   interactive worker also fires safety deadlines and on k3s one worker drains

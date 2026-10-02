@@ -207,6 +207,35 @@ class CopyEndpointTests(TestCase):
         with self.copy.file.open("rb") as stored, PILImage.open(stored) as image:
             self.assertLessEqual(max(image.size), REMOTE_COPY_MAX_DIMENSION)
 
+    def _served(self, url: str) -> tuple[int, int]:
+        from PIL import Image as PILImage
+
+        with patch(_FETCH, side_effect=AssertionError("fetched the provider again")), patch(_ENQUEUE) as enqueue:
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        enqueue.assert_not_called()
+        with PILImage.open(BytesIO(b"".join(response.streaming_content))) as image:
+            return image.size
+
+    def test_a_tile_gets_a_tile_sized_copy_from_the_same_download(self) -> None:
+        """P190: a tile for an item with no provider thumbnail loaded the lightbox's 1200 px copy."""
+        from urbanlens.dashboard.services.media.remote_copies import (
+            REMOTE_COPY_MAX_DIMENSION,
+            REMOTE_COPY_TILE_DIMENSION,
+        )
+
+        self._make(_jpeg((2400, 1800)))
+
+        self.assertLessEqual(max(self._served(f"{self.url}?size=thumb")), REMOTE_COPY_TILE_DIMENSION)
+        self.assertEqual(max(self._served(self.url)), REMOTE_COPY_MAX_DIMENSION)
+
+    def test_a_small_image_is_kept_once_and_a_tile_gets_it(self) -> None:
+        self._make(_jpeg((300, 200)))
+
+        self.copy.refresh_from_db()
+        self.assertFalse(self.copy.thumb_file.name)
+        self.assertEqual(self._served(f"{self.url}?size=thumb"), (300, 200))
+
     def test_a_failed_download_is_not_retried_until_its_backoff_runs_out(self) -> None:
         self._first_request()
         self._download(None).assert_not_called()
@@ -452,7 +481,10 @@ class GalleryUrlTests(TestCase):
             [_item("https://provider.test/full.jpg", "https://provider.test/thumb.jpg")], provider="p"
         )
 
-        self.assertEqual(urls.thumb, reverse("media.remote_copy", args=[url_digest("https://provider.test/thumb.jpg")]))
+        self.assertEqual(
+            urls.thumb,
+            reverse("media.remote_copy", args=[url_digest("https://provider.test/thumb.jpg")]) + "?size=thumb",
+        )
         self.assertEqual(urls.view, reverse("media.remote_copy", args=[url_digest("https://provider.test/full.jpg")]))
         self.assertEqual(
             set(RemoteImageCopy.objects.values_list("page_url", flat=True)), {"https://provider.test/page"}
@@ -464,7 +496,16 @@ class GalleryUrlTests(TestCase):
             [_item("https://provider.test/full.tif", "https://provider.test/thumb.tif")], provider="p"
         )
 
-        self.assertEqual(thumb, reverse("media.remote_copy", args=[url_digest("https://provider.test/thumb.tif")]))
+        self.assertEqual(
+            thumb, reverse("media.remote_copy", args=[url_digest("https://provider.test/thumb.tif")]) + "?size=thumb"
+        )
+
+    def test_an_item_without_a_provider_thumbnail_gets_a_tile_sized_view_of_its_one_copy(self) -> None:
+        (urls,) = gallery_urls([_item("https://provider.test/full.jpg", "", "image/jpeg")], provider="p")
+
+        copy = reverse("media.remote_copy", args=[url_digest("https://provider.test/full.jpg")])
+        self.assertEqual((urls.thumb, urls.view), (f"{copy}?size=thumb", copy))
+        self.assertEqual(RemoteImageCopy.objects.count(), 1)
 
     def test_an_in_app_document_is_previewed_in_place(self) -> None:
         (urls,) = gallery_urls([_item("/dashboard/cris/attachment/r1/2/", "", "application/pdf")], provider="cris")
@@ -541,7 +582,8 @@ class GalleryPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "provider.test/thumb.jpg")
         self.assertContains(
-            response, f'src="{reverse("media.remote_copy", args=[url_digest("https://provider.test/thumb.jpg")])}"'
+            response,
+            f'src="{reverse("media.remote_copy", args=[url_digest("https://provider.test/thumb.jpg")])}?size=thumb"',
         )
         self.assertContains(
             response,

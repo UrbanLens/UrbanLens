@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { externalPhotoFromJson, renderExternalPhotoTile } from "./external-photos";
+import { displayUrl } from "./photo-lightbox";
 import { lightboxListFromGrid, renderPhotoTile, tileFromJson } from "./photo-tile";
 
 afterEach(() => {
@@ -68,6 +69,25 @@ describe("external photo tile", () => {
 
     test("a source with no page gets no dead link", () => {
         expect(external({ page_url: "" }).querySelector("a.gallery-label-btn")).toBeNull();
+    });
+});
+
+describe("the lightbox shows this site's copy of a public photo", () => {
+    test("its copy is the lightbox's picture, and the provider's address stays its identity", () => {
+        document.body.innerHTML = `<div data-lightbox-scope><ul id="public"></ul></div>`;
+        const tile = external({ view_url: "/dashboard/map/media-copy/abc/" });
+        document.getElementById("public")!.append(tile);
+
+        const { list } = lightboxListFromGrid(document.querySelector<HTMLElement>("[data-lightbox-scope]")!, tile.querySelector("button")!);
+
+        expect(list[0]).toMatchObject({ url: RAW.url, viewUrl: "/dashboard/map/media-copy/abc/" });
+        expect(displayUrl(list[0]!)).toBe("/dashboard/map/media-copy/abc/");
+    });
+
+    test("only a same-site address is taken as the copy", () => {
+        for (const viewUrl of ["https://elsewhere.example/x.jpg", "//elsewhere.example/x.jpg", "javascript:alert(1)"]) {
+            expect(externalPhotoFromJson({ ...RAW, view_url: viewUrl })?.viewUrl).toBe("");
+        }
     });
 });
 

@@ -10,6 +10,8 @@ export interface ExternalPhoto {
     key: string;
     url: string;
     thumbUrl: string;
+    /** This site's copy of `url` for the lightbox; the provider's own host is refused by img-src. */
+    viewUrl: string;
     caption: string;
     author: string;
     pageUrl: string;
@@ -19,6 +21,11 @@ export interface ExternalPhoto {
 function safeLink(raw: unknown): string {
     const value = String(raw ?? "");
     return /^https?:\/\//i.test(value) || (value.startsWith("/") && !value.startsWith("//")) ? value : "";
+}
+
+function sameSitePath(raw: unknown): string {
+    const value = String(raw ?? "");
+    return value.startsWith("/") && !value.startsWith("//") ? value : "";
 }
 
 /** One `?external=1` item, or null when it has nothing to show. */
@@ -32,6 +39,7 @@ export function externalPhotoFromJson(raw: Record<string, unknown>): ExternalPho
         key,
         url: String(raw.url ?? ""),
         thumbUrl,
+        viewUrl: sameSitePath(raw.view_url),
         caption: String(raw.caption ?? ""),
         author: String(raw.author ?? ""),
         pageUrl: safeLink(raw.page_url),
@@ -46,6 +54,7 @@ export function renderExternalPhotoTile(photo: ExternalPhoto): HTMLLIElement {
     li.dataset.mediaKey = photo.key;
     li.dataset.url = photo.url;
     li.dataset.thumbUrl = photo.thumbUrl;
+    if (photo.viewUrl) li.dataset.viewUrl = photo.viewUrl;
     li.dataset.caption = photo.caption;
     li.dataset.author = photo.author;
     li.dataset.sourceUrl = photo.pageUrl;

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 import hashlib
+from io import BytesIO
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -25,6 +26,10 @@ if TYPE_CHECKING:
 
 #: Longest edge of a stored copy: thumbnails, and the lightbox's fallback when the full image cannot load.
 REMOTE_COPY_MAX_DIMENSION = 1200
+
+#: Longest edge of the copy a gallery tile asks for with ``?size=thumb``.
+REMOTE_COPY_TILE_DIMENSION = 400
+TILE_SIZE = "thumb"
 
 #: Largest source accepted. Providers hand over full-resolution images where they have no thumbnail.
 MAX_REMOTE_COPY_SOURCE_BYTES = 25 * 1024 * 1024
@@ -209,6 +214,19 @@ def copy_url(url: str, *, provider: str, page_url: str = "", edition: str = "") 
     return copy_urls([RemoteImage(url, provider, page_url, edition)]).get(url, url)
 
 
+def tile_copy_url(copy_address: str) -> str:
+    """A copy's address for a gallery tile, which is served the tile-sized file where one was made."""
+    return f"{copy_address}?size={TILE_SIZE}"
+
+
+def wants_tile_copy(content: bytes) -> bool:
+    """Whether a rendered copy is larger than a tile needs. Reads only the header of an image this site encoded."""
+    from PIL import Image as PILImage
+
+    with PILImage.open(BytesIO(content)) as image:
+        return max(image.size) > REMOTE_COPY_TILE_DIMENSION
+
+
 def retry_is_due(copy: RemoteImageCopy) -> bool:
     """Whether a copy whose downloads failed may be tried again yet.
 
@@ -235,18 +253,24 @@ def record_failure(copy: RemoteImageCopy) -> None:
     RemoteImageCopy.objects.filter(pk=copy.pk).update(failed_attempts=F("failed_attempts") + 1, last_failed_at=timezone.now())
 
 
-def store(copy: RemoteImageCopy, content: bytes, content_type: str) -> None:
+def _extension(content_type: str) -> str:
+    return "png" if content_type == "image/png" else "jpg"
+
+
+def store(copy: RemoteImageCopy, content: bytes, content_type: str, tile: tuple[bytes, str] | None = None) -> None:
     """Keep a rendered copy.
 
     Args:
         copy: The copy.
         content: The re-encoded image.
         content_type: Its type.
+        tile: The same image at a tile's size, when the copy is larger than that.
     """
-    extension = "png" if content_type == "image/png" else "jpg"
-    copy.file.save(f"{copy.url_digest}.{extension}", ContentFile(content), save=False)
+    copy.file.save(f"{copy.url_digest}.{_extension(content_type)}", ContentFile(content), save=False)
+    if tile is not None:
+        copy.thumb_file.save(f"{copy.url_digest}.{TILE_SIZE}.{_extension(tile[1])}", ContentFile(tile[0]), save=False)
     copy.content_type = content_type
     copy.file_size = len(content)
     copy.checksum = hashlib.sha256(content).hexdigest()
     copy.fetched_at = timezone.now()
-    copy.save(update_fields=["file", "content_type", "file_size", "checksum", "fetched_at", "updated"])
+    copy.save(update_fields=["file", "thumb_file", "content_type", "file_size", "checksum", "fetched_at", "updated"])

@@ -193,8 +193,10 @@ class GalleryUrls:
 
 
 def _gallery_url(source: str, copies: dict[str, str], declared: str) -> str:
+    from urbanlens.dashboard.services.media.remote_copies import tile_copy_url
+
     if source in copies:
-        return copies[source]
+        return tile_copy_url(copies[source])
     if source.startswith("/"):
         return tile_preview_url(source) if needs_server_side_preview(source, declared) else source
     return ""

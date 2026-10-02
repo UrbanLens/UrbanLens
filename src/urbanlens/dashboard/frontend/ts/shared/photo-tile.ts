@@ -145,6 +145,7 @@ export function lightboxItemFromExternalTile(el: HTMLElement): LightboxItem | nu
     if (!el.dataset.mediaKey || !url) return null;
     return {
         url,
+        ...(el.dataset.viewUrl ? { viewUrl: el.dataset.viewUrl } : {}),
         thumbUrl: el.dataset.thumbUrl ?? "",
         caption: el.dataset.caption ?? "",
         author: el.dataset.author ?? "",

@@ -13,7 +13,7 @@ from urbanlens.dashboard.controllers.media import resolve_media_path, serve_medi
 from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
 from urbanlens.dashboard.services.media.origin import apply_media_response_headers
 from urbanlens.dashboard.services.media.previews import PREVIEW_RETRY_AFTER_SECONDS, RENDER_QUEUED
-from urbanlens.dashboard.services.media.remote_copies import COPY_PENDING_TTL, COPY_RATE, COPY_THROTTLE_SCOPE, pending_marker, retry_is_due
+from urbanlens.dashboard.services.media.remote_copies import COPY_PENDING_TTL, COPY_RATE, COPY_THROTTLE_SCOPE, TILE_SIZE, pending_marker, retry_is_due
 from urbanlens.dashboard.services.security import throttle
 from urbanlens.dashboard.services.security.throttle import account_or_address
 
@@ -32,7 +32,7 @@ def _not_yet(retry_after: int | None = None) -> HttpResponse:
 
 
 class RemoteImageCopyView(View):
-    """GET media-copy/<digest>/ - one third-party image, from this site's copy.
+    """GET media-copy/<digest>/ - one third-party image, from this site's copy; ``?size=thumb`` for a gallery tile's.
 
     Answers 404 for a digest this site never issued, and for a source that failed and is not due another try; the
     page's thumbnail fallback shows an icon tile for both. Answers 503 while the first copy is being made, which
@@ -46,6 +46,8 @@ class RemoteImageCopyView(View):
         if copy is None:
             return HttpResponse(status=404)
         if stored := copy.file.name:
+            if request.GET.get("size") == TILE_SIZE and copy.thumb_file.name:
+                stored = copy.thumb_file.name
             try:
                 response = serve_media_file(resolve_media_path(stored))
             except Http404:
