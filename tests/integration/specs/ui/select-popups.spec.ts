@@ -77,3 +77,26 @@ for (const theme of ["dark", "light"] as const) {
         });
     }
 }
+
+test("the map's filter panel, dark in either theme, draws its controls the same in both", async ({ page }) => {
+    await page.goto(appRoutes.map);
+
+    const drawn = async (theme: "light" | "dark"): Promise<string[]> => {
+        await page.locator("#html-root").evaluate((root, value) => root.setAttribute("data-theme", value), theme);
+        return page.locator("#filter-panel").evaluate((panel) =>
+            [...panel.querySelectorAll("input:not([type=hidden]), select, textarea")].map((control) => {
+                const style = getComputedStyle(control);
+                const name = control.id || control.getAttribute("name");
+                // A radio or checkbox shows its label's text, not its own colour.
+                if (control.matches("[type=radio], [type=checkbox]")) return [name, style.colorScheme].join(" ");
+                const option = control instanceof HTMLSelectElement ? control.options[0] : undefined;
+                const optionStyle = option ? getComputedStyle(option) : undefined;
+                return [name, style.colorScheme, style.color, optionStyle?.color, optionStyle?.backgroundColor].join(" ");
+            }),
+        );
+    };
+
+    const light = await drawn("light");
+    expect(light.length, "the filter panel has no controls to check").toBeGreaterThan(0);
+    expect(light).toEqual(await drawn("dark"));
+});

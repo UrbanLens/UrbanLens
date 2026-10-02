@@ -19825,3 +19825,11 @@ before.
 themes: the option text against the background Chromium would paint, at least 4.5:1, and the light scheme on
 dark-theme selects. It failed on all 36 Settings selects and the map's before the change. Firefox and Safari
 were not checked; both draw from the same option colours, or a native menu.
+
+The review of that change found the map's filter panel, which is dark in either theme, asking for its own
+`color-scheme: dark`. Measuring it found an older light-theme bug: the site-wide `body div.container` input rule
+outranks every `.fp-*` colour, so in the light theme the panel's select, date and search inputs drew
+`rgb(79,79,79)` text on its near-black background, and its popup was light. `#filter-panel` now pins its text,
+inputs and options to the colours they already had in the dark theme, with `color-scheme: dark`; `.fp-select`
+takes the light scheme for its highlight row. The spec's last test checks the panel's controls draw the same in
+both themes.
