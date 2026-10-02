@@ -1,10 +1,9 @@
 /**
- * A toast raised while a modal dialog is open is drawn above it (P194).
+ * A toast shown while a modal dialog is open is drawn above it and takes the pointer (P194).
  *
- * A modal dialog sits in the top layer with a backdrop over the rest of the page, so the toast stack, which was not,
- * came out dimmed behind the backdrop - the error a dialog's own submit raised was the one hardest to read. The stack
- * is now lifted into the top layer above the dialog. It is still outside the dialog, so the modal leaves it inert:
- * hit-testing passes through it, which is why this compares what is drawn rather than what a point lands on.
+ * A modal dialog sits in the top layer with a backdrop over the rest of the page and makes everything outside it inert.
+ * The toast stack is lifted into the top layer above the dialog, and moved inside it while it is open, so it can be
+ * clicked and hovered as it can with no dialog.
  */
 
 import type { Page } from "@playwright/test";
@@ -121,3 +120,64 @@ test("with no dialog open a toast still sits in the corner and takes a click", a
     const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("#toast-container") !== null, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
     expect(hit).toBe(true);
 });
+
+/** Whether a point at the newest toast's centre lands on the toast stack: an inert element is passed through. */
+async function toastTakesThePointer(page: Page): Promise<boolean> {
+    const box = await settledToast(page);
+    return page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("#toast-container") !== null, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+}
+
+test("a toast over an open modal dialog takes a click, and the dialog stays open", async ({ page }) => {
+    await page.evaluate(() => {
+        document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+        window.toastr?.info("Over the dialog");
+    });
+
+    expect(await toastTakesThePointer(page)).toBe(true);
+    const box = await settledToast(page);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.locator(TOAST)).toHaveCount(0);
+    expect(await page.evaluate(() => document.querySelector<HTMLDialogElement>("#p194-dialog")?.open)).toBe(true);
+});
+
+test("hovering a toast over an open modal dialog holds it past its timeout", async ({ page }) => {
+    await page.evaluate(() => {
+        document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+        window.toastr?.info("Held by the pointer");
+    });
+    const box = await settledToast(page);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+    await page.waitForTimeout(6500);
+    await expect(page.locator(TOAST)).toHaveCount(1);
+});
+
+test("a toast already showing when a dialog opens is above it and takes a click", async ({ page }) => {
+    const alone = await toastWithoutDialog(page);
+    await page.evaluate(() => window.toastr?.info("Before the dialog"));
+    await settledToast(page);
+    await page.evaluate(() => document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal());
+
+    await expect.poll(() => toastTakesThePointer(page)).toBe(true);
+    expect(await peakBrightness(page)).toBeGreaterThan(alone * 0.9);
+});
+
+test("a toast outlives the dialog it was shown over, closed or removed from the page", async ({ page }) => {
+    for (const end of ["close", "remove"] as const) {
+        await page.evaluate(() => {
+            document.querySelector<HTMLDialogElement>("#p194-dialog")?.showModal();
+            window.toastr?.info("Over the dialog");
+        });
+        await settledToast(page);
+        await page.evaluate((how) => {
+            const dialog = document.querySelector<HTMLDialogElement>("#p194-dialog");
+            if (how === "close") dialog?.close();
+            else dialog?.remove();
+        }, end);
+
+        await expect.poll(() => toastTakesThePointer(page), end).toBe(true);
+        await page.evaluate(() => window.toastr?.clear());
+        await expect(page.locator(TOAST)).toHaveCount(0);
+    }
+});
+

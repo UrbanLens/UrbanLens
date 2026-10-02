@@ -6,7 +6,7 @@
  * core.js runs in <head>, before <body> exists, so listeners go on document.
  */
 
-import { raiseToasts, toast, toastWithAction } from "./dialogs";
+import { installToastHosting, raiseToasts, toast, toastWithAction } from "./dialogs";
 
 export const TOAST_TIMEOUT_MS = 4500;
 
@@ -231,6 +231,7 @@ export function showTriggeredToast(detail: TriggeredToast | undefined): void {
 export function installSiteRuntime(): void {
     installCsrfToken();
     configureToastr();
+    installToastHosting();
     installRequestErrorToasts();
     installSubmitButtonLock();
     installValidationReports();

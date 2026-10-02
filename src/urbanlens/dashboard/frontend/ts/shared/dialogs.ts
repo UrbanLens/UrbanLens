@@ -56,16 +56,75 @@ function fallbackToast(kind: ToastKind, message: string, title?: string): HTMLEl
     return item;
 }
 
+/** Open modal dialogs in the order they opened, so the newest is the one on top. */
+const openModals: HTMLDialogElement[] = [];
+
+/** The stack while it sits in a dialog: removing the dialog removes it too, and it is put back. */
+let hostedStack: HTMLElement | null = null;
+let hostWatch: MutationObserver | null = null;
+
+function isModal(dialog: HTMLDialogElement): boolean {
+    try {
+        return dialog.isConnected && dialog.matches(":modal");
+    } catch {
+        return false;
+    }
+}
+
+function topModal(): HTMLDialogElement | null {
+    for (let i = openModals.length - 1; i >= 0; i--) {
+        const dialog = openModals[i];
+        if (dialog && isModal(dialog)) return dialog;
+        openModals.splice(i, 1);
+    }
+    const modals = [...document.querySelectorAll("dialog")].filter(isModal);
+    return modals[modals.length - 1] ?? null;
+}
+
+function watchHost(stack: HTMLElement, host: HTMLElement): void {
+    hostWatch?.disconnect();
+    hostWatch = null;
+    hostedStack = host === document.body ? null : stack;
+    if (!hostedStack || typeof MutationObserver === "undefined") return;
+    hostWatch = new MutationObserver(() => {
+        if (hostedStack && !hostedStack.isConnected) restoreStack(hostedStack);
+    });
+    hostWatch.observe(document.body, { childList: true, subtree: true });
+}
+
+function restoreStack(stack: HTMLElement): void {
+    const replacement = document.getElementById("toast-container");
+    if (replacement && replacement !== stack) replacement.prepend(...stack.children);
+    else document.body.append(stack);
+    raiseToasts();
+}
+
 /**
- * Lifts the toast stack into the top layer, above any modal dialog opened since it was last shown; under a modal's
- * backdrop it is dimmed. Re-shown each time, because a later top-layer entry draws over an earlier one.
+ * Lifts the toast stack into the top layer, above any modal dialog opened since it was last shown, and inside the
+ * topmost modal while one is open: everything outside a modal is inert, which would leave the toasts unclickable and
+ * unhoverable. Re-shown each time, because a later top-layer entry draws over an earlier one.
  */
 export function raiseToasts(): void {
     const container = document.getElementById("toast-container");
-    if (!container || typeof container.showPopover !== "function") return;
+    if (!container || typeof container.showPopover !== "function" || !document.body) return;
     container.setAttribute("popover", "manual");
+    const host = topModal() ?? document.body;
+    if (container.parentElement !== host) host.append(container);
+    watchHost(container, host);
     if (container.matches(":popover-open")) container.hidePopover();
     container.showPopover();
+}
+
+/** Re-hosts the toast stack whenever a dialog opens or closes. */
+export function installToastHosting(): void {
+    if (typeof MutationObserver === "undefined" || !document.documentElement) return;
+    new MutationObserver((records) => {
+        for (const record of records) {
+            const dialog = record.target;
+            if (dialog instanceof HTMLDialogElement && isModal(dialog) && !openModals.includes(dialog)) openModals.push(dialog);
+        }
+        if (document.getElementById("toast-container")?.childElementCount) raiseToasts();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["open"], subtree: true });
 }
 
 /**

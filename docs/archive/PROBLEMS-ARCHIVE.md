@@ -20237,16 +20237,23 @@ the toast's text came out dimmed and a point inside it hit the dialog.
 **Fix.** `shared/dialogs.ts`'s `raiseToasts()` makes the container a manual popover and re-shows it after every toast
 (a later top-layer entry draws over an earlier one). `configureToastr` wraps toastr's four methods so a direct
 `window.toastr` call is lifted too; the library-missing fallback calls it itself. `_toastr.scss` undoes the UA popover
-box. Not covered: a dialog opened after the last toast covers it until the next one.
+box.
 
-**Inert, by the platform.** The container is outside the dialog, so the modal still makes it inert: while a dialog is
-open a toast can't be clicked away or hover-paused, and it times out as usual.
+**Inert outside the dialog, so it moves inside (2026-10-02, later).** Everything outside an open modal is inert, so the
+lifted toasts still couldn't be clicked away or hover-paused. While a modal is open, `raiseToasts()` now appends the
+container to the topmost one (it stays a top-layer popover, so it draws in the same corner, unclipped);
+`installToastHosting()` re-hosts it whenever a dialog's `open` attribute changes, which also covers a dialog opened
+after the last toast. A dialog removed from the page while hosting it puts it back on `<body>`. Clicking a toast
+doesn't close the dialog: `dialog-backdrop.ts` closes only on a click whose target is the dialog itself. Measured in
+the real Edit Pin and confirm dialogs at 1440 and 390 px: identical computed styles and box, and a point inside hits
+the toast. On a phone a modal fills the screen, so a toast covers some of its fields; it can now be tapped away.
 
 Tests: `tests/integration/specs/ui/toasts-over-dialogs.spec.ts` compares the toast's peak pixel brightness over a
 `.ul-dialog` with the same toast alone (above 0.9 of it), with a control that removes the popover API and sees it
 dimmed (below 0.8; the UA's own lighter backdrop dims it less, 178 against 199, which is why the spec uses
-`.ul-dialog`). Hit-testing
-can't measure it, because it skips inert elements. Also: the toast still sits in the corner and takes a click with no
+`.ul-dialog`). Clicking,
+hover-holding past the timeout, a toast shown before the dialog opened, and toasts outliving a closed or removed
+dialog are measured by hit-testing, which skips inert elements. Also: the toast still sits in the corner and takes a click with no
 dialog open, and `dialogs.test.ts` covers `raiseToasts` against a stubbed popover API (happy-dom has none).
 
 ## RESOLVED 2026-10-02: Every write handler the 2026-08-14 coverage run found unexecuted now runs under a test; the last five found two bugs
