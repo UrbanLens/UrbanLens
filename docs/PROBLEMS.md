@@ -453,6 +453,13 @@ What remains of the findings in `docs/audits/codebase-audit.md`, each re-checked
 - **Unit 25**: no moderation UI for AI-flagged trivia questions - decided against, not just unbuilt (see
   `docs/designs/drafts/trivia.md`'s "Known gaps").
 - **Unit 31**: `_dark.scss` is 1,095 lines of per-selector overrides.
+- **Games, needs a decision**: a SpotGuessr or Trivia player who leaves or is kicked mid-game drops out
+  of the end-of-game summary everyone else receives (`session_summary` reads `participants.joined()`)
+  and out of their own game history (`overview.participated_sessions` reads `.active()`), though their
+  points stay on their row. Hiding the game from them follows "a departed player loses access"; whether
+  the remaining players' scoreboard should still list them is open. The session-status writes outside
+  begin and leave (`end_session_now`, `complete_session`, the stall reveal) take no session lock, but each
+  sets a finished state, so a race with a leave only swaps abandoned for completed.
 - **Unit 34**: 12 of the 175 test files that use `@given` import the shared `strategies.py`
   (`grep -rl "@given" src/urbanlens --include='test_*.py'`, then grep those for
   `tests.hypothesis.strategies`). The earlier "~30/111" did not reproduce.
