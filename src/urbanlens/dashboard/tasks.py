@@ -1546,15 +1546,16 @@ _REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS = 100
 
 
 @shared_task(queue=Queue.INTERACTIVE, soft_time_limit=_REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS, time_limit=_REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS + 10)
-def fetch_remote_image_copy(copy_id: int, slot: str = "") -> bool:
+def fetch_remote_image_copy(copy_id: int, *, waited: int = 0) -> bool:
     """Download a third-party image for its first copy and hand the bytes to the sandbox to decode.
 
-    Runs on an ordinary worker because the sandbox has no egress. Nothing here parses the bytes.
+    Runs on an ordinary worker because the sandbox has no egress. Nothing here parses the bytes. The download takes
+    one of the site-wide ``remote_copies.DOWNLOAD_SLOTS``; while none is free the task queues itself again
+    (``remote_copies.wait_for_download_slot``) rather than wait in the worker.
 
     Args:
         copy_id: The ``RemoteImageCopy`` being made.
-        slot: The download slot the view claimed (``remote_copies.take_download_slot``), given back once the
-            download ends.
+        waited: Seconds this copy has already waited for a download slot.
 
     Returns:
         True when the bytes were staged and their render queued.
@@ -1564,17 +1565,20 @@ def fetch_remote_image_copy(copy_id: int, slot: str = "") -> bool:
     from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.media.previews import RemoteSourceTimeoutError, discard_preview_source, fetch_remote_source, stage_preview_source
-    from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS, MAX_REMOTE_COPY_SOURCE_BYTES, forgive_timeout, pending_marker, record_failure, release_download_slot
+    from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_TIMEOUT_SECONDS, MAX_REMOTE_COPY_SOURCE_BYTES, forgive_timeout, pending_marker, record_failure, release_download_slot, take_download_slot, wait_for_download_slot
 
+    copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
+    if copy is None or copy.file.name:
+        return False
+    slot = take_download_slot(str(copy_id))
+    if slot is None:
+        wait_for_download_slot(copy, waited)
+        return False
     timed_out = False
     try:
-        copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
-        if copy is None or copy.file.name:
-            return False
-        try:
-            fetched = fetch_remote_source(copy.source_url, max_bytes=MAX_REMOTE_COPY_SOURCE_BYTES, timeout=DOWNLOAD_TIMEOUT_SECONDS)
-        except (RemoteSourceTimeoutError, SoftTimeLimitExceeded):
-            fetched, timed_out = None, True
+        fetched = fetch_remote_source(copy.source_url, max_bytes=MAX_REMOTE_COPY_SOURCE_BYTES, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+    except (RemoteSourceTimeoutError, SoftTimeLimitExceeded):
+        fetched, timed_out = None, True
     finally:
         release_download_slot(slot, str(copy_id))
     queued = False

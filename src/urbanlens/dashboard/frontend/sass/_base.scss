@@ -34,6 +34,11 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--ul-grey-9);
 }
 
+// An image media-thumb-fallback.js will ask for again keeps its box but not a broken-image glyph per attempt.
+img[data-retry-pending] {
+    visibility: hidden;
+}
+
 // - Pages
 .page-content {
     padding: 1.5rem 1rem 3rem;

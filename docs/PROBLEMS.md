@@ -4168,3 +4168,36 @@ the first account's private name. Google Images searches by address only and is 
 Not changed, because it trades recall for privacy: a Location with no official name would find nothing for its
 first pins. One option is to build shared-cache queries only from Location- and wiki-level names, and to treat a
 pin-name-driven search as the owner's own, cached per pin.
+
+## P189 — A CRIS document's gallery tile loads a 1200 px render of its first page, and the render is rebuilt every hour instead of kept
+
+`id: P189` · `status: open` · `updated: 2026-10-02` · `found by: the HRSH Photos-tab slowness report, 2026-10-02`
+
+A tile for a file an in-app REData proxy serves and a browser cannot show (a CRIS attachment PDF or TIFF) points
+at `<proxy>/?preview=1` (`services/media/previews.py:198`, `_gallery_url`). `RedataMediaProxyMixin.serve_media`
+answers it with `render_preview` at `PREVIEW_MAX_DIMENSION` (`previews.py:72`, 1200 px; a PDF's first page is
+rasterised at 1200 px tall, `previews.py:274`). On the dev stack's HRSH Photos tab one such tile loaded an
+848x1200 image (an A4 page) into a 119 px box. No smaller rendition exists to point the tile at.
+
+The render is not kept either. It sits in the shared cache for `_REDATA_MEDIA_CACHE_TTL` (`controllers/pin.py:1889`,
+one hour), beside the original bytes, which are cached only under `REDATA_MEDIA_MAX_CACHED_BYTES` (4 MB,
+`pin.py:1896`). The first view after the hour downloads the document from REData again and decodes it again in the
+sandbox (`pin.py:1988`). Third-party images were settled the other way (P165, Jess 2026-09-30: copy once, keep for
+good); these proxies were not moved with them.
+
+An attachment the browser can show (a JPEG) is served as its original bytes even with `?preview=1`
+(`pin.py:1979`), at whatever size CRIS holds it. Not measured for HRSH.
+
+What a fix needs, which is pipeline work rather than a tile change:
+
+- A copy made once and kept, as `RemoteImageCopy` and `tasks.render_remote_image_copy` do for third-party URLs.
+  Those key on an http(s) source fetched by `fetch_remote_source`; a proxied file comes from `RedataGateway`, so it
+  needs its own download step on an ordinary worker (the sandbox has no egress).
+- A tile-sized rendition beside the 1200 px one the lightbox uses. Uploads get a 400 px WebP `thumbnail` for grids
+  (`MEDIA_PIPELINE.md`, "Derived copies").
+- `gallery_urls` pointing tiles at the small one.
+
+Related: a third-party copy is stored at `REMOTE_COPY_MAX_DIMENSION` (`services/media/remote_copies.py:27`, 1200 px).
+A gallery tile copies the provider's own thumbnail where it names one, but an item with none copies the original
+(`previews.py:176`, `_thumb_source`), so that tile also loads up to 1200 px. How often providers omit a thumbnail
+was not measured.

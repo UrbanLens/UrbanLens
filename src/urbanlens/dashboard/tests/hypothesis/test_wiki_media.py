@@ -357,6 +357,22 @@ class WikiMediaProviderViewTests(TestCase):
 
         self.assertContains(response, f'<img class="media-item-thumb" src="{shared.image.url}"')
 
+    def test_a_shared_photo_tile_shows_its_thumbnail_and_opens_the_full_photo(self) -> None:
+        shared = Image.objects.create(
+            image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"),
+            thumbnail=SimpleUploadedFile("shared_thumb.webp", b"thumb", content_type="image/webp"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+        )
+
+        response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "photos"]))
+
+        self.assertContains(response, f'<img class="media-item-thumb" src="{shared.thumbnail.url}"')
+        self.assertContains(response, f'data-media-thumb="{shared.thumbnail.url}"')
+        self.assertContains(response, f'data-media-url="{shared.image.url}"')
+        self.assertContains(response, f'data-media-key="{media_item_key(shared.image.url)}"')
+
     def test_photos_are_ordered_by_vote_score_before_redata_confidence(self) -> None:
         """A community upvote outranks a merely REData-confident, unvoted photo."""
         upvoted_low_confidence = Image.objects.create(
@@ -440,6 +456,34 @@ class WikiMediaProviderViewTests(TestCase):
         # Wiki tiles wire their thumbs to the vote handler, not the pin's relevance handler.
         self.assertIn('data-media-action="vote-up"', body)
         self.assertNotIn('data-media-action="relevant"', body)
+
+    def test_a_provider_photo_kept_here_shows_its_thumbnail_and_opens_the_kept_original(self) -> None:
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source
+
+        panel = get_panel_source("wikimedia")
+        if not isinstance(panel, GalleryMediaSource):
+            self.fail("wikimedia is no longer a gallery source")
+        url = "https://example.com/kept.jpg"
+        LocationCache.set(
+            self.location,
+            panel.cache_source,
+            {"items": [{"url": url, "thumb_url": url, "caption": "Kept", "source": "Wikimedia", "page_url": url}]},
+            query_key="q",
+        )
+        kept = Image.objects.create(
+            image=SimpleUploadedFile("kept.jpg", b"bytes", content_type="image/jpeg"),
+            thumbnail=SimpleUploadedFile("kept_thumb.webp", b"thumb", content_type="image/webp"),
+            location=self.location,
+            profile=self.profile,
+            media_source_key="wikimedia",
+            media_item_key=media_item_key(url),
+        )
+
+        response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "wikimedia"]))
+
+        self.assertContains(response, f'<img class="media-item-thumb" src="{kept.thumbnail.url}"')
+        self.assertContains(response, f'data-media-thumb="{kept.thumbnail.url}"')
+        self.assertContains(response, f'data-media-url="{kept.image.url}"')
 
     def test_provider_404s_for_a_user_without_a_pin(self) -> None:
         stranger = baker.make(User)

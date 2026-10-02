@@ -85,6 +85,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),
                     "local_url": local_image.file_url if local_image else None,
+                    "local_thumb_url": local_image.thumb_url if local_image else None,
                     # TIFFs, scanned PDFs and HEICs reach the gallery routinely and none of them render in an
                     # <img> - see services.media.previews.
                     "thumb_url": picture.thumb,
@@ -122,8 +123,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
             key = media_item_key(url)
             rendered_items.append(
                 {
-                    "item": MediaItem(url=url, thumb_url=url, caption=img.caption or "", source="Photos", page_url=url, author=img.author or ""),
-                    "thumb_url": url,
+                    "item": MediaItem(url=url, thumb_url=img.thumb_url, caption=img.caption or "", source="Photos", page_url=url, author=img.author or ""),
+                    "thumb_url": img.thumb_url,
                     "key": key,
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),

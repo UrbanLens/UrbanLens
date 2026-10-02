@@ -1,17 +1,11 @@
 {% comment %}The pin Photos tab's public-source photos: the Media panel's external providers, one grid paged by shared/external-photos.ts.{% endcomment %}
-<section class="albums-loose albums-external" id="albums-external"
-         {% if poll_url %}hx-get="{{ poll_url }}" hx-trigger="load delay:{{ poll_interval }}s" hx-swap="outerHTML"{% endif %}>
+<section class="albums-loose albums-external" id="albums-external">
   <h3 class="albums-toolbar-title">
     <i class="material-symbols-outlined">public</i>
     <span>From public sources</span>
     {% if external_count %}<span class="albums-count">{{ external_count }}</span>{% endif %}
   </h3>
-  {% if pending_count %}
-  <p class="albums-empty settings-help" role="status">
-    <i class="material-icons spin">autorenew</i>
-    Still searching {{ pending_count }} source{{ pending_count|pluralize }}…
-  </p>
-  {% endif %}
+  {% include "dashboard/partials/albums/_external_photos_poll.html" %}
   {% if external_count %}
   <ul class="gallery-grid albums-external-grid" id="albums-external-grid"
       data-external-photo-grid

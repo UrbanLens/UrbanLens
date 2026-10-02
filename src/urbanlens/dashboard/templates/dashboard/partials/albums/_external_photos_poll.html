@@ -1,0 +1,10 @@
+{% comment %}The public-source section's "still searching" note and its next poll. A poll that finds no new photos answers with this alone, so the grid stays as it is.{% endcomment %}
+<div id="albums-external-status"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if pending_count %}
+  <p class="albums-empty settings-help" role="status">
+    <i class="material-icons spin">autorenew</i>
+    Still searching {{ pending_count }} source{{ pending_count|pluralize }}…
+  </p>
+  {% endif %}
+</div>
+{% if poll_url %}<span hidden hx-get="{{ poll_url }}" hx-trigger="load delay:{{ poll_interval }}s" hx-swap="outerHTML"></span>{% endif %}

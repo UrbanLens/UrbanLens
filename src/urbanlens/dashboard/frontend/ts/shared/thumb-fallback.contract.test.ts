@@ -42,6 +42,9 @@ describe("the broken-thumbnail fallback", () => {
             setAttribute: (name: string, value: string) => {
                 attributes[name] = value;
             },
+            removeAttribute: (name: string) => {
+                delete attributes[name];
+            },
             replaceWith: () => {
                 replaced = true;
             },
@@ -69,6 +72,9 @@ describe("the broken-thumbnail fallback", () => {
             setAttribute: (name: string, value: string) => {
                 attributes[name] = value;
             },
+            removeAttribute: (name: string) => {
+                delete attributes[name];
+            },
             replaceWith: () => {
                 replaced = true;
             },
@@ -76,14 +82,16 @@ describe("the broken-thumbnail fallback", () => {
         const fallback = scope.urbanlensMediaThumbFallback;
         if (!fallback) throw new Error("the script did not define urbanlensMediaThumbFallback");
 
-        for (let attempt = 1; attempt <= 10; attempt++) {
+        let attempts = 0;
+        while (!replaced) {
             fallback(img, "broken_image");
+            if (replaced) break;
+            attempts++;
             timers.shift()?.();
-            expect(attributes.src).toBe(`/map/media-copy/ab/?_r=${attempt}`);
+            expect(attributes.src).toBe(`/map/media-copy/ab/?_r=${attempts}`);
         }
-        expect(replaced).toBe(false);
-        fallback(img, "broken_image");
-        expect(replaced).toBe(true);
+        expect(attempts).toBeGreaterThan(0);
+        expect(attempts).toBeLessThan(10);
     });
 
     test("an image marked data-thumb-fallback falls back on its own, however late it was added", () => {
@@ -121,8 +129,10 @@ describe("the broken-thumbnail fallback", () => {
         document.getElementById("plain")?.dispatchEvent(new Event("error"));
         own.dispatchEvent(new Event("error"));
         for (const timer of timers) timer();
-        // Earlier tests in this file left their own copies of the listener on the document, so count nothing.
-        expect(document.getElementById("plain")?.getAttribute("src")).toMatch(/^\/map\/media-copy\/ab\/\?_r=\d+$/);
+        // Earlier tests in this file left their own copies of the listener on the document, and the first of them
+        // schedules the retry on its own timers, so check that one was scheduled rather than run it.
+        expect(document.getElementById("plain")?.dataset.previewRetry).toBe("1");
+        expect(own.dataset.previewRetry).toBeUndefined();
         expect(own.getAttribute("src")).toBe("/map/media-copy/cd/");
         document.body.innerHTML = "";
     });
@@ -143,8 +153,9 @@ describe("the broken-thumbnail fallback", () => {
         expect(img.dataset.previewRetry).toBe("1");
     });
 
-    test("a copy keeps retrying for as long as a slow provider's download can take", () => {
-        // P180: the server allows a first download 90 s; a page that gave up sooner showed an icon for an image that arrived.
+    test("a copy is asked for a few times, further apart, for as long as its turn can take", () => {
+        // Copies are made one at a time site-wide, so one late in a page's queue can take minutes; asking every few
+        // seconds meanwhile only re-renders the tile.
         const delays: number[] = [];
         const scope: { urbanlensRetryPendingImage?: (img: HTMLImageElement) => boolean } = {};
         new Function("window", "setTimeout", SCRIPT)(scope, (callback: () => void, delay: number) => {
@@ -156,7 +167,50 @@ describe("the broken-thumbnail fallback", () => {
         while (scope.urbanlensRetryPendingImage?.(img)) {
             // Each scheduled retry already swapped in its URL; the next error asks again.
         }
-        expect(delays.reduce((total, delay) => total + delay, 0)).toBeGreaterThanOrEqual(100_000);
+        expect(delays.reduce((total, delay) => total + delay, 0)).toBeGreaterThanOrEqual(160_000);
+        expect(delays.length).toBeLessThan(10);
+        expect(delays[0]).toBeGreaterThanOrEqual(3_000);
+        expect(delays).toEqual([...delays].sort((a, b) => a - b));
+    });
+
+    test("one failure is retried once, however many handlers report it", () => {
+        // An external tile's own error handler and the document's listener both saw each failure, so every 503
+        // spent two of its retries.
+        const timers: Array<() => void> = [];
+        const scope: { urbanlensRetryPendingImage?: (img: HTMLImageElement) => boolean } = {};
+        new Function("window", "setTimeout", SCRIPT)(scope, (callback: () => void) => timers.push(callback));
+        const img = document.createElement("img");
+        img.setAttribute("src", "/map/media-copy/twice/");
+
+        expect(scope.urbanlensRetryPendingImage?.(img)).toBe(true);
+        expect(scope.urbanlensRetryPendingImage?.(img)).toBe(true);
+
+        expect(timers).toHaveLength(1);
+        expect(img.dataset.previewRetry).toBe("1");
+        timers.shift()?.();
+        expect(img.getAttribute("src")).toBe("/map/media-copy/twice/?_r=1");
+        expect(scope.urbanlensRetryPendingImage?.(img)).toBe(true);
+        expect(timers).toHaveLength(1);
+    });
+
+    test("an image is hidden while it waits for a retry, and shown once it loads or gives up", () => {
+        // A broken-image glyph that flickers on every attempt is what made a page of pending tiles look jittery.
+        const scope: { urbanlensRetryPendingImage?: (img: HTMLImageElement) => boolean } = {};
+        new Function("window", "setTimeout", SCRIPT)(scope, (callback: () => void) => callback());
+        document.body.innerHTML = `<img id="arrives" src="/map/media-copy/ok/"><img id="busy" data-retry-busy src="/pin/p/immich/thumbnail/a1/">`;
+        const arrives = document.getElementById("arrives") as HTMLImageElement;
+        const busy = document.getElementById("busy") as HTMLImageElement;
+
+        expect(scope.urbanlensRetryPendingImage?.(arrives)).toBe(true);
+        expect(arrives.hasAttribute("data-retry-pending")).toBe(true);
+        arrives.dispatchEvent(new Event("load"));
+        expect(arrives.hasAttribute("data-retry-pending")).toBe(false);
+
+        while (scope.urbanlensRetryPendingImage?.(busy)) {
+            expect(busy.hasAttribute("data-retry-pending")).toBe(true);
+        }
+        expect(busy.hasAttribute("data-retry-pending")).toBe(false);
+        document.body.innerHTML = "";
     });
 
     test("an image marked data-fade-in is marked loaded once it has", () => {

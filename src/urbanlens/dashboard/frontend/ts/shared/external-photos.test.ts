@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { externalPhotoFromJson, renderExternalPhotoTile } from "./external-photos";
 import { lightboxListFromGrid, renderPhotoTile, tileFromJson } from "./photo-tile";
@@ -93,5 +95,26 @@ describe("one lightbox across your photos and public ones", () => {
             mediaSource: "wikimedia",
             mediaKey: "abc123",
         });
+    });
+});
+
+describe("a public tile whose copy is still being made", () => {
+    test("asks again once per failure, then shows an icon in the thumbnail's place", () => {
+        const timers: Array<() => void> = [];
+        const script = readFileSync(join(import.meta.dir, "..", "..", "static", "js", "media-thumb-fallback.js"), "utf8");
+        new Function("window", "setTimeout", script)(window, (callback: () => void) => timers.push(callback));
+        document.body.innerHTML = `<ul id="public"></ul>`;
+        const tile = external({ thumb_url: "/dashboard/map/media-copy/abc/" });
+        document.getElementById("public")!.append(tile);
+
+        tile.querySelector("img")!.dispatchEvent(new Event("error"));
+        expect(timers).toHaveLength(1);
+
+        for (let attempt = 0; attempt < 20 && tile.querySelector("img"); attempt++) {
+            timers.splice(0).forEach((timer) => timer());
+            tile.querySelector("img")?.dispatchEvent(new Event("error"));
+        }
+        expect(tile.querySelector("img")).toBeNull();
+        expect(tile.querySelector(".gallery-thumb-btn > .gallery-thumb.gallery-thumb--placeholder")?.textContent).toBe("broken_image");
     });
 });

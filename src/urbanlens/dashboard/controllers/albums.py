@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, column_max_length, text_length_error
 from urbanlens.dashboard.services.geo.sampling import bound_map_layer
@@ -111,7 +112,7 @@ def _query_url(base: str, **params: str | int) -> str:
     return f"{base}{'&' if '?' in base else '?'}{urlencode(params)}"
 
 
-#: Re-render cadence of the public-source section while a provider is still fetching; each one resets its grid.
+#: Poll cadence of the public-source section while a provider is still fetching.
 _EXTERNAL_POLL_SECONDS = 5
 
 #: ``?photos=`` values for the pin Photos tab's "Your photos" grid.
@@ -453,7 +454,12 @@ def _mine_page(request: HttpRequest, listing: list[Pin | Wiki | Profile], profil
 
 
 def _external_response(request: HttpRequest, pin: Pin, listing: list[Pin | Wiki | Profile], profile: Profile, include_children: bool) -> HttpResponse:
-    """A pin's public-source photos: one JSON page (``?external=1``), or the Photos tab section (``?external_section=1``)."""
+    """A pin's public-source photos: one JSON page (``?external=1``), or the Photos tab section (``?external_section=1``).
+
+    While a provider is still fetching, the section polls with the photo count it shows (``known``). A poll that finds
+    the same count answers with the status note and the next poll only, leaving the grid and its loading tiles as they
+    are; one that finds more replaces the section.
+    """
     from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS
 
     external = external_photos_for_pin(pin, profile, request.user, own_pins=[entry for entry in listing if isinstance(entry, Pin)])
@@ -475,18 +481,22 @@ def _external_response(request: HttpRequest, pin: Pin, listing: list[Pin | Wiki 
     except ValueError:
         attempt = 0
     polling = bool(external.pending) and attempt < MAX_POLL_ATTEMPTS
-    return render(
-        request,
-        "dashboard/partials/albums/_external_photos_section.html",
-        {
-            "external_count": total,
-            "external_items_url": _query_url(list_url, external=1),
-            "pending_count": len(external.pending) if polling else 0,
-            "poll_url": _query_url(list_url, external_section=1, attempt=attempt + 1) if polling else "",
-            "poll_interval": _EXTERNAL_POLL_SECONDS,
-            "grid_page_size": ALBUM_GRID_PAGE_SIZE,
-        },
-    )
+    known = safe_int_or_none(request.GET.get("known"))
+    context = {
+        "external_count": total,
+        "external_items_url": _query_url(list_url, external=1),
+        "pending_count": len(external.pending) if polling else 0,
+        "poll_url": _query_url(list_url, external_section=1, attempt=attempt + 1, known=total) if polling else "",
+        "poll_interval": _EXTERNAL_POLL_SECONDS,
+        "grid_page_size": ALBUM_GRID_PAGE_SIZE,
+    }
+    if known == total and (polling or total):
+        return render(request, "dashboard/partials/albums/_external_photos_poll.html", {**context, "oob": True})
+    response = render(request, "dashboard/partials/albums/_external_photos_section.html", context)
+    if known is not None:
+        response["HX-Retarget"] = "#albums-external"
+        response["HX-Reswap"] = "outerHTML"
+    return response
 
 
 def _int_ids(raw) -> list[int]:
