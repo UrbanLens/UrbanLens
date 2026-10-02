@@ -11,6 +11,7 @@ from unittest import mock
 
 from django.conf import settings
 from django.core.cache import cache, caches
+from django.core.files.storage import default_storage
 from django.test import Client
 from django.urls import reverse
 from PIL import Image as PILImage
@@ -142,6 +143,40 @@ class KeptRenditionTests(_Base):
             self.assertEqual(self._get("thumb").status_code, 404)
             self.assertEqual(self._get("thumb").status_code, 404)
         self.assertEqual(render.call_count, 1)
+
+
+class SecondRenderTests(TestCase):
+    """A queue backed up past the queued mark's lifetime can render the same file twice, even at once."""
+
+    key = "ul_cris_attachment_race_5"
+
+    def _finish_twice(self) -> tuple[bytes, object]:
+        from urbanlens.dashboard.models import ProxiedMediaRender
+        from urbanlens.dashboard.services.media import proxied_renders
+
+        first, second = _png(300, 200), _png(200, 300)
+        proxied_renders.finish(self.key, proxied_renders.TILE, (first, "image/png"))
+        folder = ProxiedMediaRender.objects.get(source_key=self.key).file.name.rsplit("/", 1)[0]
+        self.addCleanup(
+            lambda: [default_storage.delete(f"{folder}/{name}") for name in default_storage.listdir(folder)[1]]
+        )
+        proxied_renders.finish(self.key, proxied_renders.TILE, (second, "image/png"))
+        [render] = ProxiedMediaRender.objects.filter(source_key=self.key)
+        return first, render
+
+    def _assert_first_kept_alone(self, first: bytes, render) -> None:
+        with render.file.open("rb") as stored:
+            self.assertEqual(stored.read(), first, "a kept rendering is served immutable, so it must not change")
+        folder, name = render.file.name.rsplit("/", 1)
+        self.assertEqual(default_storage.listdir(folder)[1], [name])
+
+    def test_the_first_rendering_is_kept_and_the_second_leaves_no_file(self) -> None:
+        self._assert_first_kept_alone(*self._finish_twice())
+
+    def test_a_second_rendering_finishing_at_the_same_moment_neither_fails_nor_leaves_a_file(self) -> None:
+        with mock.patch("django.db.models.query.QuerySet.exists", return_value=False):
+            first, render = self._finish_twice()
+        self._assert_first_kept_alone(first, render)
 
 
 class TileUrlTests(TestCase):

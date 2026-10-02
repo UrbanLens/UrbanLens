@@ -11,6 +11,7 @@ import hashlib
 
 from django.core.cache import cache
 from django.core.files.base import ContentFile
+from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.proxied_media_render.model import ProxiedMediaRender
 from urbanlens.dashboard.services.media.previews import PREVIEW_MAX_DIMENSION, RENDER_QUEUED, RENDER_QUEUED_TTL
@@ -103,9 +104,13 @@ def finish(source_key: str, size: str, rendered: tuple[bytes, str] | None) -> No
         return
     content, content_type = rendered
     extension = "png" if content_type == "image/png" else "jpg"
-    render = ProxiedMediaRender.objects.filter(render_digest=digest).first() or ProxiedMediaRender(render_digest=digest, source_key=source_key[:255], size=size)
-    render.content_type = content_type
-    render.file_size = len(content)
-    render.file.save(f"{digest}.{extension}", ContentFile(content), save=False)
-    render.save()
+    # A kept rendering is served immutable, so the first one stays and a later duplicate is dropped.
+    if not ProxiedMediaRender.objects.filter(render_digest=digest).exists():
+        render = ProxiedMediaRender(render_digest=digest, source_key=source_key[:255], size=size, content_type=content_type, file_size=len(content))
+        render.file.save(f"{digest}.{extension}", ContentFile(content), save=False)
+        try:
+            with transaction.atomic():
+                render.save()
+        except IntegrityError:
+            render.file.delete(save=False)
     cache.delete(_marker(digest))
