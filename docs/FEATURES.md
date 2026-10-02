@@ -129,6 +129,12 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Ford Motors, `switz` for Switzerland). Trailing words that would overflow a readable length are
   dropped as a unit, including hyphenated compounds (`non-contributing`), rather than clipped
   mid-word; dropped words are added back only when the ideal slug is not unique or is too short
+- **Wiki URLs** are `/location/<location slug>/wiki/...`; `/location/<slug>/` redirects (302) to the wiki.
+  A wiki route reached by the Location's uuid while the Location has another slug answers a 301 to the
+  same route at that slug, keeping the rest of the path and the query string. Only a GET or HEAD from
+  someone the wiki itself would serve is redirected; anything else runs in place, and anyone else gets the
+  wiki's usual 404 (`redirect_to_canonical_location` in `controllers/location_wiki.py`). A Location keeps
+  its uuid slug until child-wiki alignment replaces it; minting one from `official_name` waits on P186
 - Private per-pin notes (`PinNote`), independent of public comments
 - **Articles** — Wikipedia-style long-form write-ups (sections, links, references) with full
   **revision history** (every saved version stored, restorable from the Edit History tab); private

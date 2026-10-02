@@ -4015,3 +4015,37 @@ should come back as a polygon, probably merged with its Overture footprint. REDa
 should need to change: `upsert_place` updates a building place by its provider key once the cached `parcel_buildings`
 answer refreshes. If the merge gives Kirkbride a new key, place 483 is orphaned, with no Location on it: migration 0034
 moved them all by containment. To close: after REData deploys, refresh HRSH's buildings and re-run the location project.
+
+## P186 — `Location.official_name` is seeded from text the client sent, yet a new wiki adopts it as its automatic name and concealment shows it as the provider name; it cannot seed a readable URL slug
+
+`id: P186` · `status: open` · `updated: 2026-10-02` · `found by: the readable-location-slug work, 2026-10-02, tracing every writer before minting a URL slug from the field`
+
+The model comment (`models/location/model.py:39-41`) and `docs/designs/concealed-wiki-spec.md` (its address-proxy row) treat
+`official_name` as provider data that user edits never write. Two request paths seed it on create with text the client sent:
+
+- **Add pin.** `controllers/maps.py:236` reads `place_canonical_name` straight from the POST and `services/pins/pin_creation.py:192,198`
+  passes it as `defaults={"official_name": ...}`. The map fills it with the clicked marker's title (`map-page.ts`,
+  `_addPinCanonicalName`), and a search marker's title falls back to what the user typed: `location-search-engine.ts`
+  `runNearQuery` uses `anchorText`, and `display_name || searchTerm` / `|| q` elsewhere. Any client can also post any string.
+- **Trip activity.** `controllers/trip.py:644` passes the whole POST body as `place`;
+  `services/trips/trip_activities.py:263-265` names a new Location `geocoded_name or title`, so the activity's own title
+  when no geocoded name came with it.
+
+Older rows can carry pin names too: `migrations/0003_v0_4_0_data.py:263` named child-wiki Locations from detail pins'
+names, and `:313-315` named Locations from non-private pins' names. Nothing records which rows these are.
+
+What that reaches today: `WikiManager.get_or_create_for_location` adopts `official_name` as a new wiki's name under the
+automatic write source (`models/wiki/queryset.py:119`), and `services/wiki/concealment.py:108` shows it to a concealed
+viewer as the name a zero-contribution wiki would have. `update_location_name_from_external_sources`
+(`services/locations/naming.py`) overwrites the seed only when a provider offers a candidate; with none, the typed text stays.
+
+What it blocks: a readable Location slug minted from `official_name`. A slug is a URL, kept in history, logs and
+referrers, and it would never be re-minted. The URL redirects that work needed shipped without it (FEATURES, "Wiki URLs").
+
+Reproduced, not just read: `tests/hypothesis/test_location_official_name_provenance.py` holds strict xfails for both
+paths, each paired with a test showing the request created the Location. Not measured: how many production rows hold
+user text (production was not read), or where Hudson River State Hospital's own `official_name` came from.
+
+Directions, none chosen: drop `place_canonical_name` (it only saves a geocoding call) or check it against the linked
+`GooglePlace`; stop falling back to the activity title; record where `official_name` came from and mint slugs only from a
+provider's name, for example where `update_location_name_from_external_sources` writes a resolved provider name.
