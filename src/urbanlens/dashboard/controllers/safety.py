@@ -334,6 +334,11 @@ def _overview_stats(checkins: Iterable[SafetyCheckin]) -> dict[str, int]:
     }
 
 
+#: The external API's cap (``SafetyCheckinCreateSerializer.grace_period_seconds``), so a typo can't schedule an
+#: escalation years out.
+MAX_GRACE_PERIOD_HOURS = 168
+
+
 def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
     """Parse the submitted grace period, in hours, into a timedelta.
 
@@ -341,13 +346,15 @@ def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
         request: Incoming HTTP request.
 
     Returns:
-        The parsed timedelta, defaulting to 1 hour on missing/invalid input.
+        The parsed timedelta between 15 minutes and a week, defaulting to 1 hour on missing/invalid input.
     """
     try:
         hours = float(request.POST.get("grace_period_hours", "1"))
     except ValueError:
         hours = 1.0
-    return datetime.timedelta(hours=max(hours, 0.25))
+    if not math.isfinite(hours):
+        hours = 1.0
+    return datetime.timedelta(hours=min(max(hours, 0.25), MAX_GRACE_PERIOD_HOURS))
 
 
 def _parse_auto_delete_days(request: HttpRequest) -> int | None:

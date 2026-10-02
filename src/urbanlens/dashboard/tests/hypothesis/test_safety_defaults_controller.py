@@ -66,6 +66,15 @@ class SafetySettingsViewDefaultsPostTests(TestCase):
         req.user = self.user
         return SafetySettingsView.as_view()(req)
 
+    def test_a_grace_period_that_is_not_a_finite_number_of_hours_saves_a_sane_one(self) -> None:
+        for raw, hours in (("inf", 1), ("-inf", 1), ("nan", 1), ("1e10", 168), ("0", 0.25), ("6", 6)):
+            with self.subTest(raw=raw):
+                response = self._post({"default_message": "", "grace_period_hours": raw, "contact_emails": []})
+
+                self.assertEqual(response.status_code, 302)
+                grace = get_or_create_preference(self.profile).default_grace_period
+                self.assertEqual(grace.total_seconds(), hours * 3600)
+
     def test_saves_a_friend_chip_and_multiple_email_chips(self) -> None:
         response = self._post(
             {
