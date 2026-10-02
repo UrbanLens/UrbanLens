@@ -2826,51 +2826,6 @@ Needs a retention decision before code: how many revisions, or how old, an artic
 revision some other record cites (a revert, a moderation note) is exempt. Storing diffs instead of copies
 is the other lever, and changes what a revert has to do.
 
-## P171 — Album grids and a single album's membership are unbounded
-
-`id: P171` · `status: open` · `updated: 2026-09-29` · `found by: P166's "left open" list, re-verified 2026-09-29`
-
-P166 moved collections into SQL and said per-album size caps (T8b) and paging the album grid on the Photos
-tab were left for later; nothing tracked them after it was archived. `controllers/albums.py` renders every
-album of the listing owner, and its children when included, in one pass, and the "add to album" picker is built
-from the same rows, so paging the grid means giving the picker its own source first. `SiteSettings.max_photos_per_album`
-caps an album at 5,000 photos by default (`72f6f96a1`, an agent's value, not reviewed by Jess).
-
-`reorder_album_items` wrote through a `CASE` with a branch per photo, which Postgres tests every row against, so
-it grew with the square of the album: 10 ms at 500 photos, 58 ms at 2,000, 267 ms at 5,000 (temp-table bench on
-the dev database, 2026-09-29). It now joins `unnest(ids, positions)` (`DashboardQuerySet.number_in_order`, which pin-list reorder uses too):
-8, 20 and 26 ms. It still reads every membership id once, which is linear.
-
-**Album grid and picker: paged (2026-09-29).** The Photos tab (pin, wiki, Vault) renders the first
-`ALBUM_GRID_PAGE_SIZE` (48) album cards; the rest come from `?albums=1&offset=` as JSON whose items carry
-each card rendered by `_album_card.html`, fed through the photo grids' `bindPhotoGrid` (`album-grid.ts`,
-with an `onInserted` hook so htmx wires the new cards). The add/move dialog no longer ships in the page:
-it loads `?picker=1` (HTML rows, `?q=` name search, `?exclude=` for the open album, an `intersect once`
-row per further page) each time it opens. The old JSON `?picker=1` answer is gone; nothing but a Playwright
-spec read it. Both go through `albums_listing_page`, ordered by name then pk. Tests:
-`test_album_grid_paging.py`, `album-grid.test.ts`, `album-picker.test.ts`.
-
-Measured with 300 albums of one photo each on one pin, test client against the test-runner DB, median of 5:
-
-| Request | Before | After |
-|---|---|---|
-| Photos tab (panel HTML) | 21 queries, 2,939 ms, 853 KB, 300 cards + 300 picker rows | 22 queries, 345 ms, 138 KB, 48 cards, no picker rows |
-| Picker | JSON of all 300: 10 queries, 2,437 ms, 44 KB | first page: 11 queries, 169 ms, 25 KB; search hit: 11 queries, 91 ms |
-| Next grid page (48 cards) | n/a | 11 queries, 265 ms, 102 KB |
-
-Nearly all of the old cost was `describe_albums`' stats query over every album (about 2.1 s of SQL at 300);
-it is now paid per page. That query still costs roughly 5-7 ms per album it describes.
-
-Not checked in a browser: the grid's scroll paging, htmx wiring on paged cards (open, delete, move, drag-to-file),
-and the dialog's load-on-open, search and scroll-to-load-more are covered by unit tests with a stubbed htmx and
-IntersectionObserver only.
-
-A wiki's Photos tab with `children=1` listed another contributor's albums and unfiled photos to a concealed
-viewer whenever the wiki had a child wiki: concealment was applied only to a single-owner listing. It is now
-applied per wiki (`_conceal_by_wiki`); `WikiChildListingConcealmentTests` reproduces it.
-
-Still open: the per-album size cap (`max_photos_per_album`, 5,000, not reviewed by Jess).
-
 ## P182 — A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it
 
 `id: P182` · `status: open, upstream` · `updated: 2026-10-01` · `found by: P181's investigation, 2026-10-01`

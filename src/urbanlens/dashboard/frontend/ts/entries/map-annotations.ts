@@ -2149,7 +2149,7 @@ function init(): void {
                     </span>
                 </div>`;
             li.querySelector(".photo-panel-place-btn")?.addEventListener("click", (event) => {
-                // The tile's own click pans and opens the lightbox.
+                // The tile's own click pans to a placed photo, or opens the lightbox for one with no place.
                 event.stopPropagation();
                 if (pendingPlacement?.kind === "photo" && pendingPlacement.photoId === img.id) disarmPlacement();
                 else armPlacement({ kind: "photo", photoId: img.id });
