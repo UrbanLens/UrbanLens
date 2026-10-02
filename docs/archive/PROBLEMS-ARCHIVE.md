@@ -20249,3 +20249,29 @@ dimmed (below 0.8; the UA's own lighter backdrop dims it less, 178 against 199, 
 can't measure it, because it skips inert elements. Also: the toast still sits in the corner and takes a click with no
 dialog open, and `dialogs.test.ts` covers `raiseToasts` against a stubbed popover API (happy-dom has none).
 
+## RESOLVED 2026-10-02: Every write handler the 2026-08-14 coverage run found unexecuted now runs under a test; the last five found two bugs
+
+`id: P37` · `status: fixed` · `resolved: 2026-10-02`
+
+`found by: coverage.py over the full suite, 2026-08-14` · `report: docs/reports/2026-08-14-view-coverage.md`
+
+The 2026-08-14 run found 208 of 1,795 view-layer callables never executed, 100 of them `post`/`delete`/`put`/`patch`
+handlers totalling 1,217 statements.
+
+**Re-measured 2026-10-02.** The 100 handlers were mapped to their current routes (all 100 still have one), every test
+file naming one of those routes was collected (102 files), and `coverage run` scoped to `controllers/` and
+`external_api/` was taken over just those files: 2,054 passed. 95 of the 100 handlers execute. The other five had
+tests naming their routes but none sending their verb; `test_last_unexecuted_write_handlers.py` now covers each
+(owner path checked in the database, stranger refused with nothing changed, anonymous and a read-only key refused,
+malformed bodies a 4xx):
+
+- `external_api/views.py::VisitSuggestionActionView.post`, `ProfileNoteDetailView.patch`, `SafetyContactDefaultsView.put`
+- `controllers/detail_pins.py::DetailPinEditView.delete`, `controllers/image_gallery.py::WikiImageView.post`
+
+They found two bugs, fixed test-first: a deeply nested JSON body was a `RecursionError` 500 on every external API
+write (a `JSONParser` subclass in `services/core/request_body.py` now answers 400) and on the photo reposition routes;
+and a `map_hidden` that was not a JSON boolean (`"false"`, `"0"`, `[false]`) hid the photo, through `bool()`.
+
+Most of the roster's coverage came from P29's write-route tests. A subset run is a lower bound, so "executes" here
+is real; the 108 non-write callables the 2026-08-14 run also never reached were not re-measured. The deep-nesting
+500 is also reachable through the 17 dashboard views and one service that parse a body themselves: P195.

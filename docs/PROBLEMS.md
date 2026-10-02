@@ -270,20 +270,30 @@ the pin map had no pending state (`shared/media-map-drop.ts`). What's left is st
   (HTTP 409)." beside the dialog; those requests now report their own failures. Organize's
   priority save toasted a refusal's raw JSON; it now toasts the sentence.
 
-  **Still open from the audit, none fixed or measured here:**
-  - An expired session reads as success to any status-only check, raw or `fetchText` - see P192.
-  - The net still toasts failures that are not the user's to act on: the map's pins-meta poll on
-    every tick while offline, the geolocation-visit and map-position saves, a Wikipedia summary
-    404 for a place without an article, an own-tile 404 or 5xx per tile.
-  - Most handled calls that toast their own message do not set `__ulReported`, so one failure
-    shows two toasts - the net's "Request failed (HTTP n)." and theirs. Not counted.
-  - Smaller: an article inline-image upload shows no progress (`uploadAndInsertImage` in
-    `entries/article-wysiwyg.ts`); a failed import confirm leaves the wizard reading "Importing..."
-    (`entries/import-wizard.ts`); a failed pin-list reorder toasts but keeps the new order
-    (`saveOrder` in `entries/pin-list-detail.ts`); markup creation says "Failed to save markup."
-    when only the reload after a successful save failed (`reloadMarkupAndOpenEdit` in
-    `shared/markup-toolbar.ts`); the unlock dialog blames the password or recovery key for a
-    network failure.
+  **The audit's other open items, fixed 2026-10-02 (merge `d7c79a092` and the commits before it):**
+  - An expired session reading as success: P192, archived.
+  - Background calls no longer toast through the net: the pins-meta poll (it switches on the offline
+    indicator instead, and says "session ended" once on a 401), the geolocation-visit and map-position
+    saves, the Wikipedia and place-details enrichment, the safety-map view save, own tiles.
+    `shared/fetch-net-callers.contract.test.ts` fails if one of them loses its opt-out.
+  - One toast per failure: 83 calls (60 raw, 23 through `fetch-json`) toasted their own message and got
+    the net's too; all are marked, raw ones through the new `fetchResponse()`.
+  - The smaller ones: inline-image uploads show "Uploading image..." at the cursor; a failed import
+    confirm returns the wizard to its preview; a failed pin-list reorder reverts to the last saved order;
+    markup says "saved, but the map could not show it" when only the reload failed; the unlock dialog says
+    the keys could not be loaded rather than blaming the password; organize's priority save says it
+    couldn't reach the server instead of "Failed to fetch".
+  - Found by browser-verifying the P11 merge, and fixed: the map's bulk-delete Undo rendered as literal
+    `<button>` text since toastr escaping came on (now a real node, `toastWithAction`); "Delete child pins
+    too?" was sometimes cancelled at once by the previous dialog's late `close` event (1 in ~23); renaming
+    through the Edit Pin dialog left the page heading stale; the chip and parent/child label pickers had no
+    keyboard navigation (`shared/suggestion-keys.ts`).
+
+  **Still open:** three Python controllers still build a toast with an HTML link -
+  `controllers/pin_suggestions.py:83`, `pin_merge_suggestions.py:112`, `pin_import_failures.py:69` append
+  `<a ... class="toast-undo-btn">View pin</a>` to the message, which toastr now shows as text. The client
+  takes `showToast.link = {label, href}` (`showTriggeredToast` in `shared/site-runtime.ts`); each `_toast`
+  should send that instead, and `test_pin_suggestions.py:814` assert the link's `href`.
 
 - The three games triplicate ~1,500 lines of session/lobby/chat/invite/fetch plumbing (19 blocks
   differing only by an `sg-`/`cs-`/`trivia-` prefix). Extracting `game-net` / `game-session` /
@@ -788,98 +798,6 @@ unrelated pre-existing failures in that same run (`doc-line-refs` docs drift, `r
 **45 remain.** This entry has not re-picked a "worth doing first" set for what's left; the next
 session doing so should re-check `_KNOWN_UNSTYLED` rather than trust this sentence's count, since
 the list drifts as other work adds or removes entries.
-
----
-
-## P37 — A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured
-
-`id: P37` · `status: open` · `updated: 2026-09-18`
-
-Previously titled "A 2026-08-14 coverage run found 100 write handlers no test executed; all but one
-of its top roster are tested now", before that "100 write handlers totalling 1,217 statements never execute under the test suite",
-and before that "1,217 statements of write handlers that no test executes".
-
-Measured 2026-08-14 with `coverage.py` over the full suite; full list in
-`docs/reports/2026-08-14-view-coverage.md`.
-
-The view layer is 80% covered by statement, which sounds healthy. The shape underneath is less so:
-**208 of 1,795 callables never execute**, and **100 of those are `post`/`delete`/`put`/`patch`
-handlers totalling 1,217 statements**. Half of the unexercised view code is code that mutates data.
-
-Caveats worth keeping attached to this number: coverage measures execution, not correctness, and
-the run was scoped to `controllers/` and `external_api/`, so a service called by an uncovered
-handler may itself be well tested.
-
-### The highest-risk roster, as of 2026-09-14
-
-The entry ranked its uncovered handlers by risk. Each was re-checked by searching the tests for a
-request to its route, not by re-running coverage, so the other ~90 handlers are not re-measured.
-
-| handler [statements] | now |
-|---|---|
-| `controllers/labels.py::LabelBulkConvertView.post` [36] | exercised: `test_label_bulk_convert_conflict.py` runs a real convert, and `test_every_stored_user_image_is_reencoded.py` runs one alongside an icon publish |
-| `controllers/labels.py::LabelBulkEditView.post` [33] | `test_label_bulk_edit_applies.py` (2026-09-14): only the fields sent are written, other profiles' labels, other kinds and protected statuses are untouched, parents and children are added, and a cycle is refused. Before it, only the ceiling tests reached this handler, and they are refused before any write |
-| `controllers/site_admin.py::SiteAdminUsersView.post` [35] | exercised by `test_site_admin_user_deletion.py` and `test_request_id_lookups.py` |
-| `controllers/detail_pins.py::LocationWikiDetailPinEditView.post` [34] | `test_wiki_detail_pin_edit.py` (2026-09-14): the visibility gate, a child of another wiki, style fields sent and kept, a move and its `WikiEdit`, and a refused move that saves nothing. The `delete` verb was already covered by `test_undo.py` and `test_quota_rewards.py` |
-| `controllers/visit_suggestions.py::VisitSuggestionRespondView.post` [31] | exercised by `test_notification_inbox_dismissal.py` |
-| `controllers/calendar_sync.py::CalendarImportView.post` [30] | `test_calendar_import_view.py` |
-| `controllers/albums.py::AlbumEditView.post` [31] | exercised by `test_wiki_albums.py` since `01e1b5988` |
-| `controllers/pin.py::PinController.upload_takeout` [39] | deleted, along with its route |
-| `controllers/consensus.py::ConsensusPhotoUploadView.post` [31] | `test_consensus_photo_upload_view.py` (2026-09-14): the alpha gate, a non-participant, an unaccepted invite, a round from another session, no file, a non-image, the quota and a duplicate checksum each store nothing and award nothing; a success lands on the round's wiki, queues processing once and awards the bonus |
-
-"Exercised" means a test sends a request that reaches the handler. It does not mean every branch is
-asserted. `docs/reports/2026-08-14-view-coverage.md` (X12) stays as the dated measurement.
-
-**2026-09-18, outside the dated roster:** `controllers/userprofile.py`'s `ProfileNoteView.post`,
-`ProfileNoteEditView.post` and `ProfileNoteDeleteView.post` also had zero coverage - a later ad-hoc
-check, not a re-run of the 2026-08-14 measurement. `test_profile_notes.py` now exercises all three:
-content is created only when non-empty, a profile can't annotate itself, and - the real behavior
-worth a regression test - `ProfileNote.objects.for_pair(author, subject)` keeps edit/delete scoped
-to the acting author's own note about that specific subject, so neither another author's note about
-the same subject nor the same author's note about a *different* subject is reachable through the
-wrong URL.
-
-**2026-09-18, same file, three more:** `ProfileTrustView.post`, `ProfileNicknameView.post` and
-`ProfileLabelToggleView.post` were also zero-coverage - checked directly against the current URLs
-(`profile.trust`, `profile.nickname`, `profile.label_toggle`), not against the stale 2026-08-14
-report, since the report predates September's coverage work on this file.
-`test_profile_trust_nickname_label_toggle.py` now exercises all three: trust rating set/update, a
-zero or out-of-range rating clearing rather than erroring (the widget's own "clear" signal, not a
-rejected value), nickname set/update/clear-on-blank, an over-length nickname refused before it
-reaches the database, and self-annotation refused on all three. The label toggle's two real
-regression tests: a `Label` another author owns is not reachable even by its correct id, because
-`Label.objects.visible_to(author)` excludes it before `get_or_create` ever runs; and a label of the
-wrong `kind` (a category, not a person-label) is refused the same way, so a category or status label
-cannot be attached to a profile as if it were a person annotation.
-
-**2026-09-18, external API this time:** a fresh survey of `docs/reports/2026-08-14-view-coverage.md`
-against the current suite (the report itself is stale - several of its other listed handlers turned
-out already covered by unrelated feature work since) found `external_api/views_messaging.py`'s
-`GroupMembersView.delete` (route `messages.groups.members`) and `MessageDetailView.delete` (route
-`messages.detail`) still genuinely uncovered: `test_external_api_messaging.py` exercised `POST`
-and `GET` on the first but never touched the second at all. Added to that file rather than a
-new one, since its `MessagingBaseTestCase` fixture already fit both. `GroupMemberRemovalTests`
-covers the real permission split - the creator can remove anyone, a member can remove only
-themselves (leaving), a non-creator cannot remove someone else, and removing a non-member is
-refused - and `MessageDeleteTests` covers the sender-only `?scope=everyone` vs. recipient-only
-`?scope=self` split (including the default scope, an invalid `scope` value refused with 400, and
-an unknown message id refused with 404), so a sender cannot hide a message only for themselves
-and a recipient cannot delete it for the sender too.
-
-**2026-09-18, two more in the same file:** the same survey named `GroupsView.post` (route
-`messages.groups`, create a group) and `GroupDetailView.patch` (route `messages.groups.detail`,
-rename a group) as further candidates - checking the whole test tree, not just
-`test_external_api_messaging.py`, mattered here: a sibling file, `test_external_api_group_controls.py`,
-already covers `GroupMessageReactionView`, `GroupMessageDetailView.delete`, `GroupLeaveView`,
-`GroupMuteView`, and `ConversationMuteView` in full, which a single-file grep would have missed.
-`messages.groups` (POST) and `messages.groups.detail` (PATCH) genuinely had zero coverage anywhere,
-though - `GroupCreateTests` covers creation (a named member is added, an unknown slug is refused,
-naming only yourself is refused since the creator doesn't count as a member, a whitespace-only name
-is refused, and a read-scope-only token is refused with 403), and `GroupRenameTests` covers the
-rename path (any active member may rename, a non-member gets 404 rather than 403 since the view
-checks membership before calling the service, an unknown group uuid is 404, a whitespace-only name
-is refused, and read scope alone cannot write). `GroupPinShareView.post` (route
-`messages.groups.share.pin`) is still uncovered anywhere and was left for a later batch.
 
 ---
 
@@ -3132,7 +3050,7 @@ Not changed, because it trades recall for privacy: a Location with no official n
 first pins. One option is to build shared-cache queries only from Location- and wiki-level names, and to treat a
 pin-name-driven search as the owner's own, cached per pin.
 
-## P193 — Two product questions and three unchecked gaps left by the write-route audit (P29)
+## P193 — Two product questions and two unchecked gaps left by the write-route audit (P29)
 
 `id: P193` · `status: open` · `updated: 2026-10-02` · `found by: P29's write-route tests, 2026-10-02`
 
@@ -3146,9 +3064,43 @@ test.
   sender's live pin (type, dates, security indicators) when the recipient accepts, so edits the sender made after
   sharing travel with it. `services/sharing/CLAUDE.md` makes the share the consent; whether that consent covers later
   edits is not decided.
-- **Unbounded integers on routes that were already named.** Writable `serializers.IntegerField`s without a
-  `max_value` in `external_api/serializers*.py` may reach a column and 500 past its range, as `order` on
-  `labels.detail` did. Being checked field by field on branch `p193-integer-bounds` (2026-10-02).
+- **Integers past their column were stored as their low bits, not refused (fixed 2026-10-02).** Django sends an
+  `IntegerField` write as psycopg's `Int4` (`Int2` for a small one), and with `server_side_binding` on,
+  psycopg-binary 3.2.13's C dumpers keep the low 32 (16) bits without checking: `Label.order = 2**31` was stored
+  as -2**31, `2**32 + 1` as 1, and a `smallint` 2**16 + 3 as 3. Past 2**63 the `Int8` dumper raised
+  `OverflowError`. Measured in the runner; psycopg's 3.3 changelog lists no fix. Anything that skipped a form's
+  range validators wrapped silently: a DM's `key_version` past 2**32 stored the ciphertext under the wrong key
+  version, and a safety auto-delete window of 2**32 days was stored as 0. Two layers now:
+  - **The database layer refuses.** `core/integer_dumpers.py` registers range-checked pure-Python dumpers for
+    `Int2`/`Int4`/`Int8` on every connection (`connection_created`, from `DashboardConfig.ready`), raising
+    `DataError` with the server's wording. A missed bound is now a 500, never a wrong number
+    (`core/tests/test_integer_dumpers.py`). It also covers `__in` on a non-primary-key integer column, which
+    matched the wrapped value's rows.
+  - **The external API's serializers bound every writable integer** (`test_external_api_integer_bounds.py`,
+    one class per route), so a client gets a 400. `auto_delete_after_days` is capped at 36,500
+    (`MAX_AUTO_DELETE_AFTER_DAYS`): a window the column holds but a timestamp can't had broken
+    `delete_expired_safety_checkins` for every profile. The dashboard's grace-period parse had the same shape
+    (inf, nan, 1e10 hours were 500s); it now clamps to 15 minutes..a week.
+  - **Not checked:** a custom field's number value past `numeric(24,6)` (`Decimal("1e30")` raised
+    `numeric field overflow` in an ORM probe; whether the value route reaches it was not run).
 - **No test exercises a concealed viewer**, because `concealment_active` returns `False`.
 - `SafetyCheckinWikiOptionView.get` (a read route) parses its coordinates with a bare `float()`; a NaN matches no wiki
   rather than failing, so it was left.
+
+## P195 — 17 dashboard views and the check-in photo reposition parse a body with `json.loads` directly, so a deeply nested one is a 500
+
+`id: P195` · `status: open` · `updated: 2026-10-02` · `found by: the P37 handler tests, 2026-10-02`
+
+`json.loads` raises `RecursionError` on a body like `"[" * 100_000 + "]" * 100_000`, and `RecursionError` is not a
+`ValueError`, so no `except ValueError` around it catches it. `services/core/request_body.py::posted_json_object` and,
+since 2026-10-02, the external API's parser answer it with a 400. Not reproduced site by site; found by grep:
+
+- `json.loads(request.body ...)` in `controllers/`: `labels.py` (413, 871, 1005, 1106, 1174), `vault_photos.py` (639,
+  730), `account.py:1137`, `boundary.py:236`, `csp_report.py:112`, `custom_fields.py:471`, `e2ee.py:86`,
+  `floorplans.py:312`, `memories.py:753`, `pin_suggestions.py:251`, `tools.py:609`, `wiki_media.py:208`.
+- `services/media/images.py::parse_reposition_payload` catches only `TypeError`/`ValueError`; the safety check-in
+  photo reposition (`controllers/safety.py:1491`) calls it.
+
+The fix is to route each through `posted_json_object`/`posted_fields`, and to add the deep-nesting body to
+`MALFORMED_JSON_BODIES` in `tests/hypothesis/external_api_helpers.py` and to the no-5xx sweep
+(`test_write_route_smoke.py`), so every route is held to it.
