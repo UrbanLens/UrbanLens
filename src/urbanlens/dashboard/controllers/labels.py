@@ -45,6 +45,7 @@ from urbanlens.dashboard.services.labels.merge import (
     UnownedSourceLabelError,
     merge_labels,
 )
+from urbanlens.dashboard.services.labels.organize_rows import ROWS_LOADED_HEADER, RowsCursor, organize_page_size, organize_rows_more, organize_rows_page, organize_rows_queryset
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
 from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
 from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
@@ -238,22 +239,6 @@ def _label_id_from_kwargs(kwargs: dict[str, Any]) -> int:
     raise KeyError(msg)
 
 
-def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
-    """Return the display queryset for a label kind."""
-    if kind == KIND_TAG:
-        return Label.objects.tags().visible_to(profile).in_display_order().with_customizations_for(profile).with_pin_counts()
-    if kind == KIND_CATEGORY:
-        return Label.objects.categories().for_profile(profile).in_display_order().with_pin_counts()
-    if kind == KIND_STATUS:
-        return Label.objects.statuses().for_profile(profile).in_display_order().with_pin_counts()
-    if kind == KIND_USER:
-        return Label.objects.user_labels().visible_to(profile).in_display_order().with_pin_counts()
-    if kind == KIND_MEDIA:
-        return Label.objects.media().visible_to(profile).in_display_order().with_pin_counts()
-    msg = f"Unsupported label kind: {kind}"
-    raise ValueError(msg)
-
-
 def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
     """Whether *profile* may auto-tag labels of this kind at all.
 
@@ -306,18 +291,44 @@ def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
     return would_create_cycle(label, [proposed_parent_id])
 
 
-def _rows_ctx(kind: str, profile: Profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
+def _rows_window(request: HttpRequest) -> tuple[RowsCursor | None, int | None]:
+    """Where a rows render starts and how many rows it holds.
+
+    A sentinel names the row to continue after, and ``all`` asks for every remaining row. Otherwise the render
+    starts at the top and keeps as many rows as the client says it had loaded, so a write does not drop the
+    rows the user had scrolled to. A write always re-renders from the top.
+
+    Returns:
+        The cursor, or None for the top; and the row limit, or None for every row.
+
+    Raises:
+        BadRequest: The cursor parameters are malformed.
+    """
+    try:
+        after = RowsCursor.from_query(request.GET) if request.method == "GET" else None
+    except ValueError as exc:
+        raise BadRequest(str(exc)) from exc
+    if request.GET.get("all") == "1":
+        return after, None
+    page_size = organize_page_size()
+    if after is not None:
+        return after, page_size
+    loaded = request.headers.get(ROWS_LOADED_HEADER, "")
+    if loaded == "all":
+        return None, None
+    return None, clamp_int(loaded, low=page_size, high=DB_INTEGER_MAX, default=page_size)
+
+
+def _rows_ctx(kind: str, profile: Profile, can_edit_global: bool = False, extra: dict | None = None, *, after: RowsCursor | None = None, limit: int | None = None) -> dict:
     """Build template context for organize_label_rows.html."""
     cfg = _config(kind)
-    # Materialised before priming, and the same list is handed to the template: priming seeds a memo on each
-    # instance, so a queryset re-evaluated during rendering would discard it and quietly restore the per-label
-    # BFS.
-    label_list = list(_queryset_for_kind(kind, profile))
-    Label.prime_total_pin_counts(label_list)
+    page = organize_rows_page(kind, profile, after=after, limit=limit)
     ctx: dict = {
         **_BASE_CTX,
-        "labels": label_list,
-        cfg.rows_context_key: label_list,
+        "labels": page.labels,
+        cfg.rows_context_key: page.labels,
+        "rows_more": organize_rows_more(page, cfg.url_kind),
+        "rows_continued": after is not None,
         "kind": cfg.display_kind,
         "label_url_kind": cfg.url_kind,
         "empty_icon": cfg.empty_icon,
@@ -338,10 +349,11 @@ def _rows_ctx(kind: str, profile: Profile, can_edit_global: bool = False, extra:
 
 def _render_rows(request: HttpRequest, kind: str, profile: Profile, extra: dict | None = None) -> HttpResponse:
     """Render the shared organize label rows partial."""
+    after, limit = _rows_window(request)
     return render(
         request,
         "dashboard/partials/labels/organize_label_rows.html",
-        _rows_ctx(kind, profile, request.user.has_perm(_PERM), extra),
+        _rows_ctx(kind, profile, request.user.has_perm(_PERM), extra, after=after, limit=limit),
     )
 
 
@@ -577,7 +589,7 @@ def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> boo
         raise ValueError(error)
     label.kind = new_kind
     if new_kind in PROFILE_SCOPED_KINDS:
-        # Category, like Status, is always profile-scoped: _queryset_for_kind() looks categories up via
+        # Category, like Status, is always profile-scoped: organize_rows_queryset() looks categories up via
         # .for_profile() (exact match, no global fallback), so a converted label left with profile=None would
         # vanish from every Organize > Categories listing and become permanently un-editable
         # (_can_modify_label() requires a non-None profile for any non-tag kind).
@@ -894,13 +906,13 @@ class LabelMergeView(_LabelKindMixin, LoginRequiredMixin, View):
             return HttpResponse(status=404)
         label_id = _label_id_from_kwargs(kwargs)
         profile = _request_profile(request)
-        label = get_object_or_404(_queryset_for_kind(self.kind, profile), id=label_id)
+        label = get_object_or_404(organize_rows_queryset(self.kind, profile), id=label_id)
         if label.profile is None or label.profile.user != request.user:
             return HttpResponseForbidden()
         if label.is_protected:
             return HttpResponseForbidden()
 
-        candidates = _queryset_for_kind(self.kind, profile).exclude(id=label_id)
+        candidates = organize_rows_queryset(self.kind, profile).exclude(id=label_id)
         return render(
             request,
             "dashboard/partials/labels/organize_label_merge_form.html",
@@ -923,7 +935,7 @@ class LabelMergeView(_LabelKindMixin, LoginRequiredMixin, View):
         if not target_id:
             return HttpResponse(f"Target {cfg.singular_title.lower()} is required.", status=400)
 
-        target = get_object_or_404(_queryset_for_kind(self.kind, profile), id=safe_int_or_none(target_id))
+        target = get_object_or_404(organize_rows_queryset(self.kind, profile), id=safe_int_or_none(target_id))
 
         try:
             merge_labels(target=target, sources=[source], profile=profile)

@@ -8,6 +8,7 @@ import { LabelRelPicker } from "./label-rel-picker";
 import { registerBulkStateUpdater } from "./organize-icon-picker";
 import { applyOrgFilter, getOrgVisibleCards, ORG_TAB_KEY_BY_NS, type OrgNamespace } from "./organize-filter-engine";
 import { orgHeader } from "./organize-header";
+import { hasMoreRows, hasUnloadedRows, loadAllRows, ROWS_MORE_SELECTOR, rowsLoadedHeaders } from "./organize-rows-paging";
 import { escHtml } from "./escape-html";
 
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
@@ -116,21 +117,24 @@ export class OrgTabManager {
         this.wireMerge();
         this.wireHtmxHooks();
         registerBulkStateUpdater(this.cfg.ns, () => this.updateBulkState());
-        window._orgBulkEditByIds[this.cfg.ns] = (ids: string[]) => {
-            this.selected = new Set(ids.map(String));
-            this.syncSelectionUi();
-            this.openBulkEditDialog();
-        };
+        // Both dialogs read each label's current icon and colour from its card, which may be on a page not loaded yet.
+        window._orgBulkEditByIds[this.cfg.ns] = (ids: string[]) =>
+            void this.withCardsFor(ids, () => {
+                this.selected = new Set(ids.map(String));
+                this.syncSelectionUi();
+                this.openBulkEditDialog();
+            });
         // Merge and delete are exposed the same way so the Display Order tab can
         // drive them without owning its own dialogs: that tab lists all three
         // kinds together, and each kind's merge dialog lives here.
-        window._orgBulkMergeByIds[this.cfg.ns] = (ids: string[]) => {
-            this.selected = new Set(ids.map(String));
-            this.syncSelectionUi();
-            this.mergeTargetId = Array.from(this.selected)[0]!;
-            this.renderMergeDialog();
-            (document.getElementById(this.cfg.mergeDialog.dialogId) as HTMLDialogElement).showModal();
-        };
+        window._orgBulkMergeByIds[this.cfg.ns] = (ids: string[]) =>
+            void this.withCardsFor(ids, () => {
+                this.selected = new Set(ids.map(String));
+                this.syncSelectionUi();
+                this.mergeTargetId = Array.from(this.selected)[0]!;
+                this.renderMergeDialog();
+                (document.getElementById(this.cfg.mergeDialog.dialogId) as HTMLDialogElement).showModal();
+            });
         window._orgBulkDeleteByIds[this.cfg.ns] = (ids: string[]) => {
             this.selected = new Set(ids.map(String));
             this.syncSelectionUi();
@@ -148,7 +152,7 @@ export class OrgTabManager {
             createTitle: `New ${this.cfg.entitySingular}`,
             createHtml: '<i class="material-icons" style="font-size:1.2rem;">add</i>',
             applyView: () => this.applyView(),
-            onSelAll: () => this.onSelectAll(),
+            onSelAll: () => void this.onSelectAll(),
             updateSelAllBtn: () => this.updateSelAllBtn(),
             onCreate: () => this.onCreate(),
         });
@@ -164,6 +168,30 @@ export class OrgTabManager {
         return document.getElementById(this.cfg.rowsId);
     }
 
+    private isActiveTab(): boolean {
+        return orgHeader?.getFilterNs() === this.cfg.ns;
+    }
+
+    /** Load the pages not yet in the DOM, saying so if that fails. */
+    private async loadRemainingRows(): Promise<boolean> {
+        const rows = this.rows;
+        if (!rows) return false;
+        try {
+            await loadAllRows(rows);
+            return true;
+        } catch (err) {
+            toast.error(`Could not load every ${this.cfg.entitySingular.toLowerCase()}: ${(err as Error).message}`);
+            return false;
+        }
+    }
+
+    /** Run *then* once every card in *ids* is in the DOM. */
+    private async withCardsFor(ids: string[], then: () => void): Promise<void> {
+        const missing = ids.some((id) => !this.rows?.querySelector(`[data-${this.datasetAttr(this.cfg.idKey)}="${id}"]`));
+        if (missing && !(await this.loadRemainingRows())) return;
+        then();
+    }
+
     // ── View toggle ──────────────────────────────────────────────────────
     private applyView(): void {
         const rows = this.rows;
@@ -174,6 +202,8 @@ export class OrgTabManager {
         orgHeader.syncViewButtons(view);
         if (view === "tree") {
             renderTreeView(rows, { cardSelector: this.cfg.cardSelector, idKey: this.cfg.idKey, parentsKey: this.cfg.parentsKey });
+            // A child whose parent is not loaded would show as a root; the tree re-renders when the rest arrives.
+            if (hasMoreRows(rows)) void this.loadRemainingRows();
         } else {
             rows.querySelector(".tag-tree-root")?.remove();
             rows.querySelectorAll<HTMLElement>(".tag-card").forEach((c) => {
@@ -204,11 +234,18 @@ export class OrgTabManager {
         this.updateSelectionBar();
     }
 
+    /** Whether every row the filter shows is selected, counting rows not loaded yet as unselected. */
+    private allVisibleSelected(): boolean {
+        const visIds = this.getVisibleIds();
+        return !hasUnloadedRows(this.rows) && visIds.length > 0 && visIds.every((id) => this.selected.has(id));
+    }
+
     private updateSelAllBtn(): void {
+        // The header button is shared, and every tab hears every filter pass.
+        if (!this.isActiveTab()) return;
         const btn = document.getElementById("org-header-sel-all");
         if (!btn) return;
-        const visIds = this.getVisibleIds();
-        const allSel = visIds.length > 0 && visIds.every((id) => this.selected.has(id));
+        const allSel = this.allVisibleSelected();
         btn.classList.toggle("deselect-mode", allSel);
         btn.title = allSel ? "Deselect all" : "Select all";
         btn.innerHTML = allSel
@@ -216,13 +253,21 @@ export class OrgTabManager {
             : '<i class="material-symbols-outlined">checklist</i>';
     }
 
-    private onSelectAll(): void {
-        const visIds = this.getVisibleIds();
-        const allSel = visIds.length > 0 && visIds.every((id) => this.selected.has(id));
-        visIds.forEach((id) => {
-            if (allSel) this.selected.delete(id);
-            else this.selected.add(id);
-        });
+    /** Select every row the filter shows, loading the pages not yet in the DOM first; or, when all are selected, none. */
+    private async onSelectAll(): Promise<void> {
+        if (this.allVisibleSelected()) {
+            this.getVisibleIds().forEach((id) => this.selected.delete(id));
+        } else {
+            if (hasUnloadedRows(this.rows)) {
+                const btn = document.getElementById("org-header-sel-all") as HTMLButtonElement | null;
+                if (btn) btn.disabled = true;
+                const loaded = await this.loadRemainingRows();
+                if (btn) btn.disabled = false;
+                // The user may have moved to another tab meanwhile; the toolbar is theirs now.
+                if (!loaded || !this.isActiveTab()) return;
+            }
+            this.getVisibleIds().forEach((id) => this.selected.add(id));
+        }
         this.lastClickedIdx = -1;
         this.syncSelectionUi();
     }
@@ -329,8 +374,29 @@ export class OrgTabManager {
         applyOrgFilter(this.cfg.ns);
     }
 
+    /** Another page arrived: the selection stands, and the view and filter take in the new cards. */
+    private onRowsAppended(): void {
+        this.rows?.querySelectorAll<HTMLElement>(this.cfg.cardSelector).forEach((card) => {
+            const id = card.dataset[this.cfg.idKey] ?? "";
+            card.classList.toggle("tag-card--selected", this.selected.has(id));
+            const cb = card.querySelector<HTMLInputElement>(this.cfg.checkboxSelector);
+            if (cb) cb.checked = this.selected.has(id);
+        });
+        this.applyView();
+        applyOrgFilter(this.cfg.ns);
+        this.updateSelAllBtn();
+    }
+
     private wireHtmxHooks(): void {
-        this.rows?.addEventListener("htmx:afterSwap", () => this.onRowsUpdated());
+        // A page appended after the sentinel fires afterSwap once per new card, aimed at the sentinel.
+        this.rows?.addEventListener("htmx:afterSwap", (e) => {
+            if ((e as CustomEvent).detail?.target === this.rows) this.onRowsUpdated();
+        });
+        // htmx re-fires afterOnLoad here once the sentinel that asked is gone, so this runs once per page.
+        this.rows?.addEventListener("htmx:afterOnLoad", (e) => {
+            const target = (e as CustomEvent).detail?.target;
+            if (target instanceof Element && target.matches(ROWS_MORE_SELECTOR)) this.onRowsAppended();
+        });
         document.addEventListener("org:filter-applied", (e) => {
             if ((e as CustomEvent).detail.ns === this.cfg.ns) this.updateSelAllBtn();
         });
@@ -764,7 +830,7 @@ export class OrgTabManager {
  * POST and hand back the rendered rows.
  */
     private async postForHtml(url: string, body: unknown): Promise<string> {
-        return sendForText(url, "POST", body, { reportsItsOwnErrors: true });
+        return sendForText(url, "POST", body, { reportsItsOwnErrors: true, headers: rowsLoadedHeaders(this.rows) });
     }
 
     private replaceRows(html: string): void {

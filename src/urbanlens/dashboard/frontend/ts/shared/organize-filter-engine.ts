@@ -1,3 +1,6 @@
+import { toast } from "./dialogs";
+import { hasMoreRows, hasUnloadedRows, loadAllRows } from "./organize-rows-paging";
+
 export type OrgNamespace = "tag" | "cat" | "status" | "people" | "media";
 
 export const ORG_FILTER_NAMESPACES: OrgNamespace[] = ["tag", "cat", "status", "people", "media"];
@@ -105,10 +108,19 @@ export function getOrgVisibleCards(rows: HTMLElement | null, cardSel: string): H
     });
 }
 
+/** A filter has to see every row, so a tab with pages still to come loads them, then filters again. */
+function loadRowsForFilter(ns: OrgNamespace, rows: HTMLElement): void {
+    loadAllRows(rows).then(
+        () => applyAllOrgFilters(),
+        (err: unknown) => toast.error(`Could not load every one of your ${NS_LABELS[ns]} to filter: ${(err as Error).message}`),
+    );
+}
+
 function applyFilterForNs(ns: OrgNamespace): void {
     const cfg = NS_CONFIG[ns];
     const rows = document.getElementById(cfg.rowsId);
     if (!rows) return;
+    if (hasAnyOrgFilter() && hasMoreRows(rows)) loadRowsForFilter(ns, rows);
 
     const search = sharedFilter.search.toLowerCase().trim();
     const activeChips = sharedFilter.chips;
@@ -181,10 +193,21 @@ function hasAnyOrgFilter(): boolean {
     return !!(sharedFilter.search || sharedFilter.chips.size > 0 || sharedFilter.color);
 }
 
-function countVisibleCards(ns: OrgNamespace): number {
+interface VisibleCount {
+    n: number;
+    /** Rows of this kind are still to load, so `n` is a lower bound. */
+    partial: boolean;
+}
+
+function countVisibleCards(ns: OrgNamespace): VisibleCount {
     const cfg = NS_CONFIG[ns];
+    const rows = document.getElementById(cfg.rowsId);
     // In tree view, applyFilterForNs() hides a filtered-out card's ancestor.tag-tree-item, not the card itself.
-    return getOrgVisibleCards(document.getElementById(cfg.rowsId), cfg.cardSel).length;
+    return { n: getOrgVisibleCards(rows, cfg.cardSel).length, partial: hasUnloadedRows(rows) };
+}
+
+function countText(count: VisibleCount): string {
+    return `${count.n}${count.partial ? "+" : ""}`;
 }
 
 function updateCrossTabCounts(): void {
@@ -198,10 +221,7 @@ function updateCrossTabCounts(): void {
         return;
     }
 
-    const counts: Record<OrgNamespace, number> = { tag: 0, cat: 0, status: 0, people: 0, media: 0 };
-    ORG_FILTER_NAMESPACES.forEach((ns) => {
-        counts[ns] = countVisibleCards(ns);
-    });
+    const counts = Object.fromEntries(ORG_FILTER_NAMESPACES.map((ns) => [ns, countVisibleCards(ns)])) as Record<OrgNamespace, VisibleCount>;
 
     const activeTabEl = document.querySelector<HTMLElement>(".organize-tab.active[data-filter-ns]");
     const activeNs = (activeTabEl?.dataset.filterNs as OrgNamespace | undefined) ?? null;
@@ -212,7 +232,7 @@ function updateCrossTabCounts(): void {
         if (ns === activeNs) {
             countEl.hidden = true;
         } else {
-            countEl.textContent = String(counts[ns]);
+            countEl.textContent = countText(counts[ns]);
             countEl.hidden = false;
         }
     });
@@ -225,9 +245,9 @@ function updateCrossTabCounts(): void {
             return;
         }
 
-        const otherParts = ORG_FILTER_NAMESPACES.filter((otherNs) => otherNs !== ns && counts[otherNs] > 0).map((otherNs) => ({
+        const otherParts = ORG_FILTER_NAMESPACES.filter((otherNs) => otherNs !== ns && counts[otherNs].n > 0).map((otherNs) => ({
             ns: otherNs,
-            n: counts[otherNs],
+            n: countText(counts[otherNs]),
             label: NS_LABELS[otherNs],
         }));
 
@@ -236,8 +256,8 @@ function updateCrossTabCounts(): void {
             return;
         }
 
-        const selfCount = counts[ns];
-        const prefix = selfCount === 0 ? `No ${NS_LABELS[ns]} match, but ` : "";
+        const self = counts[ns];
+        const prefix = self.n === 0 && !self.partial ? `No ${NS_LABELS[ns]} match, but ` : "";
         const parts = otherParts.map((p) => {
             const tabKey = ORG_TAB_KEY_BY_NS[p.ns];
             const tabBtn = document.querySelector(`.organize-tab[data-tab="${tabKey}"]`);

@@ -49,7 +49,7 @@ class LabelRowsViewOnMapButtonTests(TestCase):
         self.assertContains(response, label_map_url(label.id))
 
     def test_category_row_includes_view_on_map_link(self) -> None:
-        # _queryset_for_kind uses .for_profile() (owned-only, excludes global) for
+        # organize_rows_queryset uses .for_profile() (owned-only, excludes global) for
         # category/status rows - unlike tags, which use .visible_to() (global + owned).
         label = baker.make(Label, profile=self.profile, kind=KIND_CATEGORY, name="Factories")
         self._pin_labelled(label)

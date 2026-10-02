@@ -5,6 +5,7 @@ import { installOrgFilterEngine } from "../shared/organize-filter-engine";
 import { installOrgBulkToolbar, installOrgTabSwitching, installOrgSectionSwitching, installOrgTabPrewarm, createOrganizeHeader, orgHeader } from "../shared/organize-header";
 import { initOrganizeTabs, installOrgEditDialogOpener, KIND_ROWS_TARGET, KIND_TAB_KEY } from "../shared/organize-tabs";
 import { initOrganizePriority } from "../shared/organize-priority";
+import { installRowsLoadedHeader } from "../shared/organize-rows-paging";
 import { toast } from "../shared/dialogs";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { installSavedFilterForm } from "../shared/saved-filter-form";
@@ -151,6 +152,7 @@ function init(): void {
     if (!page) return;
 
     installOrgFilterEngine();
+    installRowsLoadedHeader();
     installOrgBulkToolbar();
     createOrganizeHeader(page.dataset.activeTab ?? "tags");
     installOrgTabSwitching();

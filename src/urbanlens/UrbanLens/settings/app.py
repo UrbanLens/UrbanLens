@@ -372,6 +372,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "to some of what was selected is worse than one that says no."
         ),
     )
+    organize_rows_page_size: int = Field(
+        default=100,
+        gt=0,
+        description=(
+            "How many label cards one page of an Organize tab renders; the rest arrive as the list scrolls, or all at "
+            "once when a filter, the tree view or select-all needs them. Rendering costs about 3 ms a card (P66)."
+        ),
+    )
     max_smart_lists_per_sync: int = Field(
         default=25,
         description=(

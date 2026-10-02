@@ -3,5 +3,10 @@
 {% for card in cards %}
     {% include 'dashboard/partials/labels/_organize_label_card.html' %}
 {% empty %}
-<div class="tag-empty"><i class="material-icons">{{ empty_icon }}</i><p>{{ empty_message }}</p></div>
+{% if not rows_continued %}<div class="tag-empty"><i class="material-icons">{{ empty_icon }}</i><p>{{ empty_message }}</p></div>{% endif %}
 {% endfor %}
+{% if rows_more %}
+<div class="organize-rows-more" hx-get="{{ rows_more.next_url }}" hx-trigger="intersect once" hx-target="this" hx-swap="outerHTML" data-rest-url="{{ rows_more.rest_url }}">
+    <span class="organize-section-spinner" aria-hidden="true"></span> Loading {{ rows_more.remaining }} more&hellip;
+</div>
+{% endif %}
