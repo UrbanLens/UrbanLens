@@ -3,6 +3,7 @@
  */
 import { safeColor } from "../shared/markup-engine";
 import { getCsrfToken } from "../shared/csrf";
+import { fetchText, sendForText, sendJson } from "../shared/fetch-json";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
@@ -1155,10 +1156,7 @@ function init(): void {
             li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 if (!(await confirmAction({ title: "Delete Pin", message: `Delete "${dp.name}"?`, confirmLabel: "Delete" }))) return;
-                fetch(`${dpEditBase}${dp.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
-                    .then((r) => {
-                        if (!r.ok) throw new Error();
-                    })
+                fetchText(`${dpEditBase}${dp.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
                     .then(() => {
                         toast.success("Detail pin deleted.");
                         loadDetailPins();
@@ -1206,10 +1204,7 @@ function init(): void {
             li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 if (!(await confirmAction({ title: "Delete Item", message: `Delete this ${item.markup_type}?`, confirmLabel: "Delete" }))) return;
-                fetch(`${cfg.markupEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "")}${item.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
-                    .then((r) => {
-                        if (!r.ok) throw new Error();
-                    })
+                fetchText(`${cfg.markupEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "")}${item.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
                     .then(() => {
                         toast.success("Markup deleted.");
                         toolbar.loadMarkup();
@@ -1495,10 +1490,7 @@ function init(): void {
             deleteBtn.addEventListener("click", async () => {
                 map.closePopup();
                 if (!(await confirmAction({ title: "Delete Pin", message: `Delete "${entry.name || "this pin"}"?`, confirmLabel: "Delete" }))) return;
-                fetch(`${dpEditBase}${entry.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
-                    .then((r) => {
-                        if (!r.ok) throw new Error();
-                    })
+                fetchText(`${dpEditBase}${entry.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
                     .then(() => {
                         toast.success("Detail pin deleted.");
                         loadDetailPins();
@@ -1560,15 +1552,7 @@ function init(): void {
                     // markercluster re-files a dragged child itself on dragend.
                     marker.on("dragend", () => {
                         const pos = marker.getLatLng();
-                        fetch(`${dpEditBase}${dp.uuid}/`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                            body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
-                        })
-                            .then((r) => {
-                                if (!r.ok) throw new Error();
-                                return r.json();
-                            })
+                        sendJson(`${dpEditBase}${dp.uuid}/`, "POST", { latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) })
                             .then(() => {
                                 entry.latitude = pos.lat;
                                 entry.longitude = pos.lng;
@@ -2529,21 +2513,7 @@ function init(): void {
     }
 
     async function postBoundary(type: BoundaryType, geometry: { type: string; coordinates: unknown[] } | null): Promise<any> {
-        const response = await fetch(boundaryApiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-            body: JSON.stringify({ boundary_type: type, polygon: geometry }),
-        });
-        if (!response.ok) {
-            let msg = `HTTP ${response.status}`;
-            try {
-                msg = (await response.json()).error || msg;
-            } catch {
-
-            }
-            throw new Error(msg);
-        }
-        return response.json();
+        return sendJson(boundaryApiUrl, "POST", { boundary_type: type, polygon: geometry });
     }
 
     function saveBoundary(options: { type?: BoundaryType; exitEdit?: boolean; quiet?: boolean } = {}): void {
@@ -2746,15 +2716,8 @@ function init(): void {
         const uuid = dpAutoSaveUuid;
         dpAutoSaveUuid = null;
         if (!uuid) return Promise.resolve();
-        return fetch(`${dpEditBase}${uuid}/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-            body: JSON.stringify(collectDpFormData()),
-        })
-            .then((r) => {
-                // fetch only rejects on a network failure - a validation error (400) resolved here and was swallowed as success, so the edit looked.
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            })
+        return sendForText(`${dpEditBase}${uuid}/`, "POST", collectDpFormData())
+            .then(() => undefined)
             .catch(() => toast.error("Failed to save detail pin changes."));
     }
 
@@ -2973,9 +2936,8 @@ function init(): void {
     document.getElementById("detail-pin-delete-btn")?.addEventListener("click", async () => {
         if (!editingDp) return;
         if (!(await confirmAction({ title: "Delete Pin", message: `Delete "${editingDp.name}"?`, confirmLabel: "Delete" }))) return;
-        fetch(`${dpEditBase}${editingDp.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
-            .then((r) => {
-                if (!r.ok) throw new Error();
+        fetchText(`${dpEditBase}${editingDp.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+            .then(() => {
                 closeDetailPinPanel();
                 loadDetailPins();
                 fetchBoundaries(0);

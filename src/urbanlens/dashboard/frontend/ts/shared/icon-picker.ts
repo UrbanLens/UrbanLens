@@ -2,6 +2,7 @@
  * Icon picker widget shared by categories/tags/organize's create and bulk-edit dialogs (dashboard/partials/ui/_icon_picker.html).
  */
 import { escHtml } from "./escape-html";
+import { fetchText } from "./fetch-json";
 
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
 
@@ -27,11 +28,7 @@ function parseCatalogue(html: string): IconCatalogue {
 
 function loadCatalogue(url: string): Promise<IconCatalogue> {
     if (!gridRequest) {
-        gridRequest = fetch(url, { credentials: "same-origin" })
-            .then((response) => {
-                if (!response.ok) throw new Error(`icon grid: HTTP ${response.status}`);
-                return response.text();
-            })
+        gridRequest = fetchText(url)
             .then(parseCatalogue)
             .catch((error) => {
                 // Dropped so the next open retries.

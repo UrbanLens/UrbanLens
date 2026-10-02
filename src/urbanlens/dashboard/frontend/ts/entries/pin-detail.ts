@@ -15,7 +15,7 @@ import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
 import { delegateEditInPlace } from "../shared/edit-in-place";
 import { escHtml } from "../shared/escape-html";
-import { sendJson } from "../shared/fetch-json";
+import { fetchText, sendJson } from "../shared/fetch-json";
 import { installExternalPanelFallbacks } from "../shared/external-panel-fallbacks";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { PinMediaGallery } from "../shared/pin-media-gallery";
@@ -68,8 +68,7 @@ function readConfig(root: HTMLElement): PinConfig {
 }
 
 async function postForm(url: string, fields: Record<string, string>): Promise<void> {
-    const r = await fetch(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: new URLSearchParams(fields) });
-    if (!r.ok) throw new Error(String(r.status));
+    await fetchText(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: new URLSearchParams(fields) });
 }
 
 // -- Debug overlay (staff) -------------------------------------------------------------------

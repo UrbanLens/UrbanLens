@@ -6,6 +6,7 @@ import type { ShapeSpec } from "./markup-engine";
 import { markupItemToShapeSpec } from "./markup-shape";
 import { wireMarkupPanel, wireMarkupTools } from "./markup-panel";
 import { escHtml } from "./escape-html";
+import { fetchText } from "./fetch-json";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
@@ -733,9 +734,8 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         if (!(await confirmAction({ title: "Delete Annotation", message: "Delete this annotation?", confirmLabel: "Delete" }))) return;
         // Drop any pending autosave for this item - it no longer exists to save.
         markupAutoSaves.cancel(editingMarkupItem.uuid);
-        fetch(`${markupEditBase}${editingMarkupItem.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
-            .then((r) => {
-                if (!r.ok) throw new Error();
+        fetchText(`${markupEditBase}${editingMarkupItem.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+            .then(() => {
                 closeMarkupPanel();
                 loadMarkup();
                 toast.success("Annotation deleted.");

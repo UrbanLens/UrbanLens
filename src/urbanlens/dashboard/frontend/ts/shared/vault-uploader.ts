@@ -4,6 +4,7 @@
 
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { fetchText } from "./fetch-json";
 import type { LightboxInput } from "./photo-tile";
 import { activeVaultSort, type VaultGrid, type VaultKind, vaultTileId, vaultTileSelector } from "./vault-media-grid";
 
@@ -232,11 +233,7 @@ export class VaultUploader {
         const noun = this.kind.kind;
         if (!window.confirm(`Delete this ${noun}? This cannot be undone.`)) return;
         try {
-            const response = await fetch(`${this.actionBase}${id}/delete/`, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() } });
-            if (!response.ok) {
-                toast.error(`Could not delete that ${noun}.`);
-                return;
-            }
+            await fetchText(`${this.actionBase}${id}/delete/`, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() } });
         } catch {
             toast.error(`Could not delete that ${noun}.`);
             return;

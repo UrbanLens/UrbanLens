@@ -9,6 +9,7 @@ import Sortable from "sortablejs";
 import { toast } from "../shared/dialogs";
 import { delegateEditInPlace, type EditInPlaceOptions } from "../shared/edit-in-place";
 import { escHtml } from "../shared/escape-html";
+import { fetchText } from "../shared/fetch-json";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { activitiesForTab, calendarHtml, tripMonths, type CalendarActivity } from "../shared/trip-calendar";
 
@@ -916,8 +917,7 @@ const INLINE_FIELDS: Record<"name" | "description", InlineField> = {
 
 /** The edit view answers with a partial, not JSON; only the status matters. */
 async function saveTripField(cfg: TripConfig, field: "name" | "description", value: string): Promise<void> {
-    const r = await fetch(cfg.editUrl, { method: "POST", headers: { "X-CSRFToken": window.csrftoken }, body: new URLSearchParams({ [field]: value }) });
-    if (!r.ok) throw new Error(String(r.status));
+    await fetchText(cfg.editUrl, { method: "POST", headers: { "X-CSRFToken": window.csrftoken }, body: new URLSearchParams({ [field]: value }) });
 }
 
 /** Delegated: an activity date change re-renders the hero out of band, which would drop direct listeners. */
