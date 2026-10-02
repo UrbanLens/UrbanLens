@@ -20,6 +20,8 @@ import { startPoller } from "../shared/poller";
 import { singleFlight } from "../shared/single-flight";
 import { escHtml } from "../shared/escape-html";
 import { installAddToListPicker } from "../shared/add-to-list-picker";
+import { delegateActions } from "../shared/delegated-actions";
+import { handleMapArrival } from "../shared/map-arrival";
 
 declare const L: typeof import("leaflet");
 declare const htmx: HtmxApi;
@@ -103,6 +105,7 @@ interface MapPageUrls {
     mapPlacesDetails: string;
     mapPlacesNearby: string;
     mapResolvePlace: string;
+    memoriesLocations: string;
     pinAdd: string;
     pinBulkDelete: string;
     pinBulkEdit: string;
@@ -132,6 +135,7 @@ interface MapPageConfig {
     showPinCount: boolean;
     showFilteredPinCount: boolean;
     showPlacesLayer: boolean;
+    showPinSuggestionsIntro: boolean;
     usePinCache: boolean;
     mapCenterMode: string;
     mapCenterLat: number | null;
@@ -145,6 +149,8 @@ interface MapPageConfig {
 }
 
 const MAP_CFG: MapPageConfig = JSON.parse(document.getElementById("map-page-config")!.textContent!);
+// Registered first, so a failure later in this module cannot take the deep links with it.
+document.addEventListener("DOMContentLoaded", () => handleMapArrival(window.location.search, { showPinSuggestionsIntro: MAP_CFG.showPinSuggestionsIntro, suggestionsUrl: MAP_CFG.urls.memoriesLocations }));
 
 // -- HTML-building safety ---------------------------------------------------
 // Anything reaching href=/src= also needs its *scheme* checked - escaping quotes
@@ -6484,3 +6490,42 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
 
     dlg.showModal();
 }
+
+// -- Controls that name their action in markup -----------------------------------------------------------------
+delegateActions(document, "map-action", {
+    "close-place-info": () => {
+        const panel = document.getElementById("place-info-panel");
+        panel?.classList.remove("is-open");
+        panel?.setAttribute("hidden", "");
+    },
+    "toggle-filter-panel": () => toggleFilterPanel(),
+    "toggle-pin-list": () => _togglePinListPanel(),
+    "reset-filters": () => resetFilters(),
+    "reset-visits": () => _resetVisits(),
+    "reset-visit-dates": () => _resetVisitDates(),
+    "reset-created-dates": () => _resetCreatedDates(),
+    "reset-date-built": () => _dateBuiltRange.reset(),
+    "reset-date-abandoned": () => _dateAbandonedRange.reset(),
+    "reset-last-viewed": () => _lastViewedRange.reset(),
+    "apply-saved-filter": (control) => applySavedFilter(control),
+    "toggle-saved-filter": (control) => toggleToolbarSavedFilter(control),
+    "saved-filters-page": (control) => sfToolbarPage(Number(control.dataset.direction)),
+    "clear-pin-customizations": () => _apdlgClearCustomizations(),
+    "delete-pin": () => void _apdlgDeletePin(),
+    export: (control) => _exportSelection(control.dataset.format ?? ""),
+});
+
+/** A coordinate the pin list rendered, or null where the pin has none. */
+function _listCoordinate(value: string | undefined): number | null {
+    return value ? Number(value) : null;
+}
+
+// On the list's own body, so Edit can keep its click from the page's document-wide listeners.
+delegateActions(document.getElementById("pin-list-body")!, "pin-list-action", {
+    "add-to-list": () => openAddToListDialog(),
+    "fly-to": (control) => _flyToPinFromList(control.dataset.pinUuid ?? "", _listCoordinate(control.dataset.lat), _listCoordinate(control.dataset.lng)),
+    edit: (control, event) => {
+        event.stopPropagation();
+        openEditPinDialog(control.dataset.pinUuid ?? "");
+    },
+});

@@ -2,7 +2,7 @@
 {% comment %}Bottom-right saved-filters toggle toolbar (main map page only).{% endcomment %}
 {% if saved_filters %}
 <div class="map-buttons map-saved-filters-toolbar" id="map-saved-filters-toolbar"{% if oob %} hx-swap-oob="true"{% endif %}>
-    <button type="button" class="sf-toolbar-nav sf-toolbar-prev" aria-label="Previous saved filters" onclick="sfToolbarPage(-1)">
+    <button type="button" class="sf-toolbar-nav sf-toolbar-prev" aria-label="Previous saved filters" data-map-action="saved-filters-page" data-direction="-1">
         <i class="material-symbols-outlined">chevron_left</i>
     </button>
     <div class="sf-toolbar-viewport">
@@ -13,7 +13,7 @@
                     data-tooltip="{{ filter.name }}" data-tooltip-float="true" data-tooltip-pos="above"
                     aria-label="Toggle saved filter: {{ filter.name }}"
                     {% if filter.color %}style="background:{{ filter.color|hex_to_rgba:filter.opacity }}"{% endif %}
-                    onclick="toggleToolbarSavedFilter(this)">
+                    data-map-action="toggle-saved-filter">
                 {% if filter.icon|is_material_icon %}
                 <i class="material-symbols-outlined">{{ filter.icon }}</i>
                 {% elif filter.icon %}
@@ -25,7 +25,7 @@
             {% endfor %}
         </div>
     </div>
-    <button type="button" class="sf-toolbar-nav sf-toolbar-next" aria-label="Next saved filters" onclick="sfToolbarPage(1)">
+    <button type="button" class="sf-toolbar-nav sf-toolbar-next" aria-label="Next saved filters" data-map-action="saved-filters-page" data-direction="1">
         <i class="material-symbols-outlined">chevron_right</i>
     </button>
 </div>

@@ -4,16 +4,16 @@
     <div class="tag-edit-dialog-body">
         <p class="form-hint">Choose a format to download the selected pins.</p>
         <div class="bulk-export-format-list">
-            <button type="button" class="btn btn--secondary" onclick="_exportSelection('geojson')">
+            <button type="button" class="btn btn--secondary" data-map-action="export" data-format="geojson">
                 <i class="material-symbols-outlined">data_object</i> GeoJSON
             </button>
-            <button type="button" class="btn btn--secondary" onclick="_exportSelection('kml')">
+            <button type="button" class="btn btn--secondary" data-map-action="export" data-format="kml">
                 <i class="material-symbols-outlined">map</i> KML
             </button>
-            <button type="button" class="btn btn--secondary" onclick="_exportSelection('gpx')">
+            <button type="button" class="btn btn--secondary" data-map-action="export" data-format="gpx">
                 <i class="material-symbols-outlined">route</i> GPX
             </button>
-            <button type="button" class="btn btn--secondary" onclick="_exportSelection('csv')">
+            <button type="button" class="btn btn--secondary" data-map-action="export" data-format="csv">
                 <i class="material-symbols-outlined">table_chart</i> CSV
             </button>
         </div>
