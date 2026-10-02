@@ -176,13 +176,6 @@
   },
   {
     "rule": "py/bad-tag-filter",
-    "path": "src/urbanlens/core/tests/inline_scripts.py",
-    "fingerprint": "b7bfed56927d35cf:1",
-    "language": "python",
-    "reason": "A test helper finds inline <script> blocks to measure them; nothing it produces reaches a browser."
-  },
-  {
-    "rule": "py/bad-tag-filter",
     "path": "src/urbanlens/dashboard/tests/hypothesis/test_boundary_vote_dialog_markup.py",
     "fingerprint": "d397ad1348a881bc:1",
     "language": "python",
@@ -292,5 +285,19 @@
     "fingerprint": "f526a6335eec7a28:1",
     "language": "javascript",
     "reason": "A data-navigate select's value is followed only when it resolves to this origin (isSameOrigin), so no javascript: or off-site address runs; the options are {% url %} values."
+  },
+  {
+    "rule": "py/url-redirection",
+    "path": "src/urbanlens/dashboard/controllers/location_wiki.py",
+    "fingerprint": "50b13957d32432c5:1",
+    "language": "python",
+    "reason": "The target's path comes from reverse() and always starts with /location/; only the query string is the request's, and a query string cannot change the host."
+  },
+  {
+    "rule": "js/xss-through-dom",
+    "path": "src/urbanlens/dashboard/frontend/ts/shared/map-arrival.ts",
+    "fingerprint": "5205e718185145e2:1",
+    "language": "javascript",
+    "reason": "suggestionsUrl is a reverse()d URL the server writes into the page's json_script config, not text a user controls."
   }
 ]

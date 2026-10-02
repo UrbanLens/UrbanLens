@@ -51,8 +51,8 @@ interface SerializerState {
  */
 export const blockImageMarkdown = {
     serialize(state: SerializerState, node: ProseMirrorNode) {
-        const title = node.attrs.title ? ` "${String(node.attrs.title).replace(/"/g, '\\"')}"` : "";
-        state.write(`![${state.esc(String(node.attrs.alt ?? ""))}](${String(node.attrs.src ?? "").replace(/[()]/g, "\\$&")}${title})`);
+        const title = node.attrs.title ? ` "${String(node.attrs.title).replace(/["\\]/g, "\\$&")}"` : "";
+        state.write(`![${state.esc(String(node.attrs.alt ?? ""))}](${String(node.attrs.src ?? "").replace(/[()\\]/g, "\\$&")}${title})`);
         state.closeBlock(node);
     },
     parse: {},

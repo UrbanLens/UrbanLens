@@ -18,10 +18,11 @@ if TYPE_CHECKING:
 MAX_INLINE_SCRIPT_BYTES = 20_000
 
 #: An inline block: a ``<script>`` carrying its own body rather than a ``src``.
-INLINE = re.compile(rb"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.DOTALL)
+INLINE = re.compile(rb"<script(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script\b[^>]*>", re.DOTALL | re.IGNORECASE)
 #: An inline block a browser runs: not a ``src`` and not a JSON island.
 EXECUTABLE = re.compile(
-    rb"<script(?![^>]*\bsrc=)(?![^>]*\btype=\"application/(?:ld\+)?json\")[^>]*>(.*?)</script>", re.DOTALL
+    rb"<script(?![^>]*\bsrc\s*=)(?![^>]*\btype=\"application/(?:ld\+)?json\")[^>]*>(.*?)</script\b[^>]*>",
+    re.DOTALL | re.IGNORECASE,
 )
 #: An event handler attribute (``onclick="..."``) inside a tag.
 HANDLER = re.compile(rb"<[a-zA-Z][^>]*?\s(on[a-z]+)\s*=\s*[\"']", re.DOTALL)
