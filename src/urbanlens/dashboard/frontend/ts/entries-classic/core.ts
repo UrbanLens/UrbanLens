@@ -35,7 +35,7 @@ import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete
 import { installMemoriesNav } from "../shared/memories-nav";
 import { installGlobalPhotoLightbox } from "../shared/photo-lightbox";
 import { installGlobalPhotoProcessing } from "../shared/photo-processing";
-import { installGlobalPinCachePurge } from "../shared/pin-cache";
+import { installGlobalPinCachePurge, installPinsDirtyMarker } from "../shared/pin-cache";
 import { installPickerActions } from "../shared/picker-actions";
 import { installPanelActions } from "../shared/panel-actions";
 import { installGlobalPoller } from "../shared/poller";
@@ -102,6 +102,7 @@ installLabelDialogs();
 installGlobalRegionDelete();
 installGlobalLeaveConfirmation();
 installGlobalPinCachePurge();
+installPinsDirtyMarker();
 installGlobalPhotoLightbox();
 installGlobalPhotoProcessing();
 installGlobalWebGLSupport();

@@ -103,6 +103,19 @@ export function markPinsDirty(): void {
     }
 }
 
+let dirtyMarkerInstalled = false;
+
+/** Content that arrives (or loads) holding a ``data-pins-dirty`` element, such as a finished import, marks pins dirty. */
+export function installPinsDirtyMarker(): void {
+    if (dirtyMarkerInstalled) return;
+    dirtyMarkerInstalled = true;
+    // htmx:load also fires for the initial page.
+    document.addEventListener("htmx:load", (event) => {
+        const root = event.target;
+        if (root instanceof Element && (root.matches("[data-pins-dirty]") || root.querySelector("[data-pins-dirty]"))) markPinsDirty();
+    });
+}
+
 /**
  * Every generation of the pin-cache key: `ul_pins_v<N>_<profile id>`.
  */

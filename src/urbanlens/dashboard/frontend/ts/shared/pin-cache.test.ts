@@ -4,7 +4,7 @@
  * that shape directly rather than importing the map page's script.
  */
 import { beforeEach, describe, expect, test } from "bun:test";
-import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches, readCachedPinLocations } from "./pin-cache";
+import { installPinsDirtyMarker, PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches, readCachedPinLocations } from "./pin-cache";
 
 // localStorage comes from the DOM the test preload registers (see testing/dom-setup.ts),
 // so these exercise a real Storage rather than a hand-rolled stand-in.
@@ -116,5 +116,20 @@ describe("purgeForeignPinCaches", () => {
         writeCache();
         expect(purgeForeignPinCaches(CURRENT)).toBe(0);
         expect(localStorage.getItem(CURRENT)).not.toBeNull();
+    });
+});
+
+describe("data-pins-dirty", () => {
+    test("content that arrives carrying the marker flags the map's pins dirty, and other content does not", () => {
+        installPinsDirtyMarker();
+        installPinsDirtyMarker();
+        localStorage.removeItem("ul_pins_dirty");
+        document.body.innerHTML = '<div id="plain"></div><div id="done"><p data-pins-dirty>Import complete.</p></div>';
+
+        document.getElementById("plain")?.dispatchEvent(new CustomEvent("htmx:load", { bubbles: true }));
+        expect(localStorage.getItem("ul_pins_dirty")).toBeNull();
+
+        document.getElementById("done")?.dispatchEvent(new CustomEvent("htmx:load", { bubbles: true }));
+        expect(localStorage.getItem("ul_pins_dirty")).toBe("1");
     });
 });
