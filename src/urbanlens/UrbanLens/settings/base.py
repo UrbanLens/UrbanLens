@@ -130,6 +130,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # A fetch or htmx request follows a login redirect to a 200; it gets a 401 instead.
+    "urbanlens.dashboard.middleware.ScriptLoginRefusalMiddleware",
     # Reports user id; logs wall/CPU/SQL for requests over UL_SLOW_REQUEST_MS.
     "urbanlens.dashboard.middleware.RequestTelemetryMiddleware",
     # Mints the media-origin cookie; no-op unless UL_MEDIA_BASE_URL is set.

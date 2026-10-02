@@ -6,11 +6,15 @@ import json
 import logging
 import time
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qs, urlsplit
 
 from django.conf import settings
+from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.db import transaction
 from django.http import HttpResponse
+from django.shortcuts import resolve_url
 from django.urls import Resolver404, resolve
+from django.utils.cache import patch_vary_headers
 from django.utils.html import escape
 
 from urbanlens.dashboard.services.profile.profile_preview import SESSION_KEY, create_ghost_viewer, mode_label
@@ -82,6 +86,83 @@ class MediaOriginCookieMiddleware:
         elif MEDIA_COOKIE_NAME in request.COOKIES:
             clear_media_cookie(response)
         return response
+
+
+#: What a script is told when the request it sent needs a session the browser no longer has.
+SESSION_ENDED_MESSAGE = "Your session has ended. Sign in again to continue."
+
+#: The request headers that decide whether a login gate answers with a redirect or a refusal.
+_SCRIPT_REQUEST_HEADERS = ("Sec-Fetch-Mode", "HX-Request", "X-Requested-With")
+
+
+def is_script_request(request: HttpRequest) -> bool:
+    """Whether a script sent *request*, rather than the browser navigating.
+
+    Args:
+        request: The incoming request.
+
+    Returns:
+        True for fetch, XHR and htmx requests; browsers without fetch metadata are judged by the headers htmx and
+        XHR wrappers add.
+    """
+    mode = request.headers.get("Sec-Fetch-Mode")
+    if mode:
+        return mode != "navigate"
+    return request.headers.get("HX-Request") == "true" or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def is_login_gate(response: HttpResponse) -> bool:
+    """Whether *response* is ``redirect_to_login`` sending the viewer to sign in and come back.
+
+    Args:
+        response: A view's response.
+
+    Returns:
+        True for a redirect to ``LOGIN_URL`` that names where to return to.
+    """
+    location = response.get("Location") if 300 <= response.status_code < 400 else None
+    if not location:
+        return False
+    target, login = urlsplit(location), urlsplit(resolve_url(settings.LOGIN_URL))
+    return (target.netloc, target.path) == (login.netloc, login.path) and REDIRECT_FIELD_NAME in parse_qs(target.query)
+
+
+class ScriptLoginRefusalMiddleware:
+    """Answer a script's request that needs a login with a 401, not the login redirect.
+
+    ``fetch()`` and htmx follow the redirect, so the login page arrived as a 200 and a caller checking only the status
+    reported an unsaved write as saved.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        """Store the next handler in the chain.
+
+        Args:
+            get_response: The downstream handler.
+        """
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        """Swap an anonymous script request's login redirect for a refusal.
+
+        Args:
+            request: The current request.
+
+        Returns:
+            A 401 carrying a sentence the page can show, or the downstream response unchanged.
+        """
+        response = self.get_response(request)
+        if not is_login_gate(response):
+            return response
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated:
+            return response
+        patch_vary_headers(response, _SCRIPT_REQUEST_HEADERS)
+        if not is_script_request(request):
+            return response
+        refusal = HttpResponse(SESSION_ENDED_MESSAGE, status=401, content_type="text/plain; charset=utf-8")
+        patch_vary_headers(refusal, _SCRIPT_REQUEST_HEADERS)
+        return refusal
 
 
 class SecurityHeadersMiddleware:

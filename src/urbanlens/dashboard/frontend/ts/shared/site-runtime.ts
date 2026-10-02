@@ -64,6 +64,9 @@ export function responseErrorMessage(status: number | undefined, responseText: s
     return `Request failed${status ? ` (HTTP ${status})` : ""}.`;
 }
 
+/** What the server's ScriptLoginRefusalMiddleware says when a script's request needs a session that has ended. */
+export const SESSION_ENDED_MESSAGE = "Your session has ended. Sign in again to continue.";
+
 export type FetchInit = RequestInit & { __ulReported?: boolean };
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type WrappedFetch = typeof fetch & { __urbanLensWrapped?: boolean };
@@ -80,7 +83,7 @@ export function wrapFetch<F extends FetchLike>(nativeFetch: F, report: (message:
         const reported = init?.__ulReported === true;
         return nativeFetch.call(this, input, init).then(
             (response) => {
-                if (!response.ok && !reported) report(`Request failed (HTTP ${response.status}).`);
+                if (!response.ok && !reported) report(response.status === 401 ? SESSION_ENDED_MESSAGE : `Request failed (HTTP ${response.status}).`);
                 return response;
             },
             (err: unknown) => {

@@ -8,6 +8,7 @@ import {
     installValidationReports,
     responseErrorMessage,
     showServerMessages,
+    SESSION_ENDED_MESSAGE,
     wrapFetch,
 } from "./site-runtime";
 
@@ -52,6 +53,12 @@ describe("wrapFetch", () => {
         const response = await wrapFetch(stubFetch(new Response("", { status: 503 })), report)("/x/");
         expect(response.status).toBe(503);
         expect(report).toHaveBeenCalledWith("Request failed (HTTP 503).");
+    });
+
+    test("a 401 says the session ended, so the page is not left claiming a write landed (P192)", async () => {
+        const report = mock((_m: string) => undefined);
+        await wrapFetch(stubFetch(new Response("Your session has ended.", { status: 401 })), report)("/x/");
+        expect(report).toHaveBeenCalledWith(SESSION_ENDED_MESSAGE);
     });
 
     test("a caller that reports its own errors is left to do so, on either failure path", async () => {
