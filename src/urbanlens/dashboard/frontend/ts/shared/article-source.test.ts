@@ -33,6 +33,29 @@ describe("alignBlocks", () => {
     test("keeps the most blocks in order when blocks move", () => {
         expect(alignBlocks([[a], [b], [c]], [c, a, b])).toEqual([1, 2, -1]);
     });
+
+    describe("in an article too long to diff exactly", () => {
+        const original = Array.from({ length: 1300 }, (_, index) => [p(`block ${index}`)]);
+        const pasted = Array.from({ length: 200 }, (_, index) => p(`pasted ${index}`));
+
+        test("still finds every unchanged block after a large paste, with edits at both ends", () => {
+            const children = [p("edited first"), ...original.slice(1, 6).flat(), ...pasted, ...original.slice(6, -1).flat(), p("edited last")];
+            const starts = alignBlocks(original, children);
+            expect(starts[0]).toBe(-1);
+            expect(starts[1299]).toBe(-1);
+            original.slice(1, 1299).forEach((_, offset) => {
+                const block = offset + 1;
+                expect(starts[block]).toBe(block < 6 ? block : block + pasted.length);
+            });
+        });
+
+        test("still finds blocks whose text repeats, in order", () => {
+            const repeated = Array.from({ length: 1300 }, () => [p("same")]);
+            const children = [p("edited first"), ...repeated.slice(1, 6).map((group) => p("same")), ...pasted, ...repeated.slice(6, -1).map(() => p("same")), p("edited last")];
+            const starts = alignBlocks(repeated, children);
+            expect(starts.filter((start) => start >= 0)).toHaveLength(1298);
+        });
+    });
 });
 
 describe("joinRegion", () => {

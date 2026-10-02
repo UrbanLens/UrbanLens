@@ -207,14 +207,23 @@ const BLOCK_BREAK = "<!-- -->";
 /** Separates blocks parsed together; see {@link ArticleSourceTracker.parseBlocks}. */
 const PARSE_BREAK = "<!-- urbanlens:block -->";
 
-/** How far ahead a block is looked for once a diff is too large to match exactly. */
-const GREEDY_WINDOW = 64;
-
-/** Cells above which the middle of a diff is matched greedily instead of exactly. */
+/** Cells above which a stretch of blocks is aligned on its unique blocks before it is diffed exactly. */
 const MAX_DIFF_CELLS = 1_000_000;
 
-function groupMatches(group: readonly ProseMirrorNode[], children: readonly ProseMirrorNode[], at: number): boolean {
-    if (at + group.length > children.length) return false;
+const nodeKeys = new WeakMap<ProseMirrorNode, string>();
+
+/** A string equal for equal nodes. Nodes are immutable, and an unchanged block keeps its node, so each is keyed once. */
+function keyOf(node: ProseMirrorNode): string {
+    let key = nodeKeys.get(node);
+    if (key === undefined) {
+        key = JSON.stringify(node.toJSON());
+        nodeKeys.set(node, key);
+    }
+    return key;
+}
+
+function groupMatches(group: readonly ProseMirrorNode[], children: readonly ProseMirrorNode[], at: number, end: number): boolean {
+    if (at < 0 || at + group.length > end) return false;
     return group.every((node, offset) => {
         const child = children[at + offset]!;
         return child === node || (child.type === node.type && child.nodeSize === node.nodeSize && child.eq(node));
@@ -228,52 +237,63 @@ function groupMatches(group: readonly ProseMirrorNode[], children: readonly Pros
  */
 export function alignBlocks(groups: readonly (readonly ProseMirrorNode[])[], children: readonly ProseMirrorNode[]): number[] {
     const starts = groups.map(() => -1);
-    let firstBlock = 0;
-    let firstChild = 0;
-    while (firstBlock < groups.length && groupMatches(groups[firstBlock]!, children, firstChild)) {
+    alignRange(groups, children, [0, groups.length], [0, children.length], starts);
+    return starts;
+}
+
+type Range = [start: number, end: number];
+
+function alignRange(groups: readonly (readonly ProseMirrorNode[])[], children: readonly ProseMirrorNode[], blocks: Range, kids: Range, starts: number[]): void {
+    let [firstBlock, lastBlock] = blocks;
+    let [firstChild, lastChild] = kids;
+    while (firstBlock < lastBlock && groupMatches(groups[firstBlock]!, children, firstChild, lastChild)) {
         starts[firstBlock] = firstChild;
         firstChild += groups[firstBlock]!.length;
         firstBlock += 1;
     }
-    let lastBlock = groups.length;
-    let lastChild = children.length;
     while (lastBlock > firstBlock) {
         const group = groups[lastBlock - 1]!;
         const at = lastChild - group.length;
-        if (at < firstChild || !groupMatches(group, children, at)) break;
+        if (at < firstChild || !groupMatches(group, children, at, lastChild)) break;
         starts[lastBlock - 1] = at;
         lastChild = at;
         lastBlock -= 1;
     }
+    if (firstBlock === lastBlock || firstChild === lastChild) return;
+    if ((lastBlock - firstBlock + 1) * (lastChild - firstChild + 1) <= MAX_DIFF_CELLS) {
+        diffExactly(groups, children, [firstBlock, lastBlock], [firstChild, lastChild], starts);
+        return;
+    }
+    const anchors = uniqueAnchors(groups, children, [firstBlock, lastBlock], [firstChild, lastChild]);
+    if (!anchors.length) {
+        matchInOrder(groups, children, [firstBlock, lastBlock], [firstChild, lastChild], starts);
+        return;
+    }
+    let block = firstBlock;
+    let child = firstChild;
+    for (const [anchorBlock, anchorChild] of anchors) {
+        alignRange(groups, children, [block, anchorBlock], [child, anchorChild], starts);
+        starts[anchorBlock] = anchorChild;
+        block = anchorBlock + 1;
+        child = anchorChild + groups[anchorBlock]!.length;
+    }
+    alignRange(groups, children, [block, lastBlock], [child, lastChild], starts);
+}
 
+/** The longest common subsequence of blocks and children, by dynamic programming. */
+function diffExactly(groups: readonly (readonly ProseMirrorNode[])[], children: readonly ProseMirrorNode[], blocks: Range, kids: Range, starts: number[]): void {
+    const [firstBlock, lastBlock] = blocks;
+    const [firstChild, lastChild] = kids;
     const blockCount = lastBlock - firstBlock;
     const childCount = lastChild - firstChild;
-    if (blockCount === 0 || childCount === 0) return starts;
-
-    if ((blockCount + 1) * (childCount + 1) > MAX_DIFF_CELLS) {
-        let child = firstChild;
-        for (let block = firstBlock; block < lastBlock && child < lastChild; block++) {
-            for (let at = child; at < Math.min(lastChild, child + GREEDY_WINDOW); at++) {
-                if (groupMatches(groups[block]!, children, at)) {
-                    starts[block] = at;
-                    child = at + groups[block]!.length;
-                    break;
-                }
-            }
-        }
-        return starts;
-    }
-
-    // best[b * width + c]: the most blocks matchable from middle block b and middle child c onward.
+    // best[b * width + c]: the most blocks matchable from block firstBlock + b and child firstChild + c onward.
     const width = childCount + 1;
     const best = new Uint32Array((blockCount + 1) * width);
     for (let b = blockCount - 1; b >= 0; b--) {
         const group = groups[firstBlock + b]!;
         for (let c = childCount - 1; c >= 0; c--) {
             let value = Math.max(best[(b + 1) * width + c]!, best[b * width + c + 1]!);
-            if (c + group.length <= childCount && groupMatches(group, children, firstChild + c)) {
-                value = Math.max(value, 1 + best[(b + 1) * width + c + group.length]!);
-            }
+            if (groupMatches(group, children, firstChild + c, lastChild)) value = Math.max(value, 1 + best[(b + 1) * width + c + group.length]!);
             best[b * width + c] = value;
         }
     }
@@ -289,7 +309,84 @@ export function alignBlocks(groups: readonly (readonly ProseMirrorNode[])[], chi
             b += 1;
         }
     }
-    return starts;
+}
+
+/**
+ * Blocks whose content occurs once among the blocks and once among the children, paired up and cut down to the
+ * longest run that is in order on both sides (patience diff's anchors).
+ */
+function uniqueAnchors(groups: readonly (readonly ProseMirrorNode[])[], children: readonly ProseMirrorNode[], blocks: Range, kids: Range): [number, number][] {
+    const [firstBlock, lastBlock] = blocks;
+    const [firstChild, lastChild] = kids;
+    const blockCounts = new Map<string, number>();
+    for (let block = firstBlock; block < lastBlock; block++) {
+        const key = keyOf(groups[block]![0]!);
+        blockCounts.set(key, (blockCounts.get(key) ?? 0) + 1);
+    }
+    const childAt = new Map<string, number>();
+    const childCounts = new Map<string, number>();
+    for (let child = firstChild; child < lastChild; child++) {
+        const key = keyOf(children[child]!);
+        childAt.set(key, child);
+        childCounts.set(key, (childCounts.get(key) ?? 0) + 1);
+    }
+    const pairs: [number, number][] = [];
+    for (let block = firstBlock; block < lastBlock; block++) {
+        const key = keyOf(groups[block]![0]!);
+        const child = childAt.get(key);
+        if (child === undefined || blockCounts.get(key) !== 1 || childCounts.get(key) !== 1) continue;
+        if (groupMatches(groups[block]!, children, child, lastChild)) pairs.push([block, child]);
+    }
+    // Longest run of pairs whose children increase too: tails[k] is the pair ending the best run of length k + 1.
+    const tails: number[] = [];
+    const previous = pairs.map(() => -1);
+    pairs.forEach(([, child], index) => {
+        let low = 0;
+        let high = tails.length;
+        while (low < high) {
+            const middle = (low + high) >> 1;
+            if (pairs[tails[middle]!]![1] < child) low = middle + 1;
+            else high = middle;
+        }
+        if (low > 0) previous[index] = tails[low - 1]!;
+        tails[low] = index;
+    });
+    const run: [number, number][] = [];
+    for (let index = tails[tails.length - 1] ?? -1; index >= 0; index = previous[index]!) run.unshift(pairs[index]!);
+    // A block of several nodes can reach past the next anchor's child; that anchor is dropped.
+    const anchors: [number, number][] = [];
+    for (const pair of run) {
+        const last = anchors[anchors.length - 1];
+        if (!last || pair[1] >= last[1] + groups[last[0]]!.length) anchors.push(pair);
+    }
+    return anchors;
+}
+
+/** Each block at the next child after the previous match with the same content, for stretches no block is unique in. */
+function matchInOrder(groups: readonly (readonly ProseMirrorNode[])[], children: readonly ProseMirrorNode[], blocks: Range, kids: Range, starts: number[]): void {
+    const [firstBlock, lastBlock] = blocks;
+    const [firstChild, lastChild] = kids;
+    const positions = new Map<string, number[]>();
+    for (let child = firstChild; child < lastChild; child++) {
+        const key = keyOf(children[child]!);
+        const list = positions.get(key);
+        if (list) list.push(child);
+        else positions.set(key, [child]);
+    }
+    const cursors = new Map<string, number>();
+    let next = firstChild;
+    for (let block = firstBlock; block < lastBlock; block++) {
+        const group = groups[block]!;
+        const key = keyOf(group[0]!);
+        const list = positions.get(key) ?? [];
+        let index = cursors.get(key) ?? 0;
+        while (index < list.length && (list[index]! < next || !groupMatches(group, children, list[index]!, lastChild))) index += 1;
+        cursors.set(key, index);
+        if (index === list.length) continue;
+        starts[block] = list[index]!;
+        next = list[index]! + group.length;
+        cursors.set(key, index + 1);
+    }
 }
 
 const BLANK_LINE = /\n[ \t]*\n/;
