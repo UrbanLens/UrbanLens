@@ -63,6 +63,7 @@ from urbanlens.dashboard.models.safety.model import (
 )
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.core.colors import HEX_COLOR_RE
+from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX, DB_INTEGER_MAX, DB_INTEGER_MIN
 from urbanlens.dashboard.services.core.text_limits import (
     MAX_ADDITIONAL_PREFERENCES_LENGTH,
     MAX_COMMENT_TEXT_LENGTH,
@@ -81,6 +82,7 @@ from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 from urbanlens.dashboard.services.media.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
 from urbanlens.dashboard.services.notifications.notification_center import preference_field_names
 from urbanlens.dashboard.services.pins.pin_edit import EDITABLE_PIN_FIELDS
+from urbanlens.dashboard.services.search.filter_criteria import CriteriaShapeError, validate_criteria_shape
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 
 if TYPE_CHECKING:
@@ -955,8 +957,24 @@ class SettingsPatchSerializer(serializers.Serializer):
 #: or imported region; tight enough that a pathological payload is refused rather than persisted.
 MAX_BOUNDARY_VERTICES = 20_000
 
+
 #: Human-readable description of the ``criteria``/``smart_filter`` JSON shape, reused by every field carrying
 #: it.
+def _require_criteria_shape(value: object) -> None:
+    """Raise a field error when *value* is not criteria the pin filter can read back.
+
+    Args:
+        value: Submitted criteria.
+
+    Raises:
+        serializers.ValidationError: Carrying the shape error's message.
+    """
+    try:
+        validate_criteria_shape(value)
+    except CriteriaShapeError as exc:
+        raise serializers.ValidationError(str(exc)) from exc
+
+
 CRITERIA_HELP_TEXT = (
     "Saved main-map filter criteria, in the same JSON shape "
     "`services.search.filter_criteria.serialize_form_criteria` produces and "
@@ -1058,6 +1076,22 @@ class PinListWriteSerializer(serializers.Serializer):
     #: later edits to that filter resync this list. Null detaches the list from its source.
     source_saved_filter_uuid = serializers.UUIDField(required=False, allow_null=True)
 
+    def validate_smart_filter(self, value):
+        """Refuse rules the pin filter could not read back.
+
+        Args:
+            value: The submitted rules, or None to clear them.
+
+        Returns:
+            The value, unchanged.
+
+        Raises:
+            serializers.ValidationError: The rules are not in the stored criteria shape.
+        """
+        if value is not None:
+            _require_criteria_shape(value)
+        return value
+
     def validate_smart_boundary(self, value):
         """Parse and bound the submitted boundary geometry.
 
@@ -1123,7 +1157,7 @@ class PinListItemsReorderSerializer(serializers.Serializer):
     to the membership row, and one pin can sit on many lists.
     """
 
-    item_ids = serializers.ListField(child=serializers.IntegerField(), min_length=1, max_length=1000)
+    item_ids = serializers.ListField(child=serializers.IntegerField(min_value=1, max_value=DB_BIGINT_MAX), min_length=1, max_length=1000)
 
 
 class PinListQuerySerializer(serializers.Serializer):
@@ -1207,7 +1241,7 @@ class SavedFilterWriteSerializer(serializers.Serializer):
     color = serializers.CharField(required=False, allow_blank=True, max_length=20)
     opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
     criteria = serializers.JSONField(required=False, help_text=CRITERIA_HELP_TEXT)
-    order = serializers.IntegerField(required=False)
+    order = serializers.IntegerField(required=False, min_value=DB_INTEGER_MIN, max_value=DB_INTEGER_MAX)
 
     def validate_color(self, value):
         """Reject any hex not in the shared saved-filter/label/custom-layer color palette.
@@ -1226,7 +1260,7 @@ class SavedFilterWriteSerializer(serializers.Serializer):
         return value
 
     def validate_criteria(self, value):
-        """Require a JSON object, since every consumer indexes it by key.
+        """Require the stored criteria shape, since every consumer indexes it by key.
 
         Args:
             value: The submitted criteria.
@@ -1235,10 +1269,9 @@ class SavedFilterWriteSerializer(serializers.Serializer):
             The validated criteria dict.
 
         Raises:
-            serializers.ValidationError: If it isn't a JSON object.
+            serializers.ValidationError: If it isn't a JSON object, or a key holds a value of the wrong shape.
         """
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("criteria must be a JSON object.")
+        _require_criteria_shape(value)
         return value
 
 
@@ -1327,7 +1360,7 @@ class LabelWriteSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(choices=KIND_CHOICES, required=False)
     color = serializers.ChoiceField(choices=COLOR_CHOICES, required=False, allow_null=True, allow_blank=True)
     icon = IconField(max_length=50, required=False, allow_blank=True, allow_null=True)
-    order = serializers.IntegerField(required=False)
+    order = serializers.IntegerField(required=False, min_value=DB_INTEGER_MIN, max_value=DB_INTEGER_MAX)
     allow_auto_tag = serializers.BooleanField(required=False)
     keywords = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     #: Uuids of labels to become this label's parents. Replaces the existing

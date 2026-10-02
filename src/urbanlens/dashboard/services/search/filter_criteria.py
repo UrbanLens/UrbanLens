@@ -167,6 +167,54 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
     return criteria
 
 
+class CriteriaShapeError(ValueError):
+    """Submitted criteria are not in the stored shape, so the pin filter could not read them back."""
+
+
+def _is_id_list(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(item, int) and not isinstance(item, bool) for item in value)
+
+
+def validate_criteria_shape(stored: object) -> None:
+    """Refuse criteria that :func:`deserialize_criteria` or the pin filter would fail on.
+
+    Scalar bounds are not checked: the filter already ignores one it cannot parse.
+
+    Args:
+        stored: Submitted criteria, as parsed from a request body.
+
+    Raises:
+        CriteriaShapeError: *stored* is not an object, or a text, date, label or custom-field key holds a value of
+            the wrong shape.
+    """
+    if not isinstance(stored, dict):
+        raise CriteriaShapeError("Criteria must be a JSON object.")
+    if not isinstance(stored.get("name") or "", str):
+        raise CriteriaShapeError("name must be text.")
+    for key in _DATE_KEYS:
+        if value := stored.get(key):
+            try:
+                date.fromisoformat(value)
+            except (TypeError, ValueError) as exc:
+                raise CriteriaShapeError(f"{key} must be a YYYY-MM-DD date.") from exc
+    for key in _LABEL_LIST_KEYS:
+        if (value := stored.get(key)) and not _is_id_list(value):
+            raise CriteriaShapeError(f"{key} must be a list of label ids.")
+    if groups := stored.get("label_groups"):
+        if not isinstance(groups, list) or not all(isinstance(group, dict) and (not group.get("ids") or _is_id_list(group["ids"])) for group in groups):
+            raise CriteriaShapeError("label_groups must be a list of {op, ids} objects.")
+    if fields := stored.get("custom_fields"):
+        if not isinstance(fields, list):
+            raise CriteriaShapeError("custom_fields must be a list.")
+        for criterion in fields:
+            if not isinstance(criterion, dict) or not isinstance(criterion.get("field_id"), int):
+                raise CriteriaShapeError("Each custom_fields entry needs a field_id.")
+            try:
+                _deserialize_custom_field_bounds(criterion)
+            except (TypeError, ValueError, ArithmeticError) as exc:
+                raise CriteriaShapeError("A custom_fields bound is not a value of its field's kind.") from exc
+
+
 class CriteriaOwnershipError(ValueError):
     """Stored criteria referenced a label or custom field the profile may not use."""
 

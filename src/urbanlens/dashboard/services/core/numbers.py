@@ -9,6 +9,8 @@ import math
 #: The range of a Django ``IntegerField`` column; a larger parsed value fails the write rather than the parse.
 DB_INTEGER_MIN = -(2**31)
 DB_INTEGER_MAX = 2**31 - 1
+#: The largest ``BigAutoField`` primary key.
+DB_BIGINT_MAX = 2**63 - 1
 
 
 def safe_int_or_none(value: object) -> int | None:
