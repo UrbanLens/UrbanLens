@@ -6,9 +6,12 @@ from __future__ import annotations
 from decimal import Decimal
 import math
 
-#: The range of a Django ``IntegerField`` column; a larger parsed value fails the write rather than the parse.
+#: The range of a Django ``IntegerField`` column. psycopg's binary dumper keeps only the low 32 bits of a value
+#: written past it (2**31 is stored as -2**31) and raises past 2**63, so the bound belongs on the parse.
 DB_INTEGER_MIN = -(2**31)
 DB_INTEGER_MAX = 2**31 - 1
+#: The largest ``SmallIntegerField`` value; past it a write keeps the low 16 bits.
+DB_SMALLINT_MAX = 2**15 - 1
 #: The largest ``BigAutoField`` primary key.
 DB_BIGINT_MAX = 2**63 - 1
 

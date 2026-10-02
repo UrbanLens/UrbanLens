@@ -15,6 +15,7 @@ from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.core.connection_registry import ConnectionRegistry
 from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
+from urbanlens.dashboard.services.core.numbers import DB_INTEGER_MAX
 from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.security import socket_budget
@@ -693,7 +694,7 @@ def create_direct_message(
     if ciphertext:
         if body:
             raise MixedPlaintextAndCiphertextError(f"Sender {sender.pk} submitted both a plaintext body and ciphertext.")
-        if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
+        if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or not 1 <= key_version <= DB_INTEGER_MAX:
             raise MalformedCiphertextError(f"Sender {sender.pk} submitted an invalid ciphertext/nonce/key_version triple.")
     elif nonce or key_version:
         raise MalformedCiphertextError(f"Sender {sender.pk} submitted nonce/key_version without ciphertext.")

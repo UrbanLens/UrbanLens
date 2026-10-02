@@ -11,6 +11,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
+from urbanlens.dashboard.services.core.numbers import DB_SMALLINT_MAX
 
 #: Field types creatable through the external API. REFERENCE is excluded: a reference value points at another
 #: one of the owner's objects (a pin, wiki, trip...) and needs its own resolution design this domain doesn't
@@ -82,7 +83,7 @@ class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
     field_type = serializers.ChoiceField(choices=[(value, value) for value in WRITABLE_FIELD_TYPES], default=CustomFieldType.TEXT)
     options = serializers.ListField(child=serializers.CharField(max_length=100), required=False, default=list)
-    order = serializers.IntegerField(required=False, default=0, min_value=0)
+    order = serializers.IntegerField(required=False, default=0, min_value=0, max_value=DB_SMALLINT_MAX)
 
     def validate(self, attrs: dict) -> dict:
         """Require and normalize choices when the field type is SELECT.

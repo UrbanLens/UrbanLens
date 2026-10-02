@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.boundary.model import BoundaryType
+from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX
 from urbanlens.dashboard.services.core.text_limits import (
     MAX_ARTICLE_EDIT_SUMMARY_LENGTH,
     MAX_ARTICLE_LENGTH,
@@ -197,7 +198,7 @@ class WikiUpdateSerializer(serializers.Serializer):
     date_last_active = serializers.DateField(required=False, allow_null=True)
     security = WikiSecurityUpdateSerializer(required=False)
     #: The detail payload's ``revision`` when the client loaded it; a field written since is refused with 409.
-    base_revision_id = serializers.IntegerField(required=False, min_value=0)
+    base_revision_id = serializers.IntegerField(required=False, min_value=0, max_value=DB_BIGINT_MAX)
 
     def validate(self, attrs: dict) -> dict:
         """Reject unknown top-level keys and empty payloads.
@@ -262,7 +263,7 @@ class ArticleSaveSerializer(serializers.Serializer):
 
     content = serializers.CharField(max_length=MAX_ARTICLE_LENGTH, allow_blank=True)
     edit_summary = serializers.CharField(max_length=MAX_ARTICLE_EDIT_SUMMARY_LENGTH, required=False, allow_blank=True)
-    base_revision_id = serializers.IntegerField(required=True, allow_null=True)
+    base_revision_id = serializers.IntegerField(required=True, allow_null=True, max_value=DB_BIGINT_MAX)
 
 
 class ArticleRevisionSerializer(serializers.Serializer):
@@ -336,7 +337,7 @@ class CommentCreateSerializer(serializers.Serializer):
 
     text = serializers.CharField(max_length=MAX_COMMENT_TEXT_LENGTH)
     #: The comment being replied to. Scoped to the same pin/wiki by the view.
-    parent_id = serializers.IntegerField(required=False, allow_null=True)
+    parent_id = serializers.IntegerField(required=False, allow_null=True, max_value=DB_BIGINT_MAX)
 
 
 class ReviewSerializer(serializers.Serializer):
