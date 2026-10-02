@@ -19410,10 +19410,13 @@ owner's next visit; shared Location fields may fill in, but only by containment)
 each of these. `tests/integration/specs/api/cross-user-isolation.spec.ts` does the same end to end. The building
 place stored with no geometry is P182.
 
-Locations v0.7.0's sweep already attached stay on their building place after the fix. Containment can never reach a
-building place with no outline, and nothing current attaches to one, so `manage.py reresolve_fiat_building_places`
-re-resolves every Location on one by containment. It is a v0.8.0 deploy step; a dry run of its logic on `v080e2e`
-found 27 such Locations, all of which containment returns to the HRSH parcel.
+Locations the sweep already attached stayed on their building place after the fix. Containment can never reach a
+building place with no outline, and nothing current attaches to one, so migration
+`0034_reresolve_fiat_building_places` re-resolves every Location on one by containment. One left on no place is
+unstamped, as `detach_oversized_place` does, so the provider chain is asked about it again. On `v080e2e` 27 such
+Locations all went back to the HRSH parcel. A dry run on production's data at 0033 (2026-10-02, by the infrastructure
+repo) found 593: 186 onto 15 places and 407 onto none. Containment answering "no place" is the ruling above applied,
+not a fault: a pin there keeps its stored type, and a wiki its own `place`.
 
 ## RESOLVED 2026-10-01: A third-party image slower than 20 s to download was never copied, so its tile showed an icon
 

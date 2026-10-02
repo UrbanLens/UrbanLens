@@ -30,10 +30,9 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
         The most specific current place containing the coordinate, or None when it is on no known parcel or building."""
     place = Place.objects.resolve_for_point(location.latitude, location.longitude)
     if save and location.place_id != (place.pk if place else None):
-        # Deliberately not stamped when the answer is unchanged, and in particular not when it is
-        # "no known place".
-        # ``place_resolved_at`` is what ``services.locations.boundaries.generation_status`` reads as
-        # "the provider chain has run here", and this function calls no provider - so stamping an
+        # Not stamped when the answer is unchanged, in particular "no known place": ``place_resolved_at`` is what
+        # ``services.locations.boundaries.generation_status`` reads as "the provider chain has run here", and this
+        # function calls no provider.
         stamped = timezone.now()
         Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=stamped)
         _drop_place_scoped_caches(location)

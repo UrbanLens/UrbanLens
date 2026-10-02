@@ -4013,5 +4013,5 @@ UrbanLens stores what it was given. Asked of REData in
 **Upstream fix, not deployed.** REData joins a relation's split member ways into rings and replied (its T10) that Kirkbride
 should come back as a polygon, probably merged with its Overture footprint. REData's deploy waits for v0.8.0. Nothing here
 should need to change: `upsert_place` updates a building place by its provider key once the cached `parcel_buildings`
-answer refreshes. If the merge gives Kirkbride a new key, place 483 is orphaned, and `reresolve_fiat_building_places`
-moves any Location still on it. To close: after REData deploys, refresh HRSH's buildings and re-run the location project.
+answer refreshes. If the merge gives Kirkbride a new key, place 483 is orphaned, with no Location on it: migration 0034
+moved them all by containment. To close: after REData deploys, refresh HRSH's buildings and re-run the location project.
