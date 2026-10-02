@@ -31,7 +31,7 @@ function showPending(map: L.Map, itemEl: HTMLElement | undefined, latlng: L.LatL
     itemEl?.classList.add("media-processing");
     itemEl?.setAttribute("aria-busy", "true");
     const size = photoMarkerSize(map.getZoom());
-    // The tile's own thumbnail is already loaded; its remote original is not, and is never fetched from its host here.
+    // The thumbnail the tile already shows, never item.url: that is the provider's original, on the provider's host.
     const thumb = itemEl?.dataset.mediaThumb;
     const icon = thumb
         ? makePhotoIcon(thumb, size)
