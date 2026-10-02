@@ -84,6 +84,20 @@ describe("data-confirm", () => {
     });
 });
 
+describe("data-no-submit", () => {
+    test("a form whose fields a script reads never submits itself", () => {
+        render(`<form data-no-submit><input name="q" value="owl"><button type="submit" name="go">Go</button></form>`);
+        document.querySelector("button")?.click();
+        expect(submitted).toEqual([]);
+    });
+
+    test("a form without it still submits", () => {
+        render(`<form><button type="submit" name="go">Go</button></form>`);
+        document.querySelector("button")?.click();
+        expect(submitted).toEqual(["go"]);
+    });
+});
+
 describe("data-reload", () => {
     test("reloads the page", () => {
         let reloads = 0;

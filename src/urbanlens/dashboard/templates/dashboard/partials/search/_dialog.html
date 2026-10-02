@@ -2,7 +2,7 @@
 {# Global search dialog. Included once from the header for authenticated users. #}
 <dialog class="gs-dialog" id="global-search-dialog" aria-label="Search UrbanLens"
         data-panel-url="{% url 'search.panel' %}" data-commit-url="{% url 'search.commit' %}">
-    <form class="gs-input-row" id="gs-form" autocomplete="off" onsubmit="return false;">
+    <form class="gs-input-row" id="gs-form" autocomplete="off" data-no-submit>
         {% csrf_token %}
         <i class="material-symbols-outlined gs-input-icon">search</i>
         <input type="text" id="gs-input" name="q" class="gs-input"

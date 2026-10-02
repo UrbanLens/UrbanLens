@@ -4,6 +4,7 @@
  * - ``data-confirm="<question>"`` on a plain form, or on one of its submit buttons, asks in the site's confirm
  *   dialog before submitting. ``data-confirm-message`` and ``data-confirm-label`` fill in the rest. For an htmx
  *   request, ``hx-confirm`` does this already.
+ * - ``data-no-submit`` on a form keeps it from submitting itself, Enter included; a script reads its fields instead.
  * - ``data-reload`` on a button reloads the page.
  * - ``data-enabled-by="<id> ..."`` keeps a button disabled until every named field is satisfied: a checkbox
  *   ticked, a field with ``data-expect="<phrase>"`` saying that phrase (ignoring case and edge spaces), a list of
@@ -32,6 +33,10 @@ function asker(form: HTMLFormElement, submitter: HTMLElement | null): HTMLElemen
 async function onSubmit(event: SubmitEvent): Promise<void> {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
+    if (form.hasAttribute("data-no-submit")) {
+        event.preventDefault();
+        return;
+    }
     const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
     const source = asker(form, submitter);
     if (!source) return;

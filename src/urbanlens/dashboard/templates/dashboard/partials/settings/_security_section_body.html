@@ -22,7 +22,7 @@
             <div class="passkey-list-item-info">
                 <i class="material-symbols-outlined">passkey</i>
                 <div>
-                    <form method="post" action="{% url 'settings.security.passkeys.rename' cred.pk %}" class="passkey-rename-form" onsubmit="return false;">
+                    <form method="post" action="{% url 'settings.security.passkeys.rename' cred.pk %}" class="passkey-rename-form" data-no-submit>
                         {% csrf_token %}
                         <input type="text" name="name" value="{{ cred.name }}" maxlength="100" class="passkey-name-input" aria-label="Passkey nickname">
                     </form>
