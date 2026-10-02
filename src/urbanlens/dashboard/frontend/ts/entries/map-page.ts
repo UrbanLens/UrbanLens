@@ -7,7 +7,7 @@ import type { Map as MaplibreMap } from "maplibre-gl";
 import type { HtmxApi } from "../types/globals";
 import { deletePinCascade } from "../shared/confirm-dialog";
 import { confirmAction } from "../shared/dialogs";
-import { fetchJson, fetchText, sendJson, type FetchJsonOptions } from "../shared/fetch-json";
+import { fetchJson, fetchResponse, fetchText, sendJson, type FetchJsonOptions } from "../shared/fetch-json";
 import { createPinClusterGroup, isAdditiveClick as sharedIsAdditiveClick } from "../shared/map-clusters";
 import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared/pin-cache";
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
@@ -1678,9 +1678,9 @@ async function _fetchJson<T>(url: string, options?: FetchJsonOptions, timeoutMs?
     return result;
 }
 
-/** sendJson resolves null only for a 204; every endpoint this page posts to answers with a body. */
+/** sendJson resolves null only for a 204; every endpoint this page posts to answers with a body. Every caller toasts its own failure. */
 async function _sendJson<T>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown): Promise<T> {
-    const result = await sendJson<T>(url, method, body);
+    const result = await sendJson<T>(url, method, body, { reportsItsOwnErrors: true });
     if (result === null) throw new Error(`Empty response from ${url}`);
     return result;
 }
@@ -2424,7 +2424,7 @@ function _loadInfrastructure(): void {
     const requestSerial = ++_infrastructureRequestSerial;
     _setInfrastructureLoading(true);
 
-    fetch(`${MAP_CFG.urls.mapInfrastructure}?bbox=${encodeURIComponent(bbox)}`, {
+    fetchResponse(`${MAP_CFG.urls.mapInfrastructure}?bbox=${encodeURIComponent(bbox)}`, {
         signal: _infrastructureAbortController.signal,
         headers: { "X-Requested-With": "XMLHttpRequest" },
     })
@@ -3060,7 +3060,7 @@ async function _showPlaceInfoPanel(place: PlaceData): Promise<void> {
     // Google Places - fetch details from the server.
     if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading...</span>';
     try {
-        const resp = await fetch(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id || "")}`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        const resp = await fetchResponse(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id || "")}`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
         if (!resp.ok) throw new Error();
         const data = (await resp.json()) as { place?: PlaceData };
         const d = data.place || ({} as PlaceData);
@@ -5315,7 +5315,7 @@ function _parseIconCatalogue(html: string): IconCatalogue {
 
 function _loadIconCatalogue(url: string): Promise<IconCatalogue> {
     if (!_iconGridRequest) {
-        _iconGridRequest = fetchText(url)
+        _iconGridRequest = fetchText(url, { reportsItsOwnErrors: true })
             .then(_parseIconCatalogue)
             .catch((error: unknown) => {
                 // Dropped so the next open retries, rather than leaving the
@@ -6112,7 +6112,7 @@ interface CreateLabelResponse {
             submitBtn.disabled = false;
             return;
         }
-        fetch(createUrl, {
+        fetchResponse(createUrl, {
             method: "POST",
             body: fd,
             headers: { "X-CSRFToken": MAP_CFG.csrfToken, Accept: "application/json" },
@@ -6127,7 +6127,7 @@ interface CreateLabelResponse {
                 toastr.success(`Label "${data.name}" created.`);
             })
             .catch((err) => {
-                toastr.error("Failed to create label: " + String(err));
+                toastr.error("Failed to create label: " + (err instanceof Error ? err.message : String(err)));
             })
             .finally(() => {
                 submitBtn.disabled = false;
@@ -6207,7 +6207,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
         const uuid = _editPinUuid;
         this.disabled = true;
         this.textContent = "Saving...";
-        fetch(`/dashboard/map/quick-edit/${uuid}/`, {
+        fetchResponse(`/dashboard/map/quick-edit/${uuid}/`, {
             method: "POST",
             body: formData,
             headers: { "X-CSRFToken": MAP_CFG.csrfToken },
@@ -6223,7 +6223,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
                 }
                 map.closePopup();
             })
-            .catch((err) => toastr.error("Failed to save pin: " + String(err)))
+            .catch((err) => toastr.error("Failed to save pin: " + (err instanceof Error ? err.message : String(err))))
             .finally(() => {
                 this.disabled = false;
                 this.textContent = "Save Changes";
@@ -6273,7 +6273,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
         const pinLat = Number.parseFloat(lat);
         const pinLng = Number.parseFloat(lng);
         const pinName = String(formData.get("name") || "New Pin");
-        fetch(MAP_CFG.urls.pinAdd, {
+        fetchResponse(MAP_CFG.urls.pinAdd, {
             method: "POST",
             body: formData,
             headers: { "X-CSRFToken": MAP_CFG.csrfToken },
@@ -6308,7 +6308,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
                     }
                 }
             })
-            .catch((err) => toastr.error("Failed to add pin: " + String(err)))
+            .catch((err) => toastr.error("Failed to add pin: " + (err instanceof Error ? err.message : String(err))))
             .finally(() => {
                 this.disabled = false;
                 this.textContent = "Add Pin";
@@ -6371,7 +6371,7 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         const label = btn.textContent;
         btn.disabled = true;
         btn.textContent = busyText;
-        return fetch("/dashboard/map/pin/" + pinSlug + "/link/" + locSlug + "/", {
+        return fetchResponse("/dashboard/map/pin/" + pinSlug + "/link/" + locSlug + "/", {
             method: "POST",
             headers: { "X-CSRFToken": MAP_CFG.csrfToken, "X-Requested-With": "XMLHttpRequest" },
         })

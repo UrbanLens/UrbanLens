@@ -4,6 +4,7 @@
 
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { NetworkError, fetchResponse } from "./fetch-json";
 import { positionAboveColliders } from "./floating-controls";
 import { isTypingTarget, matchesHotkey } from "./hotkeys";
 
@@ -137,7 +138,7 @@ async function postStack(which: "undo" | "redo"): Promise<void> {
     if (!url) return;
     requestInFlight = true;
     try {
-        const response = await fetch(url, {
+        const response = await fetchResponse(url, {
             method: "POST",
             headers: { "X-CSRFToken": getCsrfToken(), "X-Requested-With": "XMLHttpRequest" },
         });
@@ -153,6 +154,9 @@ async function postStack(which: "undo" | "redo"): Promise<void> {
             return;
         }
         await afterServerChange();
+    } catch (error) {
+        if (!(error instanceof NetworkError)) throw error;
+        toast.error(error.message);
     } finally {
         requestInFlight = false;
     }

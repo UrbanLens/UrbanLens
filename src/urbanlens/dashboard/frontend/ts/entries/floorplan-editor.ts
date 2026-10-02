@@ -5,6 +5,7 @@
 import { safeColor } from "../shared/markup-engine";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
+import { fetchResponse } from "../shared/fetch-json";
 import { isTypingTarget } from "../shared/hotkeys";
 import { installUndoBar, registerLocalUndoProvider, syncUndoBar } from "../shared/undo-bar";
 import { PlanProjection, type Pt, distance, interiorPoint, pointInRing, projectOnSegment, rotate } from "../shared/floorplan/coords";
@@ -3933,7 +3934,7 @@ function boot(): void {
 
     async function load(): Promise<void> {
         try {
-            const response = await fetch(jsonUrl, { headers: { Accept: "application/json" } });
+            const response = await fetchResponse(jsonUrl, { headers: { Accept: "application/json" } });
             if (response.status === 204) {
                 state.doc = emptyDocument({ lat, lng });
             } else if (response.ok) {
@@ -3961,7 +3962,7 @@ function boot(): void {
         // A save for the version being left could still be in flight.
         await waitForSaveSlot();
         try {
-            const response = await fetch(`${jsonUrl}?version=${encodeURIComponent(uuid)}`, { headers: { Accept: "application/json" } });
+            const response = await fetchResponse(`${jsonUrl}?version=${encodeURIComponent(uuid)}`, { headers: { Accept: "application/json" } });
             if (!response.ok) {
                 toast.warning("Could not load that version.");
                 return;
@@ -4003,7 +4004,7 @@ function boot(): void {
         saving = true;
         updateSaveStatus();
         try {
-            const response = await fetch(saveUrl, {
+            const response = await fetchResponse(saveUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify(payload),
@@ -4123,7 +4124,7 @@ function boot(): void {
             saving = true;
             updateSaveStatus();
             try {
-                const response = await fetch(publishUrl, {
+                const response = await fetchResponse(publishUrl, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                     body: JSON.stringify({ uuid: state.doc.uuid }),
@@ -4134,6 +4135,8 @@ function boot(): void {
                     return;
                 }
                 toast.success("Published to the community wiki.");
+            } catch (error) {
+                toast.warning(error instanceof Error ? error.message : "Could not publish this floorplan.");
             } finally {
                 saving = false;
                 updateSaveStatus();

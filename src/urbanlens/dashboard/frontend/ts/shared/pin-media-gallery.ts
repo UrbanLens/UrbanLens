@@ -241,7 +241,7 @@ export class PinMediaGallery {
             is_relevant: next,
             page_url: itemEl.dataset.mediaPageUrl || "",
             caption: itemEl.dataset.mediaCaption || "",
-        })
+        }, { reportsItsOwnErrors: true })
             .then((data) => {
                 if (data?.materialize_error) toast.warning(`Marked relevant, but couldn't save a local copy: ${data.materialize_error}`);
                 if (data) useLocalCopy(itemEl, data);
@@ -316,7 +316,7 @@ export class PinMediaGallery {
         if (ok !== true) return;
         const payload = items.map((item) => ({ source: item.dataset.mediaSource, url: item.dataset.mediaUrl, page_url: item.dataset.mediaPageUrl, caption: item.dataset.mediaCaption }));
         try {
-            const data = await window.ulSendJson?.<RelevanceResponse>(this.cfg.sendToWikiUrl, "POST", { items: payload });
+            const data = await window.ulSendJson?.<RelevanceResponse>(this.cfg.sendToWikiUrl, "POST", { items: payload }, { reportsItsOwnErrors: true });
             // Queued, not stored: the downloads finish in the background.
             toast.success(`${data?.queued ?? items.length} photo(s) queued for the wiki - they'll appear shortly.`);
             this.toggleSelectMode();
@@ -354,7 +354,7 @@ export class PinMediaGallery {
             repaginate();
         }
         // Already applied locally; only its persistence can fail.
-        window.ulSendJson?.(this.cfg.sortUrl, "POST", { sort }).catch(() => toast.warning("Couldn't save your sort preference."));
+        window.ulSendJson?.(this.cfg.sortUrl, "POST", { sort }, { reportsItsOwnErrors: true }).catch(() => toast.warning("Couldn't save your sort preference."));
     }
 
     private onClick(event: MouseEvent): void {

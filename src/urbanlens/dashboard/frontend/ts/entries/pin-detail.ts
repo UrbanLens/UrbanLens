@@ -15,7 +15,7 @@ import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
 import { delegateEditInPlace } from "../shared/edit-in-place";
 import { escHtml } from "../shared/escape-html";
-import { fetchText, sendJson } from "../shared/fetch-json";
+import { fetchResponse, fetchText, sendJson } from "../shared/fetch-json";
 import { installExternalPanelFallbacks } from "../shared/external-panel-fallbacks";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { PinMediaGallery } from "../shared/pin-media-gallery";
@@ -68,7 +68,7 @@ function readConfig(root: HTMLElement): PinConfig {
 }
 
 async function postForm(url: string, fields: Record<string, string>): Promise<void> {
-    await fetchText(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: new URLSearchParams(fields) });
+    await fetchText(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: new URLSearchParams(fields), reportsItsOwnErrors: true });
 }
 
 // -- Debug overlay (staff) -------------------------------------------------------------------
@@ -112,7 +112,7 @@ function bindDebugOverlay(cfg: PinConfig): void {
 
     window.togglePinDebugOverlay = () => setVisible(overlay.hidden !== false);
     window.clearPinResultCache = () => {
-        fetch(cfg.debugClearUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken(), "HX-Request": "true" }, credentials: "same-origin" })
+        fetchResponse(cfg.debugClearUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken(), "HX-Request": "true" }, credentials: "same-origin" })
             .then((resp) => {
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 toast.success("Page API cache cleared. Reloading...");
@@ -143,7 +143,7 @@ function addToList(cfg: PinConfig, listRef: string, control: HTMLElement): void 
 
 function createListAndAdd(cfg: PinConfig, name: string, nameInput: HTMLInputElement, control: HTMLElement): void {
     // A duplicate name is a 409 whose plain-text body is the message to show.
-    sendJson<{ uuid: string }>(cfg.listCreateUrl, "POST", { name }, { headers: { Accept: "application/json" } })
+    sendJson<{ uuid: string }>(cfg.listCreateUrl, "POST", { name }, { headers: { Accept: "application/json" }, reportsItsOwnErrors: true })
         .then((data) => {
             nameInput.value = "";
             if (data) addToList(cfg, data.uuid, control);

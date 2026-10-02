@@ -2,6 +2,8 @@
  * Beta "time slider" overlay: lets a user scrub a pin's/wiki's map through years and see OpenHistoricalMap (OHM) vector features.
  */
 
+import { fetchResponse } from "./fetch-json";
+
 // Leaflet is loaded via a CDN <script> tag on map pages (see map-layers.ts for
 // why this is an ambient global rather than an import).
 declare const L: typeof import("leaflet");
@@ -120,7 +122,7 @@ export function createTemporalImagerySlider(map: L.Map, options: TemporalImagery
         pendingFetches += 1;
         setLoading(true);
         try {
-            const response = await fetch(temporalFeaturesUrl(urlTemplate, year));
+            const response = await fetchResponse(temporalFeaturesUrl(urlTemplate, year));
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = (await response.json()) as TemporalFeaturesResponse;
             cache.set(year, data.geojson);

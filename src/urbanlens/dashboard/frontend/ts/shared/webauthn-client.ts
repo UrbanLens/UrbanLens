@@ -2,6 +2,8 @@
  * Passkey (WebAuthn) registration and login-time authentication ceremonies.
  */
 
+import { NetworkError, fetchResponse } from "./fetch-json";
+
 function base64urlToBuffer(value: string): ArrayBuffer {
     const padded = value.replace(/-/g, "+").replace(/_/g, "/");
     const padding = "=".repeat((4 - (padded.length % 4)) % 4);
@@ -280,7 +282,7 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
         return { ok: false, error: "This browser doesn't support passkeys." };
     }
     try {
-        const optionsResp = await fetch(cfg.optionsUrl, {
+        const optionsResp = await fetchResponse(cfg.optionsUrl, {
             method: "POST",
             headers: { "X-CSRFToken": csrfToken() },
             credentials: "same-origin",
@@ -305,7 +307,7 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
         if (cfg.purpose) {
             form.set("purpose", cfg.purpose);
         }
-        const completeResp = await fetch(cfg.registerUrl, {
+        const completeResp = await fetchResponse(cfg.registerUrl, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": csrfToken() },
             credentials: "same-origin",
@@ -323,6 +325,7 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
             prfEnabled: prfEnabled(credential),
         };
     } catch (err) {
+        if (err instanceof NetworkError) return { ok: false, error: err.message };
         return { ok: false, error: isCancellation(err) ? "Passkey creation was cancelled." : "Something went wrong creating that passkey." };
     }
 }

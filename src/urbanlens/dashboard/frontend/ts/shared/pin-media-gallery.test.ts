@@ -40,7 +40,7 @@ describe("PinMediaGallery sort options", () => {
     test("choosing a sort applies and saves it", () => {
         document.getElementById("relevant-first")?.click();
         expect(document.getElementById("media-gallery-section")?.dataset.mediaSort).toBe("relevant");
-        expect(sortPosts()).toEqual([["/sort/", "POST", { sort: "relevant" }]]);
+        expect(sortPosts()).toEqual([["/sort/", "POST", { sort: "relevant" }, { reportsItsOwnErrors: true }]]);
         expect(document.getElementById("relevant-first")?.classList.contains("active")).toBe(true);
         expect(document.getElementById("media-gallery-section")?.classList.contains("active")).toBe(false);
     });

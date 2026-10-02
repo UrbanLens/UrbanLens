@@ -4,6 +4,7 @@
  */
 
 import { escHtml } from "../shared/escape-html";
+import { fetchResponse } from "../shared/fetch-json";
 
 interface FieldResponse {
     error?: string;
@@ -141,7 +142,7 @@ function bindOwnProfileEditing(updateUrl: string): void {
         const body = new URLSearchParams();
         body.set("field", field);
         body.set("value", value);
-        return fetch(updateUrl, { method: "POST", headers: { "X-CSRFToken": csrftoken }, body });
+        return fetchResponse(updateUrl, { method: "POST", headers: { "X-CSRFToken": csrftoken }, body });
     }
 
     // The identity fields' endpoint returns a specific reason as JSON, sometimes with a 200.

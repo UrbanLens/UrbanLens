@@ -17,6 +17,7 @@ import { ARTICLE_SOURCE_EXTENSIONS, ArticleSourceTracker, blockImageMarkdown } f
 import { anchorSlug } from "../shared/article-toc-anchors";
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction } from "../shared/dialogs";
+import { fetchResponse } from "../shared/fetch-json";
 import { pollerFor } from "../shared/photo-processing";
 
 type EditorMode = "wysiwyg" | "source";
@@ -181,7 +182,7 @@ async function uploadAndInsertImage(root: HTMLElement, editor: Editor, file: Fil
     let data: UploadResponse = {};
     let ok = false;
     try {
-        const response = await fetch(uploadUrl, { method: "POST", body: formData, headers: { "X-CSRFToken": getCsrfToken() } });
+        const response = await fetchResponse(uploadUrl, { method: "POST", body: formData, headers: { "X-CSRFToken": getCsrfToken() } });
         ok = response.ok;
         data = (await response.json().catch(() => ({}))) as UploadResponse;
     } catch {

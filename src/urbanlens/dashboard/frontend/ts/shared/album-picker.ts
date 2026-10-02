@@ -35,7 +35,7 @@ async function submitToAlbum(addUrl: string): Promise<void> {
     if (!pending?.imageIds.length) return;
     const body: Record<string, unknown> = { image_ids: pending.imageIds };
     if (pending.moveFrom) body.move_from = pending.moveFrom;
-    await sendForText(addUrl, "POST", body);
+    await sendForText(addUrl, "POST", body, { reportsItsOwnErrors: true });
 }
 
 export function openAlbumPicker(opts: { imageIds: number[]; moveFrom?: string | null; onDone?: () => void }): void {

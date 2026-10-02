@@ -25,6 +25,7 @@ import { clearProfileKeys, getConversationKey, getGroupKey, getIdentity, putConv
 import type { PrfAssertionResult } from "./webauthn-client";
 import { assertForPrf, credentialIdOf, getPrfResult, registerPasskey } from "./webauthn-client";
 import { toast } from "./dialogs";
+import { HttpError, fetchResponse } from "./fetch-json";
 
 /** Endpoint URLs, provided by templates via {% url %} (see init()). */
 export interface E2EEUrls {
@@ -107,7 +108,7 @@ function csrfToken(form?: HTMLFormElement): string {
 }
 
 async function postJson(url: string, body: unknown): Promise<Response> {
-    return fetch(url, {
+    return fetchResponse(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
         credentials: "same-origin",
@@ -823,7 +824,7 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
     if (identity === null) {
         return { ok: false, error: "Unlock your messages on this device first." };
     }
-    const keysResponse = await fetch(urls.keys, { credentials: "same-origin" });
+    const keysResponse = await fetchResponse(urls.keys, { credentials: "same-origin" });
     if (!keysResponse.ok) {
         return { ok: false, error: "Could not load your encryption keys. Please try again." };
     }
@@ -1106,7 +1107,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
     let currentSecret = currentPassword;
     if (currentPassword) {
-        const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+        const paramsResponse = await fetchResponse(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
         if (!paramsResponse.ok) {
             return { ok: false, error: "Could not verify your current password. Please try again." };
         }
@@ -1157,7 +1158,7 @@ async function currentPasswordProof(password: string): Promise<string | null> {
     }
     let paramsResponse: Response;
     try {
-        paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+        paramsResponse = await fetchResponse(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
     } catch {
         return null;
     }
@@ -1175,6 +1176,7 @@ async function currentPasswordProof(password: string): Promise<string | null> {
  * Generate and store a replacement recovery key (device must be unlocked).
  *
  * @returns The new recovery key display string, or null when locked.
+ * @throws When the server refused the new key or could not be reached.
  */
 export async function regenerateRecoveryKey(): Promise<string | null> {
     await cryptoReady();
@@ -1186,7 +1188,8 @@ export async function regenerateRecoveryKey(): Promise<string | null> {
     const response = await postJson(cfg().urls.rewrap, {
         recovery_wrapped_secret: wrapSecretKey(identity.privateKey, recovery.key),
     });
-    return response.ok ? recovery.display : null;
+    if (!response.ok) throw new HttpError(response.status, "Could not save a new recovery key. Please try again.");
+    return recovery.display;
 }
 
 export interface ResetResult {
@@ -1261,7 +1264,7 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
         return null;
     }
 
-    const bundleResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    const bundleResponse = await fetchResponse(cfg().urls.keys, { credentials: "same-origin" });
     if (!bundleResponse.ok) {
         return null;
     }
@@ -1292,7 +1295,7 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
     // Re-encrypt history: unseal every wrapped key copy with the OLD key and
     // re-seal it to the NEW public key, all client-side.
     if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
-        const rewrapResponse = await fetch(cfg().urls.rewrapAll as string, { credentials: "same-origin" });
+        const rewrapResponse = await fetchResponse(cfg().urls.rewrapAll as string, { credentials: "same-origin" });
         if (!rewrapResponse.ok) {
             // Holding the old private key means every thread *could* have been preserved.
             return null;
@@ -1479,7 +1482,7 @@ export async function ensureConversationKey(partnerSlug: string): Promise<KeyRes
     if (identity === null || !selfSlug) {
         return { status: "unencryptable", reason: "This device is locked." };
     }
-    const response = await fetch(`${cfg().urls.conversationKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
+    const response = await fetchResponse(`${cfg().urls.conversationKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
     if (!response.ok) {
         return { status: "error", reason: `Could not load the conversation's keys (HTTP ${response.status}).` };
     }
@@ -1524,7 +1527,7 @@ async function createConversationKeyVersion(
     partnerSlug: string,
     version: number,
 ): Promise<KeyResult> {
-    const partnerResponse = await fetch(`${cfg().urls.partnerKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
+    const partnerResponse = await fetchResponse(`${cfg().urls.partnerKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
     if (partnerResponse.status === 404) {
         // The endpoint answers 404 both for "no key bundle" and "no DM relationship".
         return { status: "unencryptable", reason: "This person isn't set up for encrypted messages." };
@@ -1591,7 +1594,7 @@ export async function ensureGroupKey(groupUuid: string): Promise<KeyResult> {
     if (identity === null || !selfSlug) {
         return { status: "unencryptable", reason: "This device is locked." };
     }
-    const response = await fetch(groupKeyUrl(groupUuid), { credentials: "same-origin" });
+    const response = await fetchResponse(groupKeyUrl(groupUuid), { credentials: "same-origin" });
     if (!response.ok) {
         return { status: "error", reason: `Could not load the group's keys (HTTP ${response.status}).` };
     }

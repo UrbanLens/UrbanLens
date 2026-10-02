@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { HttpError, fetchJson, fetchText, sendForText, sendJson } from "./fetch-json";
+import { HttpError, NETWORK_FAILURE_MESSAGE, NetworkError, fetchJson, fetchResponse, fetchText, sendForText, sendJson } from "./fetch-json";
 import { wrapFetch } from "./site-runtime";
 
 const realFetch = globalThis.fetch;
@@ -128,9 +128,11 @@ describe("a rejected request", () => {
 });
 
 describe("a request that never completes", () => {
-    test("a network failure propagates", async () => {
-        globalThis.fetch = (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch;
-        await expect(fetchJson("/x/")).rejects.toThrow("offline");
+    test("a network failure rejects as a NetworkError, in words a toast can show", async () => {
+        globalThis.fetch = (() => Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
+        const rejection = fetchJson("/x/");
+        await expect(rejection).rejects.toBeInstanceOf(NetworkError);
+        await expect(rejection).rejects.toThrow(NETWORK_FAILURE_MESSAGE);
     });
 
     test("it is abandoned after the timeout", async () => {
@@ -236,6 +238,45 @@ describe("the __ulReported contract with the fetch wrapper", () => {
             globalThis.fetch = real;
         }
         expect(report).toEqual(["Request timed out."]);
+    });
+});
+
+/** For a caller that reads the Response itself: a status that means something, a body read whatever the status. */
+describe("fetchResponse", () => {
+    let report: string[];
+
+    function answer(respond: (init?: RequestInit) => Promise<Response>): void {
+        report = [];
+        globalThis.fetch = wrapFetch(Object.assign((_input: RequestInfo | URL, init?: RequestInit) => respond(init), realFetch), (m) => void report.push(m));
+    }
+
+    test("hands back a refusal as the Response it is, without the fetch net's toast", async () => {
+        answer(async () => new Response("Already taken.", { status: 409 }));
+
+        const response = await fetchResponse("/x/", { method: "POST" });
+
+        expect(response.status).toBe(409);
+        expect(await response.text()).toBe("Already taken.");
+        expect(report).toEqual([]);
+    });
+
+    test("a request that got no answer rejects as a NetworkError, without the fetch net's toast", async () => {
+        answer(async () => {
+            throw new TypeError("Failed to fetch");
+        });
+
+        await expect(fetchResponse("/x/")).rejects.toThrow(NETWORK_FAILURE_MESSAGE);
+        expect(report).toEqual([]);
+    });
+
+    test("a request its caller aborted rejects as fetch() does, so the caller can tell a cancellation apart", async () => {
+        answer(async (init) => {
+            throw init?.signal?.reason;
+        });
+        const controller = new AbortController();
+        controller.abort();
+
+        await expect(fetchResponse("/x/", { signal: controller.signal })).rejects.toHaveProperty("name", "AbortError");
     });
 });
 

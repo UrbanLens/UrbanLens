@@ -6,6 +6,7 @@
  */
 
 import { escHtml } from "../shared/escape-html";
+import { fetchResponse } from "../shared/fetch-json";
 
 interface PreviewPin {
     name?: string;
@@ -112,7 +113,7 @@ function sleep(ms: number): Promise<void> {
 async function readImportState<R>(url: string, signal: AbortSignal): Promise<ImportState<R> | null> {
     let res: Response;
     try {
-        res = await fetch(url, { signal });
+        res = await fetchResponse(url, { signal });
     } catch (err) {
         if (isAbort(err)) throw err;
         return null;
@@ -283,7 +284,7 @@ function initImportWizard(dialog: HTMLElement): void {
             const fd = new FormData();
             fd.append("image", file);
             fd.append("csrfmiddlewaretoken", getCsrfToken());
-            fetch(cfg.mediaUploadUrl ?? "", { method: "POST", body: fd, headers: { "X-CSRFToken": getCsrfToken() } })
+            fetchResponse(cfg.mediaUploadUrl ?? "", { method: "POST", body: fd, headers: { "X-CSRFToken": getCsrfToken() } })
                 .then((r) =>
                     r
                         .json()
@@ -340,7 +341,7 @@ function initImportWizard(dialog: HTMLElement): void {
         const ctrl = new AbortController();
         abortCtrl = ctrl;
         try {
-            const res = await fetch(cfg.previewUrl ?? "", { method: "POST", body: formData, signal: ctrl.signal });
+            const res = await fetchResponse(cfg.previewUrl ?? "", { method: "POST", body: formData, signal: ctrl.signal });
             if (!res.ok) {
                 if (res.status === 413) {
                     throw new Error("That upload is too large. Try removing some files or splitting them into smaller batches.");
@@ -686,7 +687,7 @@ function initImportWizard(dialog: HTMLElement): void {
         abortCtrl = ctrl;
 
         try {
-            const res = await fetch(cfg.confirmUrl ?? "", {
+            const res = await fetchResponse(cfg.confirmUrl ?? "", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify(payload),

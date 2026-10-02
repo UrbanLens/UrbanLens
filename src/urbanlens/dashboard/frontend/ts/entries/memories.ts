@@ -3,7 +3,9 @@
  * and photos, fed a page at a time by `memories.data`.
  */
 
+import { toast } from "../shared/dialogs";
 import { escHtml } from "../shared/escape-html";
+import { fetchResponse } from "../shared/fetch-json";
 import { openVisitDialog } from "../shared/visit-dialog";
 import { createClusterGroup, type PinClusterGroup } from "../shared/map-clusters";
 
@@ -273,7 +275,10 @@ function initMemories(root: HTMLElement): void {
         let url = feedUrl + "?start=" + encodeURIComponent(start) + "&end=" + encodeURIComponent(end);
         // An exclusive cursor rather than a narrower `end`, which would stall on a day holding more than a page.
         if (before) url += "&before=" + encodeURIComponent(before);
-        return fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } }).then((resp) => resp.json() as Promise<FeedPage>);
+        return fetchResponse(url, { headers: { "X-Requested-With": "XMLHttpRequest" } }).then((resp) => {
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            return resp.json() as Promise<FeedPage>;
+        });
     }
 
     function prewarmNextPage(): void {
@@ -331,6 +336,7 @@ function initMemories(root: HTMLElement): void {
                 .then((data) => absorbPage(data, true))
                 .catch(() => {
                     button.disabled = false;
+                    toast.error("Couldn't load earlier memories. Please try again.");
                 });
         });
         const timeline = document.getElementById("memories-timeline");

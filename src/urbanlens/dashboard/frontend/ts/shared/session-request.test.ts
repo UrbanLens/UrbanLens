@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { getJson, postForm, postMultipart } from "./session-request";
+import { NETWORK_FAILURE_MESSAGE } from "./fetch-json";
 
 const toasted: string[] = [];
 
@@ -135,8 +136,8 @@ describe("session-request", () => {
             throw new TypeError("Failed to fetch");
         }) as unknown as typeof fetch;
 
-        expect((await postForm("/games/answer/", {})).error).toBe("Failed to fetch");
-        expect((await getJson("/games/lobby/9/")).error).toBe("Failed to fetch");
+        expect((await postForm("/games/answer/", {})).error).toBe(NETWORK_FAILURE_MESSAGE);
+        expect((await getJson("/games/lobby/9/")).error).toBe(NETWORK_FAILURE_MESSAGE);
     });
 
     test("a timeout says so in words a user can act on", async () => {

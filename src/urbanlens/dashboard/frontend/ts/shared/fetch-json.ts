@@ -24,6 +24,34 @@ export class HttpError extends Error {
     }
 }
 
+export const NETWORK_FAILURE_MESSAGE = "Couldn't reach the server. Check your connection and try again.";
+
+/** The request got no answer at all, as opposed to the server refusing it; its message is one a toast can show. */
+export class NetworkError extends Error {
+    constructor() {
+        super(NETWORK_FAILURE_MESSAGE);
+        this.name = "NetworkError";
+    }
+}
+
+/**
+ * fetch() for a caller that reads the Response itself and reports its own failures, so the fetch net stays quiet.
+ * A request that got no answer rejects with a {@link NetworkError}; an aborted one rejects as fetch() does.
+ */
+export async function fetchResponse(url: string, init: RequestInit = {}): Promise<Response> {
+    const request: FetchInit = { ...init, __ulReported: true };
+    try {
+        return await fetch(url, request);
+    } catch (error) {
+        throw asNetworkError(error);
+    }
+}
+
+/** fetch() rejects with a TypeError when no answer came; an abort or a timeout is a DOMException that says so itself. */
+function asNetworkError(error: unknown): unknown {
+    return error instanceof TypeError ? new NetworkError() : error;
+}
+
 /** Longest plain-text body still worth putting in a toast rather than discarding. */
 const MAX_PLAIN_TEXT_MESSAGE = 200;
 
@@ -74,7 +102,12 @@ async function requestBody<T>(url: string, options: FetchJsonOptions, read: (res
     try {
         // `__ulReported` is what base.html's wrapper reads; `fetch` ignores it.
         const request: FetchInit = { ...init, __ulReported: reportsItsOwnErrors, signal: controller.signal };
-        const response = await fetch(url, request);
+        let response: Response;
+        try {
+            response = await fetch(url, request);
+        } catch (error) {
+            throw asNetworkError(error);
+        }
         if (!response.ok) throw new HttpError(response.status, await errorMessage(response));
         return await read(response);
     } finally {

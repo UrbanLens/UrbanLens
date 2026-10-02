@@ -2,6 +2,8 @@
  * Live location sharing for a safety check-in.
  */
 
+import { fetchResponse } from "./fetch-json";
+
 export interface LiveLocationOptions {
     /** The sharing checkbox. Its state is reverted if the server refuses. */
     toggle: HTMLInputElement;
@@ -58,7 +60,7 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
     let pendingIntent: { enabled: boolean; onRefused: () => void } | null = null;
     let flushing = false;
 
-    const post = (url: string, body: FormData): Promise<Response> => fetch(url, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body });
+    const post = (url: string, body: FormData): Promise<Response> => fetchResponse(url, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body });
 
     /**
  * Ask the server for a sharing state, superseding any write not yet sent.

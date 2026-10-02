@@ -9,7 +9,7 @@ import Sortable from "sortablejs";
 import { toast } from "../shared/dialogs";
 import { delegateEditInPlace, type EditInPlaceOptions } from "../shared/edit-in-place";
 import { escHtml } from "../shared/escape-html";
-import { fetchText } from "../shared/fetch-json";
+import { fetchResponse, fetchText } from "../shared/fetch-json";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { activitiesForTab, calendarHtml, tripMonths, type CalendarActivity } from "../shared/trip-calendar";
 
@@ -356,7 +356,7 @@ class TripMap {
             unlocked = false;
             const at = marker.getLatLng();
             // The marker has already moved on screen, so a refused save must say so.
-            window.ulSendJson?.(forActivity(this.cfg.positionUrl, activityId), "POST", { lat: at.lat, lng: at.lng }, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            window.ulSendJson?.(forActivity(this.cfg.positionUrl, activityId), "POST", { lat: at.lat, lng: at.lng }, { headers: { "X-Requested-With": "XMLHttpRequest" }, reportsItsOwnErrors: true })
                 .catch(() => toast.error("Could not save new position."));
         });
     }
@@ -365,7 +365,7 @@ class TripMap {
         const mapEl = this.mapEl;
         if (!mapEl) return;
         const url = this.cfg.mapDataUrl + (this.showPast ? "?include_past=1" : "");
-        fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+        fetchResponse(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
             .then((r) => {
                 if (!r.ok) throw new Error(`trip map data: HTTP ${r.status}`);
                 return r.json() as Promise<{ points?: MapPoint[] }>;
@@ -917,7 +917,7 @@ const INLINE_FIELDS: Record<"name" | "description", InlineField> = {
 
 /** The edit view answers with a partial, not JSON; only the status matters. */
 async function saveTripField(cfg: TripConfig, field: "name" | "description", value: string): Promise<void> {
-    await fetchText(cfg.editUrl, { method: "POST", headers: { "X-CSRFToken": window.csrftoken }, body: new URLSearchParams({ [field]: value }) });
+    await fetchText(cfg.editUrl, { method: "POST", headers: { "X-CSRFToken": window.csrftoken }, body: new URLSearchParams({ [field]: value }), reportsItsOwnErrors: true });
 }
 
 /** Delegated: an activity date change re-renders the hero out of band, which would drop direct listeners. */
