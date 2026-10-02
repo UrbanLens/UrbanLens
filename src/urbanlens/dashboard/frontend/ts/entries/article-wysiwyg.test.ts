@@ -338,6 +338,22 @@ describe("uploading an inline image", () => {
         expect(canvas.querySelector('img[src="/media/image/9/"]')).not.toBeNull();
     });
 
+    test("what is typed at the cursor while it uploads goes after the image, not before it", async () => {
+        const { editor } = await mount(WYSIWYG_ARTICLE);
+        document.querySelector<HTMLElement>("[data-article-editor]")!.dataset.imageUploadUrl = "/article/image/";
+        const at = positionOf(editor, "First line");
+        editor.commands.setTextSelection(at);
+
+        document.querySelector<HTMLElement>('[data-md-action="image"]')!.click();
+        typeAt(editor, at, "Typed meanwhile. ");
+        respond(Response.json({ url: "/media/image/9/" }));
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const html = editor.getHTML();
+        expect(html.indexOf('src="/media/image/9/"')).toBeGreaterThan(-1);
+        expect(html.indexOf('src="/media/image/9/"')).toBeLessThan(html.indexOf("Typed meanwhile."));
+    });
+
     test("a failed upload takes the pending line away again", async () => {
         const { editor } = await mount(WYSIWYG_ARTICLE);
         document.querySelector<HTMLElement>("[data-article-editor]")!.dataset.imageUploadUrl = "/article/image/";

@@ -198,7 +198,7 @@ const PendingImageUploads = Extension.create({
                     apply(tr, set) {
                         const change: PendingUploadChange | undefined = tr.getMeta(pendingUploads);
                         let next = set.map(tr.mapping, tr.doc);
-                        if (change?.add) next = next.add(tr.doc, [Decoration.widget(change.add.pos, pendingUploadLine, { id: change.add.id })]);
+                        if (change?.add) next = next.add(tr.doc, [Decoration.widget(change.add.pos, pendingUploadLine, { id: change.add.id, side: -1 })]);
                         if (change?.remove) next = next.remove(next.find(undefined, undefined, (spec) => spec.id === change.remove));
                         return next;
                     },
