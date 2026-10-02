@@ -570,7 +570,7 @@ class WikiBoundaryApiView(WikiApiView):
 
         polygon_geojson = data.get("polygon")
         geom = None
-        if polygon_geojson:
+        if polygon_geojson is not None:
             try:
                 geom = parse_multipolygon_geojson(polygon_geojson)
             except InvalidPolygonGeoJSONError as exc:

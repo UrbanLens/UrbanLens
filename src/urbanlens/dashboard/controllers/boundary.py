@@ -39,6 +39,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+_POLYGON_REQUIRED = "polygon is required: a polygon or multipolygon, or null to clear."
+
+
 def _parse_boundary_type(value) -> str | None:
     """Return the validated boundary type value, or None when invalid."""
     return value if value in BoundaryType.values else None
@@ -169,8 +172,10 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
         except Profile.DoesNotExist:
             return JsonResponse({"error": "User has no profile"}, status=403)
 
-        polygon_geojson = data.get("polygon")
-        if polygon_geojson:
+        if "polygon" not in data:
+            return JsonResponse({"error": _POLYGON_REQUIRED}, status=400)
+        polygon_geojson = data["polygon"]
+        if polygon_geojson is not None:
             try:
                 geom = _parse_multipolygon(polygon_geojson)
             except InvalidPolygonGeoJSONError as exc:
@@ -237,9 +242,11 @@ class WikiBoundaryView(LoginRequiredMixin, View):
         if boundary_type is None:
             return JsonResponse({"error": "boundary_type must be 'property' or 'building'"}, status=400)
 
-        polygon_geojson = body.get("polygon")
+        if "polygon" not in body:
+            return JsonResponse({"error": _POLYGON_REQUIRED}, status=400)
+        polygon_geojson = body["polygon"]
         geom = None
-        if polygon_geojson:
+        if polygon_geojson is not None:
             try:
                 geom = _parse_multipolygon(polygon_geojson)
             except InvalidPolygonGeoJSONError as exc:
