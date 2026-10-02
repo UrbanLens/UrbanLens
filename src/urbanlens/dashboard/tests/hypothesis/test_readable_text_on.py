@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
 from urbanlens.dashboard.templatetags.dashboard_tags import READABLE_DARK_TEXT, READABLE_LIGHT_TEXT, readable_text_on
 
 _PANEL = (14, 16, 22)
@@ -43,6 +44,14 @@ class ReadableTextOnTests(SimpleTestCase):
     def test_no_or_invalid_colour_leaves_the_text_alone(self) -> None:
         for value in (None, "", "#ZZZZZZ", "red", "javascript:alert(1)"):
             self.assertEqual(readable_text_on(value, 100), "")
+
+    def test_every_palette_colour_at_every_opacity_reaches_aa(self) -> None:
+        for colour, name in COLOR_CHOICES:
+            for opacity in range(101):
+                alpha = opacity / 100
+                backdrop = tuple(c * alpha + p * (1 - alpha) for c, p in zip(_hex(colour), _PANEL, strict=True))
+                with self.subTest(colour=name, opacity=opacity):
+                    self.assertGreaterEqual(_contrast(_hex(readable_text_on(colour, opacity)), backdrop), 4.5)
 
     @given(
         st.integers(0, 0xFFFFFF).map(lambda n: f"#{n:06X}"),

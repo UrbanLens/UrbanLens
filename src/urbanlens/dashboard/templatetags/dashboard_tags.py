@@ -331,9 +331,9 @@ def hex_to_rgba(hex_value: str | None, opacity_pct: int | str = 100) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
-#: The two text colours :func:`readable_text_on` chooses between.
+#: The two text colours :func:`readable_text_on` chooses between. With pure black and white, one of them reaches 4.5:1 on any backdrop.
 READABLE_LIGHT_TEXT = "#ffffff"
-READABLE_DARK_TEXT = "#111111"
+READABLE_DARK_TEXT = "#000000"
 
 #: The map's filter panel, which saved-filter chips are drawn over.
 _DARK_PANEL_RGB = (14, 16, 22)
