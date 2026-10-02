@@ -3,11 +3,13 @@
 The predecessors are kept here as the reference the streaming parsers must agree with, over generated documents.
 ``READ_CHUNK_BYTES`` is lowered so a few bytes make a chunk and every boundary a document has gets crossed.
 
-Known, deliberate departures, which the generators steer clear of: ijson refuses JSON's non-standard ``NaN`` and
-``Infinity`` and a number past a double's range, which ``json.loads`` accepted; a duplicated key no longer keeps only its
-last value; a GeoJSON file with a byte-order mark now parses where it used to fail; a file's first line is
-judged on its first 64 KiB; a tagged OSM node whose id repeats keeps its own coordinates rather than the last
-same-id node's; and a null Shapefile attribute is left out rather than read as ``nan``.
+Known, deliberate departures, which the generators steer clear of: ijson refuses JSON's non-standard ``NaN``
+and ``Infinity`` and a number past a double's range, which ``json.loads`` accepted; a duplicated key no longer
+keeps only its last value; a GeoJSON file with a byte-order mark now parses where it used to fail; a file's first
+line is judged on its first 64 KiB; a file holding an integer outside the signed 64-bit range is re-read by
+ijson's pure-Python parser, which takes any Unicode whitespace between tokens; a tagged OSM node whose id repeats
+keeps its own coordinates rather than the last same-id node's; and a null Shapefile attribute is left out rather
+than read as ``nan``.
 """
 
 from __future__ import annotations
@@ -283,6 +285,12 @@ class GeoJsonAgreesWithJsonLoadsTests(SimpleTestCase):
         content = b'\xef\xbb\xbf{"features": [{"geometry": {"type": "Point", "coordinates": [2, 1]}, "properties": {"name": "A"}}]}'
         pins = GoogleMapsGateway(api_key="").geojson_to_dict(content, user_profile=None)  # type: ignore[arg-type]
         self.assertEqual([(p["latitude"], p["longitude"], p["name"]) for p in pins], [(1, 2, "A")])
+
+    def test_a_form_feed_between_tokens_is_not_whitespace_as_it_was_not(self) -> None:
+        """yajl reads a vertical tab or form feed as whitespace; json.loads, and so the import, did not."""
+        self.assertIsNone(validate_content_type("f.json", b'{"features": []}\x0c'))
+        with self.assertRaises(ValueError):
+            GoogleMapsGateway(api_key="").geojson_to_dict(b'{"features":\x0b[]}', user_profile=None)  # type: ignore[arg-type]
 
     def test_malformed_json_is_a_value_error_as_it_was(self) -> None:
         with self.assertRaises(ValueError):

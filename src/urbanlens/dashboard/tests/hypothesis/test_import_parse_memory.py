@@ -236,9 +236,14 @@ def _shapefile() -> tuple[bytes, int]:
 
 
 def _zipped(name: str, content: bytes, compression: int = zipfile.ZIP_DEFLATED) -> bytes:
+    return _zipped_all([(name, content)], compression)
+
+
+def _zipped_all(entries: list[tuple[str, bytes]], compression: int = zipfile.ZIP_DEFLATED) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression) as zf:
-        zf.writestr(name, content)
+        for name, content in entries:
+            zf.writestr(name, content)
     return buf.getvalue()
 
 
@@ -372,3 +377,21 @@ class AnArchiveEntryIsNotReadWholeTests(_MemoryCase):
         for path in written:
             self.assertTrue(path.startswith(os.path.join(import_preview.job_dir(""), "")), path)
             self.assertFalse(os.path.exists(path), f"{path} was left behind")
+
+    def test_no_entry_outlives_a_preview_that_filled_before_reading_it(self) -> None:
+        """The job directory goes at the end of the job, so this looks at it as the parse returns."""
+        csv = "name,latitude,longitude\n" + "".join(f"Mill {i},{_lat(i)},{_lng(i)}\n" for i in range(_KEPT_PINS))
+        upload = _zipped_all([(f"sites-{i}.csv", csv.encode()) for i in range(3)])
+        with mock.patch(ENQUEUE, return_value=mock.Mock()):
+            job_id = import_preview.start_import_preview(self.profile, [SimpleUploadedFile("export.zip", upload)])
+        directory = import_preview.job_dir(job_id)
+        self.addCleanup(import_preview.shutil.rmtree, directory, True)
+
+        with (
+            override_settings(UL_PROCESS_ROLE="sandbox", UL_UNTRUSTED_PARSE_POLICY="deny"),
+            mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", _KEPT_PINS),
+        ):
+            parsed = import_preview._read_uploads(self.profile, directory, ["export.zip"])
+
+        self.assertEqual([entry["stem"] for entry in parsed["lists"]], ["sites-0"], "the premise failed")
+        self.assertEqual([name for name in os.listdir(os.path.join(directory, "uploads")) if name != "0"], [])

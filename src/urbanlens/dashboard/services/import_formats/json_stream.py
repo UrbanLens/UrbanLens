@@ -18,12 +18,28 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
 _VALUE_KINDS = {"start_array": "array", "start_map": "object", "integer": "number", "double": "number"}
-# yajl refuses an integer wider than 64 bits, which json.loads reads; ijson's pure-Python parser reads it, slowly.
+# yajl refuses an integer outside the signed 64-bit range, which json.loads reads; ijson's pure-Python parser reads it, slowly.
 _WIDE_INTEGER_BACKEND = ijson.get_backend("python")
 
 
 class MalformedJSONError(ValueError):
     """A JSON file is not well-formed, or not UTF-8: a ``ValueError``, as ``json.loads`` raises."""
+
+
+class _StrictWhitespace:
+    """A JSON file whose reads refuse a vertical tab or form feed, which yajl reads as whitespace and JSON does not.
+
+    Neither byte can be part of a UTF-8 sequence, or stand unescaped inside a JSON string.
+    """
+
+    def __init__(self, stream: IO[bytes]) -> None:
+        self._stream = stream
+
+    def read(self, size: int = -1) -> bytes:
+        data = self._stream.read(size)
+        if b"\x0b" in data or b"\x0c" in data:
+            raise MalformedJSONError("A vertical tab or form feed is not JSON whitespace.")
+        return data
 
 
 @untrusted_parse("json.stream")
@@ -38,12 +54,12 @@ def top_level_keys(stream: IO[bytes]) -> set[str] | None:
     """
     try:
         skip_bom_and_whitespace(stream, limit=1)
-        events = _read(stream, lambda backend: backend.parse(stream))
+        events = _read(stream, lambda backend, source: backend.parse(source))
         _, first, _ = next(events)
         if first != "start_map":
             return None
         return {value for prefix, event, value in events if event == "map_key" and not prefix}
-    except (ijson.JSONError, UnicodeDecodeError):
+    except (ijson.JSONError, UnicodeDecodeError, MalformedJSONError):
         return None
 
 
@@ -64,7 +80,7 @@ def top_level_value_kind(stream: IO[bytes], key: str) -> str | None:
     """
     try:
         skip_bom_and_whitespace(stream, limit=1)
-        events = _read(stream, lambda backend: backend.parse(stream))
+        events = _read(stream, lambda backend, source: backend.parse(source))
         _, first, _ = next(events, (None, None, None))
         if first != "start_map":
             return None
@@ -95,12 +111,12 @@ def iter_array_items(stream: IO[bytes], key: str) -> Iterator[Any]:
     """
     try:
         skip_bom_and_whitespace(stream, limit=1)
-        yield from _read(stream, lambda backend: backend.items(stream, f"{key}.item", use_float=True))
+        yield from _read(stream, lambda backend, source: backend.items(source, f"{key}.item", use_float=True))
     except (ijson.JSONError, UnicodeDecodeError) as exc:
         raise MalformedJSONError(str(exc)) from exc
 
 
-def _read[T](stream: IO[bytes], read: Callable[[Any], Iterator[T]]) -> Iterator[T]:
+def _read[T](stream: IO[bytes], read: Callable[[Any, _StrictWhitespace], Iterator[T]]) -> Iterator[T]:
     """What *read* makes of *stream* through yajl, or through ijson's own parser once yajl meets a wide integer.
 
     The re-read starts where the first did and skips what the first already produced.
@@ -108,7 +124,7 @@ def _read[T](stream: IO[bytes], read: Callable[[Any], Iterator[T]]) -> Iterator[
     start = stream.tell()
     produced = 0
     try:
-        for value in read(ijson):
+        for value in read(ijson, _StrictWhitespace(stream)):
             yield value
             produced += 1
         return
@@ -116,4 +132,4 @@ def _read[T](stream: IO[bytes], read: Callable[[Any], Iterator[T]]) -> Iterator[
         if "integer overflow" not in str(exc):
             raise
     stream.seek(start)
-    yield from itertools.islice(read(_WIDE_INTEGER_BACKEND), produced, None)
+    yield from itertools.islice(read(_WIDE_INTEGER_BACKEND, _StrictWhitespace(stream)), produced, None)

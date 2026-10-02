@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_WAY_REFS_PER_PASS = 100_000
+_WAY_REFS_PER_PASS = 250_000
 
 type _Way = tuple[str | None, dict[str, str], list[str | None]]
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime, timedelta
+import itertools
 import json
 import logging
 import os
@@ -439,26 +440,31 @@ def _archive_files(name: str, archive: IO[bytes], budget: ExtractionBudget, scra
     from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
     from urbanlens.dashboard.services.import_export.archive_extractor import SpooledFile, spool_archive
 
+    # The first two entries are extracted before either is handed on; whichever the parser never reaches is removed here.
+    unread: list[SpooledFile] = []
     try:
         entries = spool_archive(archive, scratch, budget)
-        first = next(entries, None)
-        if first is None:
+        unread.extend(itertools.islice(entries, 2))
+        if not unread:
             return
-        second = next(entries, None)
+        first = unread.pop(0)
         # A KMZ wraps one "doc.kml" whatever the user named it, so the outer name is the useful one.
-        if second is None and not _is_archive_path(first.path) and _filename_stem(first.name) == "doc":
+        if not unread and not _is_archive_path(first.path) and _filename_stem(first.name) == "doc":
             suffix = first.name.rsplit(".", 1)[-1] if "." in first.name else ""
             stem = _filename_stem(name)
             yield from _opened(SpooledFile((f"{stem}.{suffix}" if suffix else stem), first.path))
             return
         yield from _expanded(first, budget, scratch)
-        if second is not None:
-            yield from _expanded(second, budget, scratch)
+        while unread:
+            yield from _expanded(unread.pop(0), budget, scratch)
         for entry in entries:
             yield from _expanded(entry, budget, scratch)
     except ValueError as exc:
         logger.warning("Could not extract archive: %s", exc)
         raise _UnreadableUploadError("Invalid archive.") from None
+    finally:
+        for entry in unread:
+            os.remove(entry.path)
 
 
 def _expanded(entry: SpooledFile, budget: ExtractionBudget, scratch: str) -> Iterator[tuple[str, IO[bytes]]]:
