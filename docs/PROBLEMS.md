@@ -816,13 +816,12 @@ open, so it now settles the one its own reveal opens the same way (tentative, wi
 session that is no longer active is refused. The same test found that ending a game mid-round dealt the next round
 and broadcast `round.started` before completing: the forced reveal and the vote now settle without advancing.
 
-**Leads outside the 25, found by reading, not fixed:**
-
-- `trivia.answer`: `submit_answer` checks neither `revealed_at` nor the session's status, and the reveal
-  broadcasts the correct answer - so after a stall-sweep or host-ended reveal, a player who had not answered
-  can submit it and score.
-- `spotguessr.guess` parses coordinates with a bare `float()` into a geography column; off-globe input is
-  likely the same class as the Consensus one above. Not reproduced.
+**Late answers and guesses, fixed 2026-10-02** (`LateGuessTests`, `LateAnswerTests`, and the guess and answer
+route tests). `trivia.answer` and `spotguessr.guess` recorded and scored a submission on a round that was already
+revealed, by its timer, the stall sweep or the host ending the game, after the reveal had broadcast the answer.
+Both now refuse it under the round lock (a 400, also on the external API), and a player's own repeat is still
+reported as a duplicate. `spotguessr.guess` also parsed coordinates with a bare `float()`: a latitude past ±90,
+`nan` or `inf` was a 500. It now parses them the way the Consensus photo answer does.
 
 **Community wiki editing, tested 2026-10-02** (`test_community_wiki_write_routes.py`, 47 tests):
 `location.wiki.albums.add`, `.remove`, `.reorder`, `.article.preview`, `.layers.reorder`, `.markup`,

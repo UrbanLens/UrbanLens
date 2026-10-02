@@ -115,6 +115,10 @@ class DuplicateGuessError(SpotGuessrError):
     """This profile already submitted a guess for this round."""
 
 
+class RoundAlreadyRevealedError(SpotGuessrError):
+    """The round was revealed (by the last guess, its timer, a stall or the host ending the game) and takes no more guesses."""
+
+
 class NotSessionHostForEndError(SpotGuessrError):
     """The caller isn't this session's host; only the host may end the game."""
 
@@ -638,6 +642,7 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     Raises:
         ParticipantNotJoinedError: if ``profile`` isn't a JOINED participant
             of this round's session (e.g. still INVITED, never joined).
+        RoundAlreadyRevealedError: if the round was revealed before the guess arrived.
         DuplicateGuessError: if ``profile`` already guessed this round.
     """
     try:
@@ -674,6 +679,10 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         locked_round = GameRound.objects.select_for_update().get(pk=round_.pk)
         if not GameSessionParticipant.objects.joined().filter(session_id=round_.session_id, profile=profile).exists():
             raise ParticipantNotJoinedError(f"Profile {profile.pk} left session {round_.session_id} before the guess was recorded.")
+        if locked_round.revealed_at is not None:
+            if Guess.objects.filter(round=locked_round, profile=profile).exists():
+                raise DuplicateGuessError(f"Profile {profile.pk} already has a guess recorded for round {locked_round.pk}.")
+            raise RoundAlreadyRevealedError(f"Round {locked_round.pk} was revealed before profile {profile.pk}'s guess arrived.")
         try:
             guess = Guess.objects.create(
                 round=locked_round,

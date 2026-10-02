@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date as date_cls, timedelta
 import json
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -30,6 +31,8 @@ from urbanlens.dashboard.models.spotguessr.model import (
     Guess,
     SpotGuessrMode,
 )
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, coordinate_or_none
+from urbanlens.dashboard.services.geo.longitude import normalize_longitude
 from urbanlens.dashboard.services.spotguessr import (
     chat as spotguessr_chat,
     overview as spotguessr_overview,
@@ -568,11 +571,11 @@ class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         round_ = get_object_or_404(GameRound, pk=round_id, session=game_session)
 
-        try:
-            latitude = float(request.POST["latitude"])
-            longitude = float(request.POST["longitude"])
-        except (KeyError, TypeError, ValueError):
-            return JsonResponse({"error": "latitude and longitude are required."}, status=400)
+        latitude = coordinate_or_none(request.POST.get("latitude"), bound=LATITUDE_BOUND)
+        # Unbounded, then folded: the map reports a guess on a wrapped copy of the world past ±180.
+        longitude = coordinate_or_none(request.POST.get("longitude"), bound=math.inf)
+        if latitude is None or longitude is None:
+            return JsonResponse({"error": "latitude and longitude must be a point on the map."}, status=400)
 
         guessed_date = None
         if raw_date := request.POST.get("guessed_date"):
@@ -581,7 +584,7 @@ class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             except ValueError:
                 return JsonResponse({"error": "guessed_date must be YYYY-MM-DD."}, status=400)
 
-        guess_point = Point(longitude, latitude, srid=4326)
+        guess_point = Point(normalize_longitude(longitude), latitude, srid=4326)
         try:
             guess, bonus_tiers, rating_change = spotguessr_session.submit_guess(round_, profile, guess_point, guessed_date)
         except spotguessr_session.ParticipantNotJoinedError as exc:
@@ -590,6 +593,9 @@ class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         except spotguessr_session.DuplicateGuessError as exc:
             logger.info("spotguessr guess in session %s round %s by %s rejected: %s", session_id, round_id, profile.pk, exc)
             return JsonResponse({"error": "This profile has already guessed this round."}, status=400)
+        except spotguessr_session.RoundAlreadyRevealedError as exc:
+            logger.info("spotguessr guess in session %s round %s by %s rejected: %s", session_id, round_id, profile.pk, exc)
+            return JsonResponse({"error": "This round is already over."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse(serializers.serialize_reveal(round_, guess, bonus_tiers, rating_change))

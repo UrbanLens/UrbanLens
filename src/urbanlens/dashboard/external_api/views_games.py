@@ -592,6 +592,9 @@ class SpotGuessrGuessView(SpotGuessrSessionScopedView):
             # The unique constraint, caught under the row lock.
             logger.info("external API guess in session %s round %s by %s rejected: %s", session_id, round_id, request.user.profile.pk, exc)
             return Response({"error": "This profile has already guessed this round."}, status=400)
+        except spotguessr_session.RoundAlreadyRevealedError as exc:
+            logger.info("external API guess in session %s round %s by %s rejected: %s", session_id, round_id, request.user.profile.pk, exc)
+            return Response({"error": "This round is already over."}, status=400)
 
         round_.refresh_from_db()
         return Response(build_reveal_payload(round_, guess, list(bonus_tiers), rating_change))

@@ -417,6 +417,9 @@ class TriviaAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         except trivia_session.NotJoinedParticipantError as exc:
             logger.info("trivia answer rejected: %s", exc)
             return JsonResponse({"error": "You must join this session before submitting an answer."}, status=400)
+        except trivia_session.RoundAlreadyRevealedError as exc:
+            logger.info("trivia answer rejected: %s", exc)
+            return JsonResponse({"error": "This round is already over."}, status=400)
         except trivia_session.DuplicateAnswerError as exc:
             logger.info("trivia answer rejected: %s", exc)
             return JsonResponse({"error": "You've already answered this round."}, status=400)

@@ -97,6 +97,10 @@ class DuplicateAnswerError(TriviaError):
     """This profile already submitted an answer for this round."""
 
 
+class RoundAlreadyRevealedError(TriviaError):
+    """The round was revealed (by the last answer, a stall or the host ending the game) and takes no more answers."""
+
+
 class EndSessionNotHostError(TriviaError):
     """The caller isn't this session's host, and only the host may end the game."""
 
@@ -385,6 +389,7 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
     Raises:
         NotJoinedParticipantError: ``profile`` isn't a JOINED participant
             of this round's session (e.g. still INVITED, never joined).
+        RoundAlreadyRevealedError: the round was revealed before the answer arrived.
         DuplicateAnswerError: ``profile`` already answered this round.
     """
     try:
@@ -412,6 +417,10 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
         locked_round = TriviaRound.objects.select_for_update().get(pk=round_.pk)
         if not TriviaSessionParticipant.objects.joined().filter(session_id=round_.session_id, profile=profile).exists():
             raise NotJoinedParticipantError("Profile left the session before the answer was recorded.")
+        if locked_round.revealed_at is not None:
+            if TriviaAnswer.objects.filter(round=locked_round, profile=profile).exists():
+                raise DuplicateAnswerError("Profile has already submitted an answer for this round.")
+            raise RoundAlreadyRevealedError(f"Round {locked_round.pk} was revealed before profile {profile.pk}'s answer arrived.")
         try:
             answer = TriviaAnswer.objects.create(
                 round=locked_round,

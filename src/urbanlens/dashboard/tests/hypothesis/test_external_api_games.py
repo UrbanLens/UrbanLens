@@ -355,6 +355,19 @@ class SpotGuessrGuessTests(_SpotGuessrApiTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Guess.objects.filter(round_id=self.round_id, profile=self.profile).count(), 1)
 
+    def test_a_guess_on_a_round_already_revealed_is_a_400_and_scores_nothing(self) -> None:
+        GameRound.objects.filter(pk=self.round_id).update(revealed_at=timezone.now())
+
+        response = self._post(
+            "external_api:games.spotguessr.sessions.rounds.guess",
+            self.session_id,
+            self.round_id,
+            body={"latitude": float(self.location.latitude), "longitude": float(self.location.longitude)},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Guess.objects.filter(round_id=self.round_id).exists())
+
     def test_an_unknown_round_is_a_404(self) -> None:
         response = self._post(
             "external_api:games.spotguessr.sessions.rounds.guess",

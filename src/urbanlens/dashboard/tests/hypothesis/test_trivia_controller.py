@@ -14,11 +14,14 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
+    TriviaAnswer,
     TriviaQuestion,
     TriviaQuestionSource,
     TriviaQuestionStatus,
+    TriviaRound,
     TriviaSession,
 )
+from urbanlens.dashboard.services.trivia.session import force_reveal_round
 
 _coordinate_counter = count()
 
@@ -114,6 +117,17 @@ class TriviaAnswerFlowTests(TestCase):
         self.assertFalse(data["is_correct"])
         self.assertEqual(data["points"], 0)
         self.assertEqual(data["answer"], "1937")
+
+    def test_an_answer_after_the_round_was_revealed_is_400_and_scores_nothing(self) -> None:
+        force_reveal_round(TriviaRound.objects.get(pk=self.round_id))
+
+        response = self.client.post(
+            reverse("trivia.answer", kwargs={"session_id": self.session_id, "round_id": self.round_id}),
+            {"answer": "1937"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(TriviaAnswer.objects.filter(round_id=self.round_id).exists())
 
     def test_answering_twice_is_rejected(self) -> None:
         answer_url = reverse("trivia.answer", kwargs={"session_id": self.session_id, "round_id": self.round_id})

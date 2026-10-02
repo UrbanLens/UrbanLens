@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.trivia.model import (
 )
 from urbanlens.dashboard.services.trivia.session import (
     NotInvitedError,
+    RoundAlreadyRevealedError,
     TriviaConfig,
     TriviaError,
     begin_session,
@@ -127,6 +128,33 @@ class ForceRevealRoundTests(TestCase):
         session.refresh_from_db()
         self.assertEqual(session.status, TriviaSessionStatus.ACTIVE)
         self.assertEqual(TriviaRound.objects.filter(session=session).count(), 2)
+
+
+class LateAnswerTests(TestCase):
+    """A revealed round broadcasts its answer, so an answer sent after the reveal must not score (P29)."""
+
+    def assert_refused(self, session: TriviaSession, round_: TriviaRound, guest: Profile) -> None:
+        with self.assertRaises(RoundAlreadyRevealedError):
+            submit_answer(round_, guest, "1937")
+        self.assertFalse(TriviaAnswer.objects.filter(round=round_, profile=guest).exists())
+        self.assertEqual(session.participants.get(profile=guest).total_points, 0)
+
+    def test_an_answer_after_the_stall_reveal_is_refused(self) -> None:
+        host, guest, _question, session, round_ = _setup_two_player_game(total_rounds=2)
+        location = _make_location()
+        baker.make(Pin, profile=host, location=location)
+        baker.make(Pin, profile=guest, location=location)
+        _make_question(location)
+        submit_answer(round_, host, "wrong")
+        force_reveal_round(round_)
+
+        self.assert_refused(session, round_, guest)
+
+    def test_an_answer_after_the_host_ended_the_game_is_refused(self) -> None:
+        host, guest, _question, session, round_ = _setup_two_player_game()
+        end_session_now(session, host)
+
+        self.assert_refused(session, round_, guest)
 
 
 class EndSessionNowTests(TestCase):

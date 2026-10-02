@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
     NotSessionHostForEndError,
+    RoundAlreadyRevealedError,
     SessionAlreadyEndedError,
     begin_session,
     end_session_now,
@@ -135,6 +136,30 @@ class ForceRevealRoundTests(TestCase):
         session.refresh_from_db()
         self.assertEqual(session.status, GameSessionStatus.ACTIVE)
         self.assertEqual(GameRound.objects.filter(session=session).count(), 2)
+
+
+class LateGuessTests(TestCase):
+    """A revealed round shows where it was, so a guess sent after the reveal must not score (P29)."""
+
+    def assert_refused(self, session: GameSession, round_: GameRound, guest: Profile, location: Location) -> None:
+        with self.assertRaises(RoundAlreadyRevealedError):
+            submit_guess(round_, guest, Point(float(location.longitude), float(location.latitude), srid=4326))
+        self.assertFalse(Guess.objects.filter(round=round_, profile=guest).exists())
+        self.assertEqual(session.participants.get(profile=guest).total_points, 0)
+
+    def test_a_guess_after_the_stall_reveal_is_refused(self) -> None:
+        host, guest, location, session, round_ = _setup_two_player_game(total_rounds=2)
+        _pinned_photo_location(host, guest)
+        submit_guess(round_, host, Point(0, 0, srid=4326))
+        force_reveal_round(round_)
+
+        self.assert_refused(session, round_, guest, location)
+
+    def test_a_guess_after_the_host_ended_the_game_is_refused(self) -> None:
+        host, guest, location, session, round_ = _setup_two_player_game()
+        end_session_now(session, host)
+
+        self.assert_refused(session, round_, guest, location)
 
 
 class ExpireRoundTimerTests(TestCase):

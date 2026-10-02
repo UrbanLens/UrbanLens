@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameRound,
     GameSession,
     GameSessionStatus,
+    Guess,
     SpotGuessrMode,
     SpotGuessrPreference,
 )
@@ -31,6 +32,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
     begin_session,
+    expire_round_timer,
     join_session,
     start_multiplayer_session,
 )
@@ -269,6 +271,31 @@ class SpotGuessrGuessFlowTests(TestCase):
     def test_missing_coordinates_are_rejected(self) -> None:
         response = self.client.post(self.guess_url, {})
         self.assertEqual(response.status_code, 400)
+
+    def test_a_point_off_the_globe_or_not_a_number_is_400_and_records_nothing(self) -> None:
+        for latitude, longitude in (("91", "0"), ("-90.5", "0"), ("nan", "0"), ("0", "inf"), ("1e400", "0")):
+            with self.subTest(latitude=latitude, longitude=longitude):
+                response = self.client.post(self.guess_url, {"latitude": latitude, "longitude": longitude})
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(Guess.objects.filter(round_id=self.round_id).exists())
+
+    def test_a_longitude_from_a_wrapped_copy_of_the_map_is_folded(self) -> None:
+        longitude = float(self.location.longitude) + 360
+        response = self.client.post(
+            self.guess_url, {"latitude": str(self.location.latitude), "longitude": str(longitude)}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertAlmostEqual(Guess.objects.get(round_id=self.round_id).guess_point.x, float(self.location.longitude))
+
+    def test_a_guess_on_a_round_already_revealed_is_400_and_scores_nothing(self) -> None:
+        expire_round_timer(GameRound.objects.get(pk=self.round_id))
+
+        response = self.client.post(
+            self.guess_url, {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)}
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Guess.objects.filter(round_id=self.round_id).exists())
 
     def test_a_non_participant_cannot_guess_on_someone_elses_session(self) -> None:
         outsider = _make_profile()
