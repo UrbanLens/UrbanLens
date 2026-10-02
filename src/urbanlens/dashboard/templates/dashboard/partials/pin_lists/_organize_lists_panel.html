@@ -1,14 +1,13 @@
 {% load humanize %}
 {% comment %}Lists tab content, lazy-loaded via HTMX into Organize's "Lists" panel.{% endcomment %}
 <div class="pin-lists-toolbar">
-    <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."
-           oninput="pinListsFilterCards(this.value)" autocomplete="off">
+    <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..." autocomplete="off">
     <div class="pin-lists-sort-control">
         <label for="pin-lists-sort-select" class="pin-lists-sort-label">
             <i class="material-symbols-outlined" aria-hidden="true">sort</i>
             Order by
         </label>
-        <select id="pin-lists-sort-select" onchange="organizeReloadListsPanel(this.value)">
+        <select id="pin-lists-sort-select" data-panel-url="{% url 'lists.list' %}?tab=lists">
             <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Recently updated</option>
             <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
             <option value="pin_count" {% if sort == 'pin_count' %}selected{% endif %}>Pin count</option>
@@ -71,20 +70,3 @@
         </form>
     </div>
 </dialog>
-
-<script>
-    function pinListsFilterCards(query) {
-        const q = (query || '').trim().toLowerCase();
-        document.querySelectorAll('#pin-lists-grid .pin-list-card').forEach((card) => {
-            const match = !q || (card.dataset.search || '').includes(q);
-            card.style.display = match ? '' : 'none';
-        });
-    }
-
-    // The sort dropdown re-fetches this same panel with the new sort applied -
-    // a fresh htmx.ajax call rather than a full page navigation, since this
-    // content now lives inside Organize instead of its own page.
-    function organizeReloadListsPanel(sort) {
-        window.htmx.ajax('GET', "{% url 'lists.list' %}?tab=lists&sort=" + sort, { target: '#panel-lists', swap: 'innerHTML' });
-    }
-</script>

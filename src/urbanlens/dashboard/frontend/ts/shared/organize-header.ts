@@ -157,8 +157,8 @@ export function createOrganizeHeader(initialTab: string): OrganizeHeader {
     return orgHeader;
 }
 
-// ── Shared floating bulk-action toolbar (window globals - called via inline
-// onclick in organize/index.html's #org-bulk-bar buttons) ────────────────
+// ── Shared floating bulk-action toolbar: the active tab registers its actions on
+// window._orgBulk, and #org-bulk-bar's data-org-bulk buttons run them ────
 export interface OrgBulkHandlers {
     deselect: (() => void) | null;
     edit: (() => void) | null;
@@ -170,8 +170,16 @@ function resetOrgBulk(): OrgBulkHandlers {
     return { deselect: null, edit: null, merge: null, del: null };
 }
 
+function isBulkAction(action: string | undefined): action is keyof OrgBulkHandlers {
+    return action === "deselect" || action === "edit" || action === "merge" || action === "del";
+}
+
 export function installOrgBulkToolbar(): void {
     window._orgBulk = resetOrgBulk();
+    document.getElementById("org-bulk-bar")?.addEventListener("click", (e) => {
+        const action = (e.target as Element).closest<HTMLElement>("[data-org-bulk]")?.dataset.orgBulk;
+        if (isBulkAction(action)) window._orgBulk?.[action]?.();
+    });
     window._orgSelectionClearers = window._orgSelectionClearers ?? [];
     window._orgBulkEditByIds = window._orgBulkEditByIds ?? {};
     window._orgBulkMergeByIds = window._orgBulkMergeByIds ?? {};
