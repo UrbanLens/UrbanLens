@@ -35,7 +35,7 @@
 {# Georeferenced image overlays (Sanborn sheets, site plans) - same json_script pattern as the custom layers above. #}
 {{ map_overlays_json|default:""|json_script:"map-overlays-data" }}
 {# Map toolbar (tools only; shared component - same as the main map). #}
-{% map_toolbar "markup_pin,markup_line,markup_freehand,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,select_detail_pins,screenshot" panel_id="detail-map-buttons" screenshot_onclick="_openMapScreenshot()" %}
+{% map_toolbar "markup_pin,markup_line,markup_freehand,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,select_detail_pins,screenshot" panel_id="detail-map-buttons" screenshot_action="pin-screenshot" %}
 
 {# -- Bottom-left map controls -- #}
 <div class="map-bottom-controls">

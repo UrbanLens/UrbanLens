@@ -12,7 +12,8 @@
                 aria-label="{{ button.spec.aria_label }}"
                 {% if button.hx_get %}hx-get="{{ button.hx_get }}" hx-target="{{ button.spec.hx_target }}" hx-swap="{{ button.spec.hx_swap }}"{% endif %}
                 {% if button.spec.markup_tool %}data-markup-tool="{{ button.spec.markup_tool }}"{% endif %}
-                {% if button.onclick %}onclick="{{ button.onclick }}"{% endif %}>
+                {% if button.action %}data-map-tool="{{ button.action }}"{% endif %}
+                {% if button.screenshot_context %}data-screenshot-context="{{ button.screenshot_context }}"{% endif %}>
             <i class="material-symbols-outlined">{{ button.spec.icon }}</i>{% if button.spec.extra_html %}{{ button.spec.extra_html|safe }}{% endif %}
         </button>
         {% endfor %}

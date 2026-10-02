@@ -38,4 +38,52 @@ describe("declarative dialog triggers", () => {
         expect(() => document.getElementById("opener")?.dispatchEvent(new MouseEvent("click", { bubbles: true }))).not.toThrow();
         expect(dialog("d1").open).toBe(false);
     });
+
+    test("an opener with data-dialog-open-event announces the opening on <body>", () => {
+        const heard: string[] = [];
+        const listen = (event: Event) => void heard.push(`${event.type} ${dialog("d1").open}`);
+        document.body.addEventListener("mapOverlaysOpen", listen);
+        document.getElementById("opener")?.setAttribute("data-dialog-open-event", "mapOverlaysOpen");
+        document.getElementById("opener-icon")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        document.body.removeEventListener("mapOverlaysOpen", listen);
+        expect(heard).toEqual(["mapOverlaysOpen true"]);
+    });
+});
+
+describe("a close function of the page's own", () => {
+    const globals = window as unknown as Record<string, unknown>;
+    let closed: string[] = [];
+
+    beforeAll(() => installGlobalDialogTriggers());
+
+    beforeEach(() => {
+        closed = [];
+        globals.closeAddPinDialog = () => {
+            closed.push("closeAddPinDialog");
+            dialog("add-pin").close();
+        };
+        globals.closeDetailPinPanel = () => void closed.push("closeDetailPinPanel");
+        document.body.innerHTML = `
+          <dialog id="add-pin" data-closefn="closeAddPinDialog"><button id="x" type="button" data-dialog-close>x</button></dialog>
+          <dialog id="plain" data-closefn="notAFunction"><button id="plain-x" type="button" data-dialog-close>x</button></dialog>
+          <div id="side-panel"><button id="panel-x" type="button" data-dialog-close data-closefn="closeDetailPinPanel">x</button></div>`;
+    });
+
+    test("a closer inside a dialog that names one runs it rather than only closing", () => {
+        dialog("add-pin").showModal();
+        document.getElementById("x")?.click();
+        expect(closed).toEqual(["closeAddPinDialog"]);
+        expect(dialog("add-pin").open).toBe(false);
+    });
+
+    test("a closer outside any dialog runs the function it names itself", () => {
+        document.getElementById("panel-x")?.click();
+        expect(closed).toEqual(["closeDetailPinPanel"]);
+    });
+
+    test("a name that is not a function falls back to closing the dialog", () => {
+        dialog("plain").showModal();
+        document.getElementById("plain-x")?.click();
+        expect(dialog("plain").open).toBe(false);
+    });
 });

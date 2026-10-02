@@ -25,6 +25,7 @@ import { installGlobalLocationSearchEngine } from "../shared/location-search-eng
 import { installGlobalMapContextMenu } from "../shared/map-context-menu";
 import { installGlobalMapExport } from "../shared/map-export";
 import { installGlobalMapLayers } from "../shared/map-layers";
+import { installMapToolbarActions } from "../shared/map-toolbar-actions";
 import { installGlobalMaplibreMarkup } from "../shared/maplibre-markup";
 import { installGlobalMaplibreRasterStyle } from "../shared/maplibre-raster-style";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
@@ -89,6 +90,7 @@ installUndoBar();
 installGlobalLocationSearchEngine();
 installGlobalMapContextMenu();
 installGlobalMapLayers();
+installMapToolbarActions();
 installGlobalMarkupEngine();
 installGlobalMapExport();
 installGlobalLabelPicker();
