@@ -4022,9 +4022,11 @@ moved them all by containment. To close: after REData deploys, refresh HRSH's bu
 
 On production (k3s site-b, celery on since the 2026-10-02 cutover) Jess's HRSH pin showed no Article > Sources
 documents, no CRIS photos, no web-image results, and exactly one public-source photo, from Wikimedia Commons. Every
-one of the missing providers is fetched through REData from a celery pod. Commons and Wikipedia are not, and they
-are the only ones that answered. Nothing here was read from production; the chain below is inferred from the
-infrastructure repo and from this LAN.
+one of the missing providers is fetched through REData from a celery pod. Commons is not, and it is the one that
+answered. (Wikipedia's article images are not REData-backed either. One cause of their absence, seen on
+`development_main` and not checked on production, is an empty answer cached while the article match had expired,
+fixed in `models/cache/signals.py` on 2026-10-02.) Nothing
+here was read from production; the chain below is inferred from the infrastructure repo and from this LAN.
 
 - **Celery egress.** `deny-egress-celery` (`infrastructure/platform/cnpg-cluster/base/network-policy.yaml`) lets
   `app.kubernetes.io/component in (beat, worker)` reach DNS, Postgres, Dragonfly and RabbitMQ only.
