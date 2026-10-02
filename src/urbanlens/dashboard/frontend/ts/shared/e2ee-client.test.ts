@@ -305,3 +305,75 @@ describe("a password check that cannot learn how the account signs in", () => {
         expect(sent.some((request) => request.body.includes("raw-secret-password"))).toBe(false);
     });
 });
+
+/** Whether *pending* settled within *ms*, rather than leaving its caller waiting for good. */
+async function settlesWithin(pending: Promise<unknown>, ms = 200): Promise<"resolved" | "rejected" | "still waiting"> {
+    const timeout = new Promise<"still waiting">((resolve) => setTimeout(() => resolve("still waiting"), ms));
+    return Promise.race([pending.then(() => "resolved" as const, () => "rejected" as const), timeout]);
+}
+
+describe("an unlock dialog whose options cannot be loaded", () => {
+    test("opens on the recovery-key path, as it does for a refused request, instead of never appearing", async () => {
+        const { showUnlockDialog } = await import("./e2ee-client");
+        stubFetch({ "/e2ee/keys/": "throw" });
+        const pending = showUnlockDialog();
+        await settle();
+
+        const overlay = document.querySelector(".e2ee-recovery-overlay");
+        expect(overlay, "no dialog appeared, so the caller's disabled button never came back").not.toBeNull();
+        expect(overlay?.querySelector(".e2ee-unlock-recovery")).not.toBeNull();
+        overlay?.querySelector<HTMLButtonElement>(".e2ee-unlock-cancel")?.click();
+        expect(await settlesWithin(pending)).toBe("resolved");
+    });
+});
+
+describe("a passkey unlock enrollment that cannot reach the server", () => {
+    const realPublicKeyCredential = window.PublicKeyCredential;
+
+    beforeEach(() => {
+        Object.defineProperty(window, "PublicKeyCredential", { value: function PublicKeyCredential() {}, configurable: true, writable: true });
+        init({
+            urls: {
+                loginParams: "/e2ee/login-params/",
+                enroll: "/e2ee/enroll/",
+                keys: "/e2ee/keys/",
+                rewrap: "/e2ee/rewrap/",
+                reset: "/e2ee/reset/",
+                partnerKeyBase: "/e2ee/keys/",
+                conversationKeyBase: "/e2ee/conversation-key/",
+                groupKeyBase: "/e2ee/group-key/",
+                login: "/login/",
+                passkeyWrap: "/e2ee/passkey-wrap/",
+                passkeyRegisterOptions: "/webauthn/register/options/",
+                passkeyRegister: "/webauthn/register/",
+            },
+            selfSlug: "jess",
+        });
+        cacheIdentity();
+        stubFetch({ "/e2ee/keys/": "throw" });
+    });
+
+    afterEach(() => {
+        Object.defineProperty(window, "PublicKeyCredential", { value: realPublicKeyCredential, configurable: true, writable: true });
+        document.body.innerHTML = "";
+    });
+
+    test("without a password to collect, it fails rather than leaving Settings' button disabled for good", async () => {
+        const { showPasskeyEnrollDialog } = await import("./e2ee-client");
+        expect(await settlesWithin(showPasskeyEnrollDialog(false))).toBe("rejected");
+    });
+
+    test("after collecting the password, it says so in the dialog, which stays open for another try", async () => {
+        const { showPasskeyEnrollDialog } = await import("./e2ee-client");
+        const pending = showPasskeyEnrollDialog(true);
+        document.querySelector<HTMLInputElement>(".e2ee-enroll-password")!.value = "account-password";
+        document.querySelector<HTMLButtonElement>(".e2ee-enroll-submit")!.click();
+        await settle();
+
+        const error = document.querySelector<HTMLElement>(".e2ee-unlock-error");
+        expect(error?.hidden).toBe(false);
+        expect(error?.textContent).toContain("Could not add that passkey");
+        document.querySelector<HTMLButtonElement>(".e2ee-enroll-cancel")!.click();
+        expect(await settlesWithin(pending)).toBe("resolved");
+    });
+});

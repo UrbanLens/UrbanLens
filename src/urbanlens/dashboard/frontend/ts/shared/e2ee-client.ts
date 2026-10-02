@@ -665,8 +665,8 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
  * @returns Whether the account is enrolled at all, whether a password-wrapped
  */
 export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean; passkey: boolean }> {
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (!response.ok) {
+    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" }).catch(() => null);
+    if (!response?.ok) {
         return { enrolled: false, password: false, passkey: false };
     }
     const bundle = (await response.json()) as KeyBundlePayload;
@@ -912,9 +912,9 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
  * @returns The enrollment outcome; ``{ok: false}`` with no error when the
  */
 export function showPasskeyEnrollDialog(hasPassword: boolean): Promise<PasskeyEnrollResult> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         if (!hasPassword) {
-            void enrollPasskeyUnlock().then(resolve);
+            enrollPasskeyUnlock().then(resolve, reject);
             return;
         }
         const overlay = document.createElement("div");
@@ -946,7 +946,7 @@ export function showPasskeyEnrollDialog(hasPassword: boolean): Promise<PasskeyEn
                 return;
             }
             errorEl.hidden = true;
-            const result = await enrollPasskeyUnlock(password);
+            const result = await enrollPasskeyUnlock(password).catch((): PasskeyEnrollResult => ({ ok: false, error: "Could not add that passkey. Check your connection and try again." }));
             if (result.ok) {
                 close(result);
                 return;
