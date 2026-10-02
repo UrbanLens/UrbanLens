@@ -165,6 +165,7 @@ const REPORTS_ITS_OWN: Array<[string, string, string, string]> = [
     ["shared/e2ee-client.ts", "ensureConversationKey", "conversationKeyBase", "the composer's toast"],
     ["shared/e2ee-client.ts", "createConversationKeyVersion", "partnerKeyBase", "the composer's toast; a 404 is by design"],
     ["shared/e2ee-client.ts", "ensureGroupKey", "groupKeyUrl", "the composer's toast"],
+    ["shared/e2ee-client.ts", "fetchOwnBundle", "urls.keys", "the unlock dialog's own line"],
     ["shared/external-tag-mapping.ts", "moveEntry", "moveUrl", "toast"],
     ["shared/external-tag-mapping.ts", "groupSelected", "groupUrl", "toast"],
     ["shared/icon-picker.ts", "loadCatalogue", "url", "the picker's own line"],

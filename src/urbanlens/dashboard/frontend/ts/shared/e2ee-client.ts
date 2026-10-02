@@ -25,7 +25,8 @@ import { clearProfileKeys, getConversationKey, getGroupKey, getIdentity, putConv
 import type { PrfAssertionResult } from "./webauthn-client";
 import { assertForPrf, credentialIdOf, getPrfResult, registerPasskey } from "./webauthn-client";
 import { toast } from "./dialogs";
-import { HttpError, fetchResponse } from "./fetch-json";
+import { HttpError, NetworkError, fetchResponse } from "./fetch-json";
+import { SESSION_ENDED_MESSAGE } from "./site-runtime";
 
 /** Endpoint URLs, provided by templates via {% url %} (see init()). */
 export interface E2EEUrls {
@@ -611,6 +612,16 @@ function notifyEnrolled(): void {
 export type UnlockState = "unlocked" | "locked" | "not-enrolled";
 
 /**
+ * The signed-in account's key bundle, for an unlock.
+ * @throws When it could not be had, which is no verdict on the secret the user typed.
+ */
+async function fetchOwnBundle(): Promise<KeyBundlePayload> {
+    const response = await fetchResponse(cfg().urls.keys, { credentials: "same-origin" });
+    if (!response.ok) throw new HttpError(response.status, response.status === 401 ? SESSION_ENDED_MESSAGE : "Couldn't load your encryption keys. Please try again.");
+    return (await response.json()) as KeyBundlePayload;
+}
+
+/**
  * Report whether this device can decrypt the signed-in user's messages.
  * @returns "unlocked" (cached key matches the server bundle), "locked"
  */
@@ -638,6 +649,7 @@ export async function getUnlockState(): Promise<UnlockState> {
  * Unlock this device with a typed/pasted recovery key.
  * @param display - The recovery key as the user entered it.
  * @returns True on success (identity cached; device unlocked).
+ * @throws When the key bundle could not be fetched.
  */
 export async function unlockWithRecovery(display: string): Promise<boolean> {
     await cryptoReady();
@@ -645,11 +657,7 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
     if (key === null) {
         return false;
     }
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (!response.ok) {
-        return false;
-    }
-    const bundle = (await response.json()) as KeyBundlePayload;
+    const bundle = await fetchOwnBundle();
     if (!bundle.enrolled) {
         return false;
     }
@@ -664,13 +672,16 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
 /**
  * Report which unlock paths this account's bundle offers on a cold device.
  * @returns Whether the account is enrolled at all, whether a password-wrapped
+ * secret and a passkey wrap exist, and why none could be learned when the bundle could not be had.
  */
-export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean; passkey: boolean }> {
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" }).catch(() => null);
-    if (!response?.ok) {
-        return { enrolled: false, password: false, passkey: false };
+export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean; passkey: boolean; error?: string }> {
+    let bundle: KeyBundlePayload;
+    try {
+        bundle = await fetchOwnBundle();
+    } catch (error) {
+        const reason = error instanceof NetworkError || error instanceof HttpError ? error.message : "Couldn't load your encryption keys. Please try again.";
+        return { enrolled: false, password: false, passkey: false, error: reason };
     }
-    const bundle = (await response.json()) as KeyBundlePayload;
     if (!bundle.enrolled) {
         return { enrolled: false, password: false, passkey: false };
     }
@@ -685,14 +696,11 @@ export async function getUnlockOptions(): Promise<{ enrolled: boolean; password:
  * Unlock this device with the account password.
  * @param password - The raw account password (never transmitted).
  * @returns True on success (identity cached; device unlocked).
+ * @throws When the key bundle could not be fetched.
  */
 export async function unlockWithPassword(password: string): Promise<boolean> {
     await cryptoReady();
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (!response.ok) {
-        return false;
-    }
-    const bundle = (await response.json()) as KeyBundlePayload;
+    const bundle = await fetchOwnBundle();
     if (!bundle.password_wrapped_secret || !bundle.password_wrap_salt) {
         return false;
     }
@@ -725,14 +733,11 @@ async function unlockFromWrap(bundle: KeyBundlePayload, wrap: PasskeyWrapPayload
 /**
  * Unlock this device with a passkey (one tap - no password, no recovery key).
  * @returns True on success (identity cached; device unlocked).
+ * @throws When the key bundle could not be fetched.
  */
 export async function unlockWithPasskey(): Promise<boolean> {
     await cryptoReady();
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (!response.ok) {
-        return false;
-    }
-    const bundle = (await response.json()) as KeyBundlePayload;
+    const bundle = await fetchOwnBundle();
     const wraps = bundle.passkey_wraps ?? [];
     if (!wraps.length) {
         return false;
@@ -1006,6 +1011,10 @@ export function showUnlockDialog(): Promise<boolean> {
                     </div>
                 </div>`;
             const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
+            if (options.error) {
+                errorEl.textContent = options.error;
+                errorEl.hidden = false;
+            }
             const passkeyButton = overlay.querySelector<HTMLButtonElement>(".e2ee-unlock-passkey");
             const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-password");
             const recoveryInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-recovery");
@@ -1026,13 +1035,18 @@ export function showUnlockDialog(): Promise<boolean> {
 
             const tryUnlock = async (unlock: () => Promise<boolean>, failure: string) => {
                 setBusy(true);
-                const unlocked = await unlock().catch(() => false);
-                if (unlocked) {
-                    close(true);
-                    return;
+                let message = failure;
+                try {
+                    if (await unlock()) {
+                        close(true);
+                        return;
+                    }
+                } catch (error) {
+                    // The secret was never tried when its bundle could not be had.
+                    if (error instanceof NetworkError || error instanceof HttpError) message = error.message;
                 }
                 setBusy(false);
-                errorEl.textContent = failure;
+                errorEl.textContent = message;
                 errorEl.hidden = false;
             };
             const attempt = async () => {

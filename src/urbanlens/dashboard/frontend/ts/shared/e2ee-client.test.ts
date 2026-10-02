@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { installFakeIndexedDB, type FakeIndexedDB } from "../testing/fake-indexeddb";
 import { encryptForGroup, encryptForPartner, init } from "./e2ee-client";
+import { cryptoReady, generateRecoveryKey } from "./e2ee-crypto";
+import { NETWORK_FAILURE_MESSAGE } from "./fetch-json";
+import { wrapFetch } from "./site-runtime";
 
 const realFetch = globalThis.fetch;
 let db: FakeIndexedDB;
@@ -375,5 +378,72 @@ describe("a passkey unlock enrollment that cannot reach the server", () => {
         expect(error?.textContent).toContain("Could not add that passkey");
         document.querySelector<HTMLButtonElement>(".e2ee-enroll-cancel")!.click();
         expect(await settlesWithin(pending)).toBe("resolved");
+    });
+});
+
+describe("an unlock that cannot fetch the key bundle", () => {
+    const bundle = { enrolled: true, profile_slug: "jess", version: 1, public_key: "pub", password_wrapped_secret: "wrapped", password_wrap_salt: "salt", recovery_wrapped_secret: "wrapped" };
+
+    /** The dialog's own options load, then the unlock's fetch of the same bundle meets *failure*. */
+    function bundleThen(failure: "network" | number): string[] {
+        const netReports: string[] = [];
+        let calls = 0;
+        const answer = async (): Promise<Response> => {
+            calls += 1;
+            if (calls === 1) return Response.json(bundle);
+            if (failure === "network") throw new TypeError("Failed to fetch");
+            return new Response("", { status: failure });
+        };
+        globalThis.fetch = wrapFetch(Object.assign(answer, realFetch), (m) => void netReports.push(m));
+        return netReports;
+    }
+
+    afterEach(() => {
+        document.body.innerHTML = "";
+    });
+
+    async function unlockWith(field: "password" | "recovery"): Promise<string> {
+        const { showUnlockDialog } = await import("./e2ee-client");
+        void showUnlockDialog();
+        await settle();
+        await cryptoReady();
+        const value = field === "password" ? "account-password" : generateRecoveryKey().display;
+        document.querySelector<HTMLInputElement>(`.e2ee-unlock-${field}`)!.value = value;
+        document.querySelector<HTMLButtonElement>(".e2ee-unlock-submit")!.click();
+        await settle();
+        const error = document.querySelector<HTMLElement>(".e2ee-unlock-error");
+        expect(error?.hidden).toBe(false);
+        return error?.textContent ?? "";
+    }
+
+    for (const field of ["password", "recovery"] as const) {
+        test(`a ${field} unlock offline says the server could not be reached, not that the ${field} was wrong`, async () => {
+            const netReports = bundleThen("network");
+
+            expect(await unlockWith(field)).toBe(NETWORK_FAILURE_MESSAGE);
+            expect(netReports).toEqual([]);
+        });
+
+        test(`a ${field} unlock the server refused says the keys could not be loaded`, async () => {
+            bundleThen(500);
+
+            expect(await unlockWith(field)).toBe("Couldn't load your encryption keys. Please try again.");
+        });
+    }
+
+    test("options that cannot be loaded are said in the dialog, not by the fetch net", async () => {
+        const netReports: string[] = [];
+        const offline = async (): Promise<Response> => {
+            throw new TypeError("Failed to fetch");
+        };
+        globalThis.fetch = wrapFetch(Object.assign(offline, realFetch), (m) => void netReports.push(m));
+        const { showUnlockDialog } = await import("./e2ee-client");
+        void showUnlockDialog();
+        await settle();
+
+        const error = document.querySelector<HTMLElement>(".e2ee-unlock-error");
+        expect(error?.hidden).toBe(false);
+        expect(error?.textContent).toBe(NETWORK_FAILURE_MESSAGE);
+        expect(netReports).toEqual([]);
     });
 });
