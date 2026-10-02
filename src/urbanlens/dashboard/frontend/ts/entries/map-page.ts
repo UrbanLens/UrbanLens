@@ -13,6 +13,7 @@ import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
 import { labelChip, labelSuggestion, type LabelCandidate } from "../shared/add-pin-label-chips";
 import { MapContextMenu } from "../shared/map-context-menu";
+import { pinsMetaChecker } from "../shared/pins-meta";
 import { readMapFilterResults, type MapFilterResults } from "../shared/map-filter-results";
 import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
 import { LocationSearchEngine, type LocationSearchAttachOptions } from "../shared/location-search-engine";
@@ -333,12 +334,14 @@ function _cacheUserLocation(lat: number, lng: number): void {
 }
 
 function _recordGeolocationVisit(lat: number, lng: number): void {
-    fetch(_GEOLOCATION_VISIT_URL, {
+    const init: FetchInit = {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": MAP_CFG.csrfToken },
         body: JSON.stringify({ latitude: lat, longitude: lng }),
         keepalive: true,
-    }).catch(() => {
+        __ulReported: true,
+    };
+    fetch(_GEOLOCATION_VISIT_URL, init).catch(() => {
         // Visit tracking is best-effort and should never block map use.
     });
 }
@@ -1056,6 +1059,7 @@ function _setOffline(offline: boolean): void {
     if (offline) console.warn("[UL] Server appears to be offline");
     else console.log("[UL] Server connectivity restored");
 }
+const _checkPinsMeta = pinsMetaChecker(MAP_CFG.urls.mapPinsMeta, _setOffline);
 
 // -- Temporary place markers (search jump + right-click context menu) -----
 // isSearch=true uses amber styling so search markers are visually distinct from
@@ -1187,13 +1191,8 @@ async function _pollForUpdates(): Promise<void> {
             await _refreshAllPins();
             return;
         }
-        const resp = await fetch(MAP_CFG.urls.mapPinsMeta, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-        if (!resp.ok) {
-            _setOffline(true);
-            return;
-        }
-        _setOffline(false);
-        const data = (await resp.json()) as { app_uuid?: string; fingerprint?: string; last_updated?: string };
+        const data = await _checkPinsMeta();
+        if (!data) return;
         // App UUID changed mid-session (DB wiped while user had the map open).
         if (_APP_UUID && data.app_uuid && data.app_uuid !== _APP_UUID) {
             console.log("[UL] App UUID changed mid-session - clearing cache and reloading pins");
@@ -1927,11 +1926,13 @@ if (_MAP_CENTER_MODE === "remember") {
         _rememberTid = null;
         _pendingPositionBody = null;
         const body = _positionBody();
-        fetch(MAP_CFG.urls.settingsSaveMapPosition, {
+        const init: FetchInit = {
             method: "POST",
             headers: { "X-CSRFToken": body.get("csrfmiddlewaretoken") ?? "", "Content-Type": "application/x-www-form-urlencoded" },
             body: body.toString(),
-        }).catch(() => {});
+            __ulReported: true,
+        };
+        fetch(MAP_CFG.urls.settingsSaveMapPosition, init).catch(() => {});
     };
     const _onRememberChange = (): void => {
         if (_rememberTid) clearTimeout(_rememberTid);
@@ -2971,8 +2972,10 @@ function _buildPlacesMarker(place: PlaceData): L.Marker {
                 },
             ],
         });
+        // Both only fill in a menu that already shows the place, so a miss is not worth a toast.
         if (place.source === "google" && place.place_id) {
-            fetch(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            const init: FetchInit = { headers: { "X-Requested-With": "XMLHttpRequest" }, __ulReported: true };
+            fetch(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id)}`, init)
                 .then((resp) => (resp.ok ? (resp.json() as Promise<{ place?: PlaceData }>) : null))
                 .then((data) => {
                     if (data?.place && document.body.contains(detailsWrap)) {
@@ -2984,9 +2987,8 @@ function _buildPlacesMarker(place: PlaceData): L.Marker {
         }
         if (place.source === "wikipedia") {
             const wikiTitle = (place.name || "").replace(/ /g, "_");
-            fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiTitle)}`, {
-                headers: { Accept: "application/json" },
-            })
+            const init: FetchInit = { headers: { Accept: "application/json" }, __ulReported: true };
+            fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiTitle)}`, init)
                 .then((resp) => (resp.ok ? (resp.json() as Promise<{ extract?: string; description?: string }>) : null))
                 .then((data) => {
                     if (data && document.body.contains(detailsWrap)) {

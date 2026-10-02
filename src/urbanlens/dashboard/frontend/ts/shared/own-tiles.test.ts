@@ -6,6 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { acquireOwnTileSlot, fetchOwnTile, isOwnTileUrl, loadOwnTileImage, ownTileRetryDelayMs, resetOwnTileGateForTests } from "./own-tiles";
+import { wrapFetch } from "./site-runtime";
 
 const realFetch = globalThis.fetch;
 
@@ -232,6 +233,25 @@ describe("fetchOwnTile", () => {
 
         expect(waits.length).toBeGreaterThan(0);
         expect(Math.max(...waits)).toBeGreaterThanOrEqual(5_000);
+    });
+
+    /** A viewport is dozens of tiles, and a gap shows on the map itself; the site's fetch net would toast each one. */
+    test("raises no toast through the site's fetch net for a missing tile or a proxy that keeps refusing", async () => {
+        const reports: string[] = [];
+        const throughNet = (): void => {
+            globalThis.fetch = wrapFetch(Object.assign(globalThis.fetch, realFetch), (m) => void reports.push(m));
+        };
+        stubFetch([404]);
+        throughNet();
+        await expect(fetchOwnTile("/tiles/1/2/3")).rejects.toThrow("404");
+
+        stubFetch([503, "network-error"]);
+        throughNet();
+        const pending = fetchOwnTile("/tiles/1/2/4");
+        await advanceRetries();
+        await expect(pending).rejects.toThrow();
+
+        expect(reports).toEqual([]);
     });
 
     test("survives a network error the same way it survives a 503", async () => {

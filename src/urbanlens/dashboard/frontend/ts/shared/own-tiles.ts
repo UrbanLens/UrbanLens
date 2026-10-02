@@ -16,6 +16,8 @@
  * does not control: other tabs, other users, a restarting worker.
  */
 
+import type { FetchInit } from "./site-runtime";
+
 /**
  * Requests for this deployment's own tiles in flight at once, across every map on the page.
  *
@@ -206,7 +208,9 @@ export async function fetchOwnTile(url: string, signal?: AbortSignal): Promise<A
             // the map can drop it in that window. Handing the slot straight back beats discovering
             // it one rejected fetch later, because the next waiter is a tile still on screen.
             if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
-            const response = await fetch(url, { signal, headers: { Accept: "image/*" } });
+            // A failed tile is a square the map draws around, not a toast.
+            const init: FetchInit = { signal, headers: { Accept: "image/*" }, __ulReported: true };
+            const response = await fetch(url, init);
             if (response.ok) {
                 recordOwnTileOutcome(true);
                 return await response.arrayBuffer();
