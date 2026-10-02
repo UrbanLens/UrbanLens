@@ -990,10 +990,10 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
             response["added"] += added
             move_from = (body.get("move_from") or "").strip()
             source_album_id = None
-            if move_from and move_from != album.slug:
+            if images and move_from and move_from != album.slug:
                 source = _qs.filter(slug=move_from).first()
                 if source is not None:
-                    response["removed"] = remove_images_from_album(source, image_ids)
+                    response["removed"] = remove_images_from_album(source, [image.pk for image in images])
                     source_album_id = source.pk
             if added:
                 from urbanlens.dashboard.services.undo.mutations import stash_album_add
@@ -1162,9 +1162,11 @@ class AlbumRemovePhotosView(LoginRequiredMixin, View):
         Returns:
             JSON with how many membership rows were removed.
         """
-        _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        image_ids = _int_ids(posted_json_object(request).get("image_ids"))
+        submitted = _int_ids(posted_json_object(request).get("image_ids"))
+        # Only photos the viewer can see: a hidden one cannot have been chosen, and counting it would confirm it is here.
+        image_ids = list(visible_album_items(album, profile, owner).filter(image_id__in=submitted).values_list("image_id", flat=True))
         removed = remove_images_from_album(album, image_ids)
         if removed:
             from urbanlens.dashboard.services.undo.mutations import stash_album_remove
@@ -1271,17 +1273,20 @@ class AlbumReorderView(LoginRequiredMixin, View):
             vault: True for a Vault (Profile-owned) album route.
 
         Returns:
-            JSON with how many items were renumbered.
+            JSON with how many of the submitted items, each once, are the viewer's own to place.
         """
-        _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
         submitted = posted_json_object(request).get("items")
         # Counted before the ids are read: naming more items than an album may hold is not a reorder.
         ceiling = ALBUM_PHOTOS.ceiling()
         if isinstance(submitted, list) and len(submitted) > ceiling:
             return JsonResponse({"error": f"Reorder at most {ceiling} items at a time."}, status=400)
-        item_ids = _int_ids(submitted)
-        reordered = reorder_album_items(album, item_ids)
-        return JsonResponse({"reordered": reordered})
+        visible = set(visible_album_items(album, profile, owner).values_list("pk", flat=True))
+        item_ids = [item_id for item_id in dict.fromkeys(_int_ids(submitted)) if item_id in visible]
+        reorder_album_items(album, item_ids)
+        # How many of the viewer's own items moved; the album's full count would include photos hidden from them.
+        return JsonResponse({"reordered": len(item_ids)})
 
 
 class AlbumMoveView(LoginRequiredMixin, View):
