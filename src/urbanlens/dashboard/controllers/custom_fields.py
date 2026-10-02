@@ -34,6 +34,7 @@ from urbanlens.dashboard.models.custom_fields.model import (
     InvalidSelectOptionError,
     InvalidTimeError,
     InvalidUrlError,
+    NumberOutOfRangeError,
     ReferenceKindNotConfiguredError,
     ReferenceTargetNotFoundError,
 )
@@ -130,6 +131,9 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
     value = existing or CustomFieldValue(field=field, **{target_attr: target})
     try:
         value.set_value(raw)
+    except NumberOutOfRangeError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That number has too many digits."
     except InvalidNumberError as e:
         logger.info("custom field value rejected: %s", e)
         return None, "That's not a valid number."

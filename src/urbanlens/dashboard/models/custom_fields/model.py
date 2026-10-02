@@ -357,6 +357,10 @@ class InvalidNumberError(CustomFieldValueError):
     """The submitted value doesn't parse as a NUMBER field's value."""
 
 
+class NumberOutOfRangeError(InvalidNumberError):
+    """The submitted number has more integer digits than ``CustomFieldValue.value_number`` holds."""
+
+
 class InvalidDateError(CustomFieldValueError):
     """The submitted value doesn't parse as a DATE field's value (YYYY-MM-DD)."""
 
@@ -604,6 +608,29 @@ class CustomFieldValue(abstract.DashboardModel):
             return "true" if raw else "false"
         return self.display_value
 
+    def _storable_number(self, raw: str) -> Decimal:
+        """Parse ``raw`` as ``value_number`` would store it.
+
+        Raises:
+            InvalidNumberError: ``raw`` is not a finite number.
+            NumberOutOfRangeError: ``raw`` has more integer digits than the column holds.
+        """
+        from urbanlens.dashboard.services.core.numbers import decimal_for_column
+
+        try:
+            parsed = Decimal(raw)
+        except InvalidOperation as e:
+            raise InvalidNumberError(f"custom field {self.field_id}: {raw!r} failed Decimal parsing for a NUMBER field") from e
+        if not parsed.is_finite():
+            raise InvalidNumberError(f"custom field {self.field_id}: {raw!r} is not a finite number")
+        column = self._meta.get_field("value_number")
+        if not isinstance(column, DecimalField):
+            raise TypeError("CustomFieldValue.value_number must be a DecimalField.")
+        stored = decimal_for_column(parsed, column)
+        if stored is None:
+            raise NumberOutOfRangeError(f"custom field {self.field_id}: {raw!r} does not fit numeric({column.max_digits},{column.decimal_places})")
+        return stored
+
     def set_value(self, raw: str) -> None:
         """Parse and store a raw string value into the typed column for this field.
 
@@ -634,10 +661,7 @@ class CustomFieldValue(abstract.DashboardModel):
             setattr(self, ref_attr, None)
 
         if field_type == CustomFieldType.NUMBER:
-            try:
-                self.value_number = Decimal(raw)
-            except InvalidOperation as e:
-                raise InvalidNumberError(f"custom field {self.field_id}: {raw!r} failed Decimal parsing for a NUMBER field") from e
+            self.value_number = self._storable_number(raw)
         elif field_type == CustomFieldType.DATE:
             try:
                 self.value_date = datetime.strptime(raw, "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; value_date is a DateField
