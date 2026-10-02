@@ -95,11 +95,13 @@ function currentScope(): string | null {
     return document.querySelector<HTMLElement>("[data-collapse-scope]")?.dataset.collapseScope ?? null;
 }
 
+/** The tools menu's own button, and any button elsewhere (the pin actions toolbar's "Hidden sections") that stands in for it. */
+const TOOLS_FAB_TOGGLES = "#tools-fab-btn, [data-opens-tools-fab]";
+
 function closeToolsFab(): void {
     const menu = document.getElementById("tools-fab-menu");
-    const btn = document.getElementById("tools-fab-btn");
     if (menu) menu.hidden = true;
-    btn?.setAttribute("aria-expanded", "false");
+    for (const toggle of document.querySelectorAll(TOOLS_FAB_TOGGLES)) toggle.setAttribute("aria-expanded", "false");
 }
 
 export function updateRestoreControls(): void {
@@ -118,6 +120,7 @@ export function updateRestoreControls(): void {
 
     group.hidden = hiddenSections.length === 0;
     fab.hidden = hiddenSections.length === 0;
+    for (const opener of document.querySelectorAll<HTMLElement>("[data-opens-tools-fab]")) opener.hidden = hiddenSections.length === 0;
     if (countEl) {
         countEl.hidden = hiddenSections.length === 0;
         countEl.textContent = String(hiddenSections.length);
@@ -164,12 +167,12 @@ function onDocumentClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (!target?.closest) return;
 
-    const fabToggle = target.closest<HTMLElement>("#tools-fab-btn");
+    const fabToggle = target.closest<HTMLElement>(TOOLS_FAB_TOGGLES);
     if (fabToggle) {
         const menu = document.getElementById("tools-fab-menu");
         const opening = !!menu?.hidden;
         if (menu) menu.hidden = !opening;
-        fabToggle.setAttribute("aria-expanded", String(opening));
+        for (const toggle of document.querySelectorAll(TOOLS_FAB_TOGGLES)) toggle.setAttribute("aria-expanded", String(opening));
         return;
     }
 

@@ -4994,7 +4994,9 @@ body.page-location-details .pin-detail-grid {
 
 // Floating actions menu: bottom-right, follows the user as they scroll.
 .pin-actions-fab {
-    &[hidden] {
+    // Its buttons carry display rules of their own, which would otherwise paint them through `hidden`.
+    &[hidden],
+    [hidden] {
         display: none;
     }
 
@@ -5005,11 +5007,15 @@ body.page-location-details .pin-detail-grid {
         left: auto;
         top: auto;
         z-index: 1400;
+        opacity: .9;
+
+        &:hover,
+        &:focus-within {
+            opacity: 1;
+        }
     }
 
-    &.is-collapsed .map-buttons-content,
-    .pin-actions-menu[hidden],
-    .map-toolbar-collapse[hidden] {
+    &.is-collapsed .map-buttons-content {
         display: none;
     }
 

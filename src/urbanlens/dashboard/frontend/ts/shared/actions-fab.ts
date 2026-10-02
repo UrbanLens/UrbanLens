@@ -36,7 +36,11 @@ export function installActionsFab(fab: HTMLElement): () => void {
         stored = null;
     }
     apply(stored !== "0");
-    collapse.addEventListener("click", () => apply(false));
+    collapse.addEventListener("click", (event) => {
+        // The page-wide `.map-toolbar-collapse` handler would also toggle `collapsed` on this toolbar.
+        event.stopPropagation();
+        apply(false);
+    });
     button.addEventListener("click", () => apply(true));
 
     const mirror = (state: UndoState): void => {
@@ -55,8 +59,6 @@ export function installActionsFab(fab: HTMLElement): () => void {
     undo?.addEventListener("click", () => {
         if (!undo.disabled) document.getElementById("ul-undo-btn")?.click();
     });
-
-    fab.querySelector("#pin-actions-hidden-sections")?.addEventListener("click", () => document.getElementById("tools-fab-btn")?.click());
 
     const showArticleActions = (tab: unknown): void => {
         for (const item of fab.querySelectorAll<HTMLElement>("[data-article-page-action]")) item.hidden = tab !== "article";
