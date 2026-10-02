@@ -22,15 +22,9 @@
     </p>
     {% endif %}
     <button type="button" class="btn btn--sm btn--ghost"
-            data-guess-latitude="{{ guess.latitude|stringformat:'f' }}"
-            data-guess-longitude="{{ guess.longitude|stringformat:'f' }}"
-            data-guess-failure="{{ failure.pk }}"
-            onclick="
-                const dialog = document.getElementById('pin-import-failure-place-dialog-{{ failure.pk }}');
-                document.getElementById('pin-import-failure-latitude-{{ failure.pk }}').value = this.dataset.guessLatitude;
-                document.getElementById('pin-import-failure-longitude-{{ failure.pk }}').value = this.dataset.guessLongitude;
-                dialog.showModal();
-            ">
+            data-dialog-open="pin-import-failure-place-dialog-{{ failure.pk }}"
+            data-dialog-fill-latitude="{{ guess.latitude|stringformat:'f' }}"
+            data-dialog-fill-longitude="{{ guess.longitude|stringformat:'f' }}">
         <i class="material-symbols-outlined">edit_location_alt</i>
         Use this location
     </button>

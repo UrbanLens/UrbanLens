@@ -269,6 +269,51 @@ describe("the lightbox list", () => {
     });
 });
 
+describe("tile controls", () => {
+    let opened: number[];
+
+    beforeEach(() => {
+        opened = [];
+        window.galleryOpenLightboxItem = (list, idx) => void opened.push(list[idx]?.imageId ?? -1);
+    });
+
+    function addControls(kind: VaultKind, id: number): void {
+        document
+            .getElementById(`${kind.kind}-tile-${id}`)
+            ?.insertAdjacentHTML("beforeend", `<button type="button" class="${kind.kind}-tile-btn"><img alt=""></button><button type="button" class="${kind.kind}-tile-del"><i>delete</i></button>`);
+    }
+
+    function click(selector: string): void {
+        document.querySelector(selector)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+
+    test("a server-rendered tile's open and delete buttons work by their class", async () => {
+        page(PHOTOS);
+        addControls(PHOTOS, 2);
+        uploader().bindTileActions();
+        click("#photo-tile-2 .photo-tile-btn img");
+        expect(opened).toEqual([2]);
+
+        window.confirm = () => true;
+        respond = () => new Response("", { status: 200 });
+        click("#photo-tile-2 .photo-tile-del i");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(requests[0]).toMatchObject({ url: "/vault/photos/2/delete/", method: "POST" });
+    });
+
+    test("a tile rendered from JSON opens once per click", () => {
+        page(DOCUMENTS, { tiles: [] });
+        const grid = document.createElement("ul");
+        grid.id = "document-grid";
+        document.getElementById("documents-page")?.appendChild(grid);
+        const tile = renderVaultDocumentTile({ id: 7, url: "/m/7" });
+        if (tile) grid.appendChild(tile);
+        uploader(DOCUMENTS, { ...photoOptions(), kind: DOCUMENTS, lightboxItem: documentLightboxItem }).bindTileActions();
+        click("#document-tile-7 .document-tile-btn");
+        expect(opened).toEqual([7]);
+    });
+});
+
 describe("retrying a failed upload", () => {
     test("the picked file is re-posted and its card dismissed", async () => {
         const dismissed: Array<[string, string]> = [];

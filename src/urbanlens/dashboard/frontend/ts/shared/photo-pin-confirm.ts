@@ -162,9 +162,12 @@ export class PhotoPinConfirm {
     }
 }
 
-/** Expose the dialog to the organize queue's cards, whose "Create pin" buttons call it inline. */
+/** The organize queue's "Create pin" buttons open the dialog on their ``data-pin-confirm-url``. */
 export function installPhotoPinConfirm(): PhotoPinConfirm {
     const confirm = new PhotoPinConfirm();
-    window.photosLoadPinConfirm = (url) => void confirm.load(url);
+    document.addEventListener("click", (event) => {
+        const button = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-pin-confirm-url]") : null;
+        if (button) void confirm.load(button.dataset.pinConfirmUrl ?? "");
+    });
     return confirm;
 }

@@ -989,8 +989,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // Not a set of swatches this editor grew for itself: the same markup,
         // classes and pickColor() call as the label and pin dialogs, so the
         // control cannot drift from the rest of the site. That means the page
-        // has to install the window global those inline handlers call - which
-        // only two other entries did.
+        // has to install the window.pickColor global the core bundle's swatch
+        // handler calls.
         await openEditor();
         await page.locator('[data-tool="marker"]').click();
         const frame = await page.locator("#floorplan-map").boundingBox();

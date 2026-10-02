@@ -27,7 +27,7 @@ describe("card tabs", () => {
         expect(tab("#a").getAttribute("aria-selected")).toBe("false");
     });
 
-    test("uses the active class the group names", () => {
+    test("uses the active class the group names, and leaves aria-selected to real tabs", () => {
         document.body.innerHTML = `
           <div data-card-tabs="is-active">
             <button id="a" data-card-tab class="is-active">A</button>
@@ -38,6 +38,7 @@ describe("card tabs", () => {
         expect(tab("#b").classList.contains("is-active")).toBe(true);
         expect(tab("#a").classList.contains("is-active")).toBe(false);
         expect(tab("#b").classList.contains("active")).toBe(false);
+        expect(tab("#b").hasAttribute("aria-selected")).toBe(false);
     });
 
     test("a tab naming a pane shows only that pane of its group", () => {

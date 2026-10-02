@@ -175,11 +175,8 @@ function boot(): void {
         showMapUnavailable();
         return;
     }
-    // The shared picker's markup calls IconPicker.* from inline onclick, so the
-    // global has to exist before any of it is clicked.
+    // The core bundle's picker actions (shared/picker-actions.ts) call these page globals.
     installGlobalIconPicker();
-    // Both pickers are server-rendered markup calling a window global from an
-    // inline onclick, so the page that uses them has to install them.
     installGlobalColorPicker();
     installUndoBar();
     const mapElement = document.getElementById("floorplan-map");
@@ -296,7 +293,7 @@ function boot(): void {
     document.body.addEventListener("ul:map-overlays-changed", (e) => {
         overlayControl.sync((e as CustomEvent).detail?.overlays || []);
     });
-    wireManageOverlaysDialog({
+    const overlaysDialog = wireManageOverlaysDialog({
         map,
         control: overlayControl,
         onAlignStart: () => (document.getElementById("map-overlays-dialog") as HTMLDialogElement | null)?.close(),
@@ -304,7 +301,7 @@ function boot(): void {
     const alignOnLoad = new URLSearchParams(window.location.search).get("align");
     if (alignOnLoad) {
         overlayControl.setVisible(alignOnLoad, true);
-        window.ulMapOverlayStartAlign?.(alignOnLoad);
+        overlaysDialog.startAlign(alignOnLoad);
     }
 
     let projection = new PlanProjection({ lat, lng });

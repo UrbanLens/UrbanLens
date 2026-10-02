@@ -309,6 +309,34 @@ describe("data-autosubmit", () => {
     });
 });
 
+describe("data-autogrow", () => {
+    function textarea(id: string, scrollHeight: number): HTMLTextAreaElement {
+        const el = document.getElementById(id) as HTMLTextAreaElement;
+        Object.defineProperty(el, "scrollHeight", { configurable: true, get: () => scrollHeight });
+        return el;
+    }
+
+    test("a textarea fits its content when it arrives and as it is typed in", () => {
+        render(`<form><div id="panel"><textarea id="note" data-autogrow></textarea><textarea id="plain"></textarea></div></form>`);
+        const note = textarea("note", 64);
+        const plain = textarea("plain", 64);
+        document.getElementById("panel")?.dispatchEvent(new CustomEvent("htmx:load", { bubbles: true }));
+        expect([note.style.height, plain.style.height]).toEqual(["64px", ""]);
+
+        textarea("note", 120).dispatchEvent(new Event("input", { bubbles: true }));
+        textarea("plain", 120).dispatchEvent(new Event("input", { bubbles: true }));
+        expect([note.style.height, plain.style.height]).toEqual(["120px", ""]);
+    });
+});
+
+describe("data-removes", () => {
+    test("a control removes the element it names", () => {
+        render(`<form></form><div id="modal"><div id="screen" data-removes="modal"></div><button type="button" data-removes="modal"><i>x</i></button></div>`);
+        document.querySelector("#screen")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(document.getElementById("modal")).toBeNull();
+    });
+});
+
 describe("data-empties", () => {
     test("a button empties the element it names", () => {
         render(`<form><button type="button" data-empties="detail"><i>close</i></button></form><div id="detail"><p>diff</p><p>more</p></div>`);

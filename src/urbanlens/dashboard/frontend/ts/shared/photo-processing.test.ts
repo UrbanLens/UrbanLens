@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { DEFAULT_SCHEDULE, PROCESSING_LABEL, ProcessingPoller, pollDelay, processingPlaceholder, processingStateOf, watchProcessingTiles } from "./photo-processing";
+import { DEFAULT_SCHEDULE, installGlobalPhotoProcessing, PROCESSING_LABEL, ProcessingPoller, pollDelay, processingPlaceholder, processingStateOf, watchProcessingTiles } from "./photo-processing";
 import { renderPhotoTile, tileFromJson, tileHasImage } from "./photo-tile";
 import { renderVaultPhotoTile } from "./vault-photo-grid";
 
@@ -184,5 +184,18 @@ describe("watching tiles", () => {
         watchProcessingTiles(grid, () => undefined);
         const poller = window.urbanlensProcessingPollers?.get("/vault/photos/processing/");
         expect(poller?.size).toBe(1);
+    });
+});
+
+describe("data-processing-tiles", () => {
+    test("a server-rendered strip has its pending tiles watched once the page has loaded", () => {
+        installGlobalPhotoProcessing();
+        document.body.innerHTML = `
+          <div data-processing-tiles data-processing-url="/vault/home/processing/">
+            <a href="/vault/photos/" data-id="7" data-processing="pending"></a>
+            <a href="/vault/photos/" data-id="8"></a>
+          </div>`;
+        document.dispatchEvent(new Event("DOMContentLoaded"));
+        expect(window.urbanlensProcessingPollers?.get("/vault/home/processing/")?.size).toBe(1);
     });
 });

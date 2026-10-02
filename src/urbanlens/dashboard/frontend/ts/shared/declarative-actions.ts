@@ -16,8 +16,10 @@
  *   one's value in that input and marks it ``aria-pressed``.
  * - ``data-readout="<id>"`` on an input shows its value in that element as it changes.
  * - ``data-toggles="<id>"`` on a button shows or hides that panel, marking the button ``.is-open``.
- * - ``data-empties="<id>"`` on a button empties that element.
+ * - ``data-empties="<id>"`` on a button empties that element, and ``data-removes="<id>"`` on any control removes it.
  * - ``data-autosubmit`` on a file input submits its form once a file is chosen.
+ * - ``data-autogrow`` on a textarea fits its height to its content when it arrives and as it is typed in, for
+ *   browsers without CSS ``field-sizing``.
  * - ``data-placeholder-ideas="<JSON island id>"`` on a field suggests another of the island's ideas as its placeholder
  *   each time its dialog closes.
  */
@@ -92,6 +94,8 @@ function onClick(event: MouseEvent): void {
     }
     const emptier = target?.closest<HTMLElement>("[data-empties]");
     if (emptier) document.getElementById(emptier.dataset.empties ?? "")?.replaceChildren();
+    const remover = target?.closest<HTMLElement>("[data-removes]");
+    if (remover) document.getElementById(remover.dataset.removes ?? "")?.remove();
 }
 
 function pick(choice: HTMLElement): void {
@@ -102,8 +106,22 @@ function pick(choice: HTMLElement): void {
     for (const other of group.querySelectorAll("[data-value]")) other.setAttribute("aria-pressed", String(other === choice));
 }
 
+function autogrow(field: HTMLTextAreaElement): void {
+    field.style.height = "auto";
+    field.style.height = `${field.scrollHeight}px`;
+}
+
+function onLoad(event: Event): void {
+    syncEnabledBy();
+    const root = event.target;
+    if (!(root instanceof Element)) return;
+    if (root instanceof HTMLTextAreaElement && root.hasAttribute("data-autogrow")) autogrow(root);
+    root.querySelectorAll<HTMLTextAreaElement>("textarea[data-autogrow]").forEach(autogrow);
+}
+
 function onInput(event: Event): void {
     const target = event.target;
+    if (target instanceof HTMLTextAreaElement && target.hasAttribute("data-autogrow")) autogrow(target);
     if (target instanceof HTMLInputElement && target.dataset.readout) {
         const readout = document.getElementById(target.dataset.readout);
         if (readout) readout.textContent = target.value;
@@ -176,7 +194,7 @@ export function installDeclarativeActions(): void {
     document.addEventListener("reset", onReset);
     // close does not bubble.
     document.addEventListener("close", onDialogClose, true);
-    document.addEventListener("htmx:load", syncEnabledBy);
+    document.addEventListener("htmx:load", onLoad);
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncEnabledBy, { once: true });
     else syncEnabledBy();
     // A back/forward visit can restore a ticked box under the server's disabled button.

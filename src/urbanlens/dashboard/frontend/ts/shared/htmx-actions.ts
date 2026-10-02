@@ -26,6 +26,8 @@ export interface HtmxRequestDetail {
     xhr?: XMLHttpRequest;
     successful?: boolean;
     requestConfig?: { verb?: string };
+    /** On ``htmx:confirm``: the event that triggered the request. */
+    triggeringEvent?: Event;
 }
 
 export type HtmxAction = (element: HTMLElement, event: CustomEvent<HtmxRequestDetail>, argument: string) => void;
@@ -161,6 +163,20 @@ function onConfirm(event: Event): void {
     if (length > 0 && length < min) event.preventDefault();
 }
 
+/**
+ * A click on a ``data-own-click`` control (a button or link inside a clickable htmx element, such as a notification
+ * row) does not also send the request of the element around it.
+ */
+function onOwnClick(event: Event): void {
+    const detail: unknown = event instanceof CustomEvent ? event.detail : null;
+    if (!detail || typeof detail !== "object") return;
+    const elt: unknown = Reflect.get(detail, "elt");
+    const triggering: unknown = Reflect.get(detail, "triggeringEvent");
+    const clicked = triggering instanceof Event ? triggering.target : null;
+    const control = clicked instanceof Element ? clicked.closest("[data-own-click]") : null;
+    if (elt instanceof Element && control && control !== elt && elt.contains(control)) event.preventDefault();
+}
+
 /** An ``htmx:confirm`` detail's ``hx-confirm`` question, or null when the request has none. */
 function hxQuestion(detail: unknown): string | null {
     const question: unknown = detail && typeof detail === "object" ? Reflect.get(detail, "question") : null;
@@ -212,6 +228,7 @@ export function installGlobalHtmxActions(): void {
     // Capture, so the listeners are bound before the event reaches the element.
     document.addEventListener("htmx:beforeRequest", onBeforeRequest, true);
     document.addEventListener("htmx:confirm", onConfirm);
-    // After onConfirm, so a held-back query is never asked about.
+    document.addEventListener("htmx:confirm", onOwnClick);
+    // After onConfirm and onOwnClick, so a held-back request is never asked about.
     document.addEventListener("htmx:confirm", onHxConfirm);
 }

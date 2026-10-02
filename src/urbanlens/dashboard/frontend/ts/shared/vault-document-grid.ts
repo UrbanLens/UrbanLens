@@ -48,7 +48,6 @@ export function renderVaultDocumentTile(raw: Record<string, unknown>): HTMLEleme
     if (name) name.textContent = caption;
 
     const openBtn = li.querySelector<HTMLButtonElement>(".document-tile-btn");
-    li.querySelector<HTMLButtonElement>(".document-tile-del")?.addEventListener("click", () => window.documentsDelete?.(id));
     if (processing) {
         li.dataset.processing = processing;
         icon?.replaceWith(processingPlaceholder("document-tile-icon", processing === "failed"));
@@ -58,10 +57,7 @@ export function renderVaultDocumentTile(raw: Record<string, unknown>): HTMLEleme
         }
         return li;
     }
-    if (openBtn) {
-        openBtn.setAttribute("aria-label", `Open document: ${caption}`);
-        openBtn.addEventListener("click", () => window.documentsOpenLightbox?.(id));
-    }
+    openBtn?.setAttribute("aria-label", `Open document: ${caption}`);
     return li;
 }
 
@@ -100,6 +96,5 @@ export function initVaultDocumentsPage(): void {
         lightboxItem: documentLightboxItem,
     });
     uploader.bindInputs();
-    window.documentsDelete = (id) => void uploader.remove(id);
-    window.documentsOpenLightbox = (id) => uploader.openLightbox(id);
+    uploader.bindTileActions();
 }

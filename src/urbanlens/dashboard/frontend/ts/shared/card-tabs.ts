@@ -1,7 +1,8 @@
 /**
- * Tab strips declared in markup. ``data-card-tabs`` marks the group, its value the active class (default
- * ``active``); each ``data-card-tab`` is a tab. A tab whose value names a pane shows the group's matching
- * ``data-card-pane`` and hides the others. A tab's content can still come from its own ``hx-get``.
+ * Tab strips and view toggles declared in markup. ``data-card-tabs`` marks the group, its value the active class
+ * (default ``active``); each ``data-card-tab`` is a tab, ``aria-selected`` kept on those with ``role="tab"``. A tab
+ * whose value names a pane shows the group's matching ``data-card-pane`` and hides the others. A tab's content can
+ * still come from its own ``hx-get``.
  */
 
 function ownedBy(group: Element, selector: string): HTMLElement[] {
@@ -14,7 +15,7 @@ function select(tab: HTMLElement): void {
     const activeClass = group.getAttribute("data-card-tabs") || "active";
     for (const other of ownedBy(group, "[data-card-tab]")) {
         other.classList.toggle(activeClass, other === tab);
-        other.setAttribute("aria-selected", other === tab ? "true" : "false");
+        if (other.getAttribute("role") === "tab") other.setAttribute("aria-selected", other === tab ? "true" : "false");
     }
     const key = tab.dataset.cardTab;
     if (!key) return;

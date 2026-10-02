@@ -13,7 +13,7 @@
             {% csrf_token %}
             <label class="avatar-upload-btn" title="Change photo">
                 <i class="material-symbols-outlined">photo_camera</i>
-                <input type="file" name="avatar" onchange="this.form.submit()" style="display:none;">
+                <input type="file" name="avatar" data-autosubmit style="display:none;">
             </label>
         </form>
         {% endif %}

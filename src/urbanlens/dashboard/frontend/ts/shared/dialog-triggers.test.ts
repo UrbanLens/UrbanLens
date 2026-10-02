@@ -33,6 +33,26 @@ describe("declarative dialog triggers", () => {
         expect(dialog("d1").open).toBe(false);
     });
 
+    test("an opener's data-dialog-fill-<name> values fill the dialog's fields of that name before it opens", () => {
+        document.body.innerHTML = `
+          <button id="guess" type="button" data-dialog-open="d2" data-dialog-fill-latitude="41.500000" data-dialog-fill-longitude="-73.250000">Use</button>
+          <input name="latitude" id="outside" value="">
+          <dialog id="d2"><form><input name="latitude" id="lat"><input name="longitude" id="lng"><input name="address" id="addr" value="kept"></form></dialog>`;
+        let seenOnOpen = "";
+        const original = HTMLDialogElement.prototype.showModal;
+        dialog("d2").showModal = function (this: HTMLDialogElement) {
+            seenOnOpen = (document.getElementById("lat") as HTMLInputElement).value;
+            original.call(this);
+        };
+        document.getElementById("guess")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        expect(dialog("d2").open).toBe(true);
+        expect(seenOnOpen).toBe("41.500000");
+        expect((document.getElementById("lng") as HTMLInputElement).value).toBe("-73.250000");
+        expect((document.getElementById("addr") as HTMLInputElement).value).toBe("kept");
+        expect((document.getElementById("outside") as HTMLInputElement).value).toBe("");
+    });
+
     test("an opener naming a missing dialog does nothing", () => {
         document.getElementById("opener")?.setAttribute("data-dialog-open", "nope");
         expect(() => document.getElementById("opener")?.dispatchEvent(new MouseEvent("click", { bubbles: true }))).not.toThrow();
