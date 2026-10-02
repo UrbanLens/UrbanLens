@@ -296,6 +296,40 @@ class PhotosPanelTests(PinPhotosTabTestCase):
 
         self.assertContains(response, "attempt=1")
 
+    def test_a_poll_that_finds_no_new_public_photos_leaves_the_grid_alone(self) -> None:
+        """Each poll used to replace the whole section, emptying and refilling the grid every few seconds."""
+        self.schedule.return_value = True
+        self._cache("wikimedia", [_wikimedia_item(1), _wikimedia_item(2)])
+        first = self._get(external_section=1).content.decode()
+        (poll_url,) = re.findall(r'hx-get="([^"]*attempt=1[^"]*)"', first)
+
+        response = self.client.get(poll_url.replace("&amp;", "&"))
+
+        self.assertNotContains(response, "data-external-photo-grid")
+        self.assertFalse(response.has_header("HX-Retarget"))
+        self.assertContains(response, "attempt=2")
+        self.assertContains(response, 'id="albums-external-status" hx-swap-oob="true"')
+
+    def test_a_poll_that_finds_new_public_photos_replaces_the_section(self) -> None:
+        self.schedule.return_value = True
+        self._cache("wikimedia", [_wikimedia_item(1), _wikimedia_item(2)])
+
+        response = self._get(external_section=1, attempt=1, known=1)
+
+        self.assertEqual(response["HX-Retarget"], "#albums-external")
+        self.assertEqual(response["HX-Reswap"], "outerHTML")
+        self.assertContains(response, 'data-photo-count="2"')
+
+    def test_the_last_poll_clears_the_searching_note_and_leaves_the_grid_alone(self) -> None:
+        self._cache("wikimedia", [_wikimedia_item(1)])
+
+        response = self._get(external_section=1, attempt=3, known=1)
+
+        self.assertNotContains(response, "data-external-photo-grid")
+        self.assertNotContains(response, "Still searching")
+        self.assertNotContains(response, "hx-trigger")
+        self.assertContains(response, 'id="albums-external-status" hx-swap-oob="true"')
+
     def test_another_accounts_pin_is_not_listed(self) -> None:
         other = baker.make_recipe("dashboard.pin", location=self.pin.location)
         self._cache("wikimedia", [_wikimedia_item(1)])
