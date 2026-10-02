@@ -2,14 +2,26 @@ import { beforeEach, describe, expect, test } from "bun:test";
 
 import { orderSaveHandlers } from "./sortable-order";
 
+interface SortableEvents {
+    onChoose?: () => void;
+    onStart?: () => void;
+    onEnd: () => void;
+}
+
 let list: HTMLElement;
 const ids = (): string[] => Array.from(list.children).map((el) => (el as HTMLElement).dataset.id ?? "");
 
-/** What a drag does: Sortable says it started, moves the item, then says it ended. */
-function drag(handlers: { onStart: () => void; onEnd: () => void }, id: string, beforeId: string | null): void {
-    handlers.onStart();
+/**
+ * What a drag does: Sortable says the item was chosen, then that the drag started, moves it, then says the drag
+ * ended. A touch drag also floats a copy of the item at the end of the list from before the start until the end.
+ */
+function drag(handlers: SortableEvents, id: string, beforeId: string | null, touch = false): void {
+    handlers.onChoose?.();
     const item = list.querySelector(`[data-id="${id}"]`)!;
+    const floating = touch ? list.appendChild(item.cloneNode(true)) : null;
+    handlers.onStart?.();
     list.insertBefore(item, beforeId ? list.querySelector(`[data-id="${beforeId}"]`) : null);
+    if (floating) list.removeChild(floating);
     handlers.onEnd();
 }
 
@@ -60,6 +72,34 @@ describe("saving the order a drag left a list in", () => {
         await settle();
 
         expect(ids()).toEqual(["3", "2", "1"]);
+    });
+
+    test("a touch drag's floating copy of the item is not put back with the old order", async () => {
+        const handlers = orderSaveHandlers(list, () => Promise.reject(new Error("refused")), () => undefined);
+
+        drag(handlers, "3", "1", true);
+        await settle();
+
+        expect(ids()).toEqual(["1", "2", "3"]);
+    });
+
+    test("an earlier save that lands after the newest one failed is the order shown", async () => {
+        const saves: Array<{ resolve: () => void; reject: () => void }> = [];
+        const handlers = orderSaveHandlers(
+            list,
+            () => new Promise<void>((resolve, reject) => saves.push({ resolve, reject: () => reject(new Error("refused")) })),
+            () => undefined,
+        );
+
+        drag(handlers, "3", "1");
+        drag(handlers, "1", null);
+        saves[1]!.reject();
+        await settle();
+        expect(ids()).toEqual(["1", "2", "3"]);
+        saves[0]!.resolve();
+        await settle();
+
+        expect(ids()).toEqual(["3", "1", "2"]);
     });
 
     test("when the later save fails too, the list goes back to the last order a save landed", async () => {
