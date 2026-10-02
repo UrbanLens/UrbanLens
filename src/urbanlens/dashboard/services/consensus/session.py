@@ -87,6 +87,10 @@ class SessionAlreadyEndedError(ConsensusError):
     """The session has already ended (COMPLETED or ABANDONED) - there's nothing left to end."""
 
 
+class SessionNotInPlayError(ConsensusError):
+    """The session isn't ACTIVE - still in its lobby, or already ended - so it takes no answers."""
+
+
 def _clamp_rounds(total_rounds: int) -> int:
     return max(MIN_ROUNDS_PER_SESSION, min(MAX_ROUNDS_PER_SESSION, total_rounds))
 
@@ -109,16 +113,21 @@ def start_competitive_session(
     total_rounds: int = DEFAULT_ROUNDS_PER_SESSION,
     vote_threshold: float = ConsensusSession.DEFAULT_VOTE_THRESHOLD,
 ) -> ConsensusSession:
-    """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles."""
-    session = ConsensusSession.objects.create(
-        host_profile=host,
-        status=ConsensusSessionStatus.LOBBY,
-        config={"vote_threshold": vote_threshold},
-        total_rounds=_clamp_rounds(total_rounds),
-    )
-    ConsensusSessionParticipant.objects.create(session=session, profile=host, status=ConsensusSessionParticipantStatus.JOINED)
-    for invitee in invite_profiles:
-        invite_to_session(session, host, invitee)
+    """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
+
+    Raises:
+        NotFriendError: An invitee isn't a friend of ``host``; nothing is created and nobody is notified.
+    """
+    with transaction.atomic():
+        session = ConsensusSession.objects.create(
+            host_profile=host,
+            status=ConsensusSessionStatus.LOBBY,
+            config={"vote_threshold": vote_threshold},
+            total_rounds=_clamp_rounds(total_rounds),
+        )
+        ConsensusSessionParticipant.objects.create(session=session, profile=host, status=ConsensusSessionParticipantStatus.JOINED)
+        for invitee in invite_profiles:
+            invite_to_session(session, host, invitee)
     return session
 
 
@@ -235,7 +244,9 @@ def _known_value_for_comparison(round_: ConsensusRound) -> Any | None:
 
 def get_or_create_round(session: ConsensusSession) -> ConsensusRound | None:
     """Return the session's current round, creating the next one once the prior round has fully settled.
-    Only JOINED participants count."""
+    Only JOINED participants count, and only an ACTIVE session is dealt a new round."""
+    if session.status != ConsensusSessionStatus.ACTIVE:
+        return None
     joined_participants = list(session.participants.joined().select_related("profile"))
     if not joined_participants:
         return None
@@ -289,6 +300,7 @@ def submit_answer(round_: ConsensusRound, profile: Profile, value: str | Point |
 
     Raises:
         NotJoinedError: ``profile`` isn't a JOINED participant.
+        SessionNotInPlayError: the session isn't ACTIVE, e.g. the host ended it.
         NoStrategyForFieldKindError: ``round_.field_kind`` has no registered strategy.
         RoundAlreadySettledError: this round has already settled.
         DuplicateAnswerError: ``profile`` already answered it."""
@@ -314,6 +326,8 @@ def submit_answer(round_: ConsensusRound, profile: Profile, value: str | Point |
         locked_round = ConsensusRound.objects.select_for_update().get(pk=round_.pk)
         if locked_round.is_settled:
             raise RoundAlreadySettledError(f"round {round_.pk} resolution is already {locked_round.resolution!r}")
+        if session.status != ConsensusSessionStatus.ACTIVE:
+            raise SessionNotInPlayError(f"session {session.pk} is {session.status!r}, not ACTIVE")
         try:
             answer = ConsensusAnswer.objects.create(
                 round=locked_round,

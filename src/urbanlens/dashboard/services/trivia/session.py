@@ -183,16 +183,20 @@ def start_multiplayer_session(
 
     The host joins immediately; each invitee gets an INVITED row plus a
     notification. Mirrors ``spotguessr.session.start_multiplayer_session``.
+
+    Raises:
+        InviteeNotFriendError: An invitee isn't a friend of ``host``; nothing is created and nobody is notified.
     """
-    session = TriviaSession.objects.create(
-        host_profile=host,
-        status=TriviaSessionStatus.LOBBY,
-        config=config.to_dict(),
-        total_rounds=_clamp_rounds(total_rounds),
-    )
-    TriviaSessionParticipant.objects.create(session=session, profile=host, status=TriviaSessionParticipantStatus.JOINED)
-    for invitee in invite_profiles:
-        invite_to_session(session, host, invitee)
+    with transaction.atomic():
+        session = TriviaSession.objects.create(
+            host_profile=host,
+            status=TriviaSessionStatus.LOBBY,
+            config=config.to_dict(),
+            total_rounds=_clamp_rounds(total_rounds),
+        )
+        TriviaSessionParticipant.objects.create(session=session, profile=host, status=TriviaSessionParticipantStatus.JOINED)
+        for invitee in invite_profiles:
+            invite_to_session(session, host, invitee)
     return session
 
 

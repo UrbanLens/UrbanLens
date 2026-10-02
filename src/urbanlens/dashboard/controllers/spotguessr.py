@@ -19,7 +19,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, rating_stats, refuse_unless_joined
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, posted_invitee, posted_invitees, rating_stats, refuse_unless_joined
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -272,9 +272,12 @@ class SpotGuessrSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
+        shown = request.POST.get("show_ratings_to_friends")
+        if shown not in ("on", "off"):
+            return JsonResponse({"error": 'show_ratings_to_friends must be "on" or "off".'}, status=400)
         profile = _current_profile(request)
         preference = spotguessr_overview.get_preference(profile)
-        preference.show_ratings_to_friends = request.POST.get("show_ratings_to_friends") == "on"
+        preference.show_ratings_to_friends = shown == "on"
         preference.save(update_fields=["show_ratings_to_friends", "updated"])
         return JsonResponse({"show_ratings_to_friends": preference.show_ratings_to_friends})
 
@@ -310,12 +313,13 @@ class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         except (TypeError, ValueError):
             total_rounds = spotguessr_session.DEFAULT_ROUNDS_PER_SESSION
 
-        invite_ids = [pid for pid in request.POST.getlist("invite_profile_ids") if pid]
+        invitees = posted_invitees(request)
+        if invitees is None:
+            return JsonResponse({"error": "You can only invite friends."}, status=400)
 
         spotguessr_overview.remember_last_config(profile, config)
 
-        if invite_ids:
-            invitees = list(Profile.objects.filter(pk__in=invite_ids))
+        if invitees:
             try:
                 game_session = spotguessr_session.start_multiplayer_session(profile, mode, config, invitees, total_rounds=total_rounds)
             except spotguessr_session.InviteeNotFriendError as exc:
@@ -366,10 +370,9 @@ class SpotGuessrInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
 
-        try:
-            invitee = Profile.objects.get(pk=request.POST.get("profile_id"))
-        except (Profile.DoesNotExist, ValueError, TypeError):
-            return JsonResponse({"error": "profile_id is required."}, status=400)
+        invitee = posted_invitee(request)
+        if isinstance(invitee, JsonResponse):
+            return invitee
 
         try:
             participant = spotguessr_session.invite_to_session(game_session, profile, invitee)

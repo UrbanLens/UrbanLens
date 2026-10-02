@@ -282,17 +282,21 @@ def start_multiplayer_session(
     The host joins immediately; each invitee gets an INVITED row plus a
     notification. See "Multiplayer sessions" in the design doc for the
     full lobby lifecycle.
+
+    Raises:
+        InviteeNotFriendError: An invitee isn't a friend of ``host``; nothing is created and nobody is notified.
     """
-    session = GameSession.objects.create(
-        host_profile=host,
-        mode=mode,
-        status=GameSessionStatus.LOBBY,
-        config=config.to_dict(),
-        total_rounds=clamp_rounds(total_rounds),
-    )
-    GameSessionParticipant.objects.create(session=session, profile=host, status=GameSessionParticipantStatus.JOINED)
-    for invitee in invite_profiles:
-        invite_to_session(session, host, invitee)
+    with transaction.atomic():
+        session = GameSession.objects.create(
+            host_profile=host,
+            mode=mode,
+            status=GameSessionStatus.LOBBY,
+            config=config.to_dict(),
+            total_rounds=clamp_rounds(total_rounds),
+        )
+        GameSessionParticipant.objects.create(session=session, profile=host, status=GameSessionParticipantStatus.JOINED)
+        for invitee in invite_profiles:
+            invite_to_session(session, host, invitee)
     return session
 
 

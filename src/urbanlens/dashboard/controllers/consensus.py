@@ -9,6 +9,7 @@ participant/ownership checks, and JSON serialization. Mirrors
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -20,7 +21,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, refuse_unless_joined
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, posted_invitee, posted_invitees, refuse_unless_joined
 from urbanlens.dashboard.models.consensus.model import (
     ConsensusAnswer,
     ConsensusFieldKind,
@@ -33,7 +34,8 @@ from urbanlens.dashboard.models.consensus.model import (
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.consensus import chat as consensus_chat, fields, serializers, session as consensus_session
 from urbanlens.dashboard.services.consensus.access import session_access
-from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, coordinate_or_none, safe_int_or_none
+from urbanlens.dashboard.services.geo.longitude import normalize_longitude
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +112,11 @@ class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         except (TypeError, ValueError):
             total_rounds = consensus_session.DEFAULT_ROUNDS_PER_SESSION
 
-        invite_ids = [pid for pid in request.POST.getlist("invite_profile_ids") if pid]
+        invitees = posted_invitees(request)
+        if invitees is None:
+            return JsonResponse({"error": "You can only invite friends to a session."}, status=400)
 
-        if invite_ids:
-            invitees = list(Profile.objects.filter(pk__in=invite_ids))
+        if invitees:
             try:
                 game_session = consensus_session.start_competitive_session(profile, invitees, total_rounds=total_rounds)
             except consensus_session.NotFriendError as exc:
@@ -163,10 +166,9 @@ class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
 
-        try:
-            invitee = Profile.objects.get(pk=request.POST.get("profile_id"))
-        except (Profile.DoesNotExist, ValueError, TypeError):
-            return JsonResponse({"error": "profile_id is required."}, status=400)
+        invitee = posted_invitee(request)
+        if isinstance(invitee, JsonResponse):
+            return invitee
 
         try:
             participant = consensus_session.invite_to_session(game_session, profile, invitee)
@@ -292,12 +294,12 @@ def _parse_answer_value(request: HttpRequest, round_: ConsensusRound) -> tuple[s
         ``(value, None)`` on success, or ``(None, error_response)`` on failure.
     """
     if round_.field_kind == ConsensusFieldKind.PHOTO_COORDINATES:
-        try:
-            latitude = float(request.POST["latitude"])
-            longitude = float(request.POST["longitude"])
-        except (KeyError, TypeError, ValueError):
-            return None, JsonResponse({"error": "latitude and longitude are required."}, status=400)
-        return Point(longitude, latitude, srid=4326), None
+        latitude = coordinate_or_none(request.POST.get("latitude"), bound=LATITUDE_BOUND)
+        # Unbounded, then folded: the map reports a guess on a wrapped copy of the world past ±180.
+        longitude = coordinate_or_none(request.POST.get("longitude"), bound=math.inf)
+        if latitude is None or longitude is None:
+            return None, JsonResponse({"error": "latitude and longitude must be a point on the map."}, status=400)
+        return Point(normalize_longitude(longitude), latitude, srid=4326), None
 
     value = (request.POST.get("value") or "").strip()
     if not value:
@@ -331,6 +333,9 @@ class ConsensusAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         except consensus_session.NotJoinedError as exc:
             logger.info("consensus answer rejected: %s", exc)
             return JsonResponse({"error": "Join this session before playing."}, status=400)
+        except consensus_session.SessionNotInPlayError as exc:
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "This game isn't in play."}, status=400)
         except consensus_session.RoundAlreadySettledError as exc:
             logger.info("consensus answer rejected: %s", exc)
             return JsonResponse({"error": "This round has already been resolved."}, status=400)
@@ -364,6 +369,9 @@ class ConsensusSkipView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         except consensus_session.NotJoinedError as exc:
             logger.info("consensus skip rejected: %s", exc)
             return JsonResponse({"error": "Join this session before playing."}, status=400)
+        except consensus_session.SessionNotInPlayError as exc:
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "This game isn't in play."}, status=400)
         except consensus_session.RoundAlreadySettledError as exc:
             logger.info("consensus skip rejected: %s", exc)
             return JsonResponse({"error": "This round has already been resolved."}, status=400)
