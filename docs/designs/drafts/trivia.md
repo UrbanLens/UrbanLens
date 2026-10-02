@@ -278,7 +278,7 @@ lifecycle, same status enum values, as SpotGuessr.
 Trivia originally shipped with no way out of a round nobody finishes and no way for a
 participant to back out of - or be removed from - a game in progress. Fixed via
 `services.trivia.session`, mirroring SpotGuessr's stall-handling shape for the first two and
-building genuinely new ground for the third (SpotGuessr has no leave/kick path either yet):
+building new ground for the third (SpotGuessr gained the same leave/kick path on 2026-10-02):
 
 - **`force_reveal_round(round_)`** — the stall-sweep's primitive, identical in shape to
   SpotGuessr's. Reveals a round using whatever answers exist; a participant who never answered
@@ -296,7 +296,8 @@ building genuinely new ground for the third (SpotGuessr has no leave/kick path e
   leaves (or declines an invitation) or the host removes them. Works from either `LOBBY` or
   `ACTIVE`; the host can't kick themselves (use `end_session_now` for that). If the departing
   participant was the last holdout on the session's current in-flight round, removing them can
-  complete that round on the spot (reusing the same `_finish_round`/`_advance_or_complete`
+  complete that round on the spot (only answers from players still joined count, so a departed
+  player's answer never completes a round for someone still playing) (reusing the same `_finish_round`/`_advance_or_complete`
   machinery `submit_answer` uses) rather than leaving it stalled until the next sweep. If the
   host leaves, host transfers to the earliest-joined remaining `JOINED` participant; if nobody
   `JOINED` remains, the session is marked `ABANDONED` - the whole table left, the same terminal
@@ -389,7 +390,7 @@ mapped through `services.ai.factory.get_gateway`'s feature registry:
   existing article-expansion/safety pipeline outright.
 - **Stall handling and leave/kick (2026-07-25)** — `force_reveal_round`/`end_session_now`
   (mirroring SpotGuessr's post-audit multiplayer hardening) plus a new `leave_session`/
-  `kick_participant` path with no SpotGuessr equivalent yet. See "Stall handling and leave/kick"
-  above.
+  `kick_participant` path, which SpotGuessr mirrored on 2026-10-02. See "Stall handling and
+  leave/kick" above.
 - **Follow-up (not yet built)** — a moderation review UI for rejected questions was considered
   and explicitly decided against (2026-07-25); see "Known gaps" above for what remains.
