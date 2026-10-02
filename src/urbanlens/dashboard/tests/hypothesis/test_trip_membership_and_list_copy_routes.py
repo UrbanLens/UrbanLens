@@ -10,7 +10,14 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
+from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+
+
+def _cap_trip_activities(limit: int) -> None:
+    site = SiteSettings.get_current()
+    site.max_trip_activities = limit
+    site.save()
 
 
 class _TripFixture(TestCase):
@@ -213,6 +220,16 @@ class PinListAddToTripRouteTests(_TripFixture):
 
         self.assertIn(response.status_code, range(400, 500))
 
+    def test_a_copy_past_the_activity_limit_is_a_400_and_copies_nothing(self) -> None:
+        _cap_trip_activities(1)
+        TripActivity.objects.create(trip=self.trip, added_by=self.creator, title="Existing", order=0)
+        self.client.force_login(self.member_user)
+
+        response = self._post({"trip_slug": self.trip.slug})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._activity_count(), 1)
+
 
 class PinListCreateTripRouteTests(_TripFixture):
     def setUp(self) -> None:
@@ -267,3 +284,14 @@ class PinListCreateTripRouteTests(_TripFixture):
         response = self.client.post(self.url, data="[]", content_type="application/json")
 
         self.assertIn(response.status_code, range(400, 500))
+
+    def test_a_list_longer_than_the_activity_limit_is_a_400_and_no_trip_is_created(self) -> None:
+        _cap_trip_activities(1)
+        baker.make(PinListItem, pin_list=self.pin_list, pin=baker.make(Pin, profile=self.member, name="Water Tower"))
+        self.client.force_login(self.member_user)
+        before = Trip.objects.count()
+
+        response = self._post({"name": "Too long"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Trip.objects.count(), before)

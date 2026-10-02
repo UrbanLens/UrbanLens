@@ -10,8 +10,11 @@ from django.db import connections
 from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
 
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
+from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
 from urbanlens.dashboard.services.trips import trip_activities
 
 
@@ -91,3 +94,62 @@ class TripActivityOrderRaceTests(TransactionTestCase):
 
         by_id = dict(TripActivity.objects.filter(trip=self.trip).values_list("id", "order"))
         self.assertEqual([by_id[activity_id] for activity_id in ids], [3, 2, 1, 0])
+
+    def _pin_list(self, size: int) -> PinList:
+        pin_list = baker.make(PinList, profile=self.profile, name="Weekend")
+        for n in range(size):
+            baker.make(
+                PinListItem, pin_list=pin_list, pin=baker.make(Pin, profile=self.profile, name=f"Pin {n}"), order=n
+            )
+        return pin_list
+
+    def test_an_activity_added_after_deletions_sorts_after_every_existing_one(self) -> None:
+        TripActivity.objects.filter(pk__in=[self.activities[0].pk, self.activities[1].pk]).delete()
+
+        added = trip_activities.create_activity(self.trip, self.profile, title="Added")
+
+        others = TripActivity.objects.filter(trip=self.trip).exclude(pk=added.pk).values_list("order", flat=True)
+        self.assertGreater(added.order, max(others))
+
+    def test_a_list_copy_after_deletions_appends_after_every_existing_activity(self) -> None:
+        TripActivity.objects.filter(pk__in=[self.activities[0].pk, self.activities[1].pk]).delete()
+
+        copy_list_pins_to_trip(self._pin_list(2), self.trip, self.profile)
+
+        copied = list(TripActivity.objects.filter(trip=self.trip, pin__isnull=False).values_list("order", flat=True))
+        self.assertEqual(len(copied), 2)
+        self.assertGreater(min(copied), max(activity.order for activity in self.activities[2:]))
+        self.assertEqual(len(set(copied)), 2)
+
+    def test_a_list_copy_racing_an_add_does_not_share_a_position(self) -> None:
+        """The add is started once the copy has read its position and before it writes, as late as a real race can."""
+        pin_list = self._pin_list(2)
+        add_finished = threading.Event()
+        errors: list[Exception] = []
+
+        def add() -> None:
+            try:
+                trip_activities.create_activity(self.trip, self.profile, title="Added")
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                add_finished.set()
+                connections.close_all()
+
+        adder = threading.Thread(target=add)
+        real_bulk_create = TripActivity.objects.bulk_create
+
+        def bulk_create_after_an_add(objs, *args, **kwargs):
+            adder.start()
+            # Times out while the copy holds the trip, which is what keeps the add from interleaving.
+            add_finished.wait(timeout=2)
+            return real_bulk_create(objs, *args, **kwargs)
+
+        with mock.patch.object(TripActivity.objects, "bulk_create", side_effect=bulk_create_after_an_add):
+            copy_list_pins_to_trip(pin_list, self.trip, self.profile)
+        adder.join(timeout=30)
+
+        self.assertEqual(errors, [])
+        orders = list(TripActivity.objects.filter(trip=self.trip).values_list("order", flat=True))
+        self.assertEqual(len(orders), 7)
+        self.assertEqual(len(set(orders)), 7, f"two activities share a position: {sorted(orders)}")
