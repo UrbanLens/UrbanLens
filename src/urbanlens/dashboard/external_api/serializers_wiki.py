@@ -17,6 +17,7 @@ from rest_framework import serializers
 from urbanlens.dashboard.external_api.fields import LinkUrlField
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.boundary.model import BoundaryType
 from urbanlens.dashboard.services.core.text_limits import (
     MAX_ARTICLE_EDIT_SUMMARY_LENGTH,
@@ -109,7 +110,7 @@ class WikiAliasCreateSerializer(serializers.Serializer):
     """Validates a submitted wiki alias."""
 
     name = serializers.CharField(max_length=255)
-    kind = serializers.CharField(max_length=50, required=False)
+    kind = serializers.ChoiceField(choices=AliasType.choices, required=False)
 
 
 class WikiLinkSerializer(serializers.Serializer):

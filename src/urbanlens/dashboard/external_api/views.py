@@ -269,6 +269,7 @@ from urbanlens.dashboard.services.pins.pin_list_membership import (
 from urbanlens.dashboard.services.pins.pin_subresources import (
     AliasExistsError,
     AliasIsCurrentNameError,
+    AliasNameRequiredError,
     InvalidLinkUrlFormatError,
     LinkExistsError,
     LinkUrlTooLongError,
@@ -2550,6 +2551,7 @@ class LabelMergeView(ExternalApiView):
 #: listed is a plain client error the caller can fix by changing the payload.
 _SUBRESOURCE_ERROR_STATUS: dict[type[PinSubResourceError], int] = {
     AliasExistsError: 409,
+    AliasNameRequiredError: 400,
     AliasIsCurrentNameError: 400,
     MissingLinkUrlError: 400,
     LinkUrlTooLongError: 400,
@@ -2561,6 +2563,7 @@ _SUBRESOURCE_ERROR_STATUS: dict[type[PinSubResourceError], int] = {
 #: status above - never derived from the raised exception's own (log-only) message.
 _SUBRESOURCE_ERROR_MESSAGE: dict[type[PinSubResourceError], str] = {
     AliasExistsError: "That alias already exists.",
+    AliasNameRequiredError: "A name is required.",
     AliasIsCurrentNameError: "This alias is the current name - pick another name first.",
     MissingLinkUrlError: "A url is required.",
     LinkUrlTooLongError: f"That url is too long (max {MAX_LINK_URL_LENGTH:,} characters).",

@@ -9,6 +9,8 @@ import math
 #: The range of a Django ``IntegerField`` column; a larger parsed value fails the write rather than the parse.
 DB_INTEGER_MIN = -(2**31)
 DB_INTEGER_MAX = 2**31 - 1
+#: The largest ``BigAutoField`` primary key.
+DB_BIGINT_MAX = 2**63 - 1
 
 
 def safe_int_or_none(value: object) -> int | None:
@@ -41,6 +43,26 @@ LATITUDE_BOUND = 90.0
 LONGITUDE_BOUND = 180.0
 
 
+def bounded_float_or_none(value: object, *, low: float, high: float) -> float | None:
+    """Return ``value`` as a finite float within ``[low, high]``, or ``None``.
+
+    Args:
+        value: Raw value from a form post or a parsed JSON body.
+        low: The smallest accepted value.
+        high: The largest accepted value.
+
+    Returns:
+        The number, or ``None`` when ``value`` is missing, not a number, not finite, or out of range.
+    """
+    if isinstance(value, bool) or not isinstance(value, str | int | float | Decimal):
+        return None
+    try:
+        parsed = float(value)
+    except (ValueError, OverflowError):
+        return None
+    return parsed if math.isfinite(parsed) and low <= parsed <= high else None
+
+
 def coordinate_or_none(value: object, *, bound: float) -> float | None:
     """Return ``value`` as a finite coordinate within ``±bound``, or ``None``.
 
@@ -51,13 +73,7 @@ def coordinate_or_none(value: object, *, bound: float) -> float | None:
     Returns:
         The coordinate, or ``None`` when ``value`` is missing, not a number, not finite, or out of range.
     """
-    if isinstance(value, bool) or not isinstance(value, str | int | float | Decimal):
-        return None
-    try:
-        parsed = float(value)
-    except (ValueError, OverflowError):
-        return None
-    return parsed if math.isfinite(parsed) and -bound <= parsed <= bound else None
+    return bounded_float_or_none(value, low=-bound, high=bound)
 
 
 def safe_int(value: object, default: int = 0) -> int:

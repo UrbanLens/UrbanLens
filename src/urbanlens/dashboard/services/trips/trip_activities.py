@@ -758,27 +758,32 @@ def set_activity_vote(trip: Trip, actor: Profile, activity_id: int, *, vote: str
     )
 
 
-def set_activity_status(trip: Trip, actor: Profile, activity_id: int, *, status: str | None) -> TripActivity:
-    """Set an activity's status, or toggle proposed/confirmed when no valid value is given.
+def set_activity_status(trip: Trip, actor: Profile, activity_id: int, *, status: object) -> TripActivity:
+    """Set an activity's status, or toggle proposed/confirmed when none is given.
 
     Args:
         trip: The trip owning the activity.
         actor: The profile changing the status.
         activity_id: Primary key of the activity to change.
-        status: ``proposed``/``confirmed``, or None/invalid to toggle between them.
+        status: ``proposed``/``confirmed``, or None/blank to toggle between them.
 
     Returns:
         The saved activity.
 
     Raises:
         TripPermissionError: The actor has not joined the trip.
-        TripNotFoundError: No such activity on this trip."""
+        TripNotFoundError: No such activity on this trip.
+        TripValidationError: *status* is given but is not one this call can set."""
     require_perform(actor, trip, Trip.PERM_EVERYONE, CONTRIBUTE_DENIED)
     activity = get_activity(trip, activity_id)
 
-    new_status = str(status or "").strip()
-    if new_status not in SETTABLE_STATUSES:
+    requested = status.strip() if isinstance(status, str) else status
+    if requested is None or requested == "":
         new_status = TripActivity.STATUS_CONFIRMED if activity.status == TripActivity.STATUS_PROPOSED else TripActivity.STATUS_PROPOSED
+    elif isinstance(requested, str) and requested in SETTABLE_STATUSES:
+        new_status = requested
+    else:
+        raise TripValidationError("Status must be proposed or confirmed.")
 
     activity.status = new_status
     activity.save(update_fields=["status", "updated"])

@@ -7,7 +7,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -31,7 +30,7 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
 )
 from urbanlens.dashboard.services.wiki.concealment import visible_rows, writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
-from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
+from urbanlens.dashboard.services.wiki.wiki_aliases import WikiAliasExistsError, WikiAliasNameError, create_wiki_alias, promote_wiki_alias_to_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -223,28 +222,13 @@ class LocationAliasView(LoginRequiredMixin, View):
 
     def post(self, request, location_slug):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        # Sanitized before the emptiness check: WikiAlias.save() applies sanitize_name, so a name of only
-        # dropped characters would otherwise store as a blank alias (see pin_subresources.add_pin_alias).
-        name = sanitize_name((request.POST.get("name") or "").strip()) or ""
-        if not name:
-            return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
-        name_error = column_length_error(WikiAlias, "name", name, "Alias")
-        if name_error:
-            return JsonResponse({"ok": False, "error": name_error}, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            with transaction.atomic():
-                alias = WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
-        except IntegrityError:
-            return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
-        from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_add
-
-        stash_wiki_alias_add(wiki, profile, alias)
-        WikiEdit.objects.create(
-            wiki=wiki,
-            editor=profile,
-            changes={"alias_added": {"from": None, "to": name}},
-        )
+            create_wiki_alias(writable_wiki(wiki), profile, name=request.POST.get("name") or "", kind=kind)
+        except WikiAliasExistsError as exc:
+            return JsonResponse({"ok": False, "error": exc.message}, status=409)
+        except WikiAliasNameError as exc:
+            return JsonResponse({"ok": False, "error": exc.message}, status=400)
         return _render_location_panel(request, location, wiki, profile)
 
 
@@ -280,7 +264,10 @@ class LocationAliasUseView(LoginRequiredMixin, View):
         # concealment.writable_wiki.
         target = writable_wiki(wiki)
         before_name = target.name
-        edit = promote_wiki_alias_to_name(target, profile, alias)
+        try:
+            edit = promote_wiki_alias_to_name(target, profile, alias)
+        except WikiAliasNameError as exc:
+            return JsonResponse({"ok": False, "error": exc.message}, status=400)
         if edit is not None:
             from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_promote
 

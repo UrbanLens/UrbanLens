@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
@@ -22,6 +23,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, bounded_float_or_none, coordinate_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title
@@ -1159,11 +1161,11 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checkin = _get_checkin_by_slug(profile, checkin_slug)
-        try:
-            latitude = float(request.POST["latitude"])
-            longitude = float(request.POST["longitude"])
-            accuracy = float(request.POST["accuracy"]) if request.POST.get("accuracy") else None
-        except (KeyError, ValueError):
+        latitude = coordinate_or_none(request.POST.get("latitude"), bound=LATITUDE_BOUND)
+        longitude = coordinate_or_none(request.POST.get("longitude"), bound=LONGITUDE_BOUND)
+        raw_accuracy = request.POST.get("accuracy")
+        accuracy = bounded_float_or_none(raw_accuracy, low=0.0, high=math.inf) if raw_accuracy else None
+        if latitude is None or longitude is None or (raw_accuracy and accuracy is None):
             return HttpResponseBadRequest("Invalid coordinates.")
 
         from django.core.cache import cache
