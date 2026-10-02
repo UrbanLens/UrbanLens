@@ -7,9 +7,12 @@ rather than a 500 or a silent wrong write.
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.dashboard.external_api.views import SavedFilterDetailView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
@@ -463,6 +466,22 @@ class ExternalSavedFilterDetailRouteTests(ExternalApiRouteCase):
         self.assertEqual((saved_filter.name, saved_filter.opacity), ("Textile Mills", 50))
         self.assertEqual(self.send("delete", self.url).status_code, 204)
         self.assertFalse(SavedFilter.objects.filter(pk=self.saved_filter.pk).exists())
+
+    def test_an_edit_keeps_a_field_another_request_changed_meanwhile(self) -> None:
+        """The view's copy of the row is read before the write; saving it whole reverted the other request."""
+        read = SavedFilterDetailView._get_filter
+
+        def read_then_concurrent_edit(view, request, filter_uuid):
+            saved_filter = read(view, request, filter_uuid)
+            SavedFilter.objects.filter(pk=self.saved_filter.pk).update(opacity=40, order=7)
+            return saved_filter
+
+        with mock.patch.object(SavedFilterDetailView, "_get_filter", read_then_concurrent_edit):
+            response = self.send("patch", self.url, {"name": "Textile Mills"})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        saved_filter = self._filter()
+        self.assertEqual((saved_filter.name, saved_filter.opacity, saved_filter.order), ("Textile Mills", 40, 7))
 
     def test_a_criteria_label_of_another_account_is_400(self) -> None:
         theirs = baker.make(Label, profile=self.stranger, kind=KIND_TAG, name="Theirs")

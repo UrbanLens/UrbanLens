@@ -2210,21 +2210,22 @@ class SavedFilterDetailView(ExternalApiView):
                 logger.info("external API saved filter update rejected (custom field ownership): %s", exc)
                 return Response({"error": "Filter criteria reference a custom field that does not exist."}, status=400)
 
-        if "name" in data:
-            if SavedFilter.objects.name_taken_for(profile, data["name"], exclude_pk=saved_filter.pk):
-                return Response({"error": "You already have a saved filter with that name."}, status=400)
-            saved_filter.name = data["name"]
-        if "icon" in data:
-            saved_filter.icon = data["icon"] or "bookmark"
-        if "color" in data:
-            saved_filter.color = _validated_color(data, default="")
-        if "opacity" in data:
-            saved_filter.opacity = data["opacity"]
-        if "criteria" in data:
-            saved_filter.criteria = data["criteria"]
-        if "order" in data:
-            saved_filter.order = data["order"]
-        saved_filter.save()
+        if "name" in data and SavedFilter.objects.name_taken_for(profile, data["name"], exclude_pk=saved_filter.pk):
+            return Response({"error": "You already have a saved filter with that name."}, status=400)
+        values = {
+            "name": data.get("name"),
+            "icon": data.get("icon") or "bookmark",
+            "color": _validated_color(data, default="") if "color" in data else None,
+            "opacity": data.get("opacity"),
+            "criteria": data.get("criteria"),
+            "order": data.get("order"),
+        }
+        # Only the fields this request sent, so a concurrent edit to another field is not reverted.
+        changed = [field for field in values if field in data]
+        for field in changed:
+            setattr(saved_filter, field, values[field])
+        if changed:
+            saved_filter.save(update_fields=[*changed, "updated"])
 
         lists_resynced = resync_lists_for_saved_filter(saved_filter) if criteria_changed else 0
 
