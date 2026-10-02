@@ -543,9 +543,13 @@ paths use it:
   `tasks.render_remote_image_copy`, which re-encodes them (1200px) in the
   sandbox and keeps the result for good. Until then the endpoint answers 503.
   At most `DOWNLOAD_SLOTS` downloads run at once site-wide (a cache slot the
-  view claims and the task frees), since the interactive worker also fires
-  safety deadlines and on k3s one worker drains every queue; a request finding
-  every slot busy answers 503 without queueing. The task's soft time limit
+  task claims when it starts and frees when the download ends), since the
+  interactive worker also fires safety deadlines and on k3s one worker drains
+  every queue. The first request queues the copy once, however busy the slots
+  are. A task that finds every slot busy queues itself again
+  `DOWNLOAD_SLOT_WAIT_SECONDS` later rather than wait in the worker, renewing
+  the copy's pending mark each time, and gives up uncounted after
+  `DOWNLOAD_SLOT_WAIT_LIMIT_SECONDS`. The task's soft time limit
   bounds a provider that trickles bytes under the per-read timeout.
   A failed download or decode backs off, 1h doubling to at most 7 days, and
   answers 404 meanwhile. The first timeout in an hour is not counted

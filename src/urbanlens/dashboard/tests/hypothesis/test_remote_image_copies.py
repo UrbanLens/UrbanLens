@@ -104,7 +104,7 @@ class CopyEndpointTests(TestCase):
         self.assertEqual(enqueue.call_args.args[:2], (fetch_remote_image_copy, self.copy.pk))
         self._queued = enqueue.call_args.args[1:]
 
-    def _download(self, body: bytes | None) -> MagicMock:
+    def _download(self, body: bytes | None, **task_kwargs: int) -> MagicMock:
         """The worker's download of what the page queued: the bytes, staged for the sandbox render it queues."""
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 
@@ -112,9 +112,21 @@ class CopyEndpointTests(TestCase):
             patch(_FETCH, return_value=(body, "image/jpeg") if body is not None else None) as fetch,
             patch(_ENQUEUE) as enqueue,
         ):
-            fetch_remote_image_copy(*self._queued)
+            fetch_remote_image_copy(*self._queued, **task_kwargs)
         fetch.assert_called_once()
         self.assertEqual(fetch.call_args.args, (self.source,))
+        return enqueue
+
+    def _wait_for_a_slot(self, **task_kwargs: int) -> MagicMock:
+        """The worker's run of what the page queued while every slot is busy: it downloads nothing."""
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        with (
+            patch(_FETCH, side_effect=AssertionError("downloaded without a slot")),
+            patch(_ENQUEUE) as enqueue,
+            patch("time.sleep", side_effect=AssertionError("waited for a slot inside the worker")),
+        ):
+            self.assertFalse(fetch_remote_image_copy(*self._queued, **task_kwargs))
         return enqueue
 
     def _hold_every_download_slot(self) -> None:
@@ -202,20 +214,89 @@ class CopyEndpointTests(TestCase):
         self._download(None)
         self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 2)
 
-    def test_while_every_download_slot_is_busy_a_new_copy_waits_its_turn(self) -> None:
-        """Downloads share the interactive worker with safety deadlines; slow providers must not take all of it."""
+    def test_while_every_download_slot_is_busy_a_new_copy_is_queued_once(self) -> None:
+        """A request that found the slot busy used to be refused unqueued, so a page's tiles were made one per lucky poll."""
         self._hold_every_download_slot()
 
+        self._first_request()
         with patch(_ENQUEUE) as enqueue:
-            response = self.client.get(self.url)
+            for _ in range(3):
+                self.assertEqual(self.client.get(self.url).status_code, 503)
 
-        self.assertEqual(response.status_code, 503)
-        self.assertTrue(response.has_header("Retry-After"))
         enqueue.assert_not_called()
+        self.assertIsNotNone(cache.get(pending_marker(self.copy.url_digest)))
         self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 0)
-        self.assertIsNone(
-            cache.get(pending_marker(self.copy.url_digest)), "a copy that never started is marked pending"
-        )
+
+    def test_the_page_request_holds_no_download_slot(self) -> None:
+        """The worker takes the slot when it starts, so a copy waiting in the queue keeps no other copy waiting."""
+        self._first_request()
+
+        self._assert_slot_free()
+
+    def test_a_queued_copy_waits_for_a_slot_on_the_broker_not_in_the_worker(self) -> None:
+        """Downloads share the interactive worker with safety deadlines; slow providers must not take all of it."""
+        from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_SLOT_WAIT_SECONDS
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        self._first_request()
+        self._hold_every_download_slot()
+
+        enqueue = self._wait_for_a_slot()
+
+        enqueue.assert_called_once()
+        self.assertEqual(enqueue.call_args.args, (fetch_remote_image_copy, self.copy.pk))
+        self.assertEqual(enqueue.call_args.kwargs["countdown"], DOWNLOAD_SLOT_WAIT_SECONDS)
+        self.assertEqual(enqueue.call_args.kwargs["waited"], DOWNLOAD_SLOT_WAIT_SECONDS)
+        self.assertIsNotNone(cache.get(pending_marker(self.copy.url_digest)))
+        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 0)
+
+    def test_a_waiting_copy_is_made_once_a_slot_frees(self) -> None:
+        from urbanlens.dashboard.services.media.remote_copies import release_download_slot, take_download_slot
+
+        self._first_request()
+        slot = take_download_slot("another-copy")
+        if slot is None:
+            self.fail("a download slot was already taken")
+        waited = self._wait_for_a_slot().call_args.kwargs["waited"]
+        release_download_slot(slot, "another-copy")
+
+        self.assertTrue(self._render(self._download(_jpeg(), waited=waited)))
+        self._assert_slot_free()
+
+    def test_a_waiting_copy_stays_pending_however_long_it_waits(self) -> None:
+        """Each wait renews its mark, so a wait longer than the mark's TTL still queues the copy only once."""
+        self._first_request()
+        self._hold_every_download_slot()
+        cache.delete(pending_marker(self.copy.url_digest))
+
+        self._wait_for_a_slot()
+
+        with patch(_ENQUEUE) as enqueue:
+            self.assertEqual(self.client.get(self.url).status_code, 503)
+        enqueue.assert_not_called()
+
+    def test_a_copy_that_waited_its_limit_gives_up_without_counting_a_failure(self) -> None:
+        from urbanlens.dashboard.services.media.remote_copies import DOWNLOAD_SLOT_WAIT_LIMIT_SECONDS
+
+        self._first_request()
+        self._hold_every_download_slot()
+
+        self._wait_for_a_slot(waited=DOWNLOAD_SLOT_WAIT_LIMIT_SECONDS).assert_not_called()
+
+        self.assertIsNone(cache.get(pending_marker(self.copy.url_digest)))
+        self.assertEqual(RemoteImageCopy.objects.get(pk=self.copy.pk).failed_attempts, 0)
+        self._first_request()
+
+    def test_a_waiting_copy_that_cannot_be_queued_again_is_not_left_pending(self) -> None:
+        from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+        self._first_request()
+        self._hold_every_download_slot()
+
+        with patch(_FETCH, side_effect=AssertionError("downloaded without a slot")), patch(_ENQUEUE, return_value=None):
+            self.assertFalse(fetch_remote_image_copy(*self._queued))
+
+        self.assertIsNone(cache.get(pending_marker(self.copy.url_digest)), "the next request would wait out its TTL")
 
     def test_a_download_gives_its_slot_back_whether_it_worked_or_not(self) -> None:
         for body in (None, _jpeg()):
@@ -230,7 +311,8 @@ class CopyEndpointTests(TestCase):
         from urbanlens.dashboard.services.media.remote_copies import release_download_slot, take_download_slot
 
         slot = take_download_slot("next-copy")
-        self.assertIsNotNone(slot, "the download slot was kept")
+        if slot is None:
+            self.fail("the download slot was kept")
         release_download_slot(slot, "next-copy")
 
     def _time_out(self, error: BaseException) -> None:
@@ -299,7 +381,7 @@ class CopyEndpointTests(TestCase):
         fetch.assert_not_called()
         self._assert_slot_free()
 
-    def test_a_download_that_cannot_be_queued_frees_its_slot(self) -> None:
+    def test_a_copy_that_cannot_be_queued_is_not_left_pending(self) -> None:
         with patch(_ENQUEUE, return_value=None):
             self.assertEqual(self.client.get(self.url).status_code, 503)
 

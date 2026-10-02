@@ -38,7 +38,7 @@ MAX_RETRY_DELAY = timedelta(days=7)
 DOWNLOAD_TIMEOUT_SECONDS = 90
 
 #: How long a copy stays pending before another request may start it again: the download, the render, and the
-#: queues ahead of each.
+#: queues ahead of each. A copy waiting for a download slot renews it with each wait.
 COPY_PENDING_TTL = 300
 
 #: First downloads one caller may start per window. A page asks for every tile at once.
@@ -48,8 +48,12 @@ COPY_THROTTLE_SCOPE = "media.remote_copy"
 #: First downloads in flight at once, site-wide. They run on the interactive worker beside safety deadlines (and,
 #: on k3s, on the one worker that drains every queue), so slow providers must leave it room.
 DOWNLOAD_SLOTS = 1
-#: A slot outlives the queue wait and the download; past this a worker that died holding one gives it back.
+#: A slot outlives the download; past this a worker that died holding one gives it back.
 DOWNLOAD_SLOT_TTL = DOWNLOAD_TIMEOUT_SECONDS + 60
+#: How long a copy that found every slot busy sits on the broker before it asks again. It holds no worker meanwhile.
+DOWNLOAD_SLOT_WAIT_SECONDS = 3
+#: How long a copy waits for a slot before it gives up uncounted, for a later request to queue it again.
+DOWNLOAD_SLOT_WAIT_LIMIT_SECONDS = 600
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +108,32 @@ def release_download_slot(key: str, holder: str) -> None:
 
     if key:
         counters.delete_if_value(key, holder)
+
+
+def wait_for_download_slot(copy: RemoteImageCopy, waited: int) -> bool:
+    """Queue *copy*'s download again for when a slot may have freed, keeping it pending meanwhile.
+
+    Args:
+        copy: The copy that found every slot busy.
+        waited: Seconds it has already waited.
+
+    Returns:
+        True when it was queued again. False when it has waited :data:`DOWNLOAD_SLOT_WAIT_LIMIT_SECONDS` or could not
+        be queued; it is then no longer pending, so the next request for it starts it afresh.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.previews import RENDER_QUEUED
+    from urbanlens.dashboard.tasks import fetch_remote_image_copy
+
+    marker = pending_marker(copy.url_digest)
+    if waited < DOWNLOAD_SLOT_WAIT_LIMIT_SECONDS:
+        cache.set(marker, RENDER_QUEUED, COPY_PENDING_TTL)
+        if safely_enqueue_task(fetch_remote_image_copy, copy.pk, countdown=DOWNLOAD_SLOT_WAIT_SECONDS, waited=waited + DOWNLOAD_SLOT_WAIT_SECONDS, durable=False) is not None:
+            return True
+    cache.delete(marker)
+    return False
 
 
 def forgive_timeout(copy: RemoteImageCopy) -> bool:
