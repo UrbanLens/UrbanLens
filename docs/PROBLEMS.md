@@ -1087,7 +1087,7 @@ one test and read through a name another module imported earlier.
 
 ## P53 — The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer
 
-`id: P53` · `status: open` · `updated: 2026-09-06`
+`id: P53` · `status: open` · `updated: 2026-10-02`
 
 Previously titled "One Private Pin page load fires dozens of concurrent panel requests and can
 exhaust the DB connection pool", and before that "one Private Pin page load can exhaust the database
@@ -1118,8 +1118,11 @@ same afternoon on them.**
 - **`revealed` / `intersect` deferral is impossible here.** Every one of these panels renders with
   the `hidden` attribute and only unhides once its content arrives, so it never intersects the
   viewport and would never fire at all. Measured: of 46 load-triggered elements on a real page, 40
-  were hidden and 0 were in the viewport. The five tab panels that *were* converted to `revealed`
-  earlier are a different shape - they are laid out, just off-tab.
+  were hidden and 0 were in the viewport. The five tab panels (Visits, Photos, Article, Notes, Changes) are a
+  different shape, laid out but off-tab, and since 2026-10-02 they wait for `intersect once`. Their earlier
+  switch to `revealed` deferred nothing: htmx counts a hidden element as revealed, so all five still loaded on
+  every view (measured on the dev stack, along with the same five on the wiki page; P191 is the Organize case).
+  Now none of them is requested until its tab opens (`test_hidden_tab_panels_defer.py`).
 - **A `delay:` stagger bounds the rate, not the concurrency.** Starting four panels every 400ms
   still leaves fifty in flight if each takes five seconds, which on a cold cache they can.
 
@@ -1141,9 +1144,10 @@ longer the concurrency and the lane assertion is what matters now: every enrichm
 a lane, because one added without `hx-sync` re-opens the problem while leaving the count green.
 Verified to gate - 27 unlaned before the change, 0 after.
 
-The remaining ~27 concurrent requests are the page's own content (overview, gallery, boundary,
-markup and detail-pin JSON), the site chrome (notifications, undo stack, safety banner), and the
-five off-tab panels. Laning those would delay the page itself, which is a different trade.
+The ~27 concurrent requests measured then were the page's own content (overview, gallery, boundary, markup and
+detail-pin JSON), the site chrome (notifications, undo stack, safety banner), and the five off-tab panels, which
+no longer load with the page (the new peak is not measured). Laning the rest would delay the page itself, which is
+a different trade.
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 

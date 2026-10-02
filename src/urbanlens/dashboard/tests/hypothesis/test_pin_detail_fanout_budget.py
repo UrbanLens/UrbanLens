@@ -21,12 +21,11 @@ from urbanlens.dashboard.models.pin.model import Pin
 #: case the ratchet asks for; an unlaned one is a defect, not a budget request.
 #:
 #: Was 53 at the time of writing; lowered to **48** when the Visits/Photos/
-#: Article/Notes/Edit-History subnav tabs switched from `hx-trigger="load"` to
-#: `"revealed"` - those five panels sit inside a client-side-hidden
-#: `<section data-tab-panel>` that only the tab switch ever unhides (the same
-#: eager-hidden-tab defect independently found and fixed on the Organize page),
-#: so `load` was firing them on every page view regardless of which tab was
-#: open. This is still a ratchet, not an endorsement: the remaining 48 are
+#: Article/Notes/Edit-History subnav tabs stopped using `hx-trigger="load"`.
+#: Those five panels sit inside a client-side-hidden `<section data-tab-panel>`
+#: that only the tab switch unhides; they wait for `intersect once`, since htmx
+#: fires both `load` and `revealed` for a hidden element at once
+#: (`test_hidden_tab_panels_defer.py`). This is still a ratchet, not an endorsement: the remaining 48 are
 #: already more than the dev deployment's Postgres could serve concurrently;
 #: the budget exists to stop it growing while the real fix - loading panels in
 #: waves, or behind one request - is decided.
