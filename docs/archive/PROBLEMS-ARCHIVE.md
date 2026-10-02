@@ -19800,3 +19800,28 @@ Kept on purpose:
   own model, not dead code.
 
 Not checked: code outside this repository that imports these querysets.
+
+## RESOLVED 2026-10-02: Native `<select>` popups were white under light text in dark mode, site-wide
+
+`id: P51` · `status: fixed` · `resolved: 2026-10-02`
+
+Every native `<select>` in the dark theme opened a white popup under light-grey text, not just the floorplan
+editor's. The cause was not the colour scheme, which reached every select. Chromium paints each popup row on the
+option's background, falling back to the select's, and to white when neither is opaque. The site's inputs have a
+translucent background (`body div.container`'s `rgba(0,0,0,0.1)`), and so did 65 of the 70 selects surveyed
+across Settings, the map, the Private Pin page, Vault, the profile page, Organize and Lists.
+
+Reproduced and verified in a headed Chromium under Xvfb, capturing the X screen, because a headless page
+screenshot does not include the popup. A select with a transparent background gave the white popup, and the same
+select with an opaque one did not.
+
+`_dark.scss` now gives `option`/`optgroup` the theme's control colours (`--ul-grey-0` / `--ul-grey-8`), which
+replaces the album dialog's local copy of the same fix. Chromium's highlighted row takes no author colour, only
+the select's colour scheme. The dark scheme's highlight is pale blue, illegible under light text, so a
+dark-theme select uses `color-scheme: light`, whose highlight is dark blue. The closed select renders the same as
+before.
+
+`tests/integration/specs/ui/select-popups.spec.ts` checks every select on the Settings and map pages in both
+themes: the option text against the background Chromium would paint, at least 4.5:1, and the light scheme on
+dark-theme selects. It failed on all 36 Settings selects and the map's before the change. Firefox and Safari
+were not checked; both draw from the same option colours, or a native menu.

@@ -96,16 +96,6 @@ $album-gutter: 1rem;
     font-size: .9rem;
 }
 
-// The <select> popup is drawn by the browser/OS, not by this box.
-.album-create-kind {
-    color-scheme: light dark;
-
-    option {
-        background-color: var(--ul-grey-0);
-        color: var(--ul-grey-8);
-    }
-}
-
 .album-create-actions {
     display: flex;
     align-items: center;

@@ -51,7 +51,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-18 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-29 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-10-02 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P66 | open | 2026-09-29 | Organize's active label tab still renders its full card list unpaginated; 400 tags now 1.2 s, was 2.2 s | [`docs/PROBLEMS.md`](PROBLEMS.md) |
