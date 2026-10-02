@@ -554,6 +554,8 @@ export class PhotoLightbox {
         search.value = "";
         results.replaceChildren();
         this.closeActions();
+        // Same reason as the lightbox in open(): the wiki page includes both in a tab panel that can be hidden.
+        if (dialog.parentElement !== document.body) document.body.appendChild(dialog);
         dialog.showModal();
         if (mode === "friends") {
             const url = lightboxDialog()?.dataset.shareFriendsUrl;

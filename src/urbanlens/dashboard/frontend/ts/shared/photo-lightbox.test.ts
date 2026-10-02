@@ -203,6 +203,17 @@ describe("the picker", () => {
         expect(calls.at(-1)).toMatchObject({ url: "/photos/1/log-visit/", body: "pin_slug=old-mill" });
     });
 
+    test("the picker leaves a hidden host for body too, or it opens modal but unpainted and blocks the page", () => {
+        // The wiki page includes the lightbox in its Overview panel, which is hidden while the Photos tab is open.
+        el("gallery-lightbox").parentElement?.appendChild(el("lightbox-picker-dialog"));
+        window.galleryOpenLightboxItem?.(photos(1), 0);
+        document.body.insertAdjacentHTML("beforeend", '<button id="open-wiki" data-lightbox-action="wiki-picker"></button>');
+        el("open-wiki").click();
+        const picker = el("lightbox-picker-dialog");
+        expect(picker instanceof HTMLDialogElement && picker.open).toBe(true);
+        expect(picker.parentElement === document.body).toBe(true);
+    });
+
     test("friends are filtered in place rather than searched", () => {
         window.galleryOpenLightboxItem?.(photos(1), 0);
         el("lightbox-share-action").click();
