@@ -776,8 +776,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     cloudflare_ai_endpoint: Url | None = Field(default=None, description="The cloudflare ai endpoint")
     cloudflare_worker_ai_endpoint: Url | None = Field(default=None, description="The cloudflare worker ai endpoint")
     cloudflare_ai_api_key: str | None = Field(default=None, description="The cloudflare ai key")
-    huggingface_ai_endpoint: Url | None = Field(default=None, description="The huggingface ai endpoint")
-    huggingface_ai_api_key: str | None = Field(default=None, description="The huggingface ai key")
     openai_api_key: str | None = Field(default=None, description="The openai key")
     anthropic_api_key: str | None = Field(default=None, description="The anthropic (claude) key")
     ai_inference_url: str | None = Field(

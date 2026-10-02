@@ -62,7 +62,6 @@ _app_settings.virustotal_api_key = None
 _app_settings.anthropic_api_key = "test-placeholder-not-a-key"
 _app_settings.openai_api_key = "test-placeholder-not-a-key"
 _app_settings.cloudflare_ai_api_key = "test-placeholder-not-a-key"
-_app_settings.huggingface_ai_api_key = None
 # Policy-valid host with no real account; keeps test artifacts shippable. Url-typed to match production.
 _app_settings.cloudflare_worker_ai_endpoint = Url("https://api.cloudflare.com/client/v4/accounts/TESTACCOUNT/ai/run")
 # Never address a real ai-inference service; tests mock at the adapter.

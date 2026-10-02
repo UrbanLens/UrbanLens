@@ -27,6 +27,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`redata-survey-roster-marks-other-surveys-on-property.md`](redata-survey-roster-marks-other-surveys-on-property.md) — every building on any survey naming one HRSH building comes back on the property; about 200 of HRSH's 300 | outbound, `../REData` | ANSWERED 2026-10-01 by REData T10 (`docs/urbanlens-2026-10-01-replies.md`): fixed on REData `main`, deploy held until v0.8.0 ships; closes after a location run against deployed REData |
 | [`redata-osm-relation-building-returned-as-point.md`](redata-osm-relation-building-returned-as-point.md) — Kirkbride, an OSM multipolygon relation, comes back as its centre point, so its building place has no outline (P182) | outbound, `../REData` | ANSWERED 2026-10-01 by REData T10 (`docs/urbanlens-2026-10-01-replies.md`): fixed on REData `main`, deploy held until v0.8.0 ships; closes after a location run against deployed REData |
 | [`infrastructure-app-0.8.0-deploy-findings-reply.md`](infrastructure-app-0.8.0-deploy-findings-reply.md) — reply to their 0.8.0 deploy findings: `:main` waits for CI, P181's step is migration 0034, releases publish again | outbound, `UrbanLens/infrastructure` | SENT 2026-10-02 |
+| [`infrastructure-jess-decisions-2026-10-02.md`](infrastructure-jess-decisions-2026-10-02.md) — Jess wants `localize_article_images` and `sweep_unnamed_pin_images --delete` run now on staging and production; Postgres restore tooling is theirs | outbound, `UrbanLens/infrastructure` | SENT 2026-10-02 |
 
 ## The convention
 

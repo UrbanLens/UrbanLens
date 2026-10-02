@@ -373,7 +373,11 @@ reporter considers too slow to refresh.
 
 ## P14 — Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment
 
-`id: P14` · `status: open` · `updated: 2026-09-29`
+`id: P14` · `status: open, handed to infrastructure` · `updated: 2026-10-02`
+
+**Jess, 2026-10-02: report and delete in one go.** The runs are the infrastructure repo's (N33,
+`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`): `sweep_unnamed_pin_images`, then `--delete`, on staging
+then production. Close this when their counts and sizes come back.
 
 Previously titled "Media gate residue: replaced or deleted pin and label icons strand their files,
 and historical orphans remain", before that "Media gate residue: icons are owner-scoped now;
@@ -451,7 +455,11 @@ access only Jess has.
 
 ## P16 — Aliases and label membership are still strictly per-pin, with no aggregation across child pins
 
-`id: P16` · `status: open` · `updated: 2026-09-15`
+`id: P16` · `status: open, decided` · `updated: 2026-10-02`
+
+**Jess, 2026-10-02: read-only listings.** With "show child pin details" on, a parent pin's page lists each child's
+aliases and labels as "also on child pin X", read-only, the way comments already aggregate. Editing stays on the
+child's own page.
 
 Previously titled "aliases/labels aggregation, and boundary voting". **The boundary-voting half
 shipped 2026-07-30** - after this entry's last update, so it sat here as "not started at all" long
@@ -475,7 +483,7 @@ editing before touching the shared templates.
 
 ---
 
-## P19 — Audit residue: a 1,100-line `_dark.scss`, a stub AI gateway, two notification settings that control nothing, and other deferred gaps
+## P19 — Audit residue: group chats lack direct messages' features, and the hypothesis strategies are barely shared
 
 `id: P19` · `status: open` · `updated: 2026-10-02`
 
@@ -485,43 +493,27 @@ residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintaina
 What remains of the findings in `docs/audits/codebase-audit.md`, each re-checked against the code on
 2026-10-02:
 
-- **Unit 14**: `NotificationPreference` has fields for 13 of the 33 `NotificationType` values. Every row
-  the Settings page offers is honoured by every producer of its type (16 producer sites read; map shares
-  ride on `pin_shared`), so no type the page presents as mutable is unmutable. Types with no row are
-  safety check-in and account-deletion alerts (deliberately, `MUTE_EXEMPT_TYPES`), feedback on the
-  user's own action (upload failures, AI extraction, pin import, error/warning/info), friend suggestions
-  (gated by the profile's `allow_friend_recommendations` instead), and SpotGuessr/Trivia/Consensus
-  invitations, which only a friendship mute silences. Open: the page offers "Trip Updated" and
-  "Community Wiki Updated", but nothing in `src/` produces either type, so those two rows change
-  nothing - build the producers or drop the rows.
-- **Unit 19**: no admin can see or revoke another admin's subscription grants
-  (`controllers/site_admin.py` scopes both to `granted_by=request.user`); no restore tooling exists for
-  the Postgres backups.
-- **Unit 20**: `services/ai/huggingface.py` is still an unwired, `NotImplementedError`-raising stub
-  (documented as such).
 - **Unit 21/22/23**: `models/pin/viewset.py`'s post-`get_object()` ownership re-check is kept
   deliberately (2026-09-06) - unreachable while `get_queryset` scopes to `profile__user`, a backstop for
   the day that filter widens; both sites say so. `GroupMessage` still carries no
-  images/markup_map/location_mentions/reply_to fields.
+  images/markup_map/location_mentions/reply_to fields. **Jess, 2026-10-02: later**, so it stays here.
 - **Unit 25**: no moderation UI for AI-flagged trivia questions - decided against, not just unbuilt (see
   `docs/designs/drafts/trivia.md`'s "Known gaps").
-- **Unit 31**: `_dark.scss` is 1,095 lines of per-selector overrides. Measured 2026-10-02 by deleting each compiled
-  dark rule in turn through CSSOM on 15 signed-in pages in the dark theme and comparing the computed style of what
-  it matched: of 413 rules, 86 changed something, 26 matched elements but changed nothing, 217 matched nothing on
-  those pages (closed dialogs, other pages), and 83 depend on a state (`:hover`, pseudo-elements) this cannot
-  probe. Even the 26 are not safe to drop: several are input rules that `body div.container` outranks inside the
-  page container but that still style inputs outside it. Shrinking the file means moving overrides into tokens,
-  not deleting rules.
-- **Games, needs a decision**: a SpotGuessr or Trivia player who leaves or is kicked mid-game drops out
-  of the end-of-game summary everyone else receives (`session_summary` reads `participants.joined()`)
-  and out of their own game history (`overview.participated_sessions` reads `.active()`), though their
-  points stay on their row. Hiding the game from them follows "a departed player loses access"; whether
-  the remaining players' scoreboard should still list them is open. The session-status writes outside
-  begin and leave (`end_session_now`, `complete_session`, the stall reveal) take no session lock, but each
-  sets a finished state, so a race with a leave only swaps abandoned for completed.
 - **Unit 34**: 12 of the 175 test files that use `@given` import the shared `strategies.py`
   (`grep -rl "@given" src/urbanlens --include='test_*.py'`, then grep those for
   `tests.hypothesis.strategies`). The earlier "~30/111" did not reproduce.
+
+Ruled on by Jess on 2026-10-02 and moved out:
+
+- "Trip Updated" and "Community Wiki Updated" control nothing: build both (P197).
+- A departed player vanishes from the scoreboard: list them as "Left" and keep the game in their history (P198).
+- Admins see only their own subscription grants: every site admin sees and revokes every grant (P199).
+- Postgres restore tooling: the infrastructure repo owns it
+  (`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`).
+- `services/ai/huggingface.py`: removed, with its two settings and its row on the setup page. Production's secrets still
+  carry `UL_HUGGINGFACE_AI_*`, which the settings model now ignores (`extra="ignore"`).
+- `_dark.scss`'s 1,095 lines of overrides: leave it. Measured on 15 signed-in pages: of 413 rules, 86 changed
+  something, 26 matched but changed nothing, 217 matched nothing, and 83 depend on a state the probe cannot reach.
 
 Removed on 2026-10-02, measured rather than assumed:
 
@@ -712,7 +704,11 @@ correct this code is. The bulk call's 403 is tolerated: aggregation still procee
 
 ## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
 
-`id: P36` · `status: open` · `updated: 2026-09-18`
+`id: P36` · `status: open, decided` · `updated: 2026-10-02`
+
+**Jess, 2026-10-02: show her each one.** Make a screenshot list: each modifier, the element it is on, what it renders
+as now, and what it was presumably meant to mark. Publish it as a decision page she can rule on (style it, or drop the
+class). Nothing is styled or dropped before her ruling.
 
 Previously titled "50 BEM modifiers are applied in templates with no CSS rule, so intended visual
 states never render", before that "45 BEM modifiers applied in templates with no CSS rule", and
@@ -850,7 +846,11 @@ one test and read through a name another module imported earlier.
 
 ## P53 — The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer
 
-`id: P53` · `status: open` · `updated: 2026-10-02`
+`id: P53` · `status: open, decided` · `updated: 2026-10-02`
+
+**Jess, 2026-10-02: ask once which panels have content, and skip the rest.** One request answers which of the 27
+panels have anything for this pin, and the page requests only those. On most places that removes the 12 plugin panels
+that come back empty. Lanes stay as they are.
 
 Previously titled "One Private Pin page load fires dozens of concurrent panel requests and can
 exhaust the DB connection pool", and before that "one Private Pin page load can exhaust the database
@@ -1309,155 +1309,24 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 
 ---
 
-## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict
+## P110 — The app reads Overture from its public S3 copy, although REData serves the same themes from our own instance
 
-`id: P105` · `status: open` · `updated: 2026-09-13`
+`id: P110` · `status: open, decided` · `updated: 2026-10-02`
 
-**Measured 2026-09-10, and it is much worse than this entry originally claimed.** The heading used to
-read "locks every user out of logging in, while already-signed-in browsing keeps working". The
-source reading below is still correct about *which* code paths are wrapped. The conclusion drawn from
-it was wrong, because it reasoned about correctness and not about time.
+**Jess, 2026-10-02: "We're self hosting Overture. Why are we contacting external services instead of using our self
+hosted instance?"** Because `OvertureMapsGateway` predates REData's Overture stack and was never moved onto it. It
+reads Overture's public GeoParquet on S3, with `stac.overturemaps.org` as its index. Three callers use it:
+`BoundaryProviderChain` (third, after REData and Overpass), and the `overture_building_attributes` plugin's
+`get_building_attributes` and `get_nearby_places`. REData syncs Overture's buildings, places, addresses and
+transportation for every US state and territory monthly (`docker/overture/README.md`). It serves them from
+`/buildings/` (`OvertureBuilding`: `height`, `num_floors`, `building_class`, `subtype`, `sources`) and from the
+`overture` provider of points of interest.
 
-Valkey paused on a staging-model environment, requests made with an **already-established** session:
-
-```
-  /health/ready                    500 in 32.16s
-  /dashboard/map/pins/?limit=5     500 in 32.15s
-  /dashboard/map/                  500 in 32.17s
-```
-
-Not "keeps working". Not even a fast failure. **Every request 500s after about half a minute**, and
-that includes the readiness endpoint, which is supposed to be the thing that still answers when
-nothing else does.
-
-Two consequences that the source reading could not have produced:
-
-- **32 seconds is the number that matters, not the 500.** `socket_connect_timeout: 1` and
-  `socket_timeout: 2` are configured (`settings/base.py:320-321`), so one cache call fails in ~2s.
-  Reaching 32 means roughly sixteen cache operations per request, each waiting its own timeout —
-  serially. With `--worker-connections 20 × 3 workers`, whole-site throughput during a Valkey outage
-  is about two requests a second.
-- **`/health/ready` fails the same way.** It answers 500 after 32s, so a readiness probe with any
-  sane timeout records a timeout rather than a verdict, and orchestration removes the instance. This
-  is the concrete case behind the warning sent to infrastructure in N20: the failure mode is a
-  *timeout*, which a probe may treat differently from a non-200.
-
-The chaos probe that produced this is `bin/perf/chaos_probe.py`; it was run by pausing the container
-directly, because `chaos.py inject` cannot dispatch (N20).
-
-What the fix has to achieve is therefore larger than "wrap the unwrapped paths": a request that
-cannot reach the cache must give up in about the time one call takes, not sixteen. The session cache
-wrapper in D11 §2.6 is still right and is no longer sufficient on its own.
-
-The original reading, still accurate:
-
-`SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"` with `SESSION_CACHE_ALIAS =
-"default"` over the stock `django.core.cache.backends.redis.RedisCache`
-(`settings/base.py:289-307`). The settings comment there says "cached_db writes through to the
-database so sessions survive a cache flush", which is true for a *flush* and, it turns out, for
-most of an *outage* too - but not all of it.
-
-Django wraps the two paths people assume break, and leaves three unwrapped
-(`django/contrib/sessions/backends/cached_db.py`, Django 6.0.6):
-
-- `load()` catches bare `Exception` and falls through to `_get_session_from_db()`. A signed-in
-  request therefore keeps working with Valkey down.
-- `save()` catches bare `Exception` and logs. Session writes keep working.
-- `exists()` does `(prefix + session_key) in self._cache` with **no** guard. `_get_new_session_key()`
-  calls it in a loop, and `create()` calls that - so `cycle_key()`, which Django's login does, raises.
-- `delete()` calls `self._cache.delete(...)` with **no** guard, and `flush()` calls `delete()` - so
-  logout raises.
-
-The login path fails even earlier, in this codebase's own code rather than Django's: `LoginView`
-calls `_is_locked_out()` (`controllers/account.py:873` → `:67-68`), which is a bare `cache.get()`.
-The brute-force counters around it (`:92-97`, `:197`, `:261`, `:286`, `:310`, `:343`) and the
-passphrase/password rate limiters (`:1395-1398`, `:1441-1444`) are the same shape. Other unguarded
-request-path callers: `controllers/immich.py:96,100,286,295` (scan status, thumbnail proxy) and
-`controllers/flickr.py:126` (OAuth request token).
-
-So the outage profile is: **existing sessions browse fine; nobody can log in or out; a signed-out
-user cannot get in at all.** Worth stating because the intuition ("Valkey is a cache, the site
-degrades") is right about pages and wrong about the door.
-
-Note before fixing: `_is_locked_out` failing *open* would be worse than failing closed - it is the
-brute-force gate. A wrapper that turns cache errors into misses must not be applied blindly to the
-lockout keys; those want an explicit decision (fail closed with a 503, or fall back to a DB-backed
-counter), not a silent miss.
-
-One thing to know before reproducing this by pausing Valkey: that does not isolate the cache.
-`CELERY_BROKER_URL` falls back to `VALKEY_URL` (`settings/base.py:374`) and `UL_CELERY_BROKER_URL` is
-unset by default, so the same instance is the cache, the session store, the channel layer, the
-result backend *and* the broker. Pausing it exercises task enqueueing as well, and a run that reads
-as "P105 plus something else" is that coupling rather than a second defect. Found by the
-infrastructure repo while building the chaos scenarios (N17); it is the sharper half of the argument
-for D11's Valkey split, which had been justified on the fill case alone.
-
-**Fixed 2026-09-13, and measured the same way it was found.** `core/cache_backend.py`'s
-`ResilientRedisCache` replaces the stock backend, on the principle that **a cache that cannot be
-reached behaves like a cache with nothing in it** — which covers `exists()` and `delete()`, the two
-Django leaves bare, and every direct `cache.get` in this codebase, in one place rather than at
-thirty call sites.
-
-The half that decides whether the site is up is the breaker, not the swallowing. One failure holds
-the store off for `UL_CACHE_BREAKER_SECONDS` (10s) and every later call in that window answers
-immediately without touching a socket, so a request pays one timeout rather than one per call. One
-probe is let through when the window ends, so recovery needs no signal and nothing has to notice
-Valkey came back.
-
-Measured on the dev stack with Valkey paused, against the 32s this entry recorded:
-
-```
-  GET /                        200 in 0.04s        (was 500 in 32.17s)
-  session create+load+flush    OK   in 4.25s       (was: raises - login and logout)
-  16 consecutive cache reads        in 0.00s       (was ~32s)
-```
-
-Three answers are deliberately not "as if empty", and each is a decision rather than an oversight:
-
-- **`add` reports False.** It is the claim half of every lock here (`services/core/single_flight`),
-  and a lock granted by a store that cannot hold it is not a lock.
-- **`incr` raises `ValueError`** — what Django raises for an absent key, which is the honest answer.
-  `account._bump_counter` already catches that and restarts the window, so a failed-login counter
-  degrades instead of exploding.
-- **A full store (`OutOfMemoryError`) degrades that one write without tripping the breaker.**
-  `volatile-lru` is still perfectly able to answer reads; holding them off for ten seconds because a
-  write did not fit would turn H54's fill case into an outage it is not.
-
-**The abuse controls fail open, and this entry's own note asked for that to be an explicit
-decision.** It is the project's existing one: `services/security/throttle.py` and
-`socket_budget.py` both allow when they cannot read their counter, on the reasoning that an outage
-which also locks everyone out is strictly worse. The login lockout now inherits it by the same
-argument. The residual, stated rather than left implied: for the length of an outage, and only then,
-failed-login counting stops.
-
-**The first version of this passed 18 unit tests and did nothing at all.** redis-py's
-`ConnectionError` and `TimeoutError` derive from `RedisError`, **not** from the builtins of the same
-name, so a backend catching the builtins caught none of them — and every mock in the suite raised a
-builtin, so the suite agreed. Found in about a minute by pausing Valkey against a real stack, and
-not findable any other way: the mock and the code shared the same wrong assumption. Every
-degradation case now runs against all four classes a real outage raises, named in one tuple at the
-top of the test file.
-
-**One thing this changes without settling: `/health/ready` answers 503 while the site serves 200s in
-40ms.** A verdict rather than a timeout is progress on its own, and the endpoint now returns in
-about 4s rather than 32. But the controller's own `_is_degraded` docstring already says an instance
-whose cache is down "still serves pages", and after this fix that is simply true — so the 503 and
-the code beside it now disagree, where before they agreed.
-
-Deliberately not changed here, because the reason it was right has moved but the consumers have not
-been looked at. `test_health.py` records the question as open in as many words, and both consumers
-live in the infrastructure repo: `deployment-web.yaml` uses `/health/ready` as its **startupProbe**
-(so a 503 during a Valkey outage blocks a rollout, which is conservative rather than wrong), and
-ingress-watch fetches it every minute and pages. If that pager keys on the status code rather than
-on `degraded`, flipping to 200 silences the alert for a real outage — which is a worse failure than
-the one being fixed. PL7 phase 2 specifies "stays 200 when degraded"; doing it needs the alert rule
-changed in the same breath, and that is an owner call across two repositories.
-
-See D11 for the Valkey split this sits inside; the chaos scenario is the reproduction.
-
-## P110 — The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off — the request-rate gap is closed in code and unit-tested, not yet re-verified live
-
-`id: P110` · `status: open` · `updated: 2026-09-17`
+**Fix:** answer all three from REData. The public read stays only for coordinates outside REData's synced area, the US,
+behind the guards it has now. Inside the US the app then makes no call to Overture at all, which is what this problem
+was trying to bound, and the live load check becomes moot there. REData reports a missing Overture database as "no
+results, not an error". So the move needs a test that an empty REData answer inside the US does not fall through to the
+public read.
 
 A recurrence of
 [the problem resolved 2026-08-31](archive/PROBLEMS-ARCHIVE.md), under a condition that resolution
@@ -2718,7 +2587,12 @@ both ways for the e2e accounts. A second run finds nothing. 205 locations are le
 
 ## P165 — Articles saved before 2026-09-30 name provider images in their source until `manage.py localize_article_images` runs on each deployment
 
-`id: P165` · `status: open` · `updated: 2026-10-02` · `was "Third-party thumbnails load directly from provider hosts, leaking every viewer's IP and referrer"; every code item is done, and what remains is an ops step`
+`id: P165` · `status: open, handed to infrastructure` · `updated: 2026-10-02` · `was "Third-party thumbnails load directly from provider hosts, leaking every viewer's IP and referrer"; every code item is done, and what remains is an ops step`
+
+**Jess, 2026-10-02: run it now, without waiting for v0.9.0.** The command ships in v0.8.0, which production runs. This
+repo can't reach production, so the run went to the infrastructure repo (N33,
+`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`): `--dry-run`, then the real run, on staging then
+production. Close this when they report the counts.
 
 **Ruled by Jess 2026-09-30:** download each thumbnail and cache it locally forever, served by UrbanLens, with a record of where it came from. That also covers a provider taking an asset offline. This is a different question from browser-direct geocoding (D25).
 
@@ -2902,82 +2776,36 @@ already minted from typed text stay in their URLs until something re-mints them,
 a Location whose old URL was its uuid.
 
 
-## P187 — Production's celery workers likely cannot reach REData: the LAN answers redata.urbanlens.org with NPM's private address, which the celery egress policy refuses, so no CRIS documents, CRIS photos or web images land
+## P187 — A source error is cached as an empty answer for seven days, so a few hours' REData outage blanked every Location it touched
 
-`id: P187` · `status: open, environmental, unverified on production` · `updated: 2026-10-02` · `found by: the HRSH report on production v0.8.0, 2026-10-02`
+`id: P187` · `status: open` · `updated: 2026-10-02` · `found by: the HRSH report on production v0.8.0; measured by the infrastructure repo (its 0.8.0 deploy findings, item 11)`
 
-On production (k3s site-b, celery on since the 2026-10-02 cutover) Jess's HRSH pin showed no Article > Sources
-documents, no CRIS photos, no web-image results, and exactly one public-source photo, from Wikimedia Commons. Every
-one of the missing providers is fetched through REData from a celery pod. Commons is not, and it is the one that
-answered. (Wikipedia's article images are not REData-backed either. One cause of their absence, seen on
-`development_main` and not checked on production, is an empty answer cached while the article match had expired,
-fixed in `models/cache/signals.py` on 2026-10-02.) Nothing
-here was read from production; the chain below is inferred from the infrastructure repo and from this LAN.
+**The outage itself is fixed and was environmental.** Production's celery workers couldn't reach REData: the LAN
+answers `redata.urbanlens.org` with NPM's private address, and the celery egress policy refused private ranges. The
+infrastructure repo fixed the policy (`23d8b1e`, deployed 05:37Z on 2026-10-02). It found no refusals after 05:17Z.
 
-- **Celery egress.** `deny-egress-celery` (`infrastructure/platform/cnpg-cluster/base/network-policy.yaml`) lets
-  `app.kubernetes.io/component in (beat, worker)` reach DNS, Postgres, Dragonfly and RabbitMQ only.
-  `allow-egress-celery-internet`
-  (`infrastructure/platform/cnpg-cluster/components/celery-internet-egress/network-policy.yaml`) adds `0.0.0.0/0`
-  **except** `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`. Both `urbanlens-worker` and
-  `urbanlens-worker-panels` carry `component: worker`. The web pods have no egress policy.
-- **REData's address on the LAN.** From chiron, `getent hosts redata.urbanlens.org` → `10.2.0.214` (NPM on jungu);
-  `urbanlens.org` → Cloudflare. bida (site-b) is `10.2.0.245` on the same LAN (`infrastructure/network/ADDRESSING.md`).
-  The infrastructure repo's REData basemap handoff reply says `redata.urbanlens.org` "really is NPM plus dynamic
-  DNS today". `UL_SEARXNG_BASE_URL`'s host in this checkout's `.env` also resolves to `10.2.0.214`.
-- **Production's REData URL.** `secrets/site-b/urbanlens-app-env.enc.yaml` carries `UL_REDATA_API_URL` and
-  `UL_REDATA_API_KEY` (names read, values not), copied from the compose stack at cutover. `bin/cutover.py` refuses a
-  literal private host, so the value is presumably the public name; staging uses `https://redata.urbanlens.org`.
-- **What the app does with an unreachable REData.** A network failure is `REASON_SOURCE_ERROR`, a transient reason
-  (`services/apis/property_records/redata_gateway.py:138`). The CRIS fetch re-raises it
-  (`plugins/builtin/cris_buildings.py`, `_fetch_now`), `run_panel_fetch` logs it and sets the skip key, and nothing
-  is cached. `collect_source_documents` then has no row and no fetch in flight, so Article > Sources lists nothing.
-  Google Images and Web Images call `RedataSearchGateway.search_web` and also cache nothing on failure.
-  Smithsonian, LoC, Internet Archive and Digital Commonwealth are REData-backed too.
+**What's left is the app's: the failures were cached as empty answers.** This entry used to claim that "a refusal
+caches nothing". On production that was false. Between 01:00Z and 05:40Z, while every REData call from celery was
+refused, these sources wrote empty rows to `dashboard_location_cache`:
 
-**Not the code.** On `development_main`, which reaches REData publicly, HRSH's Location 97736 has a site-scope
-`cris_building_usn` row with `attachments_fetched: true`, 20 attachments and 17 campus buildings, and
-`collect_source_documents` lists 12 documents at site scope. The queues are covered: `worker-panels` drains
-`panel_fetch` (the CRIS panel fetch); `worker` drains `bulk` (`extract_cris_attachments`) and `celery` (where the
-sandbox tasks go while `UL_SANDBOX_ENABLED` is unset).
+| Source | Rows written in the window | Empty |
+|---|---|---|
+| `cris_building_usn` | 50 | 50 |
+| `redata_place_details` | 50 | 50 |
+| `parcel_buildings` | 51 | 48 |
+| `redata_building_attributes` | 50 | 47 |
+| `smithsonian`, `library_of_congress`, `internet_archive`, `web_search`, `redata_historic_registers`, `redata_site_features` | 1 each (HRSH) | all |
 
-**Read-only checks that settle it** (Jess; the HRSH Location id comes from the first query):
+`{"items": []}`, `{"results": []}`, `{"resources": []}` and `{}` then held for `external_data_cache_days` (7 on
+production). HRSH's `cris_building_usn` row was still the 2026-08-01 one, because the 02:32Z refetch failed and left it.
+With Jess's yes, the infrastructure side deleted the 203 empty rows from that window at about 17:45Z, so the next view
+refetches.
 
-```bash
-# 1. What the panel worker resolves REData to. A 10.x answer is the fault.
-kubectl -n urbanlens exec deploy/urbanlens-worker-panels -- python -c "import os,socket,urllib.parse as u; h=u.urlsplit(os.environ['UL_REDATA_API_URL']).hostname; print(h, socket.gethostbyname(h))"
-# 2. Reachability from the worker, then from web (web has no egress policy). An HTTP status is reachable; a timeout is not.
-for d in urbanlens-worker-panels urbanlens-web; do kubectl -n urbanlens exec deploy/$d -- python -c "
-import os,urllib.request,urllib.error as e
-try: print(urllib.request.urlopen(os.environ['UL_REDATA_API_URL'],timeout=10).status)
-except e.HTTPError as x: print('http',x.code)
-except Exception as x: print('unreachable',type(x).__name__)"; done
-# 3. The failures, as the worker logged them.
-kubectl -n urbanlens logs deploy/urbanlens-worker-panels --since=24h | grep -E "Panel fetch (cris_building|google_images|searxng_images|smithsonian|loc|internet_archive) .*failed|Could not reach REData|REData image search failed"
-```
-
-```sql
--- REData calls with no response at all (status_code NULL), against Commons for contrast.
-SELECT service, success, status_code, count(*), max(created) FROM dashboard_api_call_log
-WHERE created > now() - interval '1 day'
-  AND service IN ('redata_api', 'redata_search_web', 'smithsonian', 'library_of_congress', 'internet_archive', 'wikimedia')
-GROUP BY 1, 2, 3 ORDER BY 1;
--- HRSH's Location, then what is cached for it.
-SELECT id, latitude, longitude, official_name FROM dashboard_locations
-WHERE latitude BETWEEN 41.730 AND 41.737 AND longitude BETWEEN -73.932 AND -73.924;
-SELECT source, updated, query_key, data ? 'attachments_fetched' AS attachments_fetched, data->>'site_scope' AS site_scope,
-       jsonb_array_length(COALESCE(data->'attachments', '[]'::jsonb)) AS attachments,
-       jsonb_array_length(COALESCE(data->'items', '[]'::jsonb)) AS items
-FROM dashboard_location_cache WHERE location_id = <id> ORDER BY source;
--- schedule_panel_fetch refuses outright for an owner with external APIs off; rules that out.
-SELECT p.id, p.profile_id, pr.external_apis_enabled FROM dashboard_user_pins p
-JOIN dashboard_profiles pr ON pr.id = p.profile_id WHERE p.location_id = <id>;
-```
-
-**The fix is the infrastructure repo's**, one of: an egress rule admitting `10.2.0.214/32:443` for `component: worker`;
-a public answer for `redata.urbanlens.org` inside the cluster (which then needs the router to hairpin); or a
-`UL_REDATA_API_URL` the policy already admits. Nothing in the app needs clearing afterwards: the failures cached
-nothing and the skip keys expire. A `cris_building_usn` row cached as `{}` by a non-transient refusal (the third SQL
-query shows it) would hold until `external_data_cache_days` passes.
+**Fix:** a source error must cache nothing, or at most a short negative entry that the reader treats as "unknown", not
+as "nothing here". A source error is `REASON_SOURCE_ERROR`, a connection failure, a timeout, or a 5xx. This applies to
+every source in the table and to every media-search provider. A real empty answer still caches for the full term.
+Reproduce first: for each source, a test where the gateway raises or reports a source error, asserting that no
+`LocationCache` row is written and that an existing good row is left alone.
 
 ## P188 — Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location
 
@@ -3080,3 +2908,112 @@ cached `.pdf`/`.djvu` rows. Documents from Commons (and any other provider) shou
 Article > Sources (`services/pins/source_documents.py`, `DocumentPanelSource`; CRIS is the only one today), filtered
 by the same relevance rule. Applies after P188, whose per-audience rows carry the names each row was searched with.
 
+
+## P197 — "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them
+
+`id: P197` · `status: open` · `updated: 2026-10-02` · `found by: the audit re-check (P19 unit 14)`
+
+Settings offers both rows, but nothing in `src/` sends either `NotificationType`, so switching them changes nothing.
+**Jess, 2026-10-02: build both.**
+
+- **Trip Updated**: a trip's members hear when its details or activities change, except the member who changed them.
+- **Community Wiki Updated**: people with a pin at the place hear when its wiki changes, except the editor. The
+  wiki's concealment rules decide what the notification may say (`docs/notes/wiki-concealment-architecture.md` and
+  the memory of the same name): it must not reveal a field the recipient cannot see.
+- **Batching**: a burst of edits must not become a burst of notifications. Fold edits by the same actor to the same
+  trip or wiki within a window into one notification, counted ("3 changes").
+- Both honour the existing row's in-app, email and text toggles, as every other producer does
+  (`notification_text_alerts.PREFERENCE_TYPE_FOR`).
+
+## P198 — A player who leaves or is kicked mid-game disappears from the final scoreboard and from their own history
+
+`id: P198` · `status: open` · `updated: 2026-10-02` · `found by: the audit re-check (P19)`
+
+In SpotGuessr and Trivia, `session_summary` reads `participants.joined()` and `overview.participated_sessions`
+reads `.active()`, so a departed player drops out of both, though their points stay on their row. **Jess,
+2026-10-02:** list them on the end-of-game scoreboard marked "Left" (or "Removed" for a kick, if the row says so),
+with their points, and keep the game in their own history. They still lose the session's live view.
+
+## P199 — A site admin can see and revoke only the subscription grants they made
+
+`id: P199` · `status: open` · `updated: 2026-10-02` · `found by: the audit re-check (P19 unit 19)`
+
+`controllers/site_admin.py` scopes both the grant list and the revoke to `granted_by=request.user`, so a grant made
+by another admin, or by one who has left, can't be seen or revoked through the UI. **Jess, 2026-10-02:** every
+site admin sees and can revoke every grant. Each grant still shows who made it. Non-admins keep getting nothing,
+which needs a test written as an exploit attempt first (a non-admin revoking someone's grant).
+
+## P200 — A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown
+
+`id: P200` · `status: open` · `updated: 2026-10-02` · `found by: Jess's HRSH report`
+
+`entries/map-annotations.ts`: a sidebar tile for a photo with a place pans to it and flashes its marker. Only a photo
+with no place opens the lightbox. **Jess, 2026-10-02:** open the lightbox as before, and pan the map behind it. She
+adds: "The lightbox didn't open before (or if it did, it wasn't visible to the user)." So find out why, in a real
+browser, before the fix. Likely suspects are a lightbox drawn under the map's panes or the sidebar's stacking context,
+or one opened inside a container that clips it. A Playwright test must assert the lightbox is visible and on top
+(`elementFromPoint` at its centre), not merely present.
+
+## P201 — An upload that meets a Garage quorum failure is a 500, and the photo is lost
+
+`id: P201` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 4`
+
+Garage runs two nodes with `replication_factor = 2`, so a write needs both. When a node has stalled for more than
+about 75 s, writes fail with a 503 ("Timeout" or "Not connected") until it reconnects. That happened 140 times in the
+week to 2026-10-02. `GatedS3Storage` has no `client_config`, so botocore's defaults apply: 5 attempts and a 60 s read
+timeout. `services/photos/uploads.py:upload_photo_for_owner` catches only `UploadRefusedError`. A "Not connected" gap
+is a 500 with no row. A "Timeout" stall can hold a thread for about 5 × 60 s, past Cloudflare's 100 s, and the row can
+then appear after the user saw an error. Their asks:
+
+- catch `botocore` `ClientError`/`EndpointConnectionError` and `S3UploadFailedError` on every direct upload path, and
+  answer 503 with `Retry-After`, keeping the bytes if the P119 retry machinery can hold them;
+- set a `client_config` with a read timeout well under 100 s and an explicit retry mode.
+
+## P202 — The scheduled database backup cannot work on Kubernetes, and a restore turns it back on
+
+`id: P202` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 5`
+
+`run_scheduled_database_backup` writes plain SQL into `settings.backups_dir`. On the platform that is an emptyDir on the
+worker pod. Its first run wrote 11.26 GB into a 12 Gi volume. The next pod's empty directory reads as "due now"
+(`scheduled_backup_due()` is True when there are no files). Infrastructure set `backup_enabled = false` in production's
+settings row. A restore or re-seed brings the old row back, and with it the task. The platform's own backups cover the
+data. Asks: let a deployment turn the task off where the row can't override it (`UL_BACKUP_ENABLED=false` winning over
+the row); and, if the task stays, write `pg_dump -Fc` or gzip, which cuts 11 GB to about 1.
+
+## P203 — A Static Maps 403 logs the full request URL, Google API key included
+
+`id: P203` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 6`
+
+The worker logs a Static Maps 403 at WARNING with the full URL, `key=` and all. That log goes to Loki. Fix: redact
+query-string secrets (at least `key=`, plus any parameter a gateway sends a credential in) everywhere a provider URL is
+logged, preferably in one logging filter or one URL formatter every gateway uses. It is a credential leak, so it needs a
+failing test reproducing the logged key first. The key's rotation is the infrastructure side's; the 403 suggests its
+restrictions don't admit the caller either.
+
+## P204 — `media-copy`'s designed 503 is logged as an ERROR a dozen times an hour
+
+`id: P204` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 7`
+
+`RemoteImageCopyView` answers 503 with `Retry-After` while a copy is being made. `django.request` logs every 5xx at
+ERROR, so production's log reads "Service Unavailable: /dashboard/map/media-copy/<digest>/" at ERROR about twelve times
+an hour. Either answer 202 for "not yet" (check every client that polls it), or filter that view's 503 out of
+`django.request`'s ERROR.
+
+## P205 — One Overpass 504 marks every Overpass endpoint down until the next day
+
+`id: P205` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 8`
+
+At 01:17Z on 2026-10-02 one 504 from `overpass-api.de` marked all Overpass endpoints down "until the next day"
+(`overpass.py`), and 46 warnings followed. A transient upstream error should back off for minutes, per endpoint, and
+grow on repeats. A day-long block should be reserved for a quota answer that means it.
+
+## P206 — `dashboard_location_cache` is 81% of production's database
+
+`id: P206` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 9`
+
+1,915 MB of 2,361 MB: 135k rows, about 1.85 GB of it TOAST, with a 69% TOAST hit ratio against 99.9% for heap. Index
+scans fetched 972k tuples from it in a day, and one pooler pod sent 11.35 GB to clients in five hours, most likely from
+it. It also sets the nightly dump's size and its 12 minutes. Questions: which reads pull the whole `payload` where a few
+fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows? Measure on
+`development_main` first. Production's `pg_stat_statements` is being loaded on the infrastructure side and will name
+the queries.

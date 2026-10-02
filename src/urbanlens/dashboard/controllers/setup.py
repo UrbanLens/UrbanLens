@@ -167,12 +167,6 @@ def _build_feature_groups(app_settings) -> list[dict]:
                     "env_var": "UL_CLOUDFLARE_AI_API_KEY + UL_CLOUDFLARE_AI_ENDPOINT",
                     "configured": bool(app_settings.cloudflare_ai_api_key and app_settings.cloudflare_ai_endpoint),
                 },
-                {
-                    "name": "HuggingFace AI",
-                    "description": "Open-source model inference via HuggingFace",
-                    "env_var": "UL_HUGGINGFACE_AI_API_KEY",
-                    "configured": bool(app_settings.huggingface_ai_api_key),
-                },
             ],
         },
         {

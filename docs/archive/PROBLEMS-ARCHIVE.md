@@ -20329,3 +20329,19 @@ viewer whenever the wiki had a child wiki: concealment was applied only to a sin
 applied per wiki (`_conceal_by_wiki`); `WikiChildListingConcealmentTests` reproduces it.
 
 **Ruled by Jess 2026-10-02:** the 5,000-photo per-album cap (`max_photos_per_album`) stays.
+
+## RESOLVED 2026-10-02: A Valkey outage no longer takes the site down, and /health/ready stays 503 while degraded (Jess's ruling)
+
+`id: P105` · `status: fixed` · `resolved: 2026-10-02`
+
+A Valkey outage used to fail every request after 32 seconds, the readiness probe included. Now the site keeps serving
+in about 40 ms, and `/health/ready` gives its verdict in about 4 s. Two parts made that work:
+
+- the cache backend catches redis-py's own `ConnectionError`/`TimeoutError`, which derive from `RedisError`, not the
+  builtins;
+- every degradation test raises all four exception classes a real outage produces.
+
+The one open question was what the probe should answer while degraded. **Jess, 2026-10-02: keep 503.** So a cache
+outage still pages through the infrastructure repo's ingress watcher, and a rollout waits it out (`deployment-web.yaml`
+uses the endpoint as its startupProbe). `test_health.py` asserts the 503 and the `degraded` field together. PL7's
+"stays 200 when degraded" is a different case: connection pressure with the cache up still answers 200.

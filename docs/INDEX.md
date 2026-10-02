@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P197` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
+**Next free id:** `P207` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -40,16 +40,16 @@ still resolves after it is fixed, and the id is never handed out again.
 | P9 | open | 2026-09-15 | REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-10-02 | Frontend TS audit: its correctness bullets are fixed, the structural debt it found is not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P14 | open | 2026-09-29 | Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P14 | open, handed to infrastructure | 2026-10-02 | Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P16 | open | 2026-09-15 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P19 | open | 2026-10-02 | Audit residue: a 1,100-line `_dark.scss`, a stub AI gateway, two notification settings that control nothing, and other deferred gaps | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P16 | open, decided | 2026-10-02 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P19 | open | 2026-10-02 | Audit residue: group chats lack direct messages' features, and the hypothesis strategies are barely shared | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-09-24 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P36 | open, decided | 2026-10-02 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-29 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P53 | open | 2026-10-02 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P53 | open, decided | 2026-10-02 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-10-02 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | T1 | done | 2026-08-27 | The mobile team's 2026-07-27 ask list is spent: its P0 was already false and its P2 remainder moved on | [`docs/notes/mobile_app_requirements.md`](notes/mobile_app_requirements.md) |
 | T2 | open | 2026-08-27 | HIGH 0-ref findings are all triaged; the MEDIUM tier and Jess's caching requests are still open | [`docs/reports/code_audit_status.txt`](reports/code_audit_status.txt) |
@@ -62,8 +62,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL7 | live | 2026-09-11 | Making "no user can affect another user's availability" a property the tests can prove; phases 0, 1 and 5 done, 2 and 6 partly | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P85 | open | 2026-09-29 | Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P95 | open | 2026-10-02 | An import preview reads each file a chunk at a time, but one oversized element is still built whole at 10-13x its size | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P105 | open | 2026-09-13 | A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P110 | open | 2026-09-17 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off — the request-rate gap is closed in code and unit-tested, not yet re-verified live | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P110 | open, decided | 2026-10-02 | The app reads Overture from its public S3 copy, although REData serves the same themes from our own instance | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-17 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-17 | 54 verified places where one account's ordinary use can degrade the site for everyone else, all fixed except 4 parked by decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -196,7 +195,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P145 | open | 2026-09-23 | The HRSH courtyard pin on k3s-staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P148 | open | 2026-09-24 | A county-sized "parcel" put strangers across the Capital District into one wiki and pin-in-common domain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P167 | open | 2026-09-29 | Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P165 | open | 2026-10-02 | Articles saved before 2026-09-30 name provider images in their source until `manage.py localize_article_images` runs on each deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P165 | open, handed to infrastructure | 2026-10-02 | Articles saved before 2026-09-30 name provider images in their source until `manage.py localize_article_images` runs on each deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P170 | open | 2026-09-29 | Nothing deletes article revisions, and each one is a full copy of the article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N29 | current | 2026-09-24 | A read of controllers, services, models, tasks, and the map frontend found game-auth, wiki-notify, geocode, merge, login-oracle, verification-resend, pin-share, undo, profile-preview, trip-list, billing-race, friend-cap, media-buffer, rate-limit, lock, presence, memories-api, achievement-backfill, map-share, billing-sweep, overlay-import, pin-refresh, slide-ready, deletion-mail, decrypt-delete, site-url, broker-fallback, task-time-limit, friend-invite, floorplan-labels, overlay-cap, friend-visibility, link-archive, social-probe, gotify, label-create, trip-location, upload-quota, checksum-race, immich-fetch, gmail-alias, api-key-usage, lost-scan, sso-email, password-reset-lookup, device-scan, lost-device-upload, password-change-tokens, fact-confidence, group-block, trip-list-page, descendant-walk, calendar-fanout, map-center-stale, health-probe, export-memory, session-rows, notification-log, scan-readings, visit-suggestions, public-pin-fanout, backup-dump, group-inbox, invite-mail, notify-mail, channel-buffer, profile-create, map-count, reputation-ledger, custom-field-text, wiki-edit-race, api-page-offset, geolocation-ping, trivia-generation, saved-filter-scan, photo-map-sample, push-fanout, assistant-timeout, upload-lock-expiry, album-listing, text-alert-enqueue, article-revisions, places-autocomplete, trip-weather, nearby-places, custom-field-count, safety-home, floorplan-features, map-label-embed, label-hierarchy, and historical-map-browse defects; paused after batch 35 with the remaining gaps written in the note; no fixes proposed | [`docs/notes/codebase-assessment-2026-09-23.md`](notes/codebase-assessment-2026-09-23.md) |
 | N30 | current | 2026-09-29 | Where every verified N29 finding stands, after a second verification pass found a dozen the first had counted fixed | [`docs/notes/codebase-assessment-2026-09-23-dispositions.md`](notes/codebase-assessment-2026-09-23-dispositions.md) |
@@ -204,9 +203,20 @@ still resolves after it is fixed, and the id is never handed out again.
 | X31 | holds | 2026-09-30 | One chat message costs ~30-60 ms of CPU and ~25 queries where it is handled, so one sender saturates the single daphne process at ~15-30 messages/s; that, not notifications, is the DoS threshold; chat now allows a burst of 30 then 4/s | [`docs/notes/chat-message-cost-measured.md`](notes/chat-message-cost-measured.md) |
 | P182 | open | 2026-10-01 | A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P186 | open | 2026-10-02 | `Location.official_name` is seeded from text the client sent, and a new Location takes its URL slug from it at creation; a new wiki adopts it as its automatic name and concealment shows it as the provider name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P187 | open | 2026-10-02 | Production's celery workers likely cannot reach REData: the LAN answers redata.urbanlens.org with NPM's private address, which the celery egress policy refuses, so no CRIS documents, CRIS photos or web images land | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P187 | open | 2026-10-02 | A source error is cached as an empty answer for seven days, so a few hours' REData outage blanked every Location it touched | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P193 | open | 2026-10-02 | Two product questions and two unchecked gaps left by the write-route audit (P29) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P195 | open | 2026-10-02 | 17 dashboard views and the check-in photo reposition parse a body with `json.loads` directly, so a deeply nested one is a 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P196 | open | 2026-10-02 | Media galleries keep results that match the search words, not the place; Commons books were dropped instead of filed as documents | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P197 | open | 2026-10-02 | "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them; Jess: build both, batched | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P198 | open | 2026-10-02 | A player who leaves mid-game disappears from the final scoreboard and their own history; Jess: list them as "Left" | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P199 | open | 2026-10-02 | A site admin can see and revoke only the subscription grants they made; Jess: every admin sees every grant | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P200 | open | 2026-10-02 | A placed photo chosen in the map sidebar pans instead of opening the lightbox, and the old lightbox may never have shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P201 | open | 2026-10-02 | An upload that meets a Garage quorum failure is a 500, and the photo is lost | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P202 | open | 2026-10-02 | The scheduled database backup cannot work on Kubernetes, and a restore turns it back on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P203 | open | 2026-10-02 | A Static Maps 403 logs the full request URL, Google API key included | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P204 | open | 2026-10-02 | `media-copy`'s designed 503 is logged as an ERROR a dozen times an hour | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P205 | open | 2026-10-02 | One Overpass 504 marks every Overpass endpoint down until the next day | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P206 | open | 2026-10-02 | `dashboard_location_cache` is 81% of production's database | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |
+| N33 | current | 2026-10-02 | Ask: run `localize_article_images` and `sweep_unnamed_pin_images --delete` on staging and production now, per Jess; restore tooling is infrastructure's | [`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`](handoffs/infrastructure-jess-decisions-2026-10-02.md) |
