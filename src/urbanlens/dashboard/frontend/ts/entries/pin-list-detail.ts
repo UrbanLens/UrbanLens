@@ -13,6 +13,7 @@ import { startEditInPlace, type EditInPlaceOptions } from "../shared/edit-in-pla
 import { fetchResponse } from "../shared/fetch-json";
 import { overviewIcon, overviewPopupHtml, type OverviewPoint } from "../shared/pin-list-overview";
 import { installSavedFilterForm } from "../shared/saved-filter-form";
+import { orderSaveHandlers } from "../shared/sortable-order";
 
 declare const L: typeof import("leaflet");
 
@@ -158,14 +159,13 @@ class PinListPage {
             animation: 150,
             handle: ".pin-list-item-drag-handle",
             ghostClass: "pin-list-item--ghost",
-            onEnd: () => this.saveOrder(list),
+            ...orderSaveHandlers(list, () => this.saveOrder(list), () => toastError("Could not save the new order.")),
         });
     }
 
-    private saveOrder(list: HTMLElement): void {
+    private saveOrder(list: HTMLElement): Promise<RedirectResponse> {
         const items = Array.from(list.querySelectorAll<HTMLElement>(".pin-list-item[data-id]")).map((el) => ({ id: el.dataset.id }));
-        // The DOM already shows the new order, so a silent failure reads as saved until the next load undoes it.
-        postJson(list.dataset.saveUrl ?? "", { items }).catch(() => toastError("Could not save the new order."));
+        return postJson(list.dataset.saveUrl ?? "", { items });
     }
 
     // -- Title and description, edited in place --------------------------------
