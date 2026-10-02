@@ -6,7 +6,7 @@
  * core.js runs in <head>, before <body> exists, so listeners go on document.
  */
 
-import { raiseToasts, toast } from "./dialogs";
+import { raiseToasts, toast, toastWithAction } from "./dialogs";
 
 export const TOAST_TIMEOUT_MS = 4500;
 
@@ -51,8 +51,9 @@ export function configureToastr(): void {
     for (const kind of ["success", "error", "warning", "info"] as const) {
         const show = library[kind].bind(library);
         library[kind] = (message, title, options) => {
-            show(message, title, options);
+            const shown = show(message, title, options);
             raiseToasts();
+            return shown;
         };
     }
 }
@@ -199,6 +200,34 @@ export function sizeEditInPlaceInput(displayEl: Element, inputEl: HTMLElement): 
     if (rect.height > 0) inputEl.style.minHeight = `${rect.height}px`;
 }
 
+/** An HX-Trigger ``showToast`` payload. The message is text; a link to show after it travels separately. */
+export interface TriggeredToast {
+    level?: string;
+    message?: string;
+    link?: { label: string; href: string };
+}
+
+/** The path of a page on this site, or null for anything else. */
+function sitePath(href: string): string | null {
+    let url: URL;
+    try {
+        url = new URL(href, window.location.href);
+    } catch {
+        return null;
+    }
+    if (url.origin !== window.location.origin || (url.protocol !== "http:" && url.protocol !== "https:")) return null;
+    return url.pathname + url.search + url.hash;
+}
+
+export function showTriggeredToast(detail: TriggeredToast | undefined): void {
+    if (!detail) return;
+    const level = toastLevel(detail.level);
+    const message = detail.message ?? "";
+    const href = detail.link ? sitePath(detail.link.href) : null;
+    if (detail.link && href) toastWithAction(level, message, { label: detail.link.label, href });
+    else toast[level](message);
+}
+
 export function installSiteRuntime(): void {
     installCsrfToken();
     configureToastr();
@@ -207,10 +236,7 @@ export function installSiteRuntime(): void {
     installValidationReports();
     installProfilePreviewGuard();
     window.urbanlensSizeEditInPlaceInput = sizeEditInPlaceInput;
-    document.addEventListener("showToast", (event) => {
-        const d = (event as CustomEvent<{ level?: string; message?: string } | undefined>).detail;
-        if (d) toast[toastLevel(d.level)](d.message ?? "");
-    });
+    document.addEventListener("showToast", (event) => showTriggeredToast((event as CustomEvent<TriggeredToast | undefined>).detail));
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", showServerMessages, { once: true });
     else showServerMessages();
 }

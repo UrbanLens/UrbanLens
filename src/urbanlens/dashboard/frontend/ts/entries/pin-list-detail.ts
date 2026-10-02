@@ -10,8 +10,10 @@ import type {} from "leaflet-draw";
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction, toast } from "../shared/dialogs";
 import { startEditInPlace, type EditInPlaceOptions } from "../shared/edit-in-place";
+import { fetchResponse } from "../shared/fetch-json";
 import { overviewIcon, overviewPopupHtml, type OverviewPoint } from "../shared/pin-list-overview";
 import { installSavedFilterForm } from "../shared/saved-filter-form";
+import { orderSaveHandlers } from "../shared/sortable-order";
 
 declare const L: typeof import("leaflet");
 
@@ -75,14 +77,14 @@ function readConfig(root: HTMLElement): PinListConfig {
 }
 
 function toastError(message: unknown): void {
-    toast.error(String(message || "Something went wrong."));
+    toast.error(message instanceof Error ? message.message : String(message || "Something went wrong."));
 }
 
 /**
  * POST JSON, resolving to the parsed body and rejecting with the server's message, whether it sent JSON or text.
  */
 async function postJson(url: string, payload: unknown): Promise<RedirectResponse> {
-    const response = await fetch(url, {
+    const response = await fetchResponse(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
         body: JSON.stringify(payload),
@@ -140,7 +142,7 @@ class PinListPage {
     }
 
     private refreshItems(): void {
-        fetch(this.cfg.itemsUrl)
+        fetchResponse(this.cfg.itemsUrl)
             .then((r) => (r.ok ? r.text() : Promise.reject("Could not refresh this list.")))
             .then((html) => this.replaceItems(html))
             .catch(toastError);
@@ -157,14 +159,13 @@ class PinListPage {
             animation: 150,
             handle: ".pin-list-item-drag-handle",
             ghostClass: "pin-list-item--ghost",
-            onEnd: () => this.saveOrder(list),
+            ...orderSaveHandlers(list, () => this.saveOrder(list), () => toastError("Could not save the new order.")),
         });
     }
 
-    private saveOrder(list: HTMLElement): void {
+    private saveOrder(list: HTMLElement): Promise<RedirectResponse> {
         const items = Array.from(list.querySelectorAll<HTMLElement>(".pin-list-item[data-id]")).map((el) => ({ id: el.dataset.id }));
-        // The DOM already shows the new order, so a silent failure reads as saved until the next load undoes it.
-        postJson(list.dataset.saveUrl ?? "", { items }).catch(() => toastError("Could not save the new order."));
+        return postJson(list.dataset.saveUrl ?? "", { items });
     }
 
     // -- Title and description, edited in place --------------------------------
@@ -280,7 +281,7 @@ class PinListPage {
             confirmLabel: "Delete list",
         });
         if (!confirmed) return;
-        fetch(this.cfg.deleteUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() } })
+        fetchResponse(this.cfg.deleteUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() } })
             .then((r) => {
                 if (!r.ok) throw "Could not delete this list.";
                 window.location.href = this.cfg.deletedUrl;
@@ -460,7 +461,7 @@ class PinListPage {
             body.append("latitude", String(pending.lat));
             body.append("longitude", String(pending.lng));
             confirmBtn.disabled = true;
-            fetch(this.cfg.pinAddUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body })
+            fetchResponse(this.cfg.pinAddUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body })
                 .then((r) => (r.ok ? (r.json() as Promise<{ pin_slug?: string }>) : r.text().then((t) => Promise.reject(t || "Failed to create pin."))))
                 .then((data) => {
                     byId("add-pins-create-confirm-dialog", HTMLDialogElement)?.close();
@@ -476,7 +477,7 @@ class PinListPage {
     }
 
     private addPinBySlug(slug: string): void {
-        fetch(this.cfg.itemsAddUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: new URLSearchParams({ pin_slugs: slug }) })
+        fetchResponse(this.cfg.itemsAddUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: new URLSearchParams({ pin_slugs: slug }) })
             .then((r) => (r.ok ? r.text() : Promise.reject("Could not add that pin.")))
             .then((html) => {
                 this.replaceItems(html);

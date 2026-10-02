@@ -6,13 +6,14 @@
 import type { Map as MaplibreMap } from "maplibre-gl";
 import type { HtmxApi } from "../types/globals";
 import { deletePinCascade } from "../shared/confirm-dialog";
-import { confirmAction } from "../shared/dialogs";
-import { fetchJson, fetchText, sendJson, type FetchJsonOptions } from "../shared/fetch-json";
+import { confirmAction, toastWithAction } from "../shared/dialogs";
+import { NetworkError, fetchJson, fetchResponse, fetchText, sendJson, type FetchJsonOptions } from "../shared/fetch-json";
 import { createPinClusterGroup, isAdditiveClick as sharedIsAdditiveClick } from "../shared/map-clusters";
 import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared/pin-cache";
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
 import { labelChip, labelSuggestion, type LabelCandidate } from "../shared/add-pin-label-chips";
 import { MapContextMenu } from "../shared/map-context-menu";
+import { pinsMetaChecker } from "../shared/pins-meta";
 import { readMapFilterResults, type MapFilterResults } from "../shared/map-filter-results";
 import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
 import { LocationSearchEngine, type LocationSearchAttachOptions } from "../shared/location-search-engine";
@@ -333,12 +334,14 @@ function _cacheUserLocation(lat: number, lng: number): void {
 }
 
 function _recordGeolocationVisit(lat: number, lng: number): void {
-    fetch(_GEOLOCATION_VISIT_URL, {
+    const init: FetchInit = {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": MAP_CFG.csrfToken },
         body: JSON.stringify({ latitude: lat, longitude: lng }),
         keepalive: true,
-    }).catch(() => {
+        __ulReported: true,
+    };
+    fetch(_GEOLOCATION_VISIT_URL, init).catch(() => {
         // Visit tracking is best-effort and should never block map use.
     });
 }
@@ -1056,6 +1059,7 @@ function _setOffline(offline: boolean): void {
     if (offline) console.warn("[UL] Server appears to be offline");
     else console.log("[UL] Server connectivity restored");
 }
+const _checkPinsMeta = pinsMetaChecker(MAP_CFG.urls.mapPinsMeta, _setOffline);
 
 // -- Temporary place markers (search jump + right-click context menu) -----
 // isSearch=true uses amber styling so search markers are visually distinct from
@@ -1187,13 +1191,8 @@ async function _pollForUpdates(): Promise<void> {
             await _refreshAllPins();
             return;
         }
-        const resp = await fetch(MAP_CFG.urls.mapPinsMeta, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-        if (!resp.ok) {
-            _setOffline(true);
-            return;
-        }
-        _setOffline(false);
-        const data = (await resp.json()) as { app_uuid?: string; fingerprint?: string; last_updated?: string };
+        const data = await _checkPinsMeta();
+        if (!data) return;
         // App UUID changed mid-session (DB wiped while user had the map open).
         if (_APP_UUID && data.app_uuid && data.app_uuid !== _APP_UUID) {
             console.log("[UL] App UUID changed mid-session - clearing cache and reloading pins");
@@ -1679,9 +1678,9 @@ async function _fetchJson<T>(url: string, options?: FetchJsonOptions, timeoutMs?
     return result;
 }
 
-/** sendJson resolves null only for a 204; every endpoint this page posts to answers with a body. */
+/** sendJson resolves null only for a 204; every endpoint this page posts to answers with a body. Every caller toasts its own failure. */
 async function _sendJson<T>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown): Promise<T> {
-    const result = await sendJson<T>(url, method, body);
+    const result = await sendJson<T>(url, method, body, { reportsItsOwnErrors: true });
     if (result === null) throw new Error(`Empty response from ${url}`);
     return result;
 }
@@ -1927,11 +1926,13 @@ if (_MAP_CENTER_MODE === "remember") {
         _rememberTid = null;
         _pendingPositionBody = null;
         const body = _positionBody();
-        fetch(MAP_CFG.urls.settingsSaveMapPosition, {
+        const init: FetchInit = {
             method: "POST",
             headers: { "X-CSRFToken": body.get("csrfmiddlewaretoken") ?? "", "Content-Type": "application/x-www-form-urlencoded" },
             body: body.toString(),
-        }).catch(() => {});
+            __ulReported: true,
+        };
+        fetch(MAP_CFG.urls.settingsSaveMapPosition, init).catch(() => {});
     };
     const _onRememberChange = (): void => {
         if (_rememberTid) clearTimeout(_rememberTid);
@@ -2423,7 +2424,7 @@ function _loadInfrastructure(): void {
     const requestSerial = ++_infrastructureRequestSerial;
     _setInfrastructureLoading(true);
 
-    fetch(`${MAP_CFG.urls.mapInfrastructure}?bbox=${encodeURIComponent(bbox)}`, {
+    fetchResponse(`${MAP_CFG.urls.mapInfrastructure}?bbox=${encodeURIComponent(bbox)}`, {
         signal: _infrastructureAbortController.signal,
         headers: { "X-Requested-With": "XMLHttpRequest" },
     })
@@ -2971,8 +2972,10 @@ function _buildPlacesMarker(place: PlaceData): L.Marker {
                 },
             ],
         });
+        // Both only fill in a menu that already shows the place, so a miss is not worth a toast.
         if (place.source === "google" && place.place_id) {
-            fetch(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            const init: FetchInit = { headers: { "X-Requested-With": "XMLHttpRequest" }, __ulReported: true };
+            fetch(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id)}`, init)
                 .then((resp) => (resp.ok ? (resp.json() as Promise<{ place?: PlaceData }>) : null))
                 .then((data) => {
                     if (data?.place && document.body.contains(detailsWrap)) {
@@ -2984,9 +2987,8 @@ function _buildPlacesMarker(place: PlaceData): L.Marker {
         }
         if (place.source === "wikipedia") {
             const wikiTitle = (place.name || "").replace(/ /g, "_");
-            fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiTitle)}`, {
-                headers: { Accept: "application/json" },
-            })
+            const init: FetchInit = { headers: { Accept: "application/json" }, __ulReported: true };
+            fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiTitle)}`, init)
                 .then((resp) => (resp.ok ? (resp.json() as Promise<{ extract?: string; description?: string }>) : null))
                 .then((data) => {
                     if (data && document.body.contains(detailsWrap)) {
@@ -3058,7 +3060,7 @@ async function _showPlaceInfoPanel(place: PlaceData): Promise<void> {
     // Google Places - fetch details from the server.
     if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading...</span>';
     try {
-        const resp = await fetch(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id || "")}`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        const resp = await fetchResponse(`${MAP_CFG.urls.mapPlacesDetails}?place_id=${encodeURIComponent(place.place_id || "")}`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
         if (!resp.ok) throw new Error();
         const data = (await resp.json()) as { place?: PlaceData };
         const d = data.place || ({} as PlaceData);
@@ -3490,8 +3492,7 @@ function _showUndoDeleteToast(count: number, descendantCount: number, token: str
     if (descendantCount > 0) {
         label += ` (+${descendantCount} child pin${descendantCount === 1 ? "" : "s"})`;
     }
-    const msg = `${label} deleted. ` + `<button type="button" class="toast-undo-btn" data-map-action="undo-bulk-delete" data-undo-token="${escHtml(token)}">Undo</button>`;
-    toastr.success(msg, "", { timeOut: 10000, extendedTimeOut: 4000, closeButton: true, tapToDismiss: false });
+    toastWithAction("success", `${label} deleted.`, { label: "Undo", data: { mapAction: "undo-bulk-delete", undoToken: token } }, { timeOut: 10000, extendedTimeOut: 4000, closeButton: true, tapToDismiss: false });
 }
 
 function _undoBulkDelete(token: string, btn: HTMLButtonElement | null): void {
@@ -3502,8 +3503,8 @@ function _undoBulkDelete(token: string, btn: HTMLButtonElement | null): void {
             toastr.success("Pins restored.");
             _refreshAllPins();
         })
-        .catch(function () {
-            toastr.error("Could not undo - the delete may have expired.");
+        .catch(function (err) {
+            toastr.error(err instanceof NetworkError ? "Couldn't reach the server, so the pins are still deleted. Try Undo again." : "Could not undo - the delete may have expired.");
             if (btn) btn.disabled = false;
         });
 }
@@ -5313,7 +5314,7 @@ function _parseIconCatalogue(html: string): IconCatalogue {
 
 function _loadIconCatalogue(url: string): Promise<IconCatalogue> {
     if (!_iconGridRequest) {
-        _iconGridRequest = fetchText(url)
+        _iconGridRequest = fetchText(url, { reportsItsOwnErrors: true })
             .then(_parseIconCatalogue)
             .catch((error: unknown) => {
                 // Dropped so the next open retries, rather than leaving the
@@ -6110,7 +6111,7 @@ interface CreateLabelResponse {
             submitBtn.disabled = false;
             return;
         }
-        fetch(createUrl, {
+        fetchResponse(createUrl, {
             method: "POST",
             body: fd,
             headers: { "X-CSRFToken": MAP_CFG.csrfToken, Accept: "application/json" },
@@ -6125,7 +6126,7 @@ interface CreateLabelResponse {
                 toastr.success(`Label "${data.name}" created.`);
             })
             .catch((err) => {
-                toastr.error("Failed to create label: " + String(err));
+                toastr.error("Failed to create label: " + (err instanceof Error ? err.message : String(err)));
             })
             .finally(() => {
                 submitBtn.disabled = false;
@@ -6205,7 +6206,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
         const uuid = _editPinUuid;
         this.disabled = true;
         this.textContent = "Saving...";
-        fetch(`/dashboard/map/quick-edit/${uuid}/`, {
+        fetchResponse(`/dashboard/map/quick-edit/${uuid}/`, {
             method: "POST",
             body: formData,
             headers: { "X-CSRFToken": MAP_CFG.csrfToken },
@@ -6221,7 +6222,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
                 }
                 map.closePopup();
             })
-            .catch((err) => toastr.error("Failed to save pin: " + String(err)))
+            .catch((err) => toastr.error("Failed to save pin: " + (err instanceof Error ? err.message : String(err))))
             .finally(() => {
                 this.disabled = false;
                 this.textContent = "Save Changes";
@@ -6271,7 +6272,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
         const pinLat = Number.parseFloat(lat);
         const pinLng = Number.parseFloat(lng);
         const pinName = String(formData.get("name") || "New Pin");
-        fetch(MAP_CFG.urls.pinAdd, {
+        fetchResponse(MAP_CFG.urls.pinAdd, {
             method: "POST",
             body: formData,
             headers: { "X-CSRFToken": MAP_CFG.csrfToken },
@@ -6306,7 +6307,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
                     }
                 }
             })
-            .catch((err) => toastr.error("Failed to add pin: " + String(err)))
+            .catch((err) => toastr.error("Failed to add pin: " + (err instanceof Error ? err.message : String(err))))
             .finally(() => {
                 this.disabled = false;
                 this.textContent = "Add Pin";
@@ -6369,7 +6370,7 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         const label = btn.textContent;
         btn.disabled = true;
         btn.textContent = busyText;
-        return fetch("/dashboard/map/pin/" + pinSlug + "/link/" + locSlug + "/", {
+        return fetchResponse("/dashboard/map/pin/" + pinSlug + "/link/" + locSlug + "/", {
             method: "POST",
             headers: { "X-CSRFToken": MAP_CFG.csrfToken, "X-Requested-With": "XMLHttpRequest" },
         })

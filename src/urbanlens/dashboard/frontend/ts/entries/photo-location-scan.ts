@@ -4,6 +4,7 @@
 import exifr from "exifr";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
+import { fetchResponse } from "../shared/fetch-json";
 import { addHitToClusters, clusterHits, partitionByCachedPins, type PhotoCluster, type PhotoHit } from "../shared/photo-location-cluster";
 import { readCachedPinLocations } from "../shared/pin-cache";
 
@@ -358,7 +359,7 @@ class PhotoLocationScanApp {
         try {
             // Regroup from the full, un-merged hit list rather than reusing the live display clusters.
             const finalClusters: UploadCluster[] = clusterHits(this.allHits).map((cluster) => ({ ...cluster, id: crypto.randomUUID() }));
-            const response = await fetch(this.uploadUrl, {
+            const response = await fetchResponse(this.uploadUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify({
@@ -419,7 +420,7 @@ class PhotoLocationScanApp {
                 const body = new FormData();
                 body.append("suggestion_id", String(suggestionId));
                 body.append("image", file);
-                const res = await fetch(this.uploadPhotoUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
+                const res = await fetchResponse(this.uploadPhotoUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
                 if (!res.ok) failures += 1;
             } catch {
                 failures += 1;

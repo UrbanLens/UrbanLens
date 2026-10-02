@@ -3,7 +3,7 @@
  */
 
 import type * as L from "leaflet";
-import { fetchText } from "./fetch-json";
+import { fetchResponse, fetchText } from "./fetch-json";
 import { templateTileLayer } from "./map-layers";
 import { processingPlaceholder, settleProcessingThumb, watchProcessingTiles } from "./photo-processing";
 
@@ -190,7 +190,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         body.append("corners", JSON.stringify(item.entry.corners));
         body.append("csrfmiddlewaretoken", options.csrfToken);
         try {
-            await fetchText(options.cornersUrl(item.entry.uuid), { method: "POST", body, headers: { "X-CSRFToken": options.csrfToken } });
+            await fetchText(options.cornersUrl(item.entry.uuid), { method: "POST", body, headers: { "X-CSRFToken": options.csrfToken }, reportsItsOwnErrors: true });
             options.onSaved?.(item.entry.uuid, item.entry.corners);
         } catch {
             options.onError?.("Could not save the overlay's position.");
@@ -600,8 +600,11 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         };
         setMessage("Loading this page's photos...");
 
-        fetch(galleryJsonUrl, { credentials: "same-origin" })
-            .then((response) => response.json())
+        fetchResponse(galleryJsonUrl, { credentials: "same-origin" })
+            .then((response) => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+            })
             .then((data: { images?: GalleryImage[] }) => {
                 const images = data.images || [];
                 if (!images.length) {

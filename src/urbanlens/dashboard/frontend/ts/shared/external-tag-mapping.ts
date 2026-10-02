@@ -1,6 +1,7 @@
 import Sortable from "sortablejs";
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { fetchResponse } from "./fetch-json";
 
 /**
  * Site-admin tag mapping page: drag-and-drop between equivalence groups.
@@ -70,7 +71,7 @@ export function initExternalTagMapping(): void {
         const body = document.getElementById("external-tag-mapping-body");
         const moveUrl = body?.dataset.moveUrl ?? "";
         try {
-            const response = await fetch(moveUrl, {
+            const response = await fetchResponse(moveUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": getCsrfToken() },
                 body: new URLSearchParams({ entry_id: entryId, target_group_id: targetGroupId }),
@@ -109,7 +110,7 @@ export function initExternalTagMapping(): void {
         selected.forEach((chip) => formData.append("entry_id", chip.dataset.entryId ?? ""));
         formData.append("search", search);
         try {
-            const response = await fetch(groupUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: formData });
+            const response = await fetchResponse(groupUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: formData });
             const html = await response.text();
             if (!response.ok) throw new Error("Grouping failed");
             replaceBody(html);

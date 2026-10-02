@@ -25,6 +25,8 @@ import { clearProfileKeys, getConversationKey, getGroupKey, getIdentity, putConv
 import type { PrfAssertionResult } from "./webauthn-client";
 import { assertForPrf, credentialIdOf, getPrfResult, registerPasskey } from "./webauthn-client";
 import { toast } from "./dialogs";
+import { HttpError, NetworkError, fetchResponse } from "./fetch-json";
+import { SESSION_ENDED_MESSAGE } from "./site-runtime";
 
 /** Endpoint URLs, provided by templates via {% url %} (see init()). */
 export interface E2EEUrls {
@@ -107,7 +109,7 @@ function csrfToken(form?: HTMLFormElement): string {
 }
 
 async function postJson(url: string, body: unknown): Promise<Response> {
-    return fetch(url, {
+    return fetchResponse(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
         credentials: "same-origin",
@@ -610,6 +612,16 @@ function notifyEnrolled(): void {
 export type UnlockState = "unlocked" | "locked" | "not-enrolled";
 
 /**
+ * The signed-in account's key bundle, for an unlock.
+ * @throws When it could not be had, which is no verdict on the secret the user typed.
+ */
+async function fetchOwnBundle(): Promise<KeyBundlePayload> {
+    const response = await fetchResponse(cfg().urls.keys, { credentials: "same-origin" });
+    if (!response.ok) throw new HttpError(response.status, response.status === 401 ? SESSION_ENDED_MESSAGE : "Couldn't load your encryption keys. Please try again.");
+    return (await response.json()) as KeyBundlePayload;
+}
+
+/**
  * Report whether this device can decrypt the signed-in user's messages.
  * @returns "unlocked" (cached key matches the server bundle), "locked"
  */
@@ -637,6 +649,7 @@ export async function getUnlockState(): Promise<UnlockState> {
  * Unlock this device with a typed/pasted recovery key.
  * @param display - The recovery key as the user entered it.
  * @returns True on success (identity cached; device unlocked).
+ * @throws When the key bundle could not be fetched.
  */
 export async function unlockWithRecovery(display: string): Promise<boolean> {
     await cryptoReady();
@@ -644,11 +657,7 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
     if (key === null) {
         return false;
     }
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (!response.ok) {
-        return false;
-    }
-    const bundle = (await response.json()) as KeyBundlePayload;
+    const bundle = await fetchOwnBundle();
     if (!bundle.enrolled) {
         return false;
     }
@@ -663,13 +672,16 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
 /**
  * Report which unlock paths this account's bundle offers on a cold device.
  * @returns Whether the account is enrolled at all, whether a password-wrapped
+ * secret and a passkey wrap exist, and why none could be learned when the bundle could not be had.
  */
-export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean; passkey: boolean }> {
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" }).catch(() => null);
-    if (!response?.ok) {
-        return { enrolled: false, password: false, passkey: false };
+export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean; passkey: boolean; error?: string }> {
+    let bundle: KeyBundlePayload;
+    try {
+        bundle = await fetchOwnBundle();
+    } catch (error) {
+        const reason = error instanceof NetworkError || error instanceof HttpError ? error.message : "Couldn't load your encryption keys. Please try again.";
+        return { enrolled: false, password: false, passkey: false, error: reason };
     }
-    const bundle = (await response.json()) as KeyBundlePayload;
     if (!bundle.enrolled) {
         return { enrolled: false, password: false, passkey: false };
     }
@@ -684,14 +696,11 @@ export async function getUnlockOptions(): Promise<{ enrolled: boolean; password:
  * Unlock this device with the account password.
  * @param password - The raw account password (never transmitted).
  * @returns True on success (identity cached; device unlocked).
+ * @throws When the key bundle could not be fetched.
  */
 export async function unlockWithPassword(password: string): Promise<boolean> {
     await cryptoReady();
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (!response.ok) {
-        return false;
-    }
-    const bundle = (await response.json()) as KeyBundlePayload;
+    const bundle = await fetchOwnBundle();
     if (!bundle.password_wrapped_secret || !bundle.password_wrap_salt) {
         return false;
     }
@@ -724,14 +733,11 @@ async function unlockFromWrap(bundle: KeyBundlePayload, wrap: PasskeyWrapPayload
 /**
  * Unlock this device with a passkey (one tap - no password, no recovery key).
  * @returns True on success (identity cached; device unlocked).
+ * @throws When the key bundle could not be fetched.
  */
 export async function unlockWithPasskey(): Promise<boolean> {
     await cryptoReady();
-    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (!response.ok) {
-        return false;
-    }
-    const bundle = (await response.json()) as KeyBundlePayload;
+    const bundle = await fetchOwnBundle();
     const wraps = bundle.passkey_wraps ?? [];
     if (!wraps.length) {
         return false;
@@ -823,7 +829,7 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
     if (identity === null) {
         return { ok: false, error: "Unlock your messages on this device first." };
     }
-    const keysResponse = await fetch(urls.keys, { credentials: "same-origin" });
+    const keysResponse = await fetchResponse(urls.keys, { credentials: "same-origin" });
     if (!keysResponse.ok) {
         return { ok: false, error: "Could not load your encryption keys. Please try again." };
     }
@@ -1005,6 +1011,10 @@ export function showUnlockDialog(): Promise<boolean> {
                     </div>
                 </div>`;
             const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
+            if (options.error) {
+                errorEl.textContent = options.error;
+                errorEl.hidden = false;
+            }
             const passkeyButton = overlay.querySelector<HTMLButtonElement>(".e2ee-unlock-passkey");
             const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-password");
             const recoveryInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-recovery");
@@ -1025,13 +1035,18 @@ export function showUnlockDialog(): Promise<boolean> {
 
             const tryUnlock = async (unlock: () => Promise<boolean>, failure: string) => {
                 setBusy(true);
-                const unlocked = await unlock().catch(() => false);
-                if (unlocked) {
-                    close(true);
-                    return;
+                let message = failure;
+                try {
+                    if (await unlock()) {
+                        close(true);
+                        return;
+                    }
+                } catch (error) {
+                    // The secret was never tried when its bundle could not be had.
+                    if (error instanceof NetworkError || error instanceof HttpError) message = error.message;
                 }
                 setBusy(false);
-                errorEl.textContent = failure;
+                errorEl.textContent = message;
                 errorEl.hidden = false;
             };
             const attempt = async () => {
@@ -1106,7 +1121,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
     let currentSecret = currentPassword;
     if (currentPassword) {
-        const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+        const paramsResponse = await fetchResponse(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
         if (!paramsResponse.ok) {
             return { ok: false, error: "Could not verify your current password. Please try again." };
         }
@@ -1157,7 +1172,7 @@ async function currentPasswordProof(password: string): Promise<string | null> {
     }
     let paramsResponse: Response;
     try {
-        paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+        paramsResponse = await fetchResponse(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
     } catch {
         return null;
     }
@@ -1175,6 +1190,7 @@ async function currentPasswordProof(password: string): Promise<string | null> {
  * Generate and store a replacement recovery key (device must be unlocked).
  *
  * @returns The new recovery key display string, or null when locked.
+ * @throws When the server refused the new key or could not be reached.
  */
 export async function regenerateRecoveryKey(): Promise<string | null> {
     await cryptoReady();
@@ -1186,7 +1202,8 @@ export async function regenerateRecoveryKey(): Promise<string | null> {
     const response = await postJson(cfg().urls.rewrap, {
         recovery_wrapped_secret: wrapSecretKey(identity.privateKey, recovery.key),
     });
-    return response.ok ? recovery.display : null;
+    if (!response.ok) throw new HttpError(response.status, "Could not save a new recovery key. Please try again.");
+    return recovery.display;
 }
 
 export interface ResetResult {
@@ -1261,7 +1278,7 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
         return null;
     }
 
-    const bundleResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    const bundleResponse = await fetchResponse(cfg().urls.keys, { credentials: "same-origin" });
     if (!bundleResponse.ok) {
         return null;
     }
@@ -1292,7 +1309,7 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
     // Re-encrypt history: unseal every wrapped key copy with the OLD key and
     // re-seal it to the NEW public key, all client-side.
     if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
-        const rewrapResponse = await fetch(cfg().urls.rewrapAll as string, { credentials: "same-origin" });
+        const rewrapResponse = await fetchResponse(cfg().urls.rewrapAll as string, { credentials: "same-origin" });
         if (!rewrapResponse.ok) {
             // Holding the old private key means every thread *could* have been preserved.
             return null;
@@ -1479,7 +1496,7 @@ export async function ensureConversationKey(partnerSlug: string): Promise<KeyRes
     if (identity === null || !selfSlug) {
         return { status: "unencryptable", reason: "This device is locked." };
     }
-    const response = await fetch(`${cfg().urls.conversationKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
+    const response = await fetchResponse(`${cfg().urls.conversationKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
     if (!response.ok) {
         return { status: "error", reason: `Could not load the conversation's keys (HTTP ${response.status}).` };
     }
@@ -1524,7 +1541,7 @@ async function createConversationKeyVersion(
     partnerSlug: string,
     version: number,
 ): Promise<KeyResult> {
-    const partnerResponse = await fetch(`${cfg().urls.partnerKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
+    const partnerResponse = await fetchResponse(`${cfg().urls.partnerKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
     if (partnerResponse.status === 404) {
         // The endpoint answers 404 both for "no key bundle" and "no DM relationship".
         return { status: "unencryptable", reason: "This person isn't set up for encrypted messages." };
@@ -1591,7 +1608,7 @@ export async function ensureGroupKey(groupUuid: string): Promise<KeyResult> {
     if (identity === null || !selfSlug) {
         return { status: "unencryptable", reason: "This device is locked." };
     }
-    const response = await fetch(groupKeyUrl(groupUuid), { credentials: "same-origin" });
+    const response = await fetchResponse(groupKeyUrl(groupUuid), { credentials: "same-origin" });
     if (!response.ok) {
         return { status: "error", reason: `Could not load the group's keys (HTTP ${response.status}).` };
     }

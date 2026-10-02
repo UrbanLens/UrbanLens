@@ -17,6 +17,7 @@ import { ARTICLE_SOURCE_EXTENSIONS, ArticleSourceTracker, blockImageMarkdown } f
 import { anchorSlug } from "../shared/article-toc-anchors";
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction } from "../shared/dialogs";
+import { fetchResponse } from "../shared/fetch-json";
 import { pollerFor } from "../shared/photo-processing";
 
 type EditorMode = "wysiwyg" | "source";
@@ -168,8 +169,59 @@ function watchInlineUpload(root: HTMLElement, url: string, id: number): void {
     });
 }
 
+// Where each image still uploading will go: a widget, so it is never part of the document or its source.
+const pendingUploads = new PluginKey<DecorationSet>("pendingImageUploads");
+
+interface PendingUploadChange {
+    add?: { id: object; pos: number };
+    remove?: object;
+}
+
+function pendingUploadLine(): HTMLElement {
+    const line = document.createElement("span");
+    line.className = "view-loading";
+    line.contentEditable = "false";
+    line.setAttribute("role", "status");
+    line.innerHTML = '<i class="material-icons spin" aria-hidden="true">autorenew</i> Uploading image...';
+    return line;
+}
+
+const PendingImageUploads = Extension.create({
+    name: "pendingImageUploads",
+
+    addProseMirrorPlugins() {
+        return [
+            new Plugin<DecorationSet>({
+                key: pendingUploads,
+                state: {
+                    init: () => DecorationSet.empty,
+                    apply(tr, set) {
+                        const change: PendingUploadChange | undefined = tr.getMeta(pendingUploads);
+                        let next = set.map(tr.mapping, tr.doc);
+                        if (change?.add) next = next.add(tr.doc, [Decoration.widget(change.add.pos, pendingUploadLine, { id: change.add.id, side: -1 })]);
+                        if (change?.remove) next = next.remove(next.find(undefined, undefined, (spec) => spec.id === change.remove));
+                        return next;
+                    },
+                },
+                props: {
+                    decorations: (state) => pendingUploads.getState(state),
+                },
+            }),
+        ];
+    },
+});
+
+/** Takes the upload's pending line away, returning where the editing since has moved it to. */
+function settlePendingUpload(editor: Editor, id: object): number | null {
+    if (editor.isDestroyed) return null;
+    const at = pendingUploads.getState(editor.state)?.find(undefined, undefined, (spec) => spec.id === id)[0]?.from ?? null;
+    const change: PendingUploadChange = { remove: id };
+    editor.view.dispatch(editor.state.tr.setMeta(pendingUploads, change));
+    return at;
+}
+
 /**
- * Upload a picked file to the article's image endpoint and insert it into the document at the current cursor once stored.
+ * Upload a picked file to the article's image endpoint and insert it where the cursor was once stored.
  */
 async function uploadAndInsertImage(root: HTMLElement, editor: Editor, file: File): Promise<void> {
     const uploadUrl = root.dataset.imageUploadUrl;
@@ -178,22 +230,29 @@ async function uploadAndInsertImage(root: HTMLElement, editor: Editor, file: Fil
     const formData = new FormData();
     formData.append("image", file);
 
+    const id = {};
+    const change: PendingUploadChange = { add: { id, pos: editor.state.selection.from } };
+    editor.view.dispatch(editor.state.tr.setMeta(pendingUploads, change));
+
     let data: UploadResponse = {};
     let ok = false;
     try {
-        const response = await fetch(uploadUrl, { method: "POST", body: formData, headers: { "X-CSRFToken": getCsrfToken() } });
+        const response = await fetchResponse(uploadUrl, { method: "POST", body: formData, headers: { "X-CSRFToken": getCsrfToken() } });
         ok = response.ok;
         data = (await response.json().catch(() => ({}))) as UploadResponse;
     } catch {
+        settlePendingUpload(editor, id);
         if (window.toastr) window.toastr.error("Image upload failed - check your connection and try again.");
         return;
     }
 
+    const at = settlePendingUpload(editor, id);
     if (!ok || !data.url) {
         if (window.toastr) window.toastr.error(data.error || "Image upload failed.");
         return;
     }
-    editor.chain().focus().setImage({ src: data.url, alt: file.name }).run();
+    if (at === null) return;
+    editor.chain().focus().insertContentAt(at, { type: "image", attrs: { src: data.url, alt: file.name } }).run();
     if (data.processing && data.id) watchInlineUpload(root, data.url, data.id);
 }
 
@@ -509,6 +568,7 @@ function mountEditor(root: HTMLElement): void {
                 heading: { levels: [2, 3, 4, 5, 6] },
             }),
             ArticleImage,
+            PendingImageUploads,
             TableKit.configure({ table: { resizable: false } }),
             Placeholder.configure({ placeholder: "Start writing, or type “/” to insert a block…" }),
             Markdown.configure({ html: false, linkify: true, transformPastedText: true }),

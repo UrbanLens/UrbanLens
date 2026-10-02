@@ -1,3 +1,5 @@
+import type { ToastrOptions } from "../types/globals";
+
 export interface ConfirmOptions {
     title?: string;
     message?: string;
@@ -23,9 +25,9 @@ const FALLBACK_TIMEOUT_MS = 4500;
 /**
  * Shows a toast without the library, in the markup toastr itself emits.
  */
-function fallbackToast(kind: ToastKind, message: string, title?: string): void {
+function fallbackToast(kind: ToastKind, message: string, title?: string): HTMLElement | null {
     const body = document.body;
-    if (!body) return;
+    if (!body) return null;
     let container = document.getElementById("toast-container");
     if (!container) {
         container = document.createElement("div");
@@ -51,6 +53,7 @@ function fallbackToast(kind: ToastKind, message: string, title?: string): void {
     item.addEventListener("click", () => item.remove());
     container.prepend(item);
     window.setTimeout(() => item.remove(), FALLBACK_TIMEOUT_MS);
+    return item;
 }
 
 /**
@@ -91,6 +94,45 @@ export const toast = {
         notify("info", message, title);
     },
 };
+
+/**
+ * A control at the end of a toast's message: a button carrying data attributes (as dataset keys) for the page's
+ * delegated click handler, or a link.
+ */
+export type ToastAction = { label: string; data: Record<string, string> } | { label: string; href: string };
+
+function toastControl(action: ToastAction): HTMLElement {
+    if ("href" in action) {
+        const link = document.createElement("a");
+        link.href = action.href;
+        link.className = "toast-undo-btn";
+        link.textContent = action.label;
+        return link;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-undo-btn";
+    Object.assign(button.dataset, action.data);
+    button.textContent = action.label;
+    return button;
+}
+
+/** The toast element inside the jQuery wrapper toastr hands back. */
+function drawnToast(shown: unknown): HTMLElement | null {
+    const first: unknown = shown !== null && typeof shown === "object" ? Reflect.get(shown, 0) : null;
+    return first instanceof HTMLElement ? first : null;
+}
+
+/**
+ * A toast whose message ends in a control. toastr escapes the message, so the control is added as a node once the
+ * toast is drawn rather than written into the message.
+ */
+export function toastWithAction(kind: ToastKind, message: string, action: ToastAction, options?: ToastrOptions): void {
+    const library = window.toastr;
+    const drawn = library ? drawnToast(library[kind](message, undefined, options)) : fallbackToast(kind, message);
+    if (!library) raiseToasts();
+    drawn?.querySelector(".toast-message")?.append(" ", toastControl(action));
+}
 
 /** Re-scans dynamically injected HTML (cloned tree-view nodes, innerHTML swaps) for hx-* attributes. */
 export function htmxProcess(element: Element): void {

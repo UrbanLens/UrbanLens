@@ -3,7 +3,7 @@
  */
 import { safeColor } from "../shared/markup-engine";
 import { getCsrfToken } from "../shared/csrf";
-import { fetchText, sendForText, sendJson } from "../shared/fetch-json";
+import { fetchResponse, fetchText, sendForText, sendJson } from "../shared/fetch-json";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
@@ -686,13 +686,17 @@ function init(): void {
             document.removeEventListener("pointermove", onPointerMove);
             document.removeEventListener("pointerup", onPointerUp);
             const finalHeight = Math.round(wrapper!.getBoundingClientRect().height);
-            fetch("/dashboard/map/pin/map-height/", {
+            fetchResponse("/dashboard/map/pin/map-height/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify({ height: finalHeight }),
-            }).catch(() => {
-                toast.error("Failed to save map size.");
-            });
+            })
+                .then((r) => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                })
+                .catch(() => {
+                    toast.error("Failed to save map size.");
+                });
         }
 
         handle.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -1156,7 +1160,7 @@ function init(): void {
             li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 if (!(await confirmAction({ title: "Delete Pin", message: `Delete "${dp.name}"?`, confirmLabel: "Delete" }))) return;
-                fetchText(`${dpEditBase}${dp.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+                fetchText(`${dpEditBase}${dp.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() }, reportsItsOwnErrors: true })
                     .then(() => {
                         toast.success("Detail pin deleted.");
                         loadDetailPins();
@@ -1204,7 +1208,7 @@ function init(): void {
             li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
                 e.stopPropagation();
                 if (!(await confirmAction({ title: "Delete Item", message: `Delete this ${item.markup_type}?`, confirmLabel: "Delete" }))) return;
-                fetchText(`${cfg.markupEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "")}${item.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+                fetchText(`${cfg.markupEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "")}${item.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() }, reportsItsOwnErrors: true })
                     .then(() => {
                         toast.success("Markup deleted.");
                         toolbar.loadMarkup();
@@ -1427,7 +1431,7 @@ function init(): void {
         if (!(await confirmAction({ title: "Make this the parent pin?", message: `"${entry.name || "This pin"}" will become the parent, and the current pin will become its child. Everything else - name, notes, reviews, photos, visit history - stays with each pin.`, confirmLabel: "Swap" }))) {
             return;
         }
-        fetch(`/dashboard/map/pin/${encodeURIComponent(entry.slug)}/swap-parent/`, {
+        fetchResponse(`/dashboard/map/pin/${encodeURIComponent(entry.slug)}/swap-parent/`, {
             method: "POST",
             headers: { "X-CSRFToken": getCsrfToken() },
         })
@@ -1490,7 +1494,7 @@ function init(): void {
             deleteBtn.addEventListener("click", async () => {
                 map.closePopup();
                 if (!(await confirmAction({ title: "Delete Pin", message: `Delete "${entry.name || "this pin"}"?`, confirmLabel: "Delete" }))) return;
-                fetchText(`${dpEditBase}${entry.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+                fetchText(`${dpEditBase}${entry.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() }, reportsItsOwnErrors: true })
                     .then(() => {
                         toast.success("Detail pin deleted.");
                         loadDetailPins();
@@ -1504,7 +1508,7 @@ function init(): void {
     }
 
     function loadDetailPins(): void {
-        fetch(cfg.detailPinsJsonUrl)
+        fetchResponse(cfg.detailPinsJsonUrl)
             .then((r) => {
                 // Without this, a server error whose body still parses as JSON (or one with no "detail_pins" key) fell through to the success branch.
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1552,7 +1556,7 @@ function init(): void {
                     // markercluster re-files a dragged child itself on dragend.
                     marker.on("dragend", () => {
                         const pos = marker.getLatLng();
-                        sendJson(`${dpEditBase}${dp.uuid}/`, "POST", { latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) })
+                        sendJson(`${dpEditBase}${dp.uuid}/`, "POST", { latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }, { reportsItsOwnErrors: true })
                             .then(() => {
                                 entry.latitude = pos.lat;
                                 entry.longitude = pos.lng;
@@ -1792,7 +1796,7 @@ function init(): void {
         this.disabled = true;
         this.innerHTML = '<i class="material-symbols-outlined spin">progress_activity</i> Saving...';
         try {
-            const response = await fetch(cfg.detailPinsBulkEditUrl, {
+            const response = await fetchResponse(cfg.detailPinsBulkEditUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify(payload),
@@ -1819,7 +1823,7 @@ function init(): void {
         const results = await Promise.all(
             uuids.map((uuid) => {
                 const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
-                return fetch(`/dashboard/map/pin/${encodeURIComponent(slug)}/detach-parent/`, {
+                return fetchResponse(`/dashboard/map/pin/${encodeURIComponent(slug)}/detach-parent/`, {
                     method: "POST",
                     headers: { "X-CSRFToken": getCsrfToken() },
                 })
@@ -1842,7 +1846,7 @@ function init(): void {
         const dialog = document.getElementById("pin-share-dialog") as HTMLDialogElement | null;
         if (!dialog) return;
         const url = `${cfg.pinShareDialogUrl}?children=${uuids.map(encodeURIComponent).join(",")}`;
-        const html = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+        const html = await fetchResponse(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
             .then((r) => (r.ok ? r.text() : ""))
             .catch(() => "");
         if (!html) {
@@ -1861,7 +1865,7 @@ function init(): void {
         if (!uuids.length) return;
         const body = new URLSearchParams();
         uuids.forEach((uuid) => body.append("child_pin_uuids", uuid));
-        const response = await fetch(cfg.detailPinsSendToWikiUrl, {
+        const response = await fetchResponse(cfg.detailPinsSendToWikiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": getCsrfToken() },
             body,
@@ -1890,7 +1894,7 @@ function init(): void {
         // `.catch(() => false)` matters as much as the `.ok`.
         const results = await Promise.all(
             uuids.map((uuid) =>
-                fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+                fetchResponse(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
                     .then((r) => r.ok)
                     .catch(() => false),
             ),
@@ -2513,7 +2517,7 @@ function init(): void {
     }
 
     async function postBoundary(type: BoundaryType, geometry: { type: string; coordinates: unknown[] } | null): Promise<any> {
-        return sendJson(boundaryApiUrl, "POST", { boundary_type: type, polygon: geometry });
+        return sendJson(boundaryApiUrl, "POST", { boundary_type: type, polygon: geometry }, { reportsItsOwnErrors: true });
     }
 
     function saveBoundary(options: { type?: BoundaryType; exitEdit?: boolean; quiet?: boolean } = {}): void {
@@ -2686,7 +2690,7 @@ function init(): void {
         const data = collectDpFormData();
         data.latitude = lat.toFixed(6);
         data.longitude = lng.toFixed(6);
-        fetch(cfg.detailPinCreateUrl, {
+        fetchResponse(cfg.detailPinCreateUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
             body: JSON.stringify(data),
@@ -2716,7 +2720,7 @@ function init(): void {
         const uuid = dpAutoSaveUuid;
         dpAutoSaveUuid = null;
         if (!uuid) return Promise.resolve();
-        return sendForText(`${dpEditBase}${uuid}/`, "POST", collectDpFormData())
+        return sendForText(`${dpEditBase}${uuid}/`, "POST", collectDpFormData(), { reportsItsOwnErrors: true })
             .then(() => undefined)
             .catch(() => toast.error("Failed to save detail pin changes."));
     }
@@ -2912,7 +2916,7 @@ function init(): void {
         const submitBtn = document.getElementById("detail-pin-submit-btn") as HTMLButtonElement;
         submitBtn.disabled = true;
         const data = collectDpFormData();
-        fetch(`${dpEditBase}${editingDp!.uuid}/`, {
+        fetchResponse(`${dpEditBase}${editingDp!.uuid}/`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
             body: JSON.stringify(data),
@@ -2936,7 +2940,7 @@ function init(): void {
     document.getElementById("detail-pin-delete-btn")?.addEventListener("click", async () => {
         if (!editingDp) return;
         if (!(await confirmAction({ title: "Delete Pin", message: `Delete "${editingDp.name}"?`, confirmLabel: "Delete" }))) return;
-        fetchText(`${dpEditBase}${editingDp.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+        fetchText(`${dpEditBase}${editingDp.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() }, reportsItsOwnErrors: true })
             .then(() => {
                 closeDetailPinPanel();
                 loadDetailPins();

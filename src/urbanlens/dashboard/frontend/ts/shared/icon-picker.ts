@@ -28,7 +28,7 @@ function parseCatalogue(html: string): IconCatalogue {
 
 function loadCatalogue(url: string): Promise<IconCatalogue> {
     if (!gridRequest) {
-        gridRequest = fetchText(url)
+        gridRequest = fetchText(url, { reportsItsOwnErrors: true })
             .then(parseCatalogue)
             .catch((error) => {
                 // Dropped so the next open retries.

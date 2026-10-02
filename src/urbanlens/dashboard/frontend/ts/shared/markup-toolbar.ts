@@ -6,7 +6,7 @@ import type { ShapeSpec } from "./markup-engine";
 import { markupItemToShapeSpec } from "./markup-shape";
 import { wireMarkupPanel, wireMarkupTools } from "./markup-panel";
 import { escHtml } from "./escape-html";
-import { fetchText } from "./fetch-json";
+import { fetchResponse, fetchText } from "./fetch-json";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
@@ -129,7 +129,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         if (!markupMapCreateUrl) return Promise.reject(new Error("No markup endpoints configured"));
         if (!markupMapCreatePromise) {
             const initialView = config.getInitialView ? config.getInitialView() : {};
-            markupMapCreatePromise = fetch(markupMapCreateUrl, {
+            markupMapCreatePromise = fetchResponse(markupMapCreateUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify(initialView),
@@ -478,7 +478,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         const security_indicator = markupType === "text" ? "" : (document.getElementById("markup-panel-security") as HTMLInputElement).value;
         ensureMarkupTarget()
             .then(() =>
-                fetch(markupPostUrl, {
+                fetchResponse(markupPostUrl, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                     body: JSON.stringify({ markup_type: markupType, geometry, label, color, stroke_width, border_color, fill_opacity, border_opacity, security_indicator }),
@@ -488,8 +488,10 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 if (!r.ok) throw new Error();
                 return r.json();
             })
-            .then((data) => reloadMarkupAndOpenEdit(data.uuid))
-            .catch(() => toast.error("Failed to save markup."));
+            .then(
+                (data) => reloadMarkupAndOpenEdit(data.uuid).catch(() => toast.error("Markup saved, but the map could not show it. Reload the page to see it.")),
+                () => toast.error("Failed to save markup."),
+            );
     }
 
     function onDrawCommit(type: string, latlngs: [number, number][], extras: Record<string, unknown>): void {
@@ -550,8 +552,12 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     }
 
     function reloadMarkupAndOpenEdit(newUuid: string): Promise<void> {
-        return fetch(markupJsonUrl)
-            .then((r) => r.json())
+        return fetchResponse(markupJsonUrl)
+            .then((r) => {
+                // A refused read must not clear what is already drawn.
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
             .then((markupData) => {
                 clearRenderedMarkup();
                 markupItems = [];
@@ -651,7 +657,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     }
 
     const markupAutoSaves = new KeyedDebounce<MarkupItem>(500, (uuid, item) => {
-        fetch(`${markupEditBase}${uuid}/`, {
+        fetchResponse(`${markupEditBase}${uuid}/`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
             body: JSON.stringify({
@@ -734,7 +740,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         if (!(await confirmAction({ title: "Delete Annotation", message: "Delete this annotation?", confirmLabel: "Delete" }))) return;
         // Drop any pending autosave for this item - it no longer exists to save.
         markupAutoSaves.cancel(editingMarkupItem.uuid);
-        fetchText(`${markupEditBase}${editingMarkupItem.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+        fetchText(`${markupEditBase}${editingMarkupItem.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() }, reportsItsOwnErrors: true })
             .then(() => {
                 closeMarkupPanel();
                 loadMarkup();

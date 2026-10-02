@@ -12,7 +12,7 @@ import { byId } from "../shared/dom";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
 import { e2eeUrlsFromDataset } from "../shared/e2ee-urls";
-import { fetchText } from "../shared/fetch-json";
+import { HttpError, NetworkError, fetchResponse, fetchText } from "../shared/fetch-json";
 import { FormAutosave, type FormAutosaveOptions } from "../shared/form-autosave";
 import { DEFAULT_HOTKEYS, normalizeCombo } from "../shared/hotkeys";
 import { installNotificationPrefs } from "../shared/notification-prefs";
@@ -96,7 +96,7 @@ function bindSecurity(root: HTMLElement): void {
         const form = input.closest<HTMLFormElement>(".passkey-rename-form");
         if (!form) return;
         input.disabled = true;
-        fetchText(form.action, { method: "POST", body: new FormData(form), headers: { "X-CSRFToken": getCsrfToken(), "X-Requested-With": "XMLHttpRequest" } })
+        fetchText(form.action, { method: "POST", body: new FormData(form), headers: { "X-CSRFToken": getCsrfToken(), "X-Requested-With": "XMLHttpRequest" }, reportsItsOwnErrors: true })
             .catch(() => toast.error("Could not rename that passkey."))
             .finally(() => {
                 input.disabled = false;
@@ -201,10 +201,12 @@ function bindEncryptionCard(): void {
             });
     });
     viewBtn.addEventListener("click", () => {
-        void e2ee.regenerateRecoveryKey().then((display) => {
-            if (display) void e2ee.showRecoveryDialog(display);
-            else toast.error("Could not generate a recovery key. This device may be locked.");
-        });
+        e2ee.regenerateRecoveryKey()
+            .then((display) => {
+                if (display) void e2ee.showRecoveryDialog(display);
+                else toast.error("Could not generate a recovery key. This device may be locked.");
+            })
+            .catch((error: unknown) => toast.error(error instanceof NetworkError || error instanceof HttpError ? error.message : "Could not generate a recovery key. Please try again."));
     });
     unlockBtn.addEventListener("click", () => {
         void e2ee.showUnlockDialog().then((ok) => {
@@ -418,7 +420,7 @@ class MapStartPreview {
             errEl.textContent = message;
             errEl.style.display = "";
         };
-        fetch(`${this.el.dataset.geocodeUrl ?? ""}?address=${encodeURIComponent(address)}`)
+        fetchResponse(`${this.el.dataset.geocodeUrl ?? ""}?address=${encodeURIComponent(address)}`)
             .then((r) => r.json() as Promise<{ error?: string; lat?: number; lng?: number }>)
             .then((data) => {
                 if (data.error || data.lat == null || data.lng == null) {

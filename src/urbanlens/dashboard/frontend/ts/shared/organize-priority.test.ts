@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { initOrganizePriority } from "./organize-priority";
+import { wrapFetch } from "./site-runtime";
 
 function itemHtml(id: string): string {
     return `<div class="priority-item" data-id="${id}" data-kind="tag">
@@ -56,13 +57,39 @@ describe("organize-priority failed save", () => {
             warning: (m: string) => toasts.push(`warning:${m}`),
             clear: () => undefined,
         });
-        globalThis.fetch = Object.assign(async () => new Response(JSON.stringify({ error: "Reorder at most 50 labels at a time." }), { status: 400 }), {
-            preconnect: realFetch.preconnect,
-        });
+        const netReports: string[] = [];
+        globalThis.fetch = wrapFetch(Object.assign(async () => new Response(JSON.stringify({ error: "Reorder at most 50 labels at a time." }), { status: 400 }), realFetch), (m) => void netReports.push(m));
         try {
             document.querySelector<HTMLElement>('.priority-item[data-id="3"] [data-priority-jump="top"]')!.click();
             await new Promise((resolve) => setTimeout(resolve, 0));
             expect(toasts).toEqual(["error:Save failed: Reorder at most 50 labels at a time."]);
+            expect(netReports, "the fetch net added its own toast for the same failure").toEqual([]);
+            expect(ids()).toEqual(["1", "2", "3"]);
+        } finally {
+            window.toastr = realToastr;
+        }
+    });
+
+    test("a save that never reached the server says so, in place of the browser's own words", async () => {
+        const realToastr = window.toastr;
+        const toasts: string[] = [];
+        window.toastr = Object.assign(Object.create(null), {
+            success: (m: string) => toasts.push(`success:${m}`),
+            error: (m: string) => toasts.push(`error:${m}`),
+            info: (m: string) => toasts.push(`info:${m}`),
+            warning: (m: string) => toasts.push(`warning:${m}`),
+            clear: () => undefined,
+        });
+        const netReports: string[] = [];
+        const offline = async (): Promise<Response> => {
+            throw new TypeError("Failed to fetch");
+        };
+        globalThis.fetch = wrapFetch(Object.assign(offline, realFetch), (m) => void netReports.push(m));
+        try {
+            document.querySelector<HTMLElement>('.priority-item[data-id="3"] [data-priority-jump="top"]')!.click();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(toasts).toEqual(["error:Couldn't reach the server - your order was not saved."]);
+            expect(netReports).toEqual([]);
             expect(ids()).toEqual(["1", "2", "3"]);
         } finally {
             window.toastr = realToastr;

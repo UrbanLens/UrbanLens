@@ -4,7 +4,7 @@
 
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
-import { fetchText } from "./fetch-json";
+import { fetchResponse, fetchText } from "./fetch-json";
 import type { LightboxInput } from "./photo-tile";
 import { activeVaultSort, type VaultGrid, type VaultKind, vaultTileId, vaultTileSelector } from "./vault-media-grid";
 
@@ -70,7 +70,7 @@ export async function postUpload(url: string, field: string, file: File): Promis
     const body = new FormData();
     body.append(field, file);
     body.append("csrfmiddlewaretoken", csrf);
-    const response = await fetch(url, { method: "POST", body, headers: { "X-CSRFToken": csrf } });
+    const response = await fetchResponse(url, { method: "POST", body, headers: { "X-CSRFToken": csrf } });
     const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) throw new Error(typeof data.error === "string" && data.error ? data.error : `HTTP ${response.status}`);
     return data;
@@ -233,7 +233,7 @@ export class VaultUploader {
         const noun = this.kind.kind;
         if (!window.confirm(`Delete this ${noun}? This cannot be undone.`)) return;
         try {
-            await fetchText(`${this.actionBase}${id}/delete/`, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() } });
+            await fetchText(`${this.actionBase}${id}/delete/`, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, reportsItsOwnErrors: true });
         } catch {
             toast.error(`Could not delete that ${noun}.`);
             return;

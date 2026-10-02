@@ -5,7 +5,7 @@
  */
 import type { LightboxInput } from "../shared/photo-tile";
 
-interface ToastrOptions {
+export interface ToastrOptions {
     timeOut?: number;
     /** How long a hover-paused toast stays after the mouse leaves it. */
     extendedTimeOut?: number;
@@ -22,11 +22,12 @@ interface ToastrOptions {
     escapeHtml?: boolean;
 }
 
+/** Each method hands back the toast it drew, in toastr's jQuery wrapper. */
 interface Toastr {
-    success(message: string, title?: string, options?: ToastrOptions): void;
-    error(message: string, title?: string, options?: ToastrOptions): void;
-    warning(message: string, title?: string, options?: ToastrOptions): void;
-    info(message: string, title?: string, options?: ToastrOptions): void;
+    success(message: string, title?: string, options?: ToastrOptions): unknown;
+    error(message: string, title?: string, options?: ToastrOptions): unknown;
+    warning(message: string, title?: string, options?: ToastrOptions): unknown;
+    info(message: string, title?: string, options?: ToastrOptions): unknown;
     clear(): void;
     options?: ToastrOptions;
 }

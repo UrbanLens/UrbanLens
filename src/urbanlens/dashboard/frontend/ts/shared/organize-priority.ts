@@ -1,6 +1,6 @@
 import Sortable from "sortablejs";
 import { toast } from "./dialogs";
-import { sendForText } from "./fetch-json";
+import { NetworkError, sendForText } from "./fetch-json";
 import { LatestWinsSaver } from "./latest-wins-saver";
 import { ORG_NS_BY_LABEL_KIND } from "./organize-filter-engine";
 
@@ -70,7 +70,7 @@ export function initOrganizePriority(): void {
     }
 
     async function sendPriorityOrder({ list, ids }: PriorityOrder): Promise<void> {
-        await sendForText(list.dataset.saveUrl ?? "", "POST", { items: ids.map((id) => ({ id: Number.parseInt(id, 10) })) });
+        await sendForText(list.dataset.saveUrl ?? "", "POST", { items: ids.map((id) => ({ id: Number.parseInt(id, 10) })) }, { reportsItsOwnErrors: true });
     }
 
     let orderSaver: { list: HTMLElement; saver: LatestWinsSaver<PriorityOrder> } | null = null;
@@ -86,7 +86,7 @@ export function initOrganizePriority(): void {
                         toast.success("Display order saved.");
                     },
                     onFailed: (err, confirmed) => {
-                        toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+                        toast.error(err instanceof NetworkError ? "Couldn't reach the server - your order was not saved." : `Save failed: ${err instanceof Error ? err.message : String(err)}`);
                         if (!confirmed) return;
                         // By id, against what the list holds now: it may have been re-rendered since.
                         const current = listItems(list);

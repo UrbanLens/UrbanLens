@@ -88,6 +88,18 @@ describe("map-page's requests leave their controls usable when they fail", () =>
         expect(handler).toMatch(/btn\.textContent = /);
     });
 
+    test("a bulk delete's Undo is a real button, not markup toastr shows as text", () => {
+        const body = functionBody("_showUndoDeleteToast");
+        expect(body).not.toMatch(/<button/);
+        expect(body).toMatch(/toastWithAction\("success", `\$\{label\} deleted\.`, \{ label: "Undo", data: \{ mapAction: "undo-bulk-delete", undoToken: token \} \}/);
+    });
+
+    test("an Undo that never reached the server says so, rather than that the delete may have expired", () => {
+        const handler = failureHandler(functionBody("_undoBulkDelete"));
+        expect(handler).toMatch(/instanceof NetworkError/);
+        expect(handler).toMatch(/may have expired/);
+    });
+
     test("adding pins to a list asks its 409 question without the fetch net's error toast, and still reports a network failure", () => {
         const body = functionBody("addPinsToList");
         expect(body).toMatch(/__ulReported: true/);

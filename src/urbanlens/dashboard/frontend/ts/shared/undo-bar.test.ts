@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { NETWORK_FAILURE_MESSAGE } from "./fetch-json";
+import { wrapFetch } from "./site-runtime";
 import { installUndoBar, registerLocalUndoProvider, resetUndoBarForTests, syncUndoBar } from "./undo-bar";
 
 function keydown(opts: { key: string; ctrlKey?: boolean; shiftKey?: boolean; metaKey?: boolean; target?: EventTarget }): KeyboardEvent {
@@ -163,6 +165,49 @@ describe("the floating undo bar", () => {
             await new Promise((r) => setTimeout(r, 0));
         } finally {
             window.fetch = originalFetch;
+        }
+    });
+
+    test("an undo that never reaches the server says so once, and can be tried again", async () => {
+        const bar = document.createElement("nav");
+        bar.id = "ul-undo-bar";
+        bar.hidden = true;
+        bar.dataset.stackUrl = "/test/undo/stack/";
+        bar.dataset.undoUrl = "/test/undo/undo/";
+        bar.dataset.redoUrl = "/test/undo/redo/";
+        bar.innerHTML = '<button type="button" id="ul-undo-btn" hidden></button><button type="button" id="ul-redo-btn" hidden></button>';
+        document.body.appendChild(bar);
+        const toasts: string[] = [];
+        const netReports: string[] = [];
+        const realToastr = window.toastr;
+        window.toastr = { success: () => undefined, error: (m: string) => void toasts.push(m), warning: () => undefined, info: () => undefined, clear: () => undefined };
+        let undoCalls = 0;
+        const originalFetch = window.fetch;
+        const answer = async (input: RequestInfo | URL): Promise<Response> => {
+            if (String(input).includes("/undo/undo/")) {
+                undoCalls++;
+                throw new TypeError("Failed to fetch");
+            }
+            return new Response(JSON.stringify({ can_undo: true, can_redo: false, undo_label: "Delete", redo_label: null }), { status: 200 });
+        };
+        window.fetch = wrapFetch(Object.assign(answer, originalFetch), (m) => void netReports.push(m));
+
+        try {
+            installUndoBar();
+            const undoBtn = document.getElementById("ul-undo-btn") as HTMLButtonElement;
+            for (let i = 0; i < 20 && undoBtn.hidden; i++) await new Promise((r) => setTimeout(r, 0));
+
+            undoBtn.click();
+            for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+            undoBtn.click();
+            for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+
+            expect(undoCalls).toBe(2);
+            expect(toasts).toEqual([NETWORK_FAILURE_MESSAGE, NETWORK_FAILURE_MESSAGE]);
+            expect(netReports).toEqual([]);
+        } finally {
+            window.fetch = originalFetch;
+            window.toastr = realToastr;
         }
     });
 

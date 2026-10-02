@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { raiseToasts, toast } from "./dialogs";
+import { raiseToasts, toast, toastWithAction } from "./dialogs";
 
 function container(): HTMLElement | null {
     return document.getElementById("toast-container");
@@ -173,5 +173,40 @@ describe("raiseToasts", () => {
 
     test("does nothing without a stack", () => {
         expect(() => raiseToasts()).not.toThrow();
+    });
+});
+
+/** A toast whose message ends in a control - the map's bulk-delete Undo. toastr escapes the message, so markup in it is shown as text. */
+describe("toastWithAction", () => {
+    const UNDO = { label: "Undo", data: { mapAction: "undo-bulk-delete", undoToken: "tok-1" } };
+
+    test("the action is a real button carrying its data attributes, and the message stays text", () => {
+        toastWithAction("success", "2 pins <b>deleted</b>.", UNDO);
+
+        const message = container()?.querySelector(".toast-message");
+        const button = message?.querySelector<HTMLButtonElement>("button.toast-undo-btn");
+        expect(button?.textContent).toBe("Undo");
+        expect(button?.type).toBe("button");
+        expect(button?.dataset.mapAction).toBe("undo-bulk-delete");
+        expect(button?.dataset.undoToken).toBe("tok-1");
+        expect(message?.querySelector("b")).toBeNull();
+        expect(message?.textContent).toBe("2 pins <b>deleted</b>. Undo");
+    });
+
+    test("with the library loaded, the button joins the toast toastr drew, and the options reach it", () => {
+        const options: unknown[] = [];
+        const drawn = document.createElement("div");
+        drawn.innerHTML = '<div class="toast-message"></div>';
+        const success = (message: string, _title?: string, opts?: unknown): HTMLElement[] => {
+            drawn.querySelector(".toast-message")!.textContent = message;
+            options.push(opts);
+            return [drawn];
+        };
+        (window as { toastr?: unknown }).toastr = { success, error: mock(() => {}), warning: mock(() => {}), info: mock(() => {}) };
+
+        toastWithAction("success", "2 pins deleted.", UNDO, { timeOut: 10000, tapToDismiss: false });
+
+        expect(drawn.querySelector<HTMLButtonElement>(".toast-message button")?.dataset.undoToken).toBe("tok-1");
+        expect(options).toEqual([{ timeOut: 10000, tapToDismiss: false }]);
     });
 });

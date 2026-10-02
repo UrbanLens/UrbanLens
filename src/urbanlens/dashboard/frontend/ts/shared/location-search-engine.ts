@@ -4,6 +4,7 @@
 
 import { readCachedPinsForSearch } from "./pin-cache";
 import { escHtml } from "./escape-html";
+import { fetchResponse } from "./fetch-json";
 
 interface SelectResult {
     lat: number;
@@ -546,7 +547,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             } else if (result.place_id) {
                 if (!resolvePlaceUrl) return;
                 try {
-                    const r = await fetch(`${resolvePlaceUrl}?place_id=${encodeURIComponent(result.place_id)}`, {
+                    const r = await fetchResponse(`${resolvePlaceUrl}?place_id=${encodeURIComponent(result.place_id)}`, {
                         headers: { "X-Requested-With": "XMLHttpRequest" },
                     });
                     if (r.ok) {
