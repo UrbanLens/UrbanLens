@@ -103,6 +103,13 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   one-to-ones (Location, then its Place) inside a savepoint and re-reads on a raced
   `IntegrityError`; nothing else should create a Wiki.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
+- **Photos on a map** (`shared/photo-map.ts` `createPhotoMarkerLayer`, used by the pin/wiki map and
+  album maps) - thumbnails that cluster into a stacked badge, open the shared photo lightbox on click,
+  and drag to a new spot when the photo is the viewer's own. Highlighting (hover, the side panel) and
+  `flash()` restyle the drawn icon in place, and a highlighted photo becomes its cluster's front photo.
+  One drag type, `PHOTO_IDS_TYPE` (`shared/photo-tile.ts`), carries the viewer's photos out of the
+  gallery, the Media section, album grids and the map's side panel; the pin map places whatever it
+  receives where it is dropped.
 - **Places layer** (a `SiteFeature.PLACES` feature) - a map click shows historical landmarks (REData or
   Google, zoom 10+), national parks and geotagged Wikipedia articles nearby, each source per the viewer's
   profile toggles. Snapped to a ~2 km grid cell and a radius bucket, fetched in parallel under one budget,
