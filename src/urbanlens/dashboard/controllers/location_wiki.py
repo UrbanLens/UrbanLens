@@ -113,6 +113,12 @@ def _with_query_string(url: str, request: HttpRequest) -> str:
     return f"{url}?{query}" if query else url
 
 
+def _unstored[ResponseT: HttpResponseBase](response: ResponseT) -> ResponseT:
+    """Keep a redirect that depends on who asked out of every cache, so it cannot replay to the next viewer."""
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
 def redirect_to_canonical_location[**P](view: Callable[Concatenate[HttpRequest, P], HttpResponseBase]) -> Callable[Concatenate[HttpRequest, P], HttpResponseBase]:
     """Wrap a ``location_slug`` route so a GET that names its Location by uuid moves permanently to the slug.
 
@@ -132,7 +138,7 @@ def redirect_to_canonical_location[**P](view: Callable[Concatenate[HttpRequest, 
         match = request.resolver_match
         if isinstance(location_slug, str) and match is not None and request.method in {"GET", "HEAD"} and request.user.is_authenticated and (canonical := canonical_location_slug(request, location_slug)) is not None:
             url = reverse(match.view_name, kwargs={**match.kwargs, "location_slug": canonical})
-            return HttpResponsePermanentRedirect(_with_query_string(url, request))
+            return _unstored(HttpResponsePermanentRedirect(_with_query_string(url, request)))
         return view(request, *args, **kwargs)
 
     return wrapper
@@ -158,7 +164,7 @@ class LocationRedirectView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         location, _wiki, _profile = locate_visible_wiki(request, location_slug)
-        return HttpResponseRedirect(_with_query_string(reverse("location.wiki", kwargs={"location_slug": location.slug or str(location.uuid)}), request))
+        return _unstored(HttpResponseRedirect(_with_query_string(reverse("location.wiki", kwargs={"location_slug": location.slug or str(location.uuid)}), request)))
 
 
 class LocationWikiView(LoginRequiredMixin, View):

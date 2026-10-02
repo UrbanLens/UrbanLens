@@ -125,6 +125,15 @@ class UuidWikiUrlLeakTests(_VisibleWikiFixture):
         self.assertTrue(response["Location"].startswith(resolve_url(settings.LOGIN_URL)))
         self.assertNotIn(SLUG, response["Location"])
 
+    def test_the_redirect_is_never_stored_for_a_later_viewer(self) -> None:
+        """A 301 is cacheable by default; a stored one would replay to the next account in this browser, unasked."""
+        moved = self.client.get(reverse("location.wiki", args=[self.old]))
+        led = self.client.get(reverse("location.detail", args=[self.old]))
+
+        for response in (moved, led):
+            self.assertIn("no-store", response["Cache-Control"])
+            self.assertIn("private", response["Cache-Control"])
+
 
 class BareLocationUrlTests(_VisibleWikiFixture):
     def test_the_location_url_leads_to_its_wiki(self) -> None:
