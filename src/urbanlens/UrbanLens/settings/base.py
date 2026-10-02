@@ -753,8 +753,8 @@ CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 #
 # Tile hosts need wildcard and bare forms for Leaflet's {s} expansion.
 #
-# script-src 'unsafe-inline' is load-bearing (inline <script> blocks and on* attributes, P34/P83); a nonce would need
-# every one converted at once, since browsers ignore 'unsafe-inline' beside a nonce. htmx must not need 'unsafe-eval':
+# script-src keeps 'unsafe-inline' until a run without it shows nothing needs it: no template or bundle-built markup
+# carries inline script any more (docs/notes/csp-violations.md). htmx must not need 'unsafe-eval':
 # no hx-on, js: hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
 _CSP_DIRECTIVES: dict[str, list[str]] = {
     "default-src": ["'self'"],

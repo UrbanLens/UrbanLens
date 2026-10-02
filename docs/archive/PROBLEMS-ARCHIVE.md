@@ -19501,3 +19501,146 @@ child either commits first and is collected, or waits and then fails its own for
 holds the host pin (`FOR NO KEY UPDATE`) until its revision commits, and raises `Pin.DoesNotExist` when the pin is
 already gone; the seed treats that as nothing to do. `test_pin_delete_races_child_writes.py` starts each writer from
 `pre_delete` on a second connection and reproduced both 500s first.
+
+## RESOLVED 2026-10-02: Every page's behaviour was inline template JavaScript - 21,543 lines and 526 `on*=` handlers that `tsc`, the bundler and the tests never saw - and it kept `script-src` on `'unsafe-inline'`
+
+`id: P34` · `status: fixed` · `resolved: 2026-10-02`
+
+**Fixed.** No template carries an executable inline `<script>` or an `on*=` attribute, and
+`test_templates_run_no_inline_script.py` fails the day one comes back. Behaviour lives in `frontend/ts/`, in per-page
+entries and the core bundle; templates name it in markup (`data-*` attributes read by delegated listeners) and pass
+values as `json_script` islands. A JSON island is data, so it may stay inline.
+
+**What was wrong.** Measured 2026-08-14: 21,543 lines of inline JavaScript across 101 templates, beside 22,684
+lines in `frontend/ts/` that `tsc` and the bun tests covered. N28 counted 526 `on*=` attributes in 160 templates on
+2026-09-23. None of it was type-checked, bundled, cached or tested. 44 function names were defined in more than one
+template, including 14 HTML-escaping helpers under 9 names, and two real bugs came from the wrong one being in reach
+(`memories/index.html`, `map/index.html`). Once P143 enforced the site CSP, this was why `script-src` kept
+`'unsafe-inline'`: browsers ignore `'unsafe-inline'` beside a nonce, so the blocks could not be converted one at a
+time.
+
+**How it went.** X21 (2026-09-16) moved the map page's block and part of `base.html`'s into plain `.js` files fed
+by a config element. From 2026-09-29 each page became a typed entry under `frontend/ts/entries/` over tested shared
+modules: the import wizard, Memories, profile, pin list, trip, pin (`225cc5a2f`), Settings (`f27cde04c`),
+`base.html`'s runtime (`e3df8db14`, `shared/site-runtime.ts`), Messages, the lightbox and gallery, wiki, the
+saved-filter form, setup wizard, profile editor, safety pages, Share dialog, Tools, sign-in pages, the Memories tabs
+and site admin. Markup actions in the core bundle took the long tail: `data-dialog-open` / `data-dialog-close` (104
+handlers, `a5fca1f42`), `data-confirm`, `data-reload`, `data-enabled-by`, `data-reveal`, `data-picks`,
+`data-readout`, `data-toggles`, `data-thumb-fallback` / `data-fade-in`, and `hx-confirm` asked in the site dialog.
+`shared/escape-html.ts::escHtml` replaced the 16 local escapers in `frontend/ts/`.
+
+The last 762 executable lines and 152 handlers went on 2026-10-01 and 10-02 (`805c2271b` to `5a33e1b3c`):
+
+- the anti-flash theme script, now `static/js/theme-init.js`, still synchronous and first in `<head>`;
+- the dev toolbar, now `static/js/dev-toolbar.js`;
+- the icon, colour and label-relationship pickers (`shared/picker-actions.ts`), and Organize's bulk bar and Lists
+  panel;
+- the shared map toolbar (`data-map-tool`) and dialog headers (`data-closefn`);
+- the map page (`data-map-action`, `data-pin-list-action`, `shared/map-arrival.ts`);
+- the pin and wiki pages' map panels, imagery carousels (`shared/carousel-controls.ts`), side panels and tab strips
+  (`shared/card-tabs.ts`, `shared/panel-actions.ts`) and comment controls;
+- notification rows (`data-own-click`), Vault, profile, Memories, and the manage-overlays dialog;
+- the three games, whose routes are JSON islands;
+- the map search fragment, and the finished-import fragment (`data-pins-dirty`).
+
+The map page's pin popups and Undo toast built `onclick=` strings in TypeScript, which a CSP refuses just as it
+does a template's. They are `data-map-action` controls now. That sweep is covered by bun and view tests, but was
+not exercised in a browser.
+
+**Defects the ports found**, each fixed where it was found:
+
+- htmx 1.9 sends a request whether or not its submit was cancelled, so `onsubmit="return confirm(...)"` on an
+  `hx-post` form asked and then went ahead. Dismissing "Remove your authenticator app?" removed it;
+  dismissing "Generate new backup codes?" replaced them. `htmx-confirm.contract.test.ts` fails any htmx element
+  that confirms any other way.
+- The region map never drew in Organize's filter dialog: htmx drops a partial's leading `<link>`/`<script>`
+  (`test_organize_filters_panel_assets.py`).
+- A pin list's drag-to-reorder called a global `Sortable` that nothing loaded, and its overview map put
+  unvalidated colours into `class` and `style`.
+- Every click in the pin page's Media section re-sorted the grid and saved the preference; select mode and three
+  filters had never applied (`de1d45a3c`).
+- Bulk photo delete toasted success on a refusal and removed photos the endpoint had skipped (`e12c82bae`). Every
+  gallery refresh added another lightbox dialog and arrow-key listener, and re-inserted the card's siblings.
+- Memories map tooltips bound names as HTML, so `<img onerror>` in a name ran on hover.
+- A check-in's map showed a drawn area with latitude and longitude swapped, and editing a shape on a check-in
+  threw. An archived check-in's Unlock never worked. A half-typed email could become an emergency contact when
+  an autosave landed.
+
+**Corrections.**
+
+- The count's regex, `\bon[a-z]+\s*=`, also matches `data-*` attributes whose last part starts with `on`
+  (`data-mode-only`, `data-show-onboarding`, `data-onboarding`): 6 of its matches on 2026-10-02. Its line count
+  includes JSON islands written as literal `<script type="application/json">`. `inline_scripts.EXECUTABLE` and
+  `inline_scripts.HANDLER`, which the new test uses, exclude both.
+- During the last sweep it was assumed that Leaflet popups keep clicks from `document`, which would have ruled out
+  delegating the popup menu. Leaflet 1.9.4's `disableClickPropagation` stops `mousedown`, `touchstart`,
+  `dblclick` and `contextmenu`, and only marks the element so the map ignores its clicks. A popup's click does
+  reach `document`.
+- A rendered-page measure (P83's) cannot see partials that htmx loads later, which is where most of the pin page's
+  handlers were. Only the template-wide check covers them.
+
+**Measured 2026-10-02**, over `src/urbanlens/dashboard/templates/**/*.html` (476 templates):
+
+| | `d1fb1bf5d` | `5a33e1b3c` |
+|---|---|---|
+| `<script>` without `src`, lines (the old command) | 770 in 19 templates | 8 in 4, all JSON islands |
+| executable inline script (`inline_scripts.EXECUTABLE`) | 762 lines, 31,174 bytes, in 16 | 0 |
+| `on*=` matches (the old command) | 163 in 61 | 6 in 4, all `data-*` |
+| handler attributes (`inline_scripts.HANDLER`) | 152 in 54 | 0 |
+
+`onclick=` strings built in `frontend/ts/`: 7 in `entries/map-page.ts` before, none after.
+
+**What it leaves.** `script-src` still lists `'unsafe-inline'` (`settings/base.py`). Nothing the templates or the
+bundles render needs it now, but nothing has shown that nothing else does: vendor scripts, the Google Maps loader,
+anything a library injects. N28 says how to read a `[csp]` run. A policy without `'unsafe-inline'`, tried
+report-only through the browser suite, would settle it. No nonce is needed, since no inline script is left to
+carry one. That follow-up has no entry of its own yet.
+
+## RESOLVED 2026-10-02: Pages re-sent their inline script on every navigation - 400 KB of the map page's 551 KB - where a file would have been fetched once and cached
+
+`id: P83` · `status: fixed` · `resolved: 2026-10-02`
+
+**Fixed.** The thirteen pages measured carry no executable inline script, with the dev toolbar or
+without: what is left inline is JSON islands. A `<script src>` is fetched once and cached for the life of its hash;
+an inline block was re-sent on every navigation, not shared between the pages that repeated it, not minified, and
+not type-checked. That last is how P81 (`core.js` dead site-wide for four days) went unnoticed.
+
+**What was wrong.** Found 2026-09-06 while measuring Settings' Security tab (P69). The map page's HTML was 550,852
+bytes, 400,066 of them inline script (72%). Pin-detail was 190,886 of 343,443, and Settings 169,194 of 309,647.
+
+**How it went.** X21 moved the map page's 265 KB block (2026-09-16), and P34's ports moved the pages' own blocks
+from 2026-09-29. The 22,460-byte block that then became the largest on every page was the dev toolbar
+(`partials/layout/_dev_toolbar.html`). `SiteSettings.show_dev_admin_features()` shows it to admins in a development
+environment, and to anyone in staging, development, local or testing when `allow_dev_toolbar_for_non_admins` is
+set; production pages never carried it. It is `static/js/dev-toolbar.js` now (`109d0dda6`). `base.html`'s 9 KB
+block went into the core bundle (`e3df8db14`), and its anti-flash theme script into `static/js/theme-init.js`
+(`805c2271b`).
+
+**Measured 2026-10-02** with the same method: `inline_blocks()` from `src/urbanlens/core/tests/inline_scripts.py`
+on a logged-in client's response, in the test runner, for a throwaway account with one pin, a wiki and a direct
+message, with alpha features granted so the games render. "Executable" excludes JSON islands; the toolbar was
+switched off by patching `allow_dev_toolbar_for_non_admins`. The before column is `d1fb1bf5d`, measured the same
+way earlier that day, without the toolbar; with it, each page carried 22,460 bytes more.
+
+| page | HTML | inline, all JSON | executable, before → after | `on*=` attributes, before → after |
+|---|---|---|---|---|
+| `/dashboard/map/` | 151,264 | 7,305 | 1,822 → 0 | 63 → 0 |
+| `/dashboard/map/pin/<slug>/` | 152,285 | 538 | 681 → 0 | 28 → 0 |
+| Organize | 255,161 | 534 | 349 → 0 | 521 → 0 |
+| wiki | 112,189 | 538 | 349 → 0 | 11 → 0 |
+| Vault | 27,486 | 534 | 628 → 0 | 1 → 0 |
+| profile | 38,375 | 534 | 349 → 0 | 2 → 0 |
+| Settings | 118,122 | 534 | 349 → 0 | 1 → 0 |
+| Messages | 48,758 | 534 | 349 → 0 | 1 → 0 |
+| home | 41,152 | 534 | 349 → 0 | 1 → 0 |
+| Memories, Sharing | 27,880 | 534 | 349 → 0 | 1 → 0 |
+| Consensus | 43,758 | 1,526 | not rendered → 0 | not rendered → 0 |
+| Trivia | 38,674 | 1,529 | not rendered → 0 | not rendered → 0 |
+| SpotGuessr | 56,653 | 1,557 | not rendered → 0 | not rendered → 0 |
+
+The before run's account lacked alpha features, so the games answered 403. Their templates carried 1,103
+(Consensus), 193 and 193 bytes of inline script. The 349 bytes every page shared was the theme script, and the
+search dialog's `onsubmit` was the one handler.
+
+A page's own HTML does not include the partials htmx loads into it later, and those carried most of the pin page's
+handlers. P34's template-wide test covers them.

@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: N28` · `status: current` · `updated: 2026-09-23`
+`id: N28` · `status: current` · `updated: 2026-10-02`
 
 The site policy is enforced by default since P143 (2026-09-23). A violation now means something on
 the page did not load or did not run. Usually nothing visible happens: a dialog stays open, a map
@@ -65,7 +65,13 @@ means an inline script or style. `blob` and `data` are URL schemes.
 
 ## What still keeps `'unsafe-inline'` in `script-src`
 
-Measured 2026-09-23: 126 inline `<script>` blocks in 99 templates, and 526 `on*=` handler
-attributes in 160 templates. A nonce is not a gradual path: browsers ignore `'unsafe-inline'` as
-soon as a nonce is present, so every block and every handler attribute would have to change in the
-same release. P34 and P83 track moving that code into files.
+Nothing the templates or the bundles render, as of 2026-10-02. No template carries an executable
+inline `<script>` or an `on*=` attribute (`test_templates_run_no_inline_script.py` fails if one
+returns), no `frontend/ts/` module builds an `onclick=` string, and thirteen rendered pages ship
+only JSON islands, which a browser does not execute. P34 and P83, archived that day, record the
+move; on 2026-09-23 there were 126 inline blocks in 99 templates and 526 handler attributes in 160.
+
+What has not been shown is that nothing else needs `'unsafe-inline'`: vendor scripts, the Google
+Maps loader, anything a library injects. A policy without it, run report-only through the browser
+suite and read as above, would settle that. No nonce is needed, since no inline script is left to
+carry one.
