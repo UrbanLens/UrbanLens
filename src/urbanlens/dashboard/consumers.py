@@ -1452,8 +1452,7 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
         await self._relay(event)
 
     #: Fired when a participant voluntarily leaves or is kicked by the host (``event["reason"]`` distinguishes
-    #: the two) - currently Trivia-only (``services.trivia.session.leave_session``/``kick_participant``), but
-    #: lives on the shared base since it's generic relay logic, not game-specific.
+    #: the two) - see each game's ``session.leave_session``/``kick_participant``.
     async def participant_left(self, event):
         await self._relay(event)
         # Participation is checked in connect() and never again, so without this a removed player's socket stays

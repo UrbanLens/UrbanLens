@@ -176,6 +176,8 @@ def _url_templates() -> dict[str, str]:
         "join": reverse("spotguessr.join", kwargs=session_kwargs),
         "begin": reverse("spotguessr.begin", kwargs=session_kwargs),
         "end": reverse("spotguessr.end", kwargs=session_kwargs),
+        "leave": reverse("spotguessr.leave", kwargs=session_kwargs),
+        "kick": reverse("spotguessr.kick", kwargs=session_kwargs),
         "round": reverse("spotguessr.round", kwargs=session_kwargs),
         "guess": reverse("spotguessr.guess", kwargs={"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}),
         "round_timeout": reverse("spotguessr.round_timeout", kwargs={"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}),
@@ -467,6 +469,59 @@ class SpotGuessrEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
             logger.info("spotguessr end of session %s by %s rejected: %s", session_id, profile.pk, exc)
             return JsonResponse({"error": "This game has already ended."}, status=400)
         return JsonResponse({"finished": True, "summary": spotguessr_session.session_summary(game_session)})
+
+
+class SpotGuessrLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
+    """The calling profile leaves this session - or declines an invitation to it.
+
+    POST /spotguessr/session/<session_id>/leave/
+    """
+
+    def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
+        profile = _current_profile(request)
+        game_session = participant_session_or_404(session_access, profile, session_id)
+
+        try:
+            spotguessr_session.leave_session(game_session, profile)
+        except spotguessr_session.SessionAlreadyEndedError as exc:
+            logger.info("spotguessr leave of session %s by %s rejected: %s", session_id, profile.pk, exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
+        except spotguessr_session.NotASessionParticipantError as exc:
+            logger.info("spotguessr leave of session %s by %s rejected: %s", session_id, profile.pk, exc)
+            return JsonResponse({"error": "You are not part of this session."}, status=400)
+        return JsonResponse({"left": True})
+
+
+class SpotGuessrKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
+    """Host removes another participant, joined or still invited. Host-only.
+
+    POST /spotguessr/session/<session_id>/kick/   body: ``profile_id``
+    """
+
+    def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
+        profile = _current_profile(request)
+        game_session = participant_session_or_404(session_access, profile, session_id)
+
+        try:
+            target = Profile.objects.get(pk=request.POST.get("profile_id"))
+        except (Profile.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"error": "profile_id is required."}, status=400)
+
+        try:
+            spotguessr_session.kick_participant(game_session, profile, target)
+        except spotguessr_session.NotSessionHostForKickError as exc:
+            logger.info("spotguessr kick in session %s rejected: %s", session_id, exc)
+            return JsonResponse({"error": "Only the host can remove a player."}, status=400)
+        except spotguessr_session.CannotKickHostError as exc:
+            logger.info("spotguessr kick in session %s rejected: %s", session_id, exc)
+            return JsonResponse({"error": "The host can't remove themselves - use End game instead."}, status=400)
+        except spotguessr_session.SessionAlreadyEndedError as exc:
+            logger.info("spotguessr kick in session %s rejected: %s", session_id, exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
+        except spotguessr_session.KickTargetNotAParticipantError as exc:
+            logger.info("spotguessr kick in session %s rejected: %s", session_id, exc)
+            return JsonResponse({"error": "That profile is not part of this session."}, status=400)
+        return JsonResponse({"kicked": True})
 
 
 class SpotGuessrRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):

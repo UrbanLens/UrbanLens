@@ -123,6 +123,22 @@ class SessionAlreadyEndedError(SpotGuessrError):
     """The session isn't LOBBY or ACTIVE any more - it has already ended."""
 
 
+class NotASessionParticipantError(SpotGuessrError):
+    """The calling profile has no participant row for this session."""
+
+
+class NotSessionHostForKickError(SpotGuessrError):
+    """The caller isn't this session's host; only the host may remove a player."""
+
+
+class CannotKickHostError(SpotGuessrError):
+    """The kick target is the host themselves; the host ends the game with ``end_session_now`` instead."""
+
+
+class KickTargetNotAParticipantError(SpotGuessrError):
+    """The kick target has no participant row for this session."""
+
+
 @dataclass(frozen=True)
 class GameConfig:
     """A validated, session-ready snapshot of SpotGuessr settings.
@@ -321,6 +337,10 @@ def invite_to_session(session: GameSession, host: Profile, invitee: Profile) -> 
     )
     if created:
         _notify_invite(host, invitee, session)
+    elif participant.status == GameSessionParticipantStatus.LEFT:
+        participant.status = GameSessionParticipantStatus.INVITED
+        participant.save(update_fields=["status", "updated"])
+        _notify_invite(host, invitee, session)
     return participant
 
 
@@ -351,11 +371,13 @@ def join_session(session: GameSession, profile: Profile) -> GameSessionParticipa
     """Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
 
     Idempotent for an already-JOINED profile. Only actually-new joins are
-    rejected once the roster is locked.
+    rejected once the roster is locked. A profile that left or was removed
+    holds no invitation any more; only a fresh ``invite_to_session`` lets it
+    back in.
 
     Raises:
-        ParticipantNotInvitedError: if ``profile`` was never invited to this
-            session.
+        ParticipantNotInvitedError: if ``profile`` has no live invitation to
+            this session.
         LobbyClosedForJoinError: if the roster is already locked and they
             hadn't joined before that happened.
     """
@@ -364,14 +386,21 @@ def join_session(session: GameSession, profile: Profile) -> GameSessionParticipa
     except GameSessionParticipant.DoesNotExist:
         raise ParticipantNotInvitedError(f"Profile {profile.pk} has no participant row for session {session.pk}.") from None
 
+    if participant.status == GameSessionParticipantStatus.LEFT:
+        raise ParticipantNotInvitedError(f"Profile {profile.pk} left session {session.pk} and needs a fresh invitation.")
     if participant.status == GameSessionParticipantStatus.JOINED:
         return participant
 
     if session.status != GameSessionStatus.LOBBY:
         raise LobbyClosedForJoinError(f"Session {session.pk} is {session.status}, not LOBBY; profile {profile.pk} was never accepted.")
 
-    participant.status = GameSessionParticipantStatus.JOINED
-    participant.save(update_fields=["status", "updated"])
+    # Conditional, so a kick landing between the read above and this write is not undone.
+    accepted = GameSessionParticipant.objects.filter(pk=participant.pk, status=GameSessionParticipantStatus.INVITED).update(status=GameSessionParticipantStatus.JOINED, updated=timezone.now())
+    participant.refresh_from_db()
+    if not accepted:
+        if participant.status == GameSessionParticipantStatus.JOINED:
+            return participant
+        raise ParticipantNotInvitedError(f"Profile {profile.pk} left session {session.pk} before accepting.")
     realtime.broadcast(session.pk, "participant.joined", {"participant": serializers.serialize_participant(participant)})
     return participant
 
@@ -658,8 +687,7 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
 
         GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points + bonus.total)
 
-        joined_count = session.participants.joined().count()
-        if locked_round.revealed_at is None and Guess.objects.for_round(locked_round).count() >= joined_count:
+        if locked_round.revealed_at is None and _every_joined_participant_has_guessed(locked_round):
             locked_round.revealed_at = timezone.now()
             locked_round.save(update_fields=["revealed_at", "updated"])
             round_completed_now = True
@@ -675,6 +703,12 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         _advance_or_complete(session)
 
     return guess, bonus.matched_tiers, rating_change
+
+
+def _every_joined_participant_has_guessed(round_: GameRound) -> bool:
+    """Whether no JOINED participant is still to guess ``round_``; a departed player's guess stands in for nobody."""
+    guessed = Guess.objects.for_round(round_).values("profile_id")
+    return not GameSessionParticipant.objects.joined().filter(session_id=round_.session_id).exclude(profile_id__in=guessed).exists()
 
 
 def _finish_round(round_: GameRound, completed_guesses: list[Guess]) -> dict[int, RatingChange]:
@@ -797,6 +831,107 @@ def end_session_now(session: GameSession, host: Profile) -> GameSession:
     session.save(update_fields=["status", "ended_at", "updated"])
     realtime.broadcast(session.pk, "session.completed", session_summary(session))
     return session
+
+
+def _remove_participant(session: GameSession, participant: GameSessionParticipant, *, reason: str) -> None:
+    """Mark ``participant`` LEFT, hand the host role on or abandon the session, and reveal a round only they held up.
+
+    Shared by ``leave_session`` and ``kick_participant``, which differ only in who may call them and ``reason``.
+    Locks the session, then the open round, then the participant: ``submit_guess`` takes the round before a
+    participant row, so a guess racing a departure waits instead of deadlocking, and the second to commit sees
+    the first.
+
+    Raises:
+        SessionAlreadyEndedError: The session ended before the lock was taken.
+    """
+    with transaction.atomic():
+        locked = GameSession.objects.select_for_update().get(pk=session.pk)
+        if locked.status not in (GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE):
+            raise SessionAlreadyEndedError(f"Session {session.pk} is {locked.status}, already ended.")
+        open_round = None
+        if locked.status == GameSessionStatus.ACTIVE:
+            open_round = GameRound.objects.select_for_update().filter(session=locked, revealed_at__isnull=True).first()
+        participant = GameSessionParticipant.objects.select_for_update().get(pk=participant.pk)
+        if participant.status == GameSessionParticipantStatus.LEFT:
+            return
+        was_joined = participant.status == GameSessionParticipantStatus.JOINED
+        participant.status = GameSessionParticipantStatus.LEFT
+        participant.save(update_fields=["status", "updated"])
+
+        new_host_profile_id = None
+        if locked.host_profile_id == participant.profile_id:
+            successor = locked.participants.joined().order_by("joined_at", "pk").first()
+            if successor is not None:
+                locked.host_profile_id = successor.profile_id
+                locked.save(update_fields=["host_profile", "updated"])
+                new_host_profile_id = successor.profile_id
+
+        abandoned = not locked.participants.joined().exists()
+        if abandoned:
+            locked.status = GameSessionStatus.ABANDONED
+            locked.ended_at = timezone.now()
+            locked.save(update_fields=["status", "ended_at", "updated"])
+
+        revealed_round = None
+        if not abandoned and was_joined and open_round is not None and _every_joined_participant_has_guessed(open_round):
+            open_round.revealed_at = timezone.now()
+            open_round.save(update_fields=["revealed_at", "updated"])
+            revealed_round = open_round
+
+    session.status, session.ended_at, session.host_profile_id = locked.status, locked.ended_at, locked.host_profile_id
+    realtime.broadcast(session.pk, "participant.left", {"profile_id": participant.profile_id, "reason": reason, "new_host_profile_id": new_host_profile_id})
+    if abandoned:
+        realtime.broadcast(session.pk, "session.completed", session_summary(session))
+    elif revealed_round is not None:
+        _finish_round(revealed_round, list(Guess.objects.for_round(revealed_round).select_related("profile")))
+        _advance_or_complete(session)
+
+
+def leave_session(session: GameSession, profile: Profile) -> None:
+    """``profile`` leaves the session - or declines an invitation to it.
+
+    A no-op for a profile that already left. See ``_remove_participant`` for host hand-over, abandonment and
+    round completion.
+
+    Raises:
+        SessionAlreadyEndedError: The session has already ended.
+        NotASessionParticipantError: ``profile`` has no participant row for this session.
+    """
+    if session.status not in (GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE):
+        raise SessionAlreadyEndedError(f"Session {session.pk} is {session.status}, already ended.")
+    try:
+        participant = GameSessionParticipant.objects.get(session=session, profile=profile)
+    except GameSessionParticipant.DoesNotExist:
+        raise NotASessionParticipantError(f"Profile {profile.pk} has no participant row for session {session.pk}.") from None
+    if participant.status == GameSessionParticipantStatus.LEFT:
+        return
+    _remove_participant(session, participant, reason="left")
+
+
+def kick_participant(session: GameSession, host: Profile, target_profile: Profile) -> None:
+    """Host-only: remove another participant, joined or still invited.
+
+    A no-op for a target that already left.
+
+    Raises:
+        NotSessionHostForKickError: The caller isn't the host.
+        CannotKickHostError: ``target_profile`` is the host.
+        SessionAlreadyEndedError: The session has already ended.
+        KickTargetNotAParticipantError: ``target_profile`` has no participant row for this session.
+    """
+    if session.host_profile_id != host.pk:
+        raise NotSessionHostForKickError(f"Profile {host.pk} is not host {session.host_profile_id} of session {session.pk}.")
+    if target_profile.pk == host.pk:
+        raise CannotKickHostError(f"Profile {host.pk} is the host of session {session.pk}.")
+    if session.status not in (GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE):
+        raise SessionAlreadyEndedError(f"Session {session.pk} is {session.status}, already ended.")
+    try:
+        participant = GameSessionParticipant.objects.get(session=session, profile=target_profile)
+    except GameSessionParticipant.DoesNotExist:
+        raise KickTargetNotAParticipantError(f"Profile {target_profile.pk} has no participant row for session {session.pk}.") from None
+    if participant.status == GameSessionParticipantStatus.LEFT:
+        return
+    _remove_participant(session, participant, reason="kicked")
 
 
 def rounds_played(session: GameSession) -> int:

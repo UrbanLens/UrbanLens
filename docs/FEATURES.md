@@ -1529,10 +1529,16 @@ play, all three guess modes.** Everything below the line is not yet built.
   into the lobby) with a host-controlled start that locks the roster, a live scoreboard, and
   WebSocket-driven round sync (`GameSessionConsumer`, one group per session) so every
   participant sees rounds/reveals/results together in real time
-- **Multiplayer stall handling**: a round stuck because a participant went AFK is force-revealed
-  by a Celery beat sweep after 10 minutes (marking the session `ABANDONED` if literally nobody
-  guessed), and the host can end an in-progress or not-yet-started game immediately at any time
-  from an "End game" control - no more waiting out a dead lobby or stuck round
+- **Multiplayer stall handling and leave/kick**: a round stuck because a participant went AFK is
+  force-revealed by a Celery beat sweep after 10 minutes (marking the session `ABANDONED` if
+  literally nobody guessed), and the host can end an in-progress or not-yet-started game (cancel
+  the lobby) immediately from an "End game" control. Any participant can leave (or decline an
+  invite), and the host can remove anyone else, from the lobby or mid-game
+  (`spotguessr.leave`/`spotguessr.kick`, `services.spotguessr.session.leave_session`/`kick_participant`).
+  The host role passes to the earliest remaining joined player if the host leaves, the session is
+  `ABANDONED` once nobody joined is left, and a round only the departed player was holding up is
+  revealed at once. A departed player (`GameSessionParticipantStatus.LEFT`) loses every route back
+  in - HTTP, WebSocket connect, chat, their session history - until the host invites them again
 - **Live text chat** scoped to a session (WebSocket-only, no E2EE - unlike DMs, session banter
   between people already visible to each other on the scoreboard has no privacy surface to
   protect)

@@ -251,7 +251,7 @@ class TriviaSessionStatus(abstract.TextChoices):
 class TriviaSessionParticipantStatus(abstract.TextChoices):
     """Whether a participant has accepted their invitation yet.
     Mirrors ``GameSessionParticipantStatus``.
-    ``LEFT`` has no SpotGuessr equivalent yet - set once a participant voluntarily leaves (``services.trivia.session.leave_session``) or is removed by the host (``kick_participant``), from either ``INVITED`` or ``JOINED``.
+    ``LEFT`` is set once a participant voluntarily leaves (``services.trivia.session.leave_session``) or is removed by the host (``kick_participant``), from either ``INVITED`` or ``JOINED``.
     """
 
     INVITED = "invited", "Invited"

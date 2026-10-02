@@ -88,8 +88,10 @@ class GameSessionParticipantQuerySet(abstract.DashboardQuerySet["GameSessionPart
         return self.filter(status=GameSessionParticipantStatus.JOINED)
 
     def active(self) -> GameSessionParticipantQuerySet:
-        """Participants who still have access to their session. Every status qualifies: none marks a departure."""
-        return self.all()
+        """Participants who still have access to their session: invited or joined, never departed."""
+        from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipantStatus
+
+        return self.exclude(status=GameSessionParticipantStatus.LEFT)
 
 
 _GameSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(GameSessionParticipantQuerySet)

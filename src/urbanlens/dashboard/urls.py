@@ -194,6 +194,8 @@ urlpatterns = [
                 path("session/<int:session_id>/join/", spotguessr.SpotGuessrJoinView.as_view(), name="spotguessr.join"),
                 path("session/<int:session_id>/begin/", spotguessr.SpotGuessrBeginView.as_view(), name="spotguessr.begin"),
                 path("session/<int:session_id>/end/", spotguessr.SpotGuessrEndSessionView.as_view(), name="spotguessr.end"),
+                path("session/<int:session_id>/leave/", spotguessr.SpotGuessrLeaveSessionView.as_view(), name="spotguessr.leave"),
+                path("session/<int:session_id>/kick/", spotguessr.SpotGuessrKickParticipantView.as_view(), name="spotguessr.kick"),
                 path("session/<int:session_id>/round/", spotguessr.SpotGuessrRoundView.as_view(), name="spotguessr.round"),
                 path(
                     "session/<int:session_id>/round/<int:round_id>/guess/",
