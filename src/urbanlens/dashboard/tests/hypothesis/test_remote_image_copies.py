@@ -463,13 +463,13 @@ class GalleryUrlTests(TestCase):
     def test_an_in_app_document_is_previewed_in_place(self) -> None:
         (urls,) = gallery_urls([_item("/dashboard/cris/attachment/r1/2/", "", "application/pdf")], provider="cris")
 
-        self.assertEqual((urls.thumb, urls.view), ("/dashboard/cris/attachment/r1/2/?preview=1", ""))
+        self.assertEqual((urls.thumb, urls.view), ("/dashboard/cris/attachment/r1/2/?preview=thumb", ""))
         self.assertFalse(RemoteImageCopy.objects.exists())
 
     def test_an_in_app_documents_own_query_is_kept(self) -> None:
         (thumb,) = gallery_thumb_urls([_item("/x/?a=b", "", "image/tiff")], provider="cris")
 
-        self.assertEqual(thumb, "/x/?a=b&preview=1")
+        self.assertEqual(thumb, "/x/?a=b&preview=thumb")
 
     def test_an_item_with_nothing_to_show_gets_no_picture(self) -> None:
         (urls,) = gallery_urls([_item("https://provider.test/record.txt")], provider="p")

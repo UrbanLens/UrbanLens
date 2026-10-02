@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.media.previews import tile_preview_url
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, PanelApiKind
 
 if TYPE_CHECKING:
@@ -107,7 +108,7 @@ class LoopnetPanelSource(GalleryMediaSource):
                 if photo_id is None:
                     continue
                 proxy_url = reverse("pin.loopnet.photo", args=[listing_uuid, photo_id])
-                items.append(MediaItem(url=proxy_url, thumb_url=proxy_url, caption=caption, source="LoopNet", page_url=page_url))
+                items.append(MediaItem(url=proxy_url, thumb_url=tile_preview_url(proxy_url), caption=caption, source="LoopNet", page_url=page_url))
         return items
 
 

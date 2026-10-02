@@ -15,7 +15,7 @@ from django.test import Client
 from django.urls import reverse
 import pytest
 
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     PropertyRecordsBusyError,
@@ -90,7 +90,7 @@ class RedataDownloadsReportThrottlingTests(SimpleTestCase):
         self.assertEqual(caught.value.retry_after, 30)
 
 
-class TheProxyAsksForARetryTests(SimpleTestCase):
+class TheProxyAsksForARetryTests(TestCase):
     def _get(
         self,
         url: str,

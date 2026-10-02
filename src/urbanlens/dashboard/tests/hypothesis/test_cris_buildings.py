@@ -347,7 +347,7 @@ class MediaItemsTests(SimpleTestCase):
             ],
         }
         items = self.source.media_items(data)
-        self.assertIn("preview=1", items[0].thumb_url)
+        self.assertIn("preview=thumb", items[0].thumb_url)
         self.assertEqual(items[0].content_type, "image/tiff")
 
     def test_every_attachment_thumbnails_through_the_proxys_preview_mode(self) -> None:
@@ -359,7 +359,7 @@ class MediaItemsTests(SimpleTestCase):
             "attachments": [{"id": 1, "kind": "photo", "name": "Front", "content_type": ""}],
         }
         items = self.source.media_items(data)
-        self.assertEqual(items[0].thumb_url, f"{items[0].url}?preview=1")
+        self.assertEqual(items[0].thumb_url, f"{items[0].url}?preview=thumb")
 
     def test_extracted_images_thumbnail_through_preview_mode_too(self) -> None:
         data = {
@@ -368,7 +368,7 @@ class MediaItemsTests(SimpleTestCase):
         }
         items = self.source.media_items(data)
         self.assertEqual(len(items), 1)
-        self.assertIn("preview=1", items[0].thumb_url)
+        self.assertIn("preview=thumb", items[0].thumb_url)
 
     def test_attachments_carry_their_own_resource_uuid(self) -> None:
         """One payload aggregates the nearest building's attachments and the

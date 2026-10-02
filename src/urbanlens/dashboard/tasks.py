@@ -1509,36 +1509,31 @@ def _merge_cris_extraction(location_id: int, resource_uuid: str, attachment_id: 
 
 
 @shared_task(queue=SANDBOX_QUEUE)
-def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int, failure_ttl: int) -> bool:
-    """Decode one proxied provider file into a browser-renderable preview.
+def render_proxied_media(source_key: str, size: str, descriptor: dict[str, str]) -> bool:
+    """Decode one file an in-app REData proxy serves and keep the rendering (``services.media.proxied_renders``).
 
     Args:
-        source_cache_key: Key holding the proxy's cached ``(bytes, content_type)`` pair.
-        preview_cache_key: Key to write the result (or the failure sentinel) to.
-        ttl: Seconds to cache a successful render.
-        failure_ttl: Seconds to cache the failure sentinel.
+        source_key: The proxy's cache key for the original file.
+        size: Which rendering, a key of ``proxied_renders.SIZES``.
+        descriptor: Where the web process staged the original (``previews.stage_preview_source``).
 
     Returns:
-        True when a preview was produced and cached.
+        True when a rendering was kept.
     """
-    from django.core.cache import cache
+    from urbanlens.dashboard.services.media import proxied_renders
+    from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
 
-    from urbanlens.dashboard.services.core.bounded_cache import get_or_none
-    from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, render_preview
-
-    source = get_or_none(source_cache_key, label=f"preview source {source_cache_key}")
-    if not isinstance(source, tuple):
-        # Expired between the caller writing it and this running. Nothing is cached either way: a retry would
-        # only re-read the same miss, and marking it UNPREVIEWABLE would blacklist a perfectly good document.
-        logger.info("Preview source %s was gone before it could be rendered", source_cache_key)
-        return False
-
-    preview = render_preview(*source)
-    if preview is None:
-        cache.set(preview_cache_key, UNPREVIEWABLE, failure_ttl)
-        return False
-    cache.set(preview_cache_key, preview, ttl)
-    return True
+    try:
+        source = load_preview_source(descriptor)
+        if source is None:
+            # Swept before this ran; the next view queues it again.
+            proxied_renders.release(source_key, size)
+            return False
+        rendered = render_preview(*source, max_dimension=proxied_renders.SIZES[size])
+        proxied_renders.finish(source_key, size, rendered)
+        return rendered is not None
+    finally:
+        discard_preview_source(descriptor)
 
 
 #: ``remote_copies.DOWNLOAD_TIMEOUT_SECONDS`` bounds each read, so a provider trickling bytes needs a bound on the whole.
@@ -1727,7 +1722,7 @@ STALLED_UPLOAD_BATCH = 100
 def sweep_stale_preview_sources() -> int:
     """Remove staged preview sources whose render never ran.
 
-    ``render_media_preview`` deletes its own source, so anything this finds is from an enqueue that
+    ``render_proxied_media`` deletes its own source, so anything this finds is from an enqueue that
     failed - the broker was down when a tile was requested
 
     - leaving a file on the media volume nothing will ever read.

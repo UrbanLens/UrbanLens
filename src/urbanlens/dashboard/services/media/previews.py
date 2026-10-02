@@ -13,9 +13,6 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from django.core.cache import cache
-from django.http import HttpResponse
-
 from urbanlens.dashboard.services.media.images import pixels_only
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
@@ -168,9 +165,9 @@ def fetch_remote_source(url: str, *, max_bytes: int, timeout: float = _FETCH_TIM
         return bytes(body), response.headers.get("Content-Type", "")
 
 
-def _with_preview_flag(url: str) -> str:
-    """Append ``preview=1`` to an in-app proxy URL, preserving any existing query."""
-    return f"{url}{'&' if '?' in url else '?'}preview=1"
+def tile_preview_url(url: str) -> str:
+    """An in-app proxy URL asking for a gallery tile's rendering (``proxied_renders.TILE``), keeping any existing query."""
+    return f"{url}{'&' if '?' in url else '?'}preview=thumb"
 
 
 def _thumb_source(item_url: str, thumb_url: str, content_type: str) -> str:
@@ -199,7 +196,7 @@ def _gallery_url(source: str, copies: dict[str, str], declared: str) -> str:
     if source in copies:
         return copies[source]
     if source.startswith("/"):
-        return _with_preview_flag(source) if needs_server_side_preview(source, declared) else source
+        return tile_preview_url(source) if needs_server_side_preview(source, declared) else source
     return ""
 
 
@@ -329,11 +326,6 @@ def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = P
     return buffer.getvalue(), "image/jpeg"
 
 
-#: Cache sentinel for "this source was decoded and could not be previewed".
-#: Shared by the in-app proxies and the task that writes it, so a provider
-#: serving something unconvertible is not re-decoded per tile.
-UNPREVIEWABLE = "unpreviewable"
-
 #: Cache sentinel for "a render is already queued for this key". A gallery page
 #: fires one request per tile at once; without it, twenty tiles for the same
 #: uncached item would queue twenty identical renders.
@@ -433,58 +425,5 @@ def sweep_preview_sources(max_age: int = PREVIEW_SOURCE_MAX_AGE) -> int:
     return removed
 
 
-def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl: int, failure_ttl: int) -> None:
-    """Queue a preview render in the sandbox worker, at most once per key. :func:`render_preview` reaches Pillow and poppler, so it must not run in a web process - see :mod:`urbanlens.dashboard.services.sandbox.guard`.
-
-    Args:
-        source_cache_key: Cache key holding the source's ``(bytes, content_type)`` pair.
-        preview_cache_key: Cache key the rendered preview is written to.
-        ttl: Seconds to cache a successful render.
-        failure_ttl: Seconds to cache the :data:`UNPREVIEWABLE` sentinel."""
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.tasks import render_media_preview
-
-    # add() is atomic in both the Redis and locmem backends, so concurrent tile
-    # requests race here rather than at the queue.
-    if not cache.add(preview_cache_key, RENDER_QUEUED, RENDER_QUEUED_TTL):
-        return
-    if safely_enqueue_task(render_media_preview, source_cache_key, preview_cache_key, ttl, failure_ttl, durable=False) is None:
-        # Broker unreachable. Drop the marker so the next request retries rather
-        # than waiting out RENDER_QUEUED_TTL against a queue nothing was put on.
-        cache.delete(preview_cache_key)
-
-
 #: Seconds a client is told to wait before asking again for a preview still being rendered.
 PREVIEW_RETRY_AFTER_SECONDS = 3
-
-
-def unfinished_preview_response(preview_cache_key: str) -> HttpResponse:
-    """The answer for a preview with no finished render: 503 with Retry-After while one is queued, else 404.
-
-    Args:
-        preview_cache_key: The key :func:`request_sandbox_render` was given.
-
-    Returns:
-        The response. A 404 means no preview is coming (unconvertible, or the render could not be queued),
-        which the gallery's onerror handler turns into the icon tile.
-    """
-    if cache.get(preview_cache_key) != RENDER_QUEUED:
-        return HttpResponse(status=404)
-    response = HttpResponse(status=503)
-    response["Retry-After"] = str(PREVIEW_RETRY_AFTER_SECONDS)
-    response["Cache-Control"] = "no-store"
-    return response
-
-
-def cached_preview(preview_cache_key: str) -> tuple[bytes, str] | None:
-    """Read a previously rendered preview, treating both sentinels as "no preview".
-
-    Args:
-        preview_cache_key: The key :func:`request_sandbox_render` was given.
-
-    Returns:
-        ``(image_bytes, content_type)``, or None when the render has not finished, was never queued, or produced nothing."""
-    cached = cache.get(preview_cache_key)
-    if cached is None or cached in (UNPREVIEWABLE, RENDER_QUEUED):
-        return None
-    return cached

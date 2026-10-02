@@ -14,12 +14,13 @@
 window.urbanlensRetryPendingImage = function (img) {
     var src = img.getAttribute('src') || '';
     var isCopy = src.indexOf('/media-copy/') !== -1;
-    var isPreview = isCopy || /[?&]preview=1(&|$)/.test(src);
+    var isPreview = isCopy || /[?&]preview=(1|thumb)(&|$)/.test(src);
     var retries = isPreview || img.hasAttribute('data-retry-busy');
     // Every handler that sees one failure asks; it is retried once.
     if (img.dataset.retryOf === src) return true;
     // A copy waits its turn behind every other one queued site-wide, so a page's later tiles can take minutes.
-    var delays = isCopy ? [4000, 6000, 10000, 15000, 20000, 25000, 30000, 30000, 30000] : [2000, 4000];
+    // A rendering waits behind the sandbox queue's other decodes.
+    var delays = isCopy ? [4000, 6000, 10000, 15000, 20000, 25000, 30000, 30000, 30000] : isPreview ? [2000, 4000, 6000, 10000, 15000] : [2000, 4000];
     // The count belongs to one address: an element reused for another image starts again.
     var base = src.replace(/([?&])_r=\d+$/, '');
     var attempt = img.dataset.previewRetryFor === base ? parseInt(img.dataset.previewRetry || '0', 10) : 0;

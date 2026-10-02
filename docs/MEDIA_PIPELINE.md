@@ -510,7 +510,7 @@ about to parse an upload:
 The import preview, which this section used to name as the one thing left before
 `deny`, parses in `parse_import_preview_task` now and finishes its lookups on an
 interactive worker (P2). The earlier moves stand: `prepare_photo_upload` no longer
-decodes, the two `render_preview` callers go through `tasks.render_media_preview`,
+decodes, the `render_preview` callers go through sandbox tasks (`render_proxied_media`, `render_remote_image_copy`),
 enrichment photos go through `process_image_upload`, and the one legitimate
 exemption (`strip_exif_from_stored_photos`, a backfill over already-scanned files) is
 written down as an `allow_untrusted_parse` block rather than left implicit. What
@@ -524,13 +524,17 @@ is a server-side render, and `render_preview` reaches Pillow and poppler - so
 it runs on the sandbox queue like every other decode, not in the view. Two
 paths use it:
 
-- **An in-app proxy's `?preview=1`** (`controllers/pin.RedataMediaProxyMixin`:
-  CRIS attachments, LoopNet photos). The proxy already holds the file as a
-  cached `(bytes, content_type)` pair. It serves `previews.cached_preview` when
-  there is one; otherwise `previews.request_sandbox_render` queues
-  `tasks.render_media_preview` at most once per key (`cache.add` of a
-  `RENDER_QUEUED` marker), and `unfinished_preview_response` answers 503 with
-  `Retry-After` while the render is queued, 404 once none is coming.
+- **An in-app proxy's `?preview=thumb` or `?preview=1`** (`controllers/pin.RedataMediaProxyMixin`:
+  CRIS attachments, LoopNet photos, place media). A gallery tile asks for `thumb` (400px, the size an
+  upload's grid thumbnail is) and the lightbox for `1` (1200px; a browser-viewable original is served as
+  it is there). Each rendering is made once and kept as a `ProxiedMediaRender` row and file
+  (`services/media/proxied_renders.py`, P189), so a later view neither downloads the file from REData nor
+  decodes it again. On a miss the proxy stages the original on disk (`previews.stage_preview_source`,
+  not the byte cache, which keeps only files up to 4MB) and queues `tasks.render_proxied_media` at most
+  once per rendering (`cache.add` of a `RENDER_QUEUED` marker), answering 503 with `Retry-After` until it
+  is kept. A file that cannot be rendered answers 404 for `RENDER_FAILED_TTL` (an hour), then is tried
+  again. A kept rendering is served through `proxied_media_response`, not an X-Accel hand-off, so it
+  carries the proxy's own headers.
 - **A third-party image** (`controllers/remote_copies.RemoteImageCopyView`,
   `media-copy/<digest>/`). Every provider image the site shows is its own copy.
   The `RemoteImageCopy` row, written when a page linking the image was built,

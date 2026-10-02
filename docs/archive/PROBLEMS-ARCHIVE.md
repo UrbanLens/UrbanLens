@@ -19523,3 +19523,26 @@ a legacy account is never stranded and no other account's password leaves the br
 returns null instead of guessing; enrolment then reports that the password could not be checked, and a reset
 refuses. `changePassword` already refused. Tests: `e2ee-client.test.ts` ("a sign-in that cannot learn how the
 account signs in", "a password check that cannot learn how the account signs in"), each written failing first.
+
+## RESOLVED 2026-10-02: A CRIS document's gallery tile loaded a 1200 px render of its first page, rebuilt every hour, and a large document got none
+
+`id: P189` · `status: fixed` · `resolved: 2026-10-02`
+
+A gallery tile for a file an in-app REData proxy serves and a browser cannot show (a CRIS attachment PDF or TIFF)
+pointed at `<proxy>/?preview=1`, which `RedataMediaProxyMixin.serve_media` answered with a render at
+`PREVIEW_MAX_DIMENSION`: on the dev stack's HRSH Photos tab an 848x1200 page went into a 119 px box. The render lived
+an hour in the shared cache (`_REDATA_MEDIA_CACHE_TTL`), so the first view after that downloaded the document from
+REData and decoded it again. The render task also read its source back from the byte cache, which refuses anything
+over `REDATA_MEDIA_MAX_CACHED_BYTES` (4 MB), so a large scanned document never got a preview at all: its tile showed
+the icon. A browser-viewable original (a LoopNet JPEG) was served at whatever size REData held it.
+
+**Fixed.** Tiles ask for `?preview=thumb` (`previews.tile_preview_url`, used by `gallery_urls` and the CRIS, LoopNet
+and place-media plugins) and get a 400 px rendering; the lightbox keeps `?preview=1`. Each rendering is made once in
+the sandbox (`tasks.render_proxied_media`) from a source staged on disk, and kept as a `ProxiedMediaRender` row and
+file (`services/media/proxied_renders.py`, migration 0035), served with the proxy's own headers and as immutable. A
+file that cannot be rendered answers 404 for an hour and is then tried again. The cache-only path
+(`request_sandbox_render`, `cached_preview`, `render_media_preview`) is gone. Tests:
+`test_redata_media_renders_kept.py`, written failing first, plus the updated proxy tests.
+
+Not changed, tracked as P190: a third-party copy is stored at 1200 px, and a tile for an item whose provider names no
+thumbnail loads that copy.

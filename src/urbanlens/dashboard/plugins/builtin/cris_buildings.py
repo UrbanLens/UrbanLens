@@ -11,6 +11,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
+from urbanlens.dashboard.services.media.previews import tile_preview_url
 from urbanlens.dashboard.services.pins.external_data import FAILURE_SKIP_TTL_SECONDS, CoordinateGatedInfoPanelSource, DocumentPanelSource, DocumentUnavailableError, GalleryMediaSource, PanelApiKind, PanelPlacement, SourceDocument
 
 if TYPE_CHECKING:
@@ -866,14 +867,14 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             caption = attachment.get("name") or attachment.get("attachment_type") or ""
             # The PDF itself belongs on Article > Sources. Images extracted from it stay in the gallery.
             if not is_pdf_document(attachment):
-                items.append(MediaItem(url=proxy_url, thumb_url=f"{proxy_url}?preview=1", caption=caption, source=_SOURCE_NAME, content_type=content_type))
+                items.append(MediaItem(url=proxy_url, thumb_url=tile_preview_url(proxy_url), caption=caption, source=_SOURCE_NAME, content_type=content_type))
 
             for image in attachment.get("extracted_images") or []:
                 image_id = image.get("id")
                 if image_id is None:
                     continue
                 image_proxy_url = reverse("pin.cris.extracted_image", args=[resource_uuid, attachment_id, image_id])
-                items.append(MediaItem(url=image_proxy_url, thumb_url=f"{image_proxy_url}?preview=1", caption=caption, source=_SOURCE_NAME))
+                items.append(MediaItem(url=image_proxy_url, thumb_url=tile_preview_url(image_proxy_url), caption=caption, source=_SOURCE_NAME))
         return items
 
     def documents_ready(self, data: dict, *, site_scope: bool) -> bool:

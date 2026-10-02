@@ -31,7 +31,7 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         # Here, not on the default queue with the keywording task that consumes it: that task holds
         # REData/OAuth/DB credentials and has full egress, so the decode must not happen in it.
         "generate_image_analysis_thumbnails",
-        "render_media_preview",
+        "render_proxied_media",
         "render_remote_image_copy",
         "render_remote_tile",
         "scan_comment_image",

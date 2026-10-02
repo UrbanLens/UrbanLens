@@ -9,7 +9,7 @@ from django.core.cache import caches
 from django.test import Client
 from django.urls import reverse
 
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     PropertyRecordsUnavailableError,
@@ -123,7 +123,7 @@ class RedataMediaCacheReadBackTests(SimpleTestCase):
         download.assert_called_once()
 
 
-class CrisAttachmentPreviewModeTests(SimpleTestCase):
+class CrisAttachmentPreviewModeTests(TestCase):
     """``?preview=1`` means "give me something an <img> can render".
 
     CRIS attachments are routinely scanned PDFs and TIFFs, which no browser displays - the Media gallery pointed
@@ -147,11 +147,11 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
 
     def test_a_tiff_attachment_is_converted(self) -> None:
         # Two requests, because the decode now happens between them: the view
-        # fetches and queues, tasks.render_media_preview decodes in the sandbox
+        # fetches and queues, tasks.render_proxied_media decodes in the sandbox
         # worker, and the second request is the one that serves a preview. The
         # first answer is "retry shortly", which the gallery's onerror retry acts
         # on.
-        from urbanlens.dashboard.tasks import render_media_preview
+        from urbanlens.dashboard.tasks import render_proxied_media
 
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
@@ -161,8 +161,8 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             self.assertEqual(self.client.get(self.url, {"preview": "1"}).status_code, 503)
-            _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
-            render_media_preview(source_key, preview_key, ttl, failure_ttl)
+            _task, source_key, size, descriptor = enqueue.call_args.args
+            render_proxied_media(source_key, size, descriptor)
 
             response = self.client.get(self.url, {"preview": "1"})
         self.assertEqual(response.status_code, 200)

@@ -13,12 +13,12 @@ import re
 from unittest.mock import patch
 
 from django.conf import settings
-from django.core.cache import cache, caches
+from django.core.cache import caches
 from django.test import Client
 from django.urls import reverse
 
 from urbanlens.core.tests.nginx_config import NGINX_DIR, parsed_directives
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 
@@ -66,7 +66,7 @@ def _get(route: _Route, content: bytes, content_type: str, **params: str):
         return Client().get(reverse(route.name, args=route.args), params)
 
 
-class HostileUpstreamTypesAreNotRenderedTests(SimpleTestCase):
+class HostileUpstreamTypesAreNotRenderedTests(TestCase):
     def assert_inert_download(self, response) -> None:
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/octet-stream")
@@ -99,7 +99,7 @@ class HostileUpstreamTypesAreNotRenderedTests(SimpleTestCase):
         self.assert_inert_download(_get(ROUTES[1], _HTML, "application/pdf"))
 
 
-class AllowListedTypesStillDisplayTests(SimpleTestCase):
+class AllowListedTypesStillDisplayTests(TestCase):
     def test_an_image_is_inline_and_sandboxed(self) -> None:
         response = _get(ROUTES[0], _JPEG, "image/jpeg")
         self.assertEqual(response.status_code, 200)
@@ -127,7 +127,9 @@ class AllowListedTypesStillDisplayTests(SimpleTestCase):
         self.assertEqual(response["X-Content-Type-Options"], "nosniff")
 
     def test_a_rendered_preview_carries_the_same_headers(self) -> None:
-        cache.set("ul_cris_attachment_res-1_5_preview", (_JPEG, "image/jpeg"))
+        from urbanlens.dashboard.services.media import proxied_renders
+
+        proxied_renders.finish("ul_cris_attachment_res-1_5", proxied_renders.VIEW, (_JPEG, "image/jpeg"))
         response = Client().get(reverse("pin.cris.attachment", args=["res-1", 5]), {"preview": "1"})
         self.assertEqual(response["Content-Type"], "image/jpeg")
         self.assertIn("default-src 'none'", response["Content-Security-Policy"])

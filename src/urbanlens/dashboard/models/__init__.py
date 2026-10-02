@@ -104,6 +104,7 @@ from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
 from urbanlens.dashboard.models.property_owner import OwnerSource, PinOwner, PinPropertySale, WikiOwner, WikiPropertySale
+from urbanlens.dashboard.models.proxied_media_render import ProxiedMediaRender
 from urbanlens.dashboard.models.public_pins import PublicPinCandidate, PublicPinCandidateStatus, PublicPinVote
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.models.reactions import Reaction

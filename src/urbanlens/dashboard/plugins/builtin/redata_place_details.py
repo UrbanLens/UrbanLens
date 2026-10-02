@@ -9,6 +9,7 @@ from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
+from urbanlens.dashboard.services.media.previews import tile_preview_url
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, GalleryMediaSource, PanelApiKind
 
 if TYPE_CHECKING:
@@ -121,7 +122,7 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
             if media_id is None:
                 continue
             proxy_url = reverse("pin.place_cid.media", args=[cid, media_id])
-            items.append(MediaItem(url=proxy_url, thumb_url=proxy_url, caption=name, source=_SOURCE_NAME, content_type=str(media.get("content_type") or "")))
+            items.append(MediaItem(url=proxy_url, thumb_url=tile_preview_url(proxy_url), caption=name, source=_SOURCE_NAME, content_type=str(media.get("content_type") or "")))
             if len(items) >= _MAX_PHOTOS:
                 break
         return items

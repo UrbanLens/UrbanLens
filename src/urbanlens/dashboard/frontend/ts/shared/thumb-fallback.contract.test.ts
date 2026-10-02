@@ -173,6 +173,26 @@ describe("the broken-thumbnail fallback", () => {
         expect(delays).toEqual([...delays].sort((a, b) => a - b));
     });
 
+    test("a tile's rendering of a proxied document is retried while the sandbox makes it", () => {
+        // REData documents are rendered at a tile's size (?preview=thumb) and at the lightbox's (?preview=1); either
+        // answers 503 until the sandbox has decoded it, which takes longer than two quick retries.
+        for (const src of ["/dashboard/map/pin/cris/attachment/r/5/?preview=thumb", "/dashboard/map/pin/cris/attachment/r/5/?preview=1"]) {
+            const delays: number[] = [];
+            const scope: { urbanlensRetryPendingImage?: (img: HTMLImageElement) => boolean } = {};
+            new Function("window", "setTimeout", SCRIPT)(scope, (callback: () => void, delay: number) => {
+                delays.push(delay);
+                callback();
+            });
+            const img = document.createElement("img");
+            img.setAttribute("src", src);
+            while (scope.urbanlensRetryPendingImage?.(img)) {
+                // Each scheduled retry already swapped in its URL; the next error asks again.
+            }
+            expect(delays.length, src).toBeGreaterThan(2);
+            expect(delays.reduce((total, delay) => total + delay, 0), src).toBeGreaterThanOrEqual(30_000);
+        }
+    });
+
     test("one failure is retried once, however many handlers report it", () => {
         // An external tile's own error handler and the document's listener both saw each failure, so every 503
         // spent two of its retries.

@@ -168,7 +168,7 @@ problems on its first run is a check somebody switches off.
 | `generate_image_marker_thumbnails` | SANDBOX | unchanged |
 | `generate_image_thumbnails` | SANDBOX | unchanged |
 | `process_image_upload` | SANDBOX | unchanged |
-| `render_media_preview` | SANDBOX | unchanged |
+| `render_proxied_media` | SANDBOX | unchanged |
 | `scan_comment_image` | SANDBOX | unchanged |
 | `scan_trip_comment_image` | SANDBOX | unchanged |
 | `run_user_data_import` | SANDBOX_BATCH | unchanged |

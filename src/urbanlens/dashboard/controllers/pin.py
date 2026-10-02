@@ -1918,38 +1918,42 @@ class RedataMediaProxyMixin:
     """
 
     def serve_media(self, request: HttpRequest, cache_key: str, download: Callable[[], tuple[bytes, str]], *, unavailable_errors: tuple[type[Exception], ...] | None = None) -> HttpResponse:
-        """Serve one REData file, converting it to a preview image when asked.
+        """Serve one REData file, or a rendering of it a browser can show.
 
         Args:
-            request: The current request; ``?preview=1`` asks for a browser-displayable rendering rather
-            than the original bytes.
+            request: The current request. ``?preview=thumb`` asks for a gallery tile's rendering and ``?preview=1`` for
+            the lightbox's (an original a browser can already show is served as it is for the lightbox).
             cache_key: Django cache key for the *original* bytes.
             download: Zero-argument callable returning ``(content, content_type)``.
             unavailable_errors: Exception types ``download`` raises to mean "not available" (a 404, an
             unconfigured gateway, ...), each turned into a 404 response...
 
         Returns:
-            The file (or its preview); a 503 with ``Retry-After`` while REData is throttled, its source is down or
-            this process already has as many REData downloads in flight as it may; a 502 when the download
-            failed; or a 404 when REData couldn't supply it or the preview couldn't be rendered.
+            The file or its kept rendering; a 503 with ``Retry-After`` while the rendering is being made, while REData is
+            throttled, its source is down or this process already has as many REData downloads in flight as it may; a
+            502 when the download failed; or a 404 when REData couldn't supply it or it could not be rendered.
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
         from urbanlens.dashboard.services.apis.request_upstreams import RedataMediaUpstream
         from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
-        from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, needs_server_side_preview, request_sandbox_render, unfinished_preview_response
+        from urbanlens.dashboard.services.media import proxied_renders
+        from urbanlens.dashboard.services.media.previews import PREVIEW_RETRY_AFTER_SECONDS, is_web_safe, needs_server_side_preview
         from urbanlens.dashboard.services.media.proxied_media import inline_media_type, proxied_media_response, retry_later_response
 
         if unavailable_errors is None:
             unavailable_errors = (PropertyRecordsUnavailableError, ValueError)
 
-        wants_preview = request.GET.get("preview") == "1"
-        preview_key = f"{cache_key}_preview"
+        size = request.GET.get("preview", "")
+        if size not in proxied_renders.SIZES:
+            size = ""
         label = f"REData media {cache_key}"
-        if wants_preview:
-            preview = cached_preview(preview_key)
-            if preview is not None:
-                content, content_type = preview
-                return proxied_media_response(content, content_type)
+        if size:
+            if (kept := self._serve_kept_render(cache_key, size)) is not None:
+                return kept
+            if proxied_renders.has_failed(cache_key, size):
+                return HttpResponse(status=404)
+            if proxied_renders.is_pending(cache_key, size):
+                return retry_later_response(PREVIEW_RETRY_AFTER_SECONDS)
 
         original = get_or_none(cache_key, label=label)
         if original is None:
@@ -1974,9 +1978,9 @@ class RedataMediaProxyMixin:
             original = fetched.value
 
         content, content_type = original
-        # A JPEG needs no conversion, and re-encoding it would only cost quality - "preview" asks for something
-        # displayable, not necessarily something different.
-        if not wants_preview or (is_web_safe(request.path, content_type) and inline_media_type(content, content_type) is not None):
+        # The lightbox shows a displayable original as it is; re-encoding it would only cost quality. A tile still gets
+        # a small rendering, since the original may be any size.
+        if not size or (size == proxied_renders.VIEW and is_web_safe(request.path, content_type) and inline_media_type(content, content_type) is not None):
             return proxied_media_response(content, content_type)
 
         declared = content_type.split(";")[0].strip().lower()
@@ -1985,8 +1989,28 @@ class RedataMediaProxyMixin:
             return HttpResponse(status=404)
         # The decode runs in the sandbox worker, not here - these are a third party's document bytes and
         # render_preview reaches Pillow and poppler.
-        request_sandbox_render(cache_key, preview_key, ttl=_REDATA_MEDIA_CACHE_TTL, failure_ttl=_REDATA_MEDIA_CACHE_TTL)
-        return unfinished_preview_response(preview_key)
+        proxied_renders.request_render(cache_key, size, original)
+        return retry_later_response(PREVIEW_RETRY_AFTER_SECONDS)
+
+    @staticmethod
+    def _serve_kept_render(cache_key: str, size: str) -> HttpResponse | None:
+        # Through proxied_media_response, not an X-Accel hand-off: nginx would drop the headers it sets.
+        from urbanlens.dashboard.services.media import proxied_renders
+        from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
+
+        render = proxied_renders.kept(cache_key, size)
+        if render is None:
+            return None
+        try:
+            with render.file.open("rb") as stored:
+                content = stored.read()
+        except OSError:
+            logger.warning("Kept rendering %s is missing its file", render.pk)
+            render.delete()
+            return None
+        response = proxied_media_response(content, render.content_type)
+        response["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
 
 
 class PinLoopnetPhotoView(RedataMediaProxyMixin, View):
