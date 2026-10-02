@@ -48,33 +48,47 @@ def parse_semantic_visits(json_data: dict) -> Generator[dict[str, Any], None, No
     Yields:
         Dict with keys: ``latitude``, ``longitude``, ``visited_at`` (tz-aware datetime), ``place_name`` (str), ``place_id`` (str|None), ``confidence`` (int)."""
     for obj in json_data.get("timelineObjects", []):
-        pv = obj.get("placeVisit")
-        if not pv:
-            continue
-        confidence = pv.get("visitConfidence", 100)
-        if confidence < MIN_CONFIDENCE:
-            continue
-        loc = pv.get("location", {})
-        lat_e7 = loc.get("latitudeE7")
-        lon_e7 = loc.get("longitudeE7")
-        if lat_e7 is None or lon_e7 is None:
-            continue
-        start_ts = (pv.get("duration") or {}).get("startTimestamp")
-        if not start_ts:
-            continue
-        try:
-            visited_at = datetime.fromisoformat(start_ts)
-        except ValueError:
-            logger.debug("Unparseable placeVisit timestamp: %s", start_ts)
-            continue
-        yield {
-            "latitude": lat_e7 / 1e7,
-            "longitude": lon_e7 / 1e7,
-            "visited_at": visited_at,
-            "place_name": loc.get("name", ""),
-            "place_id": loc.get("placeId"),
-            "confidence": confidence,
-        }
+        visit = semantic_visit(obj)
+        if visit is not None:
+            yield visit
+
+
+def semantic_visit(obj: dict) -> dict[str, Any] | None:
+    """The visit one ``timelineObjects`` entry records, if it is a qualifying ``placeVisit``.
+
+    Args:
+        obj: One entry of a Semantic Location History file's ``timelineObjects``.
+
+    Returns:
+        A dict shaped as :func:`parse_semantic_visits` yields, or None.
+    """
+    pv = obj.get("placeVisit")
+    if not pv:
+        return None
+    confidence = pv.get("visitConfidence", 100)
+    if confidence < MIN_CONFIDENCE:
+        return None
+    loc = pv.get("location", {})
+    lat_e7 = loc.get("latitudeE7")
+    lon_e7 = loc.get("longitudeE7")
+    if lat_e7 is None or lon_e7 is None:
+        return None
+    start_ts = (pv.get("duration") or {}).get("startTimestamp")
+    if not start_ts:
+        return None
+    try:
+        visited_at = datetime.fromisoformat(start_ts)
+    except ValueError:
+        logger.debug("Unparseable placeVisit timestamp: %s", start_ts)
+        return None
+    return {
+        "latitude": lat_e7 / 1e7,
+        "longitude": lon_e7 / 1e7,
+        "visited_at": visited_at,
+        "place_name": loc.get("name", ""),
+        "place_id": loc.get("placeId"),
+        "confidence": confidence,
+    }
 
 
 def iter_location_history_events(
@@ -185,28 +199,27 @@ def _activity_segment_points(segment: dict) -> Generator[Any, None, None]:
         yield RawTrackPoint(lat_e7 / 1e7, lng_e7 / 1e7, None)
 
 
-def _parse_activity_segments(json_data: dict) -> Generator[dict[str, Any], None, None]:
-    """Yield one route dict per activitySegment that has a usable path.
+def _activity_segment(obj: dict) -> dict[str, Any] | None:
+    """The route one ``timelineObjects`` entry records, if it is an activitySegment with a usable path.
 
     Args:
-        json_data: Parsed Semantic Location History dict containing ``timelineObjects``.
+        obj: One entry of a Semantic Location History file's ``timelineObjects``.
 
-    Yields:
-        Dict with keys: ``points`` (list[RawTrackPoint]), ``started_at``, ``ended_at`` (tz-aware datetime | None), ``distance_meters`` (float | None, Google's own estimate - preferred over recomputing from sparse waypoints)."""
-    for obj in json_data.get("timelineObjects", []):
-        segment = obj.get("activitySegment")
-        if not segment:
-            continue
-        points = list(_activity_segment_points(segment))
-        if len(points) < 2:
-            continue
-        duration = segment.get("duration") or {}
-        yield {
-            "points": points,
-            "started_at": _parse_iso_timestamp(duration.get("startTimestamp")),
-            "ended_at": _parse_iso_timestamp(duration.get("endTimestamp")),
-            "distance_meters": segment.get("distance"),
-        }
+    Returns:
+        Dict with keys: ``points`` (list[RawTrackPoint]), ``started_at``, ``ended_at`` (tz-aware datetime | None), ``distance_meters`` (float | None, Google's own estimate - preferred over recomputing from sparse waypoints), or None."""
+    segment = obj.get("activitySegment")
+    if not segment:
+        return None
+    points = list(_activity_segment_points(segment))
+    if len(points) < 2:
+        return None
+    duration = segment.get("duration") or {}
+    return {
+        "points": points,
+        "started_at": _parse_iso_timestamp(duration.get("startTimestamp")),
+        "ended_at": _parse_iso_timestamp(duration.get("endTimestamp")),
+        "distance_meters": segment.get("distance"),
+    }
 
 
 def semantic_history_to_routes(json_data: dict, profile: Profile, source_filename: str) -> list[ParsedRoute]:
@@ -219,25 +232,39 @@ def semantic_history_to_routes(json_data: dict, profile: Profile, source_filenam
 
     Returns:
         List of ParsedRoute - one per qualifying activitySegment."""
+    routes = (semantic_route(obj, profile, source_filename) for obj in json_data.get("timelineObjects", []))
+    return [route for route in routes if route is not None]
+
+
+def semantic_route(obj: dict, profile: Profile, source_filename: str) -> ParsedRoute | None:
+    """The unsaved Route candidate one ``timelineObjects`` entry records, if it is a qualifying activitySegment.
+
+    Args:
+        obj: One entry of a Semantic Location History file's ``timelineObjects``.
+        profile: Owning profile for the created Route row.
+        source_filename: Original uploaded filename, stored as Route.source_filename.
+
+    Returns:
+        The route and its raw points, or None."""
     from urbanlens.dashboard.models.routes.model import Route, RouteSource
     from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute
     from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure
 
-    routes: list[ParsedRoute] = []
-    for segment_data in _parse_activity_segments(json_data):
-        points = segment_data["points"]
-        geometry = simplify_and_measure([(p.latitude, p.longitude) for p in points])
-        google_distance = segment_data["distance_meters"]
-        route = Route(
-            profile=profile,
-            source=RouteSource.GOOGLE_TAKEOUT_SEMANTIC,
-            source_filename=source_filename,
-            path=geometry.path,
-            raw_point_count=geometry.raw_point_count,
-            simplified_point_count=geometry.simplified_point_count,
-            distance_meters=float(google_distance) if google_distance is not None else geometry.distance_meters,
-            started_at=segment_data["started_at"],
-            ended_at=segment_data["ended_at"],
-        )
-        routes.append(ParsedRoute(route=route, raw_points=points))
-    return routes
+    segment_data = _activity_segment(obj)
+    if segment_data is None:
+        return None
+    points = segment_data["points"]
+    geometry = simplify_and_measure([(p.latitude, p.longitude) for p in points])
+    google_distance = segment_data["distance_meters"]
+    route = Route(
+        profile=profile,
+        source=RouteSource.GOOGLE_TAKEOUT_SEMANTIC,
+        source_filename=source_filename,
+        path=geometry.path,
+        raw_point_count=geometry.raw_point_count,
+        simplified_point_count=geometry.simplified_point_count,
+        distance_meters=float(google_distance) if google_distance is not None else geometry.distance_meters,
+        started_at=segment_data["started_at"],
+        ended_at=segment_data["ended_at"],
+    )
+    return ParsedRoute(route=route, raw_points=points)

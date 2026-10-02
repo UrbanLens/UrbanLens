@@ -77,6 +77,8 @@ dependencies = [
     "jinjax~=0.66",
     "psycopg[binary,pool]>=3.2,<3.3",
     "pyogrio~=0.13.0",
+    "ijson~=3.5.1",
+    "pyarrow~=24.0",
 ]
 
 [build-system]

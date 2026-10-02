@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
+
+from urbanlens.dashboard.services.import_formats.json_stream import iter_array_items, top_level_value_kind
+from urbanlens.dashboard.services.import_formats.streams import as_stream
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
@@ -44,36 +46,40 @@ class ImportedHistory:
         """Whether there is anything to import."""
         return bool(self.visits or self.activity or self.routes)
 
-    def add_location_history(self, raw_bytes: bytes, profile: Profile, filename: str) -> None:
-        """Add a Semantic Location History file's place visits and trips.
+    def add_location_history(self, content: bytes | IO[bytes], profile: Profile, filename: str) -> None:
+        """Add a Semantic Location History file's place visits and trips, reading one timeline entry at a time.
 
         Args:
-            raw_bytes: The file.
+            content: The file, as bytes or a seekable binary file positioned at its start.
             profile: The profile the import is for.
             filename: The uploaded name, kept on each trip's Route.
 
         Raises:
-            ValueError: The file is not JSON.
+            ValueError: The file is not JSON, or not UTF-8.
             TypeError: The file is JSON but not a Semantic Location History export.
-            UnicodeDecodeError: The file is not UTF-8.
         """
-        from urbanlens.dashboard.services.apis.locations.google.location_history import parse_semantic_visits, semantic_history_to_routes
+        from urbanlens.dashboard.services.apis.locations.google.location_history import semantic_route, semantic_visit
 
-        data = json.loads(raw_bytes.decode("utf-8-sig"))
-        if not isinstance(data, dict) or not isinstance(data.get("timelineObjects"), list):
+        stream = as_stream(content)
+        start = stream.tell()
+        if top_level_value_kind(stream, "timelineObjects") != "array":
             raise TypeError("Not a Semantic Location History export.")
-        self.visits.extend(_encoded(visit, _VISIT_KEYS) for visit in parse_semantic_visits(data))
-        self.add_routes(semantic_history_to_routes(data, profile, filename))
+        stream.seek(start)
+        for entry in iter_array_items(stream, "timelineObjects"):
+            if (visit := semantic_visit(entry)) is not None:
+                self.visits.append(_encoded(visit, _VISIT_KEYS))
+            if (route := semantic_route(entry, profile, filename)) is not None:
+                self.routes.append(route.to_json())
 
-    def add_my_activity(self, raw_bytes: bytes) -> None:
+    def add_my_activity(self, content: bytes | IO[bytes]) -> None:
         """Add a My Activity export's "Directions to" entries.
 
         Args:
-            raw_bytes: The ``MyActivity.html`` file.
+            content: The ``MyActivity.html`` file, as bytes or a seekable binary file positioned at its start.
         """
         from urbanlens.dashboard.services.apis.locations.google.my_activity import parse_my_activity_entries
 
-        self.activity.extend(_encoded(entry, _ACTIVITY_KEYS) for entry in parse_my_activity_entries(raw_bytes))
+        self.activity.extend(_encoded(entry, _ACTIVITY_KEYS) for entry in parse_my_activity_entries(content))
 
     def add_routes(self, parsed_routes: Iterable[ParsedRoute]) -> None:
         """Add parsed routes.
@@ -82,6 +88,16 @@ class ImportedHistory:
             parsed_routes: Unsaved routes, whose profile is not kept.
         """
         self.routes.extend(parsed.to_json() for parsed in parsed_routes)
+
+    def extend(self, other: ImportedHistory) -> None:
+        """Add everything *other* holds.
+
+        Args:
+            other: History read from another file.
+        """
+        self.visits.extend(other.visits)
+        self.activity.extend(other.activity)
+        self.routes.extend(other.routes)
 
     def counts(self) -> dict[str, int]:
         """How many of each kind there are, for the preview.
