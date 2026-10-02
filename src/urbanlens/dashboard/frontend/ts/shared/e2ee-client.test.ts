@@ -194,3 +194,114 @@ describe("a sign-in refused for asking too often", () => {
         expect(form.querySelector("button")!.classList.contains("is-loading")).toBe(false);
     });
 });
+
+/** Records every request, answering each URL prefix as `stubFetch` would. */
+function recordFetch(routes: Record<string, Route>): Array<{ url: string; body: string }> {
+    const sent: Array<{ url: string; body: string }> = [];
+    globalThis.fetch = ((url: string, init?: RequestInit) => {
+        const target = String(url);
+        const body = init?.body instanceof FormData ? JSON.stringify(Object.fromEntries(init.body.entries())) : String(init?.body ?? "");
+        sent.push({ url: target, body });
+        const match = Object.keys(routes).find((prefix) => target.startsWith(prefix));
+        const route = match ? routes[match]! : { status: 404 };
+        if (route === "throw") return Promise.reject(new Error("offline"));
+        return Promise.resolve({
+            ok: route.status >= 200 && route.status < 300,
+            status: route.status,
+            redirected: false,
+            url: target,
+            json: () => Promise.resolve(route.body ?? {}),
+            text: () => Promise.resolve(""),
+        } as Response);
+    }) as unknown as typeof fetch;
+    return sent;
+}
+
+function loginForm(): { form: HTMLFormElement; submitted: () => boolean } {
+    document.body.innerHTML = `
+        <form id="login"><input name="username" value="jess"><input name="password" value="raw-secret-password">
+        <button type="submit" class="btn">Sign in</button></form>`;
+    const form = document.getElementById("login") as HTMLFormElement;
+    let submitted = false;
+    form.submit = () => {
+        submitted = true;
+    };
+    return { form, submitted: () => submitted };
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+describe("a sign-in that cannot learn how the account signs in", () => {
+    for (const [label, route] of [["a 500", { status: 500 }], ["a 503", { status: 503 }], ["a network failure", "throw"]] as const) {
+        test(`${label} on the sign-in parameters never sends the raw password anywhere`, async () => {
+            const { wireLoginForm } = await import("./e2ee-client");
+            const sent = recordFetch({ "/e2ee/login-params/": route });
+            const { form, submitted } = loginForm();
+            wireLoginForm(form);
+
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            await settle();
+
+            expect(submitted(), "the form fell back to a native submit of the raw password").toBe(false);
+            expect(sent.some((request) => request.body.includes("raw-secret-password"))).toBe(false);
+            expect(document.body.textContent).toContain("Couldn't sign you in");
+            expect(form.querySelector("button")!.classList.contains("is-loading")).toBe(false);
+        });
+    }
+
+    test("a derived-mode sign-in that fails after its parameters arrive does not fall back to the raw password", async () => {
+        const { wireLoginForm } = await import("./e2ee-client");
+        const sent = recordFetch({ "/e2ee/login-params/": { status: 200, body: { mode: "derived", auth_salt: "AAAAAAAAAAAAAAAAAAAAAA==" } }, "/login/": "throw" });
+        const { form, submitted } = loginForm();
+        wireLoginForm(form);
+
+        form.dispatchEvent(new Event("submit", { cancelable: true }));
+        await settle();
+
+        expect(submitted()).toBe(false);
+        expect(sent.some((request) => request.body.includes("raw-secret-password"))).toBe(false);
+        expect(document.body.textContent).toContain("Couldn't sign you in");
+    });
+
+    test("a legacy-mode sign-in that fails still gets through by the plain form, whose credential is the password", async () => {
+        const { wireLoginForm } = await import("./e2ee-client");
+        recordFetch({ "/e2ee/login-params/": { status: 200, body: { mode: "legacy" } }, "/login/": "throw" });
+        const { form, submitted } = loginForm();
+        wireLoginForm(form);
+
+        form.dispatchEvent(new Event("submit", { cancelable: true }));
+        await settle();
+
+        expect(submitted()).toBe(true);
+    });
+});
+
+describe("a password check that cannot learn how the account signs in", () => {
+    test("a key reset refuses rather than sending the raw password as proof", async () => {
+        const { init: reinit, resetKeys } = await import("./e2ee-client");
+        reinit({
+            urls: {
+                loginParams: "/e2ee/login-params/",
+                enroll: "/e2ee/enroll/",
+                keys: "/e2ee/keys/",
+                rewrap: "/e2ee/rewrap/",
+                reset: "/e2ee/reset/",
+                partnerKeyBase: "/e2ee/keys/",
+                conversationKeyBase: "/e2ee/conversation-key/",
+                groupKeyBase: "/e2ee/group-key/",
+                login: "/login/",
+            },
+            selfSlug: "jess",
+            loginIdentifier: "jess",
+        });
+        const sent = recordFetch({
+            "/e2ee/login-params/": { status: 500 },
+            "/e2ee/keys/": { status: 200, body: { enrolled: true, profile_slug: "jess", version: 1, public_key: "pub" } },
+            "/e2ee/reset/": { status: 200, body: { version: 2 } },
+        });
+
+        expect(await resetKeys("raw-secret-password")).toBeNull();
+        expect(sent.some((request) => request.url.startsWith("/e2ee/reset/"))).toBe(false);
+        expect(sent.some((request) => request.body.includes("raw-secret-password"))).toBe(false);
+    });
+});

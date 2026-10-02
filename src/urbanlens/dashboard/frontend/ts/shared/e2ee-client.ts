@@ -270,15 +270,31 @@ function bytesToB64(bytes: Uint8Array): string {
 export function wireLoginForm(form: HTMLFormElement): void {
     form.addEventListener("submit", (event) => {
         event.preventDefault();
-        void runLoginFlow(form).catch((error) => {
-            // Never leave the user stranded: fall back to a native submit with the raw password (legacy path) if anything in the E2EE flow blew up.
-            console.error("E2EE login flow failed; falling back to plain submit", error);
-            form.submit();
+        const attempt: LoginAttempt = { mode: null };
+        void runLoginFlow(form, attempt).catch((error) => {
+            console.error("E2EE login flow failed", error);
+            // A legacy account's credential is its password, so the plain form still signs it in. Any other account's
+            // password is what unwraps its message keys, and the server must never see it.
+            if (attempt.mode === "legacy") {
+                form.submit();
+                return;
+            }
+            refuseSignIn(form);
         });
     });
 }
 
-async function runLoginFlow(form: HTMLFormElement): Promise<void> {
+/** What a sign-in attempt has learned so far about how the account signs in. */
+interface LoginAttempt {
+    mode: LoginParams["mode"] | null;
+}
+
+function refuseSignIn(form: HTMLFormElement): void {
+    form.querySelector<HTMLButtonElement>('button[type="submit"]')?.classList.remove("is-loading");
+    toast.error("Couldn't sign you in just now. Please try again in a moment.");
+}
+
+async function runLoginFlow(form: HTMLFormElement, attempt: LoginAttempt): Promise<void> {
     const identifier = (form.elements.namedItem("username") as HTMLInputElement).value;
     const passwordInput = form.elements.namedItem("password") as HTMLInputElement;
     const password = passwordInput.value;
@@ -292,10 +308,11 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
         return;
     }
     if (!paramsResponse.ok) {
-        form.submit();
+        refuseSignIn(form);
         return;
     }
     const params = (await paramsResponse.json()) as LoginParams;
+    attempt.mode = params.mode;
 
     await cryptoReady();
     const credential = params.mode === "derived" ? bytesToB64(deriveKey(password, params.auth_salt)) : password;
@@ -873,7 +890,11 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
         wrapped_secret: wrapSecretKey(identity.privateKey, wrapKey),
     };
     if (password) {
-        body.current_password = await currentPasswordProof(password);
+        const proof = await currentPasswordProof(password);
+        if (proof === null) {
+            return { ok: false, error: "Couldn't check your password just now. Please try again in a moment." };
+        }
+        body.current_password = proof;
     }
     const response = await postJson(urls.passkeyWrap, body);
     if (response.status === 403) {
@@ -1124,14 +1145,24 @@ export async function changePassword(currentPassword: string, newPassword: strin
     return { ok: false, error: "Could not change your password. Please try again." };
 }
 
-async function currentPasswordProof(password: string): Promise<string> {
+/**
+ * What the server checks the account password against: the derived credential, or the password itself for a legacy account.
+ * @param password - The password the user typed.
+ * @returns The proof, or null when how the account signs in could not be learned - the raw password is never a guess.
+ */
+async function currentPasswordProof(password: string): Promise<string | null> {
     const identifier = cfg().loginIdentifier;
     if (!identifier) {
-        return password;
+        return null;
     }
-    const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+    let paramsResponse: Response;
+    try {
+        paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+    } catch {
+        return null;
+    }
     if (!paramsResponse.ok) {
-        return password;
+        return null;
     }
     const params = (await paramsResponse.json()) as LoginParams;
     if (params.mode === "derived") {
@@ -1251,7 +1282,11 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
         const wrapSalt = randomSalt();
         body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(password, wrapSalt));
         body.password_wrap_salt = wrapSalt;
-        body.current_password = await currentPasswordProof(password);
+        const proof = await currentPasswordProof(password);
+        if (proof === null) {
+            return null;
+        }
+        body.current_password = proof;
     }
 
     // Re-encrypt history: unseal every wrapped key copy with the OLD key and

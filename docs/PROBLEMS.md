@@ -3974,22 +3974,6 @@ Not decided: a `gevent` pool (which enforces limits via greenlet timeouts, not s
 prefork (reopens the memory-OOM failure P167 found there), or a per-task watchdog. No note in
 `docs/designs/celery-queue-classes.md` (D13) yet.
 
-## P177 — When the sign-in page cannot fetch an account's sign-in parameters, it submits the raw password
-
-`id: P177` · `status: open` · `updated: 2026-09-30` · `found by: adding the login-params limit, 2026-09-30`
-
-`wireLoginForm` in `frontend/ts/shared/e2ee-client.ts` asks `e2ee.login_params` for the account's mode and salt, then
-sends a credential derived from the password. When that request fails (any non-OK answer other than 429), or when
-anything in the flow throws, it falls back to `form.submit()` with the raw password. For an account in derived mode,
-the password is what unwraps its message keys, so the fallback hands the server exactly what end-to-end encryption
-keeps from it, and the sign-in then fails anyway because the server stores only the derived credential.
-
-`currentPasswordProof` (the settings and messages pages' password checks) falls back the same way, returning the raw
-password as the proof when the request fails. A 429 from the new per-address limit now shows a message on the sign-in
-page and submits nothing. The other failures still fall back.
-Refusing them too would mean a legacy-mode account cannot sign in while the endpoint is down. Nothing has been
-changed for those cases.
-
 ## P182 — A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it
 
 `id: P182` · `status: open, upstream` · `updated: 2026-10-01` · `found by: P181's investigation, 2026-10-01`

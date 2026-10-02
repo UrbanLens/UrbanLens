@@ -19504,3 +19504,22 @@ child either commits first and is collected, or waits and then fails its own for
 holds the host pin (`FOR NO KEY UPDATE`) until its revision commits, and raises `Pin.DoesNotExist` when the pin is
 already gone; the seed treats that as nothing to do. `test_pin_delete_races_child_writes.py` starts each writer from
 `pre_delete` on a second connection and reproduced both 500s first.
+
+## RESOLVED 2026-10-02: When the sign-in page could not fetch an account's sign-in parameters, it submitted the raw password
+
+`id: P177` · `status: fixed` · `resolved: 2026-10-02`
+
+`wireLoginForm` (`frontend/ts/shared/e2ee-client.ts`) asked `e2ee.login_params` for the account's mode and salt,
+then sent a credential derived from the password. When that request failed (any non-OK answer but 429), or when
+anything later in the flow threw, it fell back to `form.submit()` with the raw password. For a derived-mode account
+the password is what unwraps its message keys, so the fallback handed the server exactly what end-to-end encryption
+keeps from it - and the sign-in failed anyway, because the server stores only the derived credential.
+`currentPasswordProof` (passkey-unlock enrolment and the key reset) did the same, returning the raw password as the
+proof when the request failed or the page named no identifier.
+
+**Fixed.** A failed parameters request now shows "Couldn't sign you in just now" and submits nothing. A failure after
+the parameters arrive falls back to the plain form only for a legacy account, whose credential *is* its password, so
+a legacy account is never stranded and no other account's password leaves the browser. `currentPasswordProof`
+returns null instead of guessing; enrolment then reports that the password could not be checked, and a reset
+refuses. `changePassword` already refused. Tests: `e2ee-client.test.ts` ("a sign-in that cannot learn how the
+account signs in", "a password check that cannot learn how the account signs in"), each written failing first.
