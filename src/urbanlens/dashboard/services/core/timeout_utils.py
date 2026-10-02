@@ -74,13 +74,13 @@ def call_with_deadline[T](func: Callable[[], T], *, timeout: float, default: T, 
     try:
         return future.result(timeout=wait)
     except FutureTimeoutError:
-        check_task_deadline()
         # cancel() only succeeds while the future is still queued -- i.e. the call never started
         # because every executor slot was busy for the entire deadline.
         # Distinguishing that from a slow upstream matters when reading production logs: the former
         # means *this process* is saturated, the latter blames the provider named in the label.
         if future.cancel():
-            logger.warning("External call %r timed out after %.0fs without ever starting -- deadline executor saturated", label, timeout)
+            logger.warning("External call %r timed out after %.0fs without ever starting -- deadline executor saturated", label, wait)
         else:
-            logger.warning("External call %r exceeded %.0fs deadline -- abandoning it in the background", label, timeout)
+            logger.warning("External call %r exceeded %.0fs deadline -- abandoning it in the background", label, wait)
+        check_task_deadline()
         return default

@@ -146,6 +146,36 @@ class SoftLimitOnAThreadPoolTests(_Base):
             _in_a_worker_thread(self._task(waits, soft=1))
         self.assertLess(time.monotonic() - started, 3)
 
+    def test_a_call_still_queued_at_the_soft_limit_is_cancelled(self) -> None:
+        from concurrent.futures import Future
+
+        from urbanlens.dashboard.services.core import timeout_utils
+
+        never_started: Future = Future()
+
+        def waits():
+            time.sleep(1.1)
+            return timeout_utils.call_with_deadline(lambda: None, timeout=30, default=None, name="probe")
+
+        with (
+            mock.patch.object(timeout_utils, "submit_bounded", return_value=never_started),
+            self.assertRaises(SoftTimeLimitExceeded),
+        ):
+            _in_a_worker_thread(self._task(waits, soft=1))
+        self.assertTrue(never_started.cancelled(), "a queued call kept its slot after the task gave up on it")
+
+    def test_a_reused_pool_thread_starts_each_task_without_the_last_ones_deadline(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        def returns():
+            return None
+
+        task = self._task(returns, soft=1)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(task).result(5)
+            pool.submit(task).result(5)
+            self.assertIsNone(pool.submit(task_limits.current_task_deadline).result(5))
+
 
 class OutsideATaskTests(_Base):
     def test_a_request_handler_keeps_its_own_timeout(self) -> None:
