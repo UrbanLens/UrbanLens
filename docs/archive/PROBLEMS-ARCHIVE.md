@@ -19612,3 +19612,23 @@ showed only the tile. The Thanks page's GitHub avatars are copies too, for the s
 Tests: `test_remote_image_copies.py` (`test_a_tile_gets_a_tile_sized_copy_from_the_same_download`,
 `test_a_small_image_is_kept_once_and_a_tile_gets_it`), `test_pin_photos_tab_is_comprehensive.py` (view_url),
 `external-photos.test.ts`, `test_thanks_page_avatars.py`.
+
+## RESOLVED 2026-10-02: A deleted contribution's reputation: withdrawals retract, removals weigh, cascades keep
+
+`id: P86` · `status: fixed` · `resolved: 2026-10-02`
+
+`ReputationEvent.target_id` is a plain integer and the ledger listens to `post_save` only, so deleting a
+contribution's row left its scored event counting. Every case now has an answer, Jess's in D9
+([`designs/reputation-removal-weighting.md`](../designs/reputation-removal-weighting.md)):
+
+- **A contributor withdrawing their own contribution** retracts its events
+  (`scoring.retract_events_for_target`): a photo detached with `withdrawn_by_contributor=True`, and a wiki comment
+  deleted through the author-only `WikiCommentDeleteView`. `lifetime_earned` is untouched.
+- **Somebody else removing it** (a moderation path, when one exists) sets the event's `weight` (default 1, summed as
+  `value * weight`, reversible) rather than retracting it. No such path exists yet; the column is in place for the
+  first one.
+- **A cascade or a cleanup** strips nothing: "I'd rather err on the side of keeping positive benefits awarded to users
+  who contributed rather than stripping them". `CascadeKeepsBenefitsTests` pins it, so a blanket `post_delete`
+  handler cannot reverse that quietly. Anything that deletes in future handles its own fallout.
+
+Tests: `test_reputation_withdrawal.py`.
