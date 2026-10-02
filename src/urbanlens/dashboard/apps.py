@@ -15,6 +15,10 @@ class DashboardConfig(AppConfig):
     def ready(self):
         register_heif_opener()
 
+        from urbanlens.core.integer_dumpers import install_checked_integer_dumpers
+
+        install_checked_integer_dumpers()
+
         # Importing the module registers its @register()ed system checks. Media
         # authorization is default-deny, so a file family nobody authorized
         # would 404 for everyone; the check turns that into a startup error.

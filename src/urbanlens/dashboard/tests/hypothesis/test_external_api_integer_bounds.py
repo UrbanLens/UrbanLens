@@ -1,10 +1,9 @@
 """External API integers past their database column are refused with a 4xx and nothing written.
 
-Django adapts an ``IntegerField`` write as psycopg's ``Int4``, whose binary dumper keeps only the low 32 bits: 2**31
-is stored as -2**31 and 2**32 + 1 as 1, without an error. Past 2**63 the dumper raises ``OverflowError`` instead, and
-a wrapped value that lands below a ``Positive*`` column's check constraint raises ``IntegrityError``. An exact or
-greater-than lookup on an out-of-range id matches nothing, so an id that only reaches one is safe; each such route is
-pinned here too.
+Django adapts an ``IntegerField`` write as psycopg's ``Int4``, whose C binary dumper kept only the low 32 bits: 2**31
+was stored as -2**31 and 2**32 + 1 as 1, without an error. ``core/integer_dumpers.py`` now refuses such a write at the
+database layer, which is a 500; these pin the 400 each route answers first. An exact or greater-than lookup on an
+out-of-range id matches nothing, so an id that only reaches one is safe; each such route is pinned here too.
 """
 
 from __future__ import annotations
@@ -19,7 +18,6 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model
-import pytest
 
 from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
@@ -51,7 +49,7 @@ from urbanlens.dashboard.tests.hypothesis.external_api_helpers import ExternalAp
 
 AccessToken = get_access_token_model()
 
-#: Past ``integer``: the first two wrap on a write, the third fails it, the last wraps to the column's maximum.
+#: Past ``integer``, at each edge the C dumper got wrong: two wrapped, one overflowed, one wrapped to the maximum.
 _PAST_INTEGER = (2**31, 2**32 + 1, 2**63, DB_INTEGER_MIN - 1)
 #: Past ``smallint``, the same way.
 _PAST_SMALLINT = (2**15, 2**16 + 1, 2**31, 2**63)
@@ -64,13 +62,13 @@ _PNG_BYTES = base64.b64decode(
 
 
 class IntegerColumnWriteTests(TestCase):
-    """Why the bounds sit on the parse: the database layer stores an out-of-range write rather than refusing it."""
+    """The parse bounds answer 400; behind them the database layer refuses rather than wrapping
+    (``core/integer_dumpers.py``), which turns a missed bound into a 500 instead of a wrong number."""
 
-    @pytest.mark.xfail(strict=True, reason="psycopg's binary Int4 dumper keeps the low 32 bits instead of raising")
     def test_a_write_past_the_integer_column_is_refused_rather_than_wrapped(self) -> None:
         label = baker.make(Label, name="Wrap", kind=KIND_TAG, order=0)
 
-        with self.assertRaises((DataError, OverflowError)), transaction.atomic():
+        with self.assertRaises(DataError), transaction.atomic():
             Label.objects.filter(pk=label.pk).update(order=2**32 + 1)
 
 
