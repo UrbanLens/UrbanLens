@@ -186,6 +186,17 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
 
         self.assertEqual([entry["url"] for entry in self._all("external")], [kept["url"]])
 
+    def test_a_book_scan_commons_returned_before_is_not_listed(self) -> None:
+        scan = _wikimedia_item(
+            1,
+            url="https://upload.wikimedia.org/wikipedia/commons/2/28/American_Ancestry_4.djvu",
+            thumb_url="https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/American_Ancestry_4.djvu/page1-400px-American_Ancestry_4.djvu.jpg",
+        )
+        photo = _wikimedia_item(2)
+        self._cache("wikimedia", [scan, photo])
+
+        self.assertEqual([entry["url"] for entry in self._all("external")], [photo["url"]])
+
     def test_an_unrenderable_original_is_shown_through_this_sites_copy(self) -> None:
         self._cache("wikimedia", [_wikimedia_item(1, url="https://upload.wikimedia.org/hrsh/scan.tif", thumb_url="")])
 
