@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Concatenate
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import Http404, HttpRequest, HttpResponse, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import URLPattern, reverse
@@ -665,9 +665,12 @@ class WikiStatVoteView(LoginRequiredMixin, View):
         try:
             value = int(request.POST.get("value") or 0)
         except (TypeError, ValueError):
-            value = 0
+            value = -1
+        if not 0 <= value <= 5:
+            # The stars only send 0 to 5; a garbled value must not clear the vote they already cast.
+            return HttpResponseBadRequest("value must be 0 to 5")
 
-        if 1 <= value <= 5:
+        if value:
             WikiStatVote.objects.cast(wiki, profile, field, value)
         else:
             WikiStatVote.objects.clear(wiki, profile, field)

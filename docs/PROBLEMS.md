@@ -698,9 +698,9 @@ future "can handle the fallout of what that means", erring toward keeping benefi
 `test_reputation_withdrawal.py`, including that somebody else's removal does **not** retract and
 that `lifetime_earned` is unaffected.
 
-## P29 — 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs (fixed)
+## P29 — 68 write routes have no test naming them; the 70 highest-risk now have behavioural tests, which found 17 bugs (fixed)
 
-`id: P29` · `status: open` · `updated: 2026-09-29` · supersedes "186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx" (2026-08-13, re-measured below rather than carried)
+`id: P29` · `status: open` · `updated: 2026-10-02` · supersedes "186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx" (2026-08-13, re-measured below rather than carried)
 
 ### The count, re-measured 2026-09-29
 
@@ -809,18 +809,30 @@ or are not reachable by the sweep's fixtures; the sweep is what keeps the reacha
 - `label.bulk_convert*` accepts `{"ids": "12"}` and iterates it as `[1, 2]`; scoped to the caller's own
   labels, so harmless, but not what the caller meant.
 
-### The 35 with no reference at all
+### The 25 with no reference at all
 
 `boundary.pin`; the game lifecycles (`consensus.answer`, `.begin`, `.end`, `.invite`, `.join`, `.skip`,
-`.start`; `trivia.begin`, `.end`, `.invite`, `.leave`, `.settings`; `spotguessr.invite`); community wiki
-editing (`location.wiki.albums.add`, `.remove`, `.reorder`, `.article.preview`, `.layers.reorder`,
-`.markup`, `.overlays`, `.overlays.corners`, `.overlays.edit`, `.stat_vote`,
-`external_api:wikis.aliases.toggle_nickname`, `wikis.comments.reactions`, `wikis.history.revert`);
-read markers and preferences (`messages.group.mute`, `messages.group.read`,
+`.start`; `trivia.begin`, `.end`, `.invite`, `.leave`, `.settings`; `spotguessr.invite`); three community wiki
+routes on the external API (`external_api:wikis.aliases.toggle_nickname`, `wikis.comments.reactions`,
+`wikis.history.revert`); read markers and preferences (`messages.group.mute`, `messages.group.read`,
 `external_api:messages.groups.read`, `notifications.read_all`, `settings.save_map_dark_mode`); and
-`pin.debug.clear_cache`, `pin.web_search.refresh`, `memories.photos.redirect` (a `RedirectView` that
-answers every verb). The community wiki editing group is the highest remaining risk, given the
-album/overlay finding above.
+`pin.debug.clear_cache`, `pin.web_search.refresh`, `memories.photos.redirect` (a `RedirectView` that answers
+every verb).
+
+**Community wiki editing, tested 2026-10-02** (`test_community_wiki_write_routes.py`, 47 tests):
+`location.wiki.albums.add`, `.remove`, `.reorder`, `.article.preview`, `.layers.reorder`, `.markup`,
+`.overlays`, `.overlays.corners`, `.overlays.edit` and `.stat_vote`. The fixture adds a contributor whose
+photos are visible to no one, which is what found the first two bugs:
+
+- **A wiki album's remove deleted a photo hidden from the viewer, and confirmed it.** It removed membership by
+  raw image id and answered `"removed": 1`, so any viewer could probe which hidden photos an album holds and
+  take them out. `move_from` on `albums.add` did the same through the source album. Both now act only on the
+  viewer's visible items.
+- **A reorder's count included hidden photos**, so `"reordered"` told a viewer how many photos the album holds
+  that they cannot see. It now counts the viewer's own placed items, each id once (a repeated id used to
+  number one row twice and skip another).
+- **A garbled stat vote cleared the voter's vote.** Any non-integer `value` read as 0, which means "clear". It is
+  now a 400, as is anything outside 0 to 5.
 
 ### The no-5xx sweep, which this complements
 

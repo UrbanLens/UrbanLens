@@ -17,9 +17,12 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.album.model import Album, AlbumItem
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+from urbanlens.dashboard.models.markup.model import CustomLayer, PinMarkup
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatVote
 
 
 class _WikiFixture(TestCase):
@@ -45,7 +48,9 @@ class _WikiFixture(TestCase):
         self.assertTrue(response["Location"].startswith(settings.LOGIN_URL), response["Location"])
 
     def _photo(self, profile) -> Image:
-        return baker.make(Image, profile=profile, wiki=self.wiki, location=self.location, pending_scan=False)
+        return baker.make(
+            Image, profile=profile, wiki=self.wiki, location=self.location, pending_scan=False, image="photos/p.jpg"
+        )
 
     def _post_json(self, url: str, body):
         return self.client.post(url, json.dumps(body), content_type="application/json")
@@ -215,3 +220,303 @@ class WikiAlbumReorderRouteTests(_AlbumFixture):
         for body in (["x"], "x"):
             self.assertEqual(self._post_json(self._url("reorder"), body).status_code, 400, body)
         self.assertEqual(self._order(), [])
+
+
+def _corners(lat: float = 42.0, lng: float = -73.0) -> list[list[float]]:
+    return [[lat + 0.01, lng], [lat + 0.01, lng + 0.01], [lat, lng + 0.01], [lat, lng]]
+
+
+class _OverlayFixture(_WikiFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        flat = {f"{d}_{axis}": 0.0 for d in ("nw", "ne", "se", "sw") for axis in ("latitude", "longitude")}
+        self.overlay = baker.make(
+            MapImageOverlay,
+            parent_wiki=self.wiki,
+            profile=self.profile,
+            name="Sanborn 1910",
+            opacity=70,
+            tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png",
+            **flat,
+        )
+
+    def _url(self, name: str) -> str:
+        return reverse(f"location.wiki.overlays.{name}", args=[self.location.slug, self.overlay.uuid])
+
+
+class WikiOverlayCreateRouteTests(_WikiFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.url = reverse("location.wiki.overlays", args=[self.location.slug])
+
+    def _create(self, image: Image):
+        return self.client.post(
+            self.url,
+            {"image_id": str(image.pk), "corners": json.dumps(_corners()), "name": "Plan"},
+            HTTP_ACCEPT="application/json",
+        )
+
+    def test_a_viewer_overlays_a_photo_of_this_wiki(self) -> None:
+        photo = self._photo(self.profile)
+        self.client.force_login(self.user)
+
+        response = self._create(photo)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        overlay = MapImageOverlay.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(
+            (overlay.parent_wiki_id, overlay.image_id, overlay.profile_id), (self.wiki.pk, photo.pk, self.profile.pk)
+        )
+
+    def test_a_photo_hidden_from_the_viewer_cannot_be_overlaid(self) -> None:
+        hidden = self._photo(self.private_profile)
+        self.client.force_login(self.user)
+
+        response = self._create(hidden)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(MapImageOverlay.objects.filter(image=hidden).exists())
+
+    def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
+        photo = self._photo(self.profile)
+        self.client.force_login(self.stranger_user)
+
+        self.assertEqual(self._create(photo).status_code, 404)
+        self.assertFalse(MapImageOverlay.objects.exists())
+
+    def test_anonymous_is_redirected_to_login(self) -> None:
+        self.assert_login_redirect(self._create(self._photo(self.profile)))
+        self.assertFalse(MapImageOverlay.objects.exists())
+
+    def test_malformed_corners_are_400(self) -> None:
+        photo = self._photo(self.profile)
+        self.client.force_login(self.user)
+        for corners in ("[", "[[1,2]]", json.dumps([[91, 0]] * 4), json.dumps({"a": 1})):
+            response = self.client.post(
+                self.url, {"image_id": str(photo.pk), "corners": corners}, HTTP_ACCEPT="application/json"
+            )
+            self.assertEqual(response.status_code, 400, corners)
+        self.assertFalse(MapImageOverlay.objects.exists())
+
+
+class WikiOverlayEditRouteTests(_OverlayFixture):
+    def test_a_viewer_renames_it_and_opacity_is_kept_in_range(self) -> None:
+        self.client.force_login(self.user)
+
+        response = self.client.post(self._url("edit"), {"name": "  Sanborn 1911 ", "opacity": "250", "order": "x"})
+
+        self.assertEqual(response.status_code, 200)
+        self.overlay.refresh_from_db()
+        self.assertEqual(self.overlay.name, "Sanborn 1911")
+        self.assertLessEqual(self.overlay.opacity, 100)
+
+    def test_a_layer_of_another_wiki_cannot_be_attached(self) -> None:
+        elsewhere = baker.make(Wiki, location=baker.make(Location))
+        foreign_layer = baker.make(CustomLayer, parent_wiki=elsewhere, profile=self.profile, name="Other")
+        self.client.force_login(self.user)
+
+        self.client.post(self._url("edit"), {"name": "x", "layer": str(foreign_layer.uuid)})
+
+        self.overlay.refresh_from_db()
+        self.assertIsNone(self.overlay.layer_id)
+
+    def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
+        self.client.force_login(self.stranger_user)
+
+        self.assertEqual(self.client.post(self._url("edit"), {"name": "Mine now"}).status_code, 404)
+        self.overlay.refresh_from_db()
+        self.assertEqual(self.overlay.name, "Sanborn 1910")
+
+    def test_anonymous_is_redirected_to_login(self) -> None:
+        self.assert_login_redirect(self.client.post(self._url("edit"), {"name": "Mine now"}))
+        self.overlay.refresh_from_db()
+        self.assertEqual(self.overlay.name, "Sanborn 1910")
+
+
+class WikiOverlayCornersRouteTests(_OverlayFixture):
+    def _move(self):
+        return self.client.post(self._url("corners"), {"corners": json.dumps(_corners())})
+
+    def test_a_viewer_moves_it(self) -> None:
+        self.client.force_login(self.user)
+
+        response = self._move()
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.overlay.refresh_from_db()
+        self.assertAlmostEqual(self.overlay.sw_latitude, 42.0)
+
+    def test_a_locked_overlay_does_not_move(self) -> None:
+        MapImageOverlay.objects.filter(pk=self.overlay.pk).update(locked=True)
+        self.client.force_login(self.user)
+
+        self.assertEqual(self._move().status_code, 409)
+        self.overlay.refresh_from_db()
+        self.assertEqual(self.overlay.sw_latitude, 0.0)
+
+    def test_malformed_corners_are_400(self) -> None:
+        self.client.force_login(self.user)
+        for corners in ("", "[", json.dumps([[0, 181]] * 4), json.dumps([["a", "b"]] * 4)):
+            self.assertEqual(self.client.post(self._url("corners"), {"corners": corners}).status_code, 400, corners)
+        self.overlay.refresh_from_db()
+        self.assertEqual(self.overlay.sw_latitude, 0.0)
+
+    def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
+        self.client.force_login(self.stranger_user)
+
+        self.assertEqual(self._move().status_code, 404)
+        self.overlay.refresh_from_db()
+        self.assertEqual(self.overlay.sw_latitude, 0.0)
+
+    def test_anonymous_is_redirected_to_login(self) -> None:
+        self.assert_login_redirect(self._move())
+        self.overlay.refresh_from_db()
+        self.assertEqual(self.overlay.sw_latitude, 0.0)
+
+
+class WikiLayerReorderRouteTests(_WikiFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.first = baker.make(CustomLayer, parent_wiki=self.wiki, profile=self.profile, name="Fences", order=0)
+        self.second = baker.make(CustomLayer, parent_wiki=self.wiki, profile=self.profile, name="Holes", order=1)
+
+    def _reorder(self, layer: CustomLayer, direction: str):
+        url = reverse("location.wiki.layers.reorder", args=[self.location.slug, layer.uuid])
+        return self.client.post(url, {"direction": direction})
+
+    def _orders(self) -> tuple[int, int]:
+        self.first.refresh_from_db()
+        self.second.refresh_from_db()
+        return self.first.order, self.second.order
+
+    def test_a_viewer_moves_a_layer_down(self) -> None:
+        self.client.force_login(self.user)
+
+        self.assertEqual(self._reorder(self.first, "down").status_code, 200)
+        self.assertEqual(self._orders(), (1, 0))
+
+    def test_past_either_end_or_an_unknown_direction_changes_nothing(self) -> None:
+        self.client.force_login(self.user)
+
+        for layer, direction in ((self.first, "up"), (self.second, "down"), (self.first, "sideways")):
+            self.assertEqual(self._reorder(layer, direction).status_code, 200)
+        self.assertEqual(self._orders(), (0, 1))
+
+    def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
+        self.client.force_login(self.stranger_user)
+
+        self.assertEqual(self._reorder(self.first, "down").status_code, 404)
+        self.assertEqual(self._orders(), (0, 1))
+
+    def test_anonymous_is_redirected_to_login(self) -> None:
+        self.assert_login_redirect(self._reorder(self.first, "down"))
+        self.assertEqual(self._orders(), (0, 1))
+
+
+class WikiStatVoteRouteTests(_WikiFixture):
+    def _vote(self, value, field: str = "danger"):
+        url = reverse("location.wiki.stat_vote", args=[self.location.slug, field])
+        return self.client.post(url, {} if value is None else {"value": value})
+
+    def _my_vote(self) -> int | None:
+        vote = WikiStatVote.objects.filter(wiki=self.wiki, profile=self.profile, field="danger").first()
+        return vote.value if vote else None
+
+    def test_a_viewer_casts_changes_and_clears_a_vote(self) -> None:
+        self.client.force_login(self.user)
+
+        self.assertEqual(self._vote(4).status_code, 200)
+        self.assertEqual(self._my_vote(), 4)
+        self._vote(2)
+        self.assertEqual(self._my_vote(), 2)
+        self._vote(0)
+        self.assertIsNone(self._my_vote())
+
+    def test_a_malformed_value_is_400_and_keeps_the_vote(self) -> None:
+        """The stars only ever send 0 to 5, so anything else is a garbled request, not a request to clear."""
+        self.client.force_login(self.user)
+        self._vote(3)
+
+        for value in ("abc", "9", "-1", "2.5"):
+            self.assertEqual(self._vote(value).status_code, 400, value)
+        self.assertEqual(self._my_vote(), 3)
+
+    def test_an_unknown_field_is_404(self) -> None:
+        self.client.force_login(self.user)
+        self.assertEqual(self._vote(3, field="beauty").status_code, 404)
+
+    def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
+        self.client.force_login(self.stranger_user)
+
+        self.assertEqual(self._vote(5).status_code, 404)
+        self.assertFalse(WikiStatVote.objects.exists())
+
+    def test_anonymous_is_redirected_to_login(self) -> None:
+        self.assert_login_redirect(self._vote(5))
+        self.assertFalse(WikiStatVote.objects.exists())
+
+
+class WikiArticlePreviewRouteTests(_WikiFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.url = reverse("location.wiki.article.preview", args=[self.location.slug])
+
+    def test_a_viewer_sees_it_rendered_and_nothing_is_saved(self) -> None:
+        from urbanlens.dashboard.models.article.model import Article
+
+        self.client.force_login(self.user)
+
+        response = self.client.post(self.url, {"content": "**Boiler house** <script>alert(1)</script>"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<strong>Boiler house</strong>")
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        self.assertFalse(Article.objects.exists())
+
+    def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
+        self.client.force_login(self.stranger_user)
+        self.assertEqual(self.client.post(self.url, {"content": "x"}).status_code, 404)
+
+    def test_anonymous_is_redirected_to_login(self) -> None:
+        self.assert_login_redirect(self.client.post(self.url, {"content": "x"}))
+
+
+class WikiMarkupCreateRouteTests(_WikiFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.url = reverse("location.wiki.markup", args=[self.location.slug])
+        self.line = {
+            "markup_type": "line",
+            "geometry": {"type": "LineString", "coordinates": [[-73, 42], [-73.001, 42.001]]},
+        }
+
+    def test_a_viewer_draws_on_the_wiki_map(self) -> None:
+        self.client.force_login(self.user)
+
+        response = self._post_json(self.url, self.line)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        markup = PinMarkup.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual((markup.parent_wiki_id, markup.profile_id), (self.wiki.pk, self.profile.pk))
+
+    def test_malformed_markup_is_400(self) -> None:
+        self.client.force_login(self.user)
+        bodies = (
+            ["x"],
+            {"markup_type": "spiral", "geometry": self.line["geometry"]},
+            {"markup_type": "line"},
+            {"markup_type": "line", "geometry": {"type": "Point", "coordinates": [-73, 42]}},
+        )
+        for body in bodies:
+            self.assertEqual(self._post_json(self.url, body).status_code, 400, body)
+        self.assertFalse(PinMarkup.objects.exists())
+
+    def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
+        self.client.force_login(self.stranger_user)
+
+        self.assertEqual(self._post_json(self.url, self.line).status_code, 404)
+        self.assertFalse(PinMarkup.objects.exists())
+
+    def test_anonymous_is_redirected_to_login(self) -> None:
+        self.assert_login_redirect(self._post_json(self.url, self.line))
+        self.assertFalse(PinMarkup.objects.exists())
