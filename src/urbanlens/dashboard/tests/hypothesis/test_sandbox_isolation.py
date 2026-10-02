@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import pathlib
 from unittest.mock import patch
 
@@ -202,13 +203,13 @@ class DecoratedParserTests(SimpleTestCase):
         # parsers and only one of them was ever the obvious one.
         from urbanlens.dashboard.services.import_export.archive_extractor import (
             ExtractionBudget,
-            _extract_tgz,
-            _extract_zip,
+            _tgz_entries,
+            _zip_entries,
         )
 
-        for func in (_extract_zip, _extract_tgz):
+        for func in (_zip_entries, _tgz_entries):
             with self.subTest(func=func.__name__), self.assertRaises(UnsandboxedParseError):
-                func(b"", ExtractionBudget())
+                func(io.BytesIO(), ExtractionBudget(), lambda *_: None)
 
     def test_geo_format_parsers_are_guarded(self) -> None:
         from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
@@ -227,6 +228,33 @@ class DecoratedParserTests(SimpleTestCase):
             shapefile_to_dict(object(), object())  # type: ignore[arg-type]
         with self.assertRaises(UnsandboxedParseError):
             GoogleMapsGateway.takeout_kml_to_dict(object(), b"", object())  # type: ignore[arg-type]
+
+    def test_the_streaming_parsers_the_preview_calls_are_guarded(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+        from urbanlens.dashboard.services.import_formats.gpx_tracks import read_gpx
+        from urbanlens.dashboard.services.import_formats.json_stream import (
+            iter_array_items,
+            top_level_keys,
+            top_level_value_kind,
+        )
+        from urbanlens.dashboard.services.import_formats.osm_xml import iter_osm_xml_pins
+        from urbanlens.dashboard.services.import_formats.shapefile import iter_shapefile_pins
+        from urbanlens.dashboard.services.import_formats.wkt_wkb import iter_wkb_pins, iter_wkt_pins
+
+        calls = {
+            "iter_kml_pins": lambda: GoogleMapsGateway.iter_kml_pins(object(), b"", object()),  # type: ignore[arg-type]
+            "iter_wkt_pins": lambda: iter_wkt_pins(b"", object()),  # type: ignore[arg-type]
+            "iter_wkb_pins": lambda: iter_wkb_pins(b"", object()),  # type: ignore[arg-type]
+            "iter_osm_xml_pins": lambda: iter_osm_xml_pins(b"", object()),  # type: ignore[arg-type]
+            "read_gpx": lambda: read_gpx(b"", object(), "t.gpx"),  # type: ignore[arg-type]
+            "iter_shapefile_pins": lambda: iter_shapefile_pins(object(), "x", object()),  # type: ignore[arg-type]
+            "top_level_keys": lambda: top_level_keys(io.BytesIO(b"{}")),
+            "top_level_value_kind": lambda: top_level_value_kind(io.BytesIO(b"{}"), "x"),
+            "iter_array_items": lambda: iter_array_items(io.BytesIO(b"{}"), "x"),
+        }
+        for name, call in calls.items():
+            with self.subTest(parser=name), self.assertRaises(UnsandboxedParseError):
+                call()
 
     def test_document_text_extraction_is_guarded(self) -> None:
         # The decorator sits on extract_text, not on extract_pins_from_document

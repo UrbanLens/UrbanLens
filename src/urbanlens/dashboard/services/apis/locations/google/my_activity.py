@@ -6,12 +6,14 @@ from datetime import datetime, timedelta, timezone
 import html
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 
 from django.db import DatabaseError
 
+from urbanlens.dashboard.services.import_formats.streams import as_stream, is_valid_text, iter_decoded
+
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterator
+    from collections.abc import Generator, Iterable, Iterator
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -23,7 +25,7 @@ MY_ACTIVITY_MATCH_RADIUS_M = 100
 # scoped to a single entry's bounded HTML rather than scanning across however many unrelated entries
 # (Search, YouTube, other Maps activity) sit between two real matches in a huge file - without this,
 # a lazy `.*?` spanning the whole document would be quadratic on adversarial input.
-_ENTRY_SPLIT_RE = re.compile(r'<div class="outer-cell')
+_ENTRY_BOUNDARY = '<div class="outer-cell'
 
 _MAPS_HEADER_RE = re.compile(r'<p class="mdl-typography--title">\s*Maps\s*<br\s*/?>\s*</p>', re.IGNORECASE)
 
@@ -138,21 +140,22 @@ def _extract_timestamp(tail: str) -> datetime | None:
     return None
 
 
-def parse_my_activity_entries(html_bytes: bytes) -> Generator[dict[str, Any], None, None]:
-    """Yield one dict per qualifying "Directions to" Maps entry in a My Activity export.
+def parse_my_activity_entries(html_bytes: bytes | IO[bytes]) -> Generator[dict[str, Any], None, None]:
+    """Yield one dict per qualifying "Directions to" Maps entry in a My Activity export, reading one entry at a time.
 
     Args:
-        html_bytes: Raw ``MyActivity.html`` file bytes.
+        html_bytes: The ``MyActivity.html`` file, as bytes or a seekable binary file positioned at its start.
 
     Yields:
         Dict with keys: ``destination_name`` (str, HTML-unescaped link text), ``latitude``, ``longitude`` (float), ``visited_at`` (tz-aware datetime)."""
-    try:
-        text = html_bytes.decode("utf-8")
-    except UnicodeDecodeError:
+    stream = as_stream(html_bytes)
+    start = stream.tell()
+    if not is_valid_text(stream, "utf-8"):
         logger.warning("Could not decode My Activity file as UTF-8")
         return
+    stream.seek(start)
 
-    for chunk in _ENTRY_SPLIT_RE.split(text):
+    for chunk in _split_entries(iter_decoded(stream, "utf-8")):
         if "Maps" not in chunk or "Directions to" not in chunk:
             continue
         if not _MAPS_HEADER_RE.search(chunk):
@@ -182,6 +185,25 @@ def parse_my_activity_entries(html_bytes: bytes) -> Generator[dict[str, Any], No
             "longitude": longitude,
             "visited_at": visited_at,
         }
+
+
+def _split_entries(pieces: Iterable[str]) -> Iterator[str]:
+    """What ``text.split(_ENTRY_BOUNDARY)`` returns, for a text that arrives in pieces, holding one entry at a time."""
+    reach = len(_ENTRY_BOUNDARY) - 1
+    held: list[str] = []
+    tail = ""
+    for piece in pieces:
+        # A boundary is in this piece, or straddles it and the text before.
+        found = _ENTRY_BOUNDARY in piece or _ENTRY_BOUNDARY in tail + piece[:reach]
+        held.append(piece)
+        tail = (tail + piece)[-reach:]
+        if not found:
+            continue
+        *entries, last = "".join(held).split(_ENTRY_BOUNDARY)
+        yield from entries
+        held = [last]
+        tail = last[-reach:]
+    yield "".join(held)
 
 
 def iter_my_activity_events(

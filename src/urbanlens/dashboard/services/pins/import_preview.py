@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime, timedelta
+import itertools
 import json
 import logging
 import os
 import shutil
 import time
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 import uuid
 
 from django.conf import settings
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
 
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.import_export.archive_extractor import ExtractedFile, ExtractionBudget
+    from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, SpooledFile
 
 logger = logging.getLogger(__name__)
 
@@ -390,83 +391,111 @@ def discard_preview_history(job_id: str) -> None:
 
 
 def _read_uploads(profile: Profile, directory: str, names: list[str]) -> dict[str, Any]:
-    from urbanlens.dashboard.services.ai.document_import import is_supported_document_filename, read_document_text
+    from urbanlens.dashboard.services.ai.document_import import MAX_DOCUMENT_BYTES, is_supported_document_filename, read_document_text
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
+    uploads = os.path.join(directory, _UPLOADS)
     documents: list[dict[str, Any]] = []
     others: list[tuple[str, str]] = []
     for index, name in enumerate(names):
-        path = os.path.join(directory, _UPLOADS, str(index))
+        path = os.path.join(uploads, str(index))
         # Documents first: a .docx starts with ZIP magic bytes.
         if not is_supported_document_filename(name):
             others.append((name, path))
             continue
         with open(path, "rb") as handle:
-            text, too_large = read_document_text(name, handle.read())
+            # One byte past the limit is enough for the reader to refuse the file as too large.
+            text, too_large = read_document_text(name, handle.read(MAX_DOCUMENT_BYTES + 1))
         documents.append({"name": name, "text": text, "too_large": too_large})
 
-    parse = GoogleMapsGateway().parse_for_preview(_uploaded_files(others), profile)
+    parse = GoogleMapsGateway().parse_for_preview(_uploaded_files(others, uploads), profile, scratch=uploads)
     return {"lists": parse.lists, "unresolved": parse.unresolved, "failed_formats": parse.failed_formats, "documents": documents, "history": parse.history}
 
 
-def _uploaded_files(uploads: list[tuple[str, str]]) -> Iterator[tuple[str, bytes]]:
-    """Each file the upload holds, archives expanded, read only when the parser asks for it.
+def _uploaded_files(uploads: list[tuple[str, str]], scratch: str) -> Iterator[tuple[str, IO[bytes]]]:
+    """Each file the upload holds, archives expanded to disk an entry at a time, as the parser asks for it.
+
+    A file is yielded open, and closed - an extracted one removed - once the parser asks for the next.
+
+    Args:
+        uploads: Each uploaded file's name and where it is stored.
+        scratch: Where archive entries are extracted to.
 
     Raises:
         _UnreadableUploadError: An uploaded archive could not be extracted.
     """
-    from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, is_archive
+    from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, is_archive_file
 
     # One allowance for the whole upload: the extractor's limits are per archive, and each nested archive calls it again.
     budget = ExtractionBudget()
     for name, path in uploads:
         with open(path, "rb") as handle:
-            data = handle.read()
-        if is_archive(data):
-            yield from _archive_files(name, data, budget)
-        else:
-            yield name, data
+            if is_archive_file(handle):
+                yield from _archive_files(name, handle, budget, scratch)
+            else:
+                yield name, handle
 
 
-def _archive_files(name: str, data: bytes, budget: ExtractionBudget) -> Iterator[tuple[str, bytes]]:
+def _archive_files(name: str, archive: IO[bytes], budget: ExtractionBudget, scratch: str) -> Iterator[tuple[str, IO[bytes]]]:
     from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
-    from urbanlens.dashboard.services.import_export.archive_extractor import is_archive, iter_archive
+    from urbanlens.dashboard.services.import_export.archive_extractor import SpooledFile, spool_archive
 
+    # The first two entries are extracted before either is handed on; whichever the parser never reaches is removed here.
+    unread: list[SpooledFile] = []
     try:
-        entries = iter_archive(data, budget)
-        first = next(entries, None)
-        if first is None:
+        entries = spool_archive(archive, scratch, budget)
+        unread.extend(itertools.islice(entries, 2))
+        if not unread:
             return
-        second = next(entries, None)
+        first = unread.pop(0)
         # A KMZ wraps one "doc.kml" whatever the user named it, so the outer name is the useful one.
-        if second is None and not is_archive(first.data) and _filename_stem(first.name) == "doc":
+        if not unread and not _is_archive_path(first.path) and _filename_stem(first.name) == "doc":
             suffix = first.name.rsplit(".", 1)[-1] if "." in first.name else ""
             stem = _filename_stem(name)
-            yield (f"{stem}.{suffix}" if suffix else stem), first.data
+            yield from _opened(SpooledFile((f"{stem}.{suffix}" if suffix else stem), first.path))
             return
-        yield from _expanded(first, budget)
-        del first
-        if second is not None:
-            yield from _expanded(second, budget)
-            del second
+        yield from _expanded(first, budget, scratch)
+        while unread:
+            yield from _expanded(unread.pop(0), budget, scratch)
         for entry in entries:
-            yield from _expanded(entry, budget)
+            yield from _expanded(entry, budget, scratch)
     except ValueError as exc:
         logger.warning("Could not extract archive: %s", exc)
         raise _UnreadableUploadError("Invalid archive.") from None
+    finally:
+        for entry in unread:
+            os.remove(entry.path)
 
 
-def _expanded(entry: ExtractedFile, budget: ExtractionBudget) -> Iterator[tuple[str, bytes]]:
-    from urbanlens.dashboard.services.import_export.archive_extractor import is_archive, iter_archive
+def _expanded(entry: SpooledFile, budget: ExtractionBudget, scratch: str) -> Iterator[tuple[str, IO[bytes]]]:
+    from urbanlens.dashboard.services.import_export.archive_extractor import spool_archive
 
-    if not is_archive(entry.data):
-        yield entry.name, entry.data
+    if not _is_archive_path(entry.path):
+        yield from _opened(entry)
         return
     try:
-        for inner in iter_archive(entry.data, budget):
-            yield inner.name, inner.data
+        with open(entry.path, "rb") as nested:
+            for inner in spool_archive(nested, scratch, budget):
+                yield from _opened(inner)
     except ValueError:
         logger.warning("Could not extract nested archive during preview")
+    finally:
+        os.remove(entry.path)
+
+
+def _opened(entry: SpooledFile) -> Iterator[tuple[str, IO[bytes]]]:
+    try:
+        with open(entry.path, "rb") as handle:
+            yield entry.name, handle
+    finally:
+        os.remove(entry.path)
+
+
+def _is_archive_path(path: str) -> bool:
+    from urbanlens.dashboard.services.import_export.archive_extractor import is_archive_file
+
+    with open(path, "rb") as handle:
+        return is_archive_file(handle)
 
 
 def _claim_parse_slot(job_id: str) -> str | None:

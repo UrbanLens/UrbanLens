@@ -3,13 +3,13 @@ from __future__ import annotations
 import base64
 import csv
 from dataclasses import dataclass, field
-import io
-import json
+import itertools
 import logging
 import math
 import re
+import tempfile
 import time
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import IO, TYPE_CHECKING, Any, ClassVar
 
 from defusedxml.ElementTree import ParseError as XMLParseError, iterparse as iterparse_xml_defused
 from django.db import DatabaseError
@@ -43,6 +43,8 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
     pick_name_and_description,
 )
 from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
+from urbanlens.dashboard.services.import_formats.json_stream import iter_array_items
+from urbanlens.dashboard.services.import_formats.streams import as_stream, iter_decoded, iter_lines
 from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
 from urbanlens.dashboard.services.pins.history_import import ImportedHistory
 from urbanlens.dashboard.services.sandbox import untrusted_parse
@@ -309,6 +311,39 @@ class PreviewParse:
     failed_formats: list[str] = field(default_factory=list)
     history: ImportedHistory = field(default_factory=ImportedHistory)
 
+    @property
+    def previewed(self) -> int:
+        """How many pins the lists hold."""
+        return sum(len(entry["pins"]) for entry in self.lists)
+
+    def add(self, stem: str, read: _PreviewFile) -> None:
+        """Add what one file held, once it has been read without error.
+
+        Args:
+            stem: The file's name without its extension, naming its list.
+            read: What the file held.
+        """
+        if read.pins:
+            self.lists.append({"stem": stem, "pins": read.pins})
+        room = GoogleMapsGateway.MAX_PREVIEW_PINS - len(self.unresolved)
+        self.unresolved.extend({**row, "stem": stem} for row in read.unresolved[:room])
+        self.history.extend(read.history)
+
+
+@dataclass
+class _PreviewFile:
+    """What one file holds for the preview, kept apart until the whole file has been read.
+
+    Attributes:
+        pins: Pins in the preview shape.
+        unresolved: CSV rows only a lookup can place.
+        history: Location History, My Activity and GPS tracks.
+    """
+
+    pins: list[dict[str, Any]] = field(default_factory=list)
+    unresolved: list[dict[str, Any]] = field(default_factory=list)
+    history: ImportedHistory = field(default_factory=ImportedHistory)
+
 
 @dataclass(kw_only=True)
 class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
@@ -504,7 +539,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         heading = math.degrees(math.atan2(y, x))
         return (heading + 360) % 360
 
-    def _csv_row_iter(self, file_contents: str, user_profile: Profile, *, offline: bool = False) -> Generator[dict[str, Any] | None, None, None]:
+    def _csv_row_iter(self, file_contents: str | Iterable[str], user_profile: Profile, *, offline: bool = False) -> Generator[dict[str, Any] | None, None, None]:
         """Generator yielding one pin_data dict per CSV row.
 
         Supports two CSV shapes:
@@ -518,7 +553,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
           for the recognised column names.
 
         Args:
-            file_contents: Raw CSV text.
+            file_contents: Raw CSV text, or its lines as ``str.splitlines`` splits them.
             user_profile: The profile to associate with each pin.
             offline: Make no network request. A Takeout row only a lookup could place is
                 yielded with ``needs_lookup`` set and no coordinates.
@@ -530,7 +565,11 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         # utf-8-sig decode at the call site strips a file-level BOM; also guard
         # here so a BOM left on the first header (Excel "CSV UTF-8") still
         # matches latitude/URL column names.
-        reader = csv.DictReader(file_contents.lstrip("\ufeff").splitlines())
+        if isinstance(file_contents, str):
+            lines: Iterable[str] = file_contents.lstrip("\ufeff").splitlines()
+        else:
+            lines = _without_leading_boms(file_contents)
+        reader = csv.DictReader(lines)
         for row in reader:
             lowered_row = {normalize_header_key(k): v for k, v in row.items() if k is not None}
             url = next((lowered_row[key] for key in _TAKEOUT_URL_COLUMN_KEYS if lowered_row.get(key)), "")
@@ -599,8 +638,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
     def parse_for_preview(
         self,
-        files: Iterable[tuple[str, bytes]],
+        files: Iterable[tuple[str, bytes | IO[bytes]]],
         user_profile: Profile,
+        *,
+        scratch: str | None = None,
     ) -> PreviewParse:
         """Parse uploaded files without importing, and without any network request.
 
@@ -608,10 +649,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         place is set aside for :meth:`resolve_preview_rows`, and a file that fails to parse
         is recorded rather than reported, because the admin notice sends mail.
 
+        A file is read a chunk at a time and its pins taken only until the preview holds
+        :attr:`MAX_PREVIEW_PINS`, so what a file costs does not grow with its size, apart
+        from the history it carries, which the confirmed import needs whole.
+
         Args:
-            files: ``(filename, raw_bytes)`` pairs (archives already expanded), read one at a time:
-                only Shapefile parts are kept until the rest have been read.
+            files: ``(filename, content)`` pairs (archives already expanded), the content as bytes or as a
+                seekable binary file, read one at a time: only Shapefile parts are kept, on disk, until the
+                rest have been read.
             user_profile: The profile the import is for.
+            scratch: A directory on disk for the Shapefile parts; the system's temporary directory when not
+                given, which in the sandbox worker is a tmpfs counted as memory.
 
         Returns:
             The lists - one ``{"stem", "pins"}`` per file, pins with ``name``, ``lat``,
@@ -619,79 +667,102 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             what a networked process has left to do.
         """
         from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
-        from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
-        from urbanlens.dashboard.services.import_formats.gpx_tracks import gpx_tracks_to_routes
-        from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
-        from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, is_shapefile_part, shapefile_to_dict
-        from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
+        from urbanlens.dashboard.services.import_formats.shapefile import ShapefileSpool, is_shapefile_part, iter_shapefile_pins
 
         parse = PreviewParse()
-        previewed = 0
-        # The one kind of file held until the rest are read: a Shapefile is a set of same-stem sidecar files.
-        shapefile_parts: list[tuple[str, bytes]] = []
-
-        for filename, raw_bytes in files:
-            if is_shapefile_part(filename):
-                shapefile_parts.append((filename, raw_bytes))
-                continue
-            fmt = validate_content_type(filename, raw_bytes)
-            if fmt is None:
-                continue
-
-            stem = _filename_stem(filename)
-            try:
-                if fmt == "location_history":
-                    parse.history.add_location_history(raw_bytes, user_profile, filename)
+        with tempfile.TemporaryDirectory(prefix="preview-shapefiles-", dir=scratch) as parts:
+            # The one kind of file held until the rest are read: a Shapefile is a set of same-stem sidecar files.
+            shapefiles = ShapefileSpool(parts)
+            for filename, content in files:
+                stream = as_stream(content)
+                if is_shapefile_part(filename):
+                    shapefiles.add(filename, stream)
                     continue
-                if fmt == "my_activity":
-                    parse.history.add_my_activity(raw_bytes)
+                fmt = validate_content_type(filename, stream)
+                if fmt is None:
                     continue
-                if fmt == "json":
-                    raw_pins = self.geojson_to_dict(raw_bytes.decode("utf-8"), user_profile)
-                elif fmt == "kml":
-                    raw_pins = self.takeout_kml_to_dict(raw_bytes, user_profile)
-                elif fmt == "csv":
-                    rows = [row for row in self._csv_row_iter(raw_bytes.decode("utf-8-sig"), user_profile, offline=True) if row is not None]
-                    parse.unresolved.extend({**row, "stem": stem} for row in rows if row.get("needs_lookup"))
-                    raw_pins = [row for row in rows if not row.get("needs_lookup")]
-                elif fmt == "gpx":
-                    raw_pins = gpx_to_dict(raw_bytes, user_profile)
-                    parse.history.add_routes(gpx_tracks_to_routes(raw_bytes, user_profile, filename))
-                elif fmt == "wkt":
-                    raw_pins = wkt_to_dict(raw_bytes, user_profile)
-                elif fmt == "wkb":
-                    raw_pins = wkb_to_dict(raw_bytes, user_profile)
-                elif fmt == "osm_xml":
-                    raw_pins = osm_xml_to_dict(raw_bytes, user_profile)
-                else:
+                try:
+                    read = self._read_preview_file(fmt, filename, stream, user_profile, room=self.MAX_PREVIEW_PINS - parse.previewed)
+                except IMPORT_PARSE_ERRORS as exc:
+                    logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
+                    parse.failed_formats.append(fmt)
                     continue
-            except IMPORT_PARSE_ERRORS as exc:
-                logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
-                parse.failed_formats.append(fmt)
-                continue
+                parse.add(_filename_stem(filename), read)
+                if parse.previewed >= self.MAX_PREVIEW_PINS:
+                    return parse
 
-            pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
-            if pins:
-                previewed += len(pins)
-                parse.lists.append({"stem": stem, "pins": pins})
-            if previewed >= self.MAX_PREVIEW_PINS:
-                return parse
-
-        shapefile_bundles, _ = extract_shapefile_bundles(shapefile_parts)
-        for bundle in shapefile_bundles:
-            try:
-                raw_pins = shapefile_to_dict(bundle, user_profile)
-            except (OSError, ValueError, ShapefileDataSourceError) as exc:
-                logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
-                parse.failed_formats.append("shapefile")
-                continue
-            pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
-            if pins:
-                previewed += len(pins)
-                parse.lists.append({"stem": bundle.stem, "pins": pins})
-            if previewed >= self.MAX_PREVIEW_PINS:
-                return parse
+            for stem, shp_path in shapefiles.bundles():
+                try:
+                    pins = self._take_preview_pins(iter_shapefile_pins(shp_path, stem, user_profile), user_profile, room=self.MAX_PREVIEW_PINS - parse.previewed)
+                except (OSError, ValueError, ShapefileDataSourceError) as exc:
+                    logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", stem, exc)
+                    parse.failed_formats.append("shapefile")
+                    continue
+                parse.add(stem, _PreviewFile(pins=pins))
+                if parse.previewed >= self.MAX_PREVIEW_PINS:
+                    return parse
         return parse
+
+    def _read_preview_file(self, fmt: str, filename: str, stream: IO[bytes], user_profile: Profile, *, room: int) -> _PreviewFile:
+        """Read one file of a known format for the preview, taking at most *room* pins.
+
+        Args:
+            fmt: What :func:`validate_content_type` made of the file.
+            filename: The file's name.
+            stream: The file, positioned at its start.
+            user_profile: The profile the import is for.
+            room: How many more pins the preview may hold.
+
+        Returns:
+            What the file holds for the preview.
+
+        Raises:
+            One of ``IMPORT_PARSE_ERRORS`` for a file that cannot be read, up to where reading stopped.
+        """
+        from urbanlens.dashboard.services.import_formats.gpx_tracks import read_gpx
+        from urbanlens.dashboard.services.import_formats.osm_xml import iter_osm_xml_pins
+        from urbanlens.dashboard.services.import_formats.wkt_wkb import iter_wkb_pins, iter_wkt_pins
+
+        read = _PreviewFile()
+        if fmt == "location_history":
+            read.history.add_location_history(stream, user_profile, filename)
+        elif fmt == "my_activity":
+            read.history.add_my_activity(stream)
+        elif fmt == "json":
+            read.pins = self._take_preview_pins(self.iter_geojson_pins(stream, user_profile), user_profile, room=room)
+        elif fmt == "kml":
+            read.pins = self._take_preview_pins(self.iter_kml_pins(stream, user_profile), user_profile, room=room)
+        elif fmt == "csv":
+            self._read_preview_csv(stream, user_profile, read, room=room)
+        elif fmt == "gpx":
+            gpx = read_gpx(stream, user_profile, filename, max_waypoints=room)
+            read.pins = self._take_preview_pins(gpx.waypoints, user_profile, room=room)
+            read.history.add_routes(gpx.routes)
+        elif fmt == "wkt":
+            read.pins = self._take_preview_pins(iter_wkt_pins(stream, user_profile), user_profile, room=room)
+        elif fmt == "wkb":
+            read.pins = self._take_preview_pins(iter_wkb_pins(stream, user_profile), user_profile, room=room)
+        elif fmt == "osm_xml":
+            read.pins = self._take_preview_pins(iter_osm_xml_pins(stream, user_profile), user_profile, room=room)
+        return read
+
+    def _read_preview_csv(self, stream: IO[bytes], user_profile: Profile, read: _PreviewFile, *, room: int) -> None:
+        """Take a CSV's pins until *room* is filled, setting aside the rows only a lookup can place."""
+        for row in self._csv_row_iter(iter_lines(iter_decoded(stream, "utf-8-sig")), user_profile, offline=True):
+            if len(read.pins) >= room:
+                return
+            if row is None:
+                continue
+            if row.get("needs_lookup"):
+                # No more are kept than a preview could place: the lookups stop once it is full.
+                if len(read.unresolved) < self.MAX_PREVIEW_PINS:
+                    read.unresolved.append(row)
+                continue
+            read.pins.extend(self._iter_preview_pins([row], user_profile))
+
+    def _take_preview_pins(self, raw_pins: Iterable[dict[str, Any] | None], user_profile: Profile, *, room: int) -> list[dict[str, Any]]:
+        """The first *room* pins of a parser's output in the preview shape, reading no further."""
+        return list(itertools.islice(self._iter_preview_pins(raw_pins, user_profile), room))
 
     def resolve_preview_rows(self, rows: list[dict[str, Any]], user_profile: Profile, *, room: int, deadline: float | None = None) -> tuple[list[dict[str, Any]], int]:
         """Place the CSV rows :meth:`parse_for_preview` set aside, making the lookups it could not.
@@ -751,7 +822,11 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Returns:
             List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid``, and - on records the TEMPORARY legacy CID repair would apply to, or whose own cid came from the imprecise S2-cell URL guess - ``needs_repair``.
         """
-        pins: list[dict[str, Any]] = []
+        return list(GoogleMapsGateway._iter_preview_pins(raw_pins, user_profile))
+
+    @staticmethod
+    def _iter_preview_pins(raw_pins: Iterable[dict[str, Any] | None], user_profile: Profile) -> Iterator[dict[str, Any]]:
+        """:meth:`_preview_pins`, one pin at a time, reading no more of *raw_pins* than is asked for."""
         for p in raw_pins:
             if p is None:
                 continue
@@ -781,8 +856,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             if preview_needs_legacy_repair(user_profile, cid=cid, name=name) or p.get("s2_guess"):
                 pin["needs_repair"] = True
             # end TEMPORARY
-            pins.append(pin)
-        return pins
+            yield pin
 
     def iter_confirmed_import_events(
         self,
@@ -974,14 +1048,11 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             yield {"type": "deferred", "count": deferred_count}
 
     @untrusted_parse("geo.kml")
-    def takeout_kml_to_dict(self, file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
-        """Read every Placemark with a location out of a KML document, at any depth, one placemark at a time.
-
-        Streams rather than building the document tree, which cost about fifteen times the file (P95), and matches
-        elements by local name, so an ``https://`` KML namespace some exporters write reads like ``http://``.
+    def takeout_kml_to_dict(self, file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
+        """Read every Placemark with a location out of a KML document, at any depth.
 
         Args:
-            file_contents: The KML bytes; the encoding is taken from their XML declaration.
+            file_contents: The KML, as bytes or a binary file; the encoding is taken from its XML declaration.
             user_profile: Who the pins are for.
 
         Returns:
@@ -990,26 +1061,43 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Raises:
             One of ``IMPORT_PARSE_ERRORS`` for a malformed document, bad coordinates, or a DTD or entity.
         """
-        pins: list[dict[str, Any]] = []
         try:
-            for placemark in _iter_kml_placemarks(file_contents):
-                point = _kml_placemark_point(placemark)
-                if point is None:
-                    continue
-                pins.append(
-                    {
-                        "latitude": point[1],
-                        "longitude": point[0],
-                        "profile": user_profile,
-                        "name": _kml_child_text(placemark, "name"),
-                        "description": _kml_child_text(placemark, "description"),
-                    },
-                )
-            logger.debug("Converted %s pins from KML file to dicts.", len(pins))
+            pins = list(self.iter_kml_pins(file_contents, user_profile))
         except IMPORT_PARSE_ERRORS as e:
             logger.exception("Failed to import pins from KML: %s", e)
             raise
+        logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         return pins
+
+    @untrusted_parse("geo.kml")
+    def iter_kml_pins(self, file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
+        """:meth:`takeout_kml_to_dict`, one placemark at a time, reading no more of the file than that takes.
+
+        Holds at most one placemark's subtree at a time, and matches elements by local name, so an ``https://`` KML
+        namespace some exporters write reads like ``http://``.
+
+        Args:
+            file_contents: The KML, as bytes or a binary file; the encoding is taken from its XML declaration.
+            user_profile: Who the pins are for.
+
+        Yields:
+            One pin dict per placemark with a readable geometry.
+
+        Raises:
+            One of ``IMPORT_PARSE_ERRORS`` for a malformed document, bad coordinates, or a DTD or entity, once
+            reading reaches it.
+        """
+        for placemark in _iter_kml_placemarks(as_stream(file_contents)):
+            point = _kml_placemark_point(placemark)
+            if point is None:
+                continue
+            yield {
+                "latitude": point[1],
+                "longitude": point[0],
+                "profile": user_profile,
+                "name": _kml_child_text(placemark, "name"),
+                "description": _kml_child_text(placemark, "description"),
+            }
 
     @staticmethod
     def _geojson_feature_point(geometry: dict[str, Any]) -> tuple[float, float] | None:
@@ -1041,62 +1129,96 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             return name, " ".join(takeout_bits)
         return pick_name_and_description(properties)
 
-    def geojson_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
-        """Convert a GeoJSON ``FeatureCollection`` into pin dicts."""
+    def geojson_to_dict(self, file_contents: str | bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
+        """Convert a GeoJSON ``FeatureCollection`` into pin dicts.
+
+        Args:
+            file_contents: The GeoJSON, as text, UTF-8 bytes or a binary file.
+            user_profile: Who the pins are for.
+
+        Returns:
+            One pin dict per feature with a resolvable geometry.
+
+        Raises:
+            One of ``IMPORT_PARSE_ERRORS``.
+        """
+        content = file_contents.encode("utf-8") if isinstance(file_contents, str) else file_contents
         try:
-            json_data = json.loads(file_contents)
-            features = json_data.get("features", [])
-            pins: list[dict[str, Any]] = []
-
-            for feature in features:
-                geometry = feature.get("geometry") or {}
-                properties = feature.get("properties") or {}
-
-                point = self._geojson_feature_point(geometry)
-                if point is None:
-                    logger.warning("Skipping feature with unresolvable geometry: %s", geometry)
-                    continue
-                longitude, latitude = point
-
-                name, description = self._geojson_name_and_description(properties)
-                pins.append(
-                    {
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        "profile": user_profile,
-                        "name": name,
-                        "description": description,
-                    },
-                )
-
-            logger.info("Converted %s pins from GeoJSON file to dicts.", len(pins))
-
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            pins = list(self.iter_geojson_pins(content, user_profile))
+        except (KeyError, ValueError) as e:
             logger.exception("Failed to import pins from GeoJSON: %s", e)
             raise
-
+        logger.info("Converted %s pins from GeoJSON file to dicts.", len(pins))
         return pins
+
+    def iter_geojson_pins(self, file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
+        """:meth:`geojson_to_dict`, one feature at a time, reading no more of the file than that takes.
+
+        Args:
+            file_contents: The GeoJSON, as UTF-8 bytes or a seekable binary file positioned at its start.
+            user_profile: Who the pins are for.
+
+        Yields:
+            One pin dict per feature with a resolvable geometry.
+
+        Raises:
+            MalformedJSONError: Malformed JSON, once reading reaches it.
+            AttributeError: A feature, or its geometry or properties, is not an object.
+        """
+        for feature in iter_array_items(as_stream(file_contents), "features"):
+            geometry = feature.get("geometry") or {}
+            properties = feature.get("properties") or {}
+
+            point = self._geojson_feature_point(geometry)
+            if point is None:
+                logger.warning("Skipping feature with unresolvable geometry: %s", geometry)
+                continue
+            longitude, latitude = point
+
+            name, description = self._geojson_name_and_description(properties)
+            yield {
+                "latitude": latitude,
+                "longitude": longitude,
+                "profile": user_profile,
+                "name": name,
+                "description": description,
+            }
 
 
 _KML_COMMA_SPACING = re.compile(r"\s*,\s*")
+
+
+def _without_leading_boms(lines: Iterable[str]) -> Iterator[str]:
+    remaining = iter(lines)
+    for first in remaining:
+        yield first.lstrip("\ufeff")
+        break
+    yield from remaining
 
 
 def _kml_local_name(tag: object) -> str:
     return str(tag).rsplit("}", 1)[-1]
 
 
-def _iter_kml_placemarks(content: bytes) -> Iterator[Element]:
-    """Yield each Placemark element as it closes, then free it, refusing a DTD, entity or external reference."""
+def _iter_kml_placemarks(content: IO[bytes]) -> Iterator[Element]:
+    """Yield each Placemark element as it closes, refusing a DTD, entity or external reference.
+
+    Every element outside a placemark is freed as it closes, and a placemark once it has been read, so the tree
+    never holds more than one placemark and the elements enclosing it.
+    """
     stack: list[Element] = []
-    for event, element in iterparse_xml_defused(io.BytesIO(content), events=("start", "end"), forbid_dtd=True):
+    placemarks_open = 0
+    for event, element in iterparse_xml_defused(content, events=("start", "end"), forbid_dtd=True):
+        is_placemark = _kml_local_name(element.tag) == "Placemark"
         if event == "start":
             stack.append(element)
+            placemarks_open += is_placemark
             continue
         stack.pop()
-        if _kml_local_name(element.tag) != "Placemark":
-            continue
-        yield element
-        if stack:
+        placemarks_open -= is_placemark
+        if is_placemark:
+            yield element
+        if stack and (is_placemark or not placemarks_open):
             stack[-1].remove(element)
 
 

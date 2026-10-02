@@ -117,11 +117,11 @@ class PreviewsAreReadAFewAtATimeSiteWideTests(_PreviewCase):
         seen: list[object] = []
         real = GoogleMapsGateway.parse_for_preview
 
-        def parse(gateway, files, profile):
+        def parse(gateway, files, profile, **kwargs):
             if not seen:
                 seen.append(None)
                 seen[0] = during()
-            return real(gateway, files, profile)
+            return real(gateway, files, profile, **kwargs)
 
         with mock.patch.object(GoogleMapsGateway, "parse_for_preview", autospec=True, side_effect=parse):
             self.assertTrue(self._parse(self.first_profile, self.first))

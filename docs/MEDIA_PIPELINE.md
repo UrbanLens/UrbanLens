@@ -40,7 +40,8 @@ conflating them overstates what is actually enforced:
 | poppler + tesseract | PDF text/OCR, preview render | sandbox | yes |
 | `zipfile` / `tarfile` | data import, import preview | routed via `run_user_data_import` and `parse_import_preview_task` | yes |
 | python-docx | AI document import, via the import preview | routed via `parse_import_preview_task`; the AI call runs on an interactive worker | yes |
-| lxml / fastkml / gpxpy | KML, GPX, OSM XML | routed via `run_user_data_import` and `parse_import_preview_task` | yes |
+| expat via defusedxml's `iterparse`, gpxpy's field readers | KML, GPX, OSM XML | routed via `run_user_data_import` and `parse_import_preview_task` | yes |
+| ijson (yajl, or its pure-Python parser for a wide integer) | GeoJSON, Location History, the import preview's JSON sniff | routed via `parse_import_preview_task` | yes |
 | GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | routed via `run_user_data_import` and `parse_import_preview_task` | yes |
 | clamd | everything, except VirusTotal-eligible fetched assets (see below) | sandbox (its own container for the daemon) | n/a |
 

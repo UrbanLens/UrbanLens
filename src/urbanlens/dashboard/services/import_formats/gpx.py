@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 
-from defusedxml.ElementTree import ParseError as XMLParseError, fromstring as parse_xml_defused
-import gpxpy
+from defusedxml.ElementTree import ParseError as XMLParseError
 import gpxpy.gpx
 
 from urbanlens.dashboard.services.sandbox import untrusted_parse
@@ -18,11 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 @untrusted_parse("geo.gpx")
-def gpx_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
+def gpx_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a GPX file's waypoints into pin dicts.
 
     Args:
-        file_contents: Raw GPX file bytes.
+        file_contents: The GPX file, as bytes or a seekable binary file positioned at its start.
         user_profile: The profile to associate with each pin.
 
     Returns:
@@ -33,41 +32,13 @@ def gpx_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
         UnicodeDecodeError: If the file is not UTF-8 text.
         defusedxml.ElementTree.ParseError: If the file is not well-formed XML.
         ValueError: If the XML attempts a forbidden DTD/entity-expansion/ external-entity reference (an XXE attempt)."""
-    pins: list[dict[str, Any]] = []
+    from urbanlens.dashboard.services.import_formats.gpx_tracks import read_gpx
+
     try:
-        text = file_contents.decode("utf-8")
-
-        # gpxpy builds its XML tree internally (preferring raw lxml.etree.XML, falling back to
-        # stdlib ElementTree.XML - see gpxpy.parser.GPXParser), with no parameter to inject a
-        # hardened parser and no XXE hardening of its own.
-        # Pre-parse the same text with defusedxml first, purely to reject a malicious payload (DTD
-        parse_xml_defused(text)
-
-        gpx = gpxpy.parse(text)
-
-        for waypoint in gpx.waypoints:
-            if waypoint.latitude is None or waypoint.longitude is None:
-                continue
-
-            description_parts = [part.strip() for part in (waypoint.description, waypoint.comment) if part and part.strip()]
-            if waypoint.elevation is not None:
-                description_parts.append(f"Elevation: {waypoint.elevation:.1f}m")
-            if waypoint.time is not None:
-                description_parts.append(f"Recorded: {waypoint.time.isoformat()}")
-
-            pins.append(
-                {
-                    "latitude": waypoint.latitude,
-                    "longitude": waypoint.longitude,
-                    "profile": user_profile,
-                    "name": (waypoint.name or "Unnamed waypoint").strip(),
-                    "description": " | ".join(description_parts),
-                },
-            )
-
-        logger.debug("Converted %s waypoints from GPX file to pins (tracks/routes skipped).", len(pins))
+        pins = read_gpx(file_contents, user_profile, "", routes=False).waypoints
     except (gpxpy.gpx.GPXException, UnicodeDecodeError, ValueError, XMLParseError) as e:
         logger.exception("Failed to import pins from GPX: %s", e)
         raise
 
+    logger.debug("Converted %s waypoints from GPX file to pins (tracks/routes skipped).", len(pins))
     return pins

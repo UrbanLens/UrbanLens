@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 
 import shapely.errors
 import shapely.wkb
 import shapely.wkt
 
+from urbanlens.dashboard.services.import_formats.streams import as_stream, is_valid_text, iter_decoded, iter_lines
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from shapely.geometry.base import BaseGeometry
 
     from urbanlens.dashboard.models.profile import Profile
@@ -38,11 +41,11 @@ def _pin_from_geometry(geometry: BaseGeometry, index: int, source_label: str, us
 
 
 @untrusted_parse("geo.wkt")
-def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
+def wkt_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a WKT file (one geometry per line) into pin dicts.
 
     Args:
-        file_contents: Raw file bytes, expected to be UTF-8 text.
+        file_contents: The file, UTF-8 text, as bytes or a binary file.
         user_profile: The profile to associate with each pin.
 
     Returns:
@@ -50,10 +53,25 @@ def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
 
     Raises:
         UnicodeDecodeError: If the file is not UTF-8 text."""
-    text = file_contents.decode("utf-8")
-    pins: list[dict[str, Any]] = []
+    pins = list(iter_wkt_pins(file_contents, user_profile))
+    logger.debug("Converted %s geometries from WKT file to pins.", len(pins))
+    return pins
 
-    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+
+@untrusted_parse("geo.wkt")
+def iter_wkt_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
+    """:func:`wkt_to_dict`, one line at a time, reading no more of the file than that takes.
+
+    Args:
+        file_contents: The file, UTF-8 text, as bytes or a binary file.
+        user_profile: The profile to associate with each pin.
+
+    Yields:
+        One pin dict per valid geometry line.
+
+    Raises:
+        UnicodeDecodeError: If the file is not UTF-8 text, once reading reaches the bad byte."""
+    for line_number, raw_line in enumerate(iter_lines(iter_decoded(as_stream(file_contents), "utf-8")), start=1):
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
@@ -65,39 +83,56 @@ def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
 
         pin = _pin_from_geometry(geometry, line_number, "WKT", user_profile)
         if pin is not None:
-            pins.append(pin)
-
-    logger.debug("Converted %s geometries from WKT file to pins.", len(pins))
-    return pins
+            yield pin
 
 
 @untrusted_parse("geo.wkb")
-def wkb_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
+def wkb_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a WKB file into pin dicts.
 
     Args:
-        file_contents: Raw file bytes.
+        file_contents: The file, as bytes or a seekable binary file positioned at its start.
         user_profile: The profile to associate with each pin.
 
     Returns:
         List of pin dicts, one per valid geometry."""
-    pins: list[dict[str, Any]] = []
+    pins = list(iter_wkb_pins(file_contents, user_profile))
+    logger.debug("Converted %s geometries from WKB file to pins.", len(pins))
+    return pins
 
-    try:
-        text = file_contents.decode("ascii")
-    except UnicodeDecodeError:
+
+@untrusted_parse("geo.wkb")
+def iter_wkb_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
+    """:func:`wkb_to_dict`, one line at a time, reading no more of the file than that takes.
+
+    A file that is not ASCII is one raw binary geometry, and is read whole.
+
+    Args:
+        file_contents: The file, as bytes or a seekable binary file positioned at its start.
+        user_profile: The profile to associate with each pin.
+
+    Yields:
+        One pin dict per valid geometry.
+
+    Raises:
+        shapely.errors.ShapelyError: A binary WKB file is not a valid geometry."""
+    stream = as_stream(file_contents)
+    start = stream.tell()
+    if not is_valid_text(stream, "ascii"):
         # Not hex text - treat the whole file as one raw binary WKB geometry.
+        stream.seek(start)
         try:
-            geometry = shapely.wkb.loads(file_contents)
+            geometry = shapely.wkb.loads(stream.read())
         except _GEOMETRY_ERRORS as exc:
             logger.exception("Failed to import pins from binary WKB: %s", exc)
             raise
         pin = _pin_from_geometry(geometry, 1, "binary WKB", user_profile)
         if pin is not None:
-            pins.append(pin)
-        return pins
+            yield pin
+        return
 
-    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+    stream.seek(start)
+    for line_number, raw_line in enumerate(iter_lines(iter_decoded(stream, "ascii")), start=1):
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
@@ -109,7 +144,4 @@ def wkb_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
 
         pin = _pin_from_geometry(geometry, line_number, "hex WKB", user_profile)
         if pin is not None:
-            pins.append(pin)
-
-    logger.debug("Converted %s geometries from WKB file to pins.", len(pins))
-    return pins
+            yield pin

@@ -139,7 +139,7 @@ class PreviewParsesOutsideTheWebProcessTests(TestCase):
         job = self._upload("broken.kml", KML.encode())
 
         with (
-            mock.patch.object(GoogleMapsGateway, "takeout_kml_to_dict", side_effect=ValueError("unparseable")),
+            mock.patch.object(GoogleMapsGateway, "iter_kml_pins", side_effect=ValueError("unparseable")),
             mock.patch(NOTIFY) as sandbox_notify,
         ):
             enqueue = self._parse_in_sandbox(job)
