@@ -79,7 +79,7 @@ from urbanlens.dashboard.services.wiki.wiki_access import wiki_accessible_to
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from django.http import HttpRequest
+    from django.http import HttpRequest, QueryDict
     from django.http.response import HttpResponseBase
 
 logger = logging.getLogger(__name__)
@@ -339,6 +339,33 @@ def _overview_stats(checkins: Iterable[SafetyCheckin]) -> dict[str, int]:
 MAX_GRACE_PERIOD_HOURS = 168
 
 
+class InvalidDestinationError(ValueError):
+    """A submitted destination is half a pair, or not a finite coordinate on the globe."""
+
+
+def _parse_destination(data: QueryDict) -> tuple[float, float] | tuple[None, None]:
+    """Parse the destination pair the check-in map writes into its two hidden inputs.
+
+    Args:
+        data: ``request.POST`` or ``request.GET``.
+
+    Returns:
+        Both coordinates, or ``(None, None)`` when neither is set.
+
+    Raises:
+        InvalidDestinationError: Only one is set, or either is not a finite latitude/longitude.
+    """
+    raw_latitude = (data.get("destination_latitude") or "").strip()
+    raw_longitude = (data.get("destination_longitude") or "").strip()
+    if not raw_latitude and not raw_longitude:
+        return None, None
+    latitude = coordinate_or_none(raw_latitude, bound=LATITUDE_BOUND)
+    longitude = coordinate_or_none(raw_longitude, bound=LONGITUDE_BOUND)
+    if latitude is None or longitude is None:
+        raise InvalidDestinationError(f"destination ({raw_latitude!r}, {raw_longitude!r}) is not a coordinate pair")
+    return latitude, longitude
+
+
 def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
     """Parse the submitted grace period, in hours, into a timedelta.
 
@@ -574,8 +601,11 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
 
         title = request.POST.get("title", "").strip() or f"Check-in - {checkin_by:%b} {checkin_by.day}, {checkin_by.year}"
 
-        lat = request.POST.get("destination_latitude") or None
-        lng = request.POST.get("destination_longitude") or None
+        try:
+            lat, lng = _parse_destination(request.POST)
+        except InvalidDestinationError as exc:
+            logger.info("Safety check-in create rejected for profile %s: %s", profile.pk, exc)
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Invalid destination."}, status=400)
 
         allowed_contacts, rejected_contacts = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile))
         if rejected_contacts:
@@ -590,8 +620,8 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 plan_details=request.POST.get("plan_details", "").strip(),
                 contact_message=request.POST.get("contact_message", "").strip(),
                 trip=trip,
-                destination_latitude=float(lat) if lat else None,
-                destination_longitude=float(lng) if lng else None,
+                destination_latitude=lat,
+                destination_longitude=lng,
                 contacts=allowed_contacts,
                 notify_community_wiki="notify_community_wiki" in request.POST,
             )
@@ -791,8 +821,14 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
 
         is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
-        lat = request.POST.get("destination_latitude") or None
-        lng = request.POST.get("destination_longitude") or None
+        try:
+            destination = _parse_destination(request.POST)
+        except InvalidDestinationError as exc:
+            logger.info("Safety check-in edit rejected on checkin %s: %s", checkin.pk, exc)
+            if is_xhr:
+                return JsonResponse({"ok": False, "error": "Invalid destination."}, status=400)
+            messages.error(request, "Invalid destination.")
+            return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
         try:
             outcome = apply_checkin_edit(
@@ -803,7 +839,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 contact_message=request.POST.get("contact_message"),
                 # Always submitted by this form (the map writes both hidden inputs),
                 # so an absent pair genuinely means "cleared", not "untouched".
-                destination=(float(lat) if lat else None, float(lng) if lng else None),
+                destination=destination,
                 # Absent means unchecked - either the box was cleared or the destination has no
                 # community wiki (the toggle isn't rendered at all then), which disables it too.
                 notify_community_wiki="notify_community_wiki" in request.POST,
@@ -1205,15 +1241,12 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
             request: Incoming HTTP request.
 
         Returns:
-            Rendered toggle fragment.
+            Rendered toggle fragment, or a 400 for coordinates that are not a point on the globe.
         """
-        lat: float | None
-        lng: float | None
         try:
-            lat = float(request.GET.get("destination_latitude", ""))
-            lng = float(request.GET.get("destination_longitude", ""))
-        except ValueError:
-            lat = lng = None
+            lat, lng = _parse_destination(request.GET)
+        except InvalidDestinationError:
+            return HttpResponseBadRequest("Invalid coordinates.")
         # Scoped to the viewer: this reads coordinates straight from the query string, so the unscoped lookup
         # made it a wiki enumerator. get_or_create rather than the reverse accessor - see the matching note in
         # map_overlays.OverlayMediaPickerView.

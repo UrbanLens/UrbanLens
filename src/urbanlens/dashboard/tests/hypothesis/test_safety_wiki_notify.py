@@ -249,8 +249,9 @@ class WikiOptionEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "notify_community_wiki")
 
-    def test_empty_on_missing_or_invalid_coordinates(self):
-        response = self.client.get(reverse("safety.checkin.wiki_option"), {"destination_latitude": "not-a-number"})
+    def test_empty_without_coordinates(self):
+        # Invalid coordinates are a 400: test_safety_destination_coordinates.py.
+        response = self.client.get(reverse("safety.checkin.wiki_option"))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "notify_community_wiki")
 
