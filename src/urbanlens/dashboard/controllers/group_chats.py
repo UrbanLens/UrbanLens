@@ -614,7 +614,7 @@ class GroupSharePinView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         group, _membership = _get_group(profile, group_uuid)
-        pins = Pin.objects.filter(profile=profile, parent_pin__isnull=True).select_related("location").order_by("name")[:200]
+        pins = Pin.objects.root_pins().filter(profile=profile).select_related("location").order_by("name")[:200]
         return render(request, "dashboard/partials/messages/_share_pin_dialog.html", {"group": group, "pins": pins})
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:

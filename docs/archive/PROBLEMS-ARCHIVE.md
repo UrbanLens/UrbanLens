@@ -19773,3 +19773,30 @@ search dialog's `onsubmit` was the one handler.
 
 A page's own HTML does not include the partials htmx loads into it later, and those carried most of the pin page's
 handlers. P34's template-wide test covers them.
+
+## RESOLVED 2026-10-02: The queryset API's unused half is deleted, and root-pin filters call root_pins()
+
+`id: P41` · `status: fixed` · `resolved: 2026-10-02`
+
+Every public method on a queryset or manager under `models/` was traced to its callers, by name and by receiver
+(a name with a production caller is not proof every class defining it has one: `for_profile` is defined on 32
+querysets). 2026-09-29: 71 definitions with no production caller were deleted with the tests that only exercised them,
+and four consumers that rewrote a live method's predicate inline now call it.
+
+2026-10-02: the inline `parent_pin__isnull=True` filters on a Pin queryset, about 30 of them across `services/`,
+`controllers/` and `models/`, now call `PinQuerySet.root_pins()`. Left as they are: `Q(...)` and cross-relation lookups
+(`pins__parent_pin__isnull`), which `root_pins` cannot express, and the album owner constraint.
+
+Kept on purpose:
+
+- `ApiCallLogQuerySet.usage_by_profile` and `active_consumers`, test-only, are the fair-share limiter's inputs in D14
+  (`designs/external-api-fair-share.md`), accepted and not built. Delete them if D14 is superseded.
+- Predicates of methods deleted as dead (`parent_wiki__isnull=True` in `wiki_merge.py`, `source=VisitSource.HISTORY`
+  in `location_history.py`, `pin__isnull=True` in `pin_suggestions.py`) stay inline: each has one consumer, and
+  restoring a method for it would bring back what the pass removed.
+- Seven methods are called only inside their own file (`activity_level`, `clear_undecryptable`,
+  `filter_by_security_indicators`, `for_field`, `pending_deletion`, `this_month`, `with_coordinate_location`), re-measured
+  by AST; the earlier count of 16 included names other classes also define. They are the queryset's API used by its
+  own model, not dead code.
+
+Not checked: code outside this repository that imports these querysets.

@@ -221,7 +221,7 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
 
     # Only root pins are constrained - child pins are free to share a Location
     # with their parent and siblings, which is the whole point of detail pins.
-    if pin.parent_pin_id is None and Pin.objects.filter(profile_id=pin.profile_id, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).exists():
+    if pin.parent_pin_id is None and Pin.objects.root_pins().filter(profile_id=pin.profile_id, location=location).exclude(pk=pin.pk).exists():
         raise PinMoveError(f"Pin {pin.pk} (profile {pin.profile_id}) already has a top-level pin at location {location.pk}.")
 
     before_lat, before_lng = float(pin.effective_latitude), float(pin.effective_longitude)
@@ -245,7 +245,7 @@ def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
     if new_parent is None:
         if pin.parent_pin_id is None:
             return
-        conflict = Pin.objects.filter(profile=pin.profile, location_id=pin.location_id, parent_pin__isnull=True).exclude(pk=pin.pk).exists()
+        conflict = Pin.objects.root_pins().filter(profile=pin.profile, location_id=pin.location_id).exclude(pk=pin.pk).exists()
         if conflict:
             raise ReparentLocationConflictError(f"Pin {pin.pk} (location {pin.location_id}) already shares that location with another top-level pin of profile {pin.profile_id}; refusing detach.")
         pin.parent_pin = None
@@ -272,7 +272,7 @@ def _promote_children(instance: Pin) -> list[int]:
             child.parent_pin_id = new_parent_id
             child.save(update_fields=["parent_pin", "updated"])
             continue
-        other_root = Pin.objects.filter(profile_id=instance.profile_id, location_id=child.location_id, parent_pin__isnull=True).exclude(pk=instance.pk).first()
+        other_root = Pin.objects.root_pins().filter(profile_id=instance.profile_id, location_id=child.location_id).exclude(pk=instance.pk).first()
         if other_root is not None:
             child.parent_pin_id = other_root.pk
             child.save(update_fields=["parent_pin", "updated"])
@@ -294,7 +294,7 @@ def _finish_deferred_promotions(profile_id: int, deferred_ids: list[int]) -> Non
         profile_id: Owner of the pins (root uniqueness is per profile).
         deferred_ids: Primary keys of the temporarily self-parented children."""
     for child in Pin.objects.filter(pk__in=deferred_ids):
-        existing_root = Pin.objects.filter(profile_id=profile_id, location_id=child.location_id, parent_pin__isnull=True).exclude(pk=child.pk).first()
+        existing_root = Pin.objects.root_pins().filter(profile_id=profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
         child.parent_pin_id = existing_root.pk if existing_root is not None else None
         child.save(update_fields=["parent_pin", "updated"])
 

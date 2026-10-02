@@ -313,7 +313,7 @@ def sync_public_pin_suggestions() -> int:
         location = candidate.location
         wiki = location.wiki
         already_suggested = set(PinSuggestion.objects.filter(location=location).values_list("profile_id", flat=True))
-        has_pin = set(Pin.objects.filter(location=location, parent_pin__isnull=True).values_list("profile_id", flat=True))
+        has_pin = set(Pin.objects.root_pins().filter(location=location).values_list("profile_id", flat=True))
         recipients = Profile.objects.filter(community_enabled=True, pin_suggestions_enabled=True, suggest_public_pins=True).exclude(id__in=already_suggested | has_pin).values_list("id", flat=True)
         new_rows = [
             PinSuggestion(
@@ -352,7 +352,7 @@ def public_vote_context(location: Location, profile: Profile | None, *, conceal:
         return {"is_public": True}
     if not candidate.is_open or profile is None:
         return None
-    if not Pin.objects.filter(location=location, profile=profile, parent_pin__isnull=True).exists():
+    if not Pin.objects.root_pins().filter(location=location, profile=profile).exists():
         return None
     vote = PublicPinVote.objects.filter(candidate=candidate, profile=profile).first()
     return {"is_public": False, "my_vote": None if vote is None else vote.make_public}
@@ -373,7 +373,7 @@ def cast_public_vote(location: Location, profile: Profile, choice: str, config: 
     candidate = PublicPinCandidate.objects.filter(location=location).first()
     if candidate is None or not candidate.is_open:
         raise VoteNotOpenError(f"No open public-pin candidate for location {location.pk} (status={candidate.status if candidate else 'none'}).")
-    if not Pin.objects.filter(location=location, profile=profile, parent_pin__isnull=True).exists():
+    if not Pin.objects.root_pins().filter(location=location, profile=profile).exists():
         raise VoterNotPinnedError(f"Profile {profile.pk} holds no root pin at location {location.pk}; vote refused.")
 
     if choice == "withdraw":

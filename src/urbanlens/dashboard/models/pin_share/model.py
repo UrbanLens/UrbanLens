@@ -231,7 +231,7 @@ class PinShare(abstract.DashboardModel):
             return None
         from urbanlens.dashboard.models.pin.model import Pin
 
-        query = Pin.objects.filter(profile=self.to_profile, parent_pin__isnull=True, location_id=location_id)
+        query = Pin.objects.root_pins().filter(profile=self.to_profile, location_id=location_id)
         if self.pin_id is not None:
             query = query.exclude(pk=self.pin_id)
         return query.first()

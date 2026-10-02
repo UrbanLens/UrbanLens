@@ -76,9 +76,9 @@ def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
     # undercounts (and varies by which of the place's several pinned coordinates the URL names)
     # whenever more than one Location row exists under the Place.
     if wiki.place_id is not None:
-        root_pins = Pin.objects.filter(location__place_id=wiki.place_id, parent_pin__isnull=True)
+        root_pins = Pin.objects.root_pins().filter(location__place_id=wiki.place_id)
     else:
-        root_pins = location.pins.filter(parent_pin__isnull=True)
+        root_pins = location.pins.root_pins()
     exact_count = root_pins.values("profile").distinct().count()
     approximate = approximate_pin_count(wiki.pk, exact_count)
     is_low = bool(approximate["is_low"])

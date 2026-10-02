@@ -143,7 +143,7 @@ def bulk_merge_under(target: Pin, sources: Sequence[Pin]) -> BulkMergeResult:
     if not candidates:
         raise NoValidSourcesError
     promote = target.parent_pin_id is not None
-    if promote and Pin.objects.filter(profile_id=target.profile_id, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists():
+    if promote and Pin.objects.root_pins().filter(profile_id=target.profile_id, location_id=target.location_id).exclude(pk=target.pk).exists():
         raise MergeTargetConflictError
 
     merged: list[Pin] = []

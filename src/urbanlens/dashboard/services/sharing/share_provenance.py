@@ -39,14 +39,17 @@ def find_profile_pin_near_location(profile_id: int, location: Location | None, *
         return None
     from urbanlens.dashboard.models.pin.model import Pin
 
-    exact = Pin.objects.filter(profile_id=profile_id, parent_pin__isnull=True, location_id=location.pk).first()
+    exact = Pin.objects.root_pins().filter(profile_id=profile_id, location_id=location.pk).first()
     if exact is not None:
         return exact
-    return Pin.objects.filter(
-        profile_id=profile_id,
-        parent_pin__isnull=True,
-        location__point__dwithin=(location.point, D(m=radius_meters)),
-    ).first()
+    return (
+        Pin.objects.root_pins()
+        .filter(
+            profile_id=profile_id,
+            location__point__dwithin=(location.point, D(m=radius_meters)),
+        )
+        .first()
+    )
 
 
 def record_share_exposure(share: PinShare, *, source: ExposureSource = ExposureSource.SHARE_RECEIVED) -> LocationExposure | None:

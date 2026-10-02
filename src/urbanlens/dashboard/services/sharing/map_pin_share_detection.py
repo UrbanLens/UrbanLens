@@ -230,13 +230,16 @@ def _candidate_pins(sender: Profile, bounds: MapBounds):
     """Sender's own root pins within a bounding box, prefiltered on plain numeric fields."""
     from urbanlens.dashboard.models.pin.model import Pin
 
-    return Pin.objects.filter(
-        profile=sender,
-        parent_pin__isnull=True,
-        location__isnull=False,
-        location__latitude__range=(bounds.south, bounds.north),
-        location__longitude__range=(bounds.west, bounds.east),
-    ).select_related("location", "location__wiki", "wiki")
+    return (
+        Pin.objects.root_pins()
+        .filter(
+            profile=sender,
+            location__isnull=False,
+            location__latitude__range=(bounds.south, bounds.north),
+            location__longitude__range=(bounds.west, bounds.east),
+        )
+        .select_related("location", "location__wiki", "wiki")
+    )
 
 
 def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSGeometry]:

@@ -110,7 +110,7 @@ def _add_trip_activity(context: ToolContext, args: AddTripActivityArgs) -> dict[
     # `create_activity`'s call, via allow_add_activities and joined-ness.
     # The filter above matches through TripMembership with no status filter, so it includes
     # invited-not-joined members too.
-    pin = Pin.objects.filter(slug=args.pin_slug, profile=context.profile, parent_pin__isnull=True).select_related("location").first()
+    pin = Pin.objects.root_pins().filter(slug=args.pin_slug, profile=context.profile).select_related("location").first()
     if pin is None:
         return {"error": "No such pin (it must be one of the user's own pins)."}
 

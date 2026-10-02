@@ -297,7 +297,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                         # A profile can only ever have one root pin per location - if this candidate already has
                         # one, "Use this" can't relink the new pin there (it would collide); the client offers
                         # to merge instead.
-                        existing_pin = Pin.objects.filter(profile=request.user.profile, location=loc, parent_pin__isnull=True).exclude(pk=pin.pk).first()
+                        existing_pin = Pin.objects.root_pins().filter(profile=request.user.profile, location=loc).exclude(pk=pin.pk).first()
                         if existing_pin is not None:
                             entry["existing_pin_url"] = reverse("pin.details", kwargs={"pin_slug": existing_pin.slug or str(existing_pin.uuid)})
                             entry["existing_pin_name"] = existing_pin.effective_name

@@ -99,7 +99,7 @@ def wiki_named_by_location(location: Location) -> Wiki | None:
     wiki = Wiki.objects.existing_for_location(location)
     if wiki is None or wiki.location_id == location.pk:
         return wiki
-    if location.pins.filter(parent_pin__isnull=True).exists():
+    if location.pins.root_pins().exists():
         return wiki
     return None
 

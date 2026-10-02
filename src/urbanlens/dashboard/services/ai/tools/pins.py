@@ -41,7 +41,8 @@ def _search_pins(context: ToolContext, args: SearchPinsArgs) -> dict[str, Any]:
     if not query:
         return {"error": "query is required"}
     pins = (
-        Pin.objects.filter(profile=context.profile, parent_pin__isnull=True)
+        Pin.objects.root_pins()
+        .filter(profile=context.profile)
         .filter(Q(name__icontains=query) | Q(aliases__name__icontains=query) | Q(location__official_name__icontains=query))
         .annotate(has_visit=Exists(PinVisit.objects.filter(pin=OuterRef("pk"))))
         .select_related("location")
@@ -76,7 +77,7 @@ def _find_unvisited_pins(context: ToolContext, args: FindUnvisitedPinsArgs) -> d
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.visits.model import PinVisit
 
-    pins = Pin.objects.filter(profile=context.profile, parent_pin__isnull=True).annotate(has_visit=Exists(PinVisit.objects.filter(pin=OuterRef("pk")))).filter(has_visit=False).select_related("location")
+    pins = Pin.objects.root_pins().filter(profile=context.profile).annotate(has_visit=Exists(PinVisit.objects.filter(pin=OuterRef("pk")))).filter(has_visit=False).select_related("location")
     state = args.state.strip()
     if state:
         pins = pins.filter(location__administrative_area_level_1__iexact=state)

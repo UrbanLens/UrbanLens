@@ -352,7 +352,7 @@ class ExportFormatDownloadView(LoginRequiredMixin, View):
             raise Http404("Unknown export format.")
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pins = Pin.objects.filter(profile=profile, parent_pin__isnull=True).select_related("location").order_by("created")
+        pins = Pin.objects.root_pins().filter(profile=profile).select_related("location").order_by("created")
 
         writer, extension, content_type = EXPORT_FORMATS[fmt]
         content = writer(pins)

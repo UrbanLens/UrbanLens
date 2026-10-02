@@ -164,7 +164,7 @@ def naming_scope(location: Location | None) -> NamingScope:
     if location is None or not location.pk:
         return NamingScope.PARCEL
     pins = location.pins.all()
-    if pins.filter(parent_pin__isnull=True).exists():
+    if pins.root_pins().exists():
         return NamingScope.PARCEL
     if pins.exists():
         return NamingScope.BUILDING

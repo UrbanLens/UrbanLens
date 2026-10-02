@@ -130,7 +130,7 @@ def _common_location_ids(profiles: list[Profile]) -> set[int]:
 
     if not profiles:
         return set()
-    location_sets = [set(Pin.objects.filter(profile=profile, parent_pin__isnull=True, location__isnull=False).values_list("location_id", flat=True)) for profile in profiles]
+    location_sets = [set(Pin.objects.root_pins().filter(profile=profile, location__isnull=False).values_list("location_id", flat=True)) for profile in profiles]
     return set.intersection(*location_sets)
 
 
@@ -146,9 +146,9 @@ def _build_candidates(profiles: list[Profile], requester: Profile, exclude_locat
     sharing_profiles = [profile for profile in profiles if profile.external_apis_enabled]
     label_by_profile_id = {profile.id: f"Member {index + 1}" for index, profile in enumerate(sorted(sharing_profiles, key=lambda profile: profile.id))}
 
-    requester_pins = {pin.location_id: pin for pin in Pin.objects.filter(profile=requester, location_id__in=common_ids, parent_pin__isnull=True)}
+    requester_pins = {pin.location_id: pin for pin in Pin.objects.root_pins().filter(profile=requester, location_id__in=common_ids)}
     sharing_ids = [profile.id for profile in sharing_profiles]
-    pins: list[Pin] = list(Pin.objects.filter(location_id__in=common_ids, profile_id__in=sharing_ids, parent_pin__isnull=True).only("id", "location_id", "profile_id", "priority", "vulnerability", "danger"))
+    pins: list[Pin] = list(Pin.objects.root_pins().filter(location_id__in=common_ids, profile_id__in=sharing_ids).only("id", "location_id", "profile_id", "priority", "vulnerability", "danger"))
     visited_pin_ids = set(PinVisit.objects.filter(pin_id__in=[pin.id for pin in pins]).values_list("pin_id", flat=True))
 
     by_location: dict[int, list[Pin]] = {}

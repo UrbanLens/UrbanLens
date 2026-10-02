@@ -50,7 +50,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P29 | open | 2026-10-02 | 68 write routes have no test naming them; the 70 highest-risk now have behavioural tests, which found 17 bugs (fixed) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-18 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P41 | open | 2026-09-29 | The queryset API's unused half, by call graph: 100 methods deleted, and the only test-only survivors are D14's two fair-share inputs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-29 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |

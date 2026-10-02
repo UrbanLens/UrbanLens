@@ -400,7 +400,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 if new_parent_id is not None:
                     child.parent_pin_id = new_parent_id
                 else:
-                    other_root = Pin.objects.filter(profile_id=self.profile_id, location_id=child.location_id, parent_pin__isnull=True).exclude(pk=child.pk).first()
+                    other_root = Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=child.location_id).exclude(pk=child.pk).first()
                     child.parent_pin_id = other_root.pk if other_root is not None else None
                 child.save(update_fields=["parent_pin", "updated"])
                 promoted += 1
@@ -428,7 +428,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         grandparent_id = old_parent.parent_pin_id
 
         if grandparent_id is None:
-            if Pin.objects.filter(profile_id=self.profile_id, location_id=self.location_id, parent_pin__isnull=True).exclude(pk=self.pk).exists():
+            if Pin.objects.root_pins().filter(profile_id=self.profile_id, location_id=self.location_id).exclude(pk=self.pk).exists():
                 raise ValueError("Can't complete the swap - you already have a top-level pin at this pin's own location.")
             self.parent_pin = None
         else:

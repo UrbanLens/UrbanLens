@@ -218,7 +218,7 @@ def nestable_root_pins(pin: Pin) -> list[Pin]:
     # `location__wiki` because the dialog renders `effective_name` for every
     # candidate, and a candidate with no `name` of its own falls through to
     # `Location.display_name`, which reads the wiki.
-    candidates = Pin.objects.filter(profile_id=pin.profile_id, parent_pin__isnull=True, location__point__within=polygon).exclude(pk=pin.pk).select_related("location", "location__wiki").order_by("name")
+    candidates = Pin.objects.root_pins().filter(profile_id=pin.profile_id, location__point__within=polygon).exclude(pk=pin.pk).select_related("location", "location__wiki").order_by("name")
     # Nesting one of this pin's own ancestors beneath it would close a loop.
     lineage = Pin.objects.lineage_ids(pin)
     return [candidate for candidate in candidates[: MAX_RESTRUCTURE_ITEMS + 1] if candidate.pk not in lineage]

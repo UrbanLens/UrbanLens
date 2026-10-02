@@ -759,7 +759,7 @@ def accept_pin_suggestion(
         pin = matched_pin
     else:
         location = resolve_location_for_point(suggestion.latitude, suggestion.longitude, fetch_if_missing=fetch_if_missing)
-        pin = Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).select_related("location").first()
+        pin = Pin.objects.root_pins().filter(profile=profile, location=location).select_related("location").first()
         if pin is None:
             pin = Pin.objects.create(profile=profile, location=location)
         chosen_name = (name or "").strip() or suggestion.suggested_name

@@ -164,7 +164,7 @@ def create_pin_and_log_visit(
         raise ValueError("create_pin_and_log_visit requires coordinates (from the image or overrides)")
 
     location = resolve_location_for_point(lat, lng)
-    pin = Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).select_related("location").first()
+    pin = Pin.objects.root_pins().filter(profile=profile, location=location).select_related("location").first()
     if pin is None:
         pin = Pin.objects.create(profile=profile, location=location)
     if name and name.strip() and pin.name is None:
