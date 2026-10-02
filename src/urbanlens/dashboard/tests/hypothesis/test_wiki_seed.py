@@ -496,6 +496,25 @@ class WikipediaMatchArrivingAfterAMissTests(TestCase):
         self.assertTrue(LocationCache.objects.filter(location=self.location, source="wikipedia_media").exists())
 
 
+class ArticleImagesFetchedWhileTheMatchWasStaleTests(TestCase):
+    """An expired match reads as no match, so the images panel can cache "none" just before the same title is re-cached."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = _location()
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+        LocationCache.set(self.location, "wikipedia_media", {"items": []}, query_key="")
+
+    def test_re_caching_the_same_title_drops_the_empty_answer(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+
+        self.assertFalse(
+            LocationCache.objects.filter(location=self.location, source="wikipedia_media", query_key="").exists()
+        )
+
+
 class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
     """``tasks.ensure_wiki_for_location``: seed the article on wiki creation when a Wikipedia match was already cached for the location beforehand.
 
