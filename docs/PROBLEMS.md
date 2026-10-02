@@ -1615,7 +1615,7 @@ five off-tab panels. Laning those would delay the page itself, which is a differ
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
-`id: P56` · `status: open` · `updated: 2026-09-24` · `corrects a "zero violation reports" claim measured with the wrong browser API; also corrects its own "overlays are the blocker" claim now that P159 downloads pasted overlay URLs instead of referencing them live - the blocker is P165 (third-party thumbnails) now`
+`id: P56` · `status: open` · `updated: 2026-10-02` · `corrects a "zero violation reports" claim measured with the wrong browser API; also corrects its own "overlays are the blocker" claim now that P159 downloads pasted overlay URLs instead of referencing them live - the blocker is P165 (third-party thumbnails) now`
 
 Previously titled "`Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed
 to set it does not exist", and before that "Nuclei scan follow-ups (2026-08-28)".
@@ -1641,20 +1641,17 @@ regression test in `map-layers.ts`/`map-layers.test.ts`, not a live reference).
 So every scripted resource already passes, and the nine that do not are all `ACAO: *` and reachable
 with an attribute change. **That is not the blocker, and the entry was wrong about what was.**
 
-**The blocker is `img-src: https:`, but not from overlays anymore.** Map image overlays used to be
-a paste-any-URL feature, which is why this entry originally pointed at
-`_map_overlays_list.html`/`map-image-overlays.ts` as the reason `img-src` stayed wide open - as of
-2026-09-24 that is stale: a pasted overlay URL is now downloaded once and stored server-side rather
-than referenced live (P159), so overlays no longer need `https:` open at all. The live blocker is
-third-party thumbnails (P165): media-gallery, web-search, historical-map-sheet, and non-keyed
-satellite-imagery thumbnails all load from an open-ended set of provider hosts a viewer or REData
-picked, not the site. Under `require-corp` every such host that sends neither CORP nor CORS stops
-rendering, and that host set is unbounded by design the same way overlays' used to be. No
-inventory can close this, because the inventory is "whatever a provider was linked".
+**The open-ended host set that ruled `require-corp` out is gone; the tile vendors remain.** This
+entry once blamed pasted map overlays (stored server-side since P159) and then third-party
+thumbnails (served from this site's copies since P165) for keeping `img-src` at `https:`. Since
+2026-10-02 `img-src` is an explicit allowlist (`settings/base.py`, held by
+`test_csp_image_hosts.py`): the base-map tile vendors, the Maps JavaScript API's Google hosts and
+the vendor CDNs. What `require-corp` would still break is the tile vendors in the table above,
+which send no CORP and are requested without CORS. Not re-measured since 2026-09-05.
 
 That points at `Cross-Origin-Embedder-Policy: credentialless` rather than `require-corp`:
 credentialless sends no-cors subresource requests without credentials instead of demanding CORP, so
-a pasted image still loads. ~~Evaluating it - and its browser support, which is narrower - is the
+a vendor's tile still loads. ~~Evaluating it - and its browser support, which is narrower - is the
 next step~~ **- evaluated 2026-09-06, and it is deployed report-only.**
 
 **`credentialless` is the variant this app could enforce, and sending it costs nothing today.**
@@ -3786,62 +3783,51 @@ both ways for the e2e accounts. A second run finds nothing. 205 locations are le
 - `wiki_merge`'s lineage path (`place__parent_id`, `ancestors_of`) has no plausibility check of its own. It
   relies on no implausible place having children, which the ceiling and the repair ensure.
 
-## P165 — Third-party thumbnails load directly from provider hosts, leaking every viewer's IP and referrer to whichever host they pasted or REData named
+## P165 — Articles saved before 2026-09-30 name provider images in their source until `manage.py localize_article_images` runs on each deployment
 
-`id: P165` · `status: open` · `updated: 2026-09-30`
+`id: P165` · `status: open` · `updated: 2026-10-02` · `was "Third-party thumbnails load directly from provider hosts, leaking every viewer's IP and referrer"; every code item is done, and what remains is an ops step`
 
 **Ruled by Jess 2026-09-30:** download each thumbnail and cache it locally forever, served by UrbanLens, with a record of where it came from. That also covers a provider taking an asset offline. This is a different question from browser-direct geocoding (D25).
 
-**Partly fixed 2026-09-30.** `services/media/remote_copies.py` keeps a `RemoteImageCopy` row per remote image
-(source URL, provider, provider page, checksum, fetch time) and the page links `media-copy/<digest>/` instead of
-the provider. The first request downloads the source in the web process and the sandbox worker re-encodes and
-stores it (`render_remote_image_copy`); every later request is served from the stored file through the media
-gate's byte source, whether or not the provider still has it. The row is what authorises the fetch, so the
-endpoint cannot be pointed at an arbitrary URL; a failed download backs off from an hour to a week. A picture the
-provider replaces in place (a "Current" satellite export) is copied once a month, and earlier months are kept.
+**What remains: run `manage.py localize_article_images` on every deployment** (`--dry-run` first prints how
+many articles would change). Each changed article gets a new revision, "Images stored on this site". Not known to
+have run on any deployment. Until it runs, an article saved before 2026-09-30 still names its images by the provider's
+address in its source. Its rendering is already local, but the editor canvas, which is how every viewer sees an
+article, loads the source, and since 2026-10-02 `img-src` refuses those hosts: those images show broken in the
+editor until the command runs, rather than loading from the provider. So run it as part of the deploy that ships
+the `img-src` change. Wikipedia-seeded wiki articles are the likely bulk (not counted); a seeded Old State House
+article was measured hotlinking `thumb.wikimedia.org`, which answered 403 anyway.
 
-Now served from copies: all four sites below; the lightbox's full-size view of a gallery item
-(`data-media-view-url`; `data-media-url` stays the item's identity); the Wikipedia, Yelp, USGS topo, NPS and
-Nominatim panel images; global-search result images; the Flickr picker and album dialogs (the `remote_copy`
-template filter); web-search favicons; the Gravatar previews (a daily copy); every satellite and street-view
-slide; and every image in an article. Saving rewrites the article source, so the editor loads copies too, and
-rendering rewrites what it shows, which covers previews, old revisions and visit notes. Any `<img>` whose copy is
-still being made is retried by `media-thumb-fallback.js`.
+**What was done.** `services/media/remote_copies.py` keeps a `RemoteImageCopy` row per remote image (source URL,
+provider, provider page, checksum, fetch time) and the page links `media-copy/<digest>/`; the first request
+downloads the source and the sandbox worker re-encodes and keeps it (`docs/MEDIA_PIPELINE.md`, "Media previews").
+Every gallery, panel, search, picker, favicon, Gravatar preview, satellite and street-view image is served from a
+copy, and so is every image in an article: saving and the command rewrite the source
+(`services/wiki/articles.localize_article_images`), and rendering rewrites what it shows. Since 2026-10-02 the
+source rewrite covers reference-style images (`![a][ref]`, whose `[ref]: address` definition is rewritten) and
+addresses with parentheses, and keys each copy by the address rendering keys it by, so both find one copy.
 
-Still open:
+`img-src` is an explicit allowlist since 2026-10-02 (`settings/base.py`): the tile vendors in
+`frontend/ts/shared/map-layers.ts`'s `TILE_DEFS`, the Google hosts the Maps JavaScript API needs for
+SpotGuessr's Street View, and `unpkg.com`/`cdnjs.cloudflare.com` for images vendor stylesheets draw from beside
+themselves (leaflet.draw's toolbar sprite), plus a configured media origin, vendor mirror and vector-basemap
+style origins. `test_csp_image_hosts.py` reads every tile template out of the page code and fails when one's host
+is refused. Leaflet's marker images are served from this site's static files.
 
-- Articles saved before 2026-09-30 keep their remote addresses in the source until
-  `manage.py localize_article_images` runs; each changed article gets a new revision. Until then their display is
-  already local, because rendering rewrites it, but the editor still loads the host. The command has not been run on
-  any deployment yet. A seeded Old State House article was measured hotlinking `thumb.wikimedia.org`, which
-  answered 403.
-- Source rewriting skips reference-style images (`![a][ref]`) and addresses containing a parenthesis; only
-  rendering covers those.
-- `img-src` still carries `https:`. What else loads images from another host before it can go: base-map tiles
-  (the listed tile vendors), Google Maps imagery, and Leaflet's default marker images, which the browser fetched
-  from `unpkg.com` in the 2026-09-30 Chromium run. The `www.google.com` and `www.gravatar.com` entries have no
-  remaining user.
+**Left to rendering, and refused by `img-src` in the editor** (the source rewrite does not find them; how many
+real articles hold any was not counted):
 
-**As reported 2026-09-24** (all four sites below are now served from copies; kept for the history):
-`img-src`'s `https:` entry (`settings/base.py`, `_CSP_DIRECTIVES["img-src"]`) was wide open because
-several unrelated features each loaded a thumbnail straight from its provider's own host, in an
-`<img src>` the browser fetched directly rather than through UrbanLens:
+- a definition shared by an image and a link is rewritten, so that link then opens the copy;
+- an `<img>` with a `>` inside a quoted attribute, a definition whose address continues past a list item's indent,
+  and image syntax glued to a bare URL, which linkify swallows;
+- an image inside a heading changes that heading's anchor when it is rewritten, as it already did before.
 
-- **Media-gallery thumbnails** — dozens of providers (Mapillary, Flickr, iNaturalist, Smithsonian,
-  Library of Congress, Internet Archive, Panoramax, KartaView, Wikimedia, …) via `item.thumb_url`
-  in `templates/dashboard/partials/pins/pin_media_items.html`.
-- **Web-search result thumbnails** — `result.thumbnail` in
-  `templates/dashboard/pages/location/web_search.html`.
-- **REData historical-map sheet thumbnails** — `thumbnail_url` in
-  `templates/dashboard/partials/layout/_historical_maps_list.html`, one host per contributing
-  institution.
-- **Satellite-imagery slides for non-keyed providers** — `img_src = url` in
-  `plugins/builtin/satellite_imagery.py`.
+**Also now refused:** an `Image` row whose file never landed falls back to its `source_url`
+(`Image.display_url`/`thumb_url`), which is a provider's address, often its page rather than a picture. It used
+to load from the provider; now it shows as missing. Not counted on any deployment.
 
-Georeferenced map overlays were already off this list: a pasted overlay image is downloaded once and
-stored server-side (P159, resolved 2026-09-24). These four were what P56's COEP `require-corp` writeup
-named as its blocker. What still stands between `img-src` and a host allowlist is the "Still open"
-list above.
+**Not measured:** no browser has loaded the maps or SpotGuessr under the new `img-src` yet; the Google hosts are
+Google's documented list, not observed traffic.
 
 ## P167 — Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail
 
