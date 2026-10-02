@@ -29,30 +29,26 @@ import type {} from "leaflet-draw";
 // catalogue fetch has almost always already resolved by then.
 void registerRedataLayers();
 
-declare global {
-    interface Window {
-        SPOTGUESSR_URLS: {
-            start: string;
-            pins: string;
-            area_pin_count: string;
-            settings: string;
-            friends: string;
-            lobby: string;
-            invite: string;
-            join: string;
-            begin: string;
-            end: string;
-            round: string;
-            guess: string;
-            round_timeout: string;
-            photo_feedback: string;
-            chat_history: string;
-            summary: string;
-            session_id_sentinel: string;
-            round_id_sentinel: string;
-        };
-        SPOTGUESSR_LAST_CONFIG: LastConfig | null;
-    }
+/** The page's ``sg-urls`` island: every route, with sentinel ids for the client to substitute. */
+interface SpotguessrUrls {
+    start: string;
+    pins: string;
+    area_pin_count: string;
+    settings: string;
+    friends: string;
+    lobby: string;
+    invite: string;
+    join: string;
+    begin: string;
+    end: string;
+    round: string;
+    guess: string;
+    round_timeout: string;
+    photo_feedback: string;
+    chat_history: string;
+    summary: string;
+    session_id_sentinel: string;
+    round_id_sentinel: string;
 }
 
 // Mirrors services.spotguessr.session.GameConfig.to_dict().
@@ -175,7 +171,8 @@ interface ChatMessagePayload {
     created: string;
 }
 
-const urls = window.SPOTGUESSR_URLS;
+const urls: SpotguessrUrls = JSON.parse(document.getElementById("sg-urls")?.textContent || "{}");
+const lastConfig: LastConfig | null = JSON.parse(document.getElementById("sg-last-config")?.textContent || "null");
 // A true world view - both the area-restriction map and the guess map should start zoomed all the way out when nothing more specific.
 const DEFAULT_CENTER: L.LatLngExpression = [20, 0];
 const DEFAULT_ZOOM = 2;
@@ -1423,7 +1420,7 @@ function initEmptyState(): void {
 
 // Pre-fills the (still-closed) settings dialog from the profile's last-used settings, saved on every previous game start.
 function applyLastConfig(): void {
-    const config = window.SPOTGUESSR_LAST_CONFIG;
+    const config = lastConfig;
     if (!config) return;
 
     let nearestDifficulty: Difficulty = "medium";

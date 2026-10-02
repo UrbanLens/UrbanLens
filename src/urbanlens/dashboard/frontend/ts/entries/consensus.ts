@@ -16,27 +16,24 @@ void registerRedataLayers();
 
 declare const L: typeof import("leaflet");
 
-declare global {
-    interface Window {
-        CONSENSUS_URLS: {
-            friends: string;
-            start: string;
-            lobby: string;
-            invite: string;
-            join: string;
-            begin: string;
-            end: string;
-            round: string;
-            answer: string;
-            skip: string;
-            vote: string;
-            photo: string;
-            chat_history: string;
-            summary: string;
-            session_id_sentinel: string;
-            round_id_sentinel: string;
-        };
-    }
+/** The page's ``consensus-urls`` island: every route, with sentinel ids for the client to substitute. */
+interface ConsensusUrls {
+    friends: string;
+    start: string;
+    lobby: string;
+    invite: string;
+    join: string;
+    begin: string;
+    end: string;
+    round: string;
+    answer: string;
+    skip: string;
+    vote: string;
+    photo: string;
+    chat_history: string;
+    summary: string;
+    session_id_sentinel: string;
+    round_id_sentinel: string;
 }
 
 // Mirrors ConsensusFieldKind (models/consensus/model.py) - the registry key
@@ -144,7 +141,7 @@ interface ScoreboardEntry {
     total_points_this_session: number;
 }
 
-const urls = window.CONSENSUS_URLS;
+const urls: ConsensusUrls = JSON.parse(document.getElementById("consensus-urls")?.textContent || "{}");
 const DEFAULT_CENTER: L.LatLngExpression = [20, 0];
 const DEFAULT_ZOOM = 2;
 

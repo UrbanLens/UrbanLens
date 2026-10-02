@@ -163,9 +163,5 @@
 
 {{ urls|json_script:"trivia-urls" }}
 {{ last_config|json_script:"trivia-last-config" }}
-<script>
-    window.TRIVIA_URLS = JSON.parse(document.getElementById('trivia-urls').textContent);
-    window.TRIVIA_LAST_CONFIG = JSON.parse(document.getElementById('trivia-last-config').textContent);
-</script>
 <script type="module" src="{% static 'dashboard/js/trivia.js' %}"></script>
 {% endblock %}

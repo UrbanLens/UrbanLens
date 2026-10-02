@@ -10,6 +10,7 @@ from django.urls import NoReverseMatch, reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.features import grant_alpha_features
+from urbanlens.core.tests.inline_scripts import executable_blocks, inline_handlers, rendered_config
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
@@ -164,3 +165,38 @@ class GameFriendPickerViewTests(TestCase):
         for name in ("trivia.friends", "consensus.friends", "spotguessr.friends"):
             with self.subTest(route=name), self.assertRaises(NoReverseMatch):
                 reverse(name)
+
+
+class GamePagesRunNoInlineScriptTests(TestCase):
+    """Each game's routes reach its bundle as a JSON island; the page itself runs nothing inline."""
+
+    ISLANDS: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("spotguessr", "sg-urls"),
+        ("trivia", "trivia-urls"),
+        ("consensus", "consensus-urls"),
+    )
+
+    def setUp(self) -> None:
+        user = baker.make(User)
+        grant_alpha_features(user)
+        self.client.force_login(user)
+
+    def test_each_game_page_hands_its_routes_over_as_json(self) -> None:
+        for url_name, island in self.ISLANDS:
+            with self.subTest(game=url_name):
+                content = self.client.get(reverse(url_name)).content
+                urls = rendered_config(content, island)
+                assert urls is not None
+                self.assertEqual(urls["session_id_sentinel"], "999999999")
+                self.assertIn("/999999999/", urls["lobby"])
+                self.assertEqual(urls["friends"], reverse("games.friends"))
+                self.assertEqual((executable_blocks(content), inline_handlers(content)), ([], []))
+
+    def test_consensus_round_routes_carry_both_sentinels(self) -> None:
+        urls = rendered_config(self.client.get(reverse("consensus")).content, "consensus-urls")
+        assert urls is not None
+        self.assertEqual(urls["round_id_sentinel"], "888888888")
+        for key in ("answer", "skip", "vote", "photo"):
+            with self.subTest(route=key):
+                self.assertIn("/999999999/", urls[key])
+                self.assertIn("/888888888/", urls[key])

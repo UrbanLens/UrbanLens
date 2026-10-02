@@ -8,30 +8,30 @@ import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 
-declare global {
-    interface Window {
-        TRIVIA_URLS: {
-            start: string;
-            friends: string;
-            settings: string;
-            lobby: string;
-            invite: string;
-            join: string;
-            begin: string;
-            end: string;
-            leave: string;
-            kick: string;
-            round: string;
-            answer: string;
-            chat_history: string;
-            summary: string;
-            vote: string;
-            session_id_sentinel: string;
-            round_id_sentinel: string;
-            question_id_sentinel: string;
-        };
-        TRIVIA_LAST_CONFIG: { difficulty?: number } | null;
-    }
+/** The page's ``trivia-urls`` island: every route, with sentinel ids for the client to substitute. */
+interface TriviaUrls {
+    start: string;
+    friends: string;
+    settings: string;
+    lobby: string;
+    invite: string;
+    join: string;
+    begin: string;
+    end: string;
+    leave: string;
+    kick: string;
+    round: string;
+    answer: string;
+    chat_history: string;
+    summary: string;
+    vote: string;
+    session_id_sentinel: string;
+    round_id_sentinel: string;
+    question_id_sentinel: string;
+}
+
+interface TriviaLastConfig {
+    difficulty?: number;
 }
 
 interface RoundPayload {
@@ -119,7 +119,8 @@ const PANEL_NAME_BY_ID: Record<string, string> = {
     "trivia-summary-panel": "summary",
 };
 
-const urls = window.TRIVIA_URLS;
+const urls: TriviaUrls = JSON.parse(document.getElementById("trivia-urls")?.textContent || "{}");
+const lastConfig: TriviaLastConfig | null = JSON.parse(document.getElementById("trivia-last-config")?.textContent || "null");
 const pageEl = document.querySelector<HTMLElement>(".trivia-page");
 const myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
 
@@ -852,8 +853,8 @@ function init(): void {
         void postForm(urls.settings, { show_ratings_to_friends: ratingsToggle.checked ? "on" : "off" });
     });
 
-    if (window.TRIVIA_LAST_CONFIG?.difficulty !== undefined) {
-        el<HTMLInputElement>("trivia-difficulty").value = String(window.TRIVIA_LAST_CONFIG.difficulty);
+    if (lastConfig?.difficulty !== undefined) {
+        el<HTMLInputElement>("trivia-difficulty").value = String(lastConfig.difficulty);
     }
 
     initFriendPicker();
