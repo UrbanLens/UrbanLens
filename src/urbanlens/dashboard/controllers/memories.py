@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMember
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.core.bulk_outcome import run_each
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
 from urbanlens.dashboard.services.core.units import km_to_display, unit_label
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
@@ -750,11 +751,11 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
             raise Http404
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            body = json.loads(request.body)
-        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            body = posted_json_object(request)
+        except MalformedBodyError:
             return JsonResponse({"error": "Invalid request body."}, status=400)
 
-        raw_slugs = body.get("pin_slugs") if isinstance(body, dict) else None
+        raw_slugs = body.get("pin_slugs")
         if not isinstance(raw_slugs, list) or not raw_slugs:
             return JsonResponse({"error": "No pins provided."}, status=400)
         if len(raw_slugs) > _MAX_BULK_VISITS:
@@ -765,7 +766,7 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
 
         visited_date = timezone.now().date()
         if action == "log":
-            raw_date = body.get("visited_date") if isinstance(body, dict) else None
+            raw_date = body.get("visited_date")
             if raw_date:
                 try:
                     visited_date = datetime.date.fromisoformat(raw_date)

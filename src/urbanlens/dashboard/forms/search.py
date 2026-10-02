@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import partial
-import json
 from typing import TYPE_CHECKING, Any
 
 from django import forms
@@ -9,6 +8,7 @@ from django import forms
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.custom_fields.custom_field_references import resolve_reference
 
 if TYPE_CHECKING:
@@ -217,8 +217,8 @@ class SearchForm(forms.Form):
         if not raw:
             return None
         try:
-            geojson = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
+            geojson = decode_json(raw)
+        except MalformedBodyError:
             return None
         from urbanlens.dashboard.services.geo.geo import parse_multipolygon_geojson
 
@@ -238,7 +238,7 @@ class SearchForm(forms.Form):
         if not raw:
             return None
         try:
-            groups = json.loads(raw)
+            groups = decode_json(raw)
             if not isinstance(groups, list):
                 return None
             from django.conf import settings
@@ -269,5 +269,5 @@ class SearchForm(forms.Form):
                         group["min_priority"] = int(g["min_priority"])
                     validated.append(group)
             return validated or None
-        except (json.JSONDecodeError, TypeError, ValueError):
+        except (TypeError, ValueError):
             return None

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -11,6 +10,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
 
+from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -205,7 +205,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
-            data = json.loads(request.body or b"{}")
+            data = posted_json_object(request)
             source = str(data["source"])[:30]
             url = str(data.get("url") or "")
             is_relevant = data.get("is_relevant")

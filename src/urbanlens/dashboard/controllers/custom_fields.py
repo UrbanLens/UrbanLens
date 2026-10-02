@@ -42,7 +42,8 @@ from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, CapacityExceededError, reserve
-from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.numbers import bounded_float_or_none, safe_int_or_none
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
 from urbanlens.dashboard.services.core.text_limits import MAX_CUSTOM_FIELD_TEXT_LENGTH
 from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS, capped_reference_choices, reference_choices
 
@@ -468,12 +469,12 @@ class CustomFieldPositionView(LoginRequiredMixin, View):
         profile = _profile_for(request)
         field = get_object_or_404(CustomField, id=field_id, profile=profile)
         try:
-            body = json.loads(request.body or b"{}")
-            left = float(body.get("left"))
-            top = float(body.get("top"))
-        except (json.JSONDecodeError, TypeError, ValueError):
+            body = posted_json_object(request)
+        except MalformedBodyError:
             return HttpResponse("Invalid position.", status=400)
-        if not (math.isfinite(left) and math.isfinite(top)):
+        left = bounded_float_or_none(body.get("left"), low=-math.inf, high=math.inf)
+        top = bounded_float_or_none(body.get("top"), low=-math.inf, high=math.inf)
+        if left is None or top is None:
             return HttpResponse("Invalid position.", status=400)
 
         config = dict(field.config or {})

@@ -20,7 +20,7 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from urbanlens.dashboard.external_api.fields import IconField, LinkUrlField
+from urbanlens.dashboard.external_api.fields import IconField, JSONField, LinkUrlField
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.aliases.model import AliasType
@@ -1080,10 +1080,10 @@ class PinListWriteSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
     description = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PIN_LIST_DESCRIPTION_LENGTH)
     is_smart = serializers.BooleanField(required=False)
-    smart_filter = serializers.JSONField(required=False, allow_null=True, help_text=CRITERIA_HELP_TEXT)
+    smart_filter = JSONField(required=False, allow_null=True, help_text=CRITERIA_HELP_TEXT)
     #: A GeoJSON Polygon or MultiPolygon. Converted to a MultiPolygon on the way in (see
     #: services.geo.geo.parse_multipolygon_geojson), so a client may submit either.
-    smart_boundary = serializers.JSONField(required=False, allow_null=True)
+    smart_boundary = JSONField(required=False, allow_null=True)
     #: Point this list at one of the caller's saved filters: its criteria are copied into smart_filter, and
     #: later edits to that filter resync this list. Null detaches the list from its source.
     source_saved_filter_uuid = serializers.UUIDField(required=False, allow_null=True)
@@ -1252,7 +1252,7 @@ class SavedFilterWriteSerializer(serializers.Serializer):
     icon = IconField(required=False, allow_blank=True, max_length=64)
     color = serializers.CharField(required=False, allow_blank=True, max_length=20)
     opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
-    criteria = serializers.JSONField(required=False, help_text=CRITERIA_HELP_TEXT)
+    criteria = JSONField(required=False, help_text=CRITERIA_HELP_TEXT)
     order = serializers.IntegerField(required=False, min_value=DB_INTEGER_MIN, max_value=DB_INTEGER_MAX)
 
     def validate_color(self, value):

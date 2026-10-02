@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 from webauthn import (
@@ -27,6 +27,7 @@ from webauthn.helpers.structs import (
 )
 
 from urbanlens.dashboard.models.account import WebAuthnCredential
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -169,6 +170,24 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
     return _with_prf_extension(options_to_json(options))
 
 
+def _decoded_credential(credential_json: str) -> dict[str, Any]:
+    """Decode a ceremony response, which must be an object; the library's own decode lets ``RecursionError`` out.
+
+    Args:
+        credential_json: The raw JSON the browser posted.
+
+    Returns:
+        The decoded response, in the form the library accepts in place of the text.
+
+    Raises:
+        MalformedBodyError: Not JSON, nested too deeply to decode, or not an object.
+    """
+    credential = decode_json(credential_json)
+    if not isinstance(credential, dict):
+        raise MalformedBodyError("The credential response must be a JSON object.")
+    return credential
+
+
 def verify_and_save_registration(request: HttpRequest, user: User, credential_json: str, name: str = "", *, login_factor: bool = True) -> WebAuthnCredential:
     """Verify a completed registration ceremony and persist the new credential.
 
@@ -191,13 +210,14 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
         raise RegistrationNotPendingError(f"no registration challenge in session for user {user.pk}")
 
     try:
+        credential = _decoded_credential(credential_json)
         verified = verify_registration_response(
-            credential=credential_json,
+            credential=credential,
             expected_challenge=base64url_to_bytes(challenge),
             expected_rp_id=_rp_id(request),
             expected_origin=_origin(request),
         )
-        transports = [t.value for t in (parse_registration_credential_json(credential_json).response.transports or [])]
+        transports = [t.value for t in (parse_registration_credential_json(credential).response.transports or [])]
     except (InvalidRegistrationResponse, InvalidJSONStructure, KeyError, ValueError) as exc:
         logger.warning("WebAuthn registration failed for user %s: %s", user.pk, exc)
         raise RegistrationVerificationError(f"registration verification failed for user {user.pk}: {exc}") from exc
@@ -281,8 +301,9 @@ def verify_authentication(request: HttpRequest, user: User, credential_json: str
         raise AuthenticationNotPendingError(f"no authentication challenge in session for user {user.pk}")
 
     try:
-        raw_id = base64url_to_bytes(json.loads(credential_json)["rawId"])
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        credential = _decoded_credential(credential_json)
+        raw_id = base64url_to_bytes(credential["rawId"])
+    except (KeyError, TypeError, ValueError) as exc:
         raise MalformedCredentialResponseError(f"could not parse rawId from credential response for user {user.pk}: {exc}") from exc
 
     try:
@@ -295,13 +316,15 @@ def verify_authentication(request: HttpRequest, user: User, credential_json: str
 
     try:
         verified = verify_authentication_response(
-            credential=credential_json,
+            credential=credential,
             expected_challenge=base64url_to_bytes(challenge),
             expected_rp_id=_rp_id(request),
             expected_origin=_origin(request),
             credential_public_key=bytes(stored.public_key),
             credential_current_sign_count=stored.sign_count,
         )
+    except InvalidJSONStructure as exc:
+        raise MalformedCredentialResponseError(f"credential response for user {user.pk} is missing a required field: {exc}") from exc
     except InvalidAuthenticationResponse as exc:
         logger.warning("WebAuthn authentication failed for user %s: %s", user.pk, exc)
         raise AuthenticationVerificationError(f"authentication verification failed for user {user.pk}: {exc}") from exc

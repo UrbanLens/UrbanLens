@@ -21,10 +21,30 @@ FORM_CONTENT_TYPES = frozenset({"multipart/form-data", "application/x-www-form-u
 
 
 class MalformedBodyError(BadRequest, ValueError):
-    """A body that is not a JSON object. Django answers it with a 400.
+    """Posted JSON that does not decode, or is not the shape asked for. Django answers it with a 400.
 
     A ``ValueError`` as well, so a view that already catches one for undecodable JSON answers this the same way.
     """
+
+
+def decode_json(raw: str | bytes) -> Any:
+    """Decode client-supplied JSON of any shape: a body, a form field, a query parameter or a WebSocket frame.
+
+    ``json.loads`` raises ``RecursionError``, not a ``ValueError``, on input nested past the interpreter's limit.
+
+    Args:
+        raw: The JSON text.
+
+    Returns:
+        The decoded value.
+
+    Raises:
+        MalformedBodyError: *raw* is not JSON, or nests too deeply to decode.
+    """
+    try:
+        return json.loads(raw)
+    except (ValueError, RecursionError) as exc:
+        raise MalformedBodyError("The request body is not valid JSON.") from exc
 
 
 def posted_json_object(request: HttpRequest) -> dict[str, Any]:
@@ -41,10 +61,7 @@ def posted_json_object(request: HttpRequest) -> dict[str, Any]:
     """
     if request.content_type in FORM_CONTENT_TYPES or not request.body:
         return {}
-    try:
-        data = json.loads(request.body)
-    except (ValueError, RecursionError) as exc:
-        raise MalformedBodyError("The request body is not valid JSON.") from exc
+    data = decode_json(request.body)
     if not isinstance(data, dict):
         raise MalformedBodyError("The request body must be a JSON object.")
     return data

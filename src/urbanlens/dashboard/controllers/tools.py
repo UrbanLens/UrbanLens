@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import json
 import logging
 import os
 from typing import Any
@@ -22,6 +21,7 @@ from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core import single_flight
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
 from urbanlens.dashboard.services.import_export.export import (
     REGISTERED_EXPORT_TYPES,
     VALID_EXPORT_TYPES,
@@ -606,11 +606,11 @@ class PhotoLocationScanUploadView(LoginRequiredMixin, View):
         if not visit_logging_allowed(profile):
             return JsonResponse({"error": "Visit-history tracking is turned off."}, status=403)
         try:
-            body = json.loads(request.body)
-        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            body = posted_json_object(request)
+        except MalformedBodyError:
             return JsonResponse({"error": "Invalid request body."}, status=400)
 
-        clusters = body.get("clusters") if isinstance(body, dict) else None
+        clusters = body.get("clusters")
         if not isinstance(clusters, list) or not clusters:
             return JsonResponse({"error": "No location clusters provided."}, status=400)
         if len(clusters) > _MAX_CLUSTERS_PER_REQUEST:

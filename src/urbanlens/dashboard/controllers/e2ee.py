@@ -5,7 +5,6 @@ Blobs are encrypted client-side; views validate shape and store.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -30,6 +29,7 @@ from urbanlens.dashboard.models.e2ee import ConversationKey, E2EEPasskeyWrap, Me
 from urbanlens.dashboard.models.e2ee.key_bundle import DEFAULT_KDF_MEMLIMIT, DEFAULT_KDF_OPSLIMIT
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.credential_revocation import PasswordChangeKind, revoke_credentials_on_password_change
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
 from urbanlens.dashboard.services.messaging.direct_messages import conversation_reachable
 from urbanlens.dashboard.services.security.e2ee import (
     MAX_PUBLIC_KEY_LENGTH,
@@ -83,10 +83,9 @@ def _json_body(request: HttpRequest | Request) -> dict[str, Any] | None:
             return None
         return data if isinstance(data, dict) else None
     try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        return posted_json_object(request)
+    except MalformedBodyError:
         return None
-    return data if isinstance(data, dict) else None
 
 
 def _require_current_password_proof(user: Any, data: dict[str, Any]) -> Response | None:

@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.bulk_outcome import run_each
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pins.pin_suggestions import accept_pin_suggestion, pending_suggestions_for_profile, reject_pin_suggestion
 
@@ -248,11 +249,11 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
             raise Http404
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            body = json.loads(request.body)
-        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            body = posted_json_object(request)
+        except MalformedBodyError:
             return JsonResponse({"error": "Invalid request body."}, status=400)
 
-        raw_ids = body.get("suggestion_ids") if isinstance(body, dict) else None
+        raw_ids = body.get("suggestion_ids")
         if not isinstance(raw_ids, list) or not raw_ids:
             return JsonResponse({"error": "No suggestion ids provided."}, status=400)
         if len(raw_ids) > _MAX_BULK_SUGGESTIONS:

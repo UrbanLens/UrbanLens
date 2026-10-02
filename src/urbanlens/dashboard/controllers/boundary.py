@@ -11,7 +11,6 @@ shown value is being refreshed in the background "boundaries": { "property": {"p
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +24,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
 from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
 from urbanlens.dashboard.services.geo.wiki_boundary_edits import save_wiki_boundary
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
@@ -233,10 +233,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
-            body = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError, AttributeError):
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-        if not isinstance(body, dict):
+            body = posted_json_object(request)
+        except MalformedBodyError:
             return JsonResponse({"error": "Invalid request body"}, status=400)
         boundary_type = _parse_boundary_type(body.get("boundary_type"))
         if boundary_type is None:
