@@ -19,9 +19,12 @@ from urbanlens.core.testing_network import (
     verify_external_network_blocked,
 )
 from urbanlens.core.tests.ai_guard import patched_ai_gateway
+from urbanlens.core.tests.database_role_guard import refusal_for_role
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from pytest_django.plugin import DjangoDbBlocker
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +83,17 @@ def _configure_hypothesis() -> None:
 
 _disable_hypothesis_example_patching()
 _configure_hypothesis()
+
+
+@pytest.fixture(scope="session")
+def django_db_modify_db_settings(django_db_modify_db_settings_parallel_suffix: None, django_db_blocker: DjangoDbBlocker) -> None:  # noqa: ARG001
+    """Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE`` (P130)."""
+    from django.db import connection
+
+    with django_db_blocker.unblock():
+        refusal = refusal_for_role(connection)
+    if refusal is not None:
+        pytest.exit(refusal, returncode=4)
 
 
 @pytest.fixture(scope="session", autouse=True)

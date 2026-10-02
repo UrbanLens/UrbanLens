@@ -19833,3 +19833,23 @@ outranks every `.fp-*` colour, so in the light theme the panel's select, date an
 inputs and options to the colours they already had in the dark theme, with `color-scheme: dark`; `.fp-select`
 takes the light scheme for its highlight row. The spec's last test checks the panel's controls draw the same in
 both themes.
+
+## RESOLVED 2026-10-02: `docker exec <app> pytest` failed deep in CREATE DATABASE; it now stops at once and names `bin/run_tests.sh`
+
+`id: P130` · `status: fixed` · `resolved: 2026-10-02`
+
+`docker exec <app> pytest` failed several layers down in `CREATE DATABASE`, because each app container logs in
+as its own per-tier role and D11 keeps those roles from creating databases. That restriction is deliberate (R29,
+`docs/notes/database-roles.md`), and `bin/run_tests.sh` runs as the owner in the test-runner container, so the
+fix is the message, not the grant.
+
+`src/urbanlens/conftest.py` overrides pytest-django's `django_db_modify_db_settings`, which runs before any test
+database is created. It asks Postgres whether the current role can create databases (`rolcreatedb OR rolsuper`)
+and, if not, stops the run with the role's name and `bin/run_tests.sh`. A database it cannot reach is left to
+fail as before. `core/tests/test_database_role_guard.py` covers the check. Verified 2026-10-02: in
+`urbanlens_development_main_app` a DB test now stops at once with "The database role 'ul_web' cannot create a
+test database: ... Run tests in the test-runner container with bin/run_tests.sh", and runs through
+`bin/run_tests.sh` (`postgres` role, xdist included) are unchanged.
+
+Left for Jess: `CLAUDE.local.md` still gives `docker exec urbanlens_development_main_app ... pytest` as the way to
+run tests. It is outside this tree and is not edited here.
