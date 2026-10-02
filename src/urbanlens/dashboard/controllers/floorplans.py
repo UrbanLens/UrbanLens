@@ -89,11 +89,20 @@ def _parse_bbox(raw: str | None) -> tuple[float, float, float, float] | None:
     return (min_lng, min_lat, max_lng, max_lat)
 
 
-def _parse_date(raw: str | None) -> datetime.date | None:
-    if not raw:
+def _parse_date(raw: object) -> datetime.date | None:
+    if not raw or not isinstance(raw, str):
         return None
     try:
         return datetime.date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _parse_uuid(raw: object) -> uuid.UUID | None:
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        return uuid.UUID(raw)
     except ValueError:
         return None
 
@@ -165,9 +174,9 @@ class FloorplanJsonView(LoginRequiredMixin, View):
             # place-backed one below resolves to None when nothing matches.
             own_document = {**document_for(own), "origin": "local", "versions": []}
             return JsonResponse(own_document)
-        version_uuid = request.GET.get("version") or ""
-        if version_uuid:
-            document = _document_for_version(place, pin.profile, version_uuid)
+        if request.GET.get("version"):
+            version_uuid = _parse_uuid(request.GET["version"])
+            document = _document_for_version(place, pin.profile, version_uuid) if version_uuid else None
         else:
             document = resolve_document(place, profile=pin.profile, on_date=_parse_date(request.GET.get("date")))
         if document is None:
@@ -196,7 +205,7 @@ def _version_list(place: Place, profile) -> list[dict]:
     ]
 
 
-def _document_for_version(place: Place, profile, version_uuid: str) -> dict | None:
+def _document_for_version(place: Place, profile, version_uuid: uuid.UUID) -> dict | None:
     """One specific version of the user's own plan, or None."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.services.floorplans.serialization import document_for
@@ -231,12 +240,12 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
         if place is None:
             return HttpResponse(status=204)
 
-        version_uuid = request.GET.get("version") or ""
-        if version_uuid:
+        if request.GET.get("version"):
+            version_uuid = _parse_uuid(request.GET["version"])
             # A specific version's uuid may name the caller's own plan or a published one - same fallback as the
             # unversioned lookup below, just pinned to one exact row instead of "current".
-            floorplan = Floorplan.objects.filter(place=place, profile=pin.profile, uuid=version_uuid, wiki__isnull=True).first()
-            if floorplan is None and place_visible_to(place, pin.profile):
+            floorplan = Floorplan.objects.filter(place=place, profile=pin.profile, uuid=version_uuid, wiki__isnull=True).first() if version_uuid else None
+            if floorplan is None and version_uuid and place_visible_to(place, pin.profile):
                 floorplan = Floorplan.objects.filter(place=place, uuid=version_uuid, wiki__isnull=False).first()
         else:
             # Local-then-community, mirroring resolve_document() - a published plan must be reachable here too,
@@ -305,13 +314,19 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "Invalid JSON."}, status=400)
         if not isinstance(document, dict):
             return JsonResponse({"ok": False, "error": "Expected a document object."}, status=400)
+        version_uuid = _parse_uuid(document.get("uuid"))
+        if document.get("uuid") and version_uuid is None:
+            return JsonResponse({"ok": False, "error": "uuid must name a plan version."}, status=400)
+        valid_from = _parse_date(document.get("valid_from"))
+        if document.get("valid_from") and valid_from is None:
+            return JsonResponse({"ok": False, "error": "valid_from must be YYYY-MM-DD."}, status=400)
 
         floorplan = floorplan_for_editing(
             place,
             pin.profile,
             pin=pin,
-            version_uuid=str(document.get("uuid") or ""),
-            on_date=_parse_date(document.get("valid_from")),
+            version_uuid=str(version_uuid or ""),
+            on_date=valid_from,
             allow_community=bool(document.get("edit_community")),
         )
         # A wiki-owned row is shared: parenting it to whoever happened to save it next would hand one profile's
@@ -367,10 +382,7 @@ class FloorplanPublishView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "This pin has no single building."}, status=400)
 
         fields = posted_fields(request)
-        try:
-            version_uuid: uuid.UUID | None = uuid.UUID(str(fields.get("version") or fields.get("uuid")))
-        except ValueError:
-            version_uuid = None
+        version_uuid = _parse_uuid(fields.get("version") or fields.get("uuid"))
         floorplan = Floorplan.objects.filter(place=place, uuid=version_uuid, profile=pin.profile, wiki__isnull=True).first() if version_uuid else None
         if floorplan is None:
             return JsonResponse({"ok": False, "error": "Save your floorplan before publishing it."}, status=404)
