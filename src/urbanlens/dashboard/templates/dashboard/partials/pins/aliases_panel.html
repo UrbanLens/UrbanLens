@@ -6,8 +6,7 @@
         <span>Aliases {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id=explainer_id %}</span>
         {% if aliases %}<span class="badge">{{ aliases|length }}</span>{% endif %}
         {% if show_header_add_button %}
-        <button type="button" class="btn btn--icon-sm" title="Add alias"
-                onclick="var p=this.closest('.aliases-panel'); p.classList.add('is-adding'); p.querySelector('.alias-add-input').focus();">
+        <button type="button" class="btn btn--icon-sm" title="Add alias" data-panel-action="alias-add">
             <i class="material-symbols-outlined">add</i>
         </button>
         {% endif %}

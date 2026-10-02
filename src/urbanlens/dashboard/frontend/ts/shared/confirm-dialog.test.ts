@@ -38,7 +38,6 @@ const realFetch = globalThis.fetch;
 const realGlobals = {
     confirmDialog: window.confirmDialog,
     deletePinCascade: window.deletePinCascade,
-    urbanlensConfirmExternalLink: window.urbanlensConfirmExternalLink,
 };
 
 beforeEach(() => {
@@ -182,10 +181,53 @@ describe("deletePinCascade", () => {
 });
 
 describe("installGlobalConfirmDialog", () => {
-    test("exposes the three globals the templates call from onclick=", () => {
+    test("exposes confirmDialog and deletePinCascade", () => {
         installGlobalConfirmDialog();
         expect(typeof window.confirmDialog).toBe("function");
         expect(typeof window.deletePinCascade).toBe("function");
-        expect(typeof window.urbanlensConfirmExternalLink).toBe("function");
+    });
+
+    describe("a link marked data-confirm-external", () => {
+        const realOpen = window.open;
+        let opened: unknown[][] = [];
+
+        beforeEach(() => {
+            installGlobalConfirmDialog();
+            opened = [];
+            window.open = ((...args: unknown[]) => {
+                opened.push(args);
+                return null;
+            }) as typeof window.open;
+            document.body.insertAdjacentHTML("beforeend", `<a id="ext" href="https://example.com/x" data-confirm-external><span id="label">x</span></a><a id="plain" href="https://example.com/y">y</a>`);
+        });
+
+        afterEach(() => {
+            window.open = realOpen;
+        });
+
+        function clickOn(id: string): MouseEvent {
+            const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+            document.getElementById(id)?.dispatchEvent(event);
+            return event;
+        }
+
+        test("asks first, and opens it in a new tab once confirmed", async () => {
+            expect(clickOn("label").defaultPrevented).toBe(true);
+            await clickWhenTitled("Leaving this site", "confirm-dialog-ok");
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(opened).toEqual([["https://example.com/x", "_blank", "noopener"]]);
+        });
+
+        test("goes nowhere when declined", async () => {
+            clickOn("ext");
+            await clickWhenTitled("Leaving this site", "confirm-dialog-cancel");
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(opened).toEqual([]);
+        });
+
+        test("leaves any other link alone", () => {
+            expect(clickOn("plain").defaultPrevented).toBe(false);
+            expect(document.getElementById("confirm-dialog-title")?.textContent).toBe("");
+        });
     });
 });

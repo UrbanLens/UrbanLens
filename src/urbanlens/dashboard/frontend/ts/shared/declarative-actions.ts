@@ -16,6 +16,8 @@
  *   one's value in that input and marks it ``aria-pressed``.
  * - ``data-readout="<id>"`` on an input shows its value in that element as it changes.
  * - ``data-toggles="<id>"`` on a button shows or hides that panel, marking the button ``.is-open``.
+ * - ``data-empties="<id>"`` on a button empties that element.
+ * - ``data-autosubmit`` on a file input submits its form once a file is chosen.
  * - ``data-placeholder-ideas="<JSON island id>"`` on a field suggests another of the island's ideas as its placeholder
  *   each time its dialog closes.
  */
@@ -88,6 +90,8 @@ function onClick(event: MouseEvent): void {
         toggler.classList.toggle("is-open", !panel.hidden);
         toggler.setAttribute("aria-expanded", String(!panel.hidden));
     }
+    const emptier = target?.closest<HTMLElement>("[data-empties]");
+    if (emptier) document.getElementById(emptier.dataset.empties ?? "")?.replaceChildren();
 }
 
 function pick(choice: HTMLElement): void {
@@ -147,6 +151,7 @@ function syncEnabledBy(): void {
 function onChange(event: Event): void {
     const target = event.target;
     if (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio")) syncEnabledBy();
+    if (target instanceof HTMLInputElement && target.hasAttribute("data-autosubmit") && target.files?.length) target.form?.requestSubmit();
     if (target instanceof HTMLSelectElement && target.hasAttribute("data-navigate") && target.value && isSameOrigin(target.value)) window.location.assign(target.value);
 }
 

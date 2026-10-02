@@ -2,6 +2,7 @@
  * Opens the shared photo lightbox (`_photo_lightbox.html`) from a Media-gallery tile (`pin_media_items.html`).
  */
 
+import { delegateActions } from "./delegated-actions";
 import { observeProcessingTiles, settleProcessingThumb, type ProcessingItem } from "./photo-processing";
 import type { LightboxItem } from "./photo-tile";
 
@@ -66,6 +67,15 @@ export function openMediaLightbox(thumbBtn: HTMLElement): void {
     const list = visible.map((el) => mediaLightboxItemFromElement(el, relevanceEnabled));
     const idx = visible.indexOf(itemEl);
     window.galleryOpenLightboxItem?.(list, idx < 0 ? 0 : idx);
+}
+
+let openerInstalled = false;
+
+/** A tile's ``data-media-action="lightbox"`` button opens the lightbox on it. */
+export function installMediaLightboxOpener(): void {
+    if (openerInstalled) return;
+    openerInstalled = true;
+    delegateActions(document, "media-action", { lightbox: (button) => openMediaLightbox(button) });
 }
 
 /** Swap a "My Photos" placeholder tile (`pin_media_items.html`) for the settled photo. */

@@ -34,7 +34,7 @@
         <i class="material-symbols-outlined">check_circle</i>
     </button>
     {% endif %}
-    <button type="button" class="media-item-thumb-btn" onclick="window.mediaOpenLightbox(this)"
+    <button type="button" class="media-item-thumb-btn" data-media-action="lightbox"
             {% if entry.processing %}disabled data-processing-open aria-label="{{ item.caption|default:'Photo' }}: {% if entry.processing == 'failed' %}This photo couldn't be processed{% else %}Processing…{% endif %}"{% endif %}>
         <span class="media-item-source">{{ item.source }}</span>
         {% if entry.processing %}
@@ -55,7 +55,7 @@
     {# Community wiki: thumbs are votes (net score shown), applied to every source including shared photos. #}
     <div class="media-item-actions media-item-actions--wiki">
         <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"
-           target="_blank" rel="noopener noreferrer" title="Open source" onclick="event.stopPropagation()">
+           target="_blank" rel="noopener noreferrer" title="Open source">
             <i class="material-symbols-outlined">open_in_new</i>
         </a>
         <button type="button" class="media-item-action-btn media-item-vote-up-btn{% if entry.is_relevant == True %} is-active{% endif %}"
@@ -71,7 +71,7 @@
     {% elif source_key != "photos" %}
     <div class="media-item-actions">
         <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"
-           target="_blank" rel="noopener noreferrer" title="Open source" onclick="event.stopPropagation()">
+           target="_blank" rel="noopener noreferrer" title="Open source">
             <i class="material-symbols-outlined">open_in_new</i>
         </a>
         <button type="button" class="media-item-action-btn media-item-relevant-btn{% if entry.is_relevant == True %} is-active{% endif %}"

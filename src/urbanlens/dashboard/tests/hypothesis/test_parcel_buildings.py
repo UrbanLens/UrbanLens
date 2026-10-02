@@ -10,6 +10,7 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.inline_scripts import executable_blocks, inline_handlers
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
@@ -579,7 +580,7 @@ class ParcelBuildingsTabsTests(TestCase):
         response = self.client.get(self._url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-pb-panel="children"')
+        self.assertContains(response, 'data-card-pane="children"')
         for name in ("North Door", "Open Shaft", "The Grounds"):
             self.assertContains(response, name)
         self.assertContains(response, "<h3>Child pins</h3>", html=False)
@@ -598,12 +599,15 @@ class ParcelBuildingsTabsTests(TestCase):
 
         response = self.client.get(self._url())
 
-        self.assertContains(response, 'data-pb-panel="buildings"')
-        self.assertContains(response, 'data-pb-panel="children" hidden')
+        self.assertContains(response, 'data-card-pane="buildings"')
+        self.assertContains(response, 'data-card-pane="children" hidden')
+        self.assertContains(response, 'data-card-tab="buildings"')
+        self.assertContains(response, 'data-card-tab="children"')
+        self.assertEqual((executable_blocks(response.content), inline_handlers(response.content)), ([], []))
         self.assertContains(response, 'title="Pinned as Tool Shed"')
         self.assertContains(response, f'hx-get="{reverse("pin.child_building", args=[shed.slug])}"', count=2)
-        self.assertNotContains(response, 'data-pb-panel="mine"')
-        self.assertNotContains(response, 'data-pb-panel="parcels"')
+        self.assertNotContains(response, 'data-card-pane="mine"')
+        self.assertNotContains(response, 'data-card-pane="parcels"')
 
     def test_only_a_building_child_opens_in_place(self) -> None:
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
@@ -629,7 +633,7 @@ class ParcelBuildingsTabsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "East Stair")
-        self.assertNotContains(response, 'data-pb-panel="buildings"')
+        self.assertNotContains(response, 'data-card-pane="buildings"')
 
     def test_the_wiki_pull_is_offered_only_when_there_is_a_wiki(self) -> None:
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})

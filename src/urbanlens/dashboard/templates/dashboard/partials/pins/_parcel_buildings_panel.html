@@ -1,5 +1,5 @@
 {% comment %}Every building standing on this property - from REData (county GIS + NY SHPO CRIS) or OpenStreetMap - and, on a pin's page, every child pin.{% endcomment %}
-<div id="{{ section_id }}" class="parcel-buildings card card--secondary"
+<div id="{{ section_id }}" class="parcel-buildings card card--secondary" data-card-tabs
      data-collapse-scope="pin" data-collapse-section="parcel_buildings">
     {% if debug %}
     <span class="debug-marker" hidden
@@ -20,7 +20,7 @@
                 <i class="material-symbols-outlined">public</i>
             </button>
             {% endif %}
-            <button type="button" class="btn btn--sm btn--ghost" onclick="openAddPinDialog()" title="Add a child pin" aria-label="Add a child pin">
+            <button type="button" class="btn btn--sm btn--ghost" data-map-tool="add-pin" title="Add a child pin" aria-label="Add a child pin">
                 <i class="material-symbols-outlined">add</i>
             </button>
         </div>
@@ -29,16 +29,14 @@
 
     {% if rows and child_rows %}
     <div class="card-tabs" role="tablist" aria-label="Buildings view">
-        <button type="button" class="card-tab active" role="tab" aria-selected="true"
-                onclick="window.parcelBuildingsSetTab(this, 'buildings')">Buildings</button>
-        <button type="button" class="card-tab" role="tab" aria-selected="false"
-                onclick="window.parcelBuildingsSetTab(this, 'children')">Child pins <span class="badge">{{ child_rows|length }}</span></button>
+        <button type="button" class="card-tab active" role="tab" aria-selected="true" data-card-tab="buildings">Buildings</button>
+        <button type="button" class="card-tab" role="tab" aria-selected="false" data-card-tab="children">Child pins <span class="badge">{{ child_rows|length }}</span></button>
     </div>
     {% endif %}
 
     <div class="card__body">
         {% if rows %}
-        <div data-pb-panel="buildings">
+        <div data-card-pane="buildings">
             <ul class="parcel-building-list">
                 {% for row in rows %}
                 {% include "dashboard/partials/pins/_parcel_building_row.html" %}
@@ -48,7 +46,7 @@
         {% endif %}
 
         {% if child_rows %}
-        <div data-pb-panel="children"{% if rows %} hidden{% endif %}>
+        <div data-card-pane="children"{% if rows %} hidden{% endif %}>
             <ul class="parcel-building-list">
                 {% for row in child_rows %}
                 <li class="parcel-building child-pin-row">
@@ -84,18 +82,3 @@
         {% endif %}
     </div>
 </div>
-<script>
-(function () {
-    window.parcelBuildingsSetTab = function (btn, key) {
-        var container = btn.closest('.parcel-buildings');
-        if (!container) return;
-        container.querySelectorAll('.card-tabs > .card-tab').forEach(function (b) {
-            b.classList.toggle('active', b === btn);
-            b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
-        });
-        container.querySelectorAll('[data-pb-panel]').forEach(function (p) {
-            p.hidden = p.dataset.pbPanel !== key;
-        });
-    };
-}());
-</script>

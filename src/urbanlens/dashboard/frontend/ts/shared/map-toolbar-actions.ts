@@ -1,6 +1,7 @@
 /**
- * The shared map toolbar (``partials/map/_map_toolbar.html``): each button's ``data-map-tool`` names what it does, and
- * the page that owns the map defines the function. A page without it ignores the click.
+ * The shared map toolbar (``partials/map/_map_toolbar.html``), and any other control acting on the page's map: its
+ * ``data-map-tool`` names what it does, and the page that owns the map defines the function. A page without it ignores
+ * the click.
  */
 import { delegateActions } from "./delegated-actions";
 

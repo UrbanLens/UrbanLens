@@ -5,29 +5,26 @@
         <i class="material-symbols-outlined">travel_explore</i>
         <h3>Location Data</h3>
     </div>
-    <div class="card-tabs" role="tablist">
-        <button type="button" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
+    <div class="card-tabs" role="tablist" data-card-tabs>
+        <button type="button" data-card-tab class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
                 hx-get="{% url 'pin.location_data_overview' pin.slug %}"
                 hx-target="#location-data-body" hx-swap="innerHTML"
-                hx-trigger="ul:lazy-load, click" data-ul-lazy-section="pin:location-data"
-                onclick="document.querySelectorAll('#location-data-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+                hx-trigger="ul:lazy-load, click" data-ul-lazy-section="pin:location-data">
             <i class="material-symbols-outlined">travel_explore</i>
             <span>Overview</span>
         </button>
-        <button type="button" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+        <button type="button" data-card-tab class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
                 data-panel-key="nominatim"
                 hx-get="{% url 'pin.nominatim' pin.slug %}"
-                hx-target="#location-data-body" hx-swap="innerHTML"
-                onclick="document.querySelectorAll('#location-data-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+                hx-target="#location-data-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">map</i>
             <span>Nominatim</span>
         </button>
         {% for tab in location_data_tabs %}
-        <button type="button" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+        <button type="button" data-card-tab class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
                 data-panel-key="{{ tab.key }}"
                 hx-get="{% url 'pin.panel' pin.slug tab.key %}"
-                hx-target="#location-data-body" hx-swap="innerHTML"
-                onclick="document.querySelectorAll('#location-data-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+                hx-target="#location-data-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">{{ tab.icon }}</i>
             <span>{{ tab.label }}</span>
         </button>

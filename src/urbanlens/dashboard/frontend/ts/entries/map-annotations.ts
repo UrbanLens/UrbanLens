@@ -12,10 +12,9 @@ import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, recluster
 import type { MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
-import { observeMediaGalleryProcessing, openMediaLightbox } from "../shared/media-lightbox";
+import { installMediaLightboxOpener, observeMediaGalleryProcessing } from "../shared/media-lightbox";
 
-// Exposed at module scope, not inside the page-init function below.
-window.mediaOpenLightbox = openMediaLightbox;
+installMediaLightboxOpener();
 
 // Fired now rather than awaited inside init(): starting this deployment's REData tile catalogue
 // fetch as early as this module loads gives it a head start on the synchronous DOM/config

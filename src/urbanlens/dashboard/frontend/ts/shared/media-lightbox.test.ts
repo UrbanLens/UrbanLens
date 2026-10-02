@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { openMediaLightbox } from "./media-lightbox";
+import { installMediaLightboxOpener, openMediaLightbox } from "./media-lightbox";
 import type { LightboxInput } from "./photo-tile";
 
 let calls: Array<{ list: LightboxInput[]; idx: number }> = [];
@@ -201,6 +201,22 @@ describe("openMediaLightbox", () => {
         openMediaLightbox(clicked.querySelector("button") as HTMLElement);
 
         expect(calls[0]?.list.map((item) => item.mediaKey)).toEqual(["f", "c"]);
+        expect(calls[0]?.idx).toBe(1);
+    });
+});
+
+describe("installMediaLightboxOpener", () => {
+    test("a tile's lightbox button opens the lightbox on that tile, once however often it is installed", () => {
+        installMediaLightboxOpener();
+        installMediaLightboxOpener();
+        const first = buildTile({ mediaUrl: "first", mediaKey: "f" });
+        const second = buildTile({ mediaUrl: "second", mediaKey: "s" });
+        for (const tile of [first, second]) tile.querySelector("button")?.setAttribute("data-media-action", "lightbox");
+        buildGrid("media-gallery-grid", null, [first, second]);
+
+        second.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        expect(calls).toHaveLength(1);
         expect(calls[0]?.idx).toBe(1);
     });
 });

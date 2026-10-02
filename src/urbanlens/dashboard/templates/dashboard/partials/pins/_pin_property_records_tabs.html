@@ -5,21 +5,19 @@
         <i class="material-symbols-outlined">home_work</i>
         <h3>Property Records</h3>
     </div>
-    <div class="card-tabs" role="tablist">
-        <button type="button" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
+    <div class="card-tabs" role="tablist" data-card-tabs>
+        <button type="button" data-card-tab class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
                 hx-get="{% url 'pin.panel' pin.slug 'property_records' %}"
                 hx-target="#property-records-body" hx-swap="innerHTML"
-                hx-trigger="ul:lazy-load, click" data-ul-lazy-section="pin:property-records"
-                onclick="document.querySelectorAll('#property-records-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+                hx-trigger="ul:lazy-load, click" data-ul-lazy-section="pin:property-records">
             <i class="material-symbols-outlined">home_work</i>
             <span>Overview</span>
         </button>
         {% for tab in property_tabs %}
-        <button type="button" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+        <button type="button" data-card-tab class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
                 data-panel-key="{{ tab.key }}"
                 hx-get="{% url 'pin.panel' pin.slug tab.key %}"
-                hx-target="#property-records-body" hx-swap="innerHTML"
-                onclick="document.querySelectorAll('#property-records-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+                hx-target="#property-records-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">{{ tab.icon }}</i>
             <span>{{ tab.label }}</span>
         </button>

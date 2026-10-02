@@ -112,8 +112,7 @@
                 hx-target="#comment-reactions-{{ comment.id }}"
                 hx-swap="outerHTML"
                 hx-vals='{"emoji": "{{ emoji }}"}'
-                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                onclick="this.closest('.reaction-picker-popup').hidden=true">
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
           {{ emoji }}
         </button>
         {% endfor %}
