@@ -3574,8 +3574,8 @@ both ways for the e2e accounts. A second run finds nothing. 205 locations are le
 **Ruled by Jess 2026-09-30:** download each thumbnail and cache it locally forever, served by UrbanLens, with a record of where it came from. That also covers a provider taking an asset offline. This is a different question from browser-direct geocoding (D25).
 
 **What remains: run `manage.py localize_article_images` on every deployment** (`--dry-run` first prints how
-many articles would change). Each changed article gets a new revision, "Images stored on this site". Not known to
-have run on any deployment. Until it runs, an article saved before 2026-09-30 still names its images by the provider's
+many articles would change). Each changed article gets a new revision, "Images stored on this site". Run on the
+development_main dev stack 2026-10-02 (66 articles changed); not known to have run on staging or production. Until it runs, an article saved before 2026-09-30 still names its images by the provider's
 address in its source. Its rendering is already local, but the editor canvas, which is how every viewer sees an
 article, loads the source, and since 2026-10-02 `img-src` refuses those hosts: those images show broken in the
 editor until the command runs, rather than loading from the provider. So run it as part of the deploy that ships
@@ -3610,7 +3610,11 @@ real articles hold any was not counted):
 (`Image.display_url`/`thumb_url`), which is a provider's address, often its page rather than a picture. It used
 to load from the provider; now it shows as missing. Not counted on any deployment.
 
-**Not measured:** no browser has loaded the maps or SpotGuessr under the new `img-src` yet; the Google hosts are
+**Checked in a browser 2026-10-02**, on the dev stack: the map, a pin page and a wiki page load every tile and
+Leaflet's markers from this site with no CSP violation. Before the command ran, the one violation was a Wikipedia
+image in the article editor's canvas, as described above. `connect-src` now also admits `tile.openweathermap.org`,
+which MapLibre fetches for the weather overlay (`test_csp_image_hosts.py` reads MapLibre's tile templates too), and no
+longer lists OpenTopoMap, which no page code loads. **Not checked:** SpotGuessr's Street View; its Google hosts are
 Google's documented list, not observed traffic.
 
 ## P167 — Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail

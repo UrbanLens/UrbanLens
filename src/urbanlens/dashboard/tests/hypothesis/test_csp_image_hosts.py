@@ -107,6 +107,24 @@ class EveryImageHostTheCodeConfiguresIsAdmittedTests(SimpleTestCase):
                 _admits(_img_src(), url), f"{path} draws tiles from {urlparse(url).hostname}, refused by img-src"
             )
 
+    def test_every_tile_template_maplibre_can_fetch_is_admitted_by_connect_src(self) -> None:
+        """MapLibre fetches raster tiles rather than drawing them as ``<img>``, so they need connect-src as well."""
+        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
+
+        templates = [
+            (path.name, template)
+            for path, text in _page_code().items()
+            if path.name in {"map-layers.ts", "maplibre-layers.ts"}
+            for template in _TILE_TEMPLATE.findall(text)
+        ]
+        self.assertTrue(any(name == "maplibre-layers.ts" for name, _template in templates))
+        for name, template in templates:
+            url = template.replace("{s}", "a")
+            self.assertTrue(
+                _admits(_CSP_DIRECTIVES["connect-src"], url),
+                f"{name} draws tiles from {urlparse(url).hostname}, refused by connect-src under MapLibre",
+            )
+
     def test_the_maps_javascript_api_imagery_is_admitted_where_a_page_loads_it(self) -> None:
         loaders = [path for path, text in _page_code().items() if "maps.googleapis.com/maps/api/js" in text]
         self.assertTrue(loaders, "nothing loads the Maps JavaScript API any more; its img-src hosts can go")

@@ -807,15 +807,12 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "https://nominatim.openstreetmap.org",
         "https://en.wikipedia.org",
         "https://maps.googleapis.com",
-        # MapLibre tiles: loaded via XHR (connect-src), not <img> (img-src) the
-        # way Leaflet loads the same vendors - PL8 item 9. Mirrors img-src's
-        # tile-vendor entries below.
+        # MapLibre fetches the tiles Leaflet draws as <img> (PL8 item 9), so these mirror img-src's tile hosts.
         "https://*.basemaps.cartocdn.com",
         "https://basemaps.cartocdn.com",
-        "https://*.tile.opentopomap.org",
-        "https://tile.opentopomap.org",
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
+        "https://tile.openweathermap.org",
         # Leaflet's source map, fetched when devtools is open against the unpkg build.
         "https://unpkg.com",
     ],
