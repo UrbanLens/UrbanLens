@@ -9,7 +9,7 @@
             aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
         {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}
     </button>
-    <button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete({{ img.pk }})">
+    <button type="button" class="photo-tile-del" title="Delete photo">
         <i class="material-symbols-outlined">delete</i>
     </button>
 </li>
@@ -22,7 +22,7 @@
     data-source-url="{{ img.source_url|default:'' }}"
     data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
     {% comment %}See _widget_recent_photos.html: the image's alt disappears when the thumbnail falls back to an icon, so the name lives on the button.{% endcomment %}
-    <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="photosOpenLightbox({{ img.pk }})">
+    <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}">
         <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
              data-fade-in
              data-thumb-fallback="broken_image" data-thumb-fallback-class="photo-tile-fallback">
@@ -30,7 +30,7 @@
         <span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>
         {% endif %}
     </button>
-    <button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete({{ img.pk }})">
+    <button type="button" class="photo-tile-del" title="Delete photo">
         <i class="material-symbols-outlined">delete</i>
     </button>
 </li>

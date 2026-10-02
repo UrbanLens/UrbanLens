@@ -113,15 +113,14 @@
                     </label>
                     <div class="ul-field ul-field--wide">
                         <span>Colour</span>
-                        {% comment %}The ids live on the container, not repeated into every swatch's handler.{% endcomment %}
+                        {% comment %}The ids live on the container, which picker-actions.ts and achievements.ts read.{% endcomment %}
                         <div class="color-picker" id="achv-color-{{ picker_id }}"
                              data-color-value-id="achv-color-value-{{ picker_id }}"
                              data-color-medal-id="achv-medal-{{ picker_id }}">
                             <input type="hidden" name="color" id="achv-color-value-{{ picker_id }}" value="{{ achievement.color|default:default_color }}">
                             {% for hex, color_name in color_choices %}
                             <button type="button" class="color-swatch {% if achievement.color == hex %}selected{% endif %}"
-                                    data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"
-                                    onclick="pickAchievementColor(this)"></button>
+                                    data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"></button>
                             {% endfor %}
                         </div>
                     </div>
@@ -210,8 +209,7 @@
                         <input type="hidden" name="color" id="achv-color-value-achv-new" value="{{ default_color }}">
                         {% for hex, color_name in color_choices %}
                         <button type="button" class="color-swatch {% if default_color == hex %}selected{% endif %}"
-                                data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"
-                                onclick="pickAchievementColor(this)"></button>
+                                data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"></button>
                         {% endfor %}
                     </div>
                 </div>

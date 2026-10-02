@@ -39,7 +39,6 @@
            min="{{ field.slider_min }}" max="{{ field.slider_max }}"
            value="{{ value.input_value|default:field.slider_min }}"
            aria-label="{{ field.name }}"
-           oninput="this.parentElement.querySelector('.cf-slider-output').textContent = this.value"
            hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
            {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
     <output class="cf-slider-output">{% if value %}{{ value.display_value }}{% else %}–{% endif %}</output>

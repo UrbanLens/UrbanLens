@@ -1,26 +1,19 @@
 /**
- * Site-admin achievements editor: installs the same shared icon and colour pickers organize's label/tag/category/status forms use,.
+ * Site-admin achievements editor: installs the same shared icon and colour pickers organize's label/tag/category/status forms use.
  */
 import { installGlobalOrganizeIconPicker } from "../shared/organize-icon-picker";
-import { installGlobalColorPicker, pickColor } from "../shared/color-picker";
+import { installGlobalColorPicker } from "../shared/color-picker";
 
 /**
- * Apply a swatch, and tint the medal preview above it.
+ * Tint the medal preview a swatch's picker names; the core bundle's picker actions apply the swatch itself.
  */
-function pickAchievementColor(btn: HTMLElement): void {
-    const picker = btn.closest<HTMLElement>(".color-picker");
-    if (!picker) return;
-    const hex = btn.dataset.color ?? "";
-    pickColor(picker.id, picker.dataset.colorValueId ?? "", hex, btn);
-    document.getElementById(picker.dataset.colorMedalId ?? "")?.style.setProperty("--achievement-color", hex);
+function tintMedal(event: MouseEvent): void {
+    const swatch = event.target instanceof Element ? event.target.closest<HTMLElement>(".color-swatch") : null;
+    const picker = swatch?.closest<HTMLElement>(".color-picker[data-color-medal-id]");
+    if (!swatch || !picker) return;
+    document.getElementById(picker.dataset.colorMedalId ?? "")?.style.setProperty("--achievement-color", swatch.dataset.color ?? "");
 }
 
 installGlobalOrganizeIconPicker();
 installGlobalColorPicker();
-window.pickAchievementColor = pickAchievementColor;
-
-declare global {
-    interface Window {
-        pickAchievementColor: typeof pickAchievementColor;
-    }
-}
+document.addEventListener("click", tintMedal);

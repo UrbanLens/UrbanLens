@@ -199,26 +199,6 @@
     </div>
 </div>
 
-{% comment %}Django cannot reverse a URL with a placeholder id, so every route carrying one is reversed with a sentinel the client substitutes.{% endcomment %}
-<script>
-    window.CONSENSUS_URLS = {
-        friends: "{% url 'games.friends' %}",
-        start: "{% url 'consensus.start' %}",
-        lobby: "{% url 'consensus.lobby' session_id=999999999 %}",
-        invite: "{% url 'consensus.invite' session_id=999999999 %}",
-        join: "{% url 'consensus.join' session_id=999999999 %}",
-        begin: "{% url 'consensus.begin' session_id=999999999 %}",
-        end: "{% url 'consensus.end' session_id=999999999 %}",
-        round: "{% url 'consensus.round' session_id=999999999 %}",
-        answer: "{% url 'consensus.answer' session_id=999999999 round_id=888888888 %}",
-        skip: "{% url 'consensus.skip' session_id=999999999 round_id=888888888 %}",
-        vote: "{% url 'consensus.vote' session_id=999999999 round_id=888888888 %}",
-        photo: "{% url 'consensus.photo' session_id=999999999 round_id=888888888 %}",
-        chat_history: "{% url 'consensus.chat_history' session_id=999999999 %}",
-        summary: "{% url 'consensus.summary' session_id=999999999 %}",
-        session_id_sentinel: "999999999",
-        round_id_sentinel: "888888888"
-    };
-</script>
+{{ urls|json_script:"consensus-urls" }}
 <script type="module" src="{% static 'dashboard/js/consensus.js' %}"></script>
 {% endblock %}

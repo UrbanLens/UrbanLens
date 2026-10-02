@@ -4,6 +4,7 @@
  * - ``data-confirm="<question>"`` on a plain form, or on one of its submit buttons, asks in the site's confirm
  *   dialog before submitting. ``data-confirm-message`` and ``data-confirm-label`` fill in the rest. For an htmx
  *   request, ``hx-confirm`` does this already.
+ * - ``data-no-submit`` on a form keeps it from submitting itself, Enter included; a script reads its fields instead.
  * - ``data-reload`` on a button reloads the page.
  * - ``data-enabled-by="<id> ..."`` keeps a button disabled until every named field is satisfied: a checkbox
  *   ticked, a field with ``data-expect="<phrase>"`` saying that phrase (ignoring case and edge spaces), a list of
@@ -15,6 +16,10 @@
  *   one's value in that input and marks it ``aria-pressed``.
  * - ``data-readout="<id>"`` on an input shows its value in that element as it changes.
  * - ``data-toggles="<id>"`` on a button shows or hides that panel, marking the button ``.is-open``.
+ * - ``data-empties="<id>"`` on a button empties that element, and ``data-removes="<id>"`` on any control removes it.
+ * - ``data-autosubmit`` on a file input submits its form once a file is chosen.
+ * - ``data-autogrow`` on a textarea fits its height to its content when it arrives and as it is typed in, for
+ *   browsers without CSS ``field-sizing``.
  * - ``data-placeholder-ideas="<JSON island id>"`` on a field suggests another of the island's ideas as its placeholder
  *   each time its dialog closes.
  */
@@ -32,6 +37,10 @@ function asker(form: HTMLFormElement, submitter: HTMLElement | null): HTMLElemen
 async function onSubmit(event: SubmitEvent): Promise<void> {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
+    if (form.hasAttribute("data-no-submit")) {
+        event.preventDefault();
+        return;
+    }
     const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
     const source = asker(form, submitter);
     if (!source) return;
@@ -83,6 +92,10 @@ function onClick(event: MouseEvent): void {
         toggler.classList.toggle("is-open", !panel.hidden);
         toggler.setAttribute("aria-expanded", String(!panel.hidden));
     }
+    const emptier = target?.closest<HTMLElement>("[data-empties]");
+    if (emptier) document.getElementById(emptier.dataset.empties ?? "")?.replaceChildren();
+    const remover = target?.closest<HTMLElement>("[data-removes]");
+    if (remover) document.getElementById(remover.dataset.removes ?? "")?.remove();
 }
 
 function pick(choice: HTMLElement): void {
@@ -93,8 +106,22 @@ function pick(choice: HTMLElement): void {
     for (const other of group.querySelectorAll("[data-value]")) other.setAttribute("aria-pressed", String(other === choice));
 }
 
+function autogrow(field: HTMLTextAreaElement): void {
+    field.style.height = "auto";
+    field.style.height = `${field.scrollHeight}px`;
+}
+
+function onLoad(event: Event): void {
+    syncEnabledBy();
+    const root = event.target;
+    if (!(root instanceof Element)) return;
+    if (root instanceof HTMLTextAreaElement && root.hasAttribute("data-autogrow")) autogrow(root);
+    root.querySelectorAll<HTMLTextAreaElement>("textarea[data-autogrow]").forEach(autogrow);
+}
+
 function onInput(event: Event): void {
     const target = event.target;
+    if (target instanceof HTMLTextAreaElement && target.hasAttribute("data-autogrow")) autogrow(target);
     if (target instanceof HTMLInputElement && target.dataset.readout) {
         const readout = document.getElementById(target.dataset.readout);
         if (readout) readout.textContent = target.value;
@@ -142,6 +169,7 @@ function syncEnabledBy(): void {
 function onChange(event: Event): void {
     const target = event.target;
     if (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio")) syncEnabledBy();
+    if (target instanceof HTMLInputElement && target.hasAttribute("data-autosubmit") && target.files?.length) target.form?.requestSubmit();
     if (target instanceof HTMLSelectElement && target.hasAttribute("data-navigate") && target.value && isSameOrigin(target.value)) window.location.assign(target.value);
 }
 
@@ -166,7 +194,7 @@ export function installDeclarativeActions(): void {
     document.addEventListener("reset", onReset);
     // close does not bubble.
     document.addEventListener("close", onDialogClose, true);
-    document.addEventListener("htmx:load", syncEnabledBy);
+    document.addEventListener("htmx:load", onLoad);
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncEnabledBy, { once: true });
     else syncEnabledBy();
     // A back/forward visit can restore a ticked box under the server's disabled button.

@@ -36,7 +36,7 @@
     <div id="place-info-panel" class="place-info-panel" hidden>
         <div class="place-info-header">
             <span class="place-info-title"></span>
-            <button class="place-info-close" onclick="document.getElementById('place-info-panel').classList.remove('is-open');document.getElementById('place-info-panel').setAttribute('hidden','')" aria-label="Close">✕</button>
+            <button class="place-info-close" data-map-action="close-place-info" aria-label="Close">✕</button>
         </div>
         <div class="place-info-body"></div>
     </div>
@@ -62,7 +62,7 @@
                     data-dialog-open="save-filter-dialog" aria-label="Save filter">
                 <i class="material-symbols-outlined">bookmark_add</i>
             </button>
-            <button class="fp-close" onclick="toggleFilterPanel()" aria-label="Close">✕</button>
+            <button class="fp-close" data-map-action="toggle-filter-panel" aria-label="Close">✕</button>
         </div>
 
         <form id="filter-form"
@@ -126,7 +126,7 @@
                             <label class="fp-chip" id="fp-visits-chip-no"><input type="radio" name="has_visits_ui" value="no">Never visited</label>
                         </div>
                         <button type="button" class="fp-visits-reset" id="fp-visits-reset" style="display:none"
-                                title="Clear visit filter" onclick="_resetVisits()">
+                                title="Clear visit filter" data-map-action="reset-visits">
                             <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
@@ -140,7 +140,7 @@
                             <input type="date" name="visited_before" id="fp-visited-before" class="fp-date-input" aria-label="Visited on or before">
                         </div>
                         <button type="button" class="fp-date-reset" id="fp-visited-dates-reset" style="display:none"
-                                title="Clear date filters" onclick="_resetVisitDates()">
+                                title="Clear date filters" data-map-action="reset-visit-dates">
                             <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
@@ -166,7 +166,7 @@
                                 <input type="date" name="created_before" id="fp-created-before" class="fp-date-input" aria-label="Pinned on or before">
                             </div>
                             <button type="button" class="fp-date-reset" id="fp-created-dates-reset" style="display:none"
-                                    title="Clear date filters" onclick="_resetCreatedDates()">
+                                    title="Clear date filters" data-map-action="reset-created-dates">
                                 <i class="material-symbols-outlined">close</i>
                             </button>
                         </div>
@@ -183,7 +183,7 @@
                                 <input type="date" name="date_built_before" id="fp-date-built-before" class="fp-date-input" aria-label="Built on or before">
                             </div>
                             <button type="button" class="fp-date-reset" id="fp-date-built-dates-reset" style="display:none"
-                                    title="Clear date filters" onclick="_dateBuiltRange.reset()">
+                                    title="Clear date filters" data-map-action="reset-date-built">
                                 <i class="material-symbols-outlined">close</i>
                             </button>
                         </div>
@@ -200,7 +200,7 @@
                                 <input type="date" name="date_abandoned_before" id="fp-date-abandoned-before" class="fp-date-input" aria-label="Abandoned on or before">
                             </div>
                             <button type="button" class="fp-date-reset" id="fp-date-abandoned-dates-reset" style="display:none"
-                                    title="Clear date filters" onclick="_dateAbandonedRange.reset()">
+                                    title="Clear date filters" data-map-action="reset-date-abandoned">
                                 <i class="material-symbols-outlined">close</i>
                             </button>
                         </div>
@@ -217,7 +217,7 @@
                                 <input type="date" name="last_viewed_before" id="fp-last-viewed-before" class="fp-date-input" aria-label="Last viewed on or before">
                             </div>
                             <button type="button" class="fp-date-reset" id="fp-last-viewed-dates-reset" style="display:none"
-                                    title="Clear date filters" onclick="_lastViewedRange.reset()">
+                                    title="Clear date filters" data-map-action="reset-last-viewed">
                                 <i class="material-symbols-outlined">close</i>
                             </button>
                         </div>
@@ -377,14 +377,14 @@
 
             {% include "dashboard/partials/pins/_saved_filters_section.html" %}
 
-            <button type="button" class="fp-reset" onclick="resetFilters()">
+            <button type="button" class="fp-reset" data-map-action="reset-filters">
                 <i class="material-symbols-outlined">refresh</i> Clear all filters
             </button>
         </form>
     </div>
 
     {# -- Filter panel handle (right-docked mirror of #pin-list-handle, always-visible shortcut, desktop only) -- #}
-    <button id="filter-panel-handle" class="panel-handle filter-panel-handle" onclick="toggleFilterPanel()"
+    <button id="filter-panel-handle" class="panel-handle filter-panel-handle" data-map-action="toggle-filter-panel"
             aria-label="Toggle filters" aria-expanded="false"
             data-tooltip="Filters" data-tooltip-pos="left">
         <i class="material-symbols-outlined">chevron_left</i>
@@ -412,13 +412,13 @@
         {# Reuses the filter panel's header chrome - on mobile this panel is a bottom sheet, where the edge handle is unavailable and a visible. #}
         <div class="fp-header">
             <span class="fp-title">Pins</span>
-            <button type="button" class="fp-close" onclick="_togglePinListPanel()" aria-label="Close">✕</button>
+            <button type="button" class="fp-close" data-map-action="toggle-pin-list" aria-label="Close">✕</button>
         </div>
         <div class="pl-body" id="pin-list-body"></div>
     </div>
 
     {# -- Pin list handle (always-visible shortcut, desktop only) ------------ #}
-    <button id="pin-list-handle" class="panel-handle pin-list-handle" onclick="_togglePinListPanel()"
+    <button id="pin-list-handle" class="panel-handle pin-list-handle" data-map-action="toggle-pin-list"
             aria-label="Toggle pin list" aria-expanded="false"
             data-tooltip="Pin list" data-tooltip-pos="right">
         <i class="material-symbols-outlined">chevron_right</i>
@@ -453,7 +453,7 @@
 <dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog" data-closefn="closeAddPinDialog" aria-label="Add pin">
     <div class="apdlg-header">
         <h2><i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">add_location</i>Add Pin</h2>
-        <button class="btn-close" onclick="closeAddPinDialog()" aria-label="Close">x</button>
+        <button class="btn-close" data-dialog-close aria-label="Close">x</button>
     </div>
     <div class="apdlg-body">
 
@@ -527,21 +527,19 @@
                 </div>
                 <div class="form-field">
                     <label class="form-label">Color</label>
-                    <div class="color-picker" id="apdlg-color-picker">
+                    <div class="color-picker" id="apdlg-color-picker" data-color-value-id="apdlg-color-value">
                         <input type="hidden" id="apdlg-color-value">
                         {% for hex, color_name in color_choices %}
                         <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ color_name }}"
-                                style="background:{{ hex }};"
-                                onclick="pickColor('apdlg-color-picker','apdlg-color-value','{{ hex }}',this)"></button>
+                                style="background:{{ hex }};"></button>
                         {% endfor %}
-                        <button type="button" class="color-swatch color-clear" title="No color"
-                                onclick="pickColor('apdlg-color-picker','apdlg-color-value','',this)">
+                        <button type="button" class="color-swatch color-clear" title="No color">
                             <i class="material-icons" style="font-size:1rem;">block</i>
                         </button>
                     </div>
                 </div>
                 <button type="button" class="btn btn--ghost apdlg-customize-clear-btn" id="apdlg-customize-clear"
-                        onclick="_apdlgClearCustomizations()">
+                        data-map-action="clear-pin-customizations">
                     <i class="material-symbols-outlined">restart_alt</i>
                     Clear all customizations
                 </button>
@@ -550,13 +548,13 @@
 
     </div>
     <div class="apdlg-footer">
-        <button type="button" class="btn btn--danger" id="apdlg-delete" onclick="_apdlgDeletePin()" hidden>
+        <button type="button" class="btn btn--danger" id="apdlg-delete" data-map-action="delete-pin" hidden>
             <i class="material-symbols-outlined">delete</i>Delete
         </button>
         <a class="btn btn--ghost" id="apdlg-view-details" href="#" style="margin-right:auto;" title="Open this pin's details page" hidden>
             <i class="material-symbols-outlined">open_in_new</i>View details
         </a>
-        <button type="button" class="btn btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
+        <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
         <button type="button" class="btn btn--primary" id="apdlg-submit">Add Pin</button>
     </div>
 </dialog>
@@ -594,18 +592,6 @@
 </dialog>
 
 <div id="importPinsModal"></div>
-<script>
-    // Deep-link support: pages like the import help center link here with
-    // ?import=1 to open the import dialog immediately instead of just landing
-    // on the map. Runs on DOMContentLoaded so htmx has already wired up the
-    // button's hx-get before we synthesize the click.
-    document.addEventListener('DOMContentLoaded', function () {
-        if (new URLSearchParams(window.location.search).get('import') === '1') {
-            var importButton = document.getElementById('import-pins-button');
-            if (importButton) importButton.click();
-        }
-    });
-</script>
 
 {# -- New-user pin-suggestions intro dialog ------------------------------- #}
 <dialog id="pin-suggestions-intro-dialog" class="ul-dialog" aria-labelledby="dialog-title-suggested-pins-near-you">
@@ -619,26 +605,6 @@
         </div>
     </div>
 </dialog>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        if ({{ show_pin_suggestions_intro|yesno:"true,false" }}) {
-            var introDialog = document.getElementById('pin-suggestions-intro-dialog');
-            if (introDialog) introDialog.showModal();
-        }
-        var introAcceptBtn = document.getElementById('pin-suggestions-intro-accept');
-        if (introAcceptBtn) {
-            introAcceptBtn.addEventListener('click', function () {
-                window.location.href = '{% url "memories.locations" %}?onboarding=1';
-            });
-        }
-
-        // Returning from the "Accept all suggestions" onboarding redirect
-        // (see locations.html) - confirm the new pins landed on the map.
-        if (new URLSearchParams(window.location.search).get('suggestions_imported') === '1' && window.toastr) {
-            toastr.success('Your accepted pin suggestions are now on the map.');
-        }
-    });
-</script>
 {% endblock %}
 
 {% block scripts %}

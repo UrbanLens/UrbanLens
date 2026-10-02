@@ -176,11 +176,11 @@ test.describe("Hudson River State Hospital - child pins for every building", () 
         await expect(section.locator(".parcel-building-list").first(), "the campus page never loaded its Buildings card").toBeVisible({ timeout: 60_000 });
         await section.getByRole("tab", { name: /child pins/i }).click();
 
-        const listed = section.locator('[data-pb-panel="children"] .child-pin-row');
+        const listed = section.locator('[data-card-pane="children"] .child-pin-row');
         await expect(listed).toHaveCount(children.length);
         expect(panelRequests, "a building fetched its panels before its row was opened").toEqual([]);
 
-        const building = section.locator('[data-pb-panel="children"] details.parcel-building-opens').first();
+        const building = section.locator('[data-card-pane="children"] details.parcel-building-opens').first();
         await building.locator("summary").click();
         await expect(building.locator(".child-building-detail"), "opening a building row did not load its card").toBeVisible({ timeout: 20_000 });
     });

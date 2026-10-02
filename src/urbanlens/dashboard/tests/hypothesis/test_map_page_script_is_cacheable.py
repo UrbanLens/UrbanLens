@@ -16,8 +16,10 @@ from model_bakery import baker
 
 from urbanlens.core.tests.inline_scripts import (
     MAX_INLINE_SCRIPT_BYTES,
+    executable_blocks,
     inert_reads,
     inline_blocks,
+    inline_handlers,
     largest_inline,
     missing_config,
     rendered_config,
@@ -91,3 +93,14 @@ class MapPageScriptIsCacheableTests(TestCase):
         keys everyone's to the same string, so on a shared browser one account would show another's.
         """
         self.assertEqual(inert_reads(SCRIPT_FILE.read_text()), [], "these config reads are quoted text, not values")
+
+    def test_the_page_runs_no_inline_script_and_no_handler_attribute(self) -> None:
+        """What a CSP without ``'unsafe-inline'`` would refuse: only JSON islands may stay inline."""
+        body = self.body()
+        self.assertEqual(executable_blocks(body), [])
+        self.assertEqual(inline_handlers(body), [])
+
+    def test_the_suggestions_intro_travels_in_the_config(self) -> None:
+        config = rendered_config(self.body(), _CONFIG_ID) or {}
+        self.assertIs(config.get("showPinSuggestionsIntro"), False)
+        self.assertEqual(config["urls"]["memoriesLocations"], reverse("memories.locations"))

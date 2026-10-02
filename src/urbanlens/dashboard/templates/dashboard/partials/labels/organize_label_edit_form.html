@@ -63,20 +63,18 @@
 
         <div class="form-field">
             <label class="form-label">Color</label>
-            <div class="color-picker" id="edit-color-picker-{{ label.id }}">
+            <div class="color-picker" id="edit-color-picker-{{ label.id }}" data-color-value-id="edit-color-value-{{ label.id }}">
                 <input type="hidden" name="color" id="edit-color-value-{{ label.id }}" value="{{ label.color|default:'' }}">
                 {% for hex, color_name in color_choices %}
                 <button type="button"
                         class="color-swatch {% if label.color == hex %}selected{% endif %}"
                         data-color="{{ hex }}" title="{{ color_name }}"
-                        style="background:{{ hex }};"
-                        onclick="pickColor('edit-color-picker-{{ label.id }}','edit-color-value-{{ label.id }}','{{ hex }}',this)">
+                        style="background:{{ hex }};">
                 </button>
                 {% endfor %}
                 <button type="button"
                         class="color-swatch color-clear {% if not label.color %}selected{% endif %}"
-                        title="No color"
-                        onclick="pickColor('edit-color-picker-{{ label.id }}','edit-color-value-{{ label.id }}','',this)">
+                        title="No color">
                     <i class="material-icons" style="font-size:1rem;">block</i>
                 </button>
             </div>

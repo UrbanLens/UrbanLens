@@ -45,7 +45,7 @@ test.describe("pin detail - child pin details", () => {
         const childrenTab = section.locator(".card-tab", { hasText: "Child pins" });
         if ((await childrenTab.count()) > 0) await childrenTab.click();
 
-        const row = section.locator('[data-pb-panel="children"] .child-pin-row', { hasText: name });
+        const row = section.locator('[data-card-pane="children"] .child-pin-row', { hasText: name });
         await expect(row, `"${name}" is not among the property's child pins`).toHaveCount(1);
         await row.locator("summary .parcel-building-chevron").click();
 

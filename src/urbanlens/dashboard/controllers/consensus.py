@@ -15,6 +15,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import Point
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 if TYPE_CHECKING:
@@ -36,6 +37,34 @@ from urbanlens.dashboard.services.consensus.access import session_access
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 
 logger = logging.getLogger(__name__)
+
+# Django cannot reverse a URL with a placeholder id, so every route carrying one is reversed with a sentinel the client substitutes.
+_SESSION_ID_SENTINEL = 999999999
+_ROUND_ID_SENTINEL = 888888888
+
+
+def _url_templates() -> dict[str, str]:
+    """Every Consensus endpoint the frontend needs, with numeric-id placeholders for the parameterized ones."""
+    session_kwargs = {"session_id": _SESSION_ID_SENTINEL}
+    round_kwargs = {"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}
+    return {
+        "friends": reverse("games.friends"),
+        "start": reverse("consensus.start"),
+        "lobby": reverse("consensus.lobby", kwargs=session_kwargs),
+        "invite": reverse("consensus.invite", kwargs=session_kwargs),
+        "join": reverse("consensus.join", kwargs=session_kwargs),
+        "begin": reverse("consensus.begin", kwargs=session_kwargs),
+        "end": reverse("consensus.end", kwargs=session_kwargs),
+        "round": reverse("consensus.round", kwargs=session_kwargs),
+        "answer": reverse("consensus.answer", kwargs=round_kwargs),
+        "skip": reverse("consensus.skip", kwargs=round_kwargs),
+        "vote": reverse("consensus.vote", kwargs=round_kwargs),
+        "photo": reverse("consensus.photo", kwargs=round_kwargs),
+        "chat_history": reverse("consensus.chat_history", kwargs=session_kwargs),
+        "summary": reverse("consensus.summary", kwargs=session_kwargs),
+        "session_id_sentinel": str(_SESSION_ID_SENTINEL),
+        "round_id_sentinel": str(_ROUND_ID_SENTINEL),
+    }
 
 
 def _current_profile(request: HttpRequest) -> Profile:
@@ -89,6 +118,7 @@ class ConsensusHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
                 "default_rounds": consensus_session.DEFAULT_ROUNDS_PER_SESSION,
                 "my_profile_id": profile.pk,
                 "initial_session_id": initial_session_id,
+                "urls": _url_templates(),
             },
         )
 

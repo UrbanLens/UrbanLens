@@ -19,17 +19,15 @@
 {% block content %}
 <div id="memories-sharing-page" class="memories-tab-page">
 
-    <div class="page-inner">
+    <div class="page-inner" data-card-tabs="view-toggle-btn--active">
         {% if has_any_shares %}
         <div class="view-toggle-group memories-sharing-toggle" role="group" aria-label="Choose which shares to show">
-            <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active" data-view="sent"
-                    onclick="memoriesSharingSetView('sent')" title="Shared by you">
+            <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active" data-card-tab="sent" title="Shared by you">
                 <i class="material-symbols-outlined" aria-hidden="true">call_made</i>
                 Shared by you ({{ sent_count }})
             </button>
             {% comment %}hx-trigger="click once": the received half is fetched the first time this button is clicked and not again, so the toggle stays instant.{% endcomment %}
-            <button type="button" class="btn btn--secondary view-toggle-btn" data-view="received"
-                    onclick="memoriesSharingSetView('received')" title="Shared with you"
+            <button type="button" class="btn btn--secondary view-toggle-btn" data-card-tab="received" title="Shared with you"
                     hx-get="{% url 'memories.sharing.received' %}"
                     hx-trigger="click once"
                     hx-target="[data-sharing-view='received']"
@@ -39,24 +37,14 @@
             </button>
         </div>
 
-        <div class="memories-sharing-view" data-sharing-view="sent">
+        <div class="memories-sharing-view" data-sharing-view="sent" data-card-pane="sent">
             {% include "dashboard/partials/memories/_sharing_sent.html" %}
         </div>
 
-        <div class="memories-sharing-view" data-sharing-view="received" hidden>
+        <div class="memories-sharing-view" data-sharing-view="received" data-card-pane="received" hidden>
             <p class="memories-sharing-section-empty">Loading&hellip;</p>
         </div>
 
-        <script>
-            window.memoriesSharingSetView = function (view) {
-                document.querySelectorAll('.memories-sharing-view').forEach(function (el) {
-                    el.hidden = el.dataset.sharingView !== view;
-                });
-                document.querySelectorAll('.memories-sharing-toggle .view-toggle-btn').forEach(function (btn) {
-                    btn.classList.toggle('view-toggle-btn--active', btn.dataset.view === view);
-                });
-            };
-        </script>
         {% else %}
         <section class="visits-empty-state" aria-labelledby="sharing-empty-title">
             <div class="visits-empty-hero">

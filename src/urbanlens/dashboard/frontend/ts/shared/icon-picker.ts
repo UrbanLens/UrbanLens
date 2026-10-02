@@ -227,6 +227,7 @@ export function installGlobalIconPicker(): void {
 
 declare global {
     interface Window {
-        IconPicker: typeof IconPicker;
+        /** Organize's and the map page's pickers also take a custom image. */
+        IconPicker: typeof IconPicker & { _handleUpload?(id: string, input: HTMLInputElement): void };
     }
 }

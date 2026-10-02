@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type { LocationSearchAttachOptions } from "./location-search-engine";
-import { bboxParam, nearbyPinPopup, PhotoPinConfirm } from "./photo-pin-confirm";
+import { bboxParam, installPhotoPinConfirm, nearbyPinPopup, PhotoPinConfirm } from "./photo-pin-confirm";
 
 type Handler = (e: { latlng: { lat: number; lng: number } }) => void;
 
@@ -164,6 +164,15 @@ describe("opening the dialog", () => {
         expect(dialog().open).toBe(true);
         expect(maps[0]!.view).toEqual([[40.5, -73.25], 15]);
         expect(markers[0]!.latlng).toEqual({ lat: 40.5, lng: -73.25 });
+    });
+
+    test("a queue card's Create pin button opens it on the card's photo", async () => {
+        installPhotoPinConfirm();
+        document.body.insertAdjacentHTML("beforeend", '<button type="button" data-pin-confirm-url="/vault/photos/9/confirm-pin/"><i>add</i></button>');
+        document.querySelector("[data-pin-confirm-url] i")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await settle();
+        expect(ajax[0]).toMatchObject({ verb: "GET", url: "/vault/photos/9/confirm-pin/" });
+        expect(dialog().open).toBe(true);
     });
 
     test("reopening for another photo tears down the previous map", async () => {

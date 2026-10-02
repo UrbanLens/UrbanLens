@@ -142,7 +142,7 @@
     {% if recent_uploads %}
     <section class="ul-section vault-home-recent">
         <h2 class="vault-home-section-title"><i class="material-symbols-outlined">schedule</i> Recent uploads</h2>
-        <div class="vault-recent-strip" id="vault-recent-strip" data-processing-url="{% url 'vault.photos.processing' %}">
+        <div class="vault-recent-strip" id="vault-recent-strip" data-processing-tiles data-processing-url="{% url 'vault.photos.processing' %}">
             {% for item in recent_uploads %}
             {% if item.media_type == 'photo' and item.pending_scan %}
             <a class="vault-recent-item" href="{% url 'vault.photos' %}" title="{{ item.display_caption|default:'' }}"
@@ -171,15 +171,4 @@
     {% endif %}
 
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-(function () {
-    var strip = document.getElementById('vault-recent-strip');
-    if (strip && window.urbanlensObserveProcessingTiles) {
-        window.urbanlensObserveProcessingTiles(strip, function (el, item) { window.urbanlensSettleProcessingThumb(el, item); });
-    }
-}());
-</script>
 {% endblock %}

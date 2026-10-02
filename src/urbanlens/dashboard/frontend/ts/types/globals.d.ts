@@ -95,6 +95,9 @@ declare global {
         // The shared map composer dialog (base.html).
         _openCommentMapComposer: (formOrOptions: HTMLElement | CommentMapComposerOptions) => void;
         _clearCommentMap?: (form: HTMLElement) => void;
+        // static/js/comment-map.js: the composer's Attach photo and Attach map dialogs.
+        _openCommentAttachImageDialog?: (compose: HTMLElement) => void;
+        _openCommentAttachMapDialog?: (compose: HTMLElement) => void;
         // Where the composer starts when opened for a form (static/js/comment-map.js reads them).
         _commentMapDefaultLat?: number;
         _commentMapDefaultLng?: number;
@@ -108,15 +111,6 @@ declare global {
         // static/js/media-thumb-fallback.js, loaded in <head> by themes/base.html.
         urbanlensMediaThumbFallback?: (img: HTMLImageElement, icon?: string, className?: string) => void;
         urbanlensRetryPendingImage?: (img: HTMLImageElement) => boolean;
-        // Defined by shared/media-lightbox.ts, exposed by entries/map-annotations.ts (loaded identically by the pin and wiki pages).
-        mediaOpenLightbox?: (thumbBtn: HTMLElement) => void;
-        // Set by shared/vault-photo-grid.ts and shared/vault-document-grid.ts for the tile partials' inline handlers.
-        photosOpenLightbox?: (imageId: number) => void;
-        photosDelete?: (imageId: number) => void;
-        documentsOpenLightbox?: (imageId: number) => void;
-        documentsDelete?: (imageId: number) => void;
-        // Set by shared/photo-pin-confirm.ts for the organize queue cards' "Create pin" buttons.
-        photosLoadPinConfirm?: (url: string) => void;
         // Set by shared/photo-gallery.ts (else shared/album-items.ts), for the page's map and lightbox.
         galleryOpenLightbox?: (imgId: number, fallback?: LightboxInput) => void;
         galleryRepositionImage?: (imgId: number, lat: number, lng: number, onRejected?: () => void) => Promise<void>;
@@ -127,16 +121,6 @@ declare global {
         _galleryRemoveMarker?: (imgId: number) => void;
         _galleryHighlightMarker?: (imgId: number, on: boolean) => void;
         _albumSyncMapHidden?: (imgId: number, hidden: boolean) => void;
-        // Georeferenced map image overlays.
-        ulMapOverlayStartAlign?: (uuid: string) => void;
-        ulMapOverlayPreviewOpacity?: (uuid: string, value: string) => void;
-        ulMapOverlaySeedCorners?: () => void;
-        ulMapOverlayPickFromMedia?: (galleryJsonUrl?: string) => void;
-        ulMapOverlayChooseImage?: (id: number, caption: string) => void;
-        ulMapOverlaySyncSubmitState?: () => void;
-        ulMapOverlayChooseFile?: () => void;
-        ulMapOverlayChooseUrl?: () => void;
-        ulMapOverlayHandleDrop?: (event: DragEvent, zone: HTMLElement) => void;
         // The current user's keyboard-shortcut overrides (Settings > Shortcuts), rendered server-side by base.html via.
         UL_HOTKEYS?: Record<string, string>;
         // Wikipedia-style page tabs (static/js/page-tabs.js, not bundled).

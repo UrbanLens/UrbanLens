@@ -91,11 +91,12 @@ export function confirmDialog(options: ConfirmOptions | string): Promise<Confirm
     });
 }
 
-/**
- * Confirm before following a community-added link.
- */
-export function urbanlensConfirmExternalLink(event: Event, url: string): boolean {
+/** A click on an ``a[data-confirm-external]`` (a community-added link) confirms before opening it. */
+function onExternalLinkClick(event: MouseEvent): void {
+    const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[data-confirm-external]") : null;
+    if (!link) return;
     event.preventDefault();
+    const url = link.href;
     void confirmDialog({
         title: "Leaving this site",
         message: `This link was added by the community and leads to an external, untrusted site:\n${url}`,
@@ -104,7 +105,6 @@ export function urbanlensConfirmExternalLink(event: Event, url: string): boolean
     }).then((ok) => {
         if (ok) window.open(url, "_blank", "noopener");
     });
-    return false;
 }
 
 /**
@@ -170,13 +170,16 @@ export async function deletePinCascade(pinUuid: string, pinName: string, csrfTok
 // do not load core.js genuinely do not have it.
 declare global {
     interface Window {
-        urbanlensConfirmExternalLink?: typeof urbanlensConfirmExternalLink;
         deletePinCascade?: typeof deletePinCascade;
     }
 }
 
+let linksWatched = false;
+
 export function installGlobalConfirmDialog(): void {
     window.confirmDialog = confirmDialog;
-    window.urbanlensConfirmExternalLink = urbanlensConfirmExternalLink;
     window.deletePinCascade = deletePinCascade;
+    if (linksWatched) return;
+    linksWatched = true;
+    document.addEventListener("click", onExternalLinkClick);
 }

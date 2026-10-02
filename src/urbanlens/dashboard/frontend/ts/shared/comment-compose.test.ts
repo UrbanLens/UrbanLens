@@ -215,4 +215,23 @@ describe("markup actions", () => {
         expect(opened).toEqual([document.getElementById("f"), document.getElementById("c")]);
         expect(cleared).toEqual([document.getElementById("f")]);
     });
+
+    test("the attach buttons open the photo or map dialog for their composer", () => {
+        const calls: [string, unknown][] = [];
+        window._openCommentAttachImageDialog = (compose) => void calls.push(["image", compose]);
+        window._openCommentAttachMapDialog = (compose) => void calls.push(["map", compose]);
+        window._openCommentMapComposer = () => void calls.push(["composer", null]);
+        document.body.innerHTML = `
+          <form class="comment-compose" id="c">
+            <button type="button" data-comment-attach="image"><i>image</i></button>
+            <button type="button" data-comment-attach="map"><i>map</i></button>
+          </form>`;
+        document.querySelector('[data-comment-attach="image"] i')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        document.querySelector('[data-comment-attach="map"] i')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        const compose = document.getElementById("c");
+        expect(calls).toEqual([
+            ["image", compose],
+            ["map", compose],
+        ]);
+    });
 });

@@ -95,7 +95,7 @@ export class VaultUploader {
     private internalDrag = false;
 
     constructor(
-        root: HTMLElement,
+        private readonly root: HTMLElement,
         private readonly grid: VaultGrid | null,
         private readonly options: VaultUploaderOptions,
     ) {
@@ -110,6 +110,19 @@ export class VaultUploader {
 
     private byId(suffix: string): HTMLElement | null {
         return document.getElementById(`${this.kind.plural}-${suffix}`);
+    }
+
+    /** A tile's open button opens the lightbox at it, and its delete button deletes it. */
+    bindTileActions(): void {
+        const { kind } = this.kind;
+        this.root.addEventListener("click", (event) => {
+            const control = event.target instanceof Element ? event.target.closest(`.${kind}-tile-btn, .${kind}-tile-del`) : null;
+            const tile = control?.closest<HTMLElement>(vaultTileSelector(this.kind));
+            const id = Number(tile?.dataset.id);
+            if (!control || !id) return;
+            if (control.matches(`.${kind}-tile-del`)) void this.remove(id);
+            else this.openLightbox(id);
+        });
     }
 
     /** Wire the file picker and make the whole page a drop target. */

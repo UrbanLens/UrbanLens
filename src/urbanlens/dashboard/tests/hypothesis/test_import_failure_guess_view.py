@@ -7,6 +7,7 @@ from unittest import mock
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.inline_scripts import inline_handlers
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin_import_failures.model import (
     PinImportFailure,
@@ -105,7 +106,11 @@ class ImportFailureGuessViewTests(TestCase):
     def test_the_suggestion_only_prefills_and_never_places(self) -> None:
         """A guess from a name can be wrong, so the user confirms it."""
         with mock.patch(_GUESS, return_value=self._a_guess()):
-            body = self.client.get(self._url()).content.decode()
+            content = self.client.get(self._url()).content
+        body = content.decode()
 
         self.assertNotIn("hx-post", body)
-        self.assertIn("showModal", body)
+        self.assertIn(f'data-dialog-open="pin-import-failure-place-dialog-{self.failure.pk}"', body)
+        self.assertIn('data-dialog-fill-latitude="41.470000"', body)
+        self.assertIn('data-dialog-fill-longitude="-71.350000"', body)
+        self.assertEqual(inline_handlers(content), [])

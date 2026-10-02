@@ -268,7 +268,10 @@ export function watchAutoProcessingTiles(root: ParentNode): void {
 
 let autoWatchInstalled = false;
 
-/** For the inline scripts in server-rendered galleries (`partials/pins/_photo_gallery.html`, the home and Vault home strips). */
+/**
+ * Watches ``data-processing-auto`` tiles, and the pending tiles of each ``data-processing-tiles`` container (settled
+ * in place, links left as they are). The globals serve galleries with a script of their own.
+ */
 export function installGlobalPhotoProcessing(): void {
     if (!autoWatchInstalled) {
         autoWatchInstalled = true;
@@ -276,7 +279,10 @@ export function installGlobalPhotoProcessing(): void {
         document.addEventListener("htmx:load", (event) => {
             if (event.target instanceof HTMLElement) watchAutoProcessingTiles(event.target);
         });
-        document.addEventListener("DOMContentLoaded", () => watchAutoProcessingTiles(document));
+        document.addEventListener("DOMContentLoaded", () => {
+            watchAutoProcessingTiles(document);
+            for (const container of document.querySelectorAll<HTMLElement>("[data-processing-tiles]")) observeProcessingTiles(container, (el, item) => settleProcessingThumb(el, item));
+        });
     }
     window.urbanlensObserveProcessingTiles = observeProcessingTiles;
     window.urbanlensWatchProcessing = watchProcessing;

@@ -49,7 +49,7 @@
 
       <div class="comment-compose-actions">
         <button type="button" class="comment-image-label" title="Attach photo"
-                onclick="_openCommentAttachImageDialog(this.closest('.comment-compose'))">
+                data-comment-attach="image">
           <i class="material-symbols-outlined">image</i>
         </button>
         <input type="file" name="image" accept="image/*" class="comment-image-input" hidden aria-label="Attach an image">
@@ -57,7 +57,7 @@
         <input type="hidden" name="existing_image_id" class="comment-existing-image-field" value="">
         <span class="comment-image-preview"></span>
         <button type="button" class="comment-map-btn" title="Attach map"
-                onclick="_openCommentAttachMapDialog(this.closest('.comment-compose'))">
+                data-comment-attach="map">
           <i class="material-symbols-outlined">map</i>
         </button>
         <button type="submit" class="btn btn--primary {% if is_reply %}btn--sm{% endif %}">

@@ -431,7 +431,7 @@ class MapToolSpec:
         tooltip: Tooltip text (may include a keyboard shortcut hint).
         tooltip_pos: Tooltip placement (``""`` for float-only, or ``"below"``).
         button_id: Explicit DOM id (kept stable for tests/automation).
-        onclick: JS expression for a plain ``onclick`` handler.
+        action: What the button does, named in ``data-map-tool`` for ``map-toolbar-actions.ts`` to run.
         markup_tool: The drawing tool a markup button starts, which ``markup-panel.ts`` reads from ``data-markup-tool``.
         hx_get_name: URL name to reverse for an ``hx-get`` button, or ``""``.
         hx_target: ``hx-target`` selector, paired with ``hx_get_name``.
@@ -445,7 +445,7 @@ class MapToolSpec:
     tooltip: str
     tooltip_pos: str = ""
     button_id: str = field(default="")
-    onclick: str = ""
+    action: str = ""
     markup_tool: str = ""
     hx_get_name: str = ""
     hx_target: str = ""
@@ -483,7 +483,7 @@ register_map_tool(
         aria_label="Add pin",
         tooltip="Drop a new pin on the map",
         button_id="add-pin-button",
-        onclick="openAddPinDialog()",
+        action="add-pin",
     )
 )
 register_map_tool(
@@ -507,7 +507,7 @@ register_map_tool(
         tooltip="Filter pins by name, rating, visits, labels, and more (F)",
         tooltip_pos="below",
         button_id="search-pins-button",
-        onclick="toggleFilterPanel()",
+        action="toggle-filter-panel",
         extra_html='<span class="fp-active-label" id="fp-active-label" aria-hidden="true" hidden></span>',
     )
 )
@@ -521,7 +521,7 @@ register_map_tool(
         # _togglePinListPanel() already looks this id up to sync the button's active state; the edge handle
         # (#pin-list-handle) is a desktop convenience rather than the only way in.
         button_id="pin-list-button",
-        onclick="_togglePinListPanel()",
+        action="toggle-pin-list",
     )
 )
 register_map_tool(
@@ -532,7 +532,7 @@ register_map_tool(
         tooltip="Select multiple pins to merge, edit, or delete. Ctrl+click a second pin to start.",
         tooltip_pos="below",
         button_id="select-pins-button",
-        onclick="toggleSelectMode()",
+        action="select-pins",
     )
 )
 register_map_tool(
@@ -543,7 +543,7 @@ register_map_tool(
         tooltip="Select multiple child pins to promote or delete. Ctrl+click a second pin to start.",
         tooltip_pos="below",
         button_id="select-detail-pins-button",
-        onclick="toggleDetailPinSelectMode()",
+        action="select-detail-pins",
     )
 )
 register_map_tool(
@@ -554,7 +554,7 @@ register_map_tool(
         tooltip="Click or drag on the map to include or exclude buildings",
         tooltip_pos="below",
         button_id="select-building-import-button",
-        onclick="toggleBuildingImportSelectMode()",
+        action="select-buildings",
     )
 )
 register_map_tool(
@@ -564,7 +564,7 @@ register_map_tool(
         aria_label="Select pins",
         tooltip="Select multiple pins",
         tooltip_pos="below",
-        # No onclick: memories-tabs.ts passes this id to pin-select-map.ts as `selectToggleBtnId`, which binds it.
+        # No action: memories-tabs.ts passes this id to pin-select-map.ts as `selectToggleBtnId`, which binds it.
         button_id="unlogged-visits-select-toggle",
     )
 )
@@ -587,12 +587,11 @@ register_map_tool(
         tooltip="Take a screenshot of the map",
         tooltip_pos="below",
         button_id="screenshot-map-button",
-        # onclick is filled in per-call by map_toolbar() - it needs the
-        # calling page's map instance and (optionally) context.
+        # The action is filled in per call by map_toolbar(): the pin page opens its own composer.
     )
 )
 
-# Onclick handlers are the same window globals createMarkupToolbar() exposes (see ts/shared/markup-toolbar.ts
+# Actions call the same window globals createMarkupToolbar() exposes (see ts/shared/markup-toolbar.ts
 # and _markup_panel_dialog.html).
 register_map_tool(
     MapToolSpec(
@@ -602,7 +601,7 @@ register_map_tool(
         tooltip="Add a detail pin",
         tooltip_pos="below",
         button_id="markup-pin-button",
-        onclick="openAddPinDialog()",
+        action="add-pin",
     )
 )
 register_map_tool(
@@ -691,9 +690,7 @@ register_map_tool(
 def map_toolbar(
     tools: str = "screenshot",
     panel_id: str = "map-buttons",
-    map_var: str = "window.map",
-    screenshot_context: str = "null",
-    screenshot_onclick: str = "",
+    screenshot_action: str = "screenshot",
     screenshot_trip_name: str = "",
 ) -> dict[str, Any]:
     """Render the shared top-right map toolbar (tools only).
@@ -701,38 +698,31 @@ def map_toolbar(
     Every map on the site renders this exact markup so the screenshot tool - and any future toolbar tool
 
     - behaves identically everywhere: same placement, same collapse behavior, same underlying screenshot
-      code path (``window._openMapToolbarScreenshot``, ``themes/...
+      code path (``window._openMapToolbarScreenshot`` on ``window.map``).
 
     Args:
         tools: Comma-separated tool keys from :data:`MAP_TOOL_REGISTRY`, in display order.
         panel_id: DOM id of the toolbar root.
-        map_var: Ignored if ``screenshot_onclick`` is given.
-        screenshot_context: Raw JS expression (e.g. an object literal) passed as the composer's
-        ``context`` option, or ``"null"``.
-        screenshot_onclick: Full ``onclick`` override for the screenshot button, for pages that need
-        bespoke logic (e.g. resolving context from a JS config object)...
-        screenshot_trip_name: When set, overrides ``screenshot_context`` with ``{tripName: ...}``
-        (JSON-encoded, so it round-trips safely through the auto-escaped...
+        screenshot_action: The screenshot button's action; the pin page passes ``"pin-screenshot"`` for its own
+            composer.
+        screenshot_trip_name: When set, the composer is told it is screenshotting this trip.
 
     Returns:
         Context for ``partials/map/_map_toolbar.html``.
     """
     keys = [k.strip() for k in tools.split(",") if k.strip()]
-    if screenshot_trip_name:
-        screenshot_context = json.dumps({"tripName": screenshot_trip_name})
     buttons: list[dict[str, Any]] = []
     for key in keys:
         spec = MAP_TOOL_REGISTRY.get(key)
         if not spec:
             continue
-        onclick = spec.onclick
-        if key == "screenshot":
-            onclick = screenshot_onclick or f"_openMapToolbarScreenshot({map_var}, {screenshot_context})"
+        is_screenshot = key == "screenshot"
         buttons.append(
             {
                 "spec": spec,
                 "hx_get": reverse(spec.hx_get_name) if spec.hx_get_name else "",
-                "onclick": onclick,
+                "action": screenshot_action if is_screenshot else spec.action,
+                "screenshot_context": json.dumps({"tripName": screenshot_trip_name}) if is_screenshot and screenshot_trip_name else "",
             }
         )
     return {

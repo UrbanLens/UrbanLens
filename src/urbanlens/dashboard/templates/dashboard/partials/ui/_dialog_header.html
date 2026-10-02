@@ -2,7 +2,7 @@
 <div class="dialog-header">
     <span id="{% if title_id %}{{ title_id }}{% else %}dialog-title-{{ title|slugify }}{% endif %}">{{ title }}</span>
     <button type="button" class="dialog-close"
-            {% if closefn %}onclick="{{ closefn }}()"{% else %}data-dialog-close{% endif %}
+            data-dialog-close{% if closefn %} data-closefn="{{ closefn }}"{% endif %}
             aria-label="Close dialog">
         <i class="material-symbols-outlined">close</i>
     </button>

@@ -83,7 +83,6 @@ export const LabelRelPicker = {
         removeBtn.className = "tag-chip-remove";
         removeBtn.title = "Remove";
         removeBtn.innerHTML = "&times;";
-        removeBtn.onclick = () => LabelRelPicker.remove(instanceId, chip);
         chip.appendChild(removeBtn);
 
         group.appendChild(chip);
@@ -222,6 +221,38 @@ export const LabelRelPicker = {
     },
 };
 
+function relTypeOf(el: Element | null | undefined): RelType | null {
+    const relType = el instanceof HTMLElement ? el.dataset.relType : undefined;
+    return relType === "parent" || relType === "child" ? relType : null;
+}
+
+/** The picker a control belongs to, and the direction its popup (or Add button) serves. */
+function controlContext(control: Element): { instanceId: string; relType: RelType | null } | null {
+    const instanceId = control.closest<HTMLElement>(".label-rel-picker")?.dataset.pickerId;
+    if (!instanceId) return null;
+    return { instanceId, relType: relTypeOf(control.closest(".label-rel-popup, .label-rel-add-btn")) };
+}
+
+/** The picker's controls name their action in markup: an Add button, a popup's kind tabs and search, its suggestions, and each chip's remove button. */
+function onPickerClick(event: MouseEvent): void {
+    const target = event.target instanceof Element ? event.target : null;
+    const control = target?.closest<HTMLElement>(".label-rel-add-btn, .label-rel-tab, .label-rel-suggestion, .label-rel-chip .tag-chip-remove");
+    const context = control ? controlContext(control) : null;
+    if (!control || !context) return;
+    if (control.classList.contains("label-rel-suggestion")) LabelRelPicker.pick(control);
+    else if (control.classList.contains("tag-chip-remove")) LabelRelPicker.remove(context.instanceId, control.closest<HTMLElement>(".label-rel-chip"));
+    else if (!context.relType) return;
+    else if (control.classList.contains("label-rel-add-btn")) LabelRelPicker.toggle(context.instanceId, context.relType, control);
+    else LabelRelPicker.setTab(context.instanceId, context.relType, control.dataset.kind ?? "", control);
+}
+
+function onPickerInput(event: Event): void {
+    const field = event.target;
+    if (!(field instanceof HTMLInputElement) || !field.classList.contains("label-rel-search")) return;
+    const context = controlContext(field);
+    if (context?.relType) LabelRelPicker.filter(context.instanceId, context.relType, field.value);
+}
+
 export function installGlobalLabelRelPicker(): void {
     window.LabelRelPicker = LabelRelPicker;
     LabelRelPicker._initAll();
@@ -233,6 +264,8 @@ export function installGlobalLabelRelPicker(): void {
             });
         }
     });
+    document.addEventListener("click", onPickerClick);
+    document.addEventListener("input", onPickerInput);
 }
 
 declare global {

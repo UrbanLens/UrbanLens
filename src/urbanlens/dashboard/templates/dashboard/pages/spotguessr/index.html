@@ -197,9 +197,5 @@
 
 {{ urls|json_script:"sg-urls" }}
 {{ last_config|json_script:"sg-last-config" }}
-<script>
-    window.SPOTGUESSR_URLS = JSON.parse(document.getElementById('sg-urls').textContent);
-    window.SPOTGUESSR_LAST_CONFIG = JSON.parse(document.getElementById('sg-last-config').textContent);
-</script>
 <script type="module" src="{% static 'dashboard/js/spotguessr.js' %}"></script>
 {% endblock %}

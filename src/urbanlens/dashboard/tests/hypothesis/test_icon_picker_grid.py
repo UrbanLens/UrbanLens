@@ -74,13 +74,13 @@ class IconPickerGridEndpointTests(TestCase):
     def test_the_response_carries_no_picker_id(self) -> None:
         """One response serves every picker on the page, so it cannot name one.
 
-        The per-item handler resolves the id from the enclosing dropdown; a hardcoded id here would send every
+        ``picker-actions.ts`` resolves the id from the enclosing dropdown; a hardcoded id here would send every
         pick to whichever picker rendered first."""
         self.client.force_login(self.user)
 
         body = self.client.get(self.url).content.decode()
 
-        self.assertIn("closest('.icon-picker-dropdown').dataset.picker", body)
+        self.assertNotRegex(body, r"\son[a-z]+\s*=", "the catalogue carries an inline handler")
         self.assertNotIn("icon-value-", body)
         self.assertNotIn("icon-grid-", body)
         self.assertNotIn("icon-tabs-", body)

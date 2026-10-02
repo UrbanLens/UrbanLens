@@ -19,6 +19,12 @@ MAX_INLINE_SCRIPT_BYTES = 20_000
 
 #: An inline block: a ``<script>`` carrying its own body rather than a ``src``.
 INLINE = re.compile(rb"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.DOTALL)
+#: An inline block a browser runs: not a ``src`` and not a JSON island.
+EXECUTABLE = re.compile(
+    rb"<script(?![^>]*\bsrc=)(?![^>]*\btype=\"application/(?:ld\+)?json\")[^>]*>(.*?)</script>", re.DOTALL
+)
+#: An event handler attribute (``onclick="..."``) inside a tag.
+HANDLER = re.compile(rb"<[a-zA-Z][^>]*?\s(on[a-z]+)\s*=\s*[\"']", re.DOTALL)
 #: Every ``CFG.urls["x"]`` and ``CFG.assets["x"]`` a script reads.
 INDEXED_READ = re.compile(r'CFG\.(urls|assets)\["([^"]+)"\]')
 #: Every ``CFG.plainKey`` a script reads.
@@ -36,6 +42,28 @@ def inline_blocks(page: bytes) -> list[bytes]:
     Returns:
         The body of each ``<script>`` that has no ``src``."""
     return list(INLINE.findall(page))
+
+
+def executable_blocks(page: bytes) -> list[bytes]:
+    """Every inline script in *page* a browser would run.
+
+    Args:
+        page: A rendered response body.
+
+    Returns:
+        The body of each ``<script>`` that has no ``src`` and is not a JSON island."""
+    return list(EXECUTABLE.findall(page))
+
+
+def inline_handlers(page: bytes) -> list[str]:
+    """Every ``on*=`` handler attribute in *page*, by name.
+
+    Args:
+        page: A rendered response body.
+
+    Returns:
+        The attribute name of each handler, ``onclick`` and the like, once per occurrence."""
+    return [name.decode() for name in HANDLER.findall(page)]
 
 
 def largest_inline(page: bytes) -> int:

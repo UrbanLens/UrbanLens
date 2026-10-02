@@ -84,6 +84,20 @@ describe("data-confirm", () => {
     });
 });
 
+describe("data-no-submit", () => {
+    test("a form whose fields a script reads never submits itself", () => {
+        render(`<form data-no-submit><input name="q" value="owl"><button type="submit" name="go">Go</button></form>`);
+        document.querySelector("button")?.click();
+        expect(submitted).toEqual([]);
+    });
+
+    test("a form without it still submits", () => {
+        render(`<form><button type="submit" name="go">Go</button></form>`);
+        document.querySelector("button")?.click();
+        expect(submitted).toEqual(["go"]);
+    });
+});
+
 describe("data-reload", () => {
     test("reloads the page", () => {
         let reloads = 0;
@@ -275,5 +289,58 @@ describe("data-toggles", () => {
         expect([document.getElementById("panel")?.hidden, button?.classList.contains("is-open"), button?.getAttribute("aria-expanded")]).toEqual([false, true, "true"]);
         icon?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect([document.getElementById("panel")?.hidden, button?.classList.contains("is-open"), button?.getAttribute("aria-expanded")]).toEqual([true, false, "false"]);
+    });
+});
+
+describe("data-autosubmit", () => {
+    test("a file input submits its form once a file is chosen, and not when the choice is cleared", () => {
+        const form = render(`<form><input type="file" data-autosubmit></form>`);
+        let requested = 0;
+        form.requestSubmit = () => void requested++;
+        const input = form.querySelector("input") as HTMLInputElement;
+        let files: File[] = [];
+        Object.defineProperty(input, "files", { get: () => files });
+
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(requested).toBe(0);
+        files = [new File(["x"], "plan.pdf")];
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(requested).toBe(1);
+    });
+});
+
+describe("data-autogrow", () => {
+    function textarea(id: string, scrollHeight: number): HTMLTextAreaElement {
+        const el = document.getElementById(id) as HTMLTextAreaElement;
+        Object.defineProperty(el, "scrollHeight", { configurable: true, get: () => scrollHeight });
+        return el;
+    }
+
+    test("a textarea fits its content when it arrives and as it is typed in", () => {
+        render(`<form><div id="panel"><textarea id="note" data-autogrow></textarea><textarea id="plain"></textarea></div></form>`);
+        const note = textarea("note", 64);
+        const plain = textarea("plain", 64);
+        document.getElementById("panel")?.dispatchEvent(new CustomEvent("htmx:load", { bubbles: true }));
+        expect([note.style.height, plain.style.height]).toEqual(["64px", ""]);
+
+        textarea("note", 120).dispatchEvent(new Event("input", { bubbles: true }));
+        textarea("plain", 120).dispatchEvent(new Event("input", { bubbles: true }));
+        expect([note.style.height, plain.style.height]).toEqual(["120px", ""]);
+    });
+});
+
+describe("data-removes", () => {
+    test("a control removes the element it names", () => {
+        render(`<form></form><div id="modal"><div id="screen" data-removes="modal"></div><button type="button" data-removes="modal"><i>x</i></button></div>`);
+        document.querySelector("#screen")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(document.getElementById("modal")).toBeNull();
+    });
+});
+
+describe("data-empties", () => {
+    test("a button empties the element it names", () => {
+        render(`<form><button type="button" data-empties="detail"><i>close</i></button></form><div id="detail"><p>diff</p><p>more</p></div>`);
+        document.querySelector("[data-empties] i")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(document.getElementById("detail")?.childNodes.length).toBe(0);
     });
 });

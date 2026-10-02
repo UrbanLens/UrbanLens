@@ -36,7 +36,7 @@
                      class="sv-img sv-img--fallback"
                      hidden
                      alt="{{ slide.source }} - {{ slide.date }}">
-                <button type="button" class="sv-embed-fallback-btn" onclick="_svShowStaticFallback(this)"
+                <button type="button" class="sv-embed-fallback-btn" data-carousel-action="street-static"
                         title="If the interactive view above isn't working, switch to a static image instead">
                     Trouble viewing this? Show static image
                 </button>
@@ -44,14 +44,14 @@
                 <img src="{{ slide.img_src }}"
                      class="sv-img"
                      alt="{{ slide.source }} - {{ slide.date }}"
-                     onerror="_svRemoveSlide(this)">
+                     data-carousel-img>
                 {% endif %}
                 {% endwith %}
                 {% else %}
                 <img src="{{ slide.img_src }}"
                      class="sv-img"
                      alt="{{ slide.source }} - {{ slide.date }}"
-                     onerror="_svRemoveSlide(this)">
+                     data-carousel-img>
                 {% endif %}
             </div>
             {% endfor %}
@@ -59,7 +59,7 @@
 
         <div class="sv-controls">
             {% if slides|length > 1 %}
-            <button class="sv-btn sv-prev" onclick="_svPrev()" aria-label="Previous image"
+            <button class="sv-btn sv-prev" data-carousel-action="street-prev" aria-label="Previous image"
                     title="Previous image">
                 <i class="material-symbols-outlined">chevron_left</i>
             </button>
@@ -70,7 +70,7 @@
                 <span class="sv-heading"></span>
             </div>
             {% if slides|length > 1 %}
-            <button class="sv-btn sv-next" onclick="_svNext()" aria-label="Next image"
+            <button class="sv-btn sv-next" data-carousel-action="street-next" aria-label="Next image"
                     title="Next image">
                 <i class="material-symbols-outlined">chevron_right</i>
             </button>
@@ -79,19 +79,6 @@
 
         <div class="sv-dots" id="sv-dots"></div>
     </div>
-
-    <script>
-    (function () {
-        // Control functions (_svShow/_svRemoveSlide/_svPrev/_svNext) live in
-        // map-annotations.ts, loaded once at page load - NOT here, since HTMX
-        // inserts this fragment's DOM (including <img onerror>) before it executes
-        // any <script> found within the same fragment, which previously let a
-        // fast-failing image call _svRemoveSlide before it had been defined yet.
-        // This trailing call is safe: it only needs the DOM above to already be
-        // present, not any image to have finished loading.
-        if (window._svShow) window._svShow(0);
-    }());
-    </script>
 
     {% else %}
     <div class="view-unavailable">

@@ -61,7 +61,6 @@ export function renderVaultPhotoTile(raw: Record<string, unknown>): HTMLElement 
     }
 
     const openBtn = li.querySelector<HTMLButtonElement>(".photo-tile-btn");
-    li.querySelector<HTMLButtonElement>(".photo-tile-del")?.addEventListener("click", () => window.photosDelete?.(id));
     const img = li.querySelector("img");
     if (processing) {
         li.dataset.processing = processing;
@@ -72,10 +71,7 @@ export function renderVaultPhotoTile(raw: Record<string, unknown>): HTMLElement 
         }
         return li;
     }
-    if (openBtn) {
-        openBtn.setAttribute("aria-label", `Open photo: ${caption || "untitled"}`);
-        openBtn.addEventListener("click", () => window.photosOpenLightbox?.(id));
-    }
+    openBtn?.setAttribute("aria-label", `Open photo: ${caption || "untitled"}`);
     if (img) img.src = thumbUrl;
     return li;
 }
@@ -149,7 +145,6 @@ export function initVaultPhotosPage(): void {
         companionIds: (id) => [`photo-card-${id}`],
     });
     uploader.bindInputs();
+    uploader.bindTileActions();
     bindUploadRetry(root, root.dataset.uploadUrl ?? "", "image");
-    window.photosDelete = (id) => void uploader.remove(id);
-    window.photosOpenLightbox = (id) => uploader.openLightbox(id);
 }

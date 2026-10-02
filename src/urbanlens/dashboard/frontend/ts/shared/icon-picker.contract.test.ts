@@ -52,10 +52,14 @@ describe("icon picker search contract with _icon_picker.html", () => {
         }
     });
 
-    test("a grid button resolves its picker from the enclosing dropdown", () => {
+    test("a grid button names no picker: picker-actions.ts resolves it from the enclosing dropdown", () => {
         // One cached response serves every picker, so the id cannot be baked in.
-        expect(gridTemplate).toContain("closest('.icon-picker-dropdown').dataset.picker");
         expect(gridTemplate).not.toContain("picker_id");
+        expect(template).toContain('class="icon-picker-dropdown" data-picker="{{ picker_id }}"');
+    });
+
+    test("neither partial carries an inline handler", () => {
+        for (const source of [template, gridTemplate]) expect(source).not.toMatch(/\son[a-z]+\s*=/);
     });
 
     test("search matches a lowercased label regardless of query case", () => {

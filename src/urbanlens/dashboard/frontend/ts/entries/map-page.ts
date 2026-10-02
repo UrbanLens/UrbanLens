@@ -20,6 +20,8 @@ import { startPoller } from "../shared/poller";
 import { singleFlight } from "../shared/single-flight";
 import { escHtml } from "../shared/escape-html";
 import { installAddToListPicker } from "../shared/add-to-list-picker";
+import { delegateActions } from "../shared/delegated-actions";
+import { handleMapArrival } from "../shared/map-arrival";
 
 declare const L: typeof import("leaflet");
 declare const htmx: HtmxApi;
@@ -48,21 +50,15 @@ declare global {
         updateCachedPin: (pinData: PinData) => void;
         findLocalPinNear?: (lat: number, lng: number, thresholdMeters?: number) => PinData | null;
         applyMapDarkMode: (mode: string) => void;
-        closePinPopupMenus: typeof closePinPopupMenus;
-        togglePinPopupMenu: typeof togglePinPopupMenu;
-        deletePin: typeof deletePin;
-        promoteChildPins: typeof promoteChildPins;
         toggleSelectMode: typeof toggleSelectMode;
         exitSelectMode: typeof exitSelectMode;
         _exportSelection: typeof _exportSelection;
         openBulkDeleteDialog: typeof openBulkDeleteDialog;
-        _undoBulkDelete: typeof _undoBulkDelete;
         openBulkMergeDialog: typeof openBulkMergeDialog;
         openBulkEditDialog: typeof openBulkEditDialog;
         toggleFilterPanel: typeof toggleFilterPanel;
         _togglePinListPanel: typeof _togglePinListPanel;
         _flyToPinFromList: typeof _flyToPinFromList;
-        openAddToListDialog: typeof openAddToListDialog;
         resetFilters: typeof resetFilters;
         applySavedFilter: typeof applySavedFilter;
         toggleToolbarSavedFilter: typeof toggleToolbarSavedFilter;
@@ -76,7 +72,6 @@ declare global {
         _exitFilterMode: typeof _exitFilterMode;
         _apdlgClearCustomizations: typeof _apdlgClearCustomizations;
         _apdlgDeletePin: typeof _apdlgDeletePin;
-        openEditPinDialog: typeof openEditPinDialog;
         closeAddPinDialog: typeof closeAddPinDialog;
     }
 }
@@ -103,6 +98,7 @@ interface MapPageUrls {
     mapPlacesDetails: string;
     mapPlacesNearby: string;
     mapResolvePlace: string;
+    memoriesLocations: string;
     pinAdd: string;
     pinBulkDelete: string;
     pinBulkEdit: string;
@@ -132,6 +128,7 @@ interface MapPageConfig {
     showPinCount: boolean;
     showFilteredPinCount: boolean;
     showPlacesLayer: boolean;
+    showPinSuggestionsIntro: boolean;
     usePinCache: boolean;
     mapCenterMode: string;
     mapCenterLat: number | null;
@@ -145,6 +142,8 @@ interface MapPageConfig {
 }
 
 const MAP_CFG: MapPageConfig = JSON.parse(document.getElementById("map-page-config")!.textContent!);
+// Registered first, so a failure later in this module cannot take the deep links with it.
+document.addEventListener("DOMContentLoaded", () => handleMapArrival(window.location.search, { showPinSuggestionsIntro: MAP_CFG.showPinSuggestionsIntro, suggestionsUrl: MAP_CFG.urls.memoriesLocations }));
 
 // -- HTML-building safety ---------------------------------------------------
 // Anything reaching href=/src= also needs its *scheme* checked - escaping quotes
@@ -1384,12 +1383,12 @@ function _buildMarker(pin: PinData): L.Marker | null {
                     <div class="popup-menu">
                         <button type="button" class="popup-menu-toggle" aria-haspopup="true" aria-expanded="false"
                                 title="More actions" aria-label="More actions for this pin"
-                                onclick="togglePinPopupMenu(this)"><i class="material-symbols-outlined">more_vert</i></button>
+                                data-map-action="pin-menu"><i class="material-symbols-outlined">more_vert</i></button>
                         <div class="popup-menu-items" role="menu" hidden>
-                            ${pin.id ? `<button type="button" role="menuitem" class="add-to-list-button" onclick="event.stopPropagation(); closePinPopupMenus(); openAddToListDialog(${pin.id})"><i class="material-symbols-outlined">playlist_add</i> Add to list</button>` : ""}
-                            ${pin.child_count && pin.child_count > 0 ? `<button type="button" role="menuitem" class="promote-children-button" onclick="event.stopPropagation(); closePinPopupMenus(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})"><i class="material-symbols-outlined">move_up</i> Promote child pins</button>` : ""}
-                            <button type="button" role="menuitem" class="edit-pin-button" onclick="closePinPopupMenus(); openEditPinDialog('${pin.uuid}')"><i class="material-symbols-outlined">edit</i> Edit pin</button>
-                            <button type="button" role="menuitem" class="delete-button" onclick="deletePin(this)"><i class="material-symbols-outlined">delete</i> Delete pin</button>
+                            ${pin.id ? `<button type="button" role="menuitem" class="add-to-list-button" data-map-action="pin-add-to-list" data-pin-id="${pin.id}"><i class="material-symbols-outlined">playlist_add</i> Add to list</button>` : ""}
+                            ${pin.child_count && pin.child_count > 0 ? `<button type="button" role="menuitem" class="promote-children-button" data-map-action="pin-promote-children" data-pin-slug="${escHtml(pin.slug || pin.uuid)}" data-child-count="${pin.child_count}"><i class="material-symbols-outlined">move_up</i> Promote child pins</button>` : ""}
+                            <button type="button" role="menuitem" class="edit-pin-button" data-map-action="pin-edit" data-pin-uuid="${escHtml(pin.uuid)}"><i class="material-symbols-outlined">edit</i> Edit pin</button>
+                            <button type="button" role="menuitem" class="delete-button" data-map-action="pin-delete"><i class="material-symbols-outlined">delete</i> Delete pin</button>
                         </div>
                     </div>
                 </div>
@@ -2233,7 +2232,7 @@ function _buildChildMarker(pin: PinData): L.Marker | null {
                 ${pin.description ? `<div class="popup-desc">${escHtml(pin.description)}</div>` : ""}
                 <div class="popup-actions">
                     <a href="${escHtml(pin.url || "#")}" class="view-full-pin">View Details</a>
-                    ${pin.child_count && pin.child_count > 0 ? `<button class="btn btn--icon promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ""}
+                    ${pin.child_count && pin.child_count > 0 ? `<button class="btn btn--icon promote-children-button" data-map-action="pin-promote-children" data-pin-slug="${escHtml(pin.slug || pin.uuid)}" data-child-count="${pin.child_count}" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ""}
                 </div>
             </div>`);
 
@@ -3159,8 +3158,7 @@ async function _deletePinByUuid(pinUuid: string, pinName: string): Promise<boole
 // The popup's destructive and secondary actions (add to list, promote,
 // edit, delete) live behind one button so the popup reads as information
 // with a way in, rather than a row of icons to decode. Leaflet rebuilds
-// popup DOM on every open, so these are delegated by class rather than
-// wired per marker.
+// popup DOM on every open, so they are data-map-action controls.
 function closePinPopupMenus(): void {
     document.querySelectorAll<HTMLElement>(".popup-menu-items:not([hidden])").forEach(function (menu) {
         menu.hidden = true;
@@ -3168,7 +3166,6 @@ function closePinPopupMenus(): void {
         if (toggle) toggle.setAttribute("aria-expanded", "false");
     });
 }
-window.closePinPopupMenus = closePinPopupMenus;
 
 function togglePinPopupMenu(button: HTMLElement): void {
     const menu = button.parentElement?.querySelector<HTMLElement>(".popup-menu-items");
@@ -3178,7 +3175,6 @@ function togglePinPopupMenu(button: HTMLElement): void {
     menu.hidden = wasOpen;
     button.setAttribute("aria-expanded", String(!wasOpen));
 }
-window.togglePinPopupMenu = togglePinPopupMenu;
 
 // A click anywhere else, or Escape, closes it - including a click on the
 // map itself, which Leaflet does not route through the popup.
@@ -3195,7 +3191,6 @@ async function deletePin(button: HTMLElement): Promise<void> {
     const pinName = popup.querySelector(".popup-title")?.textContent?.trim() || "this pin";
     await _deletePinByUuid(pinUuid, pinName);
 }
-window.deletePin = deletePin;
 
 async function promoteChildPins(pinSlug: string, childCount: number): Promise<void> {
     const n = childCount || 0;
@@ -3228,7 +3223,6 @@ async function promoteChildPins(pinSlug: string, childCount: number): Promise<vo
             toastr.error("Failed to promote child pins.");
         });
 }
-window.promoteChildPins = promoteChildPins;
 
 // ============================================================
 // Multi-select tool: select, merge, delete (+undo), bulk edit
@@ -3524,7 +3518,7 @@ function _showUndoDeleteToast(count: number, descendantCount: number, token: str
     if (descendantCount > 0) {
         label += ` (+${descendantCount} child pin${descendantCount === 1 ? "" : "s"})`;
     }
-    const msg = `${label} deleted. ` + `<button type="button" class="toast-undo-btn" onclick="_undoBulkDelete('${token}', this)">Undo</button>`;
+    const msg = `${label} deleted. ` + `<button type="button" class="toast-undo-btn" data-map-action="undo-bulk-delete" data-undo-token="${escHtml(token)}">Undo</button>`;
     toastr.success(msg, "", { timeOut: 10000, extendedTimeOut: 4000, closeButton: true, tapToDismiss: false });
 }
 
@@ -3548,7 +3542,6 @@ function _undoBulkDelete(token: string, btn: HTMLButtonElement | null): void {
             toastr.error("Could not undo - the delete may have expired.");
         });
 }
-window._undoBulkDelete = _undoBulkDelete;
 
 // -- Merge ----------------------------------------------------------------
 let _bulkMergeTargetUuid: string | null = null;
@@ -4226,7 +4219,6 @@ function openAddToListDialog(pinIdOrIds?: number | string | Array<number | strin
     _addToListPinIds = pinIdOrIds == null ? null : Array.isArray(pinIdOrIds) ? pinIdOrIds : [pinIdOrIds];
     (document.getElementById("add-to-list-dialog") as HTMLDialogElement | null)?.showModal();
 }
-window.openAddToListDialog = openAddToListDialog;
 
 function _csrfToken(): string {
     return (document.querySelector("#filter-form [name=csrfmiddlewaretoken]") as HTMLInputElement | null)?.value || "";
@@ -5790,7 +5782,6 @@ function openEditPinDialog(pinUuid: string): void {
 
     (document.getElementById("add-pin-dialog") as HTMLDialogElement).showModal();
 }
-window.openEditPinDialog = openEditPinDialog;
 
 function closeAddPinDialog(): void {
     _editPinUuid = null;
@@ -6484,3 +6475,58 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
 
     dlg.showModal();
 }
+
+// -- Controls that name their action in markup -----------------------------------------------------------------
+delegateActions(document, "map-action", {
+    "close-place-info": () => {
+        const panel = document.getElementById("place-info-panel");
+        panel?.classList.remove("is-open");
+        panel?.setAttribute("hidden", "");
+    },
+    "toggle-filter-panel": () => toggleFilterPanel(),
+    "toggle-pin-list": () => _togglePinListPanel(),
+    "reset-filters": () => resetFilters(),
+    "reset-visits": () => _resetVisits(),
+    "reset-visit-dates": () => _resetVisitDates(),
+    "reset-created-dates": () => _resetCreatedDates(),
+    "reset-date-built": () => _dateBuiltRange.reset(),
+    "reset-date-abandoned": () => _dateAbandonedRange.reset(),
+    "reset-last-viewed": () => _lastViewedRange.reset(),
+    "apply-saved-filter": (control) => applySavedFilter(control),
+    "toggle-saved-filter": (control) => toggleToolbarSavedFilter(control),
+    "saved-filters-page": (control) => sfToolbarPage(Number(control.dataset.direction)),
+    "clear-pin-customizations": () => _apdlgClearCustomizations(),
+    "delete-pin": () => void _apdlgDeletePin(),
+    export: (control) => _exportSelection(control.dataset.format ?? ""),
+    // Pin popups: Leaflet 1.9 lets their clicks reach document, while keeping them from the map.
+    "pin-menu": (control) => togglePinPopupMenu(control),
+    "pin-add-to-list": (control) => {
+        closePinPopupMenus();
+        openAddToListDialog(Number(control.dataset.pinId));
+    },
+    "pin-promote-children": (control) => {
+        closePinPopupMenus();
+        void promoteChildPins(control.dataset.pinSlug ?? "", Number(control.dataset.childCount));
+    },
+    "pin-edit": (control) => {
+        closePinPopupMenus();
+        openEditPinDialog(control.dataset.pinUuid ?? "");
+    },
+    "pin-delete": (control) => void deletePin(control),
+    "undo-bulk-delete": (control) => _undoBulkDelete(control.dataset.undoToken ?? "", control instanceof HTMLButtonElement ? control : null),
+});
+
+/** A coordinate the pin list rendered, or null where the pin has none. */
+function _listCoordinate(value: string | undefined): number | null {
+    return value ? Number(value) : null;
+}
+
+// On the list's own body, so Edit can keep its click from the page's document-wide listeners.
+delegateActions(document.getElementById("pin-list-body")!, "pin-list-action", {
+    "add-to-list": () => openAddToListDialog(),
+    "fly-to": (control) => _flyToPinFromList(control.dataset.pinUuid ?? "", _listCoordinate(control.dataset.lat), _listCoordinate(control.dataset.lng)),
+    edit: (control, event) => {
+        event.stopPropagation();
+        openEditPinDialog(control.dataset.pinUuid ?? "");
+    },
+});

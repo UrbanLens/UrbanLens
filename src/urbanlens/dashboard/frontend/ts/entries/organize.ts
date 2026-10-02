@@ -8,10 +8,12 @@ import { initOrganizePriority } from "../shared/organize-priority";
 import { toast } from "../shared/dialogs";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { installSavedFilterForm } from "../shared/saved-filter-form";
+import { installOrganizeListsPanel } from "../shared/organize-lists-panel";
 
 installGlobalOrganizeIconPicker();
 installGlobalColorPicker();
 installGlobalLabelRelPicker();
+installOrganizeListsPanel();
 // The Filters tab, loaded by htmx, holds the saved-filter dialog.
 installSavedFilterForm();
 

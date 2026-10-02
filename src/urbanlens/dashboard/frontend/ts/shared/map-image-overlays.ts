@@ -445,9 +445,11 @@ export interface ManageOverlaysDialogOptions {
 }
 
 /**
- * Wire the manage-overlays dialog's window-level hooks.
+ * Wire the manage-overlays dialog (``partials/layout/_map_overlays_list.html``), whose body htmx re-renders after every
+ * change: its controls are found by id and ``data-overlay-align`` from listeners on ``document``. Returns the align
+ * starter, for a page that opens with an overlay to align.
  */
-export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): void {
+export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): { startAlign: (uuid: string) => void } {
     const { map, control, onAlignStart } = options;
 
     function showAlignBanner(): void {
@@ -474,16 +476,16 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         banner.removeAttribute("hidden");
     }
 
-    window.ulMapOverlayStartAlign = (uuid: string) => {
+    const startAlign = (uuid: string) => {
         control.setVisible(uuid, true);
         control.startAlign(uuid);
         showAlignBanner();
         onAlignStart?.();
     };
-    window.ulMapOverlayPreviewOpacity = (uuid: string, value: string) => control.previewOpacity(uuid, Number(value));
+    const previewOpacity = (uuid: string, value: string) => control.previewOpacity(uuid, Number(value));
     // A new overlay lands covering roughly the current viewport, so aligning
     // it is a small adjustment rather than a hunt across the world.
-    window.ulMapOverlaySeedCorners = () => {
+    const seedCorners = () => {
         const input = document.getElementById("map-overlay-initial-corners") as HTMLInputElement | null;
         if (!input) return;
         const bounds = map.getBounds().pad(-0.25);
@@ -523,7 +525,7 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
     }
 
     // Re-derives the Add-overlay button's disabled state from the form's current fields.
-    window.ulMapOverlaySyncSubmitState = () => {
+    const syncSubmitState = () => {
         const form = document.getElementById("map-overlay-add-form") as HTMLFormElement | null;
         const submit = document.getElementById("map-overlay-add-submit") as HTMLButtonElement | null;
         if (!form || !submit) return;
@@ -538,19 +540,19 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         }
     };
 
-    window.ulMapOverlayHandleDrop = (event: DragEvent, zone: HTMLElement) => {
+    const handleDrop = (event: Event, zone: HTMLElement) => {
         event.preventDefault();
         zone.classList.remove("is-dragover");
-        const files = event.dataTransfer?.files;
+        const files = event instanceof DragEvent ? event.dataTransfer?.files : undefined;
         const input = zone.querySelector<HTMLInputElement>('input[type="file"]');
         if (!files?.length || !input) return;
         input.files = files;
         clearPickedMedia();
         clearUrlInput();
-        window.ulMapOverlaySyncSubmitState?.();
+        syncSubmitState();
     };
 
-    window.ulMapOverlayChooseImage = (id: number, caption: string) => {
+    const chooseImage = (id: number, caption: string) => {
         const idField = document.getElementById("map-overlay-image-id") as HTMLInputElement | null;
         const picked = document.getElementById("map-overlay-picked-media");
         const picker = document.getElementById("map-overlay-media-picker");
@@ -564,25 +566,25 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         });
         clearFileInput();
         clearUrlInput();
-        window.ulMapOverlaySyncSubmitState?.();
+        syncSubmitState();
     };
 
-    window.ulMapOverlayChooseUrl = () => {
+    const chooseUrl = () => {
         const urlInput = document.querySelector<HTMLInputElement>('#map-overlay-add-form input[name="image_url"]');
         if (urlInput?.value.trim()) {
             clearFileInput();
             clearPickedMedia();
         }
-        window.ulMapOverlaySyncSubmitState?.();
+        syncSubmitState();
     };
 
-    window.ulMapOverlayChooseFile = () => {
+    const chooseFile = () => {
         clearPickedMedia();
         clearUrlInput();
-        window.ulMapOverlaySyncSubmitState?.();
+        syncSubmitState();
     };
 
-    window.ulMapOverlayPickFromMedia = (galleryJsonUrl?: string) => {
+    const pickFromMedia = (galleryJsonUrl?: string) => {
         const picker = document.getElementById("map-overlay-media-picker");
         if (!picker) return;
         if (!picker.hidden) {
@@ -614,7 +616,7 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
                 grid.className = "map-overlay-media-picker-grid";
                 const selectedId = (document.getElementById("map-overlay-image-id") as HTMLInputElement | null)?.value ?? "";
                 for (const image of images) {
-                    grid.appendChild(renderPickerThumb(image, selectedId, (id, caption) => window.ulMapOverlayChooseImage?.(id, caption)));
+                    grid.appendChild(renderPickerThumb(image, selectedId, (id, caption) => chooseImage(id, caption)));
                 }
                 picker.appendChild(grid);
                 watchProcessingTiles(grid, (el, item) => settleProcessingThumb(el, item, "", "full"));
@@ -622,14 +624,14 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
             .catch(() => setMessage("Couldn't load this page's photos."));
     };
 
-    // Keyboard submit (Enter in the name field) skips the button's onclick, which used to leave the corners field empty.
+    // Seeded as the request is built, however the form was submitted.
     document.body.addEventListener("htmx:configRequest", (event: Event) => {
         const detail = (event as CustomEvent).detail as { elt?: Element; parameters?: Record<string, string> } | undefined;
         const elt = detail?.elt;
         if (!elt) return;
         const form = elt.id === "map-overlay-add-form" ? elt : elt.closest?.("#map-overlay-add-form");
         if (!form) return;
-        window.ulMapOverlaySeedCorners?.();
+        seedCorners();
         const corners = document.getElementById("map-overlay-initial-corners") as HTMLInputElement | null;
         if (corners && detail.parameters) detail.parameters.corners = corners.value;
     });
@@ -637,6 +639,37 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
     document.body.addEventListener("ul:map-overlays-changed", (event: Event) => {
         const align = (event as CustomEvent).detail?.align as string | undefined;
         if (!align) return;
-        window.ulMapOverlayStartAlign?.(align);
+        startAlign(align);
     });
+
+    const zoneOf = (event: Event): HTMLElement | null => (event.target instanceof Element ? event.target.closest<HTMLElement>("#map-overlay-dropzone") : null);
+    document.addEventListener("dragover", (event) => {
+        const zone = zoneOf(event);
+        if (!zone) return;
+        event.preventDefault();
+        zone.classList.add("is-dragover");
+    });
+    document.addEventListener("dragleave", (event) => zoneOf(event)?.classList.remove("is-dragover"));
+    document.addEventListener("drop", (event) => {
+        const zone = zoneOf(event);
+        if (zone) handleDrop(event, zone);
+    });
+    document.addEventListener("input", (event) => {
+        const field = event.target;
+        if (!(field instanceof HTMLInputElement)) return;
+        if (field.matches('#map-overlay-add-form input[name="image_url"]')) chooseUrl();
+        const row = field.matches('.map-overlay-manage-row input[name="opacity"]') ? field.closest<HTMLElement>(".map-overlay-manage-row") : null;
+        if (row?.dataset.overlayUuid) previewOpacity(row.dataset.overlayUuid, field.value);
+    });
+    document.addEventListener("change", (event) => {
+        if (event.target instanceof HTMLInputElement && event.target.matches('#map-overlay-add-form input[type="file"]')) chooseFile();
+    });
+    document.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const align = target?.closest<HTMLElement>("[data-overlay-align]")?.dataset.overlayAlign;
+        if (align) startAlign(align);
+        const pick = target?.closest<HTMLElement>("#map-overlay-pick-media-btn");
+        if (pick) pickFromMedia(pick.dataset.galleryUrl);
+    });
+    return { startAlign };
 }

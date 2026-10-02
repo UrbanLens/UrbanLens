@@ -1,7 +1,8 @@
 {% comment %}Import progress fragment - returned by ImportStartView and polled by ImportStatusView.{% endcomment %}
 
 {% if status == "done" %}
-<div class="export-progress-wrap" id="import-status-poll">
+{# data-pins-dirty: the map refetches its pins on its next load, rather than waiting for its poll. #}
+<div class="export-progress-wrap" id="import-status-poll" data-pins-dirty>
     <div class="export-progress-label">
         <span>Complete</span>
         <span class="export-progress-pct">100%</span>
@@ -54,14 +55,6 @@
         </a>
     </div>
 </div>
-<script>
-    // This page isn't the map page, so it can't reach into the map's in-memory
-    // pin store/localStorage cache directly. Flag it dirty instead - the map
-    // page (dashboard/pages/map/index.html) checks this flag on load and
-    // invalidates its own pin cache, so newly-imported pins show up immediately
-    // instead of waiting for its ~2 minute background poll.
-    try { localStorage.setItem('ul_pins_dirty', '1'); } catch (e) {}
-</script>
 
 {% elif status == "error" %}
 <div class="export-progress-wrap" id="import-status-poll">

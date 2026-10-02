@@ -6,7 +6,7 @@
     </div>
     {% if total_count %}
         {% if not max_pins_per_list or total_count < max_pins_per_list %}
-        <button type="button" class="pin-list-add-to-list-btn" onclick="openAddToListDialog()">
+        <button type="button" class="pin-list-add-to-list-btn" data-pin-list-action="add-to-list">
             <i class="material-symbols-outlined">playlist_add</i> Add these pins to a list
         </button>
         {% endif %}
@@ -16,7 +16,7 @@
         {% for pin in pins %}
         <li class="pin-list-item">
             <button type="button" class="pin-list-item__entry"
-                    onclick="_flyToPinFromList('{{ pin.uuid|escapejs }}', {{ pin.effective_latitude|default:'null' }}, {{ pin.effective_longitude|default:'null' }})">
+                    data-pin-list-action="fly-to" data-pin-uuid="{{ pin.uuid }}" data-lat="{{ pin.effective_latitude|default:'' }}" data-lng="{{ pin.effective_longitude|default:'' }}">
                 {% if pin.effective_icon %}
                     {% if pin.effective_icon|is_material_icon %}
                     <i class="material-icons pin-list-icon" {% if pin.effective_color %}style="color:{{ pin.effective_color }}"{% endif %}>{{ pin.effective_icon }}</i>
@@ -50,7 +50,7 @@
             </button>
             <button type="button" class="btn btn--icon pin-list-item__edit"
                     title="Edit pin" aria-label="Edit pin"
-                    onclick="event.stopPropagation(); openEditPinDialog('{{ pin.uuid|escapejs }}')">
+                    data-pin-list-action="edit" data-pin-uuid="{{ pin.uuid }}">
                 <i class="material-symbols-outlined">edit</i>
             </button>
         </li>

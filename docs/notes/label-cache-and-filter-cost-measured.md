@@ -171,7 +171,7 @@ Two queries, `Bench Tag 1` and `Perf Pin 12`.
 ## Why "the browser already caches labels" and "a cache would save bytes" are both true
 
 The browser caches the label dictionary only for the map's pin store (`_labelDict`, persisted under
-`ul_pins_v5_<profile uuid>`, `pages/map/index.html:669-680`). Nothing else reads it, so Organize, the map page's label
+`ul_pins_v5_<profile uuid>`, `_writeCache` in `frontend/ts/entries/map-page.ts:789-804`). Nothing else reads it, so Organize, the map page's label
 list and JSON, and the pin label editor re-send label data as HTML on every request, and the map document re-sends the
 dictionary in its head on every build.
 

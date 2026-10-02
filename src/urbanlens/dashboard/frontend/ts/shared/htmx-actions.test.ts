@@ -187,6 +187,34 @@ describe("data-ul-min-query", () => {
     });
 });
 
+describe("data-own-click", () => {
+    function confirmFor(elt: Element, clicked: Element): boolean {
+        const click = new MouseEvent("click", { bubbles: true });
+        clicked.dispatchEvent(click);
+        return fire(elt, "htmx:confirm", { triggeringEvent: click }).defaultPrevented;
+    }
+
+    beforeEach(() => {
+        document.body.innerHTML = `
+          <li id="row" hx-post="/read/">
+            <p id="text">A notification</p>
+            <div><button id="accept" hx-post="/accept/" data-own-click><i id="icon">check</i></button></div>
+          </li>`;
+    });
+
+    test("a click on the control holds back the request of the element around it", () => {
+        expect(confirmFor(document.getElementById("row")!, document.getElementById("icon")!)).toBe(true);
+    });
+
+    test("leaves the control's own request alone", () => {
+        expect(confirmFor(document.getElementById("accept")!, document.getElementById("icon")!)).toBe(false);
+    });
+
+    test("leaves a click anywhere else on the element alone", () => {
+        expect(confirmFor(document.getElementById("row")!, document.getElementById("text")!)).toBe(false);
+    });
+});
+
 describe("hx-confirm", () => {
     const realConfirmDialog = window.confirmDialog;
 

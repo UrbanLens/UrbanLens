@@ -6,8 +6,8 @@
 
 <head>
     <meta charset="utf-8">
-    {# Anti-FOUC: when theme_mode is "system" (no server-side attribute), detect OS preference immediately. #}
-    <script>!function(){var e=document.getElementById('html-root');if(!e.getAttribute('data-theme')){var d=window.matchMedia('(prefers-color-scheme: dark)').matches;e.setAttribute('data-theme',d?'dark':'light');window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(c){e.setAttribute('data-theme',c.matches?'dark':'light');});}}();</script>
+    {# Anti-FOUC: synchronous and first, so a "system" theme is resolved before anything paints. #}
+    <script src="{% static 'js/theme-init.js' %}"></script>
     <title>{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}</title>
     <link id="ul-favicon-link" rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
 
@@ -274,7 +274,6 @@
             <button type="button" id="confirm-dialog-ok" class="btn btn--danger-filled">Confirm</button>
         </div>
     </dialog>
-    {# The confirm dialog's behaviour - plus urbanlensConfirmExternalLink and deletePinCascade, which build on it. #}
 
     {# -- Comment map composer + viewer JS -------------------------------------- #}
     {# Leaflet is NOT re-loaded here - pages with maps (pin detail, wiki, trips) already load it in {% block header %} along with their. #}

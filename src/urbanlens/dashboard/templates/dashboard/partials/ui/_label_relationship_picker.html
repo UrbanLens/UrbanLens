@@ -16,7 +16,7 @@
             <div class="label-rel-selected-header">
                 <h4 class="label-rel-selected-title"><i class="material-symbols-outlined">arrow_upward</i> Parents</h4>
                 <div class="label-rel-add-dropdown">
-                    <button type="button" class="label-rel-add-btn" onclick="LabelRelPicker.toggle('{{ instance_id }}', 'parent', this)">
+                    <button type="button" class="label-rel-add-btn" data-rel-type="parent">
                         <i class="material-symbols-outlined">add</i> Add
                     </button>
                     {% include 'dashboard/partials/ui/_label_rel_popup.html' with instance_id=instance_id rel_type='parent' ns=ns candidates=candidates candidates_from=candidates_from selected_ids=selected_ids %}
@@ -29,7 +29,7 @@
                         {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=False %}
                         {% if mode == 'replace' %}<input type="hidden" name="parent_ids" value="{{ b.id }}">{% endif %}
                     </span>
-                    <button type="button" class="tag-chip-remove" title="Remove parent" onclick="LabelRelPicker.remove('{{ instance_id }}', this.closest('.label-rel-chip'))">&times;</button>
+                    <button type="button" class="tag-chip-remove" title="Remove parent">&times;</button>
                 </span>
                 {% endfor %}
             </div>
@@ -39,7 +39,7 @@
             <div class="label-rel-selected-header">
                 <h4 class="label-rel-selected-title"><i class="material-symbols-outlined">arrow_downward</i> Children</h4>
                 <div class="label-rel-add-dropdown">
-                    <button type="button" class="label-rel-add-btn" onclick="LabelRelPicker.toggle('{{ instance_id }}', 'child', this)">
+                    <button type="button" class="label-rel-add-btn" data-rel-type="child">
                         <i class="material-symbols-outlined">add</i> Add
                     </button>
                     {% include 'dashboard/partials/ui/_label_rel_popup.html' with instance_id=instance_id rel_type='child' ns=ns candidates=candidates candidates_from=candidates_from selected_ids=selected_ids %}
@@ -52,7 +52,7 @@
                         {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=False %}
                         {% if mode == 'replace' %}<input type="hidden" name="child_ids" value="{{ b.id }}">{% endif %}
                     </span>
-                    <button type="button" class="tag-chip-remove" title="Remove child" onclick="LabelRelPicker.remove('{{ instance_id }}', this.closest('.label-rel-chip'))">&times;</button>
+                    <button type="button" class="tag-chip-remove" title="Remove child">&times;</button>
                 </span>
                 {% endfor %}
             </div>

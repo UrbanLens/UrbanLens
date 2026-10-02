@@ -357,7 +357,8 @@ class OrganizeMediaTabEndpointTests(TestCase):
         bulk_edit = bulk_edit[: bulk_edit.index("</dialog>")]
 
         self.assertIn('id="media-bulk-order-value"', bulk_edit)
-        self.assertIn("_updateMediaBulkState()", bulk_edit)
+        # OrgTabManager finds the media dialog's swatches by this id; the field is what picker-actions.ts fills.
+        self.assertIn('id="media-bulk-color-picker" data-color-value-id="media-bulk-color-value"', bulk_edit)
         self.assertNotIn("kind-toggle", bulk_edit)
 
     def test_media_rows_offer_no_merge_time_edit(self) -> None:

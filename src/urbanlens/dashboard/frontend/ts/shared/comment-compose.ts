@@ -57,11 +57,19 @@ export function watchCommentImages(root: ParentNode): void {
 /**
  * ``data-reply-form="<id>"`` toggles that reply form; ``data-comment-map="open"`` / ``"clear"`` open or clear the map
  * composer for the enclosing form or ``.comment-compose``, ``data-default-lat``/``-lng`` giving where it starts.
+ * ``data-comment-attach="image"`` / ``"map"`` open the Attach photo or Attach map dialog for its ``.comment-compose``.
  */
 function onClick(event: MouseEvent): void {
     const target = event.target instanceof Element ? event.target : null;
     const reply = target?.closest<HTMLElement>("[data-reply-form]");
     if (reply) toggleReplyForm(reply.dataset.replyForm ?? "");
+    const attach = target?.closest<HTMLElement>("[data-comment-attach]");
+    const compose = attach?.closest<HTMLElement>(".comment-compose");
+    if (attach && compose) {
+        if (attach.dataset.commentAttach === "image") window._openCommentAttachImageDialog?.(compose);
+        if (attach.dataset.commentAttach === "map") window._openCommentAttachMapDialog?.(compose);
+        return;
+    }
     const mapButton = target?.closest<HTMLElement>("[data-comment-map]");
     const form = mapButton?.closest<HTMLElement>("form, .comment-compose");
     if (!mapButton || !form) return;

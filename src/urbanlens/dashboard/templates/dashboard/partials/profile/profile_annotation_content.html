@@ -147,7 +147,7 @@
                 <p class="pan-note-content">{{ note.content }}</p>
             </div>
             <div class="pan-note-edit" id="pan-note-edit-{{ note.pk }}" hidden>
-                <textarea class="pan-note-textarea"
+                <textarea class="pan-note-textarea" data-autogrow
                           hx-post="{% url 'profile.note.edit' subject.slug note.pk %}"
                           hx-trigger="keyup changed delay:700ms"
                           hx-target="#profile-annotation-inner"
@@ -166,7 +166,7 @@
               hx-swap="outerHTML">
             {% csrf_token %}
             <textarea name="content"
-                      class="pan-note-textarea pan-compose-textarea"
+                      class="pan-note-textarea pan-compose-textarea" data-autogrow
                       placeholder="Add a private note..."
                       rows="2"></textarea>
             <div class="pan-compose-actions">
@@ -178,18 +178,4 @@
     </div>
 
 </div>
-<script>
-(function () {
-    // Fallback for browsers without CSS field-sizing support (see .pan-note-textarea
-    // in _profile.scss). This whole panel is swapped via htmx on every note/trust/label
-    // action, so the listener is attached fresh each time rather than once on page load.
-    document.querySelectorAll('#profile-annotation-inner .pan-note-textarea').forEach(function (el) {
-        var resize = function () {
-            el.style.height = 'auto';
-            el.style.height = el.scrollHeight + 'px';
-        };
-        resize();
-        el.addEventListener('input', resize);
-    });
-}());
-</script>
+

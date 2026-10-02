@@ -17,8 +17,7 @@
                     <span class="cf-field-name">{{ field.name }}</span>
                     <span class="cf-type-chip">{{ field.get_field_type_display }}{% if field.style %} · {{ field.get_style_display }}{% endif %}{% if field.reference_kind %} · {{ field.reference_kind_label }}{% endif %}{% if field.display != "default" %} · {{ field.get_display_display }}{% endif %}</span>
                     <span class="cf-field-actions">
-                        <button type="button" class="btn btn--icon-sm" title="Edit field"
-                                onclick="document.getElementById('cf-field-display-{{ field.id }}').hidden = true; document.getElementById('cf-field-edit-{{ field.id }}').hidden = false;">
+                        <button type="button" class="btn btn--icon-sm" title="Edit field" data-panel-action="cf-field-edit">
                             <i class="material-symbols-outlined">edit</i>
                         </button>
                         <button type="button" class="btn btn--icon-sm cf-delete-btn" title="Delete field"
@@ -40,8 +39,7 @@
                     <button type="submit" class="btn btn--icon-sm" title="Save">
                         <i class="material-symbols-outlined">check</i>
                     </button>
-                    <button type="button" class="btn btn--icon-sm" title="Cancel"
-                            onclick="document.getElementById('cf-field-edit-{{ field.id }}').hidden = true; document.getElementById('cf-field-display-{{ field.id }}').hidden = false;">
+                    <button type="button" class="btn btn--icon-sm" title="Cancel" data-panel-action="cf-field-cancel">
                         <i class="material-symbols-outlined">close</i>
                     </button>
                 </form>
@@ -52,8 +50,7 @@
         <p class="cf-group-empty">No custom fields for {{ group.label|lower }} yet.</p>
         {% endif %}
 
-        <button type="button" class="btn btn--secondary cf-add-trigger" id="cf-add-trigger-{{ group.entity_type }}"
-                onclick="document.getElementById('cf-add-trigger-{{ group.entity_type }}').hidden = true; document.getElementById('cf-add-form-{{ group.entity_type }}').hidden = false; document.getElementById('cf-add-form-{{ group.entity_type }}').querySelector('.cf-name-input').focus();">
+        <button type="button" class="btn btn--secondary cf-add-trigger" id="cf-add-trigger-{{ group.entity_type }}" data-panel-action="cf-add-open">
             <i class="material-symbols-outlined">add</i>
             <span>Add field</span>
         </button>
@@ -69,8 +66,7 @@
             <button type="submit" class="btn btn--icon-sm cf-add-btn" title="Add field">
                 <i class="material-symbols-outlined">check</i>
             </button>
-            <button type="button" class="btn btn--icon-sm" title="Cancel"
-                    onclick="document.getElementById('cf-add-form-{{ group.entity_type }}').hidden = true; document.getElementById('cf-add-form-{{ group.entity_type }}').reset(); document.getElementById('cf-add-trigger-{{ group.entity_type }}').hidden = false;">
+            <button type="button" class="btn btn--icon-sm" title="Cancel" data-panel-action="cf-add-cancel">
                 <i class="material-symbols-outlined">close</i>
             </button>
         </form>
