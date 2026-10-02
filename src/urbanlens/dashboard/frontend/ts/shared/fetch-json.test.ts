@@ -220,6 +220,23 @@ describe("the __ulReported contract with the fetch wrapper", () => {
         }
         expect(report).toEqual(["Request failed (HTTP 503)."]);
     });
+
+    test("its own timeout is still reported as a timeout, not taken for a cancellation", async () => {
+        const report: string[] = [];
+        const real = globalThis.fetch;
+        // Rejects the way a browser does: with the signal's reason.
+        const hanging = (_input: RequestInfo | URL, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+            });
+        globalThis.fetch = wrapFetch(Object.assign(hanging, real), (m) => void report.push(m));
+        try {
+            await expect(fetchJson("/anything/", { timeoutMs: 20 })).rejects.toThrow();
+        } finally {
+            globalThis.fetch = real;
+        }
+        expect(report).toEqual(["Request timed out."]);
+    });
 });
 
 describe("an endpoint that answers with markup", () => {

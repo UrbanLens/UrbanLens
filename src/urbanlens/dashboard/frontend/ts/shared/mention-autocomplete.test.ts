@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { type MentionItem, installGlobalMentionAutocomplete, resetMentionAutocompleteForTests } from "./mention-autocomplete";
+import { wrapFetch } from "./site-runtime";
 
 const WRAP = (attrs = "") => `
   <div class="comment-input-wrap">
@@ -189,6 +190,19 @@ describe("the dropdown", () => {
         globalThis.fetch = mock(() => Promise.reject(new Error("offline"))) as unknown as typeof fetch;
         await type("@mill");
         expect(dropdown().hidden).toBe(true);
+    });
+
+    test("a lookup the next keystroke supersedes raises no error toast through the site's fetch net", async () => {
+        const reports: string[] = [];
+        // Still out when the next lookup fires, and rejected by its abort the way a browser rejects it.
+        const pending = (_input: RequestInfo | URL, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+            });
+        globalThis.fetch = wrapFetch(Object.assign(pending, realFetch), (m) => void reports.push(m));
+        await type("@mi");
+        await type("@mil");
+        expect(reports).toEqual([]);
     });
 
     test("clicking elsewhere closes it", async () => {

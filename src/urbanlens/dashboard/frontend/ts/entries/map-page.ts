@@ -1714,7 +1714,7 @@ interface MapDocumentLine {
 // browser without streaming, or a document that arrived without its end line.
 async function _fetchMapDocument(message?: string): Promise<PinPage | null> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
+    const timer = setTimeout(() => controller.abort(new DOMException("The map took too long to answer.", "TimeoutError")), 120000);
     try {
         const resp = await fetch(MAP_CFG.urls.mapDocument, {
             headers: { "X-Requested-With": "XMLHttpRequest" },

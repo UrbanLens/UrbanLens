@@ -68,9 +68,12 @@ export type FetchInit = RequestInit & { __ulReported?: boolean };
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type WrappedFetch = typeof fetch & { __urbanLensWrapped?: boolean };
 
+const isTimeout = (reason: unknown): boolean => reason instanceof Error && (reason.name === "TimeoutError" || reason.name === "AbortError");
+
 /**
  * A net under every raw fetch(): a non-2xx or a network failure toasts, unless the caller marks the request
- * ``__ulReported`` because it reports its own errors (shared/fetch-json.ts does).
+ * ``__ulReported`` because it reports its own errors (shared/fetch-json.ts does). A request the caller aborted
+ * itself is not a failure, unless it aborted with a ``TimeoutError`` reason.
  */
 export function wrapFetch<F extends FetchLike>(nativeFetch: F, report: (message: string) => void = toastError): F & { __urbanLensWrapped: true } {
     const call = function (this: unknown, input: RequestInfo | URL, init?: FetchInit): Promise<Response> {
@@ -81,7 +84,9 @@ export function wrapFetch<F extends FetchLike>(nativeFetch: F, report: (message:
                 return response;
             },
             (err: unknown) => {
-                if (!reported) report(err instanceof Error && err.name === "AbortError" ? "Request timed out." : "Network request failed.");
+                const signal = init?.signal;
+                const cancelled = signal?.aborted === true && !(signal.reason instanceof Error && signal.reason.name === "TimeoutError");
+                if (!reported && !cancelled) report(isTimeout(err) ? "Request timed out." : "Network request failed.");
                 throw err;
             },
         );
