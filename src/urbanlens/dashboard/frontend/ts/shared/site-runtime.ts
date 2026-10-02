@@ -6,7 +6,7 @@
  * core.js runs in <head>, before <body> exists, so listeners go on document.
  */
 
-import { toast } from "./dialogs";
+import { raiseToasts, toast } from "./dialogs";
 
 export const TOAST_TIMEOUT_MS = 4500;
 
@@ -46,6 +46,15 @@ export function configureToastr(): void {
         // toastr renders with .html() by default, and server error strings can echo the caller's own input.
         escapeHtml: true,
     };
+    // Wrapped here rather than in dialogs.ts's toast, so a direct window.toastr call is lifted above a dialog too.
+    const library = window.toastr;
+    for (const kind of ["success", "error", "warning", "info"] as const) {
+        const show = library[kind].bind(library);
+        library[kind] = (message, title, options) => {
+            show(message, title, options);
+            raiseToasts();
+        };
+    }
 }
 
 /** Django's messages arrive as ``<template id="ul-messages">`` children carrying ``data-level``. */

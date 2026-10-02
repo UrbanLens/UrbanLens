@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { toast } from "./dialogs";
+import { raiseToasts, toast } from "./dialogs";
 
 function container(): HTMLElement | null {
     return document.getElementById("toast-container");
@@ -137,5 +137,41 @@ describe("toast, with the library missing", () => {
         document.body.innerHTML = "";
         toast.success("all good");
         expect(toasts()[0]?.getAttribute("role")).toBe("status");
+    });
+});
+
+describe("raiseToasts", () => {
+    afterEach(() => container()?.remove());
+
+    /** happy-dom has no popover API; this records what a browser would be asked to do. */
+    function stack(open: boolean): string[] {
+        const calls: string[] = [];
+        const el = document.createElement("div");
+        el.id = "toast-container";
+        let shown = open;
+        Object.assign(el, {
+            showPopover: () => void (calls.push("show"), (shown = true)),
+            hidePopover: () => void (calls.push("hide"), (shown = false)),
+            matches: (selector: string) => selector === ":popover-open" && shown,
+        });
+        document.body.append(el);
+        return calls;
+    }
+
+    test("puts the stack in the top layer", () => {
+        const calls = stack(false);
+        raiseToasts();
+        expect(container()?.getAttribute("popover")).toBe("manual");
+        expect(calls).toEqual(["show"]);
+    });
+
+    test("re-shows an open stack, so it draws over a dialog opened since", () => {
+        const calls = stack(true);
+        raiseToasts();
+        expect(calls).toEqual(["hide", "show"]);
+    });
+
+    test("does nothing without a stack", () => {
+        expect(() => raiseToasts()).not.toThrow();
     });
 });

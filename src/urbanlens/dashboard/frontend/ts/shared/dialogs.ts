@@ -54,12 +54,27 @@ function fallbackToast(kind: ToastKind, message: string, title?: string): void {
 }
 
 /**
+ * Lifts the toast stack into the top layer, above any modal dialog opened since it was last shown; under a modal's
+ * backdrop it is dimmed. Re-shown each time, because a later top-layer entry draws over an earlier one.
+ */
+export function raiseToasts(): void {
+    const container = document.getElementById("toast-container");
+    if (!container || typeof container.showPopover !== "function") return;
+    container.setAttribute("popover", "manual");
+    if (container.matches(":popover-open")) container.hidePopover();
+    container.showPopover();
+}
+
+/**
  * Routes to toastr when it is there, and to our own markup when it is not.
  */
 function notify(kind: ToastKind, message: string, title?: string): void {
     const library = window.toastr;
     if (library) library[kind](message, title);
-    else fallbackToast(kind, message, title);
+    else {
+        fallbackToast(kind, message, title);
+        raiseToasts();
+    }
 }
 
 export const toast = {
