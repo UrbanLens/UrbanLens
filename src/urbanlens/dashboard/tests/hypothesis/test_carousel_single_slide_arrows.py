@@ -6,6 +6,7 @@ import types
 
 from django.template.loader import render_to_string
 
+from urbanlens.core.tests.inline_scripts import executable_blocks, inline_handlers
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _STREET_VIEW_SLIDE = {
@@ -156,3 +157,26 @@ class NoImageryTests(SimpleTestCase):
 
         self.assertIn("view-unavailable", html)
         self.assertIn("No satellite imagery available.", html)
+
+
+class CarouselFragmentsCarryNoScriptTests(SimpleTestCase):
+    """The fragments name their controls for ``carousel-controls.ts``; nothing in them runs inline."""
+
+    def _render(self, name: str, slide: dict) -> bytes:
+        context = {"slides": [slide, dict(slide, source="other")], "debug_entries": [], "google_maps_api_key": "k"}
+        return render_to_string(f"dashboard/pages/location/{name}", {**context, "pin": _FAKE_PIN}).encode()
+
+    def test_satellite_view(self) -> None:
+        html = self._render("satellite_view.html", _SATELLITE_SLIDE)
+        self.assertEqual((executable_blocks(html), inline_handlers(html)), ([], []))
+        self.assertEqual(html.count(b"data-carousel-img"), 2)
+        self.assertIn(b'data-carousel-action="satellite-prev"', html)
+        self.assertIn(b'data-carousel-action="satellite-next"', html)
+
+    def test_street_view(self) -> None:
+        html = self._render("street_view.html", dict(_STREET_VIEW_SLIDE, source="Google Street View"))
+        self.assertEqual((executable_blocks(html), inline_handlers(html)), ([], []))
+        # The embed's own static image is shown on request, never dropped.
+        self.assertEqual(html.count(b"data-carousel-img"), 1)
+        self.assertIn(b'data-carousel-action="street-static"', html)
+        self.assertIn(b'data-carousel-action="street-prev"', html)

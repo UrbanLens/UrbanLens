@@ -25,7 +25,7 @@
 
 {# Always-visible edge handle (hidden by JS via refreshPanelHeader() until there's at least one detail pin, markup item, or photo to.. #}
 <button type="button" id="detail-pin-list-handle" class="detail-pin-list-handle" style="display:none"
-        onclick="_toggleDetailPinListPanel()" aria-label="Toggle detail pin list" aria-expanded="false"
+        data-annotation-action="toggle-detail-pins" aria-label="Toggle detail pin list" aria-expanded="false"
         data-tooltip="Layers" data-tooltip-float="true" data-tooltip-pos="right">
     <i class="material-symbols-outlined">chevron_right</i>
 </button>
@@ -42,13 +42,13 @@
     {# Shared layers panel - same component and engine as the main map. #}
     {% map_layers_panel layers|default:"street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" custom_layers=custom_layers manage_layers_url=manage_layers_url manage_overlays_url=manage_overlays_url %}
     <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
-        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" data-annotation-action="clear-boundary">
             <i class="material-symbols-outlined">delete_outline</i> Clear
         </button>
-        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelBoundaryEdit()">
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" data-annotation-action="cancel-boundary">
             <i class="material-symbols-outlined">close</i> Cancel
         </button>
-        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--save" onclick="finishBoundaryEdit()">
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--save" data-annotation-action="finish-boundary">
             <i class="material-symbols-outlined">check</i> Done
         </button>
     </div>
@@ -163,7 +163,7 @@
             <button type="button" class="btn btn--danger" id="detail-pin-delete-btn" hidden>
                 Delete
             </button>
-            <button type="button" class="btn btn--ghost" onclick="closeDetailPinPanel()">
+            <button type="button" class="btn btn--ghost" data-annotation-action="close-detail-pin">
                 Cancel
             </button>
         </div>

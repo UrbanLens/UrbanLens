@@ -27,6 +27,8 @@ declare const L: typeof import("leaflet");
 // Triggers TS to pick up @types/leaflet-draw's `declare module "leaflet"` augmentation (L.Draw, L.Control.Draw, L.EditToolbar,...).
 import type { } from "leaflet-draw";
 import { escHtml } from "../shared/escape-html";
+import { installCarouselControls } from "../shared/carousel-controls";
+import { delegateActions } from "../shared/delegated-actions";
 
 interface DetailPinEntry {
     uuid: string;
@@ -1199,6 +1201,13 @@ function init(): void {
         }
     }
     window._toggleDetailPinListPanel = toggleDetailPinListPanel;
+    delegateActions(document, "annotation-action", {
+        "toggle-detail-pins": () => toggleDetailPinListPanel(),
+        "clear-boundary": () => void window.clearBoundary(),
+        "cancel-boundary": () => window.cancelBoundaryEdit(),
+        "finish-boundary": () => window.finishBoundaryEdit(),
+        "close-detail-pin": () => window.closeDetailPinPanel(),
+    });
 
     // Satellite/street-view carousel controls (satellite_view.html / street_view.html fragments, HTMX-swapped into this page).
     const SAT_LAST_SOURCE_KEY = "ul_sat_last_source";
@@ -1259,7 +1268,7 @@ function init(): void {
             el.appendChild(dot);
         }
     }
-    window._satRemoveSlide = function (img: HTMLImageElement): void {
+    function _satRemoveSlide(img: HTMLImageElement): void {
         if (window.urbanlensRetryPendingImage?.(img)) return;
         const slide = img.closest<HTMLElement>(".sat-slide");
         if (!slide) return;
@@ -1277,21 +1286,20 @@ function init(): void {
         }
         if (wasActive) _satIdx = Math.max(0, Math.min(_satIdx, slides.length - 1));
         _satShow(_satIdx);
-    };
-    window._satPrev = function () {
+    }
+    function _satPrev(): void {
         _satShow(_satIdx - 1);
-    };
-    window._satNext = function () {
+    }
+    function _satNext(): void {
         _satShow(_satIdx + 1);
-    };
-    window._satShowRemembered = function (): void {
+    }
+    function _satShowRemembered(): void {
         const slides = _satSlides();
         if (!slides.length) return;
         const lastSource = _satLastSource();
         const idx = lastSource ? slides.findIndex((s) => s.dataset.source === lastSource) : -1;
         _satShow(idx >= 0 ? idx : 0);
-    };
-    window._satShow = _satShow;
+    }
 
     // The interactive embed is a cross-origin iframe.
     function _svSwapToStatic(slide: HTMLElement): void {
@@ -1341,12 +1349,12 @@ function init(): void {
             el.appendChild(dot);
         }
     }
-    window._svShowStaticFallback = function (btn: HTMLButtonElement): void {
+    function _svShowStaticFallback(btn: HTMLButtonElement): void {
         const slide = btn.closest<HTMLElement>(".sv-slide");
         if (!slide) return;
         _svSwapToStatic(slide);
-    };
-    window._svRemoveSlide = function (img: HTMLImageElement): void {
+    }
+    function _svRemoveSlide(img: HTMLImageElement): void {
         if (window.urbanlensRetryPendingImage?.(img)) return;
         const slide = img.closest<HTMLElement>(".sv-slide");
         if (!slide) return;
@@ -1364,14 +1372,17 @@ function init(): void {
         }
         if (wasActive) _svIdx = Math.max(0, Math.min(_svIdx, slides.length - 1));
         _svShow(_svIdx);
-    };
-    window._svPrev = function () {
+    }
+    function _svPrev(): void {
         _svShow(_svIdx - 1);
-    };
-    window._svNext = function () {
+    }
+    function _svNext(): void {
         _svShow(_svIdx + 1);
-    };
-    window._svShow = _svShow;
+    }
+    installCarouselControls({
+        satellite: { prev: _satPrev, next: _satNext, start: _satShowRemembered, drop: _satRemoveSlide },
+        street: { prev: _svPrev, next: _svNext, start: () => _svShow(0), drop: _svRemoveSlide, showStatic: _svShowStaticFallback },
+    });
 
     // Promotes a direct child pin to take this pin's place as the parent - the child becomes the parent, and this pin becomes its child.
     async function promotePinToParent(entry: DetailPinEntry): Promise<void> {
@@ -3079,7 +3090,7 @@ declare global {
         openBuildingImportDialog: () => void;
         toggleBuildingImportSelectMode: () => void;
 
-        // Detail-pin/boundary functions, exposed for this page's own template onclick= attributes.
+        // Detail-pin/boundary functions; the pin and wiki pages' controls reach them through data-annotation-action.
         _toggleDetailPinListPanel: () => void;
         toggleDetailPinSelectMode: () => void;
         openAddPinDialog: (lat?: number, lng?: number) => void;
@@ -3090,18 +3101,6 @@ declare global {
         cancelBoundaryEdit: () => void;
         finishBoundaryEdit: () => void;
         _boundaryDrawToggleWired?: boolean;
-
-        // Satellite/street-view carousel controls, exposed for satellite_view.html / street_view.html's onclick=/onerror= attributes.
-        _satRemoveSlide: (img: HTMLImageElement) => void;
-        _satPrev: () => void;
-        _satNext: () => void;
-        _satShow: (idx: number) => void;
-        _satShowRemembered: () => void;
-        _svRemoveSlide: (img: HTMLImageElement) => void;
-        _svShowStaticFallback: (btn: HTMLButtonElement) => void;
-        _svPrev: () => void;
-        _svNext: () => void;
-        _svShow: (idx: number) => void;
 
         // Media-section drag-onto-map integration (pages/location/index.html).
         _mediaDragItemEl?: HTMLElement;
