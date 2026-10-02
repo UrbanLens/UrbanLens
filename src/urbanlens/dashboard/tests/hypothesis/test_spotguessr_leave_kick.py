@@ -269,6 +269,15 @@ class KickParticipantTests(TestCase):
             kick_participant(session, guest, other)
         self.assertEqual(_status(session, other), GameSessionParticipantStatus.JOINED)
 
+    def test_a_host_who_has_since_left_cannot_kick(self) -> None:
+        host, (_first, second), _locations, session, _round = _active_game(players=3)
+        read_while_still_host = GameSession.objects.get(pk=session.pk)
+        leave_session(session, host)
+
+        with pytest.raises(NotSessionHostForKickError):
+            kick_participant(read_while_still_host, host, second)
+        self.assertEqual(_status(session, second), GameSessionParticipantStatus.JOINED)
+
     def test_the_host_cannot_remove_themselves(self) -> None:
         host, _guests, _locations, session, _round = _active_game()
 

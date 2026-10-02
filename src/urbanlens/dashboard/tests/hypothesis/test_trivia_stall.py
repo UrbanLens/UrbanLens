@@ -333,6 +333,21 @@ class KickParticipantTests(TestCase):
         with pytest.raises(TriviaError):
             kick_participant(session, guest, host)
 
+    def test_a_host_who_has_since_left_cannot_kick(self) -> None:
+        host, first, second = _make_profile(), _make_profile(), _make_profile()
+        _befriend(host, first)
+        _befriend(host, second)
+        session = start_multiplayer_session(host, TriviaConfig(), [first, second])
+        join_session(session, first)
+        join_session(session, second)
+        read_while_still_host = TriviaSession.objects.get(pk=session.pk)
+        leave_session(session, host)
+
+        with pytest.raises(TriviaError):
+            kick_participant(read_while_still_host, host, second)
+        participant = TriviaSessionParticipant.objects.get(session=session, profile=second)
+        self.assertEqual(participant.status, TriviaSessionParticipantStatus.JOINED)
+
     def test_host_cannot_kick_themselves(self) -> None:
         host, guest, question, session, round_ = _setup_two_player_game()
         with pytest.raises(TriviaError):

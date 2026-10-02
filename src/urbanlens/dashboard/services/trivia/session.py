@@ -531,7 +531,7 @@ def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
     return session
 
 
-def _remove_participant(session: TriviaSession, participant: TriviaSessionParticipant, *, reason: str) -> None:
+def _remove_participant(session: TriviaSession, participant: TriviaSessionParticipant, *, reason: str, removed_by: Profile | None = None) -> None:
     """Mark ``participant`` LEFT, hand the host role on or abandon the session, and reveal a round only they held up.
 
     Shared by ``leave_session`` and ``kick_participant``, which differ only in who may call them and ``reason``.
@@ -539,13 +539,22 @@ def _remove_participant(session: TriviaSession, participant: TriviaSessionPartic
     participant row, so an answer racing a departure waits instead of deadlocking, and the second to commit sees
     the first. Mirrors ``spotguessr.session._remove_participant``.
 
+    Args:
+        session: The session.
+        participant: Who is leaving or being removed.
+        reason: ``left`` or ``kicked``, for the broadcast.
+        removed_by: The host doing a kick, re-checked under the lock: the caller read the host before it.
+
     Raises:
         SessionAlreadyEndedError: The session ended before the lock was taken.
+        KickNotHostError: ``removed_by`` stopped being the host before the lock was taken.
     """
     with transaction.atomic():
         locked = TriviaSession.objects.select_for_update().get(pk=session.pk)
         if locked.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
             raise SessionAlreadyEndedError("Session status is neither LOBBY nor ACTIVE; it has already ended.")
+        if removed_by is not None and locked.host_profile_id != removed_by.pk:
+            raise KickNotHostError("Caller is no longer the session host; only the host may remove a player.")
         open_round = None
         if locked.status == TriviaSessionStatus.ACTIVE:
             open_round = TriviaRound.objects.select_for_update().filter(session=locked, revealed_at__isnull=True).first()
@@ -637,7 +646,7 @@ def kick_participant(session: TriviaSession, host: Profile, target_profile: Prof
         raise TargetNotAParticipantError("No TriviaSessionParticipant row exists for the target profile on this session.") from None
     if participant.status == TriviaSessionParticipantStatus.LEFT:
         return
-    _remove_participant(session, participant, reason="kicked")
+    _remove_participant(session, participant, reason="kicked", removed_by=host)
 
 
 def rounds_played(session: TriviaSession) -> int:

@@ -833,7 +833,7 @@ def end_session_now(session: GameSession, host: Profile) -> GameSession:
     return session
 
 
-def _remove_participant(session: GameSession, participant: GameSessionParticipant, *, reason: str) -> None:
+def _remove_participant(session: GameSession, participant: GameSessionParticipant, *, reason: str, removed_by: Profile | None = None) -> None:
     """Mark ``participant`` LEFT, hand the host role on or abandon the session, and reveal a round only they held up.
 
     Shared by ``leave_session`` and ``kick_participant``, which differ only in who may call them and ``reason``.
@@ -841,13 +841,22 @@ def _remove_participant(session: GameSession, participant: GameSessionParticipan
     participant row, so a guess racing a departure waits instead of deadlocking, and the second to commit sees
     the first.
 
+    Args:
+        session: The session.
+        participant: Who is leaving or being removed.
+        reason: ``left`` or ``kicked``, for the broadcast.
+        removed_by: The host doing a kick, re-checked under the lock: the caller read the host before it.
+
     Raises:
         SessionAlreadyEndedError: The session ended before the lock was taken.
+        NotSessionHostForKickError: ``removed_by`` stopped being the host before the lock was taken.
     """
     with transaction.atomic():
         locked = GameSession.objects.select_for_update().get(pk=session.pk)
         if locked.status not in (GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE):
             raise SessionAlreadyEndedError(f"Session {session.pk} is {locked.status}, already ended.")
+        if removed_by is not None and locked.host_profile_id != removed_by.pk:
+            raise NotSessionHostForKickError(f"Profile {removed_by.pk} is no longer host of session {session.pk}.")
         open_round = None
         if locked.status == GameSessionStatus.ACTIVE:
             open_round = GameRound.objects.select_for_update().filter(session=locked, revealed_at__isnull=True).first()
@@ -931,7 +940,7 @@ def kick_participant(session: GameSession, host: Profile, target_profile: Profil
         raise KickTargetNotAParticipantError(f"Profile {target_profile.pk} has no participant row for session {session.pk}.") from None
     if participant.status == GameSessionParticipantStatus.LEFT:
         return
-    _remove_participant(session, participant, reason="kicked")
+    _remove_participant(session, participant, reason="kicked", removed_by=host)
 
 
 def rounds_played(session: GameSession) -> int:
