@@ -764,10 +764,7 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "'unsafe-inline'",
         # libsodium's Argon2id (E2EE key derivation) compiles WebAssembly; eval stays refused.
         "'wasm-unsafe-eval'",
-        "https://code.jquery.com",
-        "https://cdnjs.cloudflare.com",
         "https://unpkg.com",
-        "https://cdn.jsdelivr.net",
         "https://maps.googleapis.com",
     ],
     # Inline styles and Leaflet runtime positioning.
@@ -861,7 +858,8 @@ def allow_vendor_mirror(directives: dict[str, list[str]], base_url: object) -> s
         return None
     parsed = urlparse(str(base_url))
     origin = f"{parsed.scheme}://{parsed.netloc}"
-    for name in ("script-src", "style-src", "font-src"):
+    # connect-src: devtools fetches a mirrored script's source map from the mirror.
+    for name in ("script-src", "style-src", "font-src", "connect-src"):
         hosts = directives.get(name)
         if hosts is not None and origin not in hosts:
             hosts.append(origin)

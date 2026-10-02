@@ -123,6 +123,49 @@ class NoRawCdnUrlsInTemplatesTests(SimpleTestCase):
         )
 
 
+class VendorSourceMapsAreAllowedByThePolicyTests(SimpleTestCase):
+    """Devtools fetches a script's source map from beside it under connect-src, so a script from an origin that omits logs a CSP violation."""
+
+    def test_every_script_comes_from_an_origin_connect_src_admits(self) -> None:
+        from urllib.parse import urlparse
+
+        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
+
+        for key, asset in VENDOR_ASSETS.items():
+            if asset.kind != "script":
+                continue
+            parsed = urlparse(asset.fallback)
+            self.assertIn(f"{parsed.scheme}://{parsed.netloc}", _CSP_DIRECTIVES["connect-src"], key)
+
+    def test_script_src_admits_no_cdn_that_serves_no_vendor_script(self) -> None:
+        from urllib.parse import urlparse
+
+        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
+
+        used = {
+            f"{urlparse(asset.fallback).scheme}://{urlparse(asset.fallback).netloc}"
+            for asset in VENDOR_ASSETS.values()
+            if asset.kind == "script"
+        }
+        for host in _CDN_HOSTS:
+            if f"https://{host}" not in used:
+                self.assertNotIn(f"https://{host}", _CSP_DIRECTIVES["script-src"], host)
+
+    def test_a_mirror_is_admitted_to_connect_src_for_the_same_reason(self) -> None:
+        from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
+
+        directives: dict[str, list[str]] = {
+            "script-src": ["'self'"],
+            "style-src": [],
+            "font-src": [],
+            "connect-src": ["'self'"],
+        }
+
+        allow_vendor_mirror(directives, "https://assets.example.test/vendor")
+
+        self.assertIn("https://assets.example.test", directives["connect-src"])
+
+
 class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
     """A mirror the policy does not admit is every asset gone, not some."""
 

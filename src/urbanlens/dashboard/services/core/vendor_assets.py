@@ -29,7 +29,8 @@ class VendorAsset:
     integrity: str = ""
 
 
-#: Every third-party asset, keyed by the name templates ask for.
+#: Every third-party asset, keyed by the name templates ask for. Scripts come from origins the CSP's connect-src admits,
+#: since devtools fetches each one's source map from beside it.
 VENDOR_ASSETS: dict[str, VendorAsset] = {
     "leaflet_css": VendorAsset(
         "style",
@@ -97,8 +98,8 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
     "toastr_js": VendorAsset(
         "script",
         "toastr/2.1.4/toastr.min.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js",
-        "sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR",
+        "https://unpkg.com/toastr@2.1.4/build/toastr.min.js",
+        "sha384-awkppW2vvGcqchV4/Wqk1nZPrGJakjrkv9gwXzll5JebuFQNSbzeKwYhqFDa/y00",
     ),
     # HTMX drives essentially every interaction in this application, so this is worth the
     # recompute-on-upgrade cost the other entries above don't pay.
@@ -111,19 +112,19 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
     "jquery_js": VendorAsset(
         "script",
         "jquery/4.0.0-beta/jquery.min.js",
-        "https://code.jquery.com/jquery-4.0.0-beta.min.js",
+        "https://unpkg.com/jquery@4.0.0-beta/dist/jquery.min.js",
         "sha384-Cm3jMWwIyV0dazzpp3V+n5HmonAQ2uoNpQCYQzGrAK1ZBIKjGgaiHq2N8ItUlBcJ",
     ),
     "chartjs_js": VendorAsset(
         "script",
-        "chart.js/4.4.0/chart.umd.min.js",
-        "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js",
-        "sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g",
+        "chart.js/4.4.0/chart.umd.js",
+        "https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js",
+        "sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo",
     ),
     "sortable_js": VendorAsset(
         "script",
         "sortablejs/1.15.0/Sortable.min.js",
-        "https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js",
+        "https://unpkg.com/sortablejs@1.15.0/Sortable.min.js",
         "sha384-eeLEhtwdMwD3X9y+8P3Cn7Idl/M+w8H4uZqkgD/2eJVkWIN1yKzEj6XegJ9dL3q0",
     ),
     "fontawesome_css": VendorAsset(
