@@ -9,7 +9,7 @@
         <span class="organize-label-columns-header-col organize-label-columns-header-col--total">Total</span>
         <span class="organize-label-columns-header-col organize-label-columns-header-col--color">Color</span>
     </div>
-    <div id="{{ rows_id }}" class="organize-label-rows"
+    <div id="{{ rows_id }}" class="organize-label-rows" data-rows-url="{% url 'label.rows' label_kind=label_url_kind %}"
          data-bulk-delete-url="{% url 'label.bulk_delete' label_kind=label_url_kind %}"
          data-bulk-edit-url="{% url 'label.bulk_edit' label_kind=label_url_kind %}"
          data-merge-url="{% url 'label.multi_merge' label_kind=label_url_kind %}"
@@ -29,7 +29,7 @@
         {% if rows_deferred %}
         <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading&hellip;</div>
         {% else %}
-        {% include 'dashboard/partials/labels/organize_label_rows.html' with labels=labels label_url_kind=label_url_kind kind=kind empty_icon=empty_icon empty_message=empty_message select_class=select_class select_data_name=select_data_name selectable=selectable editable=editable deletable=deletable edit_target=edit_target|default:'#label-edit-dialog-body' rows_target=rows_target %}
+        {% include 'dashboard/partials/labels/organize_label_rows.html' with labels=labels rows_more=rows_more label_url_kind=label_url_kind kind=kind empty_icon=empty_icon empty_message=empty_message select_class=select_class select_data_name=select_data_name selectable=selectable editable=editable deletable=deletable edit_target=edit_target|default:'#label-edit-dialog-body' rows_target=rows_target %}
         {% endif %}
     </div>
     <div id="org-cross-tab-{{ ns }}" class="org-cross-tab-footer" hidden></div>

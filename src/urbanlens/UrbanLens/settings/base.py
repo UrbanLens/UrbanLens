@@ -715,6 +715,7 @@ IMMICH_THUMBNAIL_DEADLINE_SECONDS = _app_settings.immich_thumbnail_deadline_seco
 AVATAR_MAX_UPLOAD_BYTES = _app_settings.avatar_max_upload_bytes
 LABEL_BULK_EDIT_MAX_IDS = _app_settings.label_bulk_edit_max_ids
 LABEL_REORDER_MAX_IDS = _app_settings.label_reorder_max_ids
+ORGANIZE_ROWS_PAGE_SIZE = _app_settings.organize_rows_page_size
 MAX_SMART_LISTS_PER_SYNC = _app_settings.max_smart_lists_per_sync
 IMMICH_MARKER_CACHE_MAX_ASSETS = _app_settings.immich_marker_cache_max_assets
 SEARCH_MAX_LABEL_GROUPS = _app_settings.search_max_label_groups

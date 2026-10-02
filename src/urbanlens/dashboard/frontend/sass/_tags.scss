@@ -1871,6 +1871,13 @@ $org-stat-col-color-w: 2.75rem;
     @include spinner(22px);
 }
 
+// The row after an Organize tab's last loaded card; it loads the next page as it scrolls into view.
+.organize-rows-more {
+    @extend .organize-section-loading;
+    grid-column: 1 / -1;
+    padding: 1.5rem 1rem;
+}
+
 .org-cross-tab-footer {
     display: flex;
     align-items: center;
