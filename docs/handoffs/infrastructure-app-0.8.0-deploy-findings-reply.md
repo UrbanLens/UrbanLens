@@ -24,7 +24,9 @@ A push to `main` no longer cancels the CI run of the push before it, so every co
 **Not done: CI as a required check on `main`.** Release Please opens its PRs with `GITHUB_TOKEN`, which starts no
 workflow, so a required CI check would block every release PR. Gating the tag does the job on its own.
 
-**What it costs you:** a dispatch now arrives when CI finishes, about 1 h 40 m after the push on the last run.
+**What it costs you:** a dispatch now arrives when CI finishes, about 1 h 40 m after the push on the last run. Two of
+your files still describe publishing on push: `docs/runbooks/app-deploys.md`'s publish row (~2.5 min) and the path in
+`.github/workflows/app-image.yml`'s header.
 
 **Something your findings could not show:** the CI run for `d1fb1bf`, the commit production runs now, finished at
 22:43Z and **failed**: 1 failed, 19,418 passed. The failure is `core/tests/test_version.py::
