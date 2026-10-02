@@ -13,27 +13,18 @@ import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import { Markdown } from "tiptap-markdown";
 import { nextReferenceNumber, referenceDefinitionStub } from "../shared/article-footnotes";
 import { applyInlineImageAttrs, inlineImageSettled, refreshInlineImages } from "../shared/article-inline-images";
+import { ARTICLE_SOURCE_EXTENSIONS, ArticleSourceTracker, blockImageMarkdown } from "../shared/article-source";
 import { anchorSlug } from "../shared/article-toc-anchors";
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction } from "../shared/dialogs";
 import { pollerFor } from "../shared/photo-processing";
-
-interface MarkdownStorage {
-    getMarkdown(): string;
-}
-
-// tiptap-markdown ships its own MarkdownStorage type but doesn't augment @tiptap/core's Storage interface itself.
-declare module "@tiptap/core" {
-    interface Storage {
-        markdown: MarkdownStorage;
-    }
-}
 
 type EditorMode = "wysiwyg" | "source";
 
 // A plain Map (not WeakMap) so mounted roots can be iterated on cleanup - see
 // the htmx:afterSwap handler below.
 const editors = new Map<HTMLElement, Editor>();
+const sources = new WeakMap<Editor, ArticleSourceTracker>();
 
 function editorRoot(el: Element | null): HTMLElement | null {
     return el?.closest<HTMLElement>("[data-article-editor]") ?? null;
@@ -52,14 +43,10 @@ function canvasOf(root: HTMLElement): HTMLElement | null {
     return root.querySelector<HTMLElement>("[data-article-canvas]");
 }
 
-function markdownOf(editor: Editor): string {
-    return editor.storage.markdown.getMarkdown();
-}
-
-function syncTextareaFromEditor(root: HTMLElement, editor: Editor): void {
+function syncTextareaFromEditor(root: HTMLElement, source: ArticleSourceTracker): void {
     const textarea = textareaOf(root);
     if (!textarea) return;
-    const markdown = markdownOf(editor);
+    const markdown = source.serialize();
     if (textarea.value === markdown) return;
     textarea.value = markdown;
     // Re-fires article-editor.js's own input listener: dirty flag, char
@@ -78,9 +65,8 @@ function setMode(root: HTMLElement, mode: EditorMode): void {
         textarea.hidden = false;
         textarea.focus();
     } else {
-        // The textarea may have been hand-edited while in source mode -
-        // re-parse its current Markdown back into the WYSIWYG document.
-        editor.commands.setContent(textarea.value);
+        // The textarea may have been hand-edited while in source mode.
+        sources.get(editor)?.load(textarea.value);
         textarea.hidden = true;
         canvas.hidden = false;
         editor.commands.focus();
@@ -122,11 +108,16 @@ async function handleClearClick(root: HTMLElement): Promise<void> {
 }
 
 /**
- * Footnotes have no WYSIWYG representation (TipTap has no footnote node).
+ * Insert a footnote reference, then switch to Source mode to write its definition, which the canvas can only show as
+ * protected source.
  */
 function insertReference(root: HTMLElement, editor: Editor): void {
-    const n = nextReferenceNumber(markdownOf(editor));
-    editor.chain().focus().insertContent(`[^${n}]`).run();
+    const n = nextReferenceNumber(textareaOf(root)?.value ?? "");
+    editor
+        .chain()
+        .focus()
+        .insertContent({ type: "footnoteReference", attrs: { label: String(n) } })
+        .run();
     setMode(root, "source");
     const textarea = textareaOf(root);
     if (!textarea) return;
@@ -145,6 +136,10 @@ interface UploadResponse {
 
 // A node view the editor never re-reads from the DOM, so an inline image can be requested again without its src changing.
 const ArticleImage = Image.extend({
+    addStorage() {
+        return { markdown: blockImageMarkdown };
+    },
+
     addNodeView() {
         return ({ node }) => {
             const dom = document.createElement("img");
@@ -518,11 +513,12 @@ function mountEditor(root: HTMLElement): void {
             Placeholder.configure({ placeholder: "Start writing, or type “/” to insert a block…" }),
             Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
             HeadingAnchors,
+            ...ARTICLE_SOURCE_EXTENSIONS,
             SlashCommand.configure({ root }),
             BubbleMenu.configure({ element: bubbleMenu.element }),
             FloatingMenu.configure({ element: floatingPlus }),
         ],
-        content: textarea.value,
+        content: "",
         editorProps: {
             // Shares the read-mode/preview typography (_article.scss).
             attributes: { class: "article-body" },
@@ -535,10 +531,12 @@ function mountEditor(root: HTMLElement): void {
                 return true;
             },
         },
-        onUpdate: () => syncTextareaFromEditor(root, editor),
+        onUpdate: () => syncTextareaFromEditor(root, source),
     });
+    const source = new ArticleSourceTracker(editor);
 
     editorBox.current = editor;
+    sources.set(editor, source);
     editor.on("transaction", bubbleMenu.refresh);
     editor.on("selectionUpdate", bubbleMenu.refresh);
 
