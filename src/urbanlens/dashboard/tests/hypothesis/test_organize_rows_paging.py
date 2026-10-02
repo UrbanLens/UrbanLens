@@ -263,6 +263,12 @@ class LoadedExtentTests(_RowsFixture):
         self.assertEqual(self._ids(root), self._expected())
         self.assertIsNone(self._more(root))
 
+    def test_only_all_1_asks_for_every_row(self) -> None:
+        self._tags(_PAGE * 2)
+        for value in ("0", "false", "", "yes"):
+            with self.subTest(value=value):
+                self.assertEqual(len(self._ids(self._get(self._rows_url(), {"all": value}))), _PAGE)
+
     def test_a_bulk_write_rerenders_what_the_client_had_loaded(self) -> None:
         tags = self._tags(_PAGE * 3)
         response = self.client.post(

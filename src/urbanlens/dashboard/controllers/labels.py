@@ -308,7 +308,7 @@ def _rows_window(request: HttpRequest) -> tuple[RowsCursor | None, int | None]:
         after = RowsCursor.from_query(request.GET) if request.method == "GET" else None
     except ValueError as exc:
         raise BadRequest(str(exc)) from exc
-    if request.GET.get("all"):
+    if request.GET.get("all") == "1":
         return after, None
     page_size = organize_page_size()
     if after is not None:
