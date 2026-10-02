@@ -84,6 +84,18 @@ class MediaProvider(Gateway, ABC):
         """
         ...
 
+    def admits(self, item: MediaItem) -> bool:
+        """Whether ``item`` is one this provider would return today.
+        Readers apply it to cached rows as well, so tightening what a provider keeps takes effect before its cache expires.
+
+        Args:
+            item: A previously fetched item.
+
+        Returns:
+            True unless this provider now rejects it.
+        """
+        return True
+
     def get_media(self, location: Location, search_terms: list[str], *, address: str | None = None, limit: int = 24) -> tuple[list[MediaItem], bool]:
         """Return captioned media for ``location``, using the 7-day LocationCache.
 

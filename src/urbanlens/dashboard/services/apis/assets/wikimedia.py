@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
+from urllib.parse import urlsplit
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.core.gateway import Gateway
@@ -22,6 +23,9 @@ _MAX_RESULTS = 60
 # "toomanyvalues" error, silently dropping every result. _MAX_RESULTS (60) is above that limit, so
 # imageinfo lookups must be chunked.
 _TITLES_BATCH_SIZE = 50
+#: Commons' media types for still images. A DjVu or PDF is OFFICE: a scanned book whose thumbnail is its first page.
+_PHOTO_MEDIATYPES = frozenset({"BITMAP", "DRAWING"})
+_DOCUMENT_EXTENSIONS = (".djvu", ".djv", ".pdf")
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
@@ -39,6 +43,8 @@ class WikimediaGateway(MediaProvider):
     # a country name rarely appears in a single file's own title/description text.
     # Confirmed by hand: "<name> <city> <state>" returns hits; the same query plus "United States"
     search_with_country: ClassVar[bool] = False
+    # Loose name words match unrelated files whose description mentions each word somewhere.
+    quote_name: ClassVar[bool] = True
 
     base_url: str = _API_URL
 
@@ -95,7 +101,7 @@ class WikimediaGateway(MediaProvider):
             "action": "query",
             "titles": "|".join(titles),
             "prop": "imageinfo",
-            "iiprop": "url|mime|extmetadata",
+            "iiprop": "url|mime|mediatype|extmetadata",
             "iiurlwidth": _THUMB_WIDTH,
             "format": "json",
         }
@@ -116,9 +122,9 @@ class WikimediaGateway(MediaProvider):
             if "imageinfo" not in page:
                 continue
             info = page["imageinfo"][0]
+            if info.get("mediatype") not in _PHOTO_MEDIATYPES:
+                continue
             mime = info.get("mime", "")
-            if not mime.startswith("image/"):
-                continue  # skip audio/video/pdf files
             ext_meta = info.get("extmetadata", {})
             description = ext_meta.get("ImageDescription", {}).get("value", "") or ext_meta.get("ObjectName", {}).get("value", "") or page.get("title", "").replace("File:", "")
             results.append(
@@ -132,6 +138,17 @@ class WikimediaGateway(MediaProvider):
                 },
             )
         return results
+
+    def admits(self, item: MediaItem) -> bool:
+        """Rejects a paged document, recognised by the extension of its Commons file URL.
+
+        Args:
+            item: A previously fetched item.
+
+        Returns:
+            False for a DjVu or PDF file.
+        """
+        return not urlsplit(item.url).path.lower().endswith(_DOCUMENT_EXTENSIONS)
 
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         if not search_term:

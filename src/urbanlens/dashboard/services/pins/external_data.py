@@ -746,8 +746,10 @@ class MediaPanelSource(GalleryMediaSource):
         return bool(self.search_terms(pin, gateway))
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Rebuild ``MediaItem``s from this provider's cached ``{"items": [...]}``."""
-        return [MediaItem(**item) for item in (data or {}).get("items", [])]
+        """Rebuild ``MediaItem``s from this provider's cached ``{"items": [...]}``, less any the provider no longer admits."""
+        gateway = self.make_gateway()
+        items = (MediaItem(**item) for item in (data or {}).get("items", []))
+        return [item for item in items if gateway.admits(item)]
 
 
 class BoundaryPanelSource(PanelSource):

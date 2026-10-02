@@ -4064,3 +4064,107 @@ Directions, none chosen: drop `place_canonical_name` (it only saves a geocoding 
 provider's name, for example where `update_location_name_from_external_sources` writes a resolved provider name. Slugs
 already minted from typed text stay in their URLs until something re-mints them, and the uuid redirect would only cover
 a Location whose old URL was its uuid.
+
+
+## P187 — Production's celery workers likely cannot reach REData: the LAN answers redata.urbanlens.org with NPM's private address, which the celery egress policy refuses, so no CRIS documents, CRIS photos or web images land
+
+`id: P187` · `status: open, environmental, unverified on production` · `updated: 2026-10-02` · `found by: the HRSH report on production v0.8.0, 2026-10-02`
+
+On production (k3s site-b, celery on since the 2026-10-02 cutover) Jess's HRSH pin showed no Article > Sources
+documents, no CRIS photos, no web-image results, and exactly one public-source photo, from Wikimedia Commons. Every
+one of the missing providers is fetched through REData from a celery pod. Commons is not, and it is the one that
+answered. (Wikipedia's article images are not REData-backed either. One cause of their absence, seen on
+`development_main` and not checked on production, is an empty answer cached while the article match had expired,
+fixed in `models/cache/signals.py` on 2026-10-02.) Nothing
+here was read from production; the chain below is inferred from the infrastructure repo and from this LAN.
+
+- **Celery egress.** `deny-egress-celery` (`infrastructure/platform/cnpg-cluster/base/network-policy.yaml`) lets
+  `app.kubernetes.io/component in (beat, worker)` reach DNS, Postgres, Dragonfly and RabbitMQ only.
+  `allow-egress-celery-internet`
+  (`infrastructure/platform/cnpg-cluster/components/celery-internet-egress/network-policy.yaml`) adds `0.0.0.0/0`
+  **except** `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`. Both `urbanlens-worker` and
+  `urbanlens-worker-panels` carry `component: worker`. The web pods have no egress policy.
+- **REData's address on the LAN.** From chiron, `getent hosts redata.urbanlens.org` → `10.2.0.214` (NPM on jungu);
+  `urbanlens.org` → Cloudflare. bida (site-b) is `10.2.0.245` on the same LAN (`infrastructure/network/ADDRESSING.md`).
+  The infrastructure repo's REData basemap handoff reply says `redata.urbanlens.org` "really is NPM plus dynamic
+  DNS today". `UL_SEARXNG_BASE_URL`'s host in this checkout's `.env` also resolves to `10.2.0.214`.
+- **Production's REData URL.** `secrets/site-b/urbanlens-app-env.enc.yaml` carries `UL_REDATA_API_URL` and
+  `UL_REDATA_API_KEY` (names read, values not), copied from the compose stack at cutover. `bin/cutover.py` refuses a
+  literal private host, so the value is presumably the public name; staging uses `https://redata.urbanlens.org`.
+- **What the app does with an unreachable REData.** A network failure is `REASON_SOURCE_ERROR`, a transient reason
+  (`services/apis/property_records/redata_gateway.py:138`). The CRIS fetch re-raises it
+  (`plugins/builtin/cris_buildings.py`, `_fetch_now`), `run_panel_fetch` logs it and sets the skip key, and nothing
+  is cached. `collect_source_documents` then has no row and no fetch in flight, so Article > Sources lists nothing.
+  Google Images and Web Images call `RedataSearchGateway.search_web` and also cache nothing on failure.
+  Smithsonian, LoC, Internet Archive and Digital Commonwealth are REData-backed too.
+
+**Not the code.** On `development_main`, which reaches REData publicly, HRSH's Location 97736 has a site-scope
+`cris_building_usn` row with `attachments_fetched: true`, 20 attachments and 17 campus buildings, and
+`collect_source_documents` lists 12 documents at site scope. The queues are covered: `worker-panels` drains
+`panel_fetch` (the CRIS panel fetch); `worker` drains `bulk` (`extract_cris_attachments`) and `celery` (where the
+sandbox tasks go while `UL_SANDBOX_ENABLED` is unset).
+
+**Read-only checks that settle it** (Jess; the HRSH Location id comes from the first query):
+
+```bash
+# 1. What the panel worker resolves REData to. A 10.x answer is the fault.
+kubectl -n urbanlens exec deploy/urbanlens-worker-panels -- python -c "import os,socket,urllib.parse as u; h=u.urlsplit(os.environ['UL_REDATA_API_URL']).hostname; print(h, socket.gethostbyname(h))"
+# 2. Reachability from the worker, then from web (web has no egress policy). An HTTP status is reachable; a timeout is not.
+for d in urbanlens-worker-panels urbanlens-web; do kubectl -n urbanlens exec deploy/$d -- python -c "
+import os,urllib.request,urllib.error as e
+try: print(urllib.request.urlopen(os.environ['UL_REDATA_API_URL'],timeout=10).status)
+except e.HTTPError as x: print('http',x.code)
+except Exception as x: print('unreachable',type(x).__name__)"; done
+# 3. The failures, as the worker logged them.
+kubectl -n urbanlens logs deploy/urbanlens-worker-panels --since=24h | grep -E "Panel fetch (cris_building|google_images|searxng_images|smithsonian|loc|internet_archive) .*failed|Could not reach REData|REData image search failed"
+```
+
+```sql
+-- REData calls with no response at all (status_code NULL), against Commons for contrast.
+SELECT service, success, status_code, count(*), max(created) FROM dashboard_api_call_log
+WHERE created > now() - interval '1 day'
+  AND service IN ('redata_api', 'redata_search_web', 'smithsonian', 'library_of_congress', 'internet_archive', 'wikimedia')
+GROUP BY 1, 2, 3 ORDER BY 1;
+-- HRSH's Location, then what is cached for it.
+SELECT id, latitude, longitude, official_name FROM dashboard_locations
+WHERE latitude BETWEEN 41.730 AND 41.737 AND longitude BETWEEN -73.932 AND -73.924;
+SELECT source, updated, query_key, data ? 'attachments_fetched' AS attachments_fetched, data->>'site_scope' AS site_scope,
+       jsonb_array_length(COALESCE(data->'attachments', '[]'::jsonb)) AS attachments,
+       jsonb_array_length(COALESCE(data->'items', '[]'::jsonb)) AS items
+FROM dashboard_location_cache WHERE location_id = <id> ORDER BY source;
+-- schedule_panel_fetch refuses outright for an owner with external APIs off; rules that out.
+SELECT p.id, p.profile_id, pr.external_apis_enabled FROM dashboard_user_pins p
+JOIN dashboard_profiles pr ON pr.id = p.profile_id WHERE p.location_id = <id>;
+```
+
+**The fix is the infrastructure repo's**, one of: an egress rule admitting `10.2.0.214/32:443` for `component: worker`;
+a public answer for `redata.urbanlens.org` inside the cluster (which then needs the router to hairpin); or a
+`UL_REDATA_API_URL` the policy already admits. Nothing in the app needs clearing afterwards: the failures cached
+nothing and the skip keys expire. A `cris_building_usn` row cached as `{}` by a non-transient refusal (the third SQL
+query shows it) would hold until `external_data_cache_days` passes.
+
+## P188 — Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location
+
+`id: P188` · `status: open, needs a decision` · `updated: 2026-10-02` · `found by: the HRSH Commons investigation, 2026-10-02`
+
+A pin's `name` and its `PinAlias` rows are the owner's own text. Several outbound searches use them, and every
+result is cached in a `LocationCache` row every pin and wiki at that Location reads:
+
+- `Pin.get_unique_search_name` (`models/pin/model.py`) uses `meaningful_official_name or meaningful_name`. The
+  official name is the Location's, so the private name goes out only when the Location has none. It also appends
+  the nearest ancestor's name by the same rule. Every `MediaPanelSource` (Wikimedia, Smithsonian, LoC, Internet
+  Archive, Digital Commonwealth, Chronicling America) and the web-search panel build their queries this way.
+- Web Images (`plugins/builtin/searxng_images.py`, `build_image_query`) **always** includes `pin.meaningful_name`
+  and the pin's non-nickname aliases, alongside the wiki's names. It is in `PIN_MEDIA_GALLERY_SOURCES`, so every
+  pin page sends it to REData and on to the search engines behind it.
+- Flickr (`services/apis/flickr/search.py`, `_search_components`) does the same, and adds every ancestor's names.
+  Neither the pin page nor the wiki page loads its tab (`PIN_MEDIA_GALLERY_SOURCES`, the `media-loader-*` ids in
+  `pages/location/index.html` and `wiki.html`), but the `wiki_media` route and the external API fetch it on
+  request. Wiring it into the galleries would send this for every pin.
+
+Consequences: the private text leaves the site, and a second account pinning the same place sees photos chosen by
+the first account's private name. Google Images searches by address only and is not affected.
+
+Not changed, because it trades recall for privacy: a Location with no official name would find nothing for its
+first pins. One option is to build shared-cache queries only from Location- and wiki-level names, and to treat a
+pin-name-driven search as the owner's own, cached per pin.

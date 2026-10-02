@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P187` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
+**Next free id:** `P189` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -217,4 +217,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P179 | open | 2026-10-01 | `panel_fetch`'s threads pool enforces none of its tasks' declared soft or hard time limits | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P182 | open | 2026-10-01 | A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P186 | open | 2026-10-02 | `Location.official_name` is seeded from text the client sent, and a new Location takes its URL slug from it at creation; a new wiki adopts it as its automatic name and concealment shows it as the provider name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P187 | open | 2026-10-02 | Production's celery workers likely cannot reach REData: the LAN answers redata.urbanlens.org with NPM's private address, which the celery egress policy refuses, so no CRIS documents, CRIS photos or web images land | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |
