@@ -112,8 +112,6 @@ const REVIEWED_SAFE = new Map<string, string>([
     ["shared/trip-calendar.ts: day", "WEEKDAYS constant"],
     ["shared/trip-calendar.ts: isoDay(month.y, month.m, d)", "digits and dashes built from numbers"],
     ["shared/trip-calendar.ts: d", "day-of-month loop counter"],
-    // Not a Leaflet sink: the article editor loads its own saved HTML, which its schema re-parses.
-    ["entries/article-wysiwyg.ts: textarea.value", "TipTap setContent of the article's stored body"],
 ]);
 
 function tsFiles(dir: string): string[] {

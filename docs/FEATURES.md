@@ -148,7 +148,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   **revision history** (every saved version stored, restorable from the Edit History tab); private
   per-pin, or shared/community-editable per-wiki. Edited via a WYSIWYG canvas (click-to-format,
   no Markdown syntax required) with a Markdown "Source" mode for power users/footnotes - saved as
-  plain Markdown either way
+  plain Markdown either way. The canvas writes back only the top-level blocks the user changed;
+  every other block, and the blank lines and link definitions between blocks, keep their exact
+  source. Blocks the canvas can't model faithfully (raw HTML, footnote definitions, `#` headings)
+  show as protected source, editable in Source mode (`frontend/ts/shared/article-source.ts`)
 - **Article > Sources** — a sub-tab on both the private pin page and the wiki page listing the
   documents cached for the place (today the CRIS inventory forms and nomination PDFs, each naming
   its building on a campus), viewable in a same-origin iframe or a new tab. Any cache-backed panel

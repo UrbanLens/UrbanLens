@@ -14,6 +14,7 @@ import { createPhotoMarkerLayer, type PhotoMapItem } from "../shared/photo-map";
 import { type LightboxInput, lightboxItemFromTile, parsePhotoIds, PHOTO_IDS_TYPE, tileFromJson, writePhotoIds } from "../shared/photo-tile";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 import { observeMediaGalleryProcessing, openMediaLightbox } from "../shared/media-lightbox";
+import { type MediaDropItem, placeMediaItem } from "../shared/media-map-drop";
 
 // Exposed at module scope, not inside the page-init function below.
 window.mediaOpenLightbox = openMediaLightbox;
@@ -93,15 +94,6 @@ interface NearbyPinEntry {
     url: string;
     latitude: number | null;
     longitude: number | null;
-}
-
-/** A Media-section tile's payload, as carried by its "text/media-item" drag. */
-interface MediaDropItem {
-    source: string;
-    key: string;
-    url: string;
-    pageUrl: string;
-    caption: string;
 }
 
 interface BuildingImportRow {
@@ -2231,35 +2223,8 @@ function init(): void {
         for (const id of ids) placePhotoAt(id, latlng);
     });
 
-    // Drop a Media-section item (external provider result, not yet a real Image row - see PinController.media_relevance) onto the map.
     function placeMediaItemAt(itemEl: HTMLElement | undefined, item: MediaDropItem, latlng: L.LatLng): void {
-        fetch(cfg.mediaRelevanceUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-            body: JSON.stringify({
-                source: item.source,
-                item_key: item.key,
-                url: item.url,
-                is_relevant: true,
-                page_url: item.pageUrl,
-                caption: item.caption,
-                latitude: latlng.lat,
-                longitude: latlng.lng,
-            }),
-        })
-            .then((r) => {
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                return r.json();
-            })
-            .then((data) => {
-                window.mediaApplyMaterializedDrop?.(itemEl, data);
-                if (data.image_id && data.latitude != null && data.longitude != null) {
-                    window._galleryAddMarker?.({ id: data.image_id, url: data.image_url, latitude: data.latitude, longitude: data.longitude });
-                } else if (data.materialize_error) {
-                    toast.warning(`Couldn't save a local copy: ${data.materialize_error}`);
-                }
-            })
-            .catch(() => toast.error("Failed to save photo location."));
+        void placeMediaItem(map, cfg.mediaRelevanceUrl, itemEl, item, latlng);
     }
 
     mapEl.addEventListener("dragover", (e) => {

@@ -215,36 +215,30 @@ actual polygon needs a map-overlay UX decision (a new layer? a toggle? which exi
 boundary-rendering chain, if any) that wasn't the sweep's to make. Flagging for product input rather
 than guessing at it.
 
-## P11 — Frontend TS audit: a few correctness bullets and structural debt found but not fixed
+## P11 — Frontend TS audit: its correctness bullets are fixed, the structural debt it found is not
 
-`id: P11` · `status: open` · `updated: 2026-09-29`
+`id: P11` · `status: open` · `updated: 2026-10-02`
 
-Previously titled "84 raw `fetch()` calls bypass `fetch-json.ts`, and 'all the wrappers are gone' was
-a count, not a search", and before that "~40 raw `fetch()` calls bypass `fetch-json.ts` and fail
+Previously titled "Frontend TS audit: a few correctness bullets and structural debt found but not
+fixed", before that "84 raw `fetch()` calls bypass `fetch-json.ts`, and 'all the wrappers are gone'
+was a count, not a search", and before that "~40 raw `fetch()` calls bypass `fetch-json.ts` and fail
 silently; Organize's Media tab is unwired dead UI".
 
-Full-tree audit of `dashboard/frontend/ts/` (every file read, eight passes, starting 2026-08-15). The
-`fetch()`-wrapper migration is done - `shared/fetch-json.ts` (`fetchJson`/`sendJson`,
-`fetchText`/`sendForText`) now covers every call site except `webauthn-client.ts` and the two E2EE
-calls that need raw `Response` semantics (201-vs-200, `redirected`) - and most correctness bullets
-this audit found are fixed. That history moved to `archive/PROBLEMS-ARCHIVE.md` (2026-09-15). What's
-left:
-
-**Correctness, user-visible:**
-
-- `entries/map-annotations.ts:2047` `placeMediaItemAt` still has no loading indicator for the
-  server-side image-materialize step it waits on - not attempted since
-  `window.mediaApplyMaterializedDrop`'s own contract (defined in the gallery/organize module) would
-  need to be understood first, and this file has no established loading-state convention for the
-  drag-and-drop-onto-map interaction to reuse.
-- `entries/photo-location-scan.ts` - the photo uploads that run after the "Uploaded" toast still have
-  no progress indicator (not re-verified this session; the controller-reuse and cross-scan
-  double-counting this bullet used to describe are fixed - see `beginScanState`).
-- `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
-  through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not just
-  at the edit point. Needs round-trip tests over real saved articles before it is trusted.
+Full-tree audit of `dashboard/frontend/ts/` (every file read, eight passes, starting 2026-08-15).
+Every correctness bullet it found is fixed; most of that history moved to
+`archive/PROBLEMS-ARCHIVE.md` (2026-09-15). The last three were fixed 2026-10-02: the article
+WYSIWYG canvas rewrote untouched source on its first update (`shared/article-source.ts` now writes
+back only changed blocks), photo-scan preview uploads had no progress, and a Media tile dropped on
+the pin map had no pending state (`shared/media-map-drop.ts`). What's left is structural:
 
 **Structural (no user-visible symptom):**
+
+- The `fetch()`-wrapper migration is not done, whatever an earlier pass of this entry said: a
+  2026-10-02 search finds 145 raw `fetch(` calls in 48 files outside `shared/fetch-json.ts`
+  (`map-page.ts` 26, `map-annotations.ts` 21, `e2ee-client.ts` 20). Command:
+  `grep -rnE '(^|[^.A-Za-z0-9_])fetch\(' --include=*.ts src/urbanlens/dashboard/frontend/ts`, minus
+  `*.test.ts` and comment lines. Not audited for which of them need raw `Response` semantics
+  (`webauthn-client.ts`, the E2EE calls that read 201-vs-200 or `redirected`) or fail silently.
 
 - The three games triplicate ~1,500 lines of session/lobby/chat/invite/fetch plumbing (19 blocks
   differing only by an `sg-`/`cs-`/`trivia-` prefix). Extracting `game-net` / `game-session` /

@@ -354,6 +354,7 @@ class PhotoLocationScanApp {
     private async upload(): Promise<void> {
         if (this.allHits.length === 0 || !this.uploadUrl) return;
         this.uploadBtn.disabled = true;
+        this.uploadBtn.classList.add("is-loading");
         try {
             // Regroup from the full, un-merged hit list rather than reusing the live display clusters.
             const finalClusters: UploadCluster[] = clusterHits(this.allHits).map((cluster) => ({ ...cluster, id: crypto.randomUUID() }));
@@ -379,7 +380,6 @@ class PhotoLocationScanApp {
             } | null;
             if (!response.ok || !data?.review_url) {
                 toast.error(data?.error ?? "Could not upload results. Please try again.");
-                this.uploadBtn.disabled = false;
                 return;
             }
             const total = (data.matched_suggestions ?? 0) + (data.new_pin_suggestions ?? 0);
@@ -394,7 +394,9 @@ class PhotoLocationScanApp {
             this.uploadBtn.hidden = true;
         } catch {
             toast.error("Could not upload results. Please check your connection and try again.");
-            this.uploadBtn.disabled = false;
+        } finally {
+            this.uploadBtn.classList.remove("is-loading");
+            this.uploadBtn.disabled = this.clusters.length === 0;
         }
     }
 
@@ -403,23 +405,29 @@ class PhotoLocationScanApp {
  */
     private async uploadSelectedPhotos(finalClusters: UploadCluster[], suggestionIds: Record<string, number>): Promise<void> {
         if (!this.uploadPhotoUrl) return;
-        let failures = 0;
-        for (const cluster of finalClusters) {
+        const uploads = finalClusters.flatMap((cluster) => {
             const suggestionId = suggestionIds[cluster.id];
-            if (!suggestionId) continue;
-            const selected = cluster.photos.filter((file) => this.selectedFiles.has(file));
-            for (const file of selected) {
-                try {
-                    const body = new FormData();
-                    body.append("suggestion_id", String(suggestionId));
-                    body.append("image", file);
-                    const res = await fetch(this.uploadPhotoUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
-                    if (!res.ok) failures += 1;
-                } catch {
-                    failures += 1;
-                }
+            return suggestionId ? cluster.photos.filter((file) => this.selectedFiles.has(file)).map((file) => ({ file, suggestionId })) : [];
+        });
+        if (uploads.length === 0) return;
+        const photos = `${uploads.length} preview photo${uploads.length === 1 ? "" : "s"}`;
+        this.progressWrap.hidden = false;
+        this.setProgress(`Uploading ${photos}...`, 0, uploads.length);
+        let failures = 0;
+        for (const [index, { file, suggestionId }] of uploads.entries()) {
+            try {
+                const body = new FormData();
+                body.append("suggestion_id", String(suggestionId));
+                body.append("image", file);
+                const res = await fetch(this.uploadPhotoUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
+                if (!res.ok) failures += 1;
+            } catch {
+                failures += 1;
             }
+            this.setProgress(`Uploading ${photos}...`, index + 1, uploads.length);
         }
+        const uploaded = uploads.length - failures;
+        this.setProgress(failures > 0 ? `Uploaded ${uploaded} of ${photos}.` : `Uploaded ${photos}.`, uploads.length, uploads.length);
         if (failures > 0) {
             toast.error(`${failures} preview photo${failures === 1 ? "" : "s"} could not be uploaded, but your location results were saved.`);
         }
