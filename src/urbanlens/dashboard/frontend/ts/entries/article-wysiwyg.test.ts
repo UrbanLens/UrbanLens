@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { comparableRendering, splitArticleSource } from "../shared/article-markdown-syntax";
@@ -19,6 +19,7 @@ const PANEL = `
     <button type="button" data-article-mode-toggle></button>
     <div data-article-editor>
         <button type="button" data-md-action="reference"></button>
+        <button type="button" data-md-action="image"></button>
         <div data-article-canvas hidden></div>
         <textarea data-article-textarea></textarea>
     </div>`;
@@ -293,5 +294,63 @@ describe("inserting a reference", () => {
         editor.commands.setTextSelection(positionOf(editor, "First line") + "First line".length);
         document.querySelector<HTMLElement>('[data-md-action="reference"]')!.click();
         expect(textarea.value).toBe(WYSIWYG_ARTICLE.replace("First line\\", "First line[^2]\\") + "\n[^2]: ");
+    });
+});
+
+describe("uploading an inline image", () => {
+    const realFetch = globalThis.fetch;
+    const realClick = HTMLInputElement.prototype.click;
+    let respond: (response: Response) => void;
+
+    beforeEach(() => {
+        // Only the upload waits; anything else the page asks for meanwhile is answered at once.
+        globalThis.fetch = Object.assign(
+            (_input: RequestInfo | URL, init?: RequestInit) => (init?.method === "POST" ? new Promise<Response>((resolve) => (respond = resolve)) : Promise.resolve(new Response("", { status: 404 }))),
+            realFetch,
+        );
+        // The browser's file picker, answered at once with one image.
+        HTMLInputElement.prototype.click = function (this: HTMLInputElement): void {
+            if (this.type !== "file") return;
+            Object.defineProperty(this, "files", { value: [new File(["png"], "mill.png", { type: "image/png" })], configurable: true });
+            this.dispatchEvent(new Event("change"));
+        };
+    });
+
+    afterEach(() => {
+        globalThis.fetch = realFetch;
+        HTMLInputElement.prototype.click = realClick;
+    });
+
+    test("shows where the image is going while it uploads, then puts the image there", async () => {
+        const { editor } = await mount(WYSIWYG_ARTICLE);
+        document.querySelector<HTMLElement>("[data-article-editor]")!.dataset.imageUploadUrl = "/article/image/";
+        editor.commands.setTextSelection(positionOf(editor, "First line"));
+
+        document.querySelector<HTMLElement>('[data-md-action="image"]')!.click();
+        const canvas = document.querySelector<HTMLElement>("[data-article-canvas]")!;
+        const pending = canvas.querySelector('[role="status"]');
+        expect(pending?.textContent).toContain("Uploading image");
+
+        respond(Response.json({ url: "/media/image/9/" }));
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(canvas.querySelector('[role="status"]')).toBeNull();
+        expect(canvas.querySelector('img[src="/media/image/9/"]')).not.toBeNull();
+    });
+
+    test("a failed upload takes the pending line away again", async () => {
+        const { editor } = await mount(WYSIWYG_ARTICLE);
+        document.querySelector<HTMLElement>("[data-article-editor]")!.dataset.imageUploadUrl = "/article/image/";
+        editor.commands.setTextSelection(positionOf(editor, "First line"));
+
+        const canvas = document.querySelector<HTMLElement>("[data-article-canvas]")!;
+        const images = canvas.querySelectorAll("img").length;
+
+        document.querySelector<HTMLElement>('[data-md-action="image"]')!.click();
+        respond(Response.json({ error: "That file is not an image." }, { status: 400 }));
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(canvas.querySelector('[role="status"]')).toBeNull();
+        expect(canvas.querySelectorAll("img")).toHaveLength(images);
     });
 });
