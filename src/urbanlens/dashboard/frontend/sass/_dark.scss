@@ -3,7 +3,6 @@
 @use "mixins" as *;
 
 [data-theme="dark"] {
-    // Native <select> popups.
     color-scheme: dark;
 
     @include input-selectors {
@@ -13,11 +12,15 @@
         color: var(--ul-grey-5);
     }
 
-    // Belt-and-suspenders: also set directly on every select, in case an
-    // engine prefers the originating element's own color-scheme over the
-    // root's for its popup.
+    // Chromium paints popup rows on the option's background, else the select's, else white; inputs here are translucent.
+    option, optgroup {
+        background-color: var(--ul-grey-0);
+        color: var(--ul-grey-8);
+    }
+
+    // Its dark-scheme highlight row is pale blue, illegible under light text; the light scheme's is dark blue.
     select {
-        color-scheme: dark;
+        color-scheme: light;
     }
 
     .tag-stat {
