@@ -42,9 +42,13 @@ export function rememberRecentWiki(key: string, entry: RecentWiki): void {
     }
 }
 
+/** The body event pages/location/wiki.html's history panel reloads on. */
+export const WIKI_HISTORY_CHANGED = "wikiHistoryChanged";
+
 function refreshHistory(): void {
+    // A panel still showing its placeholder has not been opened, and loads current history when it is.
     const history = document.getElementById("wiki-tab-content");
-    if (history) window.htmx?.trigger(history, "load");
+    if (history && !history.querySelector(".wiki-loading")) document.body.dispatchEvent(new CustomEvent(WIKI_HISTORY_CHANGED));
 }
 
 /** Swap in the server's About card, which carries the description, dates and security chips. */
@@ -74,9 +78,10 @@ export function installWikiEditForm(form: HTMLElement | null, editUrl: string): 
                 if (resp?.revision !== undefined && revision instanceof HTMLInputElement) revision.value = String(resp.revision);
                 toast.success(resp?.message ?? "Changes saved.");
                 form.closest("dialog")?.close();
-                if (data.name) document.body.dispatchEvent(new CustomEvent("wikiRenamed", { detail: { name: data.name } }));
                 if (resp?.about_html !== undefined) replaceAbout(resp.about_html);
-                refreshHistory();
+                // installWikiRename's handler refreshes the history too.
+                if (data.name) document.body.dispatchEvent(new CustomEvent("wikiRenamed", { detail: { name: data.name } }));
+                else refreshHistory();
             },
             (err: unknown) => toast.error(err instanceof Error && err.message ? err.message : "Failed to save changes."),
         );

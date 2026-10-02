@@ -391,7 +391,7 @@
                 <div id="wiki-tab-content"
                      class="card__body wiki-tab-content"
                      hx-get="{% url 'location.wiki.history' location.slug %}"
-                     hx-trigger="intersect once"
+                     hx-trigger="intersect once, wikiHistoryChanged from:body"
                      hx-swap="innerHTML">
                     <div class="wiki-loading">
                         <i class="material-icons spin">autorenew</i> Loading...

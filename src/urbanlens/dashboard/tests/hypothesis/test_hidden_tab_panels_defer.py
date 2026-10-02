@@ -6,6 +6,7 @@ a hidden tab panel as soon as the page is processed, exactly as `load` does. `in
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 
 from django.contrib.auth.models import User
@@ -13,6 +14,7 @@ from django.urls import reverse
 import lxml.html
 from model_bakery import baker
 
+from urbanlens import dashboard
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -60,3 +62,17 @@ class HiddenTabPanelsDeferTests(TestCase):
     def test_the_wiki_page(self) -> None:
         baker.make(Wiki, location=self.location)
         self.assert_tabs_defer(reverse("location.wiki", args=[self.location.ensure_slug()]))
+
+    def test_the_wiki_history_panel_reloads_on_the_event_an_edit_sends(self) -> None:
+        """shared/wiki-page.ts dispatches the event; an edit made before the tab is opened needs no reload."""
+        baker.make(Wiki, location=self.location)
+        response = self.client.get(reverse("location.wiki", args=[self.location.ensure_slug()]))
+        panel = lxml.html.fromstring(response.content.decode()).get_element_by_id("wiki-tab-content")
+        source = (Path(dashboard.__file__).parent / "frontend" / "ts" / "shared" / "wiki-page.ts").read_text(
+            encoding="utf-8"
+        )
+        event = re.search(r'WIKI_HISTORY_CHANGED = "([^"]+)"', source)
+
+        if event is None:
+            self.fail("wiki-page.ts no longer names WIKI_HISTORY_CHANGED")
+        self.assertIn(f"{event.group(1)} from:body", panel.get("hx-trigger", ""))

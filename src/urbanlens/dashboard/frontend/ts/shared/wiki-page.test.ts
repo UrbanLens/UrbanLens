@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
-import { installWikiEditForm, installWikiRename, rememberRecentWiki, type RecentWiki } from "./wiki-page";
+import { installWikiEditForm, installWikiRename, rememberRecentWiki, type RecentWiki, WIKI_HISTORY_CHANGED } from "./wiki-page";
 
 const realFetch = globalThis.fetch;
 const realHtmx = window.htmx;
@@ -9,6 +9,7 @@ let sent: Record<string, unknown>[] = [];
 let respond: () => Response = () => new Response("{}", { status: 200 });
 let triggered: string[] = [];
 let toasts: { success: string[]; error: string[] };
+let historyRefreshes = 0;
 
 beforeAll(() => {
     globalThis.fetch = Object.assign(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -17,6 +18,7 @@ beforeAll(() => {
     }, realFetch);
     window.htmx = { process: () => undefined, trigger: (el, name) => void triggered.push(`${el.id}:${name}`), ajax: async () => undefined };
     installWikiRename();
+    document.body.addEventListener(WIKI_HISTORY_CHANGED, () => void historyRefreshes++);
 });
 
 afterAll(() => {
@@ -28,6 +30,7 @@ afterAll(() => {
 beforeEach(() => {
     sent = [];
     triggered = [];
+    historyRefreshes = 0;
     toasts = { success: [], error: [] };
     window.toastr = {
         success: (m) => void toasts.success.push(m),
@@ -66,7 +69,16 @@ describe("suggest-edits form", () => {
         expect(document.querySelector<HTMLDialogElement>("#wiki-edit-dialog")?.open).toBe(false);
         expect(document.getElementById("wiki-about-card")?.textContent).toBe("new about");
         expect(document.querySelector(".wiki-title")?.textContent).toBe("New Mill");
-        expect(triggered).toContain("wiki-tab-content:load");
+        expect(historyRefreshes).toBe(1);
+    });
+
+    test("a history tab nobody has opened is left to load when it is", async () => {
+        document.getElementById("wiki-tab-content")!.innerHTML = '<div class="wiki-loading">Loading...</div>';
+        respond = () => new Response(JSON.stringify({ ok: true, revision: 8 }), { status: 200 });
+        await submit();
+
+        expect(toasts.success).toEqual(["Changes saved."]);
+        expect(historyRefreshes).toBe(0);
     });
 
     test("a first description adds the About card", async () => {
