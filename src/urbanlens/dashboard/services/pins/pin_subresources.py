@@ -25,6 +25,10 @@ class AliasExistsError(PinSubResourceError):
     """The pin already has an alias with this name, case-insensitively."""
 
 
+class AliasNameRequiredError(PinSubResourceError, ValueError):
+    """Nothing of the submitted name survives sanitizing."""
+
+
 class AliasIsCurrentNameError(PinSubResourceError):
     """The alias being deleted is the pin's current name."""
 
@@ -100,7 +104,7 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
         The created alias.
 
     Raises:
-        ValueError: *name* is empty once stripped.
+        AliasNameRequiredError: *name* is empty once sanitized.
         AliasExistsError: The pin already has this name as an alias, case-insensitively."""
     # Validate the value that will actually be stored: PinAlias.save() runs the name through
     # sanitize_name, so a name made only of dropped characters ("\U0001f389", "<>") passes a raw
@@ -108,7 +112,7 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
     # unique alias slot.
     cleaned = sanitize_name((name or "").strip()) or ""
     if not cleaned:
-        raise ValueError("Name is required.")
+        raise AliasNameRequiredError("Name is required.")
     try:
         # atomic() gives IntegrityError its own savepoint to roll back to - without it, catching the
         # error still leaves the surrounding transaction (if any) unusable for further queries until
