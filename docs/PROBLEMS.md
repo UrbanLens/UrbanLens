@@ -809,14 +809,18 @@ What they found, each reproduced by a failing test first and fixed:
   not show (`external_api:wikis.comments.reactions`, and the dashboard reaction route through the same
   `comment_is_visible`). A reply is now visible only under a visible parent, except to its own author.
 
+**`consensus.vote` after the host ended the game, fixed 2026-10-02** (`test_consensus_session.py::EndingAGameMidRoundTests`).
+Ending a game whose open round then split left that round `VOTE_OPEN` in a COMPLETED session, and `submit_vote` checked
+no status, so a later vote could still apply the winning answer to the wiki. Ending already settled a vote it found
+open, so it now settles the one its own reveal opens the same way (tentative, with no votes cast), and a vote on a
+session that is no longer active is refused. The same test found that ending a game mid-round dealt the next round
+and broadcast `round.started` before completing: the forced reveal and the vote now settle without advancing.
+
 **Leads outside the 25, found by reading, not fixed:**
 
 - `trivia.answer`: `submit_answer` checks neither `revealed_at` nor the session's status, and the reveal
   broadcasts the correct answer - so after a stall-sweep or host-ended reveal, a player who had not answered
   can submit it and score.
-- `consensus.vote`: ending a game whose open round then splits leaves that round `VOTE_OPEN` in a COMPLETED
-  session, and `submit_vote` checks no status, so a later vote can still apply the winning answer to the wiki.
-  Whether ending should resolve that vote or discard it is a product call.
 - `spotguessr.guess` parses coordinates with a bare `float()` into a geography column; off-globe input is
   likely the same class as the Consensus one above. Not reproduced.
 

@@ -220,3 +220,69 @@ class CompetitiveRoundFlowTests(TestCase):
         self.assertEqual(round_.resolution, ConsensusRoundResolution.SKIPPED)
         self.assertIsNone(wiki.description)
         self.assertFalse(WikiEdit.objects.filter(wiki=wiki).exists())
+
+
+class EndingAGameMidRoundTests(TestCase):
+    """The host ending a competitive game leaves no vote open behind it (P29)."""
+
+    def setUp(self) -> None:
+        self.enterContext(
+            mock.patch("urbanlens.dashboard.services.consensus.selection.should_inject_check", return_value=False)
+        )
+        self.alice, self.bob, self.carol = _make_profile(), _make_profile(), _make_profile()
+        self.wiki = _make_wiki_missing_description(self.alice)
+        for profile in (self.bob, self.carol):
+            baker.make(Pin, profile=profile, location=self.wiki.location, last_visited=timezone.now())
+        self.session = _start_competitive_session_directly(self.alice, [self.bob, self.carol])
+        self.round = consensus_session.get_or_create_round(self.session)
+
+    def test_a_round_the_ending_splits_is_settled_like_an_open_vote(self) -> None:
+        consensus_session.submit_answer(self.round, self.alice, "Description A")
+        consensus_session.submit_answer(self.round, self.bob, "Description B")
+
+        consensus_session.end_session_now(self.session, self.alice)
+        self.round.refresh_from_db()
+        self.wiki.refresh_from_db()
+
+        self.assertEqual(self.round.resolution, ConsensusRoundResolution.TENTATIVE)
+        self.assertEqual(self.session.status, ConsensusSessionStatus.COMPLETED)
+        self.assertIsNone(self.wiki.description)
+
+    def test_ending_deals_no_round_after_the_one_it_settles(self) -> None:
+        waiting = _make_wiki_missing_description(self.alice)
+        for profile in (self.bob, self.carol):
+            baker.make(Pin, profile=profile, location=waiting.location, last_visited=timezone.now())
+        consensus_session.submit_answer(self.round, self.alice, "Description A")
+        consensus_session.submit_answer(self.round, self.bob, "Description A")
+
+        with mock.patch.object(consensus_session.realtime, "broadcast") as broadcast:
+            consensus_session.end_session_now(self.session, self.alice)
+
+        self.assertEqual(list(self.session.rounds.values_list("pk", flat=True)), [self.round.pk])
+        events = [call.args[1] for call in broadcast.call_args_list]
+        self.assertNotIn("round.started", events)
+        self.assertEqual(events.count("session.completed"), 1)
+
+    def test_a_vote_on_a_round_left_open_in_an_ended_game_changes_nothing(self) -> None:
+        for profile, text in (
+            (self.alice, "Description A"),
+            (self.bob, "Description A"),
+            (self.carol, "Description B"),
+        ):
+            consensus_session.submit_answer(self.round, profile, text)
+        self.round.refresh_from_db()
+        self.assertEqual(self.round.resolution, ConsensusRoundResolution.VOTE_OPEN)
+        ConsensusSession.objects.filter(pk=self.session.pk).update(status=ConsensusSessionStatus.COMPLETED)
+        winning = self.round.answers.get(profile=self.alice)
+
+        with self.assertRaises(consensus_session.SessionNotInPlayError):
+            consensus_session.submit_vote(self.round, self.alice, winning)
+        for profile in (self.bob, self.carol):
+            with self.assertRaises(consensus_session.SessionNotInPlayError):
+                consensus_session.submit_vote(self.round, profile, winning)
+
+        self.round.refresh_from_db()
+        self.wiki.refresh_from_db()
+        self.assertEqual(self.round.resolution, ConsensusRoundResolution.VOTE_OPEN)
+        self.assertFalse(self.round.votes.exists())
+        self.assertIsNone(self.wiki.description)

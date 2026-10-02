@@ -491,6 +491,7 @@ def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
 
     Raises:
         NotJoinedError: ``profile`` isn't a JOINED participant.
+        SessionNotInPlayError: the session isn't ACTIVE, e.g. the host ended it.
         VotingClosedError: the round isn't in its vote sub-phase.
         VoteRejectedError: ``chosen_answer`` isn't part of this round, or ``profile`` already voted this round."""
     _get_joined_participant(round_.session, profile)
@@ -499,6 +500,8 @@ def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
     vote_completed_now = False
     with transaction.atomic():
         locked_round = ConsensusRound.objects.select_for_update().get(pk=round_.pk)
+        if not ConsensusSession.objects.filter(pk=session.pk, status=ConsensusSessionStatus.ACTIVE).exists():
+            raise SessionNotInPlayError(f"session {session.pk} is no longer ACTIVE")
         if locked_round.resolution != ConsensusRoundResolution.VOTE_OPEN:
             raise VotingClosedError(f"round {round_.pk} resolution is {locked_round.resolution!r}, not VOTE_OPEN")
         try:
@@ -518,8 +521,12 @@ def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
     return vote
 
 
-def resolve_vote(round_: ConsensusRound) -> None:
-    """Tally a round's votes and resolve its disagreement sub-phase - winner-take-more, or tentative."""
+def resolve_vote(round_: ConsensusRound, *, advance: bool = True) -> None:
+    """Tally a round's votes and resolve its disagreement sub-phase - winner-take-more, or tentative.
+
+    Args:
+        round_: The round whose vote to resolve; a no-op unless it is VOTE_OPEN.
+        advance: Deal the next round (or complete the session) afterwards; False when the game is ending."""
     if round_.resolution != ConsensusRoundResolution.VOTE_OPEN:
         return
 
@@ -546,7 +553,8 @@ def resolve_vote(round_: ConsensusRound) -> None:
         _mark_settled(round_, ConsensusRoundResolution.TENTATIVE)
 
     realtime.broadcast(session.pk, "round.revealed", serializers.serialize_round_reveal(round_))
-    _advance_or_complete(session)
+    if advance:
+        _advance_or_complete(session)
 
 
 def _advance_or_complete(session: ConsensusSession) -> None:
@@ -559,8 +567,12 @@ def _advance_or_complete(session: ConsensusSession) -> None:
         realtime.broadcast(session.pk, "session.completed", session_summary(session))
 
 
-def force_reveal_round(round_: ConsensusRound) -> None:
-    """Force a stalled answer-collection round to completion without waiting for every participant."""
+def force_reveal_round(round_: ConsensusRound, *, advance: bool = True) -> None:
+    """Force a stalled answer-collection round to completion without waiting for every participant.
+
+    Args:
+        round_: The round to reveal; a no-op unless it is PENDING.
+        advance: Deal the next round (or complete the session) once it settles; False when the game is ending."""
     session = round_.session
     with transaction.atomic():
         locked_round = ConsensusRound.objects.select_for_update().get(pk=round_.pk)
@@ -576,7 +588,7 @@ def force_reveal_round(round_: ConsensusRound) -> None:
         return
 
     _finish_round(locked_round, answers)
-    if locked_round.is_settled:
+    if advance and locked_round.is_settled:
         _advance_or_complete(session)
 
 
@@ -599,11 +611,11 @@ def end_session_now(session: ConsensusSession, host: Profile) -> ConsensusSessio
 
     current_round = ConsensusRound.objects.for_session(session).filter(resolution=ConsensusRoundResolution.PENDING).first()
     if current_round is not None:
-        force_reveal_round(current_round)
-    else:
-        open_vote_round = ConsensusRound.objects.for_session(session).filter(resolution=ConsensusRoundResolution.VOTE_OPEN).first()
-        if open_vote_round is not None:
-            resolve_vote(open_vote_round)
+        force_reveal_round(current_round, advance=False)
+    # Revealing a split round opens a vote, which nobody could cast once the game has ended.
+    open_vote_round = ConsensusRound.objects.for_session(session).filter(resolution=ConsensusRoundResolution.VOTE_OPEN).first()
+    if open_vote_round is not None:
+        resolve_vote(open_vote_round, advance=False)
 
     session.refresh_from_db()
     if session.status not in (ConsensusSessionStatus.COMPLETED, ConsensusSessionStatus.ABANDONED):
