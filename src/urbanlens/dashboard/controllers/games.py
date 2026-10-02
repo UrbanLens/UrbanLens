@@ -18,6 +18,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.social.connections import get_connections
 
 if TYPE_CHECKING:
@@ -73,9 +74,40 @@ def refuse_unless_joined(access: SessionAccess[Any], session: Model, profile: Pr
     return JsonResponse({"error": "Accept the invite before playing."}, status=403)
 
 
+def _is_id(raw: str) -> bool:
+    return raw.isascii() and raw.isdigit() and len(raw) <= 18
+
+
+def posted_invitees(request: HttpRequest) -> list[Profile] | None:
+    """The profiles a game's start request invites, from its repeated ``invite_profile_ids`` field.
+
+    Returns:
+        The profiles, empty for a solo start; None when any id is malformed or names no profile, which callers
+        answer as they answer a non-friend, so the reply does not say which ids exist.
+    """
+    raw_ids = [raw for raw in request.POST.getlist("invite_profile_ids") if raw]
+    if not all(_is_id(raw) for raw in raw_ids):
+        return None
+    ids = {int(raw) for raw in raw_ids}
+    invitees = list(Profile.objects.filter(pk__in=ids))
+    return invitees if len(invitees) == len(ids) else None
+
+
+def posted_invitee(request: HttpRequest) -> Profile | JsonResponse:
+    """The profile an invite request names in ``profile_id``, or the 400 to answer with.
+
+    An id that names no profile is refused as a non-friend is, so the reply does not say which ids exist.
+    """
+    invitee_id = safe_int_or_none(request.POST.get("profile_id"))
+    if invitee_id is None:
+        return JsonResponse({"error": "profile_id is required."}, status=400)
+    invitee = Profile.objects.filter(pk=invitee_id).first()
+    return invitee if invitee is not None else JsonResponse({"error": "You can only invite friends."}, status=400)
+
+
 def deep_link_session_id(access: SessionAccess[Any], profile: Profile, raw_session_id: str | None) -> int | None:
     """The ``?session=`` a game page should reopen on load, if ``profile`` still actively participates in it."""
-    if not raw_session_id or not (raw_session_id.isascii() and raw_session_id.isdigit()) or len(raw_session_id) > 18:
+    if not raw_session_id or not _is_id(raw_session_id):
         return None
     session_id = int(raw_session_id)
     return session_id if access.is_active_participant(session_id, profile.pk) else None

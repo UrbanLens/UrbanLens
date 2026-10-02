@@ -7,7 +7,7 @@ import random
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind
-from urbanlens.dashboard.services.locations.naming import is_meaningful_name, normalize_name_for_comparison
+from urbanlens.dashboard.services.locations.naming import is_meaningful_name, normalize_name_for_comparison, sanitize_name
 from urbanlens.dashboard.services.wiki.wiki_edits import save_edited_fields
 
 if TYPE_CHECKING:
@@ -230,7 +230,6 @@ def _alias_build_check_round(wiki: Wiki) -> tuple[RoundContent, Any] | None:
 
 def _alias_apply_answer(wiki: Wiki, value: Any, profile: Profile, round_: ConsensusRound) -> dict | None:
     from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
-    from urbanlens.dashboard.services.locations.naming import sanitize_name
 
     name = sanitize_name(str(value)) or ""
     if not name:
@@ -362,11 +361,36 @@ def all_kinds() -> list[str]:
     return [kind for kind, _label in ConsensusFieldKind.choices if kind in _STRATEGIES]
 
 
-def validate_value(kind: str, value: Any) -> bool:
-    """Whether ``value`` is a structurally acceptable submission for ``kind`` (before applying it).
-    Only checks the closed-vocabulary kinds - free text (name/description/ alias) and coordinates are validated by their own controller parsing, not here."""
+def _fits_where_stored(kind: str, value: str) -> bool:
+    """Whether a text answer fits the answer row, and the wiki column a name or alias is applied to.
+
+    Each is measured as written: the answer row also keeps a normalized copy, and names and aliases are sanitized
+    on save - both can come out longer than what was typed.
+    """
+    from urbanlens.dashboard.models.aliases.model import WikiAlias
+    from urbanlens.dashboard.models.consensus.model import ConsensusAnswer
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    recorded = ConsensusAnswer._meta.get_field("text_value").max_length or 0  # noqa: SLF001
+    if len(value) > recorded or len(_text_normalize(value)) > recorded:
+        return False
+    if kind == ConsensusFieldKind.WIKI_NAME:
+        applied_column = Wiki._meta.get_field("name")  # noqa: SLF001
+    elif kind == ConsensusFieldKind.WIKI_ALIAS:
+        applied_column = WikiAlias._meta.get_field("name")  # noqa: SLF001
+    else:
+        return True
+    return len(sanitize_name(value) or "") <= (applied_column.max_length or 0)
+
+
+def validate_value(kind: str, value: str) -> bool:
+    """Whether ``value`` is a structurally acceptable text submission for ``kind`` (before applying it).
+
+    Closed-vocabulary kinds must be one of their choices; every other text kind must fit where it is stored.
+    Coordinates are validated by their own controller parsing, not here.
+    """
     if kind == ConsensusFieldKind.WIKI_INDOOR_OUTDOOR:
         return value in _valid_indoor_outdoor_choices()
     if kind == ConsensusFieldKind.WIKI_PIN_TYPE:
         return value in _valid_pin_type_choices()
-    return True
+    return _fits_where_stored(kind, value)

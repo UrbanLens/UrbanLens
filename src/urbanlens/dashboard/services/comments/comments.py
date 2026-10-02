@@ -210,8 +210,15 @@ def comment_is_visible(comment: Comment, profile: Profile) -> bool:
         profile: The viewing profile.
 
     Returns:
-        True when the comment would have survived :func:`visible_comment_tree`."""
-    return _render_if_visible(comment, profile, viewer_pinned_uuids(profile), {comment.profile_id: profile.can_view_comments_from(comment.profile)}) is not None
+        True when the comment would have survived :func:`visible_comment_tree`, which drops a hidden comment's
+        replies with it. Its author can still address their own reply."""
+    pinned = viewer_pinned_uuids(profile)
+
+    def visible(row: Comment) -> bool:
+        return _render_if_visible(row, profile, pinned, {row.profile_id: profile.can_view_comments_from(row.profile)}) is not None
+
+    parent = comment.parent if comment.parent_id is not None and comment.profile_id != profile.pk else None
+    return (parent is None or visible(parent)) and visible(comment)
 
 
 def comment_mentions(text: str) -> list[dict[str, str]]:

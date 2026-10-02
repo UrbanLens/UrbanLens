@@ -615,7 +615,7 @@ lowercase values, `resource_type` as `"district"` against REData's `"building_di
 just `:read`. A read-only key gets 403 on all three and therefore yields zero attachments, however
 correct this code is. The bulk call's 403 is tolerated: aggregation still proceeds on live fetches.
 
-## P29 — 68 write routes have no test naming them; the 70 highest-risk now have behavioural tests, which found 17 bugs (fixed)
+## P29 — 42 write routes have no test naming them; the 95 highest-risk now have behavioural tests, which found 26 bugs (fixed)
 
 `id: P29` · `status: open` · `updated: 2026-10-02` · supersedes "186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx" (2026-08-13, re-measured below rather than carried)
 
@@ -645,6 +645,10 @@ static piece of its path, in order, marks 43 of the 78 as reached that way, leav
 reference at all**. It over-credits (`external_api:labels.detail` matches on `labels/` alone) and also
 misses (`external_api:wikis.history.revert` is posted to by `test_external_api_wiki_oracle.py` as
 `history/1/revert/`), so the true figure sits between 35 and 78, not at either end.
+
+**Re-measured 2026-10-02**, same definitions: 593 named routes accept a write and **42** are named by no test.
+None of the 25 with no reference at all is among them. The literal-path matcher was not re-run, so how many
+of the 42 are reached by path is not known.
 
 ### What now has behavioural tests: 60 routes, 2026-09-29
 
@@ -725,16 +729,64 @@ or are not reachable by the sweep's fixtures; the sweep is what keeps the reacha
 - `trivia.kick` refuses a non-host with 400, not 403.
 - `label.bulk_convert*` accepts `{"ids": "12"}` and iterates it as `[1, 2]`; scoped to the caller's own
   labels, so harmless, but not what the caller meant.
+- `external_api:wikis.aliases.toggle_nickname` flips on every POST, so a retried request undoes itself - the
+  reason the reaction endpoints are PUT/DELETE. `messages.group.mute` flips the same way, though
+  `set_group_muted` is declarative for exactly that reason.
+- `external_api:wikis.boundary` still clears on an absent `polygon`: its schema marks the field optional.
+- `memories.photos.redirect` answers every verb with a 301 to the Vault; a POST arrives there as a GET.
+- A garbled `total_rounds` on any game start becomes the default rather than a 400.
 
-### The 25 with no reference at all
+### The 25 with no reference at all: tested 2026-10-02
 
-`boundary.pin`; the game lifecycles (`consensus.answer`, `.begin`, `.end`, `.invite`, `.join`, `.skip`,
-`.start`; `trivia.begin`, `.end`, `.invite`, `.leave`, `.settings`; `spotguessr.invite`); three community wiki
-routes on the external API (`external_api:wikis.aliases.toggle_nickname`, `wikis.comments.reactions`,
-`wikis.history.revert`); read markers and preferences (`messages.group.mute`, `messages.group.read`,
-`external_api:messages.groups.read`, `notifications.read_all`, `settings.save_map_dark_mode`); and
-`pin.debug.clear_cache`, `pin.web_search.refresh`, `memories.photos.redirect` (a `RedirectView` that answers
-every verb).
+All in `src/urbanlens/dashboard/tests/hypothesis/`, 144 tests:
+
+- `test_game_lifecycle_write_routes.py` - `consensus.answer`, `.begin`, `.end`, `.invite`, `.join`, `.skip`,
+  `.start`; `trivia.begin`, `.end`, `.invite`, `.leave`, `.settings`; `spotguessr.invite`; and the bugs'
+  siblings in `trivia.start`, `spotguessr.start`, `spotguessr.settings`
+- `test_read_marker_write_routes.py` - `messages.group.mute`, `messages.group.read`,
+  `external_api:messages.groups.read`, `notifications.read_all`, `settings.save_map_dark_mode`
+- `test_external_wiki_community_write_routes.py` - `external_api:wikis.aliases.toggle_nickname`,
+  `wikis.comments.reactions`, `wikis.history.revert`
+- `test_misc_unnamed_write_routes.py` - `boundary.pin` (and the same parsing in `location.wiki.boundary` and
+  `external_api:wikis.boundary`), `pin.debug.clear_cache`, `pin.web_search.refresh`, `memories.photos.redirect`
+
+What they found, each reproduced by a failing test first and fixed:
+
+- **A refused multiplayer start left a lobby behind and had already invited the friends listed before the
+  non-friend** (`consensus.start`, `trivia.start`, `spotguessr.start`). The session and its invites are now one
+  transaction; the notifications' deliveries are `on_commit`, so nothing reaches the friend.
+- **A non-numeric `invite_profile_ids` was a 500** on all three starts, and an unknown id was silently dropped.
+  Both are now 400s, worded as a non-friend is (`controllers.games.posted_invitees`).
+- **An invite told a real non-friend apart from an id with no profile** (`"You can only invite friends."` vs
+  `"profile_id is required."`), on all three invite routes. Both now read as a non-friend.
+- **A Consensus game the host had ended kept playing.** Ending a round nobody had answered abandons the session
+  but leaves the round pending; answers and skips still landed, applied to the wiki, paid points and dealt new
+  rounds, and reading the round dealt new ones too. `submit_answer` now refuses a session that is not ACTIVE,
+  and `get_or_create_round` deals nothing to one.
+- **An overlong Consensus answer was a 500 - or wedged the round.** Over 500 characters failed the answer row;
+  a name of 256 to 500 was recorded, then failed the wiki's 255-character column, leaving the round pending
+  with the answer already counted. `fields.validate_value` now measures every text answer where it is stored.
+- **A photo-coordinate answer off the globe was accepted**: `latitude=91` was written onto the community photo.
+  A latitude past ±90 or a non-finite value is now a 400, and a longitude from a wrapped copy of the map is
+  folded into ±180 rather than stored as sent.
+- **A garbled ratings toggle turned rating-sharing off** (`trivia.settings`, `spotguessr.settings`): anything but
+  `"on"` read as off. The toggle only sends `"on"`/`"off"`; anything else is now a 400.
+- **A missing or empty `polygon` cleared a boundary drawing** (`boundary.pin`, `location.wiki.boundary`; on
+  `external_api:wikis.boundary`, an empty non-null one). Only an explicit `null` clears now.
+- **A reaction to a reply under a comment hidden from the viewer succeeded**, confirming a reply the thread does
+  not show (`external_api:wikis.comments.reactions`, and the dashboard reaction route through the same
+  `comment_is_visible`). A reply is now visible only under a visible parent, except to its own author.
+
+**Leads outside the 25, found by reading, not fixed:**
+
+- `trivia.answer`: `submit_answer` checks neither `revealed_at` nor the session's status, and the reveal
+  broadcasts the correct answer - so after a stall-sweep or host-ended reveal, a player who had not answered
+  can submit it and score.
+- `consensus.vote`: ending a game whose open round then splits leaves that round `VOTE_OPEN` in a COMPLETED
+  session, and `submit_vote` checks no status, so a later vote can still apply the winning answer to the wiki.
+  Whether ending should resolve that vote or discard it is a product call.
+- `spotguessr.guess` parses coordinates with a bare `float()` into a geography column; off-globe input is
+  likely the same class as the Consensus one above. Not reproduced.
 
 **Community wiki editing, tested 2026-10-02** (`test_community_wiki_write_routes.py`, 47 tests):
 `location.wiki.albums.add`, `.remove`, `.reorder`, `.article.preview`, `.layers.reorder`, `.markup`,
