@@ -14,12 +14,15 @@ from datetime import timedelta
 import os
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import DataError, transaction
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model
+import pytest
 
 from urbanlens.core.tests.oauth import first_party_application
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.article.model import ArticleRevision
 from urbanlens.dashboard.models.comments.model import Comment
@@ -58,6 +61,17 @@ _PAST_BIGINT = (2**63, 2**64 + 1)
 _PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
+
+
+class IntegerColumnWriteTests(TestCase):
+    """Why the bounds sit on the parse: the database layer stores an out-of-range write rather than refusing it."""
+
+    @pytest.mark.xfail(strict=True, reason="psycopg's binary Int4 dumper keeps the low 32 bits instead of raising")
+    def test_a_write_past_the_integer_column_is_refused_rather_than_wrapped(self) -> None:
+        label = baker.make(Label, name="Wrap", kind=KIND_TAG, order=0)
+
+        with self.assertRaises((DataError, OverflowError)), transaction.atomic():
+            Label.objects.filter(pk=label.pk).update(order=2**32 + 1)
 
 
 class LabelBulkEditOrderTests(ExternalApiRouteCase):
@@ -267,7 +281,7 @@ class PhotoUploadVisitTests(ExternalApiRouteCase):
                 response = self.client.post(
                     reverse("external_api:photos"),
                     {"file": SimpleUploadedFile("photo.png", _PNG_BYTES, content_type="image/png"), "visit": visit},
-                    **self.auth,
+                    HTTP_AUTHORIZATION=self.auth["HTTP_AUTHORIZATION"],
                 )
 
                 self.assertEqual(response.status_code, 400, response.content)
