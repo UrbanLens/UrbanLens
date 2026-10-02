@@ -30,6 +30,7 @@ import type { } from "leaflet-draw";
 import { escHtml } from "../shared/escape-html";
 import { installCarouselControls } from "../shared/carousel-controls";
 import { delegateActions } from "../shared/delegated-actions";
+import type { FetchInit } from "../shared/site-runtime";
 
 interface DetailPinEntry {
     uuid: string;
@@ -590,8 +591,8 @@ function init(): void {
     let mainMarkerLng = mapCenterLng;
     const mainMarker = L.marker([mapCenterLat, mapCenterLng], { draggable: !!cfg.mainMarkerOwnerUuid }).addTo(map);
     if (cfg.mainMarkerOwnerUuid) {
-        const savePosition = (lat: number, lng: number, confirmWikiLoss: boolean): Promise<Response> =>
-            fetch(`/dashboard/rest/pins/${cfg.mainMarkerOwnerUuid}/`, {
+        const savePosition = (lat: number, lng: number, confirmWikiLoss: boolean): Promise<Response> => {
+            const init: FetchInit = {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify({
@@ -599,7 +600,10 @@ function init(): void {
                     longitude: lng.toFixed(6),
                     ...(confirmWikiLoss ? { confirm_wiki_loss: true } : {}),
                 }),
-            });
+                __ulReported: true,
+            };
+            return fetch(`/dashboard/rest/pins/${cfg.mainMarkerOwnerUuid}/`, init);
+        };
 
         mainMarker.on("dragend", () => {
             const pos = mainMarker.getLatLng();

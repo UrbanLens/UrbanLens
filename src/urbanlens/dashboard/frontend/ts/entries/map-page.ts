@@ -22,6 +22,7 @@ import { escHtml } from "../shared/escape-html";
 import { installAddToListPicker } from "../shared/add-to-list-picker";
 import { delegateActions } from "../shared/delegated-actions";
 import { handleMapArrival } from "../shared/map-arrival";
+import type { FetchInit } from "../shared/site-runtime";
 
 declare const L: typeof import("leaflet");
 declare const htmx: HtmxApi;
@@ -3540,6 +3541,7 @@ function _undoBulkDelete(token: string, btn: HTMLButtonElement | null): void {
         })
         .catch(function () {
             toastr.error("Could not undo - the delete may have expired.");
+            if (btn) btn.disabled = false;
         });
 }
 
@@ -4235,33 +4237,33 @@ function addPinsToList(listUuid: string, confirmed?: boolean): void {
     }
     if (confirmed) params.set("confirmed", "true");
     const addUrl = MAP_CFG.urls.listsItemsAdd.replace("00000000-0000-0000-0000-000000000000", listUuid);
-    fetch(addUrl, {
-        method: "POST",
-        headers: { "X-CSRFToken": _csrfToken() },
-        body: params,
-    }).then((response) => {
-        if (response.status === 409) {
-            return response.json().then((data: { count: number }) => {
-                document.getElementById("list-add-confirm-text")!.textContent = `Add ${data.count} pins to this list?`;
-                const dlg = document.getElementById("list-add-confirm-dialog") as HTMLDialogElement;
-                document.getElementById("list-add-confirm-btn")!.addEventListener(
-                    "click",
-                    () => {
-                        dlg.close();
-                        addPinsToList(listUuid, true);
-                    },
-                    { once: true },
-                );
-                dlg.showModal();
-            });
-        }
-        if (!response.ok) {
-            toastr.error("Could not add pins to that list.");
-            return;
-        }
-        (document.getElementById("add-to-list-dialog") as HTMLDialogElement | null)?.close();
-        toastr.success("Pins added to list.");
-    });
+    // A 409 asks to confirm a large add rather than refusing it.
+    const init: FetchInit = { method: "POST", headers: { "X-CSRFToken": _csrfToken() }, body: params, __ulReported: true };
+    fetch(addUrl, init)
+        .then((response) => {
+            if (response.status === 409) {
+                return response.json().then((data: { count: number }) => {
+                    document.getElementById("list-add-confirm-text")!.textContent = `Add ${data.count} pins to this list?`;
+                    const dlg = document.getElementById("list-add-confirm-dialog") as HTMLDialogElement;
+                    document.getElementById("list-add-confirm-btn")!.addEventListener(
+                        "click",
+                        () => {
+                            dlg.close();
+                            addPinsToList(listUuid, true);
+                        },
+                        { once: true },
+                    );
+                    dlg.showModal();
+                });
+            }
+            if (!response.ok) {
+                toastr.error("Could not add pins to that list.");
+                return;
+            }
+            (document.getElementById("add-to-list-dialog") as HTMLDialogElement | null)?.close();
+            toastr.success("Pins added to list.");
+        })
+        .catch(() => toastr.error("Could not add pins to that list."));
 }
 
 function createListAndAddPins(name: string, nameInput: HTMLInputElement): void {
@@ -6404,7 +6406,10 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         list.appendChild(item);
     });
 
-    function _linkPin(locSlug: string, btn: HTMLButtonElement, onSuccess: () => void): Promise<void> {
+    function _linkPin(locSlug: string, btn: HTMLButtonElement, busyText: string, onSuccess: () => void): Promise<void> {
+        const label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = busyText;
         return fetch("/dashboard/map/pin/" + pinSlug + "/link/" + locSlug + "/", {
             method: "POST",
             headers: { "X-CSRFToken": MAP_CFG.csrfToken, "X-Requested-With": "XMLHttpRequest" },
@@ -6414,15 +6419,14 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
             .catch(() => {
                 toastr.error("Failed to update this pin's location.");
                 btn.disabled = false;
+                btn.textContent = label;
             });
     }
 
     list.querySelectorAll<HTMLButtonElement>(".loc-conflict-switch-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
             const locName = btn.dataset.name;
-            btn.disabled = true;
-            btn.textContent = "Switching...";
-            void _linkPin(btn.dataset.slug!, btn, () => {
+            void _linkPin(btn.dataset.slug!, btn, "Switching...", () => {
                 toastr.success("Switched to " + locName);
                 dlg.close();
                 window.invalidatePinCache();
@@ -6434,9 +6438,7 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
     list.querySelectorAll<HTMLButtonElement>(".loc-conflict-merge-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
             const locName = btn.dataset.name;
-            btn.disabled = true;
-            btn.textContent = "Merging...";
-            void _linkPin(btn.dataset.slug!, btn, () => {
+            void _linkPin(btn.dataset.slug!, btn, "Merging...", () => {
                 toastr.success("Merged into " + locName);
                 dlg.close();
                 window.invalidatePinCache();
