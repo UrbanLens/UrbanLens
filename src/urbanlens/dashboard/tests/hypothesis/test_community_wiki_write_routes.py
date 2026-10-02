@@ -66,7 +66,7 @@ class _AlbumFixture(_WikiFixture):
         self.hidden_item = AlbumItem.objects.create(album=self.album, image=self.hidden)
 
     def _url(self, name: str) -> str:
-        return reverse(f"location.wiki.albums.{name}", args=[self.location.slug, self.album.slug])
+        return reverse(name, args=[self.location.slug, self.album.slug])
 
     def _members(self) -> set[int]:
         return set(AlbumItem.objects.filter(album=self.album).values_list("image_id", flat=True))
@@ -77,7 +77,7 @@ class WikiAlbumAddRouteTests(_AlbumFixture):
         photo = self._photo(self.profile)
         self.client.force_login(self.user)
 
-        response = self._post_json(self._url("add"), {"image_ids": [photo.pk]})
+        response = self._post_json(self._url("location.wiki.albums.add"), {"image_ids": [photo.pk]})
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["added"], 1)
@@ -88,7 +88,7 @@ class WikiAlbumAddRouteTests(_AlbumFixture):
         foreign = baker.make(Image, profile=self.profile, wiki=baker.make(Wiki, location=elsewhere), location=elsewhere)
         self.client.force_login(self.user)
 
-        response = self._post_json(self._url("add"), {"image_ids": [foreign.pk]})
+        response = self._post_json(self._url("location.wiki.albums.add"), {"image_ids": [foreign.pk]})
 
         self.assertEqual(response.json()["added"], 0)
         self.assertNotIn(foreign.pk, self._members())
@@ -107,27 +107,27 @@ class WikiAlbumAddRouteTests(_AlbumFixture):
         photo = self._photo(self.profile)
         self.client.force_login(self.stranger_user)
 
-        response = self._post_json(self._url("add"), {"image_ids": [photo.pk]})
+        response = self._post_json(self._url("location.wiki.albums.add"), {"image_ids": [photo.pk]})
 
         self.assertEqual(response.status_code, 404)
         self.assertNotIn(photo.pk, self._members())
 
     def test_anonymous_is_redirected_to_login(self) -> None:
         photo = self._photo(self.profile)
-        self.assert_login_redirect(self._post_json(self._url("add"), {"image_ids": [photo.pk]}))
+        self.assert_login_redirect(self._post_json(self._url("location.wiki.albums.add"), {"image_ids": [photo.pk]}))
         self.assertNotIn(photo.pk, self._members())
 
     def test_a_malformed_body_is_400(self) -> None:
         self.client.force_login(self.user)
         for body in (["x"], "x"):
-            self.assertEqual(self._post_json(self._url("add"), body).status_code, 400, body)
+            self.assertEqual(self._post_json(self._url("location.wiki.albums.add"), body).status_code, 400, body)
 
 
 class WikiAlbumRemoveRouteTests(_AlbumFixture):
     def test_a_viewer_removes_a_photo_they_can_see(self) -> None:
         self.client.force_login(self.user)
 
-        response = self._post_json(self._url("remove"), {"image_ids": [self.mine.pk]})
+        response = self._post_json(self._url("location.wiki.albums.remove"), {"image_ids": [self.mine.pk]})
 
         self.assertEqual(response.json()["removed"], 1)
         self.assertEqual(self._members(), {self.hidden.pk})
@@ -137,7 +137,7 @@ class WikiAlbumRemoveRouteTests(_AlbumFixture):
         """Its uploader shows their photos to no one, so the viewer cannot have chosen it, and a count of 1 would confirm it."""
         self.client.force_login(self.user)
 
-        response = self._post_json(self._url("remove"), {"image_ids": [self.hidden.pk]})
+        response = self._post_json(self._url("location.wiki.albums.remove"), {"image_ids": [self.hidden.pk]})
 
         self.assertEqual(response.json()["removed"], 0)
         self.assertIn(self.hidden.pk, self._members())
@@ -145,19 +145,21 @@ class WikiAlbumRemoveRouteTests(_AlbumFixture):
     def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
         self.client.force_login(self.stranger_user)
 
-        response = self._post_json(self._url("remove"), {"image_ids": [self.mine.pk]})
+        response = self._post_json(self._url("location.wiki.albums.remove"), {"image_ids": [self.mine.pk]})
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(self._members(), {self.mine.pk, self.hidden.pk})
 
     def test_anonymous_is_redirected_to_login(self) -> None:
-        self.assert_login_redirect(self._post_json(self._url("remove"), {"image_ids": [self.mine.pk]}))
+        self.assert_login_redirect(
+            self._post_json(self._url("location.wiki.albums.remove"), {"image_ids": [self.mine.pk]})
+        )
         self.assertEqual(self._members(), {self.mine.pk, self.hidden.pk})
 
     def test_a_malformed_body_is_400(self) -> None:
         self.client.force_login(self.user)
         for body in (["x"], "x"):
-            self.assertEqual(self._post_json(self._url("remove"), body).status_code, 400, body)
+            self.assertEqual(self._post_json(self._url("location.wiki.albums.remove"), body).status_code, 400, body)
         self.assertEqual(self._members(), {self.mine.pk, self.hidden.pk})
 
 
@@ -178,7 +180,9 @@ class WikiAlbumReorderRouteTests(_AlbumFixture):
     def test_a_viewer_reorders_the_album(self) -> None:
         self.client.force_login(self.user)
 
-        response = self._post_json(self._url("reorder"), {"items": [self.second_item.pk, self.mine_item.pk]})
+        response = self._post_json(
+            self._url("location.wiki.albums.reorder"), {"items": [self.second_item.pk, self.mine_item.pk]}
+        )
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(self._order(), [self.second_item.pk, self.mine_item.pk])
@@ -187,7 +191,8 @@ class WikiAlbumReorderRouteTests(_AlbumFixture):
         self.client.force_login(self.user)
 
         response = self._post_json(
-            self._url("reorder"), {"items": [self.second_item.pk, self.mine_item.pk, self.hidden_item.pk]}
+            self._url("location.wiki.albums.reorder"),
+            {"items": [self.second_item.pk, self.mine_item.pk, self.hidden_item.pk]},
         )
 
         self.assertEqual(response.json()["reordered"], 2)
@@ -197,7 +202,7 @@ class WikiAlbumReorderRouteTests(_AlbumFixture):
         foreign_item = AlbumItem.objects.create(album=other, image=self._photo(self.profile))
         self.client.force_login(self.user)
 
-        self._post_json(self._url("reorder"), {"items": [foreign_item.pk, self.mine_item.pk]})
+        self._post_json(self._url("location.wiki.albums.reorder"), {"items": [foreign_item.pk, self.mine_item.pk]})
 
         foreign_item.refresh_from_db()
         self.assertEqual(foreign_item.album_id, other.pk)
@@ -206,19 +211,23 @@ class WikiAlbumReorderRouteTests(_AlbumFixture):
     def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
         self.client.force_login(self.stranger_user)
 
-        response = self._post_json(self._url("reorder"), {"items": [self.second_item.pk, self.mine_item.pk]})
+        response = self._post_json(
+            self._url("location.wiki.albums.reorder"), {"items": [self.second_item.pk, self.mine_item.pk]}
+        )
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(self._order(), [])
 
     def test_anonymous_is_redirected_to_login(self) -> None:
-        self.assert_login_redirect(self._post_json(self._url("reorder"), {"items": [self.second_item.pk]}))
+        self.assert_login_redirect(
+            self._post_json(self._url("location.wiki.albums.reorder"), {"items": [self.second_item.pk]})
+        )
         self.assertEqual(self._order(), [])
 
     def test_a_malformed_body_is_400(self) -> None:
         self.client.force_login(self.user)
         for body in (["x"], "x"):
-            self.assertEqual(self._post_json(self._url("reorder"), body).status_code, 400, body)
+            self.assertEqual(self._post_json(self._url("location.wiki.albums.reorder"), body).status_code, 400, body)
         self.assertEqual(self._order(), [])
 
 
@@ -241,7 +250,7 @@ class _OverlayFixture(_WikiFixture):
         )
 
     def _url(self, name: str) -> str:
-        return reverse(f"location.wiki.overlays.{name}", args=[self.location.slug, self.overlay.uuid])
+        return reverse(name, args=[self.location.slug, self.overlay.uuid])
 
 
 class WikiOverlayCreateRouteTests(_WikiFixture):
@@ -303,7 +312,9 @@ class WikiOverlayEditRouteTests(_OverlayFixture):
     def test_a_viewer_renames_it_and_opacity_is_kept_in_range(self) -> None:
         self.client.force_login(self.user)
 
-        response = self.client.post(self._url("edit"), {"name": "  Sanborn 1911 ", "opacity": "250", "order": "x"})
+        response = self.client.post(
+            self._url("location.wiki.overlays.edit"), {"name": "  Sanborn 1911 ", "opacity": "250", "order": "x"}
+        )
 
         self.assertEqual(response.status_code, 200)
         self.overlay.refresh_from_db()
@@ -315,7 +326,7 @@ class WikiOverlayEditRouteTests(_OverlayFixture):
         foreign_layer = baker.make(CustomLayer, parent_wiki=elsewhere, profile=self.profile, name="Other")
         self.client.force_login(self.user)
 
-        self.client.post(self._url("edit"), {"name": "x", "layer": str(foreign_layer.uuid)})
+        self.client.post(self._url("location.wiki.overlays.edit"), {"name": "x", "layer": str(foreign_layer.uuid)})
 
         self.overlay.refresh_from_db()
         self.assertIsNone(self.overlay.layer_id)
@@ -323,19 +334,21 @@ class WikiOverlayEditRouteTests(_OverlayFixture):
     def test_someone_who_cannot_see_the_wiki_gets_404(self) -> None:
         self.client.force_login(self.stranger_user)
 
-        self.assertEqual(self.client.post(self._url("edit"), {"name": "Mine now"}).status_code, 404)
+        self.assertEqual(
+            self.client.post(self._url("location.wiki.overlays.edit"), {"name": "Mine now"}).status_code, 404
+        )
         self.overlay.refresh_from_db()
         self.assertEqual(self.overlay.name, "Sanborn 1910")
 
     def test_anonymous_is_redirected_to_login(self) -> None:
-        self.assert_login_redirect(self.client.post(self._url("edit"), {"name": "Mine now"}))
+        self.assert_login_redirect(self.client.post(self._url("location.wiki.overlays.edit"), {"name": "Mine now"}))
         self.overlay.refresh_from_db()
         self.assertEqual(self.overlay.name, "Sanborn 1910")
 
 
 class WikiOverlayCornersRouteTests(_OverlayFixture):
     def _move(self):
-        return self.client.post(self._url("corners"), {"corners": json.dumps(_corners())})
+        return self.client.post(self._url("location.wiki.overlays.corners"), {"corners": json.dumps(_corners())})
 
     def test_a_viewer_moves_it(self) -> None:
         self.client.force_login(self.user)
@@ -357,7 +370,11 @@ class WikiOverlayCornersRouteTests(_OverlayFixture):
     def test_malformed_corners_are_400(self) -> None:
         self.client.force_login(self.user)
         for corners in ("", "[", json.dumps([[0, 181]] * 4), json.dumps([["a", "b"]] * 4)):
-            self.assertEqual(self.client.post(self._url("corners"), {"corners": corners}).status_code, 400, corners)
+            self.assertEqual(
+                self.client.post(self._url("location.wiki.overlays.corners"), {"corners": corners}).status_code,
+                400,
+                corners,
+            )
         self.overlay.refresh_from_db()
         self.assertEqual(self.overlay.sw_latitude, 0.0)
 
