@@ -23,30 +23,36 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
         Number of activities created.
 
     Raises:
-        TripPermissionError: ``added_by`` may not add activities to ``trip``."""
+        TripPermissionError: ``added_by`` may not add activities to ``trip``.
+        TripQuotaError: The list's pins don't fit under ``max_trip_activities``; nothing is copied."""
+    from django.db import transaction
+
     from urbanlens.dashboard.models.trips.model import TripActivity
     from urbanlens.dashboard.models.trips.signals import queue_calendar_push
     from urbanlens.dashboard.services.trips.trip_access import require_perform
-    from urbanlens.dashboard.services.trips.trip_activities import ADD_ACTIVITY_DENIED
+    from urbanlens.dashboard.services.trips.trip_activities import ADD_ACTIVITY_DENIED, reserve_activity_positions
     from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
 
     require_perform(added_by, trip, trip.allow_add_activities, ADD_ACTIVITY_DENIED)
 
-    base_order = trip.activities.count()
     items = list(pin_list.items.select_related("pin__location").order_by("order"))
-    activities = TripActivity.objects.bulk_create(
-        [
-            TripActivity(
-                trip=trip,
-                location=item.pin.location,
-                pin=item.pin,
-                added_by=added_by,
-                order=base_order + i,
-                status=TripActivity.STATUS_PROPOSED,
-            )
-            for i, item in enumerate(items)
-        ],
-    )
+    if not items:
+        return 0
+    with transaction.atomic():
+        base_order = reserve_activity_positions(trip, len(items))
+        activities = TripActivity.objects.bulk_create(
+            [
+                TripActivity(
+                    trip=trip,
+                    location=item.pin.location,
+                    pin=item.pin,
+                    added_by=added_by,
+                    order=base_order + i,
+                    status=TripActivity.STATUS_PROPOSED,
+                )
+                for i, item in enumerate(items)
+            ],
+        )
     # Each copied place is now revealed to every joined trip member - record
     # the detected shares so reshare chains keep counting (no-op for a trip
     # whose only member is `added_by`, the common "Create a trip" case).
@@ -56,6 +62,5 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
     # bulk_create fires no post_save, so sync_trip_on_activity_save never runs and a list copied
     # into an auto-synced trip never reached the user's calendar.
     # Queued once for the trip rather than per activity - the push sends the whole trip anyway.
-    if activities:
-        queue_calendar_push(trip.pk)
+    queue_calendar_push(trip.pk)
     return len(items)

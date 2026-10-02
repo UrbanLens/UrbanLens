@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from itertools import count
+from unittest.mock import patch
 
 from django.utils import timezone
 from model_bakery import baker
@@ -25,6 +26,7 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaSessionStatus,
 )
 from urbanlens.dashboard.services.trivia.session import (
+    NotInvitedError,
     TriviaConfig,
     TriviaError,
     begin_session,
@@ -282,6 +284,30 @@ class LeaveSessionTests(TestCase):
         self.assertIsNotNone(round_.revealed_at)
         self.assertEqual(session.status, TriviaSessionStatus.COMPLETED)
 
+    def test_a_departed_players_answer_does_not_stand_in_for_someone_still_playing(self) -> None:
+        host, leaver, still_playing = _make_profile(), _make_profile(), _make_profile()
+        _befriend(host, leaver)
+        _befriend(host, still_playing)
+        location = _make_location()
+        for profile in (host, leaver, still_playing):
+            baker.make(Pin, profile=profile, location=location)
+        _make_question(location)
+        session = start_multiplayer_session(host, TriviaConfig(), [leaver, still_playing], total_rounds=1)
+        join_session(session, leaver)
+        join_session(session, still_playing)
+        round_ = begin_session(session, host)
+        assert round_ is not None
+        submit_answer(round_, host, "1937")
+        submit_answer(round_, leaver, "1937")
+
+        leave_session(session, leaver)
+
+        round_.refresh_from_db()
+        self.assertIsNone(round_.revealed_at, "the round revealed before a player still in the game had answered")
+        submit_answer(round_, still_playing, "1937")
+        round_.refresh_from_db()
+        self.assertIsNotNone(round_.revealed_at)
+
     def test_a_departed_profile_can_be_reinvited(self) -> None:
         host = _make_profile()
         guest = _make_profile()
@@ -307,6 +333,21 @@ class KickParticipantTests(TestCase):
         with pytest.raises(TriviaError):
             kick_participant(session, guest, host)
 
+    def test_a_host_who_has_since_left_cannot_kick(self) -> None:
+        host, first, second = _make_profile(), _make_profile(), _make_profile()
+        _befriend(host, first)
+        _befriend(host, second)
+        session = start_multiplayer_session(host, TriviaConfig(), [first, second])
+        join_session(session, first)
+        join_session(session, second)
+        read_while_still_host = TriviaSession.objects.get(pk=session.pk)
+        leave_session(session, host)
+
+        with pytest.raises(TriviaError):
+            kick_participant(read_while_still_host, host, second)
+        participant = TriviaSessionParticipant.objects.get(session=session, profile=second)
+        self.assertEqual(participant.status, TriviaSessionParticipantStatus.JOINED)
+
     def test_host_cannot_kick_themselves(self) -> None:
         host, guest, question, session, round_ = _setup_two_player_game()
         with pytest.raises(TriviaError):
@@ -326,6 +367,22 @@ class KickParticipantTests(TestCase):
         session.refresh_from_db()
         self.assertIsNotNone(round_.revealed_at)
         self.assertEqual(session.status, TriviaSessionStatus.COMPLETED)
+
+    def test_a_kick_landing_while_the_invitee_accepts_is_not_undone(self) -> None:
+        host, invitee = _make_profile(), _make_profile()
+        _befriend(host, invitee)
+        session = start_multiplayer_session(host, TriviaConfig(), [invitee])
+        read_before_the_kick = TriviaSessionParticipant.objects.get(session=session, profile=invitee)
+        kick_participant(session, host, invitee)
+
+        with (
+            patch.object(TriviaSessionParticipant.objects, "get", return_value=read_before_the_kick),
+            pytest.raises(NotInvitedError),
+        ):
+            join_session(session, invitee)
+
+        participant = TriviaSessionParticipant.objects.get(session=session, profile=invitee)
+        self.assertEqual(participant.status, TriviaSessionParticipantStatus.LEFT)
 
     def test_kicking_an_invited_but_not_joined_participant_cancels_the_invite(self) -> None:
         host = _make_profile()

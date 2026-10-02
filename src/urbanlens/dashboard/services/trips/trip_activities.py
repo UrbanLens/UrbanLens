@@ -6,7 +6,7 @@ import datetime
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Max
 from django.utils import timezone
 
 from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -469,6 +469,31 @@ def _attach_legs(rows: list[dict[str, Any]], viewer: Profile, *, include_legs: b
         item["leg"] = legs.get(item["activity"].id)
 
 
+def reserve_activity_positions(trip: Trip, count: int) -> int:
+    """Lock *trip* for the rest of the current transaction and make room for *count* more activities.
+
+    Positions are taken after the highest existing ``order``, not the activity count, which deletions make stale.
+
+    Args:
+        trip: The trip being appended to.
+        count: How many activities the caller is about to create.
+
+    Returns:
+        The first of *count* consecutive ``order`` values after every activity the trip already has.
+
+    Raises:
+        TripQuotaError: The trip cannot take *count* more under ``max_trip_activities``.
+    """
+    Trip.objects.select_for_update().filter(pk=trip.pk).first()
+    max_activities = SiteSettings.get_current().max_trip_activities
+    if max_activities > 0 and trip.activities.count() + count > max_activities:
+        if count == 1:
+            raise TripQuotaError(f"This trip already has the maximum of {max_activities} activities.")
+        raise TripQuotaError(f"This trip can hold at most {max_activities} activities; adding {count} more would go past that.")
+    last = trip.activities.aggregate(last=Max("order"))["last"]
+    return 0 if last is None else last + 1
+
+
 def create_activity(
     trip: Trip,
     actor: Profile,
@@ -520,17 +545,9 @@ def create_activity(
     if clean_status not in SETTABLE_STATUSES:
         clean_status = TripActivity.STATUS_PROPOSED
 
-    # Serialised on the trip, and entered only after the slow work (place resolution) is done, so
-    # the lock covers just the read-then-write section.
-    # Both the quota check and the append position count the same rows they are about to add to:
-    # unserialised, two members adding at once both read the same count, so both take the same
+    # Entered only after place resolution, so the trip lock covers just the read-then-write section.
     with transaction.atomic():
-        Trip.objects.select_for_update().filter(pk=trip.pk).first()
-
-        max_activities = SiteSettings.get_current().max_trip_activities
-        if max_activities > 0 and trip.activities.count() >= max_activities:
-            raise TripQuotaError(f"This trip already has the maximum of {max_activities} activities.")
-
+        position = reserve_activity_positions(trip, 1)
         activity = TripActivity.objects.create(
             trip=trip,
             location=location,
@@ -540,7 +557,7 @@ def create_activity(
             notes=clean_notes,
             scheduled_at=scheduled_at,
             scheduled_end=scheduled_end,
-            order=trip.activities.count(),
+            order=position,
             status=clean_status,
             child_trip=child_trip,
             location_hidden=_as_bool(location_hidden),

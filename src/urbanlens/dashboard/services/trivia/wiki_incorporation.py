@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 import logging
 
 from django.utils import timezone
@@ -12,7 +13,7 @@ from urbanlens.dashboard.services.ai.article_safety import classify_article_text
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
-from urbanlens.dashboard.services.trivia.voting import effective_score
+from urbanlens.dashboard.services.trivia.voting import effective_score, score_expression
 from urbanlens.dashboard.services.wiki.articles import get_article
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,8 @@ def sweep_questions_for_wiki_incorporation(*, batch_size: int = DEFAULT_SWEEP_BA
             wiki_incorporated_at__isnull=True,
             location__wiki__isnull=False,
         )
+        .alias(vote_score=score_expression())
+        .filter(vote_score__gte=Decimal(str(WIKI_INCORPORATION_SCORE_THRESHOLD)))
         .select_related("location", "location__wiki")
         .order_by("pk")[:batch_size]
     )

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from django.db.models import Count
+from django.db.models import Case, Count, DecimalField, OuterRef, Subquery, Sum, Value, When
+from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models.trivia.model import TriviaQuestionVote, TriviaQuestionVoteKind
 
@@ -66,3 +68,16 @@ def effective_score(question: TriviaQuestion) -> float:
     """
     counts = TriviaQuestionVote.objects.for_question(question).values("kind").annotate(n=Count("pk"))
     return sum(_WEIGHTS.get(row["kind"], 0.0) * row["n"] for row in counts)
+
+
+_SCORE_FIELD = DecimalField(max_digits=12, decimal_places=2)
+
+
+def score_expression() -> Coalesce:
+    """:func:`effective_score` as an expression on ``TriviaQuestion``, for filtering many questions in one query.
+
+    Summed as ``numeric``, so a score that lands exactly on a threshold compares exactly.
+    """
+    weighted = Case(*(When(kind=kind, then=Value(Decimal(str(weight)))) for kind, weight in _WEIGHTS.items()), default=Value(Decimal(0)), output_field=_SCORE_FIELD)
+    per_question = TriviaQuestionVote.objects.filter(question=OuterRef("pk")).order_by().values("question").annotate(score=Sum(weighted)).values("score")
+    return Coalesce(Subquery(per_question, output_field=_SCORE_FIELD), Value(Decimal(0)), output_field=_SCORE_FIELD)

@@ -62,15 +62,18 @@ class GameSessionStatus(abstract.TextChoices):
 
 
 class GameSessionParticipantStatus(abstract.TextChoices):
-    """Whether a participant has accepted their invitation yet.
+    """Whether a participant has accepted their invitation yet, or has gone.
 
     Mirrors ``TripMembership.status`` - the same row that will hold the
     accepted membership *is* the invite record, so there is no separate
-    invite model.
+    invite model. ``LEFT`` is set when a participant leaves or declines
+    (``services.spotguessr.session.leave_session``) or the host removes them
+    (``kick_participant``), from either ``INVITED`` or ``JOINED``.
     """
 
     INVITED = "invited", "Invited"
     JOINED = "joined", "Joined"
+    LEFT = "left", "Left"
 
 
 class PlayerModeRating(Glicko2RatingFields, abstract.DashboardModel):
@@ -191,11 +194,11 @@ class GameSessionParticipant(abstract.DashboardModel):
     ``total_points`` is a denormalized cache (mirrors ``Pin.last_visited``'s role) kept in sync by ``services.spotguessr.session`` as guesses are submitted, so the scoreboard never needs to re-sum every guess.
 
     Attributes:
-        status: INVITED until the profile accepts, then JOINED. A solo
-            session's host row is created directly as JOINED - there is no
-            invite step when you're the only player. Eligibility, "has
-            everyone in this round guessed," and the final scoreboard all
-            read JOINED participants only (see
+        status: INVITED until the profile accepts, then JOINED; LEFT once
+            they leave or are removed. A solo session's host row is created
+            directly as JOINED - there is no invite step when you're the only
+            player. Eligibility, "has everyone in this round guessed," and the
+            final scoreboard all read JOINED participants only (see
             ``docs/designs/drafts/spotguessr.md``'s eligibility rule 6) - an
             invitee who never accepts is not yet a player.
         joined_at: When this row was created. Despite the name, this is set

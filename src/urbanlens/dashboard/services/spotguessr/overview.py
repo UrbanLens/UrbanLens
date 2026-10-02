@@ -62,7 +62,7 @@ def most_recent_rating(profile: Profile) -> PlayerModeRating | None:
 
 
 def participated_sessions(profile: Profile, *, status: str | None = None) -> QuerySet[GameSession]:
-    """Every session ``profile`` takes part in, annotated for list/detail display.
+    """Every session ``profile`` still takes part in (not one they left), annotated for list/detail display.
 
     Args:
         profile: The player whose sessions to list.
@@ -70,7 +70,7 @@ def participated_sessions(profile: Profile, *, status: str | None = None) -> Que
 
     Returns:
         An unevaluated queryset ordered newest-first."""
-    session_ids = GameSessionParticipant.objects.filter(profile=profile).values("session_id")
+    session_ids = GameSessionParticipant.objects.active().filter(profile=profile).values("session_id")
     sessions = GameSession.objects.filter(pk__in=session_ids)
     if status is not None:
         sessions = sessions.filter(status=status)

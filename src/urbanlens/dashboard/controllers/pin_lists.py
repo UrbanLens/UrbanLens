@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 import uuid as uuid_lib
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -31,7 +32,7 @@ from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
 from urbanlens.dashboard.services.pins.pin_list_membership import add_pin_ids_to_list, reorder_list_items, resync_smart_list
 from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
-from urbanlens.dashboard.services.trips.trip_errors import TripPermissionError
+from urbanlens.dashboard.services.trips.trip_errors import TripPermissionError, TripQuotaError
 from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -542,9 +543,13 @@ class PinListCreateTripView(LoginRequiredMixin, View):
         name_error = column_length_error(Trip, "name", trip_name, "Trip name")
         if name_error:
             return HttpResponse(name_error, status=400)
-        trip = Trip.objects.create(name=trip_name, creator=profile)
-        TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
-        copy_list_pins_to_trip(pin_list, trip, profile)
+        try:
+            with transaction.atomic():
+                trip = Trip.objects.create(name=trip_name, creator=profile)
+                TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
+                copy_list_pins_to_trip(pin_list, trip, profile)
+        except TripQuotaError as exc:
+            return HttpResponse(exc.message, status=400)
 
         return JsonResponse({"ok": True, "redirect": reverse("trips.detail", kwargs={"trip_slug": trip.slug})})
 
@@ -574,6 +579,8 @@ class PinListAddToTripView(LoginRequiredMixin, View):
             count = copy_list_pins_to_trip(pin_list, trip, profile)
         except TripPermissionError as exc:
             return HttpResponse(exc.message, status=403)
+        except TripQuotaError as exc:
+            return HttpResponse(exc.message, status=400)
         return JsonResponse({"ok": True, "added": count, "redirect": reverse("trips.detail", kwargs={"trip_slug": trip.slug})})
 
 

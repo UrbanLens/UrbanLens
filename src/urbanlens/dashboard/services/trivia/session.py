@@ -286,8 +286,13 @@ def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParti
     if session.status != TriviaSessionStatus.LOBBY:
         raise JoinAfterLobbyClosedError("Session left LOBBY before this profile joined; the roster is locked.")
 
-    participant.status = TriviaSessionParticipantStatus.JOINED
-    participant.save(update_fields=["status", "updated"])
+    # Conditional, so a kick landing between the read above and this write is not undone.
+    accepted = TriviaSessionParticipant.objects.filter(pk=participant.pk, status=TriviaSessionParticipantStatus.INVITED).update(status=TriviaSessionParticipantStatus.JOINED, updated=timezone.now())
+    participant.refresh_from_db()
+    if not accepted:
+        if participant.status == TriviaSessionParticipantStatus.JOINED:
+            return participant
+        raise NotInvitedError("This profile left or was removed before accepting; it needs a fresh invitation to rejoin.")
     realtime.broadcast(session.pk, "participant.joined", {"participant": serializers.serialize_participant(participant)})
     return participant
 
@@ -417,8 +422,7 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
 
         TriviaSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points)
 
-        joined_count = session.participants.joined().count()
-        if locked_round.revealed_at is None and TriviaAnswer.objects.for_round(locked_round).count() >= joined_count:
+        if locked_round.revealed_at is None and _every_joined_participant_has_answered(locked_round):
             locked_round.revealed_at = timezone.now()
             locked_round.save(update_fields=["revealed_at", "updated"])
             round_completed_now = True
@@ -432,6 +436,12 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
         _advance_or_complete(session)
 
     return answer
+
+
+def _every_joined_participant_has_answered(round_: TriviaRound) -> bool:
+    """Whether no JOINED participant is still to answer ``round_``; a departed player's answer stands in for nobody."""
+    answered = TriviaAnswer.objects.for_round(round_).values("profile_id")
+    return not TriviaSessionParticipant.objects.joined().filter(session_id=round_.session_id).exclude(profile_id__in=answered).exists()
 
 
 def _finish_round(round_: TriviaRound, completed_answers: list[TriviaAnswer]) -> None:
@@ -525,67 +535,67 @@ def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
     return session
 
 
-def _remove_participant(session: TriviaSession, participant: TriviaSessionParticipant, *, reason: str) -> None:
-    """Mark ``participant`` LEFT, transfer host / abandon if needed, and finish an in-flight round if the removal just completed it.
+def _remove_participant(session: TriviaSession, participant: TriviaSessionParticipant, *, reason: str, removed_by: Profile | None = None) -> None:
+    """Mark ``participant`` LEFT, hand the host role on or abandon the session, and reveal a round only they held up.
 
-    Shared by ``leave_session`` and ``kick_participant`` (they differ only in
-    caller and broadcast ``reason``).
+    Shared by ``leave_session`` and ``kick_participant``, which differ only in who may call them and ``reason``.
+    Locks the session, then the open round, then the participant: ``submit_answer`` takes the round before a
+    participant row, so an answer racing a departure waits instead of deadlocking, and the second to commit sees
+    the first. Mirrors ``spotguessr.session._remove_participant``.
 
-    - Host departure transfers host to the earliest-joined remaining JOINED
-      participant; with nobody JOINED left the session is ``ABANDONED``.
-    - Removing the last holdout on an ACTIVE round can complete it exactly
-      like their answer would, so that path reuses ``_finish_round`` /
-      ``_advance_or_complete`` instead of waiting for the stall sweep.
+    Args:
+        session: The session.
+        participant: Who is leaving or being removed.
+        reason: ``left`` or ``kicked``, for the broadcast.
+        removed_by: The host doing a kick, re-checked under the lock: the caller read the host before it.
+
+    Raises:
+        SessionAlreadyEndedError: The session ended before the lock was taken.
+        KickNotHostError: ``removed_by`` stopped being the host before the lock was taken.
     """
-    was_host = session.host_profile_id == participant.profile_id
-    was_joined = participant.status == TriviaSessionParticipantStatus.JOINED
-
-    participant.status = TriviaSessionParticipantStatus.LEFT
-    participant.save(update_fields=["status", "updated"])
-
-    new_host_profile_id = None
-    if was_host:
-        successor = session.participants.joined().exclude(pk=participant.pk).order_by("joined_at").first()
-        if successor is not None:
-            session.host_profile_id = successor.profile_id
-            session.save(update_fields=["host_profile", "updated"])
-            new_host_profile_id = successor.profile_id
-
-    realtime.broadcast(
-        session.pk,
-        "participant.left",
-        {"profile_id": participant.profile_id, "reason": reason, "new_host_profile_id": new_host_profile_id},
-    )
-
-    if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
-        return
-
-    remaining = session.participants.joined().count()
-    if remaining == 0:
-        session.status = TriviaSessionStatus.ABANDONED
-        session.ended_at = timezone.now()
-        session.save(update_fields=["status", "ended_at", "updated"])
-        realtime.broadcast(session.pk, "session.completed", session_summary(session))
-        return
-
-    if not was_joined or session.status != TriviaSessionStatus.ACTIVE:
-        return
-
-    current_round = TriviaRound.objects.for_session(session).filter(revealed_at__isnull=True).first()
-    if current_round is None:
-        return
-    completed_answers = list(TriviaAnswer.objects.for_round(current_round).select_related("profile"))
-    if len(completed_answers) < remaining:
-        return  # still waiting on someone who's actually still here
-
     with transaction.atomic():
-        locked_round = TriviaRound.objects.select_for_update().get(pk=current_round.pk)
-        if locked_round.revealed_at is not None:
+        locked = TriviaSession.objects.select_for_update().get(pk=session.pk)
+        if locked.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
+            raise SessionAlreadyEndedError("Session status is neither LOBBY nor ACTIVE; it has already ended.")
+        if removed_by is not None and locked.host_profile_id != removed_by.pk:
+            raise KickNotHostError("Caller is no longer the session host; only the host may remove a player.")
+        open_round = None
+        if locked.status == TriviaSessionStatus.ACTIVE:
+            open_round = TriviaRound.objects.select_for_update().filter(session=locked, revealed_at__isnull=True).first()
+        participant = TriviaSessionParticipant.objects.select_for_update().get(pk=participant.pk)
+        if participant.status == TriviaSessionParticipantStatus.LEFT:
             return
-        locked_round.revealed_at = timezone.now()
-        locked_round.save(update_fields=["revealed_at", "updated"])
-    _finish_round(locked_round, completed_answers)
-    _advance_or_complete(session)
+        was_joined = participant.status == TriviaSessionParticipantStatus.JOINED
+        participant.status = TriviaSessionParticipantStatus.LEFT
+        participant.save(update_fields=["status", "updated"])
+
+        new_host_profile_id = None
+        if locked.host_profile_id == participant.profile_id:
+            successor = locked.participants.joined().order_by("joined_at", "pk").first()
+            if successor is not None:
+                locked.host_profile_id = successor.profile_id
+                locked.save(update_fields=["host_profile", "updated"])
+                new_host_profile_id = successor.profile_id
+
+        abandoned = not locked.participants.joined().exists()
+        if abandoned:
+            locked.status = TriviaSessionStatus.ABANDONED
+            locked.ended_at = timezone.now()
+            locked.save(update_fields=["status", "ended_at", "updated"])
+
+        revealed_round = None
+        if not abandoned and was_joined and open_round is not None and _every_joined_participant_has_answered(open_round):
+            open_round.revealed_at = timezone.now()
+            open_round.save(update_fields=["revealed_at", "updated"])
+            revealed_round = open_round
+
+    session.status, session.ended_at, session.host_profile_id = locked.status, locked.ended_at, locked.host_profile_id
+    realtime.broadcast(session.pk, "participant.left", {"profile_id": participant.profile_id, "reason": reason, "new_host_profile_id": new_host_profile_id})
+    if abandoned:
+        realtime.broadcast(session.pk, "session.completed", session_summary(session))
+    elif revealed_round is not None:
+        _finish_round(revealed_round, list(TriviaAnswer.objects.for_round(revealed_round).select_related("profile")))
+        _advance_or_complete(session)
 
 
 def leave_session(session: TriviaSession, profile: Profile) -> None:
@@ -640,7 +650,7 @@ def kick_participant(session: TriviaSession, host: Profile, target_profile: Prof
         raise TargetNotAParticipantError("No TriviaSessionParticipant row exists for the target profile on this session.") from None
     if participant.status == TriviaSessionParticipantStatus.LEFT:
         return
-    _remove_participant(session, participant, reason="kicked")
+    _remove_participant(session, participant, reason="kicked", removed_by=host)
 
 
 def rounds_played(session: TriviaSession) -> int:

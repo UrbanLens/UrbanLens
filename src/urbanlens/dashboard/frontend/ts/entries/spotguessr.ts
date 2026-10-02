@@ -41,6 +41,8 @@ interface SpotguessrUrls {
     join: string;
     begin: string;
     end: string;
+    leave: string;
+    kick: string;
     round: string;
     guess: string;
     round_timeout: string;
@@ -669,9 +671,24 @@ async function reportRoundTimeout(): Promise<void> {
 // Lobby
 // ---------------------------------------------------------------------------
 
+function kickButton(participant: ParticipantPayload): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn--danger btn--icon-sm";
+    button.title = `Remove ${participant.username}`;
+    button.setAttribute("aria-label", `Remove ${participant.username}`);
+    const icon = document.createElement("i");
+    icon.className = "material-symbols-outlined";
+    icon.textContent = "close";
+    button.appendChild(icon);
+    button.addEventListener("click", () => void kickParticipant(participant.profile_id, participant.username));
+    return button;
+}
+
 function renderLobbyParticipants(participants: ParticipantPayload[]): void {
     const list = el("sg-lobby-participants");
     list.innerHTML = "";
+    const isHost = state.hostProfileId === myProfileId;
     for (const participant of participants) {
         const item = document.createElement("li");
         const name = document.createElement("span");
@@ -680,14 +697,16 @@ function renderLobbyParticipants(participants: ParticipantPayload[]): void {
         status.className = participant.status === "joined" ? "spotguessr-lobby-status spotguessr-lobby-status--joined" : "spotguessr-lobby-status";
         status.textContent = participant.status === "joined" ? "Joined" : "Invited";
         item.append(name, status);
+        if (isHost && participant.profile_id !== myProfileId) item.appendChild(kickButton(participant));
         list.appendChild(item);
     }
 
     const me = participants.find((participant) => participant.profile_id === myProfileId);
-    const isHost = state.hostProfileId === myProfileId;
     el<HTMLButtonElement>("sg-invite-more-btn").hidden = !isHost;
     el<HTMLButtonElement>("sg-join-lobby-btn").hidden = !(me && me.status === "invited");
     el<HTMLButtonElement>("sg-begin-btn").hidden = !isHost;
+    el<HTMLButtonElement>("sg-leave-lobby-btn").hidden = !me;
+    el<HTMLButtonElement>("sg-end-game-lobby-btn").hidden = !isHost;
 }
 
 function renderLobby(session: SessionPayload): void {
@@ -702,6 +721,8 @@ function renderLobby(session: SessionPayload): void {
 async function refreshLobby(): Promise<void> {
     if (state.sessionId === null) return;
     const lobby: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
+    // The host changes hands when the host leaves, and a reconnect can miss that broadcast.
+    state.hostProfileId = lobby.host_profile_id;
     renderLobbyParticipants(lobby.participants);
 }
 
@@ -778,6 +799,13 @@ async function initStreetViewPanorama(lat: number, lng: number): Promise<void> {
 // Gameplay
 // ---------------------------------------------------------------------------
 
+// Leaving and ending early only make sense in a shared game, and ending only for its host - solo play has
+// "play again" for the same purpose.
+function updateRoundActionVisibility(): void {
+    el<HTMLButtonElement>("sg-leave-round-btn").hidden = !state.isMultiplayer;
+    el<HTMLButtonElement>("sg-end-game-btn").hidden = !(state.isMultiplayer && state.hostProfileId === myProfileId);
+}
+
 function renderRound(round: RoundPayload, roundNumber: number): void {
     state.currentRoundId = round.round_id;
     state.currentMode = round.mode;
@@ -793,9 +821,7 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     el("sg-score-status").textContent = state.isMultiplayer ? "" : `Score: ${state.sessionScore}`;
     // Changing settings mid-game starts an entirely new session.
     el<HTMLButtonElement>("sg-game-settings-btn").hidden = state.isMultiplayer;
-    // Ending early only makes sense for the host of a shared game - solo play
-    // has "reload"/"play again" for the same purpose already.
-    el<HTMLButtonElement>("sg-end-game-btn").hidden = !(state.isMultiplayer && state.hostProfileId === myProfileId);
+    updateRoundActionVisibility();
 
     const photo = el<HTMLImageElement>("sg-round-photo");
     const nameHeading = el("sg-round-name");
@@ -1367,6 +1393,42 @@ function resetToSettings(): void {
     showPanel("settings");
 }
 
+// Leave a lobby or a game in progress - or decline an invitation; the rest of the group plays on.
+async function leaveGame(): Promise<void> {
+    if (state.sessionId === null) return;
+    const confirmed = await confirmAction({
+        title: "Leave this game?",
+        message: "You'll stop playing, but the rest of the group can continue without you.",
+        confirmLabel: "Leave",
+    });
+    if (!confirmed) return;
+
+    const response = await postForm(urlFor(urls.leave, state.sessionId), {});
+    if (response.error) {
+        toast.error(response.error);
+        return;
+    }
+    resetToSettings();
+}
+
+// Host-only: remove another participant, joined or still invited.
+async function kickParticipant(profileId: number, username: string): Promise<void> {
+    if (state.sessionId === null) return;
+    const confirmed = await confirmAction({
+        title: `Remove ${username}?`,
+        message: `${username} will be removed from this game.`,
+        confirmLabel: "Remove",
+    });
+    if (!confirmed) return;
+
+    const response = await postForm(urlFor(urls.kick, state.sessionId), { profile_id: String(profileId) });
+    if (response.error) {
+        toast.error(response.error);
+        return;
+    }
+    await refreshLobby();
+}
+
 // Which currently-checked settings could plausibly be why nothing matched.
 function activeFilterLabels(): string[] {
     const labels: string[] = [];
@@ -1476,6 +1538,19 @@ function handleSocketMessage(data: any): void {
     switch (data.type) {
         case "participant.joined":
             void refreshLobby();
+            break;
+        case "participant.left":
+            if (data.new_host_profile_id) {
+                state.hostProfileId = data.new_host_profile_id;
+                updateRoundActionVisibility();
+            }
+            if (data.profile_id === myProfileId) {
+                toast.warning(data.reason === "kicked" ? "You were removed from the game by the host." : "You left the game.");
+                resetToSettings();
+            } else {
+                toast.info(data.reason === "kicked" ? "A player was removed from the game." : "A player left the game.");
+                void refreshLobby();
+            }
             break;
         case "session.started":
             renderRound(data.round, 1);
@@ -1621,5 +1696,8 @@ el("sg-join-lobby-btn").addEventListener("click", () => void joinLobby());
 el("sg-begin-btn").addEventListener("click", () => void beginGame());
 el("sg-invite-more-btn").addEventListener("click", () => void handleInviteMore());
 el("sg-end-game-btn").addEventListener("click", () => void endGameNow());
+el("sg-end-game-lobby-btn").addEventListener("click", () => void endGameNow());
+el("sg-leave-lobby-btn").addEventListener("click", () => void leaveGame());
+el("sg-leave-round-btn").addEventListener("click", () => void leaveGame());
 el("sg-street-view-fallback-btn").addEventListener("click", showStreetViewFallback);
 void loadInitialSession();

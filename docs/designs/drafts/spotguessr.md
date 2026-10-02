@@ -362,7 +362,7 @@ as nobody showing up. See "Multiplayer stall handling" for the full design.
 ### Participants: invited vs. joined
 
 `GameSessionParticipant.status` (new field, `GameSessionParticipantStatus`: `INVITED` |
-`JOINED`) mirrors `TripMembership.status` exactly (`models/trips/model.py`) — the same
+`JOINED`, and `LEFT` since 2026-10-02 - see "Leave and kick") mirrors `TripMembership.status` exactly (`models/trips/model.py`) — the same
 model row that will later hold the accepted membership *is* the invite record, there is no
 separate `GameSessionInvite` model. The host's own row is created as `JOINED` immediately
 (`start_multiplayer_session`); every invitee's row is created as `INVITED`.
@@ -418,6 +418,7 @@ methods per Channels convention):
 | Event | Sent when | Payload |
 |---|---|---|
 | `participant.joined` | An invitee accepts | profile id/username |
+| `participant.left` | A participant leaves or declines, or the host removes them | profile id, `reason` (`left`/`kicked`), any new host's profile id; the removed player's own socket is closed after it |
 | `session.started` | Host begins the game | round 1 (safe-serialized, no answer) |
 | `guess.submitted` | Any participant guesses | which profile, so others see "waiting on 2 more" — **not** their guess coordinates or score, which stay hidden until reveal |
 | `round.revealed` | Every joined participant has guessed, **or** the round is force-revealed early (stall-sweep timeout, round-timer expiry, or the host ending the session - see "Multiplayer stall handling") | the answer, every participant's distance/points/rating-delta, updated scoreboard totals |
@@ -478,6 +479,19 @@ same `_finish_round` helper `submit_guess` already used:
 `get_or_create_round`'s "is the current round done" check reads `revealed_at IS NOT NULL`
 directly (not "everyone's guessed count"), since revealed_at is now the single authoritative
 completion marker regardless of which of the above set it.
+
+### Leave and kick (added 2026-10-02, mirroring Trivia)
+
+`GameSessionParticipantStatus.LEFT` marks a participant who left, declined, or was removed by the
+host (`leave_session`, `kick_participant`). A `LEFT` row keeps its guesses and is history, not
+access: `GameSessionParticipantQuerySet.active()` excludes it, so every route that resolves a session
+through `SessionAccess` 404s for it, and `join_session` refuses it until a fresh `invite_to_session`.
+`_remove_participant` locks the session, then the open round, then the participant row - the round
+before the participant is the order `submit_guess` takes them in, so a guess racing a departure
+waits rather than deadlocking. If the host leaves, the earliest remaining joined player becomes host;
+with nobody joined left the session is `ABANDONED`. "Every joined participant has guessed" counts
+only guesses by players still joined, so a departed player's guess never completes a round for
+someone still playing.
 
 ### Explicitly not built (tracked as follow-up, not silently dropped)
 

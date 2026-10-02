@@ -150,7 +150,7 @@ def serialize_participant(participant: GameSessionParticipant) -> dict[str, Any]
 
 
 def serialize_session(session: GameSession) -> dict[str, Any]:
-    """Lobby state: mode, status, and every participant (invited or joined)."""
+    """Lobby state: mode, status, and every current participant (invited or joined - never a departed one)."""
     return {
         "session_id": session.pk,
         "mode": session.mode,
@@ -158,7 +158,7 @@ def serialize_session(session: GameSession) -> dict[str, Any]:
         "total_rounds": session.total_rounds,
         "host_profile_id": session.host_profile_id,
         "geo_bounds": _geo_bounds_bbox(session),
-        "participants": [serialize_participant(participant) for participant in session.participants.select_related("profile__user")],
+        "participants": [serialize_participant(participant) for participant in session.participants.active().select_related("profile__user")],
     }
 
 

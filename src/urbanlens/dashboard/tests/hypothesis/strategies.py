@@ -13,6 +13,7 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.profile.model import MapCenterMode
+from urbanlens.dashboard.models.trivia.model import TriviaQuestionVoteKind
 
 # -- Safe text ------------------------------------------------------------------
 # Restrict to printable ASCII to avoid encoding edge-cases in DB text columns.
@@ -116,3 +117,15 @@ valid_zoom = st.integers(min_value=1, max_value=19)
 
 # -- Misc -----------------------------------------------------------------------
 invalid_security_level = short_text.filter(lambda s: s.lower() not in SecurityLevel.values)
+
+# -- Trivia ---------------------------------------------------------------------
+#: Votes on one trivia question, counted per kind; never more than ``TRIVIA_VOTE_TALLY_MAX_VOTES`` in total.
+trivia_vote_tally = st.fixed_dictionaries(
+    {
+        TriviaQuestionVoteKind.UPVOTE: st.integers(min_value=0, max_value=8),
+        TriviaQuestionVoteKind.DOWNVOTE: st.integers(min_value=0, max_value=3),
+        TriviaQuestionVoteKind.REPORT: st.integers(min_value=0, max_value=2),
+        TriviaQuestionVoteKind.NO_REACTION: st.integers(min_value=0, max_value=20),
+    },
+)
+TRIVIA_VOTE_TALLY_MAX_VOTES = 8 + 3 + 2 + 20

@@ -420,44 +420,69 @@ editing before touching the shared templates.
 
 ---
 
-## P19 — Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps
+## P19 — Audit residue: a 1,100-line `_dark.scss`, a stub AI gateway, two notification settings that control nothing, and other deferred gaps
 
-`id: P19` · `status: open` · `updated: 2026-09-29`
+`id: P19` · `status: open` · `updated: 2026-10-02`
 
-Previously titled "Full-codebase audit: re-verification pass (2026-07-25)".
+Previously titled "Full-codebase audit: re-verification pass (2026-07-25)", then "Audit re-verification's
+residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps".
 
-Six independent re-verification passes re-read every finding in `docs/audits/codebase-audit.md`
-against the current code (not trusting the earlier session's own claims) and reported per-finding
-FIXED/PARTIALLY-FIXED/NOT-FIXED/REGRESSED verdicts. Most findings held up as genuinely fixed, and
-the regressions/gaps this pass surfaced were fixed directly in it - that changelog moved to
-`archive/PROBLEMS-ARCHIVE.md` (2026-09-15). What's left, verified against the current code rather
-than trusted from the original audit text:
+What remains of the findings in `docs/audits/codebase-audit.md`, each re-checked against the code on
+2026-10-02:
 
-- **Unit 09/10**: bulk-accept/reject's per-item failures still aren't surfaced in the frontend
-  toast; both trip-invite paths and calendar-push still loop per-invitee/per-activity without
-  batching or debounce; `TripActivity.order` still has no uniqueness constraint or locking.
-- **Unit 13/14/19**: `NotificationPreference` still only models 12 of 30 `NotificationType` values;
-  no admin can see/revoke another admin's subscription grants; no restore tooling exists for the
-  Postgres backups. (The `labels.py` `ai_kind_enabled`/`keyword_kind_enabled` `.get`/`.post`
-  duplication this bullet used to list is fixed - consolidated into `AutoTagService`.)
+- **Unit 14**: `NotificationPreference` has fields for 13 of the 33 `NotificationType` values. Every row
+  the Settings page offers is honoured by every producer of its type (16 producer sites read; map shares
+  ride on `pin_shared`), so no type the page presents as mutable is unmutable. Types with no row are
+  safety check-in and account-deletion alerts (deliberately, `MUTE_EXEMPT_TYPES`), feedback on the
+  user's own action (upload failures, AI extraction, pin import, error/warning/info), friend suggestions
+  (gated by the profile's `allow_friend_recommendations` instead), and SpotGuessr/Trivia/Consensus
+  invitations, which only a friendship mute silences. Open: the page offers "Trip Updated" and
+  "Community Wiki Updated", but nothing in `src/` produces either type, so those two rows change
+  nothing - build the producers or drop the rows. And `notification_text_alerts.TEXT_ALERTABLE_TYPES`
+  keys on the type value, so the "Pin Shared" row's WhatsApp/SMS toggles never reach map shares,
+  whose in-app and email delivery that row does govern.
+- **Unit 19**: no admin can see or revoke another admin's subscription grants
+  (`controllers/site_admin.py` scopes both to `granted_by=request.user`); no restore tooling exists for
+  the Postgres backups.
 - **Unit 20**: `services/ai/huggingface.py` is still an unwired, `NotImplementedError`-raising stub
-  (documented as such). `PinSerializer.create()` and `parse_for_preview`'s blocking-AI-call half of
-  this finding is fixed - both are async now.
+  (documented as such).
 - **Unit 21/22/23**: `models/pin/viewset.py`'s post-`get_object()` ownership re-check is kept
-  deliberately (2026-09-06) - unreachable today since `get_queryset` scopes to `profile__user` and a
-  stranger's pin 404s first, but a backstop for the day that filter widens (shared pins, an admin
-  view); both sites carry a comment saying so. `GroupMessage` still carries no
-  images/markup_map/location_mentions/reply_to fields. (`GameSessionConsumer`/`TriviaSessionConsumer`
-  now share a base class with per-connection rate limiting - struck from this list.)
-- **Unit 24/25**: no moderation UI exists for AI-flagged trivia questions (decided against, not just
-  unbuilt - see `docs/designs/drafts/trivia.md`'s "Known gaps"); SpotGuessr still has no
-  leave/cancel/kick path once a lobby exists (Trivia gained one 2026-07-25).
-- **Unit 31**: `_dark.scss` is still ~1100 lines of per-selector overrides.
-- **Unit 34**: only ~30/111 `@given`-using test files import the shared `strategies.py` module (up
-  from 8/97, but still a minority); `test_trivia_wiki_incorporation.py` has zero `@given` tests
-  despite an obvious property-testing candidate (the upvote-count threshold logic).
+  deliberately (2026-09-06) - unreachable while `get_queryset` scopes to `profile__user`, a backstop for
+  the day that filter widens; both sites say so. `GroupMessage` still carries no
+  images/markup_map/location_mentions/reply_to fields.
+- **Unit 25**: no moderation UI for AI-flagged trivia questions - decided against, not just unbuilt (see
+  `docs/designs/drafts/trivia.md`'s "Known gaps").
+- **Unit 31**: `_dark.scss` is 1,095 lines of per-selector overrides.
+- **Unit 34**: 12 of the 175 test files that use `@given` import the shared `strategies.py`
+  (`grep -rl "@given" src/urbanlens --include='test_*.py'`, then grep those for
+  `tests.hypothesis.strategies`). The earlier "~30/111" did not reproduce.
 
-All of the above are maintainability/completeness gaps, not active security or correctness bugs.
+Removed on 2026-10-02, measured rather than assumed:
+
+- Bulk accept/reject already surfaced per-item failures: both endpoints run each row through
+  `services.core.bulk_outcome.run_each` and the page toasts failed rows apart from skipped ones
+  (`reportBulkOutcome`). The bullet was stale.
+- `TripActivity.order`: adds and reorders already locked the trip, but appends took the activity
+  *count*, which deletions make stale (after two deletions a new activity sorted into the middle), and
+  `copy_list_pins_to_trip` took the count with no lock and no `max_trip_activities` check. All appends
+  now go through `trip_activities.reserve_activity_positions` (lock, cap the whole batch, `Max(order)+1`).
+  No `(trip, order)` unique constraint: reorders renumber only non-completed activities, so completed
+  ones legitimately share positions with them, and 83 test call sites create activities with the
+  default `order=0`.
+- Trip invites and calendar push are linear, not N+1. `trip_crud.invite_members`: 42 queries for 3
+  invitees, 158 for 12 (~13 each: a locked seat reservation, the membership's achievement read, and a
+  notification whose preference, identity and mute checks are per recipient); the calendar import's
+  `_invite_participants`: 47 and 181, in a Celery task. Both are bounded by `max_trip_members`
+  (default 10, at most 100). `push_auto_synced_trip_changes`: 12 queries and 4 Calendar calls for 3
+  scheduled activities, 21 and 13 for 12 - one link write and one API call per activity, which one event
+  per activity needs.
+- SpotGuessr leave/kick/lobby cancel is built (`docs/FEATURES.md`). Building it found that Trivia's
+  round completion counted a departed player's answer, so a player who answered and left could reveal
+  the round before someone still playing had answered; fixed in both games.
+- `test_trivia_wiki_incorporation.py` has property tests for the threshold. They found that the sweep
+  starved: it took the lowest-pk unprocessed questions without filtering on score, and never marked the
+  ones below the threshold, so a batch's worth of them blocked every later question. The sweep now
+  filters on `voting.score_expression()` in SQL.
 
 ## P21 — A shared markup map stamps provenance only for places its sender has pinned
 
