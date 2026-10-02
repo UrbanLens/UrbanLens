@@ -101,6 +101,21 @@ async function viewMap(page: Page, center: { lat: number; lng: number }, zoom = 
     }, { ...center, zoom });
 }
 
+/** The front photo of the cluster a photo is drawn in, or "" when it is drawn on its own. */
+async function clusterFront(page: Page, imageId: number): Promise<string> {
+    return page.evaluate((imageId) => {
+        const maps = (window as unknown as { __ulLeafletMaps?: MapLike[] }).__ulLeafletMaps ?? [];
+        const map = maps.find((m) => m.getContainer().id === "map");
+        let front = "";
+        map?.eachLayer((group) => {
+            const marker = group.getLayers?.().find((m) => m._ulPhotoId === imageId);
+            const drawn = marker && group.getVisibleParent ? group.getVisibleParent(marker) : null;
+            if (marker && drawn && drawn !== marker) front = drawn.getElement()?.querySelector(".photo-cluster__img--front")?.getAttribute("src") ?? "";
+        });
+        return front;
+    }, imageId);
+}
+
 /** Where a photo is drawn on screen, and whether it is drawn on its own or inside a cluster. */
 async function photoOnScreen(page: Page, imageId: number): Promise<(Point & { clustered: boolean }) | null> {
     return page.evaluate((imageId) => {
@@ -209,6 +224,8 @@ test.describe("photos on the pin map", () => {
         await page.mouse.move(from.x, from.y, { steps: 2 });
         await page.mouse.down();
         await page.mouse.move(to.x, to.y, { steps: 3 });
+        // Leaflet draws a drag once per frame and drops an undrawn frame on release; a hand comes to rest first.
+        await page.waitForTimeout(100);
         await page.mouse.up();
 
         const body = (await saved).postDataJSON() as { latitude: number; longitude: number };
@@ -289,19 +306,18 @@ test.describe("photos on the pin map", () => {
         await viewMap(page, { lat: pin.latitude, lng: pin.longitude });
         expect((await waitForPhoto(page, older)).clustered, "two photos at one spot were not clustered").toBe(true);
 
-        const front = page.locator(".photo-cluster-icon .photo-cluster__img--front");
         const olderMarkerUrl = await page.evaluate(async (id) => {
             const body = (await (await fetch(location.pathname + "gallery/json/")).json()) as { images: Array<{ id: number; marker_thumb_url: string; url: string }> };
             const image = body.images.find((img) => img.id === id);
             return image?.marker_thumb_url || image?.url || "";
         }, older);
-        await expect(front).not.toHaveAttribute("src", olderMarkerUrl);
+        expect(await clusterFront(page, older)).not.toBe(olderMarkerUrl);
 
         await page.locator("#detail-pin-list-handle").click();
         await page.locator('.map-panel-tab[data-tab="photos"]').click();
         await page.locator(`#map-panel-photos .photo-panel-item[data-id="${older}"]`).click();
 
-        await expect(front).toHaveAttribute("src", olderMarkerUrl);
+        await expect.poll(() => clusterFront(page, older)).toBe(olderMarkerUrl);
         await expect(page.locator(".photo-cluster-icon.is-flashing")).toHaveCount(1);
     });
 
@@ -320,6 +336,8 @@ test.describe("photos on the pin map", () => {
         await page.mouse.move(from.x, from.y, { steps: 2 });
         await page.mouse.down();
         await page.mouse.move(to.x, to.y, { steps: 3 });
+        // Leaflet draws a drag once per frame and drops an undrawn frame on release; a hand comes to rest first.
+        await page.waitForTimeout(100);
         await page.mouse.up();
 
         const body = (await saved).postDataJSON() as { latitude: string; longitude: string };

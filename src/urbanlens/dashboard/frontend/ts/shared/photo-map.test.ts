@@ -103,7 +103,9 @@ interface FakeMarker {
     setIconCalls: number;
     zIndexOffset: number;
     handlers: Record<string, Array<() => void>>;
+    latlng: { lat: number; lng: number };
     fire(event: string): void;
+    getLatLng(): { lat: number; lng: number };
 }
 
 function installFakeLeaflet(): { markers: FakeMarker[]; removed: FakeMarker[]; clusterOptions: Array<Record<string, unknown>>; refreshed: FakeMarker[] } {
@@ -121,7 +123,7 @@ function installFakeLeaflet(): { markers: FakeMarker[]; removed: FakeMarker[]; c
         };
         return self;
     };
-    const marker = (_latlng: unknown, options: { icon?: { className?: string } }): FakeMarker & Record<string, unknown> => {
+    const marker = (latlng: [number, number], options: { icon?: { className?: string } }): FakeMarker & Record<string, unknown> => {
         const element = document.createElement("div");
         element.className = options.icon?.className ?? "";
         const self = {
@@ -139,8 +141,13 @@ function installFakeLeaflet(): { markers: FakeMarker[]; removed: FakeMarker[]; c
             },
             addTo: () => self,
             bindTooltip: () => self,
+            latlng: { lat: 0, lng: 0 },
             getElement: () => self.element,
-            getLatLng: () => ({ lat: 1, lng: 2 }),
+            getLatLng: () => self.latlng,
+            setLatLng(latlng: [number, number]) {
+                self.latlng = { lat: latlng[0], lng: latlng[1] };
+                return self;
+            },
             setIcon(icon: { className?: string }) {
                 self.setIconCalls += 1;
                 self.options.icon = icon;
@@ -153,6 +160,7 @@ function installFakeLeaflet(): { markers: FakeMarker[]; removed: FakeMarker[]; c
                 return self;
             },
         };
+        self.latlng = { lat: latlng[0], lng: latlng[1] };
         markers.push(self);
         return self;
     };
@@ -285,6 +293,51 @@ describe("photo marker dragging", () => {
         marker.fire("dragstart");
         marker.fire("drag");
         expect(fake.removed.includes(marker), "the marker was pulled off its layer mid-drag").toBe(false);
+    });
+});
+
+describe("refreshing the photo layer", () => {
+    const previousL = (globalThis as Record<string, unknown>).L;
+    afterEach(() => {
+        (globalThis as Record<string, unknown>).L = previousL;
+    });
+
+    test("leaves a photo that is being dragged alone, so the drag is not ended under the pointer", () => {
+        const fake = installFakeLeaflet();
+        const layer = createPhotoMarkerLayer(clusteringMap, { onMove: () => Promise.resolve() });
+        const photo = { id: 1, url: "/a.jpg", lat: 1, lng: 2, movable: true };
+        layer.set(photo);
+        const dragged = fake.markers[0]!;
+        dragged.fire("dragstart");
+
+        layer.replaceAll([{ ...photo, lat: 5, lng: 6 }, { id: 2, url: "/b.jpg", lat: 1, lng: 2 }]);
+        expect(fake.removed.includes(dragged), "the dragged marker was taken off the map").toBe(false);
+        expect(dragged.getLatLng()).toEqual({ lat: 1, lng: 2 });
+        expect(fake.markers.length).toBe(2);
+    });
+
+    test("moves an unchanged photo's own marker rather than rebuilding it, keeping its highlight", () => {
+        const fake = installFakeLeaflet();
+        const layer = createPhotoMarkerLayer(clusteringMap);
+        layer.set({ id: 1, url: "/a.jpg", lat: 1, lng: 2 });
+        const marker = fake.markers[0]!;
+        layer.highlight(1, true);
+
+        layer.replaceAll([{ id: 1, url: "/a.jpg", lat: 3, lng: 4 }]);
+        expect(fake.markers.length).toBe(1);
+        expect(fake.removed.includes(marker)).toBe(false);
+        expect(marker.getLatLng()).toEqual({ lat: 3, lng: 4 });
+        expect(marker.element.classList.contains("is-highlighted")).toBe(true);
+    });
+
+    test("rebuilds a photo whose picture or permissions changed", () => {
+        const fake = installFakeLeaflet();
+        const layer = createPhotoMarkerLayer(clusteringMap, { onMove: () => Promise.resolve() });
+        layer.set({ id: 1, url: "/a.jpg", lat: 1, lng: 2, movable: true });
+        layer.set({ id: 1, url: "/a2.jpg", lat: 1, lng: 2, movable: true });
+        layer.set({ id: 1, url: "/a2.jpg", lat: 1, lng: 2, movable: false });
+        expect(fake.markers.length).toBe(3);
+        expect(fake.removed.length).toBe(2);
     });
 });
 

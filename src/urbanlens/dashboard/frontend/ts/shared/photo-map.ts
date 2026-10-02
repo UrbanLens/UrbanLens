@@ -208,7 +208,7 @@ export interface PhotoMarkerLayerOptions {
 export interface PhotoMarkerLayer {
     /** The LayerGroup, so callers can add/remove it from a layers control. */
     layer: L.LayerGroup;
-    /** Adds or replaces one photo's marker. */
+    /** Adds one photo's marker, or brings its existing one up to date. */
     set: (item: PhotoMapItem) => void;
     /** Adds or replaces every given photo, dropping any marker not in the list. */
     replaceAll: (items: PhotoMapItem[]) => void;
@@ -228,6 +228,9 @@ interface MarkerEntry {
     url: string;
     lat: number;
     lng: number;
+    draggable: boolean;
+    caption: string | undefined;
+    dragging: boolean;
     highlighted: boolean;
     flashing: boolean;
     flashTimer?: ReturnType<typeof setTimeout>;
@@ -271,13 +274,23 @@ export function createPhotoMarkerLayer(map: L.Map, options: PhotoMarkerLayerOpti
     }
 
     function set(item: PhotoMapItem): void {
+        const draggable = !!item.movable && !!options.onMove;
         const existing = markers.get(item.id);
         if (existing) {
+            // Rebuilding a marker mid-drag ends the drag; its own dragend saves where it lands.
+            if (existing.dragging) return;
+            if (existing.url === item.url && existing.draggable === draggable && existing.caption === item.caption) {
+                if (existing.lat !== item.lat || existing.lng !== item.lng) {
+                    existing.lat = item.lat;
+                    existing.lng = item.lng;
+                    existing.marker.setLatLng([item.lat, item.lng]);
+                }
+                return;
+            }
             clearTimeout(existing.flashTimer);
             layer.removeLayer(existing.marker);
         }
 
-        const draggable = !!item.movable && !!options.onMove;
         const marker: TaggedPhotoMarker = L.marker([item.lat, item.lng], {
             icon: makePhotoIcon(item.url, photoMarkerSize(map.getZoom())),
             draggable,
@@ -285,11 +298,15 @@ export function createPhotoMarkerLayer(map: L.Map, options: PhotoMarkerLayerOpti
         tagPhotoMarker(marker, item.url, item.id);
         if (item.caption) marker.bindTooltip(escHtml(item.caption), { direction: "top", className: "detail-pin-tooltip" });
 
-        const entry: MarkerEntry = { marker, url: item.url, lat: item.lat, lng: item.lng, highlighted: false, flashing: false };
+        const entry: MarkerEntry = { marker, url: item.url, lat: item.lat, lng: item.lng, draggable, caption: item.caption, dragging: false, highlighted: false, flashing: false };
 
         // markercluster re-files a dragged child itself on dragend.
         if (draggable && options.onMove) {
+            marker.on("dragstart", () => {
+                entry.dragging = true;
+            });
             marker.on("dragend", () => {
+                entry.dragging = false;
                 const pos = marker.getLatLng();
                 const prevLat = entry.lat;
                 const prevLng = entry.lng;
