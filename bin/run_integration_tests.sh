@@ -147,6 +147,12 @@ if [[ ${USE_DOCKER} -eq 1 ]]; then
 		ENV_FLAGS+=(-e "${name}")
 	done < <(compgen -e | grep '^UL_E2E_' || true)
 
+	# Quoted for the container's shell: a pass-through such as `--grep "a|b"` must reach Playwright as one argument.
+	PLAYWRIGHT_ARGS=""
+	if ((${#PROJECTS[@]} + ${#PASSTHROUGH[@]})); then
+		PLAYWRIGHT_ARGS="$(printf '%q ' ${PROJECTS[@]+"${PROJECTS[@]}"} ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"})"
+	fi
+
 	# Larger shm so Chromium tabs survive large pages; host networking so local targets resolve.
 	# Run as the caller so reports/ and node_modules/ stay writable by a later host run.
 	exec docker run --rm ${TTY_FLAGS[@]+"${TTY_FLAGS[@]}"} \
@@ -159,7 +165,7 @@ if [[ ${USE_DOCKER} -eq 1 ]]; then
 		-w /suite \
 		"${ENV_FLAGS[@]}" \
 		"${IMAGE}" \
-		bash -lc "$(install_command) && npx playwright test ${PROJECTS[*]:-} ${PASSTHROUGH[*]:-}"
+		bash -lc "$(install_command) && npx playwright test ${PLAYWRIGHT_ARGS}"
 fi
 
 command -v npm >/dev/null 2>&1 || {
