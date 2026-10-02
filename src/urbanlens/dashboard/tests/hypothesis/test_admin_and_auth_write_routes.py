@@ -10,6 +10,7 @@ from django.urls import reverse
 from model_bakery import baker
 from webauthn.helpers import bytes_to_base64url
 
+from urbanlens.core.tests.inline_scripts import inline_blocks
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import account as account_controllers
 from urbanlens.dashboard.models.account import WebAuthnCredential
@@ -110,6 +111,17 @@ class DevToolbarRouteTests(TestCase):
         button = button[: button.index("</button>")]
         self.assertIn(f'hx-post="{reverse("dev_toolbar.toggle_map_dark_mode")}"', button)
         self.assertIn('data-map-dark-mode="light"', button)
+
+    def test_the_toolbar_runs_from_a_file_and_carries_its_clear_session_url(self) -> None:
+        self.client.force_login(self.admin)
+        with mock.patch(
+            "urbanlens.dashboard.models.site_settings.model.SiteSettings.show_dev_admin_features", return_value=True
+        ):
+            page = self.client.get(reverse("faq")).content
+
+        self.assertIn(b"js/dev-toolbar.js", page)
+        self.assertIn(f'data-clear-session-url="{reverse("dev_toolbar.clear_session")}"'.encode(), page)
+        self.assertEqual([block for block in inline_blocks(page) if b"dev-toolbar" in block], [])
 
     def test_clear_session_logs_the_admin_out_on_a_development_site(self) -> None:
         self.client.force_login(self.admin)
