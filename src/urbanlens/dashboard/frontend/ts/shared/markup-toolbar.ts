@@ -488,8 +488,10 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 if (!r.ok) throw new Error();
                 return r.json();
             })
-            .then((data) => reloadMarkupAndOpenEdit(data.uuid))
-            .catch(() => toast.error("Failed to save markup."));
+            .then(
+                (data) => reloadMarkupAndOpenEdit(data.uuid).catch(() => toast.error("Markup saved, but the map could not show it. Reload the page to see it.")),
+                () => toast.error("Failed to save markup."),
+            );
     }
 
     function onDrawCommit(type: string, latlngs: [number, number][], extras: Record<string, unknown>): void {
@@ -551,7 +553,11 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
 
     function reloadMarkupAndOpenEdit(newUuid: string): Promise<void> {
         return fetchResponse(markupJsonUrl)
-            .then((r) => r.json())
+            .then((r) => {
+                // A refused read must not clear what is already drawn.
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
             .then((markupData) => {
                 clearRenderedMarkup();
                 markupItems = [];
