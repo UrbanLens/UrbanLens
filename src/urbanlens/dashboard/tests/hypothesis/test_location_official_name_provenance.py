@@ -1,7 +1,10 @@
 """P186: ``Location.official_name`` is treated as provider data, but two request paths seed it with text the client sent.
 
+A Location created with a name also takes its slug from it, so the same text reaches the wiki's URL.
+
 Each xfail asserts what the field is relied on to mean; it fails today and passes once the writer is fixed, when
-``strict`` turns the pass into a failure so the marker is removed. The paired test proves the request really ran.
+``strict`` turns the pass into a failure so the marker is removed. The paired tests prove the request really ran and
+that a creation-time name does become the slug.
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils.text import slugify
 from model_bakery import baker
 import pytest
 
@@ -51,6 +55,11 @@ class AddPinCanonicalNameTests(_SignedIn):
         wiki, _created = Wiki.objects.get_or_create_for_location(self._add_pin())
         self.assertNotEqual(wiki.name, TYPED)
 
+    @pytest.mark.xfail(strict=True, reason="P186: the Location's slug is minted from official_name at creation")
+    def test_text_the_client_sent_does_not_reach_the_wiki_url(self) -> None:
+        location = self._add_pin()
+        self.assertNotIn(slugify(TYPED), reverse("location.wiki", args=[location.slug]))
+
 
 class TripActivityTitleTests(_SignedIn):
     def _add_activity(self) -> TripActivity:
@@ -72,3 +81,23 @@ class TripActivityTitleTests(_SignedIn):
         location = self._add_activity().location
         assert location is not None
         self.assertNotEqual(location.official_name, TYPED)
+
+    @pytest.mark.xfail(strict=True, reason="P186: the Location's slug is minted from official_name at creation")
+    def test_the_activity_title_does_not_reach_the_wiki_url(self) -> None:
+        location = self._add_activity().location
+        assert location is not None
+        self.assertNotIn(slugify(TYPED), reverse("location.wiki", args=[location.slug]))
+
+
+class CreationNameSlugTests(TestCase):
+    """The mechanism the URL xfails rely on, so they cannot pass merely because slugs stopped coming from names."""
+
+    def test_a_location_created_with_a_name_takes_its_slug_from_it(self) -> None:
+        location, _created = Location.objects.get_exact_or_create(
+            42.4, -73.9, defaults={"official_name": "Old Grain Mill"}
+        )
+        self.assertEqual(location.slug, "old-grain-mill")
+
+    def test_a_location_created_without_a_name_keeps_its_uuid(self) -> None:
+        location, _created = Location.objects.get_exact_or_create(42.5, -73.95)
+        self.assertEqual(location.slug, str(location.uuid))

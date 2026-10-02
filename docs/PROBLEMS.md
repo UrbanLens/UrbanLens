@@ -4016,9 +4016,9 @@ should need to change: `upsert_place` updates a building place by its provider k
 answer refreshes. If the merge gives Kirkbride a new key, place 483 is orphaned, with no Location on it: migration 0034
 moved them all by containment. To close: after REData deploys, refresh HRSH's buildings and re-run the location project.
 
-## P186 — `Location.official_name` is seeded from text the client sent, yet a new wiki adopts it as its automatic name and concealment shows it as the provider name; it cannot seed a readable URL slug
+## P186 — `Location.official_name` is seeded from text the client sent, and a new Location takes its URL slug from it at creation; a new wiki adopts it as its automatic name and concealment shows it as the provider name
 
-`id: P186` · `status: open` · `updated: 2026-10-02` · `found by: the readable-location-slug work, 2026-10-02, tracing every writer before minting a URL slug from the field`
+`id: P186` · `status: open` · `updated: 2026-10-02` · `found by: the readable-location-slug work, 2026-10-02, tracing every writer before minting a URL slug from the field` · `supersedes: the same day's first version, which missed that creation already mints the slug`
 
 The model comment (`models/location/model.py:39-41`) and `docs/designs/concealed-wiki-spec.md` (its address-proxy row) treat
 `official_name` as provider data that user edits never write. Two request paths seed it on create with text the client sent:
@@ -4034,18 +4034,33 @@ The model comment (`models/location/model.py:39-41`) and `docs/designs/concealed
 Older rows can carry pin names too: `migrations/0003_v0_4_0_data.py:263` named child-wiki Locations from detail pins'
 names, and `:313-315` named Locations from non-private pins' names. Nothing records which rows these are.
 
-What that reaches today: `WikiManager.get_or_create_for_location` adopts `official_name` as a new wiki's name under the
-automatic write source (`models/wiki/queryset.py:119`), and `services/wiki/concealment.py:108` shows it to a concealed
-viewer as the name a zero-contribution wiki would have. `update_location_name_from_external_sources`
-(`services/locations/naming.py`) overwrites the seed only when a provider offers a candidate; with none, the typed text stays.
+What that reaches today:
 
-What it blocks: a readable Location slug minted from `official_name`. A slug is a URL, kept in history, logs and
-referrers, and it would never be re-minted. The URL redirects that work needed shipped without it (FEATURES, "Wiki URLs").
+- **The URL.** Both paths create the Location with the name already set, and `PublicDashboardModel.save`
+  (`models/abstract/model.py:172`) mints the slug on insert from `Location._slugify_base()`, which is
+  `official_name or str(uuid)` (`models/location/model.py:285-289`). So the typed text becomes the slug, and every link
+  to the place's wiki is `/location/<that text, slugified>/wiki/`, seen by everyone who can open the wiki and kept in
+  history, logs and referrers. The slug is never re-minted, so a later provider name does not remove it. Only a
+  Location created without a name gets a uuid slug, which is why Hudson River State Hospital's URL is a uuid.
+- **The wiki's name.** `WikiManager.get_or_create_for_location` adopts `official_name` as a new wiki's name under the
+  automatic write source (`models/wiki/queryset.py:119`).
+- **Concealment.** `services/wiki/concealment.py:108` shows it to a concealed viewer as the name a zero-contribution
+  wiki would have.
+
+`update_location_name_from_external_sources` (`services/locations/naming.py`) overwrites `official_name`, never the
+slug, and only when a provider offers a candidate; with none, the typed text stays in both.
+
+It also blocks the readable-slug work. Re-minting uuid slugs from `official_name` would carry the same text, and the
+older rows above, into more URLs. The URL redirects that work needed shipped without it (FEATURES, "Wiki URLs").
 
 Reproduced, not just read: `tests/hypothesis/test_location_official_name_provenance.py` holds strict xfails for both
-paths, each paired with a test showing the request created the Location. Not measured: how many production rows hold
-user text (production was not read), or where Hudson River State Hospital's own `official_name` came from.
+paths: the official name, the wiki's name (add pin), and the wiki URL. Each path is paired with a test showing the
+request created the Location, and the slug mechanism with a test that a name given at creation becomes the slug. Not
+measured: how many production rows hold user text (production was not read), or where Hudson River State Hospital's own
+`official_name` came from.
 
 Directions, none chosen: drop `place_canonical_name` (it only saves a geocoding call) or check it against the linked
 `GooglePlace`; stop falling back to the activity title; record where `official_name` came from and mint slugs only from a
-provider's name, for example where `update_location_name_from_external_sources` writes a resolved provider name.
+provider's name, for example where `update_location_name_from_external_sources` writes a resolved provider name. Slugs
+already minted from typed text stay in their URLs until something re-mints them, and the uuid redirect would only cover
+a Location whose old URL was its uuid.
