@@ -119,7 +119,7 @@
 
             <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
                  {% if active_tab != 'priority' %}hidden{% endif %}
-                 {% if priority_deferred %}hx-get="{% url 'organize.priority.list' %}" hx-trigger="revealed" hx-target="#priority-list-wrap" hx-swap="innerHTML"{% endif %}>
+                 {% if priority_deferred %}hx-get="{% url 'organize.priority.list' %}" hx-trigger="intersect once" hx-target="#priority-list-wrap" hx-swap="innerHTML"{% endif %}>
 
                 <div class="label-header">
                     <div>
@@ -149,12 +149,12 @@
 
     {# LISTS / FILTERS SECTIONS: lazy-loaded via HTMX the first time each tab is shown. #}
     <div class="organize-section-panel" id="panel-lists" role="tabpanel" {% if active_section != 'lists' %}hidden{% endif %}
-         hx-get="{% url 'lists.list' %}?tab=lists" hx-trigger="revealed" hx-swap="innerHTML">
+         hx-get="{% url 'lists.list' %}?tab=lists" hx-trigger="intersect once" hx-swap="innerHTML">
         <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading your lists&hellip;</div>
     </div>
 
     <div class="organize-section-panel" id="panel-filters" role="tabpanel" {% if active_section != 'filters' %}hidden{% endif %}
-         hx-get="{% url 'lists.list' %}?tab=filters" hx-trigger="revealed" hx-swap="innerHTML">
+         hx-get="{% url 'lists.list' %}?tab=filters" hx-trigger="intersect once" hx-swap="innerHTML">
         <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading your filters&hellip;</div>
     </div>
 

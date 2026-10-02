@@ -19853,3 +19853,88 @@ test database: ... Run tests in the test-runner container with bin/run_tests.sh"
 
 Left for Jess: `CLAUDE.local.md` still gives `docker exec urbanlens_development_main_app ... pytest` as the way to
 run tests. It is outside this tree and is not edited here.
+
+## RESOLVED 2026-10-02: Organize's label tabs rendered every card of their kind; they render 100 a page now, and 400 tags paint in 0.3 s instead of 1.0-1.2 s
+
+`id: P66` · `status: fixed` · `resolved: 2026-10-02`
+
+**Fixed 2026-10-02 (merged in `ac139c0bf`). `label.rows` for 400 tags, each with one parent, median of
+5, test client, runner DB, host load average 9-10: 1,225 ms before, 300-328 ms after (the first page of 100).** The
+Organize page with the tags tab active went from 1,028 ms to 593 ms. Both were measured minutes apart with the same
+scratch test, the "before" by putting the base commit's controllers and templates back. At other page sizes the
+first page took 139 ms for 25 cards, 195 ms for 50, 300 ms for 100, 534 ms for 200 and 1,068 ms for all 400 - about
+70 ms a request plus 2.4 ms a card.
+
+**What was wrong.** The active tab, rendered inline by `controllers/organize.py` and by `label.rows` after every
+write, listed every label of its kind. Preparing the card data in Python (2.2 s → 1.2 s) left about 2.4 ms of
+template per card, so the cost still grew with the label count and only a cap could remove it.
+
+**What changed.**
+
+- `services/labels/organize_rows.py` holds the one queryset the page and `label.rows` share, and pages it on
+  the last row's `(order, name, pk)`. A key rather than an offset, because REData's sync adds global tags in the
+  background: a label created or deleted between two page loads neither repeats a row nor skips one. The order
+  gained the pk because an own tag can share a global tag's name and order.
+- A tab renders `ORGANIZE_ROWS_PAGE_SIZE` cards (100, `UL_ORGANIZE_ROWS_PAGE_SIZE`) and a sentinel row,
+  `.organize-rows-more` in `organize_label_rows.html`, that fetches the next page as it scrolls into view. Under
+  100 labels nothing changes. 100 rather than 50 because the ~70 ms fixed cost of a request is then a fifth of it,
+  and at 1280×900 the gallery shows six cards a row, so 100 cards are about four screens before the next page is
+  needed. The list view puts one card in a row, so a page lasts longer there; how much longer was not measured.
+- The sentinel uses `hx-trigger="intersect once"`, not `revealed`. htmx 1.9.11's `isScrolledIntoView` reads
+  `getBoundingClientRect`, and a hidden panel's all-zero rect passes its `top < innerHeight && bottom >= 0` test,
+  so every prewarmed tab would have walked all its pages on page load. It also sets `hx-target="this"`: the panel
+  around it carries `hx-target` for its own deferred load, and htmx inherits it.
+- The filter, the tree view, select-all, and a bulk edit or merge started from Display Order load the rest of
+  the kind in one request (`?all=1`) before acting (`frontend/ts/shared/organize-rows-paging.ts`). They then see
+  every row as before, so select-all selects every label of the kind and "N selected" is the true number. This
+  was chosen over filtering on the server because the filter's chips - "has children" counted among the kind's
+  own cards, a tag's customised name, icon and colour - would need a second implementation in SQL kept in step
+  with `organize-filter-engine.ts`, while loading the rest costs at most what every visit cost before.
+- A write re-renders as many rows as the client had loaded, which it sends in `X-Org-Rows-Loaded` (a count, or
+  `all`): from htmx's `configRequest` for forms aimed at a rows container, and from `postForHtml` for the bulk
+  actions. Without it, deleting a label 150 rows down would drop the user back to the first page.
+- The cross-tab counts a filter shows read "n+" while a tab still has rows to load.
+- Only the tab on screen updates the shared select-all button. Every tab heard every filter pass, so the button
+  showed the media tab's state, which made "Deselect all" unreliable once select-all depended on it.
+- People and media rows no longer compute pin counts they never show, and media rows read the viewer's
+  customizations (the page offered "customize" on a global media label and then never showed the result).
+
+**How it was verified.** `tests/hypothesis/test_organize_rows_paging.py` (page boundaries, a walk equal to the
+unpaged order with name ties, inserts and deletes between page loads, `all=1`, the header, writes, malformed
+cursors, other accounts' labels on every page, global-label actions on later pages, and a hypothesis property
+that pages concatenate to the whole list) and `organize-rows-paging.test.ts` (happy-dom, a stand-in for htmx
+firing htmx 1.9.11's events in its order). Then in Chromium against a throwaway `runserver` on a copy of the test
+database, 251 tags and 131 categories: the first paint held 100 cards and "Loading 151 more…"; scrolling loaded
+200 then 251, in name order, without duplicates; typing "needle" loaded the rest in one request and showed only
+the 251st tag; the categories tab count read 1; select-all selected 251; a bulk delete and a card's own delete
+each sent `X-Org-Rows-Loaded: 200` and left 200 rows with the page where it was; the tree view loaded every row
+and nested a page-three child under its page-one parent; the gallery sentinel spanned the grid.
+
+**What it does not fix.**
+
+- A filter, the tree view or select-all still renders the rest of the kind once: about 1 s at 400 tags, which
+  is what every visit cost before. Filtering on the server would remove it, at the cost described above.
+- The Display Order tab (`_priority_list.html`) still lists every tag, category and status, but it is a much lighter
+  row: 134 ms at 400 tags, before and after.
+- Found while verifying, and older than this fix: P191, every deferred tab loaded twice on page load (fixed the same day).
+
+## RESOLVED 2026-10-02: Organize loaded hidden tabs twice and closed sections at once; each panel now loads once, when shown or prewarmed
+
+`id: P191` · `status: fixed` · `resolved: 2026-10-02`
+
+One load of `/dashboard/organize/?tab=tags` requested the status, media and Display Order panels twice each, and
+the Lists and Filters sections once each although neither was open. Measured on the dev stack, 2026-10-02:
+`status 2, priority 2, media 2, people 1, category 1, lists 1, filters 1`.
+
+htmx 1.9.11's `revealed` trigger checks `getBoundingClientRect()`, and a `hidden` panel's rect is all zeros, so
+every hidden panel counted as revealed and loaded as soon as htmx processed it. The prewarm chain
+(`organize-header.ts`) then loaded each one again. Removing a panel's `hx-trigger` attribute in the chain did not
+help, because htmx had already installed the handler.
+
+The four deferred panels (label rows, Display Order, Lists, Filters) now use `hx-trigger="intersect once"`. An
+IntersectionObserver does not report a hidden element, so a panel waits until it is shown or the chain reaches
+it. The chain also skips a panel whose own request already started, and a panel it loaded cancels its own
+trigger through `htmx:confirm`. After the change, the same load requested each label kind and Display Order once
+and Lists and Filters not at all. Opening the media tab before the chain reached it loaded it once, and Lists
+loaded when its section was opened. Covered by `organize-tab-prewarm.test.ts` and
+`tests/integration/specs/ui/organize-tab-loading.spec.ts`.

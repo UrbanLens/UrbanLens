@@ -57,14 +57,14 @@ class OrganizeStatsRenderInlineTests(TestCase):
         """The whole point: the active tab's rows are already correct, so nothing
         should re-fetch and re-render them."""
         rows_url = reverse("label.rows", kwargs={"label_kind": "tag"})
-        self.assertNotIn(f'hx-get="{rows_url}" hx-trigger="revealed"', self._page())
+        self.assertNotIn(f'hx-get="{rows_url}"', self._page())
 
     def test_an_inactive_tab_still_defers_its_rows(self) -> None:
         """The negative half: removing the stats backfill must not remove tab
         deferral, which is a different and still-worthwhile saving."""
         content = self._page()
         categories_url = reverse("label.rows", kwargs={"label_kind": "category"})
-        self.assertIn(f'hx-get="{categories_url}" hx-trigger="revealed"', content)
+        self.assertIn(f'hx-get="{categories_url}" hx-trigger="intersect once"', content)
         self.assertIn("organize-section-loading", content)
 
     def test_the_rows_endpoint_still_returns_the_real_pin_count(self) -> None:

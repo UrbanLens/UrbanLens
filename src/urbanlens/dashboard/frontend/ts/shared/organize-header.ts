@@ -282,18 +282,38 @@ function isRenderedVisible(el: HTMLElement): boolean {
     return el.offsetParent !== null;
 }
 
+/** Panels whose rows are loading or loaded, by the prewarm chain or by their own trigger. */
+const loadedOrgPanels = new WeakSet<HTMLElement>();
+let orgPanelLoadGuardInstalled = false;
+
+/** A panel loads once: its own trigger is cancelled after the chain loaded it, and the chain skips one it loaded itself. */
+function installOrgPanelLoadGuard(): void {
+    if (orgPanelLoadGuardInstalled) return;
+    orgPanelLoadGuardInstalled = true;
+    document.addEventListener("htmx:confirm", (evt) => {
+        if (evt.target instanceof HTMLElement && evt.target.matches(".organize-panel") && loadedOrgPanels.has(evt.target)) evt.preventDefault();
+    });
+    document.addEventListener("htmx:beforeRequest", (evt) => {
+        if (evt.target instanceof HTMLElement && evt.target.matches(".organize-panel")) loadedOrgPanels.add(evt.target);
+    });
+}
+
 function prewarmOrgPanel(panels: HTMLElement[], index: number): void {
     if (index >= panels.length) return;
     const panel = panels[index];
-    const url = panel?.getAttribute("hx-get");
-    const targetSel = panel?.getAttribute("hx-target");
-    // Cleared before firing, not after: a click on this tab while the prewarm request is in flight must not also fire htmx's own "revealed".
-    panel?.removeAttribute("hx-trigger");
-    panel?.removeAttribute("hx-get");
-    panel?.removeAttribute("hx-target");
-    panel?.removeAttribute("hx-swap");
-
     const advance = () => prewarmOrgPanel(panels, index + 1);
+    if (!panel || loadedOrgPanels.has(panel)) {
+        advance();
+        return;
+    }
+    loadedOrgPanels.add(panel);
+    const url = panel.getAttribute("hx-get");
+    const targetSel = panel.getAttribute("hx-target");
+    panel.removeAttribute("hx-trigger");
+    panel.removeAttribute("hx-get");
+    panel.removeAttribute("hx-target");
+    panel.removeAttribute("hx-swap");
+
     if (!url || !targetSel) {
         advance();
         return;
@@ -311,6 +331,7 @@ function prewarmOrgPanel(panels: HTMLElement[], index: number): void {
 export function installOrgTabPrewarm(): void {
     const panels = Array.from(document.querySelectorAll<HTMLElement>(".organize-panel[hx-get]"));
     if (!panels.length) return;
+    installOrgPanelLoadGuard();
     const activePanel = panels.find((p) => !p.hidden && isRenderedVisible(p));
     const toPrewarm = panels.filter((p) => p !== activePanel);
     if (!toPrewarm.length) return;
