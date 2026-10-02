@@ -417,7 +417,7 @@ class WikiAliasUseView(WikiApiView):
         "POST": frozenset({ApiKeyScope.WIKI_WRITE}),
     }
 
-    @extend_schema(request=None, responses={200: WikiDetailSerializer, 404: ErrorSerializer})
+    @extend_schema(request=None, responses={200: WikiDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str, alias_id: int) -> Response:
         """Promote one alias to the wiki's name and return the updated wiki.
 
@@ -444,8 +444,11 @@ class WikiAliasUseView(WikiApiView):
 
         # Renaming saves the wiki; `wiki` may be a concealed projection.
         target = writable_wiki(wiki)
-        with transaction.atomic():
-            promote_wiki_alias_to_name(target, profile, alias)
+        try:
+            with transaction.atomic():
+                promote_wiki_alias_to_name(target, profile, alias)
+        except WikiAliasNameError as exc:
+            return Response({"error": exc.message}, status=400)
 
         # Built strictly after the save.
         return Response(build_wiki_detail(target, location, profile))

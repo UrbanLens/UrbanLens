@@ -190,6 +190,16 @@ class ExternalWikiAliasUseRouteTests(_WikiFixture):
     def test_a_garbled_body_is_not_a_500(self) -> None:
         self.assertLess(self.send("post", self.url, "[1,").status_code, 500)
 
+    def test_a_blank_alias_left_by_the_old_create_path_cannot_blank_the_wiki(self) -> None:
+        blank = WikiAlias.objects.create(wiki=self.wiki, name="")
+        self.client.force_login(self.owner_user)
+
+        api = self.send("post", reverse("external_api:wikis.aliases.use", args=[self.slug, blank.pk]))
+        dashboard = self.client.post(reverse("location.wiki.alias.use", args=[self.slug, blank.pk]))
+
+        self.assertEqual((api.status_code, dashboard.status_code), (400, 400))
+        self.assertEqual(self._wiki().name, "Old Mill")
+
 
 class ExternalWikiLinksRouteTests(_WikiFixture):
     def setUp(self) -> None:

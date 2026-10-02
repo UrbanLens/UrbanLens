@@ -224,7 +224,7 @@ class LocationAliasView(LoginRequiredMixin, View):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            create_wiki_alias(wiki, profile, name=request.POST.get("name") or "", kind=kind)
+            create_wiki_alias(writable_wiki(wiki), profile, name=request.POST.get("name") or "", kind=kind)
         except WikiAliasExistsError as exc:
             return JsonResponse({"ok": False, "error": exc.message}, status=409)
         except WikiAliasNameError as exc:
@@ -264,7 +264,10 @@ class LocationAliasUseView(LoginRequiredMixin, View):
         # concealment.writable_wiki.
         target = writable_wiki(wiki)
         before_name = target.name
-        edit = promote_wiki_alias_to_name(target, profile, alias)
+        try:
+            edit = promote_wiki_alias_to_name(target, profile, alias)
+        except WikiAliasNameError as exc:
+            return JsonResponse({"ok": False, "error": exc.message}, status=400)
         if edit is not None:
             from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_promote
 

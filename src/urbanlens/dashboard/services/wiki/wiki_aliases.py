@@ -97,8 +97,9 @@ def promote_wiki_alias_to_name(wiki: Wiki, profile: Profile, alias: WikiAlias) -
         The recorded :class:`~urbanlens.dashboard.models.wiki_edit.WikiEdit`, or None when *alias* was already the name and nothing changed.
 
     Raises:
-        WikiEditValidationError: The alias's name is empty only once sanitized - stored aliases are sanitized on save,
-            so only a row written before that rule can be."""
+        WikiAliasNameError: The alias has no name; only one stored before names were checked can be blank."""
+    if not (alias.name or "").strip():
+        raise WikiAliasNameError("That alias has no name to use.")
     outgoing = (wiki.name or "").strip()
     if is_meaningful_name(outgoing):
         WikiAlias.objects.resolve_or_create(wiki, outgoing)

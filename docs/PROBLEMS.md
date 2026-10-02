@@ -647,7 +647,7 @@ lowercase values, `resource_type` as `"district"` against REData's `"building_di
 just `:read`. A read-only key gets 403 on all three and therefore yields zero attachments, however
 correct this code is. The bulk call's 403 is tolerated: aggregation still proceeds on live fetches.
 
-## P29 — No write route is left unnamed by a test; behavioural tests on 137 of them found 42 bugs (fixed)
+## P29 — No write route is left unnamed by a test; behavioural tests on 137 of them found 43 bugs (fixed)
 
 `id: P29` · `status: open` · `updated: 2026-10-02` · supersedes "42 write routes have no test naming them; the 95 highest-risk now have behavioural tests, which found 26 bugs (fixed)" (2026-10-02) and "186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx" (2026-08-13)
 
@@ -727,7 +727,7 @@ write scope); and a malformed body is a 4xx, not a 500 and not a silent wrong wr
 `.remove`, `.reorder`, `.article.preview`, `.layers.reorder`, `.markup`, `.overlays`, `.overlays.corners`,
 `.overlays.edit` and `.stat_vote`.
 
-**2026-10-02, the last 42 (214 tests):** the external API files share the owner/stranger/read-only-key fixture and
+**2026-10-02, the last 42 (215 tests):** the external API files share the owner/stranger/read-only-key fixture and
 the malformed-body sweep in `external_api_helpers.ExternalApiRouteCase`.
 
 - `test_external_share_merge_and_rsvp_write_routes.py` - `external_api:pin-shares.respond`, `pins.bulk.merge`,
@@ -746,7 +746,7 @@ the malformed-body sweep in `external_api_helpers.ExternalApiRouteCase`.
 None of the 42 is dead: every dashboard route has a template or TypeScript caller, and the external routes are the
 published API.
 
-### What they found, 2026-10-02 (the last 42): 16 bugs, all fixed
+### What they found, 2026-10-02 (the last 42): 17 bugs, all fixed
 
 Each was a failing test first; the same tests now pass.
 
@@ -770,6 +770,10 @@ Each was a failing test first; the same tests now pass.
   `kind` was stored, or past ten characters was a 500; and the alias never reached the wiki's history or the undo
   stack, though the dashboard's alias form records both. Both now call `services.wiki.wiki_aliases.create_wiki_alias`,
   and `kind` is a choice. `ExternalWikiAliasesRouteTests`.
+- **A blank alias that path left behind could blank the wiki** through "use this name" (`external_api:wikis.aliases.use`,
+  `location.wiki.alias.use`): an explicit empty name is a legal rename. `promote_wiki_alias_to_name` refuses a blank
+  alias and both routes answer 400. Existing blank aliases were not looked for or removed.
+  `test_a_blank_alias_left_by_the_old_create_path_cannot_blank_the_wiki`.
 - **A community wiki could be renamed to blank** (`external_api:wikis.detail`, and `location.wiki.edit` through the
   same `apply_wiki_edit`): a name `sanitize_name` empties passed, `Wiki.save()` stored `""`, and the history recorded
   the unsanitized text. A name is now checked as it will be stored; an explicit `""` stays possible because undoing a
@@ -887,15 +891,20 @@ unconverted because they already check `isinstance(..., dict)` or are not reacha
   sender's live pin (type, dates, security indicators) when the recipient accepts, so edits the sender made after
   sharing travel with it. The privacy model in `services/sharing/CLAUDE.md` makes the share the consent; whether that
   consent covers later edits is not decided.
-- **The same unbounded-integer 500 on routes that were already named**, not tested here:
-  `serializers_labels_bulk.py:121` (`order`), `serializers_messaging.py:171` and `:173` (`reply_to_id`, `image_ids`),
-  `serializers_messaging.py:99` (`pin_share_id`), `serializers.py` `visit` and `parent_id` (the `IntegerField`s with
-  neither bound, found by grepping `serializers.IntegerField(` without `max_value`), and the two downscale settings.
-  Whether each reaches a query or a column was not checked.
+- **Possibly the same unbounded-integer 500 on routes that were already named**, not tested here. Grepping
+  `external_api/serializers*.py` for a writable `serializers.IntegerField(` with no `max_value` finds
+  `serializers_labels_bulk.py:121` (`order`), `serializers_messaging.py:99`, `:171`, `:173` (`pin_share_id`,
+  `reply_to_id`, `image_ids`), and `serializers.py:952`, `:953`, `:2224`, `:3032` (the two downscale settings, `visit`,
+  `parent_id`). Whether each reaches a query or a column was not checked; the comment `parent_id` on the two routes
+  tested here is a 404, not a 500.
 - **`SavedFilterDetailView.patch` saves the whole row** (`saved_filter.save()`), so a concurrent edit to another field
   is reverted; `PinListDetailView.patch` was fixed for exactly this. Not tested: it needs two interleaved requests.
 - **Concealment is inert** (`concealment_active` returns `False`), so no test here exercises a concealed viewer.
-- The full suite was not run for this batch; the 171 test files that import or reach a changed module were.
+- `SafetyCheckinWikiOptionView.get` (a read route) still parses its coordinates with a bare `float()`; a NaN matches
+  no wiki rather than failing, so it was left.
+- The full suite was not run for this batch. The 171 test files that import or reach a changed module were: 3,683
+  passed and one failed, `test_migration_noop_reverse_guard.py::test_every_noop_reverse_is_reviewed`, on migration
+  `0034_reresolve_fiat_building_places` (P181), which is on `release/v_0_9_0` already and untouched here.
 
 ### The no-5xx sweep, which this complements
 
