@@ -1262,10 +1262,11 @@ panel fan-out - reproducing again, not a new problem.)
 `id: P66` · `status: fixed` · `updated: 2026-10-02` · supersedes "Organize's active label tab still renders its full card list unpaginated; 400 tags now 1.2 s, was 2.2 s"
 
 **Fixed 2026-10-02 on branch `p66-organize-pagination`. `label.rows` for 400 tags, each with one parent, median of
-5, test client, runner DB: 1,015 ms for every card, 306-318 ms for the first page of 100.** The Organize page with
-the tags tab active went from 1,010 ms to 595 ms. The same run at other page sizes: 25 cards 125 ms, 50 184 ms,
-100 318 ms, 200 554 ms, all 400 1,015 ms - about 65 ms a request plus 2.4 ms a card. Host load average was 8-14
-during that run; the pre-change 1,224 ms for `label.rows` was taken at load 19, so compare within the run.
+5, test client, runner DB, host load average 9-10: 1,225 ms before, 300-328 ms after (the first page of 100).** The
+Organize page with the tags tab active went from 1,028 ms to 593 ms. Both were measured minutes apart with the same
+scratch test, the "before" by putting the base commit's controllers and templates back. At other page sizes the
+first page took 139 ms for 25 cards, 195 ms for 50, 300 ms for 100, 534 ms for 200 and 1,068 ms for all 400 - about
+70 ms a request plus 2.4 ms a card.
 
 **What was wrong.** The active tab, rendered inline by `controllers/organize.py` and by `label.rows` after every
 write, listed every label of its kind. Preparing the card data in Python (2.2 s → 1.2 s) left about 2.4 ms of
@@ -1279,8 +1280,9 @@ template per card, so the cost still grew with the label count and only a cap co
   gained the pk because an own tag can share a global tag's name and order.
 - A tab renders `ORGANIZE_ROWS_PAGE_SIZE` cards (100, `UL_ORGANIZE_ROWS_PAGE_SIZE`) and a sentinel row,
   `.organize-rows-more` in `organize_label_rows.html`, that fetches the next page as it scrolls into view. Under
-  100 labels nothing changes. 100 rather than 50 because the ~65 ms fixed cost of a request is then a fifth of it,
-  and 100 cards fill two to three screens of the gallery view and about seven of the list.
+  100 labels nothing changes. 100 rather than 50 because the ~70 ms fixed cost of a request is then a fifth of it,
+  and at 1280×900 the gallery shows six cards a row, so 100 cards are about four screens before the next page is
+  needed. The list view puts one card in a row, so a page lasts longer there; how much longer was not measured.
 - The sentinel uses `hx-trigger="intersect once"`, not `revealed`. htmx 1.9.11's `isScrolledIntoView` reads
   `getBoundingClientRect`, and a hidden panel's all-zero rect passes its `top < innerHeight && bottom >= 0` test,
   so every prewarmed tab would have walked all its pages on page load. It also sets `hx-target="this"`: the panel
@@ -1315,7 +1317,8 @@ and nested a page-three child under its page-one parent; the gallery sentinel sp
 
 - A filter, the tree view or select-all still renders the rest of the kind once: about 1 s at 400 tags, which
   is what every visit cost before. Filtering on the server would remove it, at the cost described above.
-- The Display Order tab (`_priority_list.html`) still lists every tag, category and status. Not measured.
+- The Display Order tab (`_priority_list.html`) still lists every tag, category and status, but it is a much lighter
+  row: 134 ms at 400 tags, before and after.
 - Found while verifying, and older than this fix: P191, every deferred tab loads twice on page load.
 
 ## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows
