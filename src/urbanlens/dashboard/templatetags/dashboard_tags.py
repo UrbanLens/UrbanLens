@@ -10,7 +10,7 @@ from django import template
 from django.utils.html import format_html, format_html_join
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable
+    from collections.abc import Collection, Iterable, Sequence
     import datetime
 
     from django.utils.safestring import SafeString
@@ -329,6 +329,44 @@ def hex_to_rgba(hex_value: str | None, opacity_pct: int | str = 100) -> str:
         alpha = 1.0
     r, g, b = (int(hex_value[i : i + 2], 16) for i in (1, 3, 5))
     return f"rgba({r},{g},{b},{alpha})"
+
+
+#: The two text colours :func:`readable_text_on` chooses between.
+READABLE_LIGHT_TEXT = "#ffffff"
+READABLE_DARK_TEXT = "#111111"
+
+#: The map's filter panel, which saved-filter chips are drawn over.
+_DARK_PANEL_RGB = (14, 16, 22)
+
+
+def _relative_luminance(rgb: Sequence[float]) -> float:
+    """WCAG 2 relative luminance of an sRGB colour given in 0-255 channels."""
+
+    def channel(value: float) -> float:
+        c = value / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = rgb
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+@register.filter
+def readable_text_on(hex_value: str | None, opacity_pct: int | str = 100) -> str:
+    """The text colour that reads best on a ``#RRGGBB`` chip tinted at ``opacity_pct`` over the dark filter panel.
+
+    Usage: style="background:{{ filter.color|hex_to_rgba:filter.opacity }};color:{{ filter.color|readable_text_on:filter.opacity }}"
+
+    Returns:
+        :data:`READABLE_LIGHT_TEXT` or :data:`READABLE_DARK_TEXT`, whichever contrasts more with the composited colour,
+        or ``""`` if ``hex_value`` isn't a valid hex color.
+    """
+    tint = hex_to_rgba(hex_value, opacity_pct)
+    if not tint:
+        return ""
+    *channels, alpha = (float(part) for part in tint[len("rgba(") : -1].split(","))
+    backdrop = _relative_luminance(tuple(c * alpha + p * (1 - alpha) for c, p in zip(channels, _DARK_PANEL_RGB, strict=True)))
+    light, dark = (_relative_luminance(tuple(int(text[i : i + 2], 16) for i in (1, 3, 5))) for text in (READABLE_LIGHT_TEXT, READABLE_DARK_TEXT))
+    return READABLE_LIGHT_TEXT if (light + 0.05) / (backdrop + 0.05) >= (backdrop + 0.05) / (dark + 0.05) else READABLE_DARK_TEXT
 
 
 @register.filter

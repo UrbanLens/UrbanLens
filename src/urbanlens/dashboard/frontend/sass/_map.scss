@@ -1715,7 +1715,7 @@ img.leaflet-marker-icon.is-selected {
         }
 
         &::placeholder {
-            color: $color-grey-2;
+            color: rgba(255, 255, 255, 0.5);
         }
     }
 
@@ -2325,7 +2325,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.11);
     border-radius: 8px;
-    color: var(--ul-grey-4);
+    color: $color-grey-5;
     padding: 6px 10px;
     font-size: 0.8rem;
     cursor: pointer;
@@ -2336,6 +2336,11 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         font-size: 1rem;
         color: rgba(255, 255, 255, 0.45);
     }
+}
+
+// Tinted with the filter's own colour, so the text colour is chosen for it (readable_text_on) and the icon follows.
+.fp-saved-filter-apply--tinted i {
+    color: inherit;
 }
 
 .fp-saved-filter-apply:hover {

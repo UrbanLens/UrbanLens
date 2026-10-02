@@ -19831,8 +19831,13 @@ The review of that change found the map's filter panel, which is dark in either 
 outranks every `.fp-*` colour, so in the light theme the panel's select, date and search inputs drew
 `rgb(79,79,79)` text on its near-black background, and its popup was light. `#filter-panel` now pins its text,
 inputs and options to the colours they already had in the dark theme, with `color-scheme: dark`; `.fp-select`
-takes the light scheme for its highlight row. The spec's last test checks the panel's controls draw the same in
-both themes.
+takes the light scheme for its highlight row. The spec checks the panel's controls draw the same in both themes.
+
+A second review found two more in the same panel. A saved filter's chip is tinted with the filter's own colour,
+but its name was grey, about 1.3:1 on the e2e account's blue and green filters. The new `readable_text_on`
+template filter picks white or near-black for the tint over the panel (`test_readable_text_on.py`, with a
+property test that the choice is always the more legible one). And the search hint drew in the typed text's
+colour in both themes. It is dimmer now. The spec's last test checks both.
 
 ## RESOLVED 2026-10-02: `docker exec <app> pytest` failed deep in CREATE DATABASE; it now stops at once and names `bin/run_tests.sh`
 
