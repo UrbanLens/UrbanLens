@@ -5,7 +5,7 @@ import { OrgTabManager, type OrgTabManagerConfig } from "./organize-tab-manager"
 export const KIND_ROWS_TARGET: Record<string, string> = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
 export const KIND_TAB_KEY: Record<string, string> = { tag: "tags", category: "categories", status: "status" };
 
-type TabOverrides = Partial<OrgTabManagerConfig> & Pick<OrgTabManagerConfig, "ns" | "nsCapitalized">;
+type TabOverrides = Partial<OrgTabManagerConfig> & Pick<OrgTabManagerConfig, "ns">;
 
 function buildTabConfig(rows: HTMLElement, overrides: TabOverrides): OrgTabManagerConfig {
     const page = document.querySelector<HTMLElement>(".organize-page");
@@ -17,7 +17,6 @@ function buildTabConfig(rows: HTMLElement, overrides: TabOverrides): OrgTabManag
 
     const base: OrgTabManagerConfig = {
         ns: overrides.ns,
-        nsCapitalized: overrides.nsCapitalized,
         rowsId: rows.id,
         cardSelector: `.tag-card[data-${overrides.ns}-id]`,
         idKey: `${overrides.ns}Id`,
@@ -86,7 +85,6 @@ export function organizeTabConfigs(): OrgTabManagerConfig[] {
         configs.push(
             buildTabConfig(tagRows, {
                 ns: "tag",
-                nsCapitalized: "Tag",
                 entitySingular: "Tag",
                 entityPluralLower: "tags",
                 entityPluralCap: "Tags",
@@ -103,7 +101,6 @@ export function organizeTabConfigs(): OrgTabManagerConfig[] {
         configs.push(
             buildTabConfig(catRows, {
                 ns: "cat",
-                nsCapitalized: "Cat",
                 cardSelector: ".tag-card[data-category-id]",
                 idKey: "categoryId",
                 nameKey: "categoryName",
@@ -127,7 +124,6 @@ export function organizeTabConfigs(): OrgTabManagerConfig[] {
         configs.push(
             buildTabConfig(statusRows, {
                 ns: "status",
-                nsCapitalized: "Status",
                 entitySingular: "Status",
                 entityPluralLower: "statuses",
                 entityPluralCap: "Statuses",
@@ -146,7 +142,6 @@ export function organizeTabConfigs(): OrgTabManagerConfig[] {
         configs.push(
             buildNonPriorityTabConfig(peopleRows, {
                 ns: "people",
-                nsCapitalized: "People",
                 entitySingular: "Label",
                 entityPluralLower: "labels",
                 entityPluralCap: "Labels",
@@ -160,7 +155,6 @@ export function organizeTabConfigs(): OrgTabManagerConfig[] {
         configs.push(
             buildNonPriorityTabConfig(mediaRows, {
                 ns: "media",
-                nsCapitalized: "Media",
                 entitySingular: "Media Label",
                 entityPluralLower: "media labels",
                 entityPluralCap: "Media Labels",

@@ -27,7 +27,6 @@ export interface ConvertTarget {
 
 export interface OrgTabManagerConfig {
     ns: OrgNamespace;
-    nsCapitalized: string;
     rowsId: string;
     cardSelector: string;
     idKey: string;
@@ -117,11 +116,6 @@ export class OrgTabManager {
         this.wireMerge();
         this.wireHtmxHooks();
         registerBulkStateUpdater(this.cfg.ns, () => this.updateBulkState());
-        const globalWindow = window as unknown as Record<string, unknown>;
-        if (this.cfg.convertTargets.length > 0) {
-            globalWindow[`_set${this.cfg.nsCapitalized}BulkConvert`] = (target: string) => this.setConvertTarget(target);
-        }
-        globalWindow[`_update${this.cfg.nsCapitalized}BulkState`] = () => this.updateBulkState();
         window._orgBulkEditByIds[this.cfg.ns] = (ids: string[]) => {
             this.selected = new Set(ids.map(String));
             this.syncSelectionUi();
@@ -526,6 +520,16 @@ export class OrgTabManager {
                 (document.getElementById(d.iconNochangeId) as HTMLInputElement).checked = false;
                 this.updateBulkState();
             }
+        });
+        // The swatch itself is applied by the core bundle's picker actions.
+        document.getElementById(d.colorPickerId)?.addEventListener("click", (e) => {
+            if (!(e.target as Element).closest(".color-swatch")) return;
+            (document.getElementById(d.colorNochangeId) as HTMLInputElement).checked = false;
+            this.updateBulkState();
+        });
+        document.getElementById(d.dialogId)?.addEventListener("click", (e) => {
+            const kind = (e.target as Element).closest<HTMLElement>("[data-convert-to]")?.dataset.convertTo;
+            if (kind && this.cfg.convertTargets.length > 0) this.setConvertTarget(kind);
         });
         if (d.orderValueId && d.orderNochangeId) {
             document.getElementById(d.orderValueId)?.addEventListener("input", () => {

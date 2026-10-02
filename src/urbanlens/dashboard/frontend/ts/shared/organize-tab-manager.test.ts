@@ -9,7 +9,6 @@ import { OrgTabManager, type OrgTabManagerConfig } from "./organize-tab-manager"
 
 const CFG: OrgTabManagerConfig = {
     ns: "tag",
-    nsCapitalized: "Tag",
     rowsId: "tag-rows",
     cardSelector: ".tag-card",
     idKey: "tagId",
@@ -58,8 +57,7 @@ const DIALOG_MARKUP = `
         <p class="label-rel-empty-hint">No children selected.</p>
         <div class="label-rel-popup" id="new-tag-popup-parent" hidden>
           <div class="label-rel-suggestions" id="new-tag-suggestions-parent">
-            <button type="button" class="tag-chip label-rel-suggestion label-rel-suggestion--hidden" data-id="5" data-kind="tag" data-name="existing parent"
-                    onclick="LabelRelPicker.select('new-tag','parent',this)">Existing Parent</button>
+            <button type="button" class="tag-chip label-rel-suggestion label-rel-suggestion--hidden" data-id="5" data-kind="tag" data-name="existing parent">Existing Parent</button>
           </div>
         </div>
         <div class="label-rel-popup" id="new-tag-popup-child" hidden>
@@ -97,7 +95,7 @@ describe("OrgTabManager onCreate", () => {
         const container = document.getElementById("new-tag-suggestions-parent")!;
         container.insertAdjacentHTML(
             "beforeend",
-            '<button type="button" class="tag-chip label-rel-suggestion" data-id="9" data-kind="tag" data-name="brand new" onclick="LabelRelPicker.select(\'new-tag\',\'parent\',this)">Brand New</button>',
+            '<button type="button" class="tag-chip label-rel-suggestion" data-id="9" data-kind="tag" data-name="brand new">Brand New</button>',
         );
 
         const manager = new OrgTabManager(CFG) as unknown as { onCreate: () => void };
@@ -142,5 +140,59 @@ describe("OrgTabManager merge with edits", () => {
         } finally {
             globalThis.fetch = realFetch;
         }
+    });
+});
+
+describe("OrgTabManager bulk edit dialog", () => {
+    const BULK_MARKUP = `
+      <dialog id="tag-bulk-edit-dialog">
+        <div class="kind-toggle">
+          <button type="button" class="kind-toggle-option" id="tag-bulk-convert-to-category" data-convert-to="category"><span id="to-category-label">Category</span></button>
+          <button type="button" class="kind-toggle-option" id="tag-bulk-convert-to-status" data-convert-to="status">Status</button>
+        </div>
+        <p id="tag-bulk-convert-hint" hidden></p>
+        <input type="checkbox" id="tag-bulk-icon-nochange" checked>
+        <div class="color-picker" id="tag-bulk-color-picker" data-color-value-id="tag-bulk-color-value">
+          <input type="hidden" id="tag-bulk-color-value">
+          <button type="button" class="color-swatch" id="red" data-color="#ff0000"></button>
+        </div>
+        <input type="checkbox" id="tag-bulk-color-nochange" checked>
+        <button type="button" id="tag-bulk-edit-confirm">Apply Changes</button>
+      </dialog>`;
+    const convertTargets: OrgTabManagerConfig["convertTargets"] = [
+        { kind: "category", label: "Categories", endpoint: "/to-category" },
+        { kind: "status", label: "Statuses", endpoint: "/to-status" },
+    ];
+
+    function wired(cfg: OrgTabManagerConfig): void {
+        document.body.innerHTML = BULK_MARKUP;
+        (new OrgTabManager(cfg) as unknown as { wireBulkEdit: () => void }).wireBulkEdit();
+    }
+
+    test("a kind button converts to that kind, and pressing it again stops", () => {
+        wired({ ...CFG, convertTargets, bulkEditDialog: { ...CFG.bulkEditDialog, convertHintId: "tag-bulk-convert-hint" } });
+        const toCategory = document.getElementById("tag-bulk-convert-to-category")!;
+        const confirm = document.getElementById("tag-bulk-edit-confirm")!;
+
+        document.getElementById("to-category-label")!.click();
+        expect(toCategory.classList.contains("is-active")).toBe(true);
+        expect(confirm.textContent).toContain("Convert to Categories");
+        expect(document.getElementById("tag-bulk-convert-hint")!.hidden).toBe(false);
+
+        toCategory.click();
+        expect(toCategory.classList.contains("is-active")).toBe(false);
+        expect(confirm.textContent).toContain("Apply Changes");
+    });
+
+    test("a tab with nothing to convert to ignores the kind buttons", () => {
+        wired(CFG);
+        document.getElementById("tag-bulk-convert-to-category")!.click();
+        expect(document.getElementById("tag-bulk-convert-to-category")!.classList.contains("is-active")).toBe(false);
+    });
+
+    test("picking a colour means the colour is changing", () => {
+        wired(CFG);
+        document.getElementById("red")!.click();
+        expect((document.getElementById("tag-bulk-color-nochange") as HTMLInputElement).checked).toBe(false);
     });
 });

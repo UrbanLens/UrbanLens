@@ -2,15 +2,15 @@
  * A picker whose candidates live in a shared <template> fills its popup the first time the popup opens.
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
-import { LabelRelPicker } from "./label-rel-picker";
+import { installGlobalLabelRelPicker, LabelRelPicker } from "./label-rel-picker";
 
 const CANDIDATES = `
   <template id="label-rel-candidates-priority">
-    <button type="button" class="tag-chip label-rel-suggestion" data-id="5" data-kind="tag" data-name="existing parent" onclick="LabelRelPicker.pick(this)">Existing Parent</button>
-    <button type="button" class="tag-chip label-rel-suggestion" data-id="6" data-kind="category" data-name="hospital" onclick="LabelRelPicker.pick(this)">Hospital</button>
-    <button type="button" class="tag-chip label-rel-suggestion" data-id="9" data-kind="tag" data-name="brand new" onclick="LabelRelPicker.pick(this)">Brand New</button>
+    <button type="button" class="tag-chip label-rel-suggestion" data-id="5" data-kind="tag" data-name="existing parent">Existing Parent</button>
+    <button type="button" class="tag-chip label-rel-suggestion" data-id="6" data-kind="category" data-name="hospital">Hospital</button>
+    <button type="button" class="tag-chip label-rel-suggestion" data-id="9" data-kind="tag" data-name="brand new">Brand New</button>
   </template>`;
 
 function picker(instanceId: string, mode: string, selectedParent: string): string {
@@ -103,5 +103,76 @@ describe("LabelRelPicker shared candidates", () => {
         expect(LabelRelPicker.getSelectedIds("tag-bulk", "child")).toEqual([6]);
         expect(LabelRelPicker.getSelectedIds("new-tag", "child")).toEqual([]);
         expect(hospital.classList.contains("label-rel-suggestion--hidden")).toBe(true);
+    });
+});
+
+describe("LabelRelPicker controls in markup", () => {
+    const CONTROLS = `
+  <div class="label-rel-picker" data-picker-id="edit-7" data-mode="replace">
+    <div class="label-rel-selected-group">
+      <div class="label-rel-add-dropdown">
+        <button type="button" class="label-rel-add-btn" id="add-parent" data-rel-type="parent"><i id="add-icon">add</i> Add</button>
+        <div class="label-rel-popup" id="edit-7-popup-parent" data-rel-type="parent" hidden>
+          <div class="label-rel-tabs"><button type="button" class="label-rel-tab" id="tab-category" data-kind="category">Categories</button><button type="button" class="label-rel-tab active" id="tab-all" data-kind="">All</button></div>
+          <input type="text" class="form-input label-rel-search" id="search-parent">
+          <div class="label-rel-suggestions" id="edit-7-suggestions-parent" data-rel-type="parent" data-active-tab="">
+            <button type="button" class="tag-chip label-rel-suggestion" id="hospital" data-id="6" data-kind="category" data-name="hospital"><span id="hospital-name">Hospital</span></button>
+            <button type="button" class="tag-chip label-rel-suggestion" id="ruin" data-id="8" data-kind="tag" data-name="ruin">Ruin</button>
+          </div>
+        </div>
+      </div>
+      <div class="label-rel-selected-chips" id="edit-7-sel-parent">
+        <span class="label-rel-chip" data-id="5"><span class="tag-chip">Existing<input type="hidden" name="parent_ids" value="5"></span><button type="button" class="tag-chip-remove" id="remove-5">&times;</button></span>
+      </div>
+      <p class="label-rel-empty-hint" hidden>No parents selected.</p>
+    </div>
+    <div class="label-rel-selected-group">
+      <div class="label-rel-selected-chips" id="edit-7-sel-child"></div>
+      <p class="label-rel-empty-hint">No children selected.</p>
+    </div>
+  </div>`;
+
+    const click = (id: string) => document.getElementById(id)!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const popup = () => document.getElementById("edit-7-popup-parent")!;
+    const shown = () =>
+        Array.from(document.querySelectorAll<HTMLElement>("#edit-7-suggestions-parent .label-rel-suggestion"))
+            .filter((b) => b.style.display !== "none")
+            .map((b) => b.id);
+
+    beforeAll(() => {
+        installGlobalLabelRelPicker();
+    });
+
+    beforeEach(() => {
+        document.body.innerHTML = CONTROLS;
+    });
+
+    test("Add opens its direction's popup and closes it again", () => {
+        click("add-icon");
+        expect(popup().hidden).toBe(false);
+        click("add-parent");
+        expect(popup().hidden).toBe(true);
+    });
+
+    test("a tab and the search narrow the suggestions", () => {
+        click("add-parent");
+        click("tab-category");
+        expect(shown()).toEqual(["hospital"]);
+        click("tab-all");
+        const search = document.getElementById("search-parent") as HTMLInputElement;
+        search.value = "RU";
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(shown()).toEqual(["ruin"]);
+    });
+
+    test("a suggestion picks, and a chip's remove button removes it, whoever built the chip", () => {
+        click("add-parent");
+        click("hospital-name");
+        expect(LabelRelPicker.getSelectedIds("edit-7", "parent")).toEqual([5, 6]);
+        click("remove-5");
+        expect(LabelRelPicker.getSelectedIds("edit-7", "parent")).toEqual([6]);
+        document.querySelector<HTMLElement>('#edit-7-sel-parent .label-rel-chip[data-id="6"] .tag-chip-remove')!.click();
+        expect(LabelRelPicker.getSelectedIds("edit-7", "parent")).toEqual([]);
+        expect(document.getElementById("hospital")!.classList.contains("label-rel-suggestion--hidden")).toBe(false);
     });
 });
