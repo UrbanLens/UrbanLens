@@ -579,10 +579,14 @@ Neither path waits for the render. Waiting on a Celery result inside a web
 request would pin one worker per tile, twenty tiles per gallery page, for as
 long as `media-worker` is behind. The tile's `<img>` retries a 503 instead
 (`urbanlensRetryPendingImage` in `frontend/static/js/media-thumb-fallback.js`),
-2s later, then 4s, and so on, with a cache-busting `_r=` because the browser
-has already negatively cached the first URL: twice for a preview, six times for
-a copy, then it settles on its icon tile. A tile that runs out of retries still
-fills in on the next page load. A map tile is retried by the own-tile layer
+with a cache-busting `_r=` because the browser has already negatively cached
+the first URL: a preview at 2s and 4s; a copy nine times over about three
+minutes, further apart as it goes, since copies are made one at a time
+site-wide and a page's later tiles wait their turn. Each failure is retried
+once however many handlers report it, and the `<img>` is hidden
+(`data-retry-pending`) until it loads, so a waiting grid does not redraw a
+broken-image glyph on every attempt. Then it settles on its icon tile. A tile
+that runs out of retries still fills in on the next page load. A map tile is retried by the own-tile layer
 (`map-layers.templateTileLayer`, `own-tiles.ts`), which honours `Retry-After`.
 
 ## Files nothing points at any more

@@ -16,20 +16,30 @@ window.urbanlensRetryPendingImage = function (img) {
     var isCopy = src.indexOf('/media-copy/') !== -1;
     var isPreview = isCopy || /[?&]preview=1(&|$)/.test(src);
     var retries = isPreview || img.hasAttribute('data-retry-busy');
+    // Every handler that sees one failure asks; it is retried once.
+    if (img.dataset.retryOf === src) return true;
+    // A copy waits its turn behind every other one queued site-wide, so a page's later tiles can take minutes.
+    var delays = isCopy ? [4000, 6000, 10000, 15000, 20000, 25000, 30000, 30000, 30000] : [2000, 4000];
     // The count belongs to one address: an element reused for another image starts again.
     var base = src.replace(/([?&])_r=\d+$/, '');
     var attempt = img.dataset.previewRetryFor === base ? parseInt(img.dataset.previewRetry || '0', 10) : 0;
-    // A copy's first download runs on a worker for up to 90 s (DOWNLOAD_TIMEOUT_SECONDS); ten retries wait 110 s.
-    if (!retries || attempt >= (isCopy ? 10 : 2)) return false;
+    if (!retries || attempt >= delays.length) {
+        img.removeAttribute('data-retry-pending');
+        return false;
+    }
     img.dataset.previewRetry = String(attempt + 1);
     img.dataset.previewRetryFor = base;
+    img.dataset.retryOf = src;
+    // Hidden until it loads: a broken-image glyph redrawn on every attempt is what makes a waiting grid flicker.
+    img.setAttribute('data-retry-pending', '');
     // A new query param, not the same URL again: the browser has already negatively cached this exact one.
     var retryUrl = src.replace(/([?&])_r=\d+/, '$1_r=' + (attempt + 1));
     if (retryUrl === src) retryUrl = src + (src.indexOf('?') === -1 ? '?' : '&') + '_r=' + (attempt + 1);
     setTimeout(function () {
+        if (img.dataset.retryOf === src) delete img.dataset.retryOf;
         // Something else put another image here meanwhile, so this retry is no longer wanted.
         if (img.getAttribute('src') === src) img.setAttribute('src', retryUrl);
-    }, 2000 * (attempt + 1));
+    }, delays[attempt]);
     return true;
 };
 
@@ -61,5 +71,7 @@ document.addEventListener('error', function (event) {
 // For thumbnails that fade in once decoded rather than pop in over their tile.
 document.addEventListener('load', function (event) {
     var img = event.target;
-    if (img instanceof HTMLImageElement && img.hasAttribute('data-fade-in')) img.classList.add('is-loaded');
+    if (!(img instanceof HTMLImageElement)) return;
+    img.removeAttribute('data-retry-pending');
+    if (img.hasAttribute('data-fade-in')) img.classList.add('is-loaded');
 }, true);

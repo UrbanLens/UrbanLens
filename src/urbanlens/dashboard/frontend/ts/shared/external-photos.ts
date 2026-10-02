@@ -58,8 +58,9 @@ export function renderExternalPhotoTile(photo: ExternalPhoto): HTMLLIElement {
     const img = li.querySelector("img");
     if (img) {
         img.dataset.guarded = "1";
+        img.dataset.thumbFallback = "broken_image";
+        img.dataset.thumbFallbackClass = "gallery-thumb gallery-thumb--placeholder";
         img.alt = photo.caption || photo.sourceName || "Photo";
-        img.addEventListener("error", () => window.urbanlensMediaThumbFallback?.(img, "broken_image", "gallery-thumb gallery-thumb--placeholder"));
         img.src = photo.thumbUrl;
     }
     const ribbon = li.querySelector<HTMLElement>(".gallery-child-ribbon");
