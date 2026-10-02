@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import {
+    configureToastr,
     type FetchInit,
     installCsrfToken,
     installProfilePreviewGuard,
@@ -8,6 +9,7 @@ import {
     installValidationReports,
     responseErrorMessage,
     showServerMessages,
+    showTriggeredToast,
     SESSION_ENDED_MESSAGE,
     wrapFetch,
 } from "./site-runtime";
@@ -108,6 +110,17 @@ describe("wrapFetch", () => {
     });
 });
 
+describe("configureToastr", () => {
+    test("keeps what toastr hands back, which is the toast a caller adds a control to", () => {
+        const drawn = [document.createElement("div")];
+        window.toastr = { success: () => drawn, error: () => drawn, warning: () => drawn, info: () => drawn, clear: () => undefined };
+
+        configureToastr();
+
+        expect(window.toastr.success("Saved.")).toBe(drawn);
+    });
+});
+
 describe("responseErrorMessage", () => {
     test("a short plain-text body is shown as sent", () => {
         expect(responseErrorMessage(400, "  That name is taken.  ")).toBe("That name is taken.");
@@ -128,6 +141,48 @@ describe("server messages", () => {
             ["success", "Saved <b>"],
             ["info", "Odd"],
         ]);
+    });
+});
+
+describe("HX-Trigger toasts", () => {
+    function drawingToastr(): HTMLElement {
+        const drawn = document.createElement("div");
+        drawn.innerHTML = '<div class="toast-message"></div>';
+        const draw = (message: string): HTMLElement[] => {
+            drawn.querySelector(".toast-message")!.textContent = message;
+            return [drawn];
+        };
+        window.toastr = { success: draw, error: draw, warning: draw, info: draw, clear: () => undefined };
+        return drawn;
+    }
+
+    test("a link the server sends follows the message as a real link, and the message stays text", () => {
+        const drawn = drawingToastr();
+
+        showTriggeredToast({ level: "success", message: "Pin <b>created</b>.", link: { label: "View pin", href: "/map/pin/old-mill/" } });
+
+        const message = drawn.querySelector(".toast-message");
+        const link = message?.querySelector<HTMLAnchorElement>("a.toast-undo-btn");
+        expect(link?.textContent).toBe("View pin");
+        expect(link?.getAttribute("href")).toBe("/map/pin/old-mill/");
+        expect(message?.querySelector("b")).toBeNull();
+        expect(message?.textContent).toBe("Pin <b>created</b>. View pin");
+    });
+
+    test("a link that leaves this site, or is not a page, is left off and the message still shows", () => {
+        const drawn = drawingToastr();
+
+        for (const href of ["https://elsewhere.example/pin/", "//elsewhere.example/pin/", "javascript:alert(1)"]) {
+            showTriggeredToast({ level: "success", message: "Pin created.", link: { label: "View pin", href } });
+            expect(drawn.querySelector("a")).toBeNull();
+            expect(drawn.querySelector(".toast-message")?.textContent).toBe("Pin created.");
+        }
+    });
+
+    test("a toast without a link is shown at its level", () => {
+        showTriggeredToast({ level: "error", message: "Something went wrong." });
+        showTriggeredToast(undefined);
+        expect(shown).toEqual([["error", "Something went wrong."]]);
     });
 });
 

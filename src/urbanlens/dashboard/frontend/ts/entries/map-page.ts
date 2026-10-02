@@ -6,8 +6,8 @@
 import type { Map as MaplibreMap } from "maplibre-gl";
 import type { HtmxApi } from "../types/globals";
 import { deletePinCascade } from "../shared/confirm-dialog";
-import { confirmAction } from "../shared/dialogs";
-import { fetchJson, fetchResponse, fetchText, sendJson, type FetchJsonOptions } from "../shared/fetch-json";
+import { confirmAction, toastWithAction } from "../shared/dialogs";
+import { NetworkError, fetchJson, fetchResponse, fetchText, sendJson, type FetchJsonOptions } from "../shared/fetch-json";
 import { createPinClusterGroup, isAdditiveClick as sharedIsAdditiveClick } from "../shared/map-clusters";
 import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared/pin-cache";
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
@@ -3492,8 +3492,7 @@ function _showUndoDeleteToast(count: number, descendantCount: number, token: str
     if (descendantCount > 0) {
         label += ` (+${descendantCount} child pin${descendantCount === 1 ? "" : "s"})`;
     }
-    const msg = `${label} deleted. ` + `<button type="button" class="toast-undo-btn" data-map-action="undo-bulk-delete" data-undo-token="${escHtml(token)}">Undo</button>`;
-    toastr.success(msg, "", { timeOut: 10000, extendedTimeOut: 4000, closeButton: true, tapToDismiss: false });
+    toastWithAction("success", `${label} deleted.`, { label: "Undo", data: { mapAction: "undo-bulk-delete", undoToken: token } }, { timeOut: 10000, extendedTimeOut: 4000, closeButton: true, tapToDismiss: false });
 }
 
 function _undoBulkDelete(token: string, btn: HTMLButtonElement | null): void {
@@ -3504,8 +3503,8 @@ function _undoBulkDelete(token: string, btn: HTMLButtonElement | null): void {
             toastr.success("Pins restored.");
             _refreshAllPins();
         })
-        .catch(function () {
-            toastr.error("Could not undo - the delete may have expired.");
+        .catch(function (err) {
+            toastr.error(err instanceof NetworkError ? "Couldn't reach the server, so the pins are still deleted. Try Undo again." : "Could not undo - the delete may have expired.");
             if (btn) btn.disabled = false;
         });
 }
