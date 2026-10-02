@@ -503,6 +503,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "key": media_item_key(item.url),
                 "is_relevant": relevance.get(media_item_key(item.url)),
                 "local_url": local_images[item.url].file_url if item.url in local_images else None,
+                "local_thumb_url": local_images[item.url].thumb_url if item.url in local_images else None,
                 # TIFFs, scanned PDFs and HEICs reach the gallery routinely and
                 # none of them render in an <img> - see services.media.previews.
                 "thumb_url": picture.thumb,

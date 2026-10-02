@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.http.response import HttpResponseBase
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -496,7 +497,7 @@ class GalleryPageTests(TestCase):
         LocationCache.set(self.pin.location, "stub_gallery", {}, query_key="")
         self.client.force_login(self.pin.profile.user)
 
-    def test_tiles_and_the_lightbox_use_copies(self) -> None:
+    def _gallery(self) -> HttpResponseBase:
         panel = MagicMock(spec=GalleryMediaSource)
         panel.required_feature = None
         panel.cache_source = "stub_gallery"
@@ -505,7 +506,31 @@ class GalleryPageTests(TestCase):
         panel.media_items.return_value = [_item("https://provider.test/full.jpg", "https://provider.test/thumb.jpg")]
 
         with patch("urbanlens.dashboard.services.pins.external_data.get_panel_source", return_value=panel):
-            response = self.client.get(reverse("pin.media", args=[self.pin.slug, "stub_gallery"]))
+            return self.client.get(reverse("pin.media", args=[self.pin.slug, "stub_gallery"]))
+
+    def test_a_provider_photo_kept_here_shows_its_thumbnail_and_opens_the_kept_original(self) -> None:
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.models.images.relevance import media_item_key
+
+        kept = Image.objects.create(
+            image=SimpleUploadedFile("kept.jpg", b"bytes", content_type="image/jpeg"),
+            thumbnail=SimpleUploadedFile("kept_thumb.webp", b"thumb", content_type="image/webp"),
+            location=self.pin.location,
+            profile=self.pin.profile,
+            media_source_key="stub_gallery",
+            media_item_key=media_item_key("https://provider.test/full.jpg"),
+        )
+
+        response = self._gallery()
+
+        self.assertContains(response, f'<img class="media-item-thumb" src="{kept.thumbnail.url}"')
+        self.assertContains(response, f'data-media-thumb="{kept.thumbnail.url}"')
+        self.assertContains(response, f'data-media-url="{kept.image.url}"')
+
+    def test_tiles_and_the_lightbox_use_copies(self) -> None:
+        response = self._gallery()
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "provider.test/thumb.jpg")

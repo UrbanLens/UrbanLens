@@ -14,7 +14,7 @@
      data-media-key="{{ entry.key }}"
      data-media-url="{{ entry.local_url|default:item.url }}"
      {% if not entry.local_url and entry.view_url %}data-media-view-url="{{ entry.view_url }}"{% endif %}
-     data-media-thumb="{% firstof entry.local_url entry.thumb_url %}"
+     data-media-thumb="{% firstof entry.local_thumb_url entry.thumb_url %}"
      data-media-page-url="{{ item.page_url|default:item.url }}"
      data-media-remote-url="{{ item.url }}"
      data-media-caption="{{ item.caption }}"
@@ -39,8 +39,8 @@
         <span class="media-item-source">{{ item.source }}</span>
         {% if entry.processing %}
         {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="media-item-thumb media-item-thumb-fallback" failed=entry.processing_failed %}
-        {% elif entry.local_url or entry.thumb_url %}
-        <img class="media-item-thumb" src="{% firstof entry.local_url entry.thumb_url %}" alt="{{ item.caption }}" loading="lazy"
+        {% elif entry.local_thumb_url or entry.thumb_url %}
+        <img class="media-item-thumb" src="{% firstof entry.local_thumb_url entry.thumb_url %}" alt="{{ item.caption }}" loading="lazy"
              data-thumb-fallback="broken_image">
         {% else %}
         <span class="media-item-thumb media-item-thumb-fallback" aria-hidden="true">

@@ -177,7 +177,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
             if mark is False:
                 continue
             local_url = local[item.url].file_url if item.url in local else ""
-            thumb = local_url or remote_thumb
+            thumb = (local[item.url].thumb_url if item.url in local else "") or remote_thumb
             if not thumb:
                 continue
             candidates.append(

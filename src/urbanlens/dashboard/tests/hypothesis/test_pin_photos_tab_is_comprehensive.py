@@ -171,6 +171,23 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
 
         self.assertEqual([entry["url"] for entry in external], [_wikimedia_item(2)["url"]])
 
+    def test_a_public_photo_kept_here_shows_its_thumbnail_and_opens_the_kept_original(self) -> None:
+        item = _wikimedia_item(1)
+        self._cache("wikimedia", [item])
+        kept = self._photo(
+            "kept.png",
+            pin=None,
+            profile=baker.make(User).profile,
+            location=self.pin.location,
+            media_source_key="wikimedia",
+            media_item_key=media_item_key(item["url"]),
+            thumbnail=SimpleUploadedFile("kept_thumb.webp", _PNG_BYTES, content_type="image/webp"),
+        )
+
+        (entry,) = self._all("external")
+
+        self.assertEqual((entry["thumb_url"], entry["url"]), (kept.thumbnail.url, kept.image.url))
+
     def test_items_marked_not_relevant_and_items_with_no_image_are_left_out(self) -> None:
         rejected = _wikimedia_item(1)
         text_only = _wikimedia_item(2, url="https://example.org/record/2", thumb_url="")
