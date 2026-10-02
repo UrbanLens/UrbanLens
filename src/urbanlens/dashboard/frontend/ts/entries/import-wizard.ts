@@ -701,11 +701,28 @@ function initImportWizard(dialog: HTMLElement): void {
             await followImport(job, ctrl.signal);
         } catch (err) {
             if (isAbort(err)) return;
-            importing = false;
-            closeButton.disabled = false;
+            if (importJob) {
+                // It started, and may still finish.
+                importJob = null;
+                showImportStopped("Lost track of the import");
+            } else {
+                // Nothing was imported, so the selection is still the one to send.
+                importing = false;
+                closeButton.disabled = false;
+                showStep("preview", 1);
+            }
             toastr.error(errorMessage(err, "Import failed"), "Import failed");
         }
     });
+
+    /** What the import got through stays on screen, under a heading that says it is no longer running. */
+    function showImportStopped(heading: string): void {
+        importing = false;
+        closeButton.disabled = false;
+        $("iw-progress-header").textContent = heading;
+        $("iw-title").textContent = heading;
+        $("iw-btn-done").hidden = false;
+    }
 
     async function followImport(job: ImportJob, signal: AbortSignal): Promise<void> {
         let shown = 0;
@@ -821,8 +838,7 @@ function initImportWizard(dialog: HTMLElement): void {
                 break;
 
             case "error":
-                importing = false;
-                closeButton.disabled = false;
+                showImportStopped("Import stopped");
                 toastr.error(evt.message ?? "", "Import error");
                 break;
         }
