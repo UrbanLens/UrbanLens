@@ -7,9 +7,12 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import BadRequest
+from rest_framework import parsers
 from rest_framework.exceptions import ParseError
 
 if TYPE_CHECKING:
+    from typing import IO
+
     from django.http import HttpRequest
     from rest_framework.request import Request
 
@@ -80,3 +83,26 @@ def drf_data_object(request: Request) -> Mapping[str, Any]:
     if not isinstance(data, Mapping):
         raise ParseError("The request body must be a JSON object.")
     return data
+
+
+class JSONParser(parsers.JSONParser):
+    """DRF's JSON parser, answering a body nested past the recursion limit with a 400 rather than a 500."""
+
+    def parse(self, stream: IO[bytes], media_type: str | None = None, parser_context: Mapping[str, Any] | None = None) -> Any:
+        """Parse *stream* as JSON.
+
+        Args:
+            stream: The request body.
+            media_type: The request's media type.
+            parser_context: DRF's parser context.
+
+        Returns:
+            The decoded JSON value.
+
+        Raises:
+            ParseError: The body is not JSON, or nests too deeply to decode.
+        """
+        try:
+            return super().parse(stream, media_type, parser_context)
+        except RecursionError as exc:
+            raise ParseError("JSON parse error - the body is nested too deeply.") from exc
