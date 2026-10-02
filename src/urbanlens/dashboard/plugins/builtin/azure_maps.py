@@ -27,6 +27,12 @@ class AzureMapsPanelSource(LocationCachePanelSource):
     # through the shared INFO contract for the same reason as Nominatim's.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
+    def gate(self, pin: Pin) -> bool:
+        """Requires a subscription key, without which every call is refused before it is made."""
+        from urbanlens.UrbanLens.settings.app import settings
+
+        return super().gate(pin) and bool(settings.azure_maps_subscription_key)
+
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the nearest POI, if any.
         An empty result is cached explicitly when neither call finds anything, so the panel degrades to quietly absent rather than polling forever."""

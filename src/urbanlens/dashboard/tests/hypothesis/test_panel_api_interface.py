@@ -677,6 +677,18 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
         self.assertEqual(hrefs["Wikipedia"], "https://de.wikipedia.org/wiki/Alte Mühle")
         self.assertEqual(hrefs["Wikidata"], "https://www.wikidata.org/wiki/Q42")
 
+    def test_azure_maps_is_not_fetched_without_a_subscription_key(self) -> None:
+        """Without one, every fetch raised, logged a traceback and suppressed the panel for five minutes."""
+        from unittest import mock
+
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        source = AzureMapsPanelSource()
+        with mock.patch.object(app_settings, "azure_maps_subscription_key", None):
+            self.assertFalse(source.gate(self.pin))
+        with mock.patch.object(app_settings, "azure_maps_subscription_key", "key"):
+            self.assertTrue(source.gate(self.pin))
+
     def test_azure_maps_coordinate_only_result_yields_none(self) -> None:
         """Neither an address nor a POI means the payload is the input echoed back."""
         source = AzureMapsPanelSource()
