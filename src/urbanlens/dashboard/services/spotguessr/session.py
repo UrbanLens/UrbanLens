@@ -415,13 +415,15 @@ def begin_session(session: GameSession, host: Profile) -> GameRound | None:
         NotSessionHostForStartError: if the caller isn't the host.
         SessionAlreadyStartedError: if the session isn't still in its lobby.
     """
-    if session.host_profile_id != host.pk:
-        raise NotSessionHostForStartError(f"Profile {host.pk} is not host {session.host_profile_id} of session {session.pk}.")
-    if session.status != GameSessionStatus.LOBBY:
-        raise SessionAlreadyStartedError(f"Session {session.pk} is {session.status}, not LOBBY.")
-
-    session.status = GameSessionStatus.ACTIVE
-    session.save(update_fields=["status", "updated"])
+    with transaction.atomic():
+        locked = GameSession.objects.select_for_update().get(pk=session.pk)
+        if locked.host_profile_id != host.pk:
+            raise NotSessionHostForStartError(f"Profile {host.pk} is not host {locked.host_profile_id} of session {session.pk}.")
+        if locked.status != GameSessionStatus.LOBBY:
+            raise SessionAlreadyStartedError(f"Session {session.pk} is {locked.status}, not LOBBY.")
+        locked.status = GameSessionStatus.ACTIVE
+        locked.save(update_fields=["status", "updated"])
+    session.status, session.host_profile_id = locked.status, locked.host_profile_id
     round_ = get_or_create_round(session)
     if round_ is not None:
         realtime.broadcast(session.pk, "session.started", {"round": serializers.serialize_round(round_)})
@@ -666,6 +668,8 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     round_completed_now = False
     with transaction.atomic():
         locked_round = GameRound.objects.select_for_update().get(pk=round_.pk)
+        if not GameSessionParticipant.objects.joined().filter(session_id=round_.session_id, profile=profile).exists():
+            raise ParticipantNotJoinedError(f"Profile {profile.pk} left session {round_.session_id} before the guess was recorded.")
         try:
             guess = Guess.objects.create(
                 round=locked_round,

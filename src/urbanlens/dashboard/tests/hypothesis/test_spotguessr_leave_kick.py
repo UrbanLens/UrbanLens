@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameSessionParticipant,
     GameSessionParticipantStatus,
     GameSessionStatus,
+    Guess,
     SpotGuessrMode,
 )
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -41,6 +42,7 @@ from urbanlens.dashboard.services.spotguessr.session import (
     ParticipantNotInvitedError,
     ParticipantNotJoinedError,
     SessionAlreadyEndedError,
+    SessionAlreadyStartedError,
     begin_session,
     end_session_now,
     get_or_create_round,
@@ -318,6 +320,31 @@ class KickParticipantTests(TestCase):
             join_session(session, guest)
 
         self.assertEqual(_status(session, guest), GameSessionParticipantStatus.LEFT)
+
+    def test_a_guess_from_a_player_kicked_after_its_check_is_refused(self) -> None:
+        host, (guest,), (location,), session, round_ = _active_game()
+        submit_guess(round_, host, _point(location))
+        read_before_the_kick = GameSessionParticipant.objects.get(session=session, profile=guest)
+        kick_participant(session, host, guest)
+
+        with (
+            patch.object(GameSessionParticipant.objects, "get", return_value=read_before_the_kick),
+            pytest.raises(ParticipantNotJoinedError),
+        ):
+            submit_guess(round_, guest, _point(location))
+
+        self.assertFalse(Guess.objects.filter(round=round_, profile=guest).exists())
+
+    def test_a_stale_begin_cannot_revive_a_lobby_its_host_abandoned(self) -> None:
+        host, _invitees, session = _lobby(invited=1)
+        read_before_leaving = GameSession.objects.get(pk=session.pk)
+        leave_session(session, host)
+
+        with pytest.raises(SessionAlreadyStartedError):
+            begin_session(read_before_leaving, host)
+
+        session.refresh_from_db()
+        self.assertEqual(session.status, GameSessionStatus.ABANDONED)
 
     def test_a_kick_is_announced_as_one(self) -> None:
         host, (guest,), session = _lobby(1)

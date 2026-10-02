@@ -304,13 +304,15 @@ def begin_session(session: TriviaSession, host: Profile) -> TriviaRound | None:
         BeginNotHostError: The caller isn't this session's host.
         SessionAlreadyBegunError: The session isn't still in its lobby.
     """
-    if session.host_profile_id != host.pk:
-        raise BeginNotHostError("Caller is not the session host; only the host may begin the game.")
-    if session.status != TriviaSessionStatus.LOBBY:
-        raise SessionAlreadyBegunError("Session is not in LOBBY status; it has already begun.")
-
-    session.status = TriviaSessionStatus.ACTIVE
-    session.save(update_fields=["status", "updated"])
+    with transaction.atomic():
+        locked = TriviaSession.objects.select_for_update().get(pk=session.pk)
+        if locked.host_profile_id != host.pk:
+            raise BeginNotHostError("Caller is not the session host; only the host may begin the game.")
+        if locked.status != TriviaSessionStatus.LOBBY:
+            raise SessionAlreadyBegunError("Session is not in LOBBY status; it has already begun.")
+        locked.status = TriviaSessionStatus.ACTIVE
+        locked.save(update_fields=["status", "updated"])
+    session.status, session.host_profile_id = locked.status, locked.host_profile_id
     round_ = get_or_create_round(session)
     if round_ is not None:
         realtime.broadcast(session.pk, "session.started", {"round": serializers.serialize_round(round_)})
@@ -404,6 +406,8 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
     round_completed_now = False
     with transaction.atomic():
         locked_round = TriviaRound.objects.select_for_update().get(pk=round_.pk)
+        if not TriviaSessionParticipant.objects.joined().filter(session_id=round_.session_id, profile=profile).exists():
+            raise NotJoinedParticipantError("Profile left the session before the answer was recorded.")
         try:
             answer = TriviaAnswer.objects.create(
                 round=locked_round,
