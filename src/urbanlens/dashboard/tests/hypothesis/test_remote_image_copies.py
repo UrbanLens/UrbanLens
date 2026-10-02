@@ -83,6 +83,12 @@ class CopyRecordTests(TestCase):
         self.assertFalse(RemoteImageCopy.objects.exists())
         self.assertEqual(copy_url("/local.jpg", provider="x"), "/local.jpg")
 
+    def test_an_address_the_url_parser_refuses_is_left_as_it_is(self) -> None:
+        """An article can name ``https://[x/a.jpg``; ``urlsplit`` raises on it, which failed the save."""
+        self.assertEqual(copy_urls([RemoteImage("https://[x/a.jpg", "article")]), {})
+        self.assertEqual(copy_url("http://[::1/a.jpg", provider="article"), "http://[::1/a.jpg")
+        self.assertFalse(RemoteImageCopy.objects.exists())
+
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
 class CopyEndpointTests(TestCase):

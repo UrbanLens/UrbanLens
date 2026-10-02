@@ -13,12 +13,17 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from django.db import transaction
 from markdown_it import MarkdownIt
+from markdown_it.common.html_re import HTML_TAG_RE
+from markdown_it.common.utils import normalizeReference
+from markdown_it.helpers import parseLinkDestination, parseLinkTitle
 from mdit_py_plugins.footnote import footnote_plugin
 import nh3
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable, Iterator
     import datetime
+
+    from markdown_it.token import Token
 
     from urbanlens.dashboard.models.article.model import Article, ArticleRevision
     from urbanlens.dashboard.models.pin.model import Pin
@@ -132,16 +137,21 @@ def _build_markdown() -> MarkdownIt:
 
 _MD = _build_markdown()
 
-#: A remote image in article source: Markdown's ``![alt](url`` and a raw ``<img ... src="url"``.
-#: An address with a parenthesis in it is left for render time, which parses it properly. Alt text stops at a
-#: bracket and a tag at the next ``<``, so each match attempt ends where the next one starts; saving runs this.
-_SOURCE_IMAGE = re.compile(r"""(!\[[^\[\]]*\]\(\s*<?|<img\b[^<>]*?\bsrc\s*=\s*["']?)(https?://[^\s()<>"']+)(?=[\s)>"'])""", re.IGNORECASE)
+#: Where an inline image's address begins: ``![alt](``. Alt text stops at a bracket, so each match attempt ends where
+#: the next one starts; the address itself is read the way markdown-it reads it, parentheses and all.
+_INLINE_IMAGE = re.compile(r"!\[[^\[\]]*\]\(")
+#: A reference-style image: ``![alt][label]``, ``![label][]`` or ``![label]``.
+_REFERENCE_IMAGE = re.compile(r"!\[([^\[\]]*)\](?:\[([^\[\]]*)\])?")
+#: A raw ``<img ...>`` tag. One with a ``>`` inside a quoted attribute is cut short there and left to rendering.
+_HTML_IMAGE_TAG = re.compile(r"<img\b[^<>]*>", re.IGNORECASE)
+#: The address in a raw ``<img>`` tag, quoted or bare.
+_HTML_IMAGE_SOURCE = re.compile(r"""\ssrc\s*=\s*(?:"(https?://[^"]*)"|'(https?://[^']*)'|(https?://[^\s"'=<>`]+))""", re.IGNORECASE)
+_LINK_SPACE = re.compile(r"[ \t\n]*")
+#: The gap before a definition's address, which may start the next line, after a block quote's ``>``.
+_DEFINITION_SPACE = re.compile(r"[ \t]*(?:\n[ \t>]*)?")
 _BACKTICK_RUN = re.compile(r"`+")
-#: Every fenced or indented code block contains one of these, so text without any needs no Markdown parse.
-_BLOCK_CODE_HINT = re.compile(r"```|~~~|^(?: {4}|\t)", re.MULTILINE)
-_BLANK_LINE = re.compile(r"\n(?=\n)")
 #: A remote image in sanitized HTML, whose attributes nh3 always double-quotes.
-_RENDERED_IMAGE = re.compile(r'(<img\b[^<>]*?\ssrc=")(https?://[^"]+)(")')
+_RENDERED_IMAGE = re.compile(r'(<img\b[^<>]*?\ssrc=")(https?://[^"]+)(")', re.IGNORECASE)
 
 
 def _copies_of(urls: set[str]) -> dict[str, str]:
@@ -150,45 +160,210 @@ def _copies_of(urls: set[str]) -> dict[str, str]:
     return copy_urls(RemoteImage(url, "article") for url in urls) if urls else {}
 
 
-def _code_ranges(content: str) -> list[tuple[int, int]]:
-    """Character ranges of *content* that are code: fenced and indented blocks, and inline code."""
-    starts = [0]
-    for line in content.split("\n"):
-        starts.append(starts[-1] + len(line) + 1)
-    blocks = _MD.parse(content) if _BLOCK_CODE_HINT.search(content) else []
-    ranges = [(starts[token.map[0]], starts[min(token.map[1], len(starts) - 1)]) for token in blocks if token.type in ("fence", "code_block") and token.map]
-    return ranges + _inline_code_ranges(content)
-
-
-def _inline_code_ranges(content: str) -> list[tuple[int, int]]:
-    """Inline code: a run of backticks up to the next run of the same length, within one paragraph."""
-    runs = [(match.start(), match.end()) for match in _BACKTICK_RUN.finditer(content)]
-    blank_lines = [match.start() for match in _BLANK_LINE.finditer(content)]
+def _code_spans(content: str, start: int, end: int) -> Iterator[tuple[int, int]]:
+    """Inline code in ``content[start:end]``, one block's inline text: a run of backticks up to the next of its length."""
+    runs = [match.span() for match in _BACKTICK_RUN.finditer(content, start, end)]
     by_length: dict[int, list[int]] = {}
-    for index, (start, end) in enumerate(runs):
-        by_length.setdefault(end - start, []).append(index)
-    ranges = []
+    for index, (run_start, run_end) in enumerate(runs):
+        by_length.setdefault(run_end - run_start, []).append(index)
     index = 0
     while index < len(runs):
-        start, end = runs[index]
-        same = by_length[end - start]
+        run_start, run_end = runs[index]
+        same = by_length[run_end - run_start]
         following = bisect.bisect_right(same, index)
         if following < len(same):
-            closer = same[following]
-            blank = bisect.bisect_left(blank_lines, end)
-            if blank == len(blank_lines) or blank_lines[blank] >= runs[closer][0]:
-                ranges.append((start, runs[closer][1]))
-                index = closer + 1
+            yield run_start, runs[same[following]][1]
+            index = same[following] + 1
+        else:
+            index += 1
+
+
+def _skip(pattern: re.Pattern[str], content: str, position: int, limit: int) -> int:
+    match = pattern.match(content, position, limit)
+    return match.end() if match else position
+
+
+class _Spans:
+    """Character ranges of article source, merged where they overlap, looked up in logarithmic time."""
+
+    __slots__ = ("_ends", "_starts")
+
+    def __init__(self, ranges: Iterable[tuple[int, int]]) -> None:
+        self._starts: list[int] = []
+        self._ends: list[int] = []
+        for start, end in sorted(ranges):
+            if self._ends and start < self._ends[-1]:
+                self._ends[-1] = max(self._ends[-1], end)
+            else:
+                self._starts.append(start)
+                self._ends.append(end)
+
+    def __iter__(self) -> Iterator[tuple[int, int]]:
+        return zip(self._starts, self._ends, strict=True)
+
+    def around(self, position: int) -> tuple[int, int] | None:
+        """The range holding *position*, if one does."""
+        index = bisect.bisect_right(self._starts, position) - 1
+        return (self._starts[index], self._ends[index]) if index >= 0 and position < self._ends[index] else None
+
+    def __contains__(self, position: int) -> bool:
+        return self.around(position) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceImage:
+    """Where an image's address sits in article source.
+
+    Attributes:
+        start: The address's first character.
+        end: Just past its last.
+        url: The address a browser loads for it, which is what rendering keys the copy by.
+    """
+
+    start: int
+    end: int
+    url: str
+
+
+class _ImageScan:
+    """Every image address in one article's source that the article displays.
+
+    The block structure comes from markdown-it and the inline syntax from the helpers its own image rule uses. That finds
+    what rendering would show without an inline parse, which some text makes take seconds.
+    """
+
+    def __init__(self, content: str) -> None:
+        """Read the block structure of *content*.
+
+        Args:
+            content: Markdown article source.
+        """
+        self.content = content
+        self.env: dict[str, Any] = {}
+        blocks: list[Token] = []
+        _MD.block.parse(content, _MD, self.env, blocks)
+        self._line_starts = [0]
+        for line in content.split("\n"):
+            self._line_starts.append(self._line_starts[-1] + len(line) + 1)
+        # Paragraphs, headings and table cells, which markdown-it reads as Markdown; code, HTML blocks and definitions not.
+        self._inline = _Spans(self._lines(token.map) for token in blocks if token.type == "inline" and token.map)
+        self._html_blocks = _Spans(self._lines(token.map) for token in blocks if token.type == "html_block" and token.map)
+        self._code = _Spans(span for start, end in self._inline for span in _code_spans(content, start, end))
+
+    def _lines(self, lines: list[int]) -> tuple[int, int]:
+        return self._line_starts[lines[0]], min(self._line_starts[min(lines[1], len(self._line_starts) - 1)], len(self.content))
+
+    def _escaped(self, position: int) -> bool:
+        run = position
+        while run and self.content[run - 1] == "\\":
+            run -= 1
+        return (position - run) % 2 == 1
+
+    def _markdown(self, start: int, end: int) -> tuple[int, int] | None:
+        """The block of inline text holding ``content[start:end]``, when it is read as Markdown there."""
+        block = self._inline.around(start)
+        if block is None or end > block[1] or start in self._code or self._escaped(start):
+            return None
+        return block
+
+    def _inline_destination(self, position: int, limit: int) -> _SourceImage | None:
+        """The address of the inline image whose ``(`` ends at *position*, or None when the rest is not one."""
+        content = self.content
+        start = _skip(_LINK_SPACE, content, position, limit)
+        destination = parseLinkDestination(content, start, limit)
+        if not destination.ok:
+            return None
+        end = _skip(_LINK_SPACE, content, destination.pos, limit)
+        if end != destination.pos:
+            title = parseLinkTitle(content, end, limit)
+            if title.ok:
+                end = _skip(_LINK_SPACE, content, title.pos, limit)
+        if end >= limit or content[end] != ")":
+            return None
+        bracketed = content[start] == "<"
+        return _SourceImage(start + bracketed, destination.pos - bracketed, _MD.normalizeLink(destination.str))
+
+    def inline_images(self) -> Iterator[_SourceImage]:
+        """``![alt](address "title")``.
+
+        Each is read no further than the next ``![alt](``: markdown-it reads an address through up to 32 nested
+        parentheses, so text made of nothing but openers would otherwise be read 32 times over. An address or title
+        containing one is left to rendering.
+        """
+        openers = [match.span() for match in _INLINE_IMAGE.finditer(self.content)]
+        for index, (start, end) in enumerate(openers):
+            block = self._markdown(start, end)
+            if block is None:
                 continue
-        index += 1
-    return ranges
+            limit = min(block[1], openers[index + 1][0]) if index + 1 < len(openers) else block[1]
+            if (image := self._inline_destination(end, limit)) is not None:
+                yield image
+
+    def html_images(self) -> Iterator[_SourceImage]:
+        """``<img src="address">``, in an HTML block, or in inline text where markdown-it reads it as a tag."""
+        for tag in _HTML_IMAGE_TAG.finditer(self.content):
+            start, end = tag.span()
+            if start not in self._html_blocks and (self._markdown(start, end) is None or not HTML_TAG_RE.match(tag.group())):
+                continue
+            source = _HTML_IMAGE_SOURCE.search(self.content, start, end)
+            if source is not None:
+                group = next(index for index in (1, 2, 3) if source.group(index) is not None)
+                yield _SourceImage(source.start(group), source.end(group), html_lib.unescape(source.group(group)))
+
+    def _image_labels(self) -> set[str]:
+        """The normalized label of every reference an image is drawn from."""
+        labels: set[str] = set()
+        for match in _REFERENCE_IMAGE.finditer(self.content):
+            if self._markdown(*match.span()) is None:
+                continue
+            alt, label = match.group(1), match.group(2)
+            if label is None and self.content.startswith("(", match.end()):
+                continue
+            labels.add(normalizeReference(label or alt))
+        labels.discard("")
+        return labels
+
+    def reference_images(self) -> Iterator[_SourceImage]:
+        """The definition behind ``![alt][label]``, ``![label][]`` and ``![label]``, wherever it is written.
+
+        A definition a link shares with an image is rewritten too, so the link then opens the copy.
+        """
+        references: dict[str, dict[str, Any]] = self.env.get("references", {})
+        for label in self._image_labels() & references.keys():
+            reference = references[label]
+            if lines := reference.get("map"):
+                image = self._definition(*self._lines(lines), reference["href"])
+                if image is not None:
+                    yield image
+
+    def _definition(self, start: int, end: int, href: str) -> _SourceImage | None:
+        """The address of the definition of *href* written between *start* and *end*.
+
+        Footnote markers can come before it on its line (``[^1]: [label]: address``), so each ``[`` is tried in turn,
+        and one that continues past a list item's indent is left to rendering.
+        """
+        content = self.content
+        position = start
+        while (opener := content.find("[", position, end)) >= 0:
+            position = opener + 1
+            while position < end and content[position] not in "[]":
+                position += 2 if content[position] == "\\" else 1
+            if not content.startswith("]:", position):
+                continue
+            address = _skip(_DEFINITION_SPACE, content, position + 2, len(content))
+            destination = parseLinkDestination(content, address, len(content))
+            if destination.ok and _MD.normalizeLink(destination.str) == href:
+                bracketed = content[address] == "<"
+                return _SourceImage(address + bracketed, destination.pos - bracketed, href)
+        return None
 
 
 def localize_article_images(content: str) -> str:
     """Point every remote image in article source at this site's copy, so the editor never loads it from its host.
 
-    Links stay as they are, and so does code that shows image syntax; only images the article displays change. The
-    original address is kept on the copy.
+    Covers inline, reference-style and raw HTML images. Links stay as they are, unless one shares a reference definition
+    with an image, and so does code that shows image syntax. The original address is kept on the copy, keyed the way
+    rendering keys it, so both find the same one.
 
     Args:
         content: Markdown article source.
@@ -196,17 +371,19 @@ def localize_article_images(content: str) -> str:
     Returns:
         The source with each remote image address replaced.
     """
-
-    def address(match: re.Match[str]) -> str:
-        return html_lib.unescape(match.group(2)) if match.group(1).startswith("<") else match.group(2)
-
-    code = _code_ranges(content)
-
-    def shown(match: re.Match[str]) -> bool:
-        return not any(start <= match.start() < end for start, end in code)
-
-    copies = _copies_of({address(match) for match in _SOURCE_IMAGE.finditer(content) if shown(match)})
-    return _SOURCE_IMAGE.sub(lambda match: match.group(1) + copies.get(address(match), match.group(2)) if shown(match) else match.group(0), content)
+    scan = _ImageScan(content)
+    images = sorted([*scan.inline_images(), *scan.html_images(), *scan.reference_images()], key=lambda image: image.start)
+    copies = _copies_of({image.url for image in images})
+    pieces: list[str] = []
+    done = 0
+    for image in images:
+        copy = copies.get(image.url)
+        if copy is None or image.start < done:
+            continue
+        pieces += (content[done : image.start], copy)
+        done = image.end
+    pieces.append(content[done:])
+    return "".join(pieces)
 
 
 def _localize_rendered_images(clean_html: str) -> str:
