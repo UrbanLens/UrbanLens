@@ -12,6 +12,7 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
+import lxml.html
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -417,3 +418,36 @@ class PinEditRatingClearTests(TestCase):
             self._post({"priority": 2})
 
         mock_delete.assert_not_called()
+
+
+class PinEditRenameHeroTests(TestCase):
+    """The hero holds the page's heading outside ``#pin-overview``, which is all the edit dialog swaps."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User)
+        self.pin = baker.make(Pin, profile=self.user.profile, name="Old mill", parent_pin=None)
+        self.client.force_login(self.user)
+
+    def _hero(self, body: dict) -> lxml.html.HtmlElement | None:
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
+            response = self.client.post(reverse("pin.edit", kwargs={"pin_slug": self.pin.slug}), body)
+        self.assertEqual(response.status_code, 200)
+        heroes = lxml.html.fragment_fromstring(response.content.decode(), create_parent="div").xpath(
+            "//*[@id='pin-detail-hero'][@hx-swap-oob='true']"
+        )
+        return heroes[0] if heroes else None
+
+    def test_a_rename_swaps_the_heading_too(self) -> None:
+        hero = self._hero({"name": "Textile mill"})
+
+        if hero is None:
+            self.fail("the response carries no out-of-band hero")
+        self.assertEqual(hero.xpath("string(.//*[@id='pin-detail-hero-title'])").strip(), "Textile mill")
+
+    def test_an_edit_that_leaves_the_name_alone_does_not_rebuild_the_hero(self) -> None:
+        self.assertIsNone(self._hero({"description": "Brick, three storeys"}))

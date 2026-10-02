@@ -358,7 +358,12 @@ class PinEditView(LoginRequiredMixin, View):
             oob = render(request, "dashboard/partials/pins/pin_overview_partial.html", oob_context)
             return HttpResponse(fragment.content + oob.content)
 
-        return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
+        overview_context = _overview_context(pin)
+        response = render(request, "dashboard/partials/pins/pin_overview_partial.html", overview_context)
+        if "name" in edits:
+            # The page's heading is in the hero, outside the #pin-overview this swaps.
+            response.content += _pin_hero_oob(request, pin, linked_wiki_locations=overview_context["linked_wiki_locations"]).encode()
+        return response
 
 
 class PinNotesView(LoginRequiredMixin, View):
