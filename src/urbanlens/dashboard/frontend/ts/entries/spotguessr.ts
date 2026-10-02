@@ -724,6 +724,8 @@ function renderLobby(session: SessionPayload): void {
 async function refreshLobby(): Promise<void> {
     if (state.sessionId === null) return;
     const lobby: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
+    // The host changes hands when the host leaves, and a reconnect can miss that broadcast.
+    state.hostProfileId = lobby.host_profile_id;
     renderLobbyParticipants(lobby.participants);
 }
 

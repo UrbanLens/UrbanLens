@@ -1532,8 +1532,8 @@ play, all three guess modes.** Everything below the line is not yet built.
 - **Multiplayer stall handling and leave/kick**: a round stuck because a participant went AFK is
   force-revealed by a Celery beat sweep after 10 minutes (marking the session `ABANDONED` if
   literally nobody guessed), and the host can end an in-progress or not-yet-started game (cancel
-  the lobby) immediately from an "End game" control. Any participant can leave (or decline an
-  invite), and the host can remove anyone else, from the lobby or mid-game
+  the lobby) immediately from an "End game" control. Any participant can leave, from the lobby or
+  mid-game, or decline an invite; the host can remove anyone else from the lobby roster
   (`spotguessr.leave`/`spotguessr.kick`, `services.spotguessr.session.leave_session`/`kick_participant`).
   The host role passes to the earliest remaining joined player if the host leaves, the session is
   `ABANDONED` once nobody joined is left, and a round only the departed player was holding up is
