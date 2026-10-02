@@ -168,17 +168,10 @@ export async function deletePinCascade(pinUuid: string, pinName: string, csrfTok
 
 // window.confirmDialog is declared in types/globals.d.ts, optional because pages that
 // do not load core.js genuinely do not have it.
-declare global {
-    interface Window {
-        deletePinCascade?: typeof deletePinCascade;
-    }
-}
-
 let linksWatched = false;
 
 export function installGlobalConfirmDialog(): void {
     window.confirmDialog = confirmDialog;
-    window.deletePinCascade = deletePinCascade;
     if (linksWatched) return;
     linksWatched = true;
     document.addEventListener("click", onExternalLinkClick);

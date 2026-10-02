@@ -37,7 +37,6 @@ async function clickWhenTitled(title: string, buttonId: string): Promise<void> {
 const realFetch = globalThis.fetch;
 const realGlobals = {
     confirmDialog: window.confirmDialog,
-    deletePinCascade: window.deletePinCascade,
 };
 
 beforeEach(() => {
@@ -181,10 +180,9 @@ describe("deletePinCascade", () => {
 });
 
 describe("installGlobalConfirmDialog", () => {
-    test("exposes confirmDialog and deletePinCascade", () => {
+    test("exposes confirmDialog", () => {
         installGlobalConfirmDialog();
         expect(typeof window.confirmDialog).toBe("function");
-        expect(typeof window.deletePinCascade).toBe("function");
     });
 
     describe("a link marked data-confirm-external", () => {

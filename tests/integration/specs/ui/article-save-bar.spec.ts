@@ -37,10 +37,12 @@ for (const viewport of [
             await editor.pressSequentially("Boiler room");
             const save = "#article-panel .article-editor-actions button[type=submit]";
             await expect(page.locator(save)).toBeVisible();
-            await expect(page.locator("#pin-actions-fab .pin-actions-fab-btn")).toBeVisible();
+            // Open, the toolbar shows its collapse control; collapsed, the Actions button. Either way one is showing.
+            const actions = "#pin-actions-fab :is(#pin-actions-collapse, .pin-actions-fab-btn):visible";
+            await expect(page.locator(actions)).toHaveCount(1);
 
             expect(await receivesClicks(page, save), "something is drawn over the article's Save button").toBe(true);
-            expect(await receivesClicks(page, "#pin-actions-fab .pin-actions-fab-btn"), "something is drawn over the Actions button").toBe(true);
+            expect(await receivesClicks(page, actions), "something is drawn over the floating actions").toBe(true);
         });
     });
 }
