@@ -74,6 +74,25 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertAlmostEqual(pins[0]["latitude"], 1.0)
         self.assertAlmostEqual(pins[0]["longitude"], 2.0)
 
+    def test_a_url_that_places_nothing_leaves_the_coordinate_columns_to_place_the_row(self):
+        """A spreadsheet's own URL column (a website) is not a Takeout export; its latitude/longitude still place the row."""
+        csv_text = "Name,URL,latitude,longitude\nOld Mill,https://oldmill.example/,42.9013318,-73.3513978"
+
+        for offline in (True, False):
+            with self.subTest(offline=offline):
+                pins = list(self.gateway._csv_row_iter(csv_text, self.profile, offline=offline))
+
+                self.assertEqual(len(pins), 1)
+                self.assertIsNotNone(pins[0])
+                self.assertEqual(pins[0]["name"], "Old Mill")
+                self.assertAlmostEqual(pins[0]["latitude"], 42.9013318)
+                self.assertAlmostEqual(pins[0]["longitude"], -73.3513978)
+
+    def test_a_url_that_places_nothing_without_coordinate_columns_is_still_skipped(self):
+        csv_text = "Title,URL\nOld Mill,https://oldmill.example/"
+
+        self.assertEqual(list(self.gateway._csv_row_iter(csv_text, self.profile, offline=True)), [None])
+
     def test_parking_location_column_is_recognized_as_a_url_column(self):
         """UL-203: Google Takeout's Parking.csv export uses a "Parking location" header for its URL column, not "URL" - every row previously fell through to the generic latitude/longitude fallback (which Parking.csv has none of) and was silently skipped, so the whole file failed to import a single pin."""
         csv_text = 'Parking location,Timestamp\n"https://maps.google.com/maps/search/3.0,4.0",2024-01-01T00:00:00Z'

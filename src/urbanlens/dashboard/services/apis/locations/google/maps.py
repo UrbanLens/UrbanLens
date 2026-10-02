@@ -596,16 +596,16 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     continue
                 except ValueError as exc:
                     logger.warning("Failed to extract coordinates from a Takeout URL: %s", type(exc).__name__)
-                    yield None
-                    continue
+                    latitude = longitude = None
 
-                if latitude is None or longitude is None:
+                if latitude is not None and longitude is not None:
+                    yield {"latitude": latitude, "longitude": longitude, "profile": user_profile, **takeout}
+                    continue
+                # A spreadsheet's own URL column (a website, say) places nothing; its coordinate columns may.
+                if pick_latlon(row) is None:
                     logger.warning("Could not resolve coordinates for a Takeout URL")
                     yield None
                     continue
-
-                yield {"latitude": latitude, "longitude": longitude, "profile": user_profile, **takeout}
-                continue
 
             coords = pick_latlon(row)
             if coords is None:
