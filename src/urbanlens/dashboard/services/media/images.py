@@ -121,12 +121,12 @@ def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
         JSON-serialisable lat/lng/map_hidden of the saved row.
 
     Raises:
-        ValueError: Malformed JSON, or a reposition payload that fails :func:`coerce_coordinates`."""
+        ValueError: Malformed JSON, a reposition payload that fails :func:`coerce_coordinates`, or a ``map_hidden`` that is not a boolean."""
     import json
 
     try:
         data = json.loads(body or b"{}")
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, RecursionError) as exc:
         raise ValueError("Invalid request data.") from exc
     if not isinstance(data, dict):
         raise ValueError("Invalid request data.")  # noqa: TRY004
@@ -142,7 +142,9 @@ def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
         image.map_hidden = False
         fields.extend(["latitude", "longitude", "map_hidden"])
     elif "map_hidden" in data:
-        image.map_hidden = bool(data["map_hidden"])
+        if not isinstance(data["map_hidden"], bool):
+            raise ValueError("map_hidden must be true or false.")
+        image.map_hidden = data["map_hidden"]
         fields.append("map_hidden")
     else:
         raise ValueError("Invalid request data.")
