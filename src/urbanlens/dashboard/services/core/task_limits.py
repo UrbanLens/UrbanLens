@@ -11,13 +11,19 @@ until the hard kill. :class:`UrbanLensTask` swaps that handler, for the duration
 :class:`TaskSoftTimeLimit`, a ``BaseException``, which passes those handlers the way ``KeyboardInterrupt`` does, and converts it back to
 ``SoftTimeLimitExceeded`` at the task boundary so Celery records an ordinary failure. Code that wants to clean
 up on a soft limit catches :data:`SOFT_TIME_LIMIT_ERRORS`.
+
+No signal reaches a thread pool's tasks (``celery-worker-panels``), so each task also carries its soft limit as a
+deadline that outbound calls check: a gateway request past it raises :class:`TaskSoftTimeLimit`, and one before it
+waits no longer than the time left.
 """
 
 from __future__ import annotations
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 import signal
 import threading
+import time
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from celery import Task
@@ -125,6 +131,72 @@ class TaskSoftTimeLimit(BaseException):
 SOFT_TIME_LIMIT_ERRORS: tuple[type[BaseException], ...] = (TaskSoftTimeLimit, SoftTimeLimitExceeded)
 
 
+#: A ContextVar rather than a thread-local: the threads pool runs many tasks in one process.
+_deadline: ContextVar[float | None] = ContextVar("urbanlens_task_deadline", default=None)
+
+
+def current_task_deadline() -> float | None:
+    """The running task's soft deadline as a ``time.monotonic()`` value, or None outside a task."""
+    return _deadline.get()
+
+
+@contextmanager
+def task_deadline(deadline: float | None) -> Iterator[None]:
+    """Hold outbound calls inside the block to ``deadline``, unless an earlier one is already in force.
+
+    Args:
+        deadline: A ``time.monotonic()`` value, or None to leave the current deadline as it is.
+
+    Yields:
+        Nothing.
+    """
+    current = _deadline.get()
+    if deadline is None or (current is not None and current <= deadline):
+        yield
+        return
+    token = _deadline.set(deadline)
+    try:
+        yield
+    finally:
+        _deadline.reset(token)
+
+
+def check_task_deadline() -> None:
+    """Raise :class:`TaskSoftTimeLimit` when the running task is past its soft limit.
+
+    Raises:
+        TaskSoftTimeLimit: The deadline has passed.
+    """
+    deadline = _deadline.get()
+    if deadline is not None and time.monotonic() >= deadline:
+        raise TaskSoftTimeLimit
+
+
+def within_task_deadline[T](timeout: T) -> T | float | tuple[float | None, ...]:
+    """A ``requests`` timeout shortened so the call cannot outlast the running task's soft limit.
+
+    ``requests`` bounds each phase, not the whole call, so a response trickling in can still run past it; the next
+    outbound call then refuses.
+
+    Args:
+        timeout: A number, a ``(connect, read)`` tuple, or None.
+
+    Returns:
+        ``timeout`` unchanged outside a task, else each phase capped at the time left.
+    """
+    deadline = _deadline.get()
+    if deadline is None:
+        return timeout
+    left = max(deadline - time.monotonic(), 0.001)
+    if timeout is None:
+        return left
+    if isinstance(timeout, tuple):
+        return tuple(left if phase is None else min(phase, left) for phase in timeout)
+    if isinstance(timeout, int | float):
+        return min(timeout, left)
+    return timeout
+
+
 def _raise_soft_limit(signum: int, frame: FrameType | None) -> None:
     raise TaskSoftTimeLimit
 
@@ -157,8 +229,14 @@ class UrbanLensTask(Task):
     """The base class of every task: a soft limit escapes broad handlers inside it, and is reported as a failure."""
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        soft = self._soft_limit()
         try:
-            with soft_limit_escapes_broad_handlers():
+            with soft_limit_escapes_broad_handlers(), task_deadline(None if soft is None else time.monotonic() + soft):
                 return super().__call__(*args, **kwargs)
         except TaskSoftTimeLimit as exc:
             raise SoftTimeLimitExceeded(f"{self.name} exceeded its soft time limit of {self.soft_time_limit}s") from exc
+
+    def _soft_limit(self) -> float | None:
+        """This run's soft limit: the one it was sent with, else the task's own."""
+        timelimit = getattr(self.request, "timelimit", None) or (None, None)
+        return timelimit[1] or self.soft_time_limit

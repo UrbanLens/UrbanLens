@@ -202,6 +202,16 @@ moved.
 overrides it per source with `queue=source.queue`, which is the pre-existing design and is left
 alone: whether a panel is thread-pool or prefork work is a property of that panel, not of the task.
 
+**Time limits on the threads pool.** `celery-worker-panels` runs `--pool=threads`, and billiard
+delivers a soft or hard limit by signal to a prefork child's main thread only, so on that worker the
+declared limits did nothing (P179). `UrbanLensTask` now also carries each run's soft limit as a
+deadline (a `ContextVar`, so it is per task, not per thread): a gateway request after it raises
+`TaskSoftTimeLimit`, one before it has its timeout cut to the time left, and `call_with_deadline`
+stops waiting at it and carries it onto its own pool. That bounds what hangs in practice, an upstream
+call. What it cannot bound is anything that blocks outside the gateway session (a database query,
+duckdb, a long loop), and nothing enforces the hard limit there: a thread cannot be killed. A
+`gevent` pool would enforce both, and needs every blocking library made cooperative first.
+
 The startup check exempts test modules. A probe task defined by a test is never enqueued by the
 running site, and requiring a class of it would make every such test carry a declaration that means
 nothing. `test_celery_queue_classes.py` registers its probe under a production module name for

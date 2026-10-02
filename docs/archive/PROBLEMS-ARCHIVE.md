@@ -19546,3 +19546,21 @@ file that cannot be rendered answers 404 for an hour and is then tried again. Th
 
 Not changed, tracked as P190: a third-party copy is stored at 1200 px, and a tile for an item whose provider names no
 thumbnail loads that copy.
+
+## RESOLVED 2026-10-02: `panel_fetch`'s threads pool now holds its tasks to their soft limits at every outbound call
+
+`id: P179` · `status: fixed` · `resolved: 2026-10-02`
+
+`celery-worker-panels` runs `--pool=threads`, where billiard's soft- and hard-limit signals never reach a task,
+so every `panel_fetch` task's declared limits (`fetch_panel_source` 110/130, `enrich_wiki_location` 240/270)
+were inert there and a hung upstream call held a thread until its HTTP client's own timeout.
+
+`UrbanLensTask` now carries each run's soft limit as a deadline in a `ContextVar` (`task_limits.task_deadline`;
+a task called inside another cannot extend the outer one). `_RateLimitedSession` refuses a request past it with
+`TaskSoftTimeLimit`, which `run_panel_fetch` already handles as a soft limit, and cuts each phase of an earlier
+request's timeout to the time left. `call_with_deadline` stops waiting at it, and `submit_bounded` carries it onto
+the deadline pool. `test_thread_pool_task_deadline.py` runs the task off the main thread, as the pool does.
+
+Left as it is, and recorded in `docs/designs/celery-queue-classes.md`: blocking outside the gateway session (a
+database query, duckdb) is not bounded, the hard limit is unenforceable on threads, and `requests` bounds each
+read rather than the whole response.

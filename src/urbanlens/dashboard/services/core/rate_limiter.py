@@ -773,8 +773,10 @@ class _RateLimitedSession:
     def _do_request(self, method: str, url: str, **kwargs):
         """Reserve a rate-limit slot, make the request, finalize the logged result.
         The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through."""
+        from urbanlens.dashboard.services.core.task_limits import check_task_deadline, within_task_deadline
         from urbanlens.dashboard.services.core.upstream_breaker import breaker_for
 
+        check_task_deadline()
         endpoint = self._endpoint_for_log(str(url))
         breaker = breaker_for(self._service_key)
         if breaker is not None and (wait := breaker.wait(str(url), kwargs.get("params"))) is not None:
@@ -785,8 +787,9 @@ class _RateLimitedSession:
         # requests has no default timeout at all: a gateway call that forgets timeout= would
         # otherwise block its caller (and, when running under a call_with_deadline guard, pin an
         # executor slot) indefinitely.
-        # The (connect, read) tuple bounds each phase separately; callers that pass their own
-        kwargs.setdefault("timeout", (5, 30))
+        # The (connect, read) tuple bounds each phase separately. A caller's own timeout is kept, cut to what a
+        # running task has left.
+        kwargs["timeout"] = within_task_deadline(kwargs.get("timeout", (5, 30)))
 
         t0 = time.monotonic()
         try:

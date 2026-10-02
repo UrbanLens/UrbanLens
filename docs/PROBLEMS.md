@@ -3948,32 +3948,6 @@ applied per wiki (`_conceal_by_wiki`); `WikiChildListingConcealmentTests` reprod
 
 Still open: the per-album size cap (`max_photos_per_album`, 5,000, not reviewed by Jess).
 
-## P179 — `panel_fetch`'s threads pool enforces none of its tasks' declared soft or hard time limits
-
-`id: P179` · `status: open` · `updated: 2026-10-01` · `found by: reading task_limits.py against the panel worker's pool, 2026-10-01`
-
-`celery-worker-panels` runs `--pool=threads --concurrency=20 -Q panel_fetch` (`docker-compose.yml:552-567`). Every
-task's soft limit depends on `soft_limit_escapes_broad_handlers` installing a signal handler, which it only does
-"in a prefork child's main thread, where billiard installed its own handler" (`services/core/task_limits.py:131-135`);
-in any other context, including this worker's threads, "the signal is left as it is." Billiard's own
-`SIG_SOFT_TIMEOUT` handling is the same prefork mechanism, so the hard limit is unenforced there too. The result:
-every `panel_fetch` task's declared limits (`queue_defaults()`: soft 110 / hard 130; `queue_ceilings()`: 300) are
-inert at runtime. A hung upstream call is bounded only by its own HTTP client timeout, and holds one of the 20
-threads until then.
-
-`dashboard.checks.check_every_task_has_a_time_limit` (`checks.py:473`) validates each task's declared limits
-against its queue's ceiling at startup, which reads as if the limits it checks were enforced; the check says
-nothing about the pool actually applying them.
-
-Commit d81325d4b moved `enrich_wiki_location` (soft 240 / hard 270: Google place linking, name resolution, boundary
-generation) from `INTERACTIVE` to `PANEL_FETCH` to stop four of them saturating the four-slot interactive pool
-shared with safety check-ins (P167). That move inherits this gap: the task's limit was the only thing bounding it
-on `INTERACTIVE`'s prefork pool, and it enforces nothing on `PANEL_FETCH`'s threads pool.
-
-Not decided: a `gevent` pool (which enforces limits via greenlet timeouts, not signals), moving `panel_fetch` to
-prefork (reopens the memory-OOM failure P167 found there), or a per-task watchdog. No note in
-`docs/designs/celery-queue-classes.md` (D13) yet.
-
 ## P182 — A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it
 
 `id: P182` · `status: open, upstream` · `updated: 2026-10-01` · `found by: P181's investigation, 2026-10-01`

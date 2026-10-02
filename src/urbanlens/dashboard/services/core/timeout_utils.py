@@ -5,9 +5,12 @@ from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from django.db import connections
+
+from urbanlens.dashboard.services.core.task_limits import check_task_deadline, current_task_deadline, task_deadline
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -36,9 +39,12 @@ def submit_bounded[T](func: Callable[[], T]) -> Future[T]:
         The future; ``cancel()`` on it succeeds only while the call has not started.
     """
 
+    deadline = current_task_deadline()
+
     def _run() -> T:
         try:
-            return func()
+            with task_deadline(deadline):
+                return func()
         finally:
             # Closed outright rather than left to CONN_MAX_AGE: ul_web's limit counts request threads, not these.
             connections.close_all()
@@ -59,12 +65,16 @@ def call_with_deadline[T](func: Callable[[], T], *, timeout: float, default: T, 
         The result of ``func``, or ``default`` when it times out.
 
     Raises:
-        Exception: Whatever ``func`` itself raises (other than a timeout)."""
+        Exception: Whatever ``func`` itself raises (other than a timeout).
+        TaskSoftTimeLimit: The running task reached its soft limit first."""
     label = name or getattr(func, "__qualname__", repr(func))
     future = submit_bounded(func)
+    deadline = current_task_deadline()
+    wait = timeout if deadline is None else max(min(timeout, deadline - time.monotonic()), 0)
     try:
-        return future.result(timeout=timeout)
+        return future.result(timeout=wait)
     except FutureTimeoutError:
+        check_task_deadline()
         # cancel() only succeeds while the future is still queued -- i.e. the call never started
         # because every executor slot was busy for the entire deadline.
         # Distinguishing that from a slow upstream matters when reading production logs: the former
