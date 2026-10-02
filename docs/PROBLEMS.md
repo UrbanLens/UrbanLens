@@ -3059,3 +3059,24 @@ since 2026-10-02, the external API's parser answer it with a 400. Not reproduced
 The fix is to route each through `posted_json_object`/`posted_fields`, and to add the deep-nesting body to
 `MALFORMED_JSON_BODIES` in `tests/hypothesis/external_api_helpers.py` and to the no-5xx sweep
 (`test_write_route_smoke.py`), so every route is held to it.
+
+## P196 — Media galleries keep results that match the search words, not the place; Commons books were dropped instead of filed as documents
+
+`id: P196` · `status: open` · `updated: 2026-10-02` · `found by: Jess, on the HRSH Commons fix (f0fd2741a)`
+
+**Ruled by Jess 2026-10-02.** Returning a book is fine; the HRSH bug was an irrelevant one. Keep every relevant
+item, and put books and documents in Article > Sources like other documents. Keep and show only what explicitly
+matches the subject:
+
+- geolocated with coordinates inside the subject's bounding box; or
+- the subject's name plus a geographic indicator consistent with the place. Matches: "HRSH Poughkeepsie",
+  "Hudson River State Hospital NY", "HRPC <its ZIP>". Not matches: "HRSH Binghamton", "Hudson River Poughkeepsie"
+  (not the name), "HRPC OH".
+- A distinctive name alone matches ("HRSH", "Hudson River State Hospital") when nothing geographic contradicts
+  it. A generic name ("Historic Mansion") never matches on its name alone.
+
+What that undoes: f0fd2741a keeps only Commons files typed BITMAP or DRAWING, and `WikimediaGateway.admits` drops
+cached `.pdf`/`.djvu` rows. Documents from Commons (and any other provider) should become `SourceDocument`s in
+Article > Sources (`services/pins/source_documents.py`, `DocumentPanelSource`; CRIS is the only one today), filtered
+by the same relevance rule. Applies after P188, whose per-audience rows carry the names each row was searched with.
+
