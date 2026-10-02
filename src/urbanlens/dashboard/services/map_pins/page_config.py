@@ -12,7 +12,7 @@ from django.middleware.csrf import get_token
 from django.urls import reverse
 
 from urbanlens.dashboard.models.profile.meta import MapViewChoice
-from urbanlens.dashboard.services.core.vendor_assets import vendor_asset_url
+from urbanlens.dashboard.services.core.vendor_assets import leaflet_marker_artwork
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -90,8 +90,8 @@ def map_page_config(request: HttpRequest, profile: Profile, context: Mapping[str
     return {
         "urls": _urls(),
         "assets": {
-            "leafletMarkerIcon": vendor_asset_url("leaflet_marker_icon"),
-            "leafletMarkerShadow": vendor_asset_url("leaflet_marker_shadow"),
+            "leafletMarkerIcon": leaflet_marker_artwork()["iconUrl"],
+            "leafletMarkerShadow": leaflet_marker_artwork()["shadowUrl"],
         },
         "csrfToken": get_token(request),
         "profileId": profile.pk,

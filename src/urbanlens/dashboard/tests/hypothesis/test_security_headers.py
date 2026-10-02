@@ -173,9 +173,8 @@ class SecurityHeadersMiddlewareTests(SimpleTestCase):
         )
 
     def test_cross_origin_embedder_policy_is_not_enforced(self) -> None:
-        """The enforcing header would block every pasted map-overlay image whose
-        host sends neither CORP nor CORS - `img-src: https:` is deliberately open,
-        so that host set is unbounded by design."""
+        """The enforcing header would block every base-map tile: Leaflet requests
+        them without CORS, and none of the tile vendors img-src admits sends CORP (P56)."""
         response = self.client.get("/health/")
 
         self.assertIsNone(response.headers.get("Cross-Origin-Embedder-Policy"))
@@ -310,9 +309,7 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
         wanted = {"script": "script-src", "style": "style-src"}
         seen = 0
         for key, asset in VENDOR_ASSETS.items():
-            directive = wanted.get(asset.kind)
-            if directive is None:  # images are covered by img-src's blanket https:
-                continue
+            directive = wanted[asset.kind]
             seen += 1
             parsed = urlparse(asset.fallback)
             host = f"{parsed.scheme}://{parsed.netloc}"

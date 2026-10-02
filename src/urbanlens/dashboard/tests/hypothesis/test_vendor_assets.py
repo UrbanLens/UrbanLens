@@ -36,22 +36,9 @@ class VendorAssetTableTests(SimpleTestCase):
         for key, asset in VENDOR_ASSETS.items():
             self.assertRegex(asset.path, r"\d+\.\d+", f"{key}'s path names no version: {asset.path!r}")
 
-    def test_leaflet_artwork_matches_the_leaflet_it_is_drawn_by(self) -> None:
-        """The marker images were served from 1.7.1 while the library was 1.9.4."""
-        library = VENDOR_ASSETS["leaflet_js"].path.split("/")[1]
-        for key in ("leaflet_marker_icon", "leaflet_marker_shadow"):
-            self.assertEqual(
-                VENDOR_ASSETS[key].path.split("/")[1], library, f"{key} is from a different Leaflet release"
-            )
-
     def test_every_script_and_style_pins_an_integrity_hash(self) -> None:
-        """Every ``<script>``/``<link>`` this table can render must be checkable.
-
-        Only ``image`` assets are exempt - they have no tag of their own (`vendor_asset_tag` raises for one), so
-        nothing renders `integrity=` for them regardless."""
+        """Every ``<script>``/``<link>`` this table can render must be checkable."""
         for key, asset in VENDOR_ASSETS.items():
-            if asset.kind == "image":
-                continue
             self.assertTrue(asset.integrity, f"{key} ({asset.kind}) has no integrity hash")
             self.assertRegex(
                 asset.integrity,
@@ -94,18 +81,10 @@ class VendorAssetResolutionTests(SimpleTestCase):
         with self.assertRaises(KeyError):
             vendor_asset_url("leaflet_js_typo")
 
-    def test_an_image_has_no_tag_of_its_own(self) -> None:
-        with self.assertRaises(ValueError):
-            vendor_asset_tag("leaflet_marker_icon")
-
-    def test_the_template_tags_render(self) -> None:
+    def test_the_template_tag_renders(self) -> None:
         with _mirrored("https://assets.example.test/vendor"):
-            rendered = Template(
-                '{% load vendor_assets %}{% vendor_asset "leaflet_js" %}|{% vendor_asset_source "leaflet_marker_icon" %}'
-            ).render(Context({}))
-        tag, url = rendered.split("|")
-        self.assertIn("https://assets.example.test/vendor/leaflet/1.9.4/leaflet.js", tag)
-        self.assertEqual(url, "https://assets.example.test/vendor/leaflet/1.9.4/images/marker-icon.png")
+            rendered = Template('{% load vendor_assets %}{% vendor_asset "leaflet_js" %}').render(Context({}))
+        self.assertIn("https://assets.example.test/vendor/leaflet/1.9.4/leaflet.js", rendered)
 
 
 class NoRawCdnUrlsInTemplatesTests(SimpleTestCase):
@@ -176,16 +155,15 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
             "script-src": ["'self'"],
             "style-src": ["'self'"],
             "font-src": ["'self'"],
-            "img-src": ["https:"],
+            "img-src": ["'self'"],
         }
 
         origin = allow_vendor_mirror(directives, "https://assets.example.test/vendor/leaflet")
 
         self.assertEqual(origin, "https://assets.example.test")
-        for name in ("script-src", "style-src", "font-src"):
+        # img-src: a mirrored stylesheet draws its images (leaflet.draw's toolbar sprite) from beside itself.
+        for name in ("script-src", "style-src", "font-src", "img-src"):
             self.assertIn("https://assets.example.test", directives[name], name)
-        # img-src already allows https: wholesale; adding a host would be noise.
-        self.assertNotIn("https://assets.example.test", directives["img-src"])
 
     def test_no_mirror_configured_changes_nothing(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
@@ -215,34 +193,30 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
     CSP, the map is blank with no network error a user could act on.
     """
 
-    def test_the_style_origin_reaches_connect_src_and_only_that(self) -> None:
+    def test_the_style_origin_reaches_connect_src_and_img_src_only(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
         directives: dict[str, list[str]] = {
             "connect-src": ["'self'"],
-            "img-src": ["https:"],
+            "img-src": ["'self'"],
             "script-src": ["'self'"],
         }
 
         origins = allow_basemap_style_origins(directives, "https://tiles.example.test/styles/street.json")
 
         self.assertEqual(origins, ["https://tiles.example.test"])
+        # img-src: MapLibre draws a raster source the style names as <img>. script-src must not widen
+        # for a style document, which is data and never executes.
         self.assertIn("https://tiles.example.test", directives["connect-src"])
-        # img-src already allows https: wholesale, which covers the sprite's image half; script-src
-        # must not widen for a style document, which is data and never executes.
-        self.assertNotIn("https://tiles.example.test", directives["img-src"])
+        self.assertIn("https://tiles.example.test", directives["img-src"])
         self.assertNotIn("https://tiles.example.test", directives["script-src"])
 
-    def test_the_real_policy_declares_the_directive_this_helper_writes_to(self) -> None:
+    def test_the_real_policy_declares_the_directives_this_helper_writes_to(self) -> None:
         """The helper appends only to lists that already exist, so naming a directive the policy does not declare is a silent no-op that reads like configuration - which `worker-src` was, before this caught it."""
         from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
 
         self.assertIsInstance(_CSP_DIRECTIVES.get("connect-src"), list)
-        self.assertIn(
-            "https:",
-            _CSP_DIRECTIVES["img-src"],
-            "img-src stops covering the sprite if this wholesale entry is ever dropped",
-        )
+        self.assertIsInstance(_CSP_DIRECTIVES.get("img-src"), list)
 
     def test_buying_the_hosted_basemap_admits_its_glyph_host(self) -> None:
         """The proxied style still names protomaps.github.io for glyphs and sprites; unadmitted, the map has no labels."""

@@ -641,7 +641,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "from this deployment's own mirror. Set it and those two layers are served through "
             "this origin: VectorBasemapStyleView rewrites the hosted style's tiles to "
             "VectorBasemapTileView, which fetches them with the key server-side. Glyphs and "
-            "sprites stay on protomaps.github.io, which the CSP admits to connect-src whenever "
+            "sprites stay on protomaps.github.io, which the CSP admits to connect-src and img-src whenever "
             "this is set. Leave it empty and the layers keep whatever REData published."
         ),
     )
@@ -652,7 +652,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "their glyphs and sprites, and the tiles they name. Whitespace- or comma-separated, "
             "because a style's assets need not share a host with its tiles. Protomaps' hosted "
             "basemap needs nothing here; protomaps_api_key admits its glyph host. Admitted to CSP's "
-            "connect-src, and nothing else: it is not where tiles are fetched "
+            "connect-src and img-src, and nothing else: it is not where tiles are fetched "
             "from by this server, it is where the *browser* is allowed to fetch them from. A "
             "raster layer is proxied same-origin and needs no exception, so a deployment whose "
             "REData offers only raster layers can leave this unset. "

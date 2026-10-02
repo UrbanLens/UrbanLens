@@ -232,6 +232,7 @@ export function resolveConfiguredBase(root: HTMLElement | null, requested?: stri
  */
 export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.TileLayer {
     applyEmbeddedCatalogue();
+    applyMarkerArtwork();
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
     return templateTileLayer(def.url, { ...def.options, ...extraOptions });
 }
@@ -279,6 +280,7 @@ function canDrawVectorBase(): boolean {
  * @param extraOptions - Leaflet options for the raster fallback; a vector base takes none.
  */
 export function baseLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Layer {
+    applyMarkerArtwork();
     const def = vectorStyleFor(kind);
     if (def && canDrawVectorBase()) return L.maplibreGL({ style: def.styleUrl, attribution: def.attribution });
     return tileLayer(kind, extraOptions);
@@ -701,6 +703,35 @@ function applyEmbeddedCatalogue(): boolean {
     return embeddedRegisteredIds !== null;
 }
 
+/** `<script type="application/json">` written by `{% leaflet_marker_artwork %}` in `themes/base.html`. */
+const MARKER_ARTWORK_ID = "ul-leaflet-marker-artwork";
+
+/** The `L.Icon.Default` the artwork was last handed to; Leaflet arrives after this module, so it is set on first use. */
+let markerArtworkAppliedTo: unknown = null;
+
+/**
+ * Points Leaflet's default marker at this site's copy of its images. Left alone, Leaflet works their address out
+ * from leaflet.css and fetches them from the CDN that served it, once per page that shows a plain marker.
+ *
+ * Called from each entry point that gives a Leaflet map its layers, which the pages showing a plain marker all use
+ * before adding one. Without the embed, Leaflet's own lookup stands.
+ */
+function applyMarkerArtwork(): void {
+    if (typeof document === "undefined" || typeof L === "undefined" || !L.Icon?.Default || markerArtworkAppliedTo === L.Icon.Default) return;
+    const text = document.getElementById(MARKER_ARTWORK_ID)?.textContent;
+    if (!text) return;
+    let artwork: Pick<L.IconOptions, "iconUrl" | "iconRetinaUrl" | "shadowUrl">;
+    try {
+        artwork = JSON.parse(text) as typeof artwork;
+    } catch {
+        return;
+    }
+    // A string stops Leaflet looking the path up from its stylesheet; empty, it prefixes nothing to these URLs.
+    L.Icon.Default.imagePath = "";
+    L.Icon.Default.mergeOptions(artwork);
+    markerArtworkAppliedTo = L.Icon.Default;
+}
+
 /**
  * Registers each catalogue entry into `TILE_DEFS` so `tileLayer()` resolves it by id like any
  * other source, replacing the built-in vendor URL for that id.
@@ -946,6 +977,7 @@ export function createMapLayers(map: L.Map | MaplibreMap, options: MapLayersOpti
     // of the first tile request, not one round trip after it.
     applyEmbeddedCatalogue();
     if (isMaplibreMap(map)) return createMaplibreMapLayers(map, options);
+    applyMarkerArtwork();
     return createLeafletMapLayers(map, options);
 }
 

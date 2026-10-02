@@ -1641,3 +1641,53 @@ describe("the attribution line", () => {
         expect(text).toContain("Leaflet");
     });
 });
+
+/**
+ * `{% leaflet_marker_artwork %}` (themes/base.html) names this site's copy of Leaflet's marker images. Without it,
+ * Leaflet works their address out from leaflet.css and fetches every default marker from the CDN that served it.
+ */
+describe("the default marker's artwork", () => {
+    const ARTWORK = { iconUrl: "/static/l/marker-icon.png", iconRetinaUrl: "/static/l/marker-icon-2x.png", shadowUrl: "/static/l/marker-shadow.png" };
+
+    function stubIconDefault(): { imagePath?: string; merged: Record<string, unknown>[] } {
+        stubLeaflet();
+        const Default = {
+            imagePath: undefined as string | undefined,
+            merged: [] as Record<string, unknown>[],
+            mergeOptions(options: Record<string, unknown>) {
+                Default.merged.push(options);
+            },
+        };
+        ((globalThis as Record<string, unknown>).L as Record<string, unknown>).Icon = { Default };
+        return Default;
+    }
+
+    afterEach(() => {
+        document.getElementById("ul-leaflet-marker-artwork")?.remove();
+    });
+
+    test("comes from this site once a map asks for its layers", () => {
+        const el = document.createElement("script");
+        el.type = "application/json";
+        el.id = "ul-leaflet-marker-artwork";
+        el.textContent = JSON.stringify(ARTWORK);
+        document.head.appendChild(el);
+        const Default = stubIconDefault();
+
+        tileLayer("street");
+        tileLayer("satellite");
+
+        // An empty string, not undefined: Leaflet looks the path up from its stylesheet whenever it is not a string.
+        expect(Default.imagePath).toBe("");
+        expect(Default.merged).toEqual([ARTWORK]);
+    });
+
+    test("is left to Leaflet on a page that names none", () => {
+        const Default = stubIconDefault();
+
+        tileLayer("street");
+
+        expect(Default.imagePath).toBeUndefined();
+        expect(Default.merged).toEqual([]);
+    });
+});
