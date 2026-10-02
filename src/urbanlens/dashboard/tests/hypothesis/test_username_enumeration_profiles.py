@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 from urbanlens.dashboard.services.social.friendship import block_profile
+from urbanlens.dashboard.tests.hypothesis.test_external_api_wiki_oracle import disable_throttling
 
 NOBODY = "nobody_holds_this"
 _CSRF_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
@@ -264,6 +265,8 @@ class ExternalApiRoutesHideProfilesTests(_HiddenProfilesTestCase):
             scope=_ALL_SCOPES,
         )
         self.auth = {"HTTP_AUTHORIZATION": f"Bearer {token.token}"}
+        # Every route is walked once per case over this one token, far past the burst allowance.
+        disable_throttling(self)
 
     def _call(self, method: str, url: str, payload: dict) -> tuple[int, str]:
         response = getattr(self.client, method)(url, payload, content_type="application/json", **self.auth)
@@ -279,6 +282,7 @@ class ExternalApiRoutesHideProfilesTests(_HiddenProfilesTestCase):
                     return status, body.replace(slug, "SLUG")
 
                 expected = answer(NOBODY)
+                self.assertNotEqual(expected[0], 429, "a throttled answer matches every other one")
                 for case, slug in self.hidden.items():
                     with self.subTest(route=name, method=method, case=case):
                         self.assertEqual(answer(slug), expected)
