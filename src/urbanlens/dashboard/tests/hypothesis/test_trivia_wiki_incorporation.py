@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from fractions import Fraction
 from itertools import count
 from unittest.mock import patch
 
 from django.utils import timezone
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.article.model import ArticleRevision
 from urbanlens.dashboard.models.location.model import Location
@@ -22,6 +24,7 @@ from urbanlens.dashboard.models.trivia.model import (
 )
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.ai.article_safety import ArticleSafetyVerdict
+from urbanlens.dashboard.services.trivia import voting
 from urbanlens.dashboard.services.trivia.wiki_incorporation import (
     EDIT_SUMMARY_INCORPORATED_TRIVIA,
     WIKI_INCORPORATION_SCORE_THRESHOLD,
@@ -29,6 +32,7 @@ from urbanlens.dashboard.services.trivia.wiki_incorporation import (
     sweep_questions_for_wiki_incorporation,
 )
 from urbanlens.dashboard.services.wiki.articles import get_article, save_article
+from urbanlens.dashboard.tests.hypothesis.strategies import TRIVIA_VOTE_TALLY_MAX_VOTES, trivia_vote_tally
 
 _coordinate_counter = count()
 
@@ -79,6 +83,28 @@ def _upvote(question: TriviaQuestion, count_: int) -> None:
     """Give ``question`` enough upvotes to cross WIKI_INCORPORATION_SCORE_THRESHOLD (1.0 each)."""
     for _ in range(count_):
         baker.make(TriviaQuestionVote, question=question, profile=_make_profile(), kind=TriviaQuestionVoteKind.UPVOTE)
+
+
+def _exact_score(tally: dict[str, int]) -> Fraction:
+    weights = {
+        TriviaQuestionVoteKind.UPVOTE: voting.UPVOTE_WEIGHT,
+        TriviaQuestionVoteKind.DOWNVOTE: voting.DOWNVOTE_WEIGHT,
+        TriviaQuestionVoteKind.REPORT: voting.REPORT_WEIGHT,
+        TriviaQuestionVoteKind.NO_REACTION: voting.NO_REACTION_WEIGHT,
+    }
+    return sum((Fraction(str(weights[kind])) * n for kind, n in tally.items()), Fraction(0))
+
+
+def _qualifies(tally: dict[str, int]) -> bool:
+    return _exact_score(tally) >= Fraction(str(WIKI_INCORPORATION_SCORE_THRESHOLD))
+
+
+def _apply_tally(question: TriviaQuestion, tally: dict[str, int], voters: list[Profile]) -> None:
+    kinds = [kind for kind, n in tally.items() for _ in range(n)]
+    TriviaQuestionVote.objects.bulk_create(
+        TriviaQuestionVote(question=question, profile=voter, kind=kind)
+        for voter, kind in zip(voters, kinds, strict=False)
+    )
 
 
 class IncorporateQuestionIntoWikiTests(TestCase):
@@ -216,7 +242,7 @@ class SweepQuestionsForWikiIncorporationTests(TestCase):
         self.location = _make_location()
         self.wiki = _make_wiki(self.location)
 
-    def test_counts_considered_and_incorporated(self) -> None:
+    def test_a_question_below_the_threshold_is_not_a_candidate(self) -> None:
         eligible = _make_question(self.location, prompt="Eligible", answer="Yes")
         _upvote(eligible, 5)
         ineligible = _make_question(self.location, prompt="Too new", answer="No")
@@ -234,7 +260,7 @@ class SweepQuestionsForWikiIncorporationTests(TestCase):
         ):
             summary = sweep_questions_for_wiki_incorporation(batch_size=10)
 
-        self.assertEqual(summary["questions_considered"], 2)
+        self.assertEqual(summary["questions_considered"], 1)
         self.assertEqual(summary["questions_incorporated"], 1)
         eligible.refresh_from_db()
         ineligible.refresh_from_db()
@@ -269,3 +295,60 @@ class SweepQuestionsForWikiIncorporationTests(TestCase):
         with patch("urbanlens.dashboard.services.trivia.wiki_incorporation.get_gateway", return_value=None):
             summary = sweep_questions_for_wiki_incorporation(batch_size=2)
         self.assertEqual(summary["questions_considered"], 2)
+
+
+class VoteThresholdPropertyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.location = _make_location()
+        cls.wiki = _make_wiki(cls.location)
+        cls.voters = [_make_profile() for _ in range(TRIVIA_VOTE_TALLY_MAX_VOTES)]
+
+    def _gateway_and_safety(self):
+        return (
+            patch(
+                "urbanlens.dashboard.services.trivia.wiki_incorporation.get_gateway",
+                return_value=_FakeGateway("The armory was built in 1937."),
+            ),
+            patch(
+                "urbanlens.dashboard.services.trivia.wiki_incorporation.classify_article_text",
+                return_value=ArticleSafetyVerdict(approved=True),
+            ),
+        )
+
+    @settings(max_examples=40, deadline=None)
+    @given(tally=trivia_vote_tally)
+    def test_the_writer_is_consulted_exactly_when_the_weighted_score_meets_the_threshold(self, tally) -> None:
+        question = _make_question(self.location)
+        _apply_tally(question, tally, self.voters)
+
+        with patch(
+            "urbanlens.dashboard.services.trivia.wiki_incorporation.get_gateway", return_value=None
+        ) as get_gateway:
+            incorporate_question_into_wiki(question)
+
+        self.assertEqual(get_gateway.called, _qualifies(tally), f"tally={tally} score={_exact_score(tally)}")
+
+    @settings(max_examples=25, deadline=None)
+    @given(
+        tallies=st.lists(trivia_vote_tally, min_size=1, max_size=6), batch_size=st.integers(min_value=1, max_value=3)
+    )
+    def test_repeated_sweeps_reach_every_qualifying_question_whatever_precedes_it(self, tallies, batch_size) -> None:
+        questions = []
+        for index, tally in enumerate(tallies):
+            question = _make_question(self.location, prompt=f"Q{index}", answer=f"A{index}")
+            _apply_tally(question, tally, self.voters)
+            questions.append(question)
+
+        gateway, safety = self._gateway_and_safety()
+        with gateway, safety:
+            for _ in range(len(questions) + 1):
+                sweep_questions_for_wiki_incorporation(batch_size=batch_size)
+
+        processed = set(
+            TriviaQuestion.objects.filter(
+                pk__in=[q.pk for q in questions], wiki_incorporated_at__isnull=False
+            ).values_list("pk", flat=True)
+        )
+        expected = {question.pk for question, tally in zip(questions, tallies, strict=True) if _qualifies(tally)}
+        self.assertEqual(processed, expected)
