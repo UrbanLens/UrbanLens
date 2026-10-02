@@ -113,6 +113,21 @@ describe("confirmDialog", () => {
         expect(await second).toBe(true);
     });
 
+    test("a question asked right after another is answered is not cancelled by the first one's late close event", async () => {
+        // Chromium dispatches a dialog's close event a frame after close(), by when the 409 that asks the second
+        // question ("delete its child pins too?") may already have reopened the dialog.
+        const dialog = document.getElementById("confirm-dialog") as HTMLDialogElement;
+        const first = confirmDialog({ message: "Delete it?" });
+        click("confirm-dialog-ok");
+        expect(await first).toBe(true);
+
+        const second = confirmDialog({ message: "Its children too?" });
+        dialog.dispatchEvent(new Event("close"));
+        expect(dialog.open).toBe(true);
+        click("confirm-dialog-ok");
+        expect(await second).toBe(true);
+    });
+
     test("binding is lazy, so markup added after import still works", async () => {
         // The whole reason this module resolves elements on first use: it loads from
         // the <head>, before the dialog markup exists.

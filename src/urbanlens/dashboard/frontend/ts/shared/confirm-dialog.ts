@@ -57,8 +57,11 @@ function dialogParts(): DialogParts | null {
     document.getElementById("confirm-dialog-x")?.addEventListener("click", () => settle(false));
     ok.addEventListener("click", () => settle(true));
     alt.addEventListener("click", () => settle("alt"));
-    // Catches every close path at once: backdrop click, Escape, and direct .close().
-    dialog.addEventListener("close", () => settle(false));
+    // Catches every close path at once: backdrop click, Escape, and direct .close(). The event arrives a frame late,
+    // so one reaching a dialog already reopened for the next question belongs to the last one.
+    dialog.addEventListener("close", () => {
+        if (!dialog.open) settle(false);
+    });
     return parts;
 }
 
