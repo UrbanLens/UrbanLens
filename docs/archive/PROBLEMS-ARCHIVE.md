@@ -19943,3 +19943,309 @@ trigger through `htmx:confirm`. After the change, the same load requested each l
 and Lists and Filters not at all. Opening the media tab before the chain reached it loaded it once, and Lists
 loaded when its section was opened. Covered by `organize-tab-prewarm.test.ts` and
 `tests/integration/specs/ui/organize-tab-loading.spec.ts`.
+
+## RESOLVED 2026-10-02: No write route is left unnamed by a test; behavioural tests on 137 of them found 43 bugs, all fixed
+
+`id: P29` · `status: fixed` · `resolved: 2026-10-02`
+
+**No unnamed write route remains (2026-10-02).** What was left - the same bug class on routes that were already named, and two product questions - moved to P193.
+
+### The count
+
+`bin/report_unnamed_write_routes.py` walks `get_resolver().url_patterns` and joins nested namespaces
+(`external_api:pins.bulk.delete`). A route "accepts a write" when a DRF viewset's `actions`, a class-based view's
+handlers (filtered by `http_method_names` and `view_initkwargs`), or a DRF `APIView`'s handlers include
+`post`/`put`/`patch`/`delete`. A route is "named" when its full name appears as a quoted string literal in any
+`src/**/tests/**/*.py` or `tests/**/*.py`. `admin`, `oauth2_provider` and `social` are excluded; plain function views
+cannot be classified and are counted separately (there are 4, all named). It needs GeoDjango, so it runs in the
+test runner after a sync (`bin/run_tests.sh --verify-only` syncs):
+
+```bash
+docker exec -w /app urbanlens_development_main_test_runner /app/.venv/bin/python bin/report_unnamed_write_routes.py
+```
+
+| | 2026-09-29, before | 2026-09-29, after | 2026-10-02, before | 2026-10-02, after |
+|---|---|---|---|---|
+| project routes | 940 | 940 | 936 | 936 |
+| accept a write | | | 595 | 595 |
+| named by no test | 206 | 146 | 101 | 58 |
+| ...of which accept a write | **138** | **78** | **42** | **0** |
+
+The 940 included the four `social:*` function views, which the script leaves out; the 2026-10-02 figures are the
+script's. `/app/tests` in the runner is the image's copy, not synced, so a name used only in a new
+`tests/contract` or `tests/integration` file is not seen until a rebuild. The 2026-08-14 figure (187 of 841) is not
+comparable and was never reconciled.
+
+### What has behavioural tests: 137 routes
+
+Each asserts the owner's (or authorised member's) path does what it should, checked in the database; another user is
+refused and nothing changes; anonymous is redirected to login (401/403 on the external API, plus a key without the
+write scope); and a malformed body is a 4xx, not a 500 and not a silent wrong write. All in
+`src/urbanlens/dashboard/tests/hypothesis/`.
+
+**2026-09-29, 60 routes:**
+
+- `test_owner_scoped_delete_routes.py` - `pin.note.delete`, `pin.notes`, `pin.visit.delete`,
+  `pin.albums.delete`, `pin.albums.remove`, `lists.items.remove`, `trips.activity.delete`
+- `test_trip_membership_and_list_copy_routes.py` - `trips.member.organizer`, `trips.join`,
+  `lists.add_to_trip`, `lists.create_trip`
+- `test_group_chat_write_routes.py` - `messages.group.delete`, `messages.group.share.pin`,
+  `messages.group.share.pin.respond`, `external_api:messages.groups.share.pin`
+- `test_safety_write_routes.py` - `safety.checkin.partners`, `.partners.remove`, `safety.partner.accept`,
+  `.decline`, `.mark_safe`, `safety.checkin.cancel`, `.location.toggle`, `.gallery.image`,
+  `.maps.detach`, `safety.contact.mark_safe`, `safety.contact.optout`
+- `test_bulk_write_routes.py` - `external_api:pins.bulk.delete`, `pins.bulk.edit`, `labels.bulk.delete`,
+  `labels.bulk.convert`, `label.bulk_convert_status`, `_tag`, `_category`
+- `test_admin_and_auth_write_routes.py` - the four `dev_toolbar.*` routes, `login.2fa.options`
+- `test_upload_and_wiki_write_routes.py` - `tools.import.start`, `pin.immich.import`,
+  `vault.photos.failures`, `external_api:safety.checkins.photos`, `.photos.detail`, `.maps.detail`,
+  `location.wiki.article.image`, `location.wiki.albums.upload`, `location.wiki.albums.delete`,
+  `location.wiki.overlays.delete`, `external_api:wikis.cover_photo`
+- `test_publish_and_restore_routes.py` - `external_api:pins.wiki-sync.push`, `.pull`,
+  `pin.floorplan.publish`, `location.wiki.article.restore`, `external_api:wikis.article.revisions.restore`,
+  `external_api:trips.calendar_sync`
+- `test_owner_scoped_misc_write_routes.py` - `markup_map.markup.edit`, `vault.photos.conflicts.dismiss`,
+  `vault.photos.failures.dismiss`, `pin.import.confirmed.cancel`, `trivia.kick`
+
+**2026-10-02, the 25 with no reference at all (144 tests):**
+
+- `test_game_lifecycle_write_routes.py` - `consensus.answer`, `.begin`, `.end`, `.invite`, `.join`, `.skip`,
+  `.start`; `trivia.begin`, `.end`, `.invite`, `.leave`, `.settings`; `spotguessr.invite`; and the bugs'
+  siblings in `trivia.start`, `spotguessr.start`, `spotguessr.settings`
+- `test_read_marker_write_routes.py` - `messages.group.mute`, `messages.group.read`,
+  `external_api:messages.groups.read`, `notifications.read_all`, `settings.save_map_dark_mode`
+- `test_external_wiki_community_write_routes.py` - `external_api:wikis.aliases.toggle_nickname`,
+  `wikis.comments.reactions`, `wikis.history.revert`
+- `test_misc_unnamed_write_routes.py` - `boundary.pin` (and the same parsing in `location.wiki.boundary` and
+  `external_api:wikis.boundary`), `pin.debug.clear_cache`, `pin.web_search.refresh`, `memories.photos.redirect`
+
+**2026-10-02, community wiki editing (47 tests):** `test_community_wiki_write_routes.py` - `location.wiki.albums.add`,
+`.remove`, `.reorder`, `.article.preview`, `.layers.reorder`, `.markup`, `.overlays`, `.overlays.corners`,
+`.overlays.edit` and `.stat_vote`.
+
+**2026-10-02, the last 42 (215 tests):** the external API files share the owner/stranger/read-only-key fixture and
+the malformed-body sweep in `external_api_helpers.ExternalApiRouteCase`.
+
+- `test_external_share_merge_and_rsvp_write_routes.py` - `external_api:pin-shares.respond`, `pins.bulk.merge`,
+  `trips.rsvp`
+- `test_dashboard_unnamed_write_routes.py` - `safety.checkin.checkin`, `safety.checkin.location.update`,
+  `safety.contact.messages`, `lists.delete`, `pin.floorplan.save`, `trips.activity.status`
+- `test_external_pin_subresource_write_routes.py` - `external_api:pins.notes`, `.notes.detail`, `.aliases`,
+  `.aliases.detail`, `.aliases.use`, `.links`, `.links.detail`, `.visits.detail`, `.comments`, `.comments.detail`,
+  `.comments.reactions`, `.review`, `.article`, `.article.revisions.restore`
+- `test_external_wiki_write_routes.py` - `external_api:wikis.detail`, `.aliases`, `.aliases.use`, `.links`,
+  `.article`, `.article.revisions.detail`, `.comments`, `.comments.detail`, `.votes`
+- `test_external_list_label_filter_write_routes.py` - `external_api:lists`, `lists.detail`, `lists.items`,
+  `lists.items.reorder`, `lists.markup-map`, `lists.resync`, `labels.detail`, `labels.customization`,
+  `labels.merge`, `saved_filters.detail`
+
+None of the 42 is dead: every dashboard route has a template or TypeScript caller, and the external routes are the
+published API.
+
+### What they found, 2026-10-02 (the last 42): 17 bugs, all fixed
+
+Each was a failing test first; the same tests now pass.
+
+- **A live position off the globe was stored** (`safety.checkin.location.update`): `latitude=91` was written to the
+  check-in, and `nan`, `inf` and `1e300` reached the `Decimal(9,6)` column. Coordinates now go through
+  `coordinate_or_none`, accuracy through the new `numbers.bounded_float_or_none` (finite, not negative); anything
+  else is a 400. `test_a_point_off_the_globe_or_not_a_number_is_400_and_records_nothing`.
+- **A floorplan save naming a version that is not a uuid was a 500** (`pin.floorplan.save`): the ORM raised on the
+  filter. **So was a `valid_from` that is not a string**, and an unparseable one was silently dropped. Both are 400s
+  now (`controllers.floorplans._parse_uuid`). The read routes `pin.floorplan.json` and `.features` 500'd on
+  `?version=` the same way and now find nothing (204). `test_a_malformed_document_is_4xx_and_saves_nothing`,
+  `test_reading_a_version_that_is_not_a_uuid_finds_nothing_rather_than_failing`.
+- **An unrecognized activity status flipped it** (`trips.activity.status`): a typo for "proposed" sent to a proposed
+  activity confirmed it. An absent status still toggles, which is what the button sends; anything else that is not
+  `proposed`/`confirmed` is a 400 (`set_activity_status`). `test_an_unrecognized_status_is_400_not_a_flip`.
+- **A pin alias made only of symbols was a 500** (`external_api:pins.aliases`): `create_pin_alias` raised a bare
+  `ValueError` the view's `PinSubResourceError` handler never caught. It raises `AliasNameRequiredError` now, mapped
+  to 400. `test_a_name_with_nothing_left_once_sanitized_is_400_not_a_500`.
+- **`external_api:wikis.aliases` built the alias by hand, four ways wrong.** A case variant of an existing name was a
+  500 on `db_walias_unique`; a name made only of symbols stored a blank alias (and the next one 500'd); an unknown
+  `kind` was stored, or past ten characters was a 500; and the alias never reached the wiki's history or the undo
+  stack, though the dashboard's alias form records both. Both now call `services.wiki.wiki_aliases.create_wiki_alias`,
+  and `kind` is a choice. `ExternalWikiAliasesRouteTests`.
+- **A blank alias that path left behind could blank the wiki** through "use this name" (`external_api:wikis.aliases.use`,
+  `location.wiki.alias.use`): an explicit empty name is a legal rename. `promote_wiki_alias_to_name` refuses a blank
+  alias and both routes answer 400. Existing blank aliases were not looked for or removed.
+  `test_a_blank_alias_left_by_the_old_create_path_cannot_blank_the_wiki`.
+- **A community wiki could be renamed to blank** (`external_api:wikis.detail`, and `location.wiki.edit` through the
+  same `apply_wiki_edit`): a name `sanitize_name` empties passed, `Wiki.save()` stored `""`, and the history recorded
+  the unsanitized text. A name is now checked as it will be stored; an explicit `""` stays possible because undoing a
+  rename of an unnamed wiki writes one. `test_a_name_with_nothing_left_once_sanitized_is_400_and_keeps_the_name`,
+  `test_the_dashboard_edit_refuses_that_name_too`.
+- **A duplicate wiki link answered `{"detail": ...}`** (`external_api:wikis.links`), the one hand-written response in
+  the package outside the `{"error": ...}` envelope. `test_the_same_url_twice_is_400_in_the_error_envelope`.
+- **List rules that were not an object were a 500** (`external_api:lists`, `lists.detail`): `smart_filter` accepted any
+  JSON and `validate_criteria_ownership` called `.get` on it. **Rules of the wrong shape inside an object** (`tags: 5`,
+  `label_groups: 5`, an unparseable date, a `custom_fields` entry without `field_id`, a non-text `name`) were 500s in
+  the immediate resync, and `saved_filters.detail` stored the same criteria, which then failed every list derived from
+  the filter. `services.search.filter_criteria.validate_criteria_shape` now refuses them in both serializers; scalar
+  bounds are left alone because the filter already ignores one it cannot parse.
+  `test_smart_rules_that_are_not_an_object_are_400_not_a_500` and the saved-filter malformed-edit test.
+- **An `order` past the integer column was a 500** on `labels.detail` and `saved_filters.detail`, and **an item id past
+  bigint** on `lists.items.reorder`. The serializers bound them (`DB_INTEGER_MIN`/`MAX`, the new `DB_BIGINT_MAX`).
+
+### What they found, 2026-09-29: 14 bugs, all fixed
+
+Each was an `xfail(strict=True)` reproduction first; the markers are gone and the same tests pass.
+
+- **A permission bypass.** `lists.add_to_trip` (`PinListAddToTripView`) never called
+  `require_perform(..., trip.allow_add_activities, ...)`, so a member the trip forbids from adding activities added
+  them through a list copy, and so did an invited member who never joined. `copy_list_pins_to_trip` now calls it, so
+  every caller is gated. `test_a_member_the_trip_forbids_from_adding_activities_is_refused`,
+  `test_an_invited_member_who_has_not_joined_is_refused`.
+- **Any API-key write to a path over 255 characters was a 500**: `ApiKeyAuthentication` wrote `request.path` into
+  `ApiKeyUsageLog.endpoint` (`varchar(255)`) unbounded. `record_api_key_usage` truncates to the column.
+  `test_a_long_pin_slug_is_a_404_not_a_500`.
+- **A JSON array body was a 500** wherever a view called `.get()` on whatever `json.loads` returned (`pin.notes`,
+  `pin.albums.remove`, `lists.add_to_trip`, `lists.create_trip`, `vault.photos.failures`, `pin.floorplan.publish`;
+  each `test_a_json_array_body_is_a_4xx`), and **other malformed bodies** were 500s: a non-string note `text`
+  (`test_a_non_string_text_is_a_4xx`), a number in `add_parent_ids` (`labels._posted_ids` refuses a non-list,
+  `test_a_non_list_parent_ids_is_a_4xx`), a form post to `pin.floorplan.publish` without `version` or with a non-uuid
+  one (`test_a_form_post_without_a_version_is_a_4xx`, `test_a_non_uuid_version_is_a_4xx`), and a form-encoded `label`
+  to `markup_map.markup.edit` (`test_a_form_encoded_label_is_not_a_500`). A body that is present but not a JSON object
+  is a 400 through `services/core/request_body.py` (`posted_json_object`, `posted_fields`), which raises Django's
+  `BadRequest`; the three `_parse_body` copies are gone, and a form post reads one value per field.
+
+**Swept, 2026-09-29.** `test_write_route_smoke.py` also posts `[]`, `null`, a JSON string, `{` and a 5,000-deep array
+to every write route it can build, and fails on any 5xx. It found 26 more routes that 500'd (`trips.*` ×12,
+`pin.bulk_*` ×4, `pin.edit`, `location.wiki.edit`, both cover-photo routes, the detail-pin routes,
+`organize.priority.save`, `home.widgets.save`, and three DRF actions whose `request.data` was a list), all converted to
+`posted_json_object`/`posted_fields`/`drf_data_object`. `MalformedBodyError` is a `ValueError` too, so a view's
+existing handler for undecodable JSON answers it with its own 400. 17 `json.loads(request.body ...)` sites remain
+unconverted because they already check `isinstance(..., dict)` or are not reachable by the sweep's fixtures.
+
+### What they found, 2026-10-02 (the 25 unreferenced, and community wiki editing)
+
+- **A refused multiplayer start left a lobby behind and had already invited the friends listed before the
+  non-friend** (`consensus.start`, `trivia.start`, `spotguessr.start`). The session and its invites are one
+  transaction; the notifications' deliveries are `on_commit`.
+- **A non-numeric `invite_profile_ids` was a 500** on all three starts, and an unknown id was silently dropped; both
+  are 400s, worded as a non-friend is (`controllers.games.posted_invitees`).
+- **An invite told a real non-friend apart from an id with no profile**, on all three invite routes. Both now read as
+  a non-friend.
+- **A Consensus game the host had ended kept playing**: answers and skips still landed, applied to the wiki, paid
+  points and dealt new rounds. `submit_answer` refuses a session that is not ACTIVE, and `get_or_create_round` deals
+  nothing to one. Ending a game whose open round then split left that round `VOTE_OPEN`, so a later
+  `consensus.vote` could still apply the winning answer; ending now settles that vote (tentative, no votes cast) and
+  a vote on a session that is no longer active is refused. Ending mid-round no longer deals and broadcasts the next
+  round first (`test_consensus_session.py::EndingAGameMidRoundTests`).
+- **An overlong Consensus answer was a 500, or wedged the round** (256 to 500 characters failed the wiki's column
+  after the answer was counted). `fields.validate_value` measures every text answer where it is stored.
+- **A photo-coordinate answer off the globe was accepted**: `latitude=91` was written onto the community photo. A
+  latitude past ±90 or a non-finite value is a 400; a longitude from a wrapped copy of the map is folded into ±180.
+- **A garbled ratings toggle turned rating-sharing off** (`trivia.settings`, `spotguessr.settings`). Only
+  `"on"`/`"off"` are accepted.
+- **A missing or empty `polygon` cleared a boundary drawing** (`boundary.pin`, `location.wiki.boundary`; on
+  `external_api:wikis.boundary`, an empty non-null one). Only an explicit `null` clears.
+- **A reaction to a reply under a comment hidden from the viewer succeeded**, confirming a reply the thread does not
+  show (`external_api:wikis.comments.reactions`, and the dashboard route through `comment_is_visible`). A reply is
+  visible only under a visible parent, except to its own author.
+- **Late answers and guesses were scored** (`trivia.answer`, `spotguessr.guess`) on a round already revealed by its
+  timer, the stall sweep or the host ending the game. Both refuse it under the round lock (a 400, also on the external
+  API), and a player's own repeat is still reported as a duplicate. `spotguessr.guess` also parsed coordinates with a
+  bare `float()`; it now parses them as the photo answer does.
+- The community wiki fixture adds a contributor whose photos are visible to no one, which found the next two.
+  **A wiki album's remove deleted a photo hidden from the viewer, and confirmed it**, and `move_from` on `albums.add`
+  did the same through the source album; both act only on the viewer's visible items. **A reorder's count included
+  hidden photos**; it counts the viewer's own placed items, each id once. **A garbled stat vote cleared the voter's
+  vote**; it is a 400, as is anything outside 0 to 5.
+
+### Looks deliberate, but surprising - not encoded as a bug
+
+- Any viewer of a wiki may delete another contributor's community album or map overlay
+  (`location.wiki.albums.delete`, `location.wiki.overlays.delete`): both resolve through visibility, not authorship.
+  The tests assert only the visibility gate.
+- The `dev_toolbar.*` routes answer an anonymous caller 403, not a login redirect (`raise_exception = True`).
+- `trivia.kick` refuses a non-host with 400, not 403.
+- `label.bulk_convert*` accepts `{"ids": "12"}` and iterates it as `[1, 2]`; scoped to the caller's own labels.
+- `external_api:wikis.aliases.toggle_nickname` and `messages.group.mute` flip on every POST, so a retried request
+  undoes itself - the reason the reaction endpoints are PUT/DELETE, and `set_group_muted` is declarative.
+- `external_api:wikis.boundary` still clears on an absent `polygon`: its schema marks the field optional.
+- `memories.photos.redirect` answers every verb with a 301 to the Vault; a POST arrives there as a GET.
+- A garbled `total_rounds` on any game start becomes the default rather than a 400.
+- `trips.activity.status` lets any joined member confirm or propose any activity, where editing, moving and deleting
+  one follow `allow_edit_activities`. The button is shown to every joined member, so it reads as intended. A bare
+  toggle on a completed activity sets it to proposed; the button is hidden for completed activities.
+- An article save with a `base_revision_id` on an article that has no revisions yet is accepted
+  (`save_article_checked` only compares when there is a latest revision), and a `wikis.detail` PATCH with a
+  `base_revision_id` newer than every field revision applies. Neither is a 500, and a client can always send the
+  current id anyway.
+- `external_api:wikis.article.revisions.detail` lets an editor delete their own revision from a community article's
+  history; the article's text stays.
+- `safety.contact.messages` answers a blank body by re-rendering the chat panel (200, nothing written); its docstring
+  says 400.
+
+### The no-5xx sweep, which this complements
+
+`tests/hypothesis/test_write_route_smoke.py` posts a minimal body, and the malformed bodies above, to every write
+route it can build a URL for, as the owner, and fails only on a 5xx. It reached 532 of 647 named routes as of
+2026-08-16 (not re-measured since), and its `_KNOWN_CRASHES` allowlist is empty; `test_the_known_crash_is_still_crashing`
+notices if one is added and then fixed. It cannot assert what a route does, and a minimal body is not a malformed one:
+every 500 above passed it.
+
+**`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
+
+### After the merge (2026-10-02)
+
+- `SavedFilterDetailView.patch` saved the whole row, so a concurrent edit to another field was reverted; it now saves
+  only the fields the request sent (6dc797445,
+  `test_an_edit_keeps_a_field_another_request_changed_meanwhile`, which failed on the old code).
+- The one failure in the 171-file sweep, `test_migration_noop_reverse_guard.py` on `0034_reresolve_fiat_building_places`,
+  was an unreviewed one-way migration; it is reviewed now (00627cf8b). The merged tree's 135-file sweep: 2,952 passed.
+- The product questions and unchecked gaps moved to P193.
+
+## RESOLVED 2026-10-02: A fetch() or htmx write after the session ended reported success; a script's request now gets a 401 it can show
+
+`id: P192` · `status: fixed` · `resolved: 2026-10-02`
+
+`found by: the P11 raw-fetch audit, 2026-10-02`
+
+A view behind `LoginRequiredMixin` or `@login_required` answered an anonymous request with a 302 to
+`/accounts/login/?next=...`. `fetch()` and htmx follow redirects, so a write sent after the session ended - expiry, or
+a sign-out in another tab, which leaves the page's CSRF token valid - came back as the login page with a 200. A caller
+checking only the status ran its success path: the change was not saved and the page said it was. Through htmx the
+login page was swapped into the target (the pin edit dialog closed and `#pin-overview` became a login form).
+
+**Fix.** `dashboard.middleware.ScriptLoginRefusalMiddleware`, after `AuthenticationMiddleware`, swaps a login gate
+(a redirect to `LOGIN_URL` carrying `next`) for a `401` with the plain-text body "Your session has ended. Sign in again
+to continue." when the viewer is anonymous and a script sent the request: `Sec-Fetch-Mode` other than `navigate`, or,
+for a browser without fetch metadata, `HX-Request: true` or `X-Requested-With: XMLHttpRequest`. A navigation, a form
+post, a request with none of those headers, a plain redirect to the login page, and a signed-in viewer sent to sign in
+(the staff-only views) keep the redirect. Both answers `Vary` on the three headers. htmx's error handler and
+`fetchJson` already show a short plain-text body; the raw-fetch net in `shared/site-runtime.ts` says the same sentence
+for any 401 (`SESSION_ENDED_MESSAGE`, which a Python test holds equal to the server's).
+
+Tests: `test_expired_session_script_requests.py` (the five script shapes refused with nothing written, the navigation
+shapes still redirected, the middleware's edge cases) and `site-runtime.test.ts`. Browser-verified on the dev stack:
+with the session cookie removed, the pin page's Edit Pin dialog posts, gets the 401, stays open with the name typed,
+`#pin-overview` is unchanged, and the toast reads the sentence; a raw `fetch` POST toasts it too.
+
+Not changed: the toast is drawn under an open modal dialog's backdrop (P194).
+
+## RESOLVED 2026-10-02: A toast raised while a modal dialog was open was dimmed under its backdrop; it is drawn above it now
+
+`id: P194` · `status: fixed` · `resolved: 2026-10-02` · `found by: browser-verifying P192, 2026-10-02`
+
+A modal `<dialog>` sits in the top layer with a backdrop over everything else, and `#toast-container` was not in the
+top layer, so any toast raised while a dialog was open - typically the error from that dialog's own submit - was drawn
+under the backdrop (`rgba(0,0,0,.55)` plus a blur for `.ul-dialog`). Measured on the pin page's Edit Pin dialog:
+the toast's text came out dimmed and a point inside it hit the dialog.
+
+**Fix.** `shared/dialogs.ts`'s `raiseToasts()` makes the container a manual popover and re-shows it after every toast
+(a later top-layer entry draws over an earlier one). `configureToastr` wraps toastr's four methods so a direct
+`window.toastr` call is lifted too; the library-missing fallback calls it itself. `_toastr.scss` undoes the UA popover
+box. Not covered: a dialog opened after the last toast covers it until the next one.
+
+**Inert, by the platform.** The container is outside the dialog, so the modal still makes it inert: while a dialog is
+open a toast can't be clicked away or hover-paused, and it times out as usual.
+
+Tests: `tests/integration/specs/ui/toasts-over-dialogs.spec.ts` compares the toast's peak pixel brightness over a
+`.ul-dialog` with the same toast alone (above 0.9 of it), with a control that removes the popover API and sees it
+dimmed (below 0.8; the UA's own lighter backdrop dims it less, 178 against 199, which is why the spec uses
+`.ul-dialog`). Hit-testing
+can't measure it, because it skips inert elements. Also: the toast still sits in the corner and takes a click with no
+dialog open, and `dialogs.test.ts` covers `raiseToasts` against a stubbed popover API (happy-dom has none).
+

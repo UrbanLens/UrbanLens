@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P193` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
+**Next free id:** `P195` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -47,7 +47,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-09-24 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P29 | open | 2026-10-02 | No write route is left unnamed by a test; behavioural tests on 137 of them found 43 bugs (fixed) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-18 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-29 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -209,5 +208,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | P186 | open | 2026-10-02 | `Location.official_name` is seeded from text the client sent, and a new Location takes its URL slug from it at creation; a new wiki adopts it as its automatic name and concealment shows it as the provider name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P187 | open | 2026-10-02 | Production's celery workers likely cannot reach REData: the LAN answers redata.urbanlens.org with NPM's private address, which the celery egress policy refuses, so no CRIS documents, CRIS photos or web images land | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P192 | open | 2026-10-02 | A fetch() write made after the session ends reports success: the login redirect is followed to a 200 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P193 | open | 2026-10-02 | Two product questions and three unchecked gaps left by the write-route audit (P29) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |
