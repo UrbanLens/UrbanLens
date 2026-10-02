@@ -159,7 +159,10 @@ def pending_marker(digest: str) -> str:
 
 
 def _is_remote(url: str) -> bool:
-    return urlsplit(url).scheme in ("http", "https")
+    try:
+        return urlsplit(url).scheme in ("http", "https")
+    except ValueError:
+        return False
 
 
 def copy_urls(images: Iterable[RemoteImage]) -> dict[str, str]:

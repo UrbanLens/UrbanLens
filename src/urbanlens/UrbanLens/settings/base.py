@@ -746,7 +746,7 @@ PERMISSIONS_POLICY = "geolocation=(self), clipboard-write=(self), camera=(), mic
 CROSS_ORIGIN_RESOURCE_POLICY = "same-site"
 X_PERMITTED_CROSS_DOMAIN_POLICIES = "none"
 
-# Report-only: `require-corp` would break the third-party thumbnails img-src admits; `credentialless` fails open where unsupported.
+# Report-only: `require-corp` would break the vendor tiles img-src admits, which send no CORP; `credentialless` fails open where unsupported.
 CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 
 # Content-Security-Policy (django-csp >= 4).
@@ -776,29 +776,27 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "https://unpkg.com",
     ],
     "font-src": ["'self'", "data:", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+    # Third-party pictures are served from this site's copies (P165), so only these load from elsewhere.
+    # tests/hypothesis/test_csp_image_hosts.py reads the hosts out of the code that configures them.
     "img-src": [
         "'self'",
         "data:",
         "blob:",
-        # Media-gallery, web-search, historical-sheet and imagery thumbnails load from unbounded provider hosts;
-        # narrowing this needs them proxied (P165). Images don't execute.
-        "https:",
-        # Base map tiles and overlays. Not tile.openstreetmap.org (P126) - nothing
-        # loads from OSM's own tile servers anymore, and the "https:" entry above
-        # would cover it anyway if something did.
+        # Tiles the browser fetches itself (TILE_DEFS in frontend/ts/shared/map-layers.ts): the borders and weather
+        # overlays, and each base layer REData's catalogue does not replace, which is all of them when signed out.
         "https://*.basemaps.cartocdn.com",
         "https://basemaps.cartocdn.com",
-        "https://*.tile.opentopomap.org",
-        "https://tile.opentopomap.org",
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
-        # Favicons and avatar preview.
-        "https://www.google.com",
-        "https://www.gravatar.com",
-        # Maps imagery hosts (runtime-chosen; report-only reveals gaps).
-        "https://maps.googleapis.com",
-        "https://maps.gstatic.com",
+        # The Maps JavaScript API's imagery (SpotGuessr's Street View), as Google's CSP guide lists it.
+        "https://*.googleapis.com",
+        "https://*.gstatic.com",
+        "https://*.google.com",
+        "https://*.googleusercontent.com",
+        # Images vendor stylesheets draw from beside themselves, such as leaflet.draw's toolbar sprite.
+        "https://unpkg.com",
+        "https://cdnjs.cloudflare.com",
     ],
     # ws: for plain-HTTP local/dev game sockets.
     "connect-src": [
@@ -858,8 +856,9 @@ def allow_vendor_mirror(directives: dict[str, list[str]], base_url: object) -> s
         return None
     parsed = urlparse(str(base_url))
     origin = f"{parsed.scheme}://{parsed.netloc}"
-    # connect-src: devtools fetches a mirrored script's source map from the mirror.
-    for name in ("script-src", "style-src", "font-src", "connect-src"):
+    # connect-src: devtools fetches a mirrored script's source map from the mirror. img-src: a mirrored stylesheet draws
+    # its images from beside itself.
+    for name in ("script-src", "style-src", "font-src", "connect-src", "img-src"):
         hosts = directives.get(name)
         if hosts is not None and origin not in hosts:
             hosts.append(origin)
@@ -893,11 +892,11 @@ def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str
     A raster basemap needs nothing here: it is proxied, so the browser only ever talks to this
     origin. A vector one is the opposite - REData publishes a ``style_url`` and the browser fetches
     the style, its glyphs, its sprite and the tile archive itself directly (REData's ``D11``).
-    MapLibre fetches all four with ``fetch``/XHR rather than as ``<img>``, so ``connect-src`` is
-    the only directive that has to name them. Deliberately not the other two it might look like it
-    needs: ``img-src`` already admits ``https:`` wholesale, so the sprite's image half is covered
-    and a host entry would be noise (the same reasoning ``allow_vendor_mirror`` applies), and
-    MapLibre's tile-decoding workers are same-origin, so the style's origin has no bearing on them.
+    MapLibre fetches all four with ``fetch``/XHR, so ``connect-src`` names them; ``img-src`` does
+    too, because MapLibre loads a raster source the style names as ``<img>`` whenever it is not
+    refreshing expired tiles, and decodes a sprite through one where ``createImageBitmap`` is
+    missing. Not ``worker-src``: MapLibre's tile-decoding workers are same-origin, so the style's
+    origin has no bearing on them.
 
     More than one origin is accepted because a style's assets need not share a host with its
     tiles: Protomaps' hosted API serves tiles from ``api.protomaps.com`` and the glyphs and sprite
@@ -921,7 +920,7 @@ def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str
         if origin in admitted:
             continue
         admitted.append(origin)
-        for name in ("connect-src",):
+        for name in ("connect-src", "img-src"):
             hosts = directives.get(name)
             if hosts is not None and origin not in hosts:
                 hosts.append(origin)

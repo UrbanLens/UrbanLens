@@ -23,7 +23,7 @@ class VendorAsset:
         fallback: The public URL used when no mirror is configured.
         integrity: Subresource-integrity hash for ``fallback`` only."""
 
-    kind: Literal["script", "style", "image"]
+    kind: Literal["script", "style"]
     path: str
     fallback: str
     integrity: str = ""
@@ -43,14 +43,6 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
         "leaflet/1.9.4/leaflet.js",
         "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
         "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH",
-    ),
-    # Leaflet's own default marker artwork. Previously requested from Leaflet
-    # 1.7.1 while the library was 1.9.4.
-    "leaflet_marker_icon": VendorAsset("image", "leaflet/1.9.4/images/marker-icon.png", "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png"),
-    "leaflet_marker_shadow": VendorAsset(
-        "image",
-        "leaflet/1.9.4/images/marker-shadow.png",
-        "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
     ),
     "leaflet_rotate_js": VendorAsset(
         "script",
@@ -198,11 +190,8 @@ def vendor_asset_tag(key: str) -> SafeString:
         The tag, with integrity and crossorigin only when loading from the public fallback.
 
     Raises:
-        KeyError: If the key is not in the table.
-        ValueError: If the asset is an image, which has no tag of its own."""
+        KeyError: If the key is not in the table."""
     asset = VENDOR_ASSETS[key]
-    if asset.kind == "image":
-        raise ValueError(f"{key} is an image; use vendor_asset_url")
     url = vendor_asset_url(key)
     mirrored = url != asset.fallback
     if asset.kind == "style":
@@ -212,3 +201,23 @@ def vendor_asset_tag(key: str) -> SafeString:
     if asset.integrity and not mirrored:
         return format_html('<script src="{}" integrity="{}" crossorigin="anonymous"></script>', url, asset.integrity)
     return format_html('<script src="{}"></script>', url)
+
+
+#: Leaflet's marker images, served by this site rather than the CDN that serves Leaflet, by the name of the
+#: ``L.Icon.Default`` option each fills. Static paths, versioned with the Leaflet that draws them.
+LEAFLET_MARKER_ARTWORK: dict[str, str] = {
+    "iconUrl": "dashboard/vendor/leaflet/1.9.4/images/marker-icon.png",
+    "iconRetinaUrl": "dashboard/vendor/leaflet/1.9.4/images/marker-icon-2x.png",
+    "shadowUrl": "dashboard/vendor/leaflet/1.9.4/images/marker-shadow.png",
+}
+
+
+def leaflet_marker_artwork() -> dict[str, str]:
+    """Where each of Leaflet's marker images is served.
+
+    Returns:
+        The URL of each image, by the ``L.Icon.Default`` option it fills.
+    """
+    from django.templatetags.static import static
+
+    return {option: static(path) for option, path in LEAFLET_MARKER_ARTWORK.items()}

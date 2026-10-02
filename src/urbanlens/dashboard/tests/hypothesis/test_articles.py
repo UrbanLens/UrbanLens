@@ -477,6 +477,193 @@ class ArticleImagesAreLocalTests(TestCase):
         self.assertNotIn("img.example", article.content_html)
         self.assertEqual(article.revisions.get().edit_summary, "Images stored on this site")
 
+    def test_reference_style_images_store_copies_in_their_definitions(self) -> None:
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        sample = (
+            "![The mill][Mill] and ![Yard][] and ![shortcut] and ![quoted]\n\n"
+            '[mill]: https://img.example/mill.jpg "The mill"\n'
+            "[yard]: <https://img.example/yard.png>\n"
+            "[Shortcut]: https://img.example/short.jpg\n\n"
+            "> [quoted]:\n> https://img.example/quoted.jpg"
+        )
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertIn("![The mill][Mill] and ![Yard][] and ![shortcut] and ![quoted]", article.content)
+        self.assertIn(f'[mill]: {self._copy("https://img.example/mill.jpg")} "The mill"', article.content)
+        self.assertIn(f"[yard]: <{self._copy('https://img.example/yard.png')}>", article.content)
+        self.assertIn(f"[Shortcut]: {self._copy('https://img.example/short.jpg')}", article.content)
+        self.assertIn(f"> [quoted]:\n> {self._copy('https://img.example/quoted.jpg')}", article.content)
+        self.assertNotIn("img.example", article.content)
+        self.assertEqual(RemoteImageCopy.objects.get(source_url="https://img.example/mill.jpg").provider, "article")
+
+    def test_a_definition_only_a_link_uses_stays_as_written(self) -> None:
+        sample = (
+            "[the full photo][full] beside ![thumb][small], and `![code][code]`\n\n"
+            "[full]: https://img.example/full.jpg\n[small]: https://img.example/small.jpg\n"
+            "[code]: https://img.example/code.jpg"
+        )
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertIn("[full]: https://img.example/full.jpg", article.content)
+        self.assertIn("[code]: https://img.example/code.jpg", article.content)
+        self.assertNotIn("https://img.example/small.jpg", article.content)
+
+    def test_an_escaped_bang_is_a_link_and_stays_one(self) -> None:
+        sample = "\\![a link](https://img.example/a.jpg) and \\![a reference link][r]\n\n[r]: https://img.example/r.jpg"
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertEqual(article.content, sample)
+
+    def test_markdown_inside_an_html_block_is_not_an_image(self) -> None:
+        sample = '<div class="note">\n![shown as text](https://img.example/a.jpg)\n</div>'
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertEqual(article.content, sample)
+
+    def test_addresses_with_parentheses_store_copies(self) -> None:
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        sample = (
+            "![Mill](https://img.example/Mill_(1900).jpg)\n\n"
+            '![Escaped](https://img.example/a\\(b.jpg "a title")\n\n'
+            "![Spaced](<https://img.example/c (d).jpg>)\n\n"
+            '<img src="https://img.example/e(f).png" alt="e">\n\n'
+            "<img src='https://img.example/g(h) i.png'>"
+        )
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertNotIn("img.example", article.content)
+        self.assertIn('"a title")', article.content)
+        self.assertEqual(
+            set(RemoteImageCopy.objects.values_list("source_url", flat=True)),
+            {
+                "https://img.example/Mill_(1900).jpg",
+                "https://img.example/a(b.jpg",
+                "https://img.example/c%20(d).jpg",
+                "https://img.example/e(f).png",
+                "https://img.example/g(h) i.png",
+            },
+        )
+
+    def test_a_parenthesis_that_ends_the_image_is_not_part_of_its_address(self) -> None:
+        sample = "(see ![Mill](https://img.example/mill.jpg))"
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertEqual(article.content, f"(see ![Mill]({self._copy('https://img.example/mill.jpg')}))")
+
+    def test_what_is_not_an_image_is_left_alone(self) -> None:
+        sample = (
+            "![no close](https://img.example/a.jpg\n\n"
+            '![bad title](https://img.example/b.jpg "unterminated)\n\n'
+            '![title in the next paragraph](https://img.example/c.jpg "\n\n")'
+        )
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertEqual(article.content, sample)
+
+    def test_the_stored_copy_is_the_one_rendering_would_have_shown(self) -> None:
+        """Rendering keys a copy by the address the browser would load; a source rewritten under another key would
+        make a second copy of the same picture and change nothing else."""
+        sample = (
+            "![a](https://img.example/x_(1).jpg) ![b](<https://img.example/sp ace.jpg>) ![c][r] "
+            '![d](HTTPS://img.example/upper.jpg) <img src="https://img.example/q.png?a=1&amp;b=2">\n\n'
+            "[r]: https://img.example/café.jpg"
+        )
+        before = render_article(sample).html
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertEqual(article.content_html, before)
+        self.assertNotIn("img.example", before)
+
+    def test_an_address_the_url_parser_refuses_saves(self) -> None:
+        sample = 'An unparseable host: <img src="https://[x/a.jpg">'
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertEqual(article.content, sample)
+
+    def test_the_command_also_moves_reference_style_images(self) -> None:
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        article = Article.objects.create(pin=self.pin, content="![Mill][m]\n\n[m]: https://img.example/mill.jpg")
+
+        call_command("localize_article_images", stdout=StringIO())
+
+        article.refresh_from_db()
+        self.assertEqual(article.content, f"![Mill][m]\n\n[m]: {self._copy('https://img.example/mill.jpg')}")
+
+
+_ALT = st.text(alphabet="abc XYZ", min_size=1, max_size=6).map(str.strip).filter(bool)
+# Parentheses balanced: an unbalanced one ends the address early, and markdown-it's fallback for the inline syntax that
+# then fails can swallow a neighbouring image into a link, which is its own quirk rather than this code's.
+_PATH = st.lists(
+    st.sampled_from(["a", "z", "0", "-", "_", ".", "(b)", "(c_(d))", "&", "=", "?", "é"]), min_size=1, max_size=8
+).map("".join)
+_IMAGE_LABELS = ("one", "Two", "three four")
+_LINK_LABELS = ("l1", "L2")
+
+
+@st.composite
+def _article_sources(draw: st.DrawFn) -> str:
+    """Article source mixing every way an image can be written with links and code that must stay as they are."""
+    pieces: list[str] = []
+    defined: dict[str, str] = {}
+    for _ in range(draw(st.integers(min_value=1, max_value=6))):
+        url = f"https://img.example/{draw(_PATH)}"
+        alt = draw(_ALT)
+        kind = draw(st.sampled_from(["inline", "bracketed", "titled", "html", "reference", "link", "linkref", "code"]))
+        if kind == "inline":
+            pieces.append(f"![{alt}]({url})")
+        elif kind == "bracketed":
+            pieces.append(f"![{alt}](<{url} x>)")
+        elif kind == "titled":
+            pieces.append(f'![{alt}]({url} "{alt}")')
+        elif kind == "html":
+            pieces.append(f'<img src="{url}" alt="{alt}">')
+        elif kind == "reference":
+            label = draw(st.sampled_from(_IMAGE_LABELS))
+            defined.setdefault(label, url)
+            pieces.append(draw(st.sampled_from([f"![{alt}][{label.upper()}]", f"![{label}][]", f"![{label}]"])))
+        elif kind == "link":
+            pieces.append(f"[{alt}]({url})")
+        elif kind == "linkref":
+            label = draw(st.sampled_from(_LINK_LABELS))
+            defined.setdefault(label, url)
+            pieces.append(f"[{alt}][{label}]")
+        else:
+            pieces.append(f"`![{alt}]({url})`")
+    body = draw(st.sampled_from([" ", "\n", "\n\n"])).join(pieces)
+    definitions = "\n".join(f"[{label}]: {url}" for label, url in defined.items())
+    return f"{body}\n\n{definitions}" if definitions else body
+
+
+class StoredSourceShowsWhatTheAuthorWroteTests(TestCase):
+    """Rewriting image addresses in the source changes where the editor loads them from, and nothing else."""
+
+    @hyp_settings(max_examples=60, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @given(_article_sources())
+    def test_rendering_the_stored_source_matches_rendering_what_was_written(self, content: str) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.services.wiki import articles
+
+        localized = articles.localize_article_images(content)
+
+        self.assertEqual(render_article(localized).html, render_article(content).html)
+        with mock.patch.object(articles, "_localize_rendered_images", side_effect=lambda html: html):
+            self.assertNotRegex(render_article(localized).html, r'<img [^>]*src="https?://')
+
 
 class ArticleImageScanIsLinearTests(SimpleTestCase):
     """Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
@@ -485,12 +672,14 @@ class ArticleImageScanIsLinearTests(SimpleTestCase):
 
     def _assert_fast(self, content: str) -> None:
         import time
+        from unittest import mock
 
-        from urbanlens.dashboard.services.wiki.articles import localize_article_images
+        from urbanlens.dashboard.services.wiki import articles
 
-        started = time.perf_counter()
-        localize_article_images(content)
-        self.assertLess(time.perf_counter() - started, 2.0)
+        with mock.patch.object(articles, "_copies_of", side_effect=lambda urls: dict.fromkeys(urls, "/copy/")):
+            started = time.perf_counter()
+            articles.localize_article_images(content)
+            self.assertLess(time.perf_counter() - started, 2.0)
 
     def test_a_long_run_of_backticks(self) -> None:
         self._assert_fast("`" * 1000)
@@ -503,3 +692,28 @@ class ArticleImageScanIsLinearTests(SimpleTestCase):
 
     def test_many_unclosed_image_brackets(self) -> None:
         self._assert_fast("![" * 50000)
+
+    def test_unclosed_image_brackets_beside_a_definition(self) -> None:
+        self._assert_fast("![" * 50000 + "\n\n[a]: https://img.example/a.jpg")
+
+    def test_many_nested_parentheses(self) -> None:
+        self._assert_fast("![a](https://img.example/" + "(" * 20000)
+
+    def test_many_images_opening_parentheses(self) -> None:
+        self._assert_fast("![a](https://img.example/x" * 20000)
+
+    def test_many_unterminated_titles(self) -> None:
+        self._assert_fast('![a](https://img.example/x "' * 20000)
+
+    def test_many_unclosed_quoted_sources(self) -> None:
+        self._assert_fast('<img src="https://img.example/' * 20000)
+
+    def test_many_reference_images_and_definitions(self) -> None:
+        self._assert_fast(
+            " ".join(f"![x][a{n}]" for n in range(5000))
+            + "\n\n"
+            + "\n".join(f"[a{n}]: https://img.example/{n}.jpg" for n in range(5000))
+        )
+
+    def test_code_spans_beside_many_images(self) -> None:
+        self._assert_fast("`a` " * 20000 + "![a](/local.jpg) " * 20000)

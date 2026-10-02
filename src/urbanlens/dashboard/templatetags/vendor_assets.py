@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-from django import template
+from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.services.core.vendor_assets import vendor_asset_tag, vendor_asset_url
+from django import template
+from django.utils.html import json_script
+
+from urbanlens.dashboard.services.core.vendor_assets import leaflet_marker_artwork as marker_artwork, vendor_asset_tag
+
+if TYPE_CHECKING:
+    from django.utils.safestring import SafeString
 
 register = template.Library()
+
+#: The element ``map-layers.ts`` reads Leaflet's default marker artwork from.
+LEAFLET_MARKER_ARTWORK_ID = "ul-leaflet-marker-artwork"
 
 
 @register.simple_tag
@@ -23,13 +32,23 @@ def vendor_asset(key: str) -> str:
 
 
 @register.simple_tag
-def vendor_asset_source(key: str) -> str:
-    """The URL of a named third-party asset, for use inside script or CSS.
-
-    Args:
-        key: A key of ``VENDOR_ASSETS``.
+def leaflet_marker_artwork() -> SafeString:
+    """Embed where Leaflet's default marker draws its images from, for ``map-layers.ts`` to hand to Leaflet.
 
     Returns:
-        The URL the asset should be loaded from.
+        A ``<script type="application/json">`` block.
     """
-    return vendor_asset_url(key)
+    return json_script(marker_artwork(), LEAFLET_MARKER_ARTWORK_ID)
+
+
+@register.simple_tag
+def leaflet_marker_url(option: str) -> str:
+    """The URL of one of Leaflet's marker images.
+
+    Args:
+        option: The ``L.Icon.Default`` option it fills: ``iconUrl``, ``iconRetinaUrl`` or ``shadowUrl``.
+
+    Returns:
+        The image's URL on this site.
+    """
+    return marker_artwork()[option]
