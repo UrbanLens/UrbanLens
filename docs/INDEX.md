@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P191` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
+**Next free id:** `P192` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -54,7 +54,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-10-02 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P66 | open | 2026-09-29 | Organize's active label tab still renders its full card list unpaginated; 400 tags now 1.2 s, was 2.2 s | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P66 | fixed | 2026-10-02 | Organize's label tabs rendered every card of their kind; they now render 100 a page, and 400 tags paint in 0.3 s instead of 1.0-1.2 s | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | T1 | done | 2026-08-27 | The mobile team's 2026-07-27 ask list is spent: its P0 was already false and its P2 remainder moved on | [`docs/notes/mobile_app_requirements.md`](notes/mobile_app_requirements.md) |
 | T2 | open | 2026-08-27 | HIGH 0-ref findings are all triaged; the MEDIUM tier and Jess's caching requests are still open | [`docs/reports/code_audit_status.txt`](reports/code_audit_status.txt) |
 | PL1 | live | 2026-09-01 | The strategy plus a six-tier backlog: locations are both the product and the thing being protected | [`docs/ROADMAP.md`](ROADMAP.md) |
@@ -212,4 +212,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | P186 | open | 2026-10-02 | `Location.official_name` is seeded from text the client sent, and a new Location takes its URL slug from it at creation; a new wiki adopts it as its automatic name and concealment shows it as the provider name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P187 | open | 2026-10-02 | Production's celery workers likely cannot reach REData: the LAN answers redata.urbanlens.org with NPM's private address, which the celery egress policy refuses, so no CRIS documents, CRIS photos or web images land | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P191 | open | 2026-10-02 | Every deferred Organize tab after the first loads twice on page load: htmx fires a hidden panel's `revealed` trigger at once, and the prewarm chain loads it again | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |

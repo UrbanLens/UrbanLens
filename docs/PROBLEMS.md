@@ -1257,47 +1257,66 @@ already tracked: loading the full pin-detail page transiently hit `FATAL: too ma
 role "ul_web"` against this shared dev Postgres. That's P53's already-open finding - the same page's
 panel fan-out - reproducing again, not a new problem.)
 
-## P66 — Organize's active label tab still renders its full card list unpaginated; 400 tags now 1.2 s, was 2.2 s
+## P66 — Organize's label tabs rendered every card of their kind; they now render 100 a page, and 400 tags paint in 0.3 s instead of 1.0-1.2 s
 
-`id: P66` · `status: open` · `updated: 2026-09-29`
+`id: P66` · `status: fixed` · `updated: 2026-10-02` · supersedes "Organize's active label tab still renders its full card list unpaginated; 400 tags now 1.2 s, was 2.2 s"
 
-Previously titled "Organize's *active* label tab still renders its full card list unpaginated".
+**Fixed 2026-10-02 on branch `p66-organize-pagination`. `label.rows` for 400 tags, each with one parent, median of
+5, test client, runner DB: 1,015 ms for every card, 306-318 ms for the first page of 100.** The Organize page with
+the tags tab active went from 1,010 ms to 595 ms. The same run at other page sizes: 25 cards 125 ms, 50 184 ms,
+100 318 ms, 200 554 ms, all 400 1,015 ms - about 65 ms a request plus 2.4 ms a card. Host load average was 8-14
+during that run; the pre-change 1,224 ms for `label.rows` was taken at load 19, so compare within the run.
 
-The tab-deferral fix (see the entry above) stopped the other five tabs from rendering, but did
-nothing to cap the *active* tab's own row count - `controllers/labels.py:370-406`
-(`_rows_ctx`/`_render_rows`, `list(_queryset_for_kind(kind, profile))` with no slicing) feeding
-`templates/dashboard/partials/labels/_organize_label_card.html` is the same per-row template
-profiled at ~2s of pure render time for 500 rows (`label.rows`, the `hx-trigger="revealed"` endpoint
-every tab - including the active one - now defers to). A profile whose *single* busiest tab (tags
-carries every global category/status too, via `Label.visible_to`) reaches that scale is still going
-to feel this page as slow, just for one tab instead of six.
+**What was wrong.** The active tab, rendered inline by `controllers/organize.py` and by `label.rows` after every
+write, listed every label of its kind. Preparing the card data in Python (2.2 s → 1.2 s) left about 2.4 ms of
+template per card, so the cost still grew with the label count and only a cap could remove it.
 
-Not fixed here because it isn't a quick swap: `organize-filter-engine.ts`'s client-side search/filter
-assumes every row for a kind is already in the DOM, so naively paginating the server response would
-break "type to filter" without a matching client-side redesign (fetch-as-you-type, or a windowed grid
-like Vault's `photo-virtual-grid.ts`/`bindPhotoGrid` - see the tooling entry above for why the latter
-wasn't reused as-is: it's built for JSON tile grids, not server-rendered card rows wired into the
-existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
+**What changed.**
 
-**Re-measured 2026-09-29: it is template cost, not queries.** `label.rows` for 400 tags (each with one parent)
-ran 9 queries whatever the count, and took 1,881 ms at 400 against 493 ms at 100. Of 2.5 s profiled, 0.35 s
-builds the context and the rest renders `_organize_label_card.html`: about 13,000 variable renders and 32
-`{% if %}` nodes per card, 5,249 `number_format` calls among them. No per-row query or loop to remove, so the
-options are still the client-side redesign above, or building the card's data attributes in Python rather
-than in the template, keeping the markup the organize JS reads.
+- `services/labels/organize_rows.py` holds the one queryset the page and `label.rows` share, and pages it on
+  the last row's `(order, name, pk)`. A key rather than an offset, because REData's sync adds global tags in the
+  background: a label created or deleted between two page loads neither repeats a row nor skips one. The order
+  gained the pk because an own tag can share a global tag's name and order.
+- A tab renders `ORGANIZE_ROWS_PAGE_SIZE` cards (100, `UL_ORGANIZE_ROWS_PAGE_SIZE`) and a sentinel row,
+  `.organize-rows-more` in `organize_label_rows.html`, that fetches the next page as it scrolls into view. Under
+  100 labels nothing changes. 100 rather than 50 because the ~65 ms fixed cost of a request is then a fifth of it,
+  and 100 cards fill two to three screens of the gallery view and about seven of the list.
+- The sentinel uses `hx-trigger="intersect once"`, not `revealed`. htmx 1.9.11's `isScrolledIntoView` reads
+  `getBoundingClientRect`, and a hidden panel's all-zero rect passes its `top < innerHeight && bottom >= 0` test,
+  so every prewarmed tab would have walked all its pages on page load. It also sets `hx-target="this"`: the panel
+  around it carries `hx-target` for its own deferred load, and htmx inherits it.
+- The filter, the tree view, select-all, and a bulk edit or merge started from Display Order load the rest of
+  the kind in one request (`?all=1`) before acting (`frontend/ts/shared/organize-rows-paging.ts`). They then see
+  every row as before, so select-all selects every label of the kind and "N selected" is the true number. This
+  was chosen over filtering on the server because the filter's chips - "has children" counted among the kind's
+  own cards, a tag's customised name, icon and colour - would need a second implementation in SQL kept in step
+  with `organize-filter-engine.ts`, while loading the rest costs at most what every visit cost before.
+- A write re-renders as many rows as the client had loaded, which it sends in `X-Org-Rows-Loaded` (a count, or
+  `all`): from htmx's `configRequest` for forms aimed at a rows container, and from `postForHtml` for the bulk
+  actions. Without it, deleting a label 150 rows down would drop the user back to the first page.
+- The cross-tab counts a filter shows read "n+" while a tab still has rows to load.
+- Only the tab on screen updates the shared select-all button. Every tab heard every filter pass, so the button
+  showed the media tab's state, which made "Deselect all" unreliable once select-all depended on it.
+- People and media rows no longer compute pin counts they never show, and media rows read the viewer's
+  customizations (the page offered "customize" on a global media label and then never showed the result).
 
-**Card data prepared in Python (2026-09-29): 2,169 ms → 1,166 ms** for `label.rows` at 400 tags (median of 5,
-test client, runner DB). `services/labels/organize_cards.py` builds one `OrganizeLabelCard` per label - the
-kind's `data-*` attributes as one escaped string, counts as text (Django localizes every integer it renders),
-URLs, parent names and the per-label action rules - and the template only places them. The rendered markup was
-compared element by element against the old template for all five kinds, as an admin and as a user: identical,
-except that a global label's card no longer offers a plain Delete, which `LabelDeleteView` refused for a
-non-owner and which gave an admin a second delete form. `test_organize_label_cards.py` covers the attributes the
-organize scripts read and the action rules.
+**How it was verified.** `tests/hypothesis/test_organize_rows_paging.py` (page boundaries, a walk equal to the
+unpaged order with name ties, inserts and deletes between page loads, `all=1`, the header, writes, malformed
+cursors, other accounts' labels on every page, global-label actions on later pages, and a hypothesis property
+that pages concatenate to the whole list) and `organize-rows-paging.test.ts` (happy-dom, a stand-in for htmx
+firing htmx 1.9.11's events in its order). Then in Chromium against a throwaway `runserver` on a copy of the test
+database, 251 tags and 131 categories: the first paint held 100 cards and "Loading 151 more…"; scrolling loaded
+200 then 251, in name order, without duplicates; typing "needle" loaded the rest in one request and showed only
+the 251st tag; the categories tab count read 1; select-all selected 251; a bulk delete and a card's own delete
+each sent `X-Org-Rows-Loaded: 200` and left 200 rows with the page where it was; the tree view loaded every row
+and nested a page-three child under its page-one parent; the gallery sentinel spanned the grid.
 
-What remains is about 30 variable renders per card, nearly all attributes the organize scripts read, so the
-template itself is now the floor. Going lower means rendering the card in Python, or the client-side redesign
-above.
+**What it does not fix.**
+
+- A filter, the tree view or select-all still renders the rest of the kind once: about 1 s at 400 tags, which
+  is what every visit cost before. Filtering on the server would remove it, at the cost described above.
+- The Display Order tab (`_priority_list.html`) still lists every tag, category and status. Not measured.
+- Found while verifying, and older than this fix: P191, every deferred tab loads twice on page load.
 
 ## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows
 
@@ -3330,3 +3349,24 @@ the first account's private name. Google Images searches by address only and is 
 Not changed, because it trades recall for privacy: a Location with no official name would find nothing for its
 first pins. One option is to build shared-cache queries only from Location- and wiki-level names, and to treat a
 pin-name-driven search as the owner's own, cached per pin.
+
+## P191 — Every deferred Organize tab after the first loads twice on page load: htmx fires a hidden panel's `revealed` trigger at once, and the prewarm chain loads it again
+
+`id: P191` · `status: open` · `updated: 2026-10-02`
+
+**Seen 2026-10-02**, while verifying P66 in Chromium against a throwaway `runserver`: one load of
+`/dashboard/organize/?tab=tags` requested `label.rows` for categories once, and for statuses, people and media
+twice each - `category, status, people, media, status, people, media`. The Display Order panel's URL was not in
+the log's filter, so whether it loads twice too was not seen.
+
+The likely mechanism, read from htmx 1.9.11's source and not tested separately: `isScrolledIntoView` compares
+`getBoundingClientRect()` with `top < innerHeight && bottom >= 0`, and a `hidden` panel's rect is all zeros, so
+`maybeReveal` fires a deferred panel's `hx-trigger="revealed"` as soon as htmx processes it.
+`installOrgTabPrewarm` (`frontend/ts/shared/organize-header.ts`) strips `hx-trigger` from a panel only when the
+chain reaches it, so only the first panel loses its trigger before htmx processes the page; the rest load at once
+and then again from the chain.
+
+Since P66 each load is one page of 100 cards (about 0.3 s at 400 tags), so the waste is one extra page per
+deferred tab per visit, not a whole tab. Two candidate fixes, neither tried: `hx-trigger="intersect once"` on the
+panels (an IntersectionObserver does not report a hidden element as intersecting, which is why P66's sentinel
+uses it), or stripping every panel's trigger before htmx processes the page.
