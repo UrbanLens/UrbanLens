@@ -57,6 +57,11 @@ REVIEWED: dict[str, str] = {
         "_0096_refuse_to_drop_url_only_overlays deletes nothing; it only clears a tile template an overlay with an "
         "image never drew. The rows left are valid overlays for the old code."
     ),
+    "0034_reresolve_fiat_building_places.py": (
+        "_reresolve_fiat_building_places moves Locations off outline-less buildings onto the place containing them, "
+        "or onto none, and drops their parcel-buildings cache. A reverse leaves ordinary place links and unstamped "
+        "Locations, which the old code reads and re-resolves; the cache is refetched."
+    ),
 }
 
 
