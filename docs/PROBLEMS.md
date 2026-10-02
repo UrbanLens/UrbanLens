@@ -1376,7 +1376,7 @@ excluded (guarded; the guard cannot fire).
 `Trip.objects` as `Any` on 2026-09-29 against the same code the full run typed, so a single-file
 probe proves nothing either way.
 
-## P95 — An import preview reads each file a chunk at a time, but one oversized element is still built whole at 10-12x its size
+## P95 — An import preview reads each file a chunk at a time, but one oversized element is still built whole at 10-13x its size
 
 `id: P95` · `status: open` · `updated: 2026-10-02`
 
@@ -1397,8 +1397,8 @@ holds `MAX_PREVIEW_PINS` (20,000). On a 16 MiB file, RSS growth fell from 2.7x-1
 rather than every node, so it stops growing at about 135 MiB where it used to grow at 15-16x. The
 history formats hold what the confirmed import will save rather than the file (Location History
 1.26x, GPX 5.9x). What still grows with its input is a single element: one KML placemark, GeoJSON
-feature, OSM way, CSV row or text line is built whole, at 10-12x its size, so an entry that is one
-300 MB element would still exhaust `media-worker`. Capping an element is what is left, and where to
+feature or OSM way is built whole, at 10-13x its size (RSS) - as, unmeasured, is one CSV row or text
+line - so an entry that is one 300 MB element would still exhaust `media-worker`. Capping an element is what is left, and where to
 cap it is a product call (below).
 
 **Where the parse runs, re-checked 2026-09-14.** Not in a gunicorn worker any more.
@@ -1464,8 +1464,8 @@ freed only placemarks, so a file's styles stayed in the tree until 2026-10-02.
 - **GPX is read with `iterparse` into gpxpy's own field readers** (`gpx_tracks.py::_GpxReader`), so a
   value gpxpy refused still fails the file, and it stops taking waypoints once the preview is full.
 - **Shapefiles are read through GDAL's Arrow stream**, 1,000 features a batch
-  (`shapefile.py::iter_shapefile_pins`), rather than as one GeoDataFrame. Batching by offset instead
-  read some records twice wherever a `.dbf` marks others deleted.
+  (`shapefile.py::iter_shapefile_pins`), rather than as one GeoDataFrame. Batching by offset
+  (`skip_features`), tried first, reads some records twice wherever a `.dbf` marks others deleted.
 - **KML frees every element outside a placemark**, so a file whose placemarks follow 12 MiB of styles
   no longer holds the styles (93.8 MB tracemalloc peak before).
 - **Pin formats stop once the preview is full**, instead of parsing the rest of the file and
@@ -1482,7 +1482,7 @@ rather than read as `nan`, and an integer column holding one no longer reads as 
 past the point where the preview filled is never reached, so that file now previews where it failed.
 
 `test_import_parse_memory.py` holds each format's tracemalloc peak under an eighth of a 12 MiB file
-(16 MiB for the Shapefile); all 17 of its memory cases failed on the code before this change. ijson is
+(16 MiB for the Shapefile); all 17 of its tracemalloc cases failed on the code before this change. ijson is
 a new dependency: nothing installed streamed JSON (orjson and simplejson do not). pyarrow, already
 installed through overturemaps, is now declared, since pyogrio's Arrow stream needs it.
 
@@ -1522,7 +1522,7 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 
 - **One element is built whole.** A file that is one element - a single placemark, feature, way, row
   or line - is read whole into that element and then parsed, at a ratio that does not fall with size
-  (after, RSS):
+  (after, RSS; a single row or line was not measured):
 
   | One element | 4 MiB | 8 MiB | 16 MiB |
   |---|---|---|---|
