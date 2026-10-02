@@ -36,6 +36,10 @@ TEXT_ALERTABLE_TYPES: frozenset[str] = frozenset(
     },
 )
 
+#: Types with no preference row of their own, delivered under another type's: ``map_sharing`` asks the "Pin Shared"
+#: row whether to deliver a map share at all, so its texts follow that row too.
+PREFERENCE_TYPE_FOR: dict[str, str] = {"map_shared": "pin_shared"}
+
 #: How long after an unread notification lands before the text fires, giving a
 #: logged-in user a chance to read it organically first. Matches the DM flow's
 #: EMAIL_DELAY_SECONDS.
@@ -73,7 +77,8 @@ def _enabled_channels(notification: NotificationLog) -> tuple[bool, bool]:
 
     Returns:
         Tuple of booleans; (False, False) when the type has no toggle pair or the recipient has no preference row."""
-    if notification.notification_type not in TEXT_ALERTABLE_TYPES or notification.profile is None:
+    governing_type = PREFERENCE_TYPE_FOR.get(notification.notification_type, notification.notification_type)
+    if governing_type not in TEXT_ALERTABLE_TYPES or notification.profile is None:
         return False, False
     try:
         prefs = notification.profile.notification_preferences
@@ -85,7 +90,7 @@ def _enabled_channels(notification: NotificationLog) -> tuple[bool, bool]:
     # other consumer of these preferences reads them by the member-style name.
     from urbanlens.dashboard.models.notifications.meta.type import NotificationType
 
-    prefix = NotificationType(notification.notification_type).name.lower()
+    prefix = NotificationType(governing_type).name.lower()
     return bool(getattr(prefs, f"{prefix}_whatsapp", False)), bool(getattr(prefs, f"{prefix}_sms", False))
 
 

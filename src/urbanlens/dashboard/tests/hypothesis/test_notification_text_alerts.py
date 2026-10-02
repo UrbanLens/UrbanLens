@@ -79,6 +79,14 @@ class ScheduleNotificationTextAlertsTests(_AlertTestBase):
             schedule_notification_text_alerts(notification)
         enqueue.assert_called_once()
 
+    def test_a_map_share_follows_the_pin_shared_row(self) -> None:
+        """Map shares have no row of their own; the "Pin Shared" row already decides their in-app and email delivery."""
+        self._prefs(pin_shared_whatsapp=True)
+        notification = self._notification(ntype=NotificationType.MAP_SHARED, title="Map shared with you")
+        with mock.patch(_ENQUEUE_PATCH) as enqueue:
+            schedule_notification_text_alerts(notification)
+        enqueue.assert_called_once()
+
     def test_message_type_is_excluded_from_the_generic_pipeline(self) -> None:
         """DM alerts keep their own streak-debounced pipeline - the generic one
         must not double-text for MESSAGE notifications."""
@@ -144,6 +152,14 @@ class SendNotificationTextAlertsTaskTests(_AlertTestBase):
             send_notification_text_alerts_if_unread(notification.pk)
         whatsapp.assert_called_once()
         sms.assert_not_called()
+
+    def test_a_map_share_texts_on_the_pin_shared_channels(self) -> None:
+        self._prefs(pin_shared_whatsapp=False, pin_shared_sms=True)
+        notification = self._notification(ntype=NotificationType.MAP_SHARED, title="Map shared with you")
+        with mock.patch(_WHATSAPP_PATCH) as whatsapp, mock.patch(_SMS_PATCH) as sms:
+            send_notification_text_alerts_if_unread(notification.pk)
+        whatsapp.assert_not_called()
+        sms.assert_called_once()
 
     def test_body_carries_the_title_not_the_message(self) -> None:
         """Details stay off the third-party carrier - only the title travels."""

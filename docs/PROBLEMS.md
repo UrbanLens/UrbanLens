@@ -483,9 +483,7 @@ What remains of the findings in `docs/audits/codebase-audit.md`, each re-checked
   (gated by the profile's `allow_friend_recommendations` instead), and SpotGuessr/Trivia/Consensus
   invitations, which only a friendship mute silences. Open: the page offers "Trip Updated" and
   "Community Wiki Updated", but nothing in `src/` produces either type, so those two rows change
-  nothing - build the producers or drop the rows. And `notification_text_alerts.TEXT_ALERTABLE_TYPES`
-  keys on the type value, so the "Pin Shared" row's WhatsApp/SMS toggles never reach map shares,
-  whose in-app and email delivery that row does govern.
+  nothing - build the producers or drop the rows.
 - **Unit 19**: no admin can see or revoke another admin's subscription grants
   (`controllers/site_admin.py` scopes both to `granted_by=request.user`); no restore tooling exists for
   the Postgres backups.
@@ -516,6 +514,10 @@ What remains of the findings in `docs/audits/codebase-audit.md`, each re-checked
   `tests.hypothesis.strategies`). The earlier "~30/111" did not reproduce.
 
 Removed on 2026-10-02, measured rather than assumed:
+
+- The "Pin Shared" row's WhatsApp/SMS toggles never reached map shares, whose in-app and email delivery that row
+  governs: the text-alert check looked up `map_shared`, which has no toggles. `PREFERENCE_TYPE_FOR` in
+  `notification_text_alerts.py` routes it to `pin_shared` (two tests in `test_notification_text_alerts.py`).
 
 - Bulk accept/reject already surfaced per-item failures: both endpoints run each row through
   `services.core.bulk_outcome.run_each` and the page toasts failed rows apart from skipped ones
