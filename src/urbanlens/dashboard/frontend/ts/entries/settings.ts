@@ -12,6 +12,7 @@ import { byId } from "../shared/dom";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
 import { e2eeUrlsFromDataset } from "../shared/e2ee-urls";
+import { fetchText } from "../shared/fetch-json";
 import { FormAutosave, type FormAutosaveOptions } from "../shared/form-autosave";
 import { DEFAULT_HOTKEYS, normalizeCombo } from "../shared/hotkeys";
 import { installNotificationPrefs } from "../shared/notification-prefs";
@@ -95,10 +96,7 @@ function bindSecurity(root: HTMLElement): void {
         const form = input.closest<HTMLFormElement>(".passkey-rename-form");
         if (!form) return;
         input.disabled = true;
-        fetch(form.action, { method: "POST", body: new FormData(form), headers: { "X-CSRFToken": getCsrfToken(), "X-Requested-With": "XMLHttpRequest" } })
-            .then((r) => {
-                if (!r.ok) toast.error("Could not rename that passkey.");
-            })
+        fetchText(form.action, { method: "POST", body: new FormData(form), headers: { "X-CSRFToken": getCsrfToken(), "X-Requested-With": "XMLHttpRequest" } })
             .catch(() => toast.error("Could not rename that passkey."))
             .finally(() => {
                 input.disabled = false;

@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { confirmDialog, deletePinCascade, installGlobalConfirmDialog, resetConfirmDialogForTests } from "./confirm-dialog";
+import { wrapFetch } from "./site-runtime";
 
 const DIALOG_MARKUP = `
   <dialog id="confirm-dialog">
@@ -176,6 +177,25 @@ describe("deletePinCascade", () => {
 
         expect(await pending).toBe(true);
         expect(calls[1]).toContain("children=delete");
+    });
+
+    test("the 409 that asks the question raises no error toast through the site's fetch net", async () => {
+        // Its callers toast their own failure on a null result, so a refused delete is still heard.
+        const reports: string[] = [];
+        let first = true;
+        const answer = async (): Promise<Response> => {
+            if (!first) return new Response(null, { status: 204 });
+            first = false;
+            return new Response(JSON.stringify({ requires_children_decision: true, children: 1 }), { status: 409 });
+        };
+        globalThis.fetch = wrapFetch(Object.assign(answer, realFetch), (m) => void reports.push(m));
+
+        const pending = deletePinCascade("uuid-1", "Powerhouse", "csrf");
+        await clickWhenTitled("Delete Pin", "confirm-dialog-ok");
+        await clickWhenTitled("Delete child pins too?", "confirm-dialog-alt");
+
+        expect(await pending).toBe(true);
+        expect(reports).toEqual([]);
     });
 });
 

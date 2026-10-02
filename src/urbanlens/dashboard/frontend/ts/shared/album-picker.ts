@@ -2,7 +2,7 @@
  * Add-to-album / move-to-album picker. Its rows are server-rendered pages, searched by name, loaded each time it opens.
  */
 
-import { getCsrfToken } from "./csrf";
+import { sendForText } from "./fetch-json";
 import { toast } from "./dialogs";
 
 interface Pending {
@@ -35,15 +35,7 @@ async function submitToAlbum(addUrl: string): Promise<void> {
     if (!pending?.imageIds.length) return;
     const body: Record<string, unknown> = { image_ids: pending.imageIds };
     if (pending.moveFrom) body.move_from = pending.moveFrom;
-    const response = await fetch(addUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error || response.statusText);
-    }
+    await sendForText(addUrl, "POST", body);
 }
 
 export function openAlbumPicker(opts: { imageIds: number[]; moveFrom?: string | null; onDone?: () => void }): void {

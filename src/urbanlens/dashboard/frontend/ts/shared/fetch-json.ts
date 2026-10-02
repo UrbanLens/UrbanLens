@@ -68,7 +68,8 @@ async function errorMessage(response: Response): Promise<string> {
 async function requestBody<T>(url: string, options: FetchJsonOptions, read: (response: Response) => Promise<T>): Promise<T> {
     const { timeoutMs = 120000, reportsItsOwnErrors = false, ...init } = options;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // The reason is what tells site-runtime's fetch wrapper this is a timeout, not a cancellation.
+    const timer = setTimeout(() => controller.abort(new DOMException("The request timed out.", "TimeoutError")), timeoutMs);
 
     try {
         // `__ulReported` is what base.html's wrapper reads; `fetch` ignores it.

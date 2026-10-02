@@ -3,6 +3,7 @@
  */
 
 import { escHtml } from "./escape-html";
+import type { FetchInit } from "./site-runtime";
 
 interface ConfirmOptions {
     title?: string;
@@ -119,7 +120,9 @@ export async function deletePinCascade(pinUuid: string, pinName: string, csrfTok
     if (!confirmed) return false;
 
     const url = `/dashboard/rest/pins/${encodeURIComponent(pinUuid)}/`;
-    const send = (query: string): Promise<Response> => fetch(url + query, { method: "DELETE", headers: { "X-CSRFToken": csrfToken } });
+    // A 409 is the question below, not a failure; every caller toasts a null result itself.
+    const init: FetchInit = { method: "DELETE", headers: { "X-CSRFToken": csrfToken }, __ulReported: true };
+    const send = (query: string): Promise<Response> => fetch(url + query, init);
 
     let response: Response;
     try {

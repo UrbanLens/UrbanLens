@@ -4,7 +4,7 @@
  */
 
 import { escHtml } from "./escape-html";
-import type { FetchInit } from "./site-runtime";
+import { fetchJson } from "./fetch-json";
 
 declare const L: typeof import("leaflet");
 
@@ -157,10 +157,7 @@ export function createPinSelectMap<T extends PinSelectItem>(mapEl: HTMLElement, 
 
     const reload = async (): Promise<void> => {
         try {
-            const init: FetchInit = { __ulReported: true };
-            const response = await fetch(opts.dataUrl, init);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data: unknown = await response.json();
+            const data = await fetchJson(opts.dataUrl, { reportsItsOwnErrors: true });
             const raw: unknown = data && typeof data === "object" && opts.itemsKey in data ? Reflect.get(data, opts.itemsKey) : [];
             for (const marker of markers.values()) map.removeLayer(marker);
             markers.clear();

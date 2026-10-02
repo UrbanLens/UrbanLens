@@ -147,6 +147,14 @@ describe("session-request", () => {
         expect((await postForm("/games/answer/", {})).error).toContain("took too long");
     });
 
+    test("so does fetchJson's own timeout, which a browser rejects with its TimeoutError reason", async () => {
+        globalThis.fetch = mock(async () => {
+            throw new DOMException("The request timed out.", "TimeoutError");
+        }) as unknown as typeof fetch;
+
+        expect((await postForm("/games/answer/", {})).error).toContain("took too long");
+    });
+
     test("a 204 resolves to an object, because every caller reads a property off it", async () => {
         // fetchJson answers a bodyless success with null, correctly.
         respond("", { status: 204 });

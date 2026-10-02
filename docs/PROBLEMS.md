@@ -233,12 +233,57 @@ the pin map had no pending state (`shared/media-map-drop.ts`). What's left is st
 
 **Structural (no user-visible symptom):**
 
-- The `fetch()`-wrapper migration is not done, whatever an earlier pass of this entry said: a
-  2026-10-02 search finds 145 raw `fetch(` calls in 48 files outside `shared/fetch-json.ts`
-  (`map-page.ts` 26, `map-annotations.ts` 21, `e2ee-client.ts` 20). Command:
+- **Raw `fetch()` calls: audited 2026-10-02, the silent failures fixed, the migration half done.**
   `grep -rnE '(^|[^.A-Za-z0-9_])fetch\(' --include=*.ts src/urbanlens/dashboard/frontend/ts`, minus
-  `*.test.ts` and comment lines. Not audited for which of them need raw `Response` semantics
-  (`webauthn-client.ts`, the E2EE calls that read 201-vs-200 or `redirected`) or fail silently.
+  `*.test.ts`, `shared/fetch-json.ts` and comment lines, found 144 calls in 47 files at `07c4210a5`
+  (not the 145/48 first counted); 119 remain. "Silent" is narrower than it looks: `wrapFetch` in
+  `shared/site-runtime.ts` toasts every unmarked raw call's non-2xx or network failure on every
+  `base.html` page, so the real silent cases are a control left stuck, success shown after a
+  failure, and the `auth_base.html` pages (login, signup, 2FA, set-password, reset), which load no
+  `core.js` and so have no net. Each call, by its line at `07c4210a5`:
+  - **55 need the raw `Response`** (a status that means something - 409, 410, 413, 429, 204, 202 -
+    `redirected`, a stream, bytes, a body read whatever the status, per-item outcomes, WebAuthn and
+    E2EE protocol). All handle failure. `e2ee-client.ts` is 17 of them.
+  - **4 failed silently or left the UI stuck, now fixed:** Settings' "Add passkey unlock" (account
+    without a password) never re-enabled its button on a network failure, because
+    `showPasskeyEnrollDialog` never settled (`e2ee-client.ts:826`); `showUnlockDialog` never
+    appeared when the key bundle could not be fetched, leaving the set-password page's passkey
+    button disabled with no message (`:668`); a failed bulk-delete undo left the toast's Undo button
+    disabled (`map-page.ts:3527`); a failed location switch/merge re-enabled its button still
+    reading "Switching..."/"Merging..." (`:6408`). Tests in `e2ee-client.test.ts` and
+    `map-page.contract.test.ts` (the entry is not importable, so it is checked as text).
+  - **33 are background or best-effort reads** where silence is the intent: typeahead, polls,
+    enrichment, telemetry, optional layers.
+  - **52 could move to `fetch-json.ts`; 24 have**, plus the undo above. The 28 left (7 in
+    `map-annotations.ts`, 4 in `map-page.ts`, 4 in `markup-toolbar.ts`, 4 in `pin-list-detail.ts`,
+    one each in nine more files) each read their body in a way `fetchJson` would change - a
+    tolerant `.json().catch()`, a `resp.ok === false` on a 200, the raw error text as the message,
+    a `null` the types would have to handle - so each needs its own decision, and most sit in entry
+    modules no behavioural test can import.
+
+  The net itself was wrong in two ways, also fixed: it reported a request its own caller aborted
+  as "Request timed out.", so every superseded request toasted (an `@mention` lookup per
+  keystroke, the infrastructure layer per pan, a MapLibre own-tile dropped on pan, a closed import
+  dialog's poll); it now stays quiet unless the abort reason is a `TimeoutError`, which
+  `fetchJson`'s timeout now uses. And three 409s that ask a question - delete this pin's children
+  too, add this many pins to a list, move the pin out of its wiki place - raised "Request failed
+  (HTTP 409)." beside the dialog; those requests now report their own failures. Organize's
+  priority save toasted a refusal's raw JSON; it now toasts the sentence.
+
+  **Still open from the audit, none fixed or measured here:**
+  - An expired session reads as success to any status-only check, raw or `fetchText` - see P192.
+  - The net still toasts failures that are not the user's to act on: the map's pins-meta poll on
+    every tick while offline, the geolocation-visit and map-position saves, a Wikipedia summary
+    404 for a place without an article, an own-tile 404 or 5xx per tile.
+  - Most handled calls that toast their own message do not set `__ulReported`, so one failure
+    shows two toasts - the net's "Request failed (HTTP n)." and theirs. Not counted.
+  - Smaller: an article inline-image upload shows no progress (`uploadAndInsertImage` in
+    `entries/article-wysiwyg.ts`); a failed import confirm leaves the wizard reading "Importing..."
+    (`entries/import-wizard.ts`); a failed pin-list reorder toasts but keeps the new order
+    (`saveOrder` in `entries/pin-list-detail.ts`); markup creation says "Failed to save markup."
+    when only the reload after a successful save failed (`reloadMarkupAndOpenEdit` in
+    `shared/markup-toolbar.ts`); the unlock dialog blames the password or recovery key for a
+    network failure.
 
 - The three games triplicate ~1,500 lines of session/lobby/chat/invite/fetch plumbing (19 blocks
   differing only by an `sg-`/`cs-`/`trivia-` prefix). Extracting `game-net` / `game-session` /
@@ -3214,3 +3259,25 @@ the first account's private name. Google Images searches by address only and is 
 Not changed, because it trades recall for privacy: a Location with no official name would find nothing for its
 first pins. One option is to build shared-cache queries only from Location- and wiki-level names, and to treat a
 pin-name-driven search as the owner's own, cached per pin.
+
+## P192 — A fetch() write made after the session ends reports success: the login redirect is followed to a 200
+
+`id: P192` · `status: open` · `updated: 2026-10-02` · `found by: the P11 raw-fetch audit, 2026-10-02`
+
+A view behind Django's `LoginRequiredMixin` answers an anonymous request with a 302 to
+`LOGIN_URL` (`/accounts/login/`). `fetch()` follows redirects by default and turns a redirected
+POST into a GET, so a write sent after the session expired - or after a sign-out in another tab,
+which flushes the session but leaves the page's CSRF token valid - resolves with the login page and
+a 200. Every caller that checks only `response.ok` then runs its success path: the change is not
+saved, and the UI says it was. That covers the status-only raw calls and every `fetchText` /
+`sendForText` caller (`shared/fetch-json.ts` checks `ok`, not `redirected`); a `fetchJson` caller
+fails, but on a JSON parse error rather than a sign-in prompt. Example: `PinEditView`
+(`controllers/pin_edit.py`), which pin-detail's in-place name and description edits post to.
+
+DRF endpoints under `/dashboard/rest/` answer 401 or 403 instead and are not affected.
+
+Found by reading the mixin and the fetch redirect rules; not reproduced in a browser. One fix
+covers every call: answer a non-navigation request (`Sec-Fetch-Mode` other than `navigate`, or
+`X-Requested-With`) that needs a login with a 401 instead of the redirect - in a middleware or a
+project `LoginRequiredMixin` - and let the existing failure paths, and the site's fetch net,
+report it.

@@ -74,6 +74,24 @@ describe("wrapFetch", () => {
         expect(report).toHaveBeenCalledWith("Request timed out.");
     });
 
+    // A request superseded by a newer one (a keystroke, a pan, a closed dialog) rejects the same way a dead network does.
+    test("a request its caller cancelled is not reported", async () => {
+        const report = mock((_m: string) => undefined);
+        const controller = new AbortController();
+        controller.abort();
+        await expect(wrapFetch(stubFetch(new DOMException("gone", "AbortError")), report)("/x/", { signal: controller.signal })).rejects.toThrow();
+        expect(report).not.toHaveBeenCalled();
+    });
+
+    test("a request its caller gave up on for taking too long still reads as a timeout", async () => {
+        const report = mock((_m: string) => undefined);
+        const controller = new AbortController();
+        const reason = new DOMException("too slow", "TimeoutError");
+        controller.abort(reason);
+        await expect(wrapFetch(stubFetch(reason), report)("/x/", { signal: controller.signal })).rejects.toThrow();
+        expect(report).toHaveBeenCalledWith("Request timed out.");
+    });
+
     test("a 2xx is silent, and the wrapper marks itself so it is not wrapped twice", async () => {
         const report = mock((_m: string) => undefined);
         const wrapped = wrapFetch(stubFetch(new Response("{}")), report);

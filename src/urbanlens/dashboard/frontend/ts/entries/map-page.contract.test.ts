@@ -60,3 +60,37 @@ describe("map-page's background refresh and poll", () => {
         expect(codeOnly).not.toMatch(/\bsetInterval\(/);
     });
 });
+
+/** The text of the function declared as ``function <name>(``, up to its closing brace at the same indent. */
+function functionBody(name: string): string {
+    const start = source.search(new RegExp(`^( *)(async )?function ${name}\\(`, "m"));
+    expect(start, `${name} is no longer declared as a function`).toBeGreaterThan(-1);
+    const indent = /^ */.exec(source.slice(start))![0];
+    const end = source.indexOf(`\n${indent}}\n`, start);
+    return source.slice(start, end);
+}
+
+/** The ``.catch(...)`` handler at the end of a request chain, which is what runs when the request fails. */
+function failureHandler(body: string): string {
+    const at = body.lastIndexOf(".catch(");
+    expect(at, "the request has no failure handler").toBeGreaterThan(-1);
+    return body.slice(at);
+}
+
+describe("map-page's requests leave their controls usable when they fail", () => {
+    test("a failed bulk-delete undo re-enables the toast's Undo button for another try", () => {
+        expect(failureHandler(functionBody("_undoBulkDelete"))).toMatch(/btn\.disabled = false/);
+    });
+
+    test("a failed location switch or merge puts the button's own label back, not 'Switching...'", () => {
+        const handler = failureHandler(functionBody("_linkPin"));
+        expect(handler).toMatch(/btn\.disabled = false/);
+        expect(handler).toMatch(/btn\.textContent = /);
+    });
+
+    test("adding pins to a list asks its 409 question without the fetch net's error toast, and still reports a network failure", () => {
+        const body = functionBody("addPinsToList");
+        expect(body).toMatch(/__ulReported: true/);
+        expect(failureHandler(body)).toMatch(/toastr\.error\(/);
+    });
+});

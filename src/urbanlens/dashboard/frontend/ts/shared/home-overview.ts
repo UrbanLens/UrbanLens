@@ -4,7 +4,7 @@
  */
 
 import { lightboxItemFromTile, tileFromElement } from "./photo-tile";
-import type { FetchInit } from "./site-runtime";
+import { sendForText } from "./fetch-json";
 
 const STRIP_LIMIT = 6;
 
@@ -86,14 +86,7 @@ async function saveLayout(button: HTMLButtonElement, deps: HomeOverviewDeps): Pr
     const value = hidden instanceof HTMLInputElement ? hidden.value : "";
     button.disabled = true;
     try {
-        const init: FetchInit = {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRFToken": window.csrftoken ?? "" },
-            body: JSON.stringify({ enabled_keys: value ? value.split(",") : [] }),
-            __ulReported: true,
-        };
-        const response = await fetch(button.dataset.saveUrl ?? "", init);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await sendForText(button.dataset.saveUrl ?? "", "POST", { enabled_keys: value ? value.split(",") : [] }, { reportsItsOwnErrors: true });
         // Every widget renders server-side, so the new layout needs the page again.
         deps.reload();
     } catch {

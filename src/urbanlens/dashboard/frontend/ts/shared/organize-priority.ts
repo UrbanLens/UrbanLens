@@ -1,6 +1,6 @@
 import Sortable from "sortablejs";
-import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { sendForText } from "./fetch-json";
 import { LatestWinsSaver } from "./latest-wins-saver";
 import { ORG_NS_BY_LABEL_KIND } from "./organize-filter-engine";
 
@@ -70,15 +70,7 @@ export function initOrganizePriority(): void {
     }
 
     async function sendPriorityOrder({ list, ids }: PriorityOrder): Promise<void> {
-        const response = await fetch(list.dataset.saveUrl ?? "", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-            body: JSON.stringify({ items: ids.map((id) => ({ id: Number.parseInt(id, 10) })) }),
-        });
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text || response.statusText);
-        }
+        await sendForText(list.dataset.saveUrl ?? "", "POST", { items: ids.map((id) => ({ id: Number.parseInt(id, 10) })) });
     }
 
     let orderSaver: { list: HTMLElement; saver: LatestWinsSaver<PriorityOrder> } | null = null;

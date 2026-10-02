@@ -19,7 +19,7 @@ const EMPTY_BODY = {} as const;
 /** What went wrong, preferring the server's own words. */
 function describe(error: unknown): string {
     const message = error instanceof Error ? error.message : String(error);
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
         return "The server took too long to answer. Please try again.";
     }
     return message || "Something went wrong. Please try again.";

@@ -7,7 +7,7 @@ import type { Map as MaplibreMap } from "maplibre-gl";
 import type { HtmxApi } from "../types/globals";
 import { deletePinCascade } from "../shared/confirm-dialog";
 import { confirmAction } from "../shared/dialogs";
-import { fetchJson, sendJson, type FetchJsonOptions } from "../shared/fetch-json";
+import { fetchJson, fetchText, sendJson, type FetchJsonOptions } from "../shared/fetch-json";
 import { createPinClusterGroup, isAdditiveClick as sharedIsAdditiveClick } from "../shared/map-clusters";
 import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared/pin-cache";
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
@@ -22,6 +22,7 @@ import { escHtml } from "../shared/escape-html";
 import { installAddToListPicker } from "../shared/add-to-list-picker";
 import { delegateActions } from "../shared/delegated-actions";
 import { handleMapArrival } from "../shared/map-arrival";
+import type { FetchInit } from "../shared/site-runtime";
 
 declare const L: typeof import("leaflet");
 declare const htmx: HtmxApi;
@@ -1459,15 +1460,7 @@ function _buildMarker(pin: PinData): L.Marker | null {
                     _reclusterMarker();
                     return;
                 }
-                fetch(`/dashboard/rest/pins/${pin.uuid}/`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json", "X-CSRFToken": MAP_CFG.csrfToken },
-                    body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
-                })
-                    .then((r) => {
-                        if (!r.ok) throw new Error();
-                        return r.json();
-                    })
+                _sendJson(`/dashboard/rest/pins/${pin.uuid}/`, "PATCH", { latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) })
                     .then(() => {
                         _savedLat = pos.lat;
                         _savedLng = pos.lng;
@@ -1714,7 +1707,7 @@ interface MapDocumentLine {
 // browser without streaming, or a document that arrived without its end line.
 async function _fetchMapDocument(message?: string): Promise<PinPage | null> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
+    const timer = setTimeout(() => controller.abort(new DOMException("The map took too long to answer.", "TimeoutError")), 120000);
     try {
         const resp = await fetch(MAP_CFG.urls.mapDocument, {
             headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -2668,21 +2661,7 @@ map.on("popupopen", function () {
                     return;
                 }
 
-                fetch(`/dashboard/rest/pins/${pinUuid}/`, {
-                    method: "PATCH",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRFToken": MAP_CFG.csrfToken,
-                    },
-                    body: JSON.stringify(data),
-                })
-                    .then((response) => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        } else {
-                            return response.json();
-                        }
-                    })
+                _sendJson(`/dashboard/rest/pins/${pinUuid}/`, "PATCH", data)
                     .then(() => {
                         console.log(`${name} updated successfully`);
                         toastr.success(`${name.charAt(0).toUpperCase() + name.slice(1)} updated successfully`);
@@ -3200,14 +3179,7 @@ async function promoteChildPins(pinSlug: string, childCount: number): Promise<vo
         confirmLabel: "Promote",
     });
     if (!confirmed) return;
-    fetch("/dashboard/map/pin/" + encodeURIComponent(pinSlug) + "/promote-children/", {
-        method: "POST",
-        headers: { "X-CSRFToken": MAP_CFG.csrfToken },
-    })
-        .then(function (r) {
-            if (!r.ok) throw new Error();
-            return r.json() as Promise<{ promoted: number }>;
-        })
+    _sendJson<{ promoted: number }>("/dashboard/map/pin/" + encodeURIComponent(pinSlug) + "/promote-children/", "POST")
         .then(function (data) {
             map.closePopup();
             toastr.success(`${data.promoted} pin${data.promoted === 1 ? "" : "s"} promoted.`);
@@ -3524,15 +3496,7 @@ function _showUndoDeleteToast(count: number, descendantCount: number, token: str
 
 function _undoBulkDelete(token: string, btn: HTMLButtonElement | null): void {
     if (btn) btn.disabled = true;
-    fetch(MAP_CFG.urls.pinBulkUndo, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": MAP_CFG.csrfToken },
-        body: JSON.stringify({ token: token }),
-    })
-        .then(function (r) {
-            if (!r.ok) throw new Error();
-            return r.json();
-        })
+    _sendJson(MAP_CFG.urls.pinBulkUndo, "POST", { token: token })
         .then(function () {
             toastr.clear();
             toastr.success("Pins restored.");
@@ -3540,6 +3504,7 @@ function _undoBulkDelete(token: string, btn: HTMLButtonElement | null): void {
         })
         .catch(function () {
             toastr.error("Could not undo - the delete may have expired.");
+            if (btn) btn.disabled = false;
         });
 }
 
@@ -4235,33 +4200,33 @@ function addPinsToList(listUuid: string, confirmed?: boolean): void {
     }
     if (confirmed) params.set("confirmed", "true");
     const addUrl = MAP_CFG.urls.listsItemsAdd.replace("00000000-0000-0000-0000-000000000000", listUuid);
-    fetch(addUrl, {
-        method: "POST",
-        headers: { "X-CSRFToken": _csrfToken() },
-        body: params,
-    }).then((response) => {
-        if (response.status === 409) {
-            return response.json().then((data: { count: number }) => {
-                document.getElementById("list-add-confirm-text")!.textContent = `Add ${data.count} pins to this list?`;
-                const dlg = document.getElementById("list-add-confirm-dialog") as HTMLDialogElement;
-                document.getElementById("list-add-confirm-btn")!.addEventListener(
-                    "click",
-                    () => {
-                        dlg.close();
-                        addPinsToList(listUuid, true);
-                    },
-                    { once: true },
-                );
-                dlg.showModal();
-            });
-        }
-        if (!response.ok) {
-            toastr.error("Could not add pins to that list.");
-            return;
-        }
-        (document.getElementById("add-to-list-dialog") as HTMLDialogElement | null)?.close();
-        toastr.success("Pins added to list.");
-    });
+    // A 409 asks to confirm a large add rather than refusing it.
+    const init: FetchInit = { method: "POST", headers: { "X-CSRFToken": _csrfToken() }, body: params, __ulReported: true };
+    fetch(addUrl, init)
+        .then((response) => {
+            if (response.status === 409) {
+                return response.json().then((data: { count: number }) => {
+                    document.getElementById("list-add-confirm-text")!.textContent = `Add ${data.count} pins to this list?`;
+                    const dlg = document.getElementById("list-add-confirm-dialog") as HTMLDialogElement;
+                    document.getElementById("list-add-confirm-btn")!.addEventListener(
+                        "click",
+                        () => {
+                            dlg.close();
+                            addPinsToList(listUuid, true);
+                        },
+                        { once: true },
+                    );
+                    dlg.showModal();
+                });
+            }
+            if (!response.ok) {
+                toastr.error("Could not add pins to that list.");
+                return;
+            }
+            (document.getElementById("add-to-list-dialog") as HTMLDialogElement | null)?.close();
+            toastr.success("Pins added to list.");
+        })
+        .catch(() => toastr.error("Could not add pins to that list."));
 }
 
 function createListAndAddPins(name: string, nameInput: HTMLInputElement): void {
@@ -5348,11 +5313,7 @@ function _parseIconCatalogue(html: string): IconCatalogue {
 
 function _loadIconCatalogue(url: string): Promise<IconCatalogue> {
     if (!_iconGridRequest) {
-        _iconGridRequest = fetch(url, { credentials: "same-origin" })
-            .then((response) => {
-                if (!response.ok) throw new Error("icon grid: HTTP " + response.status);
-                return response.text();
-            })
+        _iconGridRequest = fetchText(url)
             .then(_parseIconCatalogue)
             .catch((error: unknown) => {
                 // Dropped so the next open retries, rather than leaving the
@@ -6404,7 +6365,10 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         list.appendChild(item);
     });
 
-    function _linkPin(locSlug: string, btn: HTMLButtonElement, onSuccess: () => void): Promise<void> {
+    function _linkPin(locSlug: string, btn: HTMLButtonElement, busyText: string, onSuccess: () => void): Promise<void> {
+        const label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = busyText;
         return fetch("/dashboard/map/pin/" + pinSlug + "/link/" + locSlug + "/", {
             method: "POST",
             headers: { "X-CSRFToken": MAP_CFG.csrfToken, "X-Requested-With": "XMLHttpRequest" },
@@ -6414,15 +6378,14 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
             .catch(() => {
                 toastr.error("Failed to update this pin's location.");
                 btn.disabled = false;
+                btn.textContent = label;
             });
     }
 
     list.querySelectorAll<HTMLButtonElement>(".loc-conflict-switch-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
             const locName = btn.dataset.name;
-            btn.disabled = true;
-            btn.textContent = "Switching...";
-            void _linkPin(btn.dataset.slug!, btn, () => {
+            void _linkPin(btn.dataset.slug!, btn, "Switching...", () => {
                 toastr.success("Switched to " + locName);
                 dlg.close();
                 window.invalidatePinCache();
@@ -6434,9 +6397,7 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
     list.querySelectorAll<HTMLButtonElement>(".loc-conflict-merge-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
             const locName = btn.dataset.name;
-            btn.disabled = true;
-            btn.textContent = "Merging...";
-            void _linkPin(btn.dataset.slug!, btn, () => {
+            void _linkPin(btn.dataset.slug!, btn, "Merging...", () => {
                 toastr.success("Merged into " + locName);
                 dlg.close();
                 window.invalidatePinCache();
@@ -6452,12 +6413,7 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
                 return;
             }
             cancelBtn.disabled = true;
-            fetch(MAP_CFG.urls.pinBulkDelete, {
-                method: "POST",
-                headers: { "X-CSRFToken": MAP_CFG.csrfToken, "Content-Type": "application/json" },
-                body: JSON.stringify({ uuids: [pinUuid] }),
-            })
-                .then((r) => (r.ok ? Promise.resolve() : Promise.reject(new Error("delete failed"))))
+            _sendJson(MAP_CFG.urls.pinBulkDelete, "POST", { uuids: [pinUuid] })
                 .then(() => {
                     toastr.success("Pin creation cancelled.");
                     dlg.close();

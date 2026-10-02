@@ -3,7 +3,7 @@
  * custom-fields panel) and the pin panel's draggable fixed fields. Both panels arrive and re-render through htmx.
  */
 
-import type { FetchInit } from "./site-runtime";
+import { sendForText } from "./fetch-json";
 
 type StylesByType = Record<string, [string, string][]>;
 
@@ -88,15 +88,9 @@ export function installCustomFieldForms(): void {
 }
 
 async function savePosition(item: HTMLElement): Promise<void> {
-    const init: FetchInit = {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": window.csrftoken ?? "" },
-        body: JSON.stringify({ left: Number.parseFloat(item.style.left), top: Number.parseFloat(item.style.top) }),
-        __ulReported: true,
-    };
+    const position = { left: Number.parseFloat(item.style.left), top: Number.parseFloat(item.style.top) };
     try {
-        const response = await fetch(item.dataset.cfPositionUrl ?? "", init);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await sendForText(item.dataset.cfPositionUrl ?? "", "POST", position, { reportsItsOwnErrors: true });
     } catch {
         window.toastr?.error("Failed to save the field position.");
     }
