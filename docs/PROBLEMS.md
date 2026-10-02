@@ -452,7 +452,13 @@ What remains of the findings in `docs/audits/codebase-audit.md`, each re-checked
   images/markup_map/location_mentions/reply_to fields.
 - **Unit 25**: no moderation UI for AI-flagged trivia questions - decided against, not just unbuilt (see
   `docs/designs/drafts/trivia.md`'s "Known gaps").
-- **Unit 31**: `_dark.scss` is 1,095 lines of per-selector overrides.
+- **Unit 31**: `_dark.scss` is 1,095 lines of per-selector overrides. Measured 2026-10-02 by deleting each compiled
+  dark rule in turn through CSSOM on 15 signed-in pages in the dark theme and comparing the computed style of what
+  it matched: of 413 rules, 86 changed something, 26 matched elements but changed nothing, 217 matched nothing on
+  those pages (closed dialogs, other pages), and 83 depend on a state (`:hover`, pseudo-elements) this cannot
+  probe. Even the 26 are not safe to drop: several are input rules that `body div.container` outranks inside the
+  page container but that still style inputs outside it. Shrinking the file means moving overrides into tokens,
+  not deleting rules.
 - **Games, needs a decision**: a SpotGuessr or Trivia player who leaves or is kicked mid-game drops out
   of the end-of-game summary everyone else receives (`session_summary` reads `participants.joined()`)
   and out of their own game history (`overview.participated_sessions` reads `.active()`), though their
