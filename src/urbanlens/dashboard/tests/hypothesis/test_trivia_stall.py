@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
     PlayerTriviaRating,
+    TriviaAnswer,
     TriviaQuestion,
     TriviaQuestionSource,
     TriviaRound,
@@ -347,6 +348,33 @@ class KickParticipantTests(TestCase):
             kick_participant(read_while_still_host, host, second)
         participant = TriviaSessionParticipant.objects.get(session=session, profile=second)
         self.assertEqual(participant.status, TriviaSessionParticipantStatus.JOINED)
+
+    def test_an_answer_from_a_player_kicked_after_its_check_is_refused(self) -> None:
+        host, guest, question, session, round_ = _setup_two_player_game()
+        submit_answer(round_, host, "1937")
+        read_before_the_kick = TriviaSessionParticipant.objects.get(session=session, profile=guest)
+        kick_participant(session, host, guest)
+
+        with (
+            patch.object(TriviaSessionParticipant.objects, "get", return_value=read_before_the_kick),
+            pytest.raises(TriviaError),
+        ):
+            submit_answer(round_, guest, "1937")
+
+        self.assertFalse(TriviaAnswer.objects.filter(round=round_, profile=guest).exists())
+
+    def test_a_stale_begin_cannot_revive_a_lobby_its_host_abandoned(self) -> None:
+        host, invitee = _make_profile(), _make_profile()
+        _befriend(host, invitee)
+        session = start_multiplayer_session(host, TriviaConfig(), [invitee])
+        read_before_leaving = TriviaSession.objects.get(pk=session.pk)
+        leave_session(session, host)
+
+        with pytest.raises(TriviaError):
+            begin_session(read_before_leaving, host)
+
+        session.refresh_from_db()
+        self.assertEqual(session.status, TriviaSessionStatus.ABANDONED)
 
     def test_host_cannot_kick_themselves(self) -> None:
         host, guest, question, session, round_ = _setup_two_player_game()

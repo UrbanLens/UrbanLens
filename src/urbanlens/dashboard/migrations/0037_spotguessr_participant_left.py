@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dashboard', '0035_proxied_media_render'),
+        ('dashboard', '0036_remoteimagecopy_thumb_file'),
     ]
 
     operations = [
