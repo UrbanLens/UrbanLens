@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Concatenate
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
-from django.urls import reverse
+from django.urls import URLPattern, reverse
 from django.views import View
 
 from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
@@ -39,10 +40,14 @@ from urbanlens.dashboard.services.pins.public_pins import (
 from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
-from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_parent_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import canonical_location_slug, locate_visible_wiki, resolve_visible_wiki, visible_parent_wiki
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditConflictError, WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields, wiki_revision_marker
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from django.http.response import HttpResponseBase
+
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -101,6 +106,65 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conce
         "composite": WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal, viewer=profile),
         **WIKI_STAT_FIELD_META[field],
     }
+
+
+def _with_query_string(url: str, request: HttpRequest) -> str:
+    query = request.META.get("QUERY_STRING", "")
+    return f"{url}?{query}" if query else url
+
+
+def _unstored[ResponseT: HttpResponseBase](response: ResponseT) -> ResponseT:
+    """Keep a redirect that depends on who asked out of every cache, so it cannot replay to the next viewer."""
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+def redirect_to_canonical_location[**P](view: Callable[Concatenate[HttpRequest, P], HttpResponseBase]) -> Callable[Concatenate[HttpRequest, P], HttpResponseBase]:
+    """Wrap a ``location_slug`` route so a GET that names its Location by uuid moves permanently to the slug.
+
+    Anything but GET and HEAD runs in place, because a redirect would turn a POST into a GET and drop its body.
+    Anonymous requests run in place too, and reach the view's own login redirect.
+
+    Args:
+        view: The route's view callable.
+
+    Returns:
+        The wrapped view.
+    """
+
+    @functools.wraps(view)
+    def wrapper(request: HttpRequest, /, *args: P.args, **kwargs: P.kwargs) -> HttpResponseBase:
+        location_slug = kwargs.get("location_slug")
+        match = request.resolver_match
+        if isinstance(location_slug, str) and match is not None and request.method in {"GET", "HEAD"} and request.user.is_authenticated and (canonical := canonical_location_slug(request, location_slug)) is not None:
+            url = reverse(match.view_name, kwargs={**match.kwargs, "location_slug": canonical})
+            return _unstored(HttpResponsePermanentRedirect(_with_query_string(url, request)))
+        return view(request, *args, **kwargs)
+
+    return wrapper
+
+
+def canonical_location_routes(patterns: list[URLPattern]) -> list[URLPattern]:
+    """Apply :func:`redirect_to_canonical_location` to every route in a ``location_slug`` group.
+
+    Args:
+        patterns: Routes whose patterns capture ``location_slug``.
+
+    Returns:
+        The same routes, each answering at its Location's canonical slug.
+    """
+    return [URLPattern(pattern.pattern, redirect_to_canonical_location(pattern.callback), pattern.default_args, pattern.name) for pattern in patterns]
+
+
+class LocationRedirectView(LoginRequiredMixin, View):
+    """``/location/<slug>/`` has no page of its own; it leads to the location's wiki.
+
+    GET  /location/<slug>/  → 302 to /location/<canonical slug>/wiki/
+    """
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        location, _wiki, _profile = locate_visible_wiki(request, location_slug)
+        return _unstored(HttpResponseRedirect(_with_query_string(reverse("location.wiki", kwargs={"location_slug": location.slug or str(location.uuid)}), request)))
 
 
 class LocationWikiView(LoginRequiredMixin, View):

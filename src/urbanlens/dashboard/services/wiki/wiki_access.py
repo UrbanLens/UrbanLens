@@ -377,15 +377,18 @@ def get_location_or_404(location_slug: str, *, related: tuple[str, ...] = ()) ->
     return location
 
 
-def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
-    """Resolve a Location and its Wiki, 404ing unless the requester can see it.
+def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
+    """Find a Location and its Wiki, 404ing unless the requester can see it.
+
+    The bare gate: unlike :func:`resolve_visible_wiki` it neither records engagement nor conceals, so it suits a
+    caller that only needs to know where the wiki is.
 
     Args:
         request: The current request (used for the requesting profile).
-        location_slug: Slug of the Location whose Wiki is being resolved.
+        location_slug: Slug or uuid of the Location.
 
     Returns:
-        Tuple of (Location, Wiki, requester's Profile).
+        Tuple of (Location, unconcealed Wiki, requester's Profile).
 
     Raises:
         Http404: The location doesn't exist, has no wiki, or the requester can't see it."""
@@ -399,6 +402,50 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     profile, _ = Profile.objects.get_or_create(user=request.user)
     if not location_visible_to(location, profile):
         raise Http404
+    return location, wiki, profile
+
+
+def canonical_location_slug(request: HttpRequest, location_slug: str) -> str | None:
+    """The slug a wiki route should be addressed by, when *location_slug* reaches it under another name.
+
+    Only a uuid can name a Location other than by its slug, so anything else answers None without a query.
+    A wiki the requester could not open also answers None, leaving its view to raise the usual 404: a redirect
+    there would name the place.
+
+    Args:
+        request: The current request (used for the requesting profile).
+        location_slug: Slug or uuid taken from the URL.
+
+    Returns:
+        The Location's slug, or None when the URL already uses it or the requester may not see the wiki."""
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.core.slugs import is_uuid_slug
+
+    if not is_uuid_slug(location_slug):
+        return None
+    current = Location.objects.slug_or_uuid(location_slug).values_list("slug", flat=True).first()
+    if not current or current == location_slug:
+        return None
+    try:
+        locate_visible_wiki(request, location_slug)
+    except Http404:
+        return None
+    return current
+
+
+def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
+    """Resolve a Location and its Wiki, 404ing unless the requester can see it.
+
+    Args:
+        request: The current request (used for the requesting profile).
+        location_slug: Slug of the Location whose Wiki is being resolved.
+
+    Returns:
+        Tuple of (Location, Wiki, requester's Profile).
+
+    Raises:
+        Http404: The location doesn't exist, has no wiki, or the requester can't see it."""
+    location, wiki, profile = locate_visible_wiki(request, location_slug)
 
     # Viewing while access is held grants it permanently (D19). Only reached once location_visible_to has passed.
     if location.place_id is not None:
