@@ -63,15 +63,16 @@ means an inline script or style. `blob` and `data` are URL schemes.
   fetching them again. Otherwise use `guard.allow(...)` in the spec with a pattern narrow enough
   that it cannot hide a real violation from the site.
 
-## What still keeps `'unsafe-inline'` in `script-src`
+## `script-src` refuses inline script (2026-10-02)
 
-Nothing the templates or the bundles render, as of 2026-10-02. No template carries an executable
-inline `<script>` or an `on*=` attribute (`test_templates_run_no_inline_script.py` fails if one
-returns), no `frontend/ts/` module builds an `onclick=` string, and thirteen rendered pages ship
-only JSON islands, which a browser does not execute. P34 and P83, archived that day, record the
-move; on 2026-09-23 there were 126 inline blocks in 99 templates and 526 handler attributes in 160.
+`'unsafe-inline'` is gone from `script-src`; `style-src` keeps it, since Leaflet and the pages position elements with
+inline styles. No template carries an executable inline `<script>` or an `on*=` attribute
+(`test_templates_run_no_inline_script.py` fails if one returns), no `frontend/ts/` module builds an `onclick=` string,
+and rendered pages ship only JSON islands, which a browser does not execute. P34 and P83 record the move.
 
-What has not been shown is that nothing else needs `'unsafe-inline'`: vendor scripts, the Google
-Maps loader, anything a library injects. A policy without it, run report-only through the browser
-suite and read as above, would settle that. No nonce is needed, since no inline script is left to
-carry one.
+Before it was dropped, a report-only policy without it ran beside the enforced one on the dev stack through every
+`ui` browser spec (about 140 tests) and the admin, error and Settings pages: no report, while a script injected on
+purpose was reported and logged, so the pipe was proven. Django's admin, auth and DRF templates load their scripts by
+`src`. `test_security_headers.py::test_scripts_cannot_run_inline` holds it. Not exercised: SpotGuessr's Maps
+JavaScript API (an alpha feature the test accounts cannot open), which loads its scripts by `src` from
+`maps.googleapis.com`. A deployment that meets a violation can set `UL_CSP_ENFORCE=false` while the source is fixed.

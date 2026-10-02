@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import re
 from unittest import mock
 
 from django.conf import settings
@@ -14,7 +13,6 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.settings.app import AppSettings
 
 #: ``dashboard/templates/dashboard/themes/base.html`` - the template every page extends.
-BASE_TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "dashboard" / "themes" / "base.html"
 
 #: ``src/urbanlens/config/nginx/nginx.conf`` - this deployment's own proxy config.
 NGINX_CONF = Path(__file__).resolve().parents[3] / "config" / "nginx" / "nginx.conf"
@@ -273,8 +271,18 @@ class CspHeaderTests(SimpleTestCase):
             parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER]),
         )
 
+    def test_scripts_cannot_run_inline(self) -> None:
+        """No template or bundle-built markup runs inline script (P34, P83), so an injected one must not run either.
+
+        Styles keep 'unsafe-inline': Leaflet and the pages position elements with inline styles.
+        """
+        policy = parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER])
+
+        self.assertNotIn("'unsafe-inline'", policy["script-src"])
+        self.assertIn("'unsafe-inline'", policy["style-src"])
+
     def test_no_unsafe_eval_anywhere(self) -> None:
-        """'unsafe-inline' is a deliberate concession; 'unsafe-eval' is not. WebAssembly has its own keyword."""
+        """'unsafe-eval' stays refused. WebAssembly has its own keyword."""
         policy = parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER])
 
         for directive, sources in policy.items():
@@ -315,23 +323,3 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
             host = f"{parsed.scheme}://{parsed.netloc}"
             self.assertIn(host, directives[directive], f"{key} loads from {host}, missing from {directive}")
         self.assertTrue(seen, "expected third-party scripts and stylesheets in VENDOR_ASSETS")
-
-    def test_unsafe_inline_is_kept_while_inline_scripts_remain(self) -> None:
-        """The caveat, pinned to the thing that causes it.
-
-        ``'unsafe-inline'`` cannot be dropped until the inline blocks are gone - and a nonce would not help
-        incrementally, since browsers ignore ``'unsafe-inline'`` as soon as any nonce is present."""
-        html = BASE_TEMPLATE.read_text(encoding="utf-8")
-        # Case-insensitive: HTML tag names are, so a <SCRIPT> block would
-        # otherwise slip past and read as "no inline scripts left".
-        inline_blocks = re.findall(r"<script(?![^>]*\ssrc=)[^>]*>", html, re.IGNORECASE)
-
-        script_src = settings.CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"]
-
-        if inline_blocks:
-            self.assertIn(
-                "'unsafe-inline'",
-                script_src,
-                f"base.html still has {len(inline_blocks)} inline <script> block(s); removing "
-                "'unsafe-inline' would break them",
-            )

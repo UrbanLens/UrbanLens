@@ -753,15 +753,14 @@ CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 #
 # Tile hosts need wildcard and bare forms for Leaflet's {s} expansion.
 #
-# script-src keeps 'unsafe-inline' until a run without it shows nothing needs it: no template or bundle-built markup
-# carries inline script any more (docs/notes/csp-violations.md). htmx must not need 'unsafe-eval':
-# no hx-on, js: hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
+# script-src refuses inline script: no template or bundle-built markup carries any (docs/notes/csp-violations.md), and
+# test_templates_run_no_inline_script.py keeps it that way. htmx must not need 'unsafe-eval' either: no hx-on, js:
+# hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
 _CSP_DIRECTIVES: dict[str, list[str]] = {
     "default-src": ["'self'"],
     # CDN scripts plus runtime-injected Maps API.
     "script-src": [
         "'self'",
-        "'unsafe-inline'",
         # libsodium's Argon2id (E2EE key derivation) compiles WebAssembly; eval stays refused.
         "'wasm-unsafe-eval'",
         "https://unpkg.com",
