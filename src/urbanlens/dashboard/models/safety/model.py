@@ -56,6 +56,10 @@ FINAL_WARNING_LEAD_TIME = timedelta(minutes=5)
 # email per change.
 PLAN_UPDATE_NOTIFICATION_COOLDOWN = timedelta(minutes=15)
 
+#: The longest ``SafetyPreference.auto_delete_after_days``, a century. The purge adds the window to a timestamp in
+#: SQL, and one past the timestamp range fails that query for every profile, not only its owner's.
+MAX_AUTO_DELETE_AFTER_DAYS = 36_500
+
 DEFAULT_CONTACT_MESSAGE = (
     "Hi! I went on a trip and set up an automated safety check-in: if I don't confirm I'm safe by "
     "my expected return time, this message is sent to my emergency contacts. If you're reading this, "

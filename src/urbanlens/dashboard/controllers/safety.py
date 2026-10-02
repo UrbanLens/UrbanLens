@@ -20,7 +20,7 @@ from django.views import View
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
+from urbanlens.dashboard.models.safety.model import MAX_AUTO_DELETE_AFTER_DAYS, SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, bounded_float_or_none, coordinate_or_none
@@ -357,7 +357,7 @@ def _parse_auto_delete_days(request: HttpRequest) -> int | None:
         request: Incoming HTTP request.
 
     Returns:
-        A positive day count, or None for "never".
+        A positive day count no longer than :data:`MAX_AUTO_DELETE_AFTER_DAYS`, or None for "never".
     """
     raw = request.POST.get("auto_delete_after_days", "").strip()
     if not raw:
@@ -366,7 +366,7 @@ def _parse_auto_delete_days(request: HttpRequest) -> int | None:
         days = int(raw)
     except ValueError:
         return None
-    return days if days > 0 else None
+    return min(days, MAX_AUTO_DELETE_AFTER_DAYS) if days > 0 else None
 
 
 class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):

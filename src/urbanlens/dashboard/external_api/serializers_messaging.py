@@ -20,6 +20,7 @@ from rest_framework import serializers
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH
 from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX, DB_INTEGER_MAX
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH, column_max_length
 from urbanlens.dashboard.services.messaging.direct_messages import reaction_summary, serialize_direct_message
 
@@ -167,10 +168,10 @@ class MessageSendSerializer(serializers.Serializer):
     body = serializers.CharField(required=False, allow_blank=True, default="", max_length=MAX_DIRECT_MESSAGE_LENGTH)
     ciphertext = serializers.CharField(required=False, allow_blank=True, default="")
     nonce = serializers.CharField(required=False, allow_blank=True, default="", max_length=MAX_NONCE_FIELD_LENGTH)
-    key_version = serializers.IntegerField(required=False, default=0, min_value=0)
-    reply_to_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    key_version = serializers.IntegerField(required=False, default=0, min_value=0, max_value=DB_INTEGER_MAX)
+    reply_to_id = serializers.IntegerField(required=False, allow_null=True, default=None, max_value=DB_BIGINT_MAX)
     markup_map_id = serializers.UUIDField(required=False, allow_null=True, default=None)
-    image_ids = serializers.ListField(required=False, child=serializers.IntegerField(), max_length=MAX_ATTACHED_IMAGES, default=list)
+    image_ids = serializers.ListField(required=False, child=serializers.IntegerField(min_value=1, max_value=DB_BIGINT_MAX), max_length=MAX_ATTACHED_IMAGES, default=list)
     #: Preferred over ``image_ids`` for new clients - addresses the sender's own not-yet-attached images by uuid
     #: instead of integer pk. Additive: ``image_ids`` keeps working unchanged, and a request may combine both.
     image_uuids = serializers.ListField(required=False, child=serializers.UUIDField(), max_length=MAX_ATTACHED_IMAGES, default=list)

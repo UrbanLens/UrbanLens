@@ -55,6 +55,7 @@ from urbanlens.dashboard.models.profile.meta import (
 from urbanlens.dashboard.models.profile.model import _COMMUNITY_GATED_VISIBILITY_FIELDS
 from urbanlens.dashboard.models.push_device import PushTransport
 from urbanlens.dashboard.models.safety.model import (
+    MAX_AUTO_DELETE_AFTER_DAYS,
     SafetyCheckin,
     SafetyCheckinContact,
     SafetyCheckinPartner,
@@ -80,6 +81,7 @@ from urbanlens.dashboard.services.core.text_limits import (
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 from urbanlens.dashboard.services.media.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
+from urbanlens.dashboard.services.media.storage import DOWNSCALE_DIMENSION_CHOICES, VIDEO_DOWNSCALE_HEIGHT_CHOICES
 from urbanlens.dashboard.services.notifications.notification_center import preference_field_names
 from urbanlens.dashboard.services.pins.pin_edit import EDITABLE_PIN_FIELDS
 from urbanlens.dashboard.services.search.filter_criteria import CriteriaShapeError, validate_criteria_shape
@@ -949,8 +951,18 @@ class SettingsPatchSerializer(serializers.Serializer):
     external_apis_enabled = serializers.BooleanField(required=False)
     #: Null means "no downscaling preference"; any value is checked against the
     #: caller's plan entitlement in services.profile.profile_settings.
-    image_downscale_max_dimension = serializers.IntegerField(required=False, allow_null=True)
-    video_downscale_max_height = serializers.IntegerField(required=False, allow_null=True)
+    image_downscale_max_dimension = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=min(value for value, _label in DOWNSCALE_DIMENSION_CHOICES),
+        max_value=max(value for value, _label in DOWNSCALE_DIMENSION_CHOICES),
+    )
+    video_downscale_max_height = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=min(value for value, _label in VIDEO_DOWNSCALE_HEIGHT_CHOICES),
+        max_value=max(value for value, _label in VIDEO_DOWNSCALE_HEIGHT_CHOICES),
+    )
 
 
 #: Upper bound on the total vertex count of a submitted smart-list boundary. Generous enough for any hand-drawn
@@ -1655,7 +1667,7 @@ class SafetyPreferenceSerializer(serializers.Serializer):
     default_message = serializers.CharField(max_length=5000, required=False, allow_blank=True)
     default_grace_period_seconds = serializers.IntegerField(required=False, min_value=900, max_value=604800)
     #: Null means "never auto-delete".
-    auto_delete_after_days = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+    auto_delete_after_days = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=MAX_AUTO_DELETE_AFTER_DAYS)
 
 
 class SafetyCheckinListResponseSerializer(serializers.Serializer):
@@ -2221,7 +2233,7 @@ class PhotoUploadSerializer(serializers.Serializer):
     #: A pin slug or uuid; must be one of the caller's own pins.
     pin = serializers.CharField(max_length=255, required=False, allow_blank=True)
     #: A PinVisit id; must be on one of the caller's own pins.
-    visit = serializers.IntegerField(required=False)
+    visit = serializers.IntegerField(required=False, min_value=1, max_value=DB_BIGINT_MAX)
 
 
 class PhotoLabelsSerializer(serializers.Serializer):
@@ -3029,7 +3041,7 @@ class TripCommentCreateSerializer(serializers.Serializer):
 
     text = serializers.CharField(max_length=MAX_COMMENT_TEXT_LENGTH, allow_blank=False)
     #: A comment on this same trip to reply to.
-    parent_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    parent_id = serializers.IntegerField(required=False, allow_null=True, default=None, max_value=DB_BIGINT_MAX)
 
 
 class TripCommentReactionSetSerializer(serializers.Serializer):
