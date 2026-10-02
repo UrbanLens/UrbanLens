@@ -232,6 +232,9 @@ class WalkTests(_RowsFixture):
             {"after_order": "x", "after_name": "a", "after_id": "1"},
             {"after_order": "1"},
             {"after_id": "1", "after_name": "a"},
+            {"after_order": "1", "after_name": "a\x00b", "after_id": "1"},
+            {"after_order": str(2**31), "after_name": "a", "after_id": "1"},
+            {"after_order": "1", "after_name": "a", "after_id": "-1"},
         ):
             with self.subTest(params=params):
                 self.assertEqual(self.client.get(self._rows_url(), params).status_code, 400)

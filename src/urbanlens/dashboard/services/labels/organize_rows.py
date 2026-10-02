@@ -109,6 +109,9 @@ class RowsCursor:
         order_value, pk_value = safe_int_or_none(order), safe_int_or_none(pk)
         if order_value is None or pk_value is None or name is None:
             raise ValueError("Incomplete cursor.")
+        # PostgreSQL refuses a NUL in any string parameter, which would surface as a 500.
+        if "\x00" in name:
+            raise ValueError("Malformed cursor.")
         if not DB_INTEGER_MIN <= order_value <= DB_INTEGER_MAX or not 0 <= pk_value <= _BIGINT_MAX:
             raise ValueError("Cursor out of range.")
         return cls(order=order_value, name=name, pk=pk_value)
