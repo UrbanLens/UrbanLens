@@ -19564,3 +19564,30 @@ the deadline pool. `test_thread_pool_task_deadline.py` runs the task off the mai
 Left as it is, and recorded in `docs/designs/celery-queue-classes.md`: blocking outside the gateway session (a
 database query, duckdb) is not bounded, the hard limit is unenforceable on threads, and `requests` bounds each
 read rather than the whole response.
+
+## RESOLVED 2026-10-02: Unbounded lists across the site: nine paginated, the rest bounded and measured
+
+`id: P69` · `status: fixed` · `resolved: 2026-10-02`
+
+A survey found eleven collections that grow with account age rendered by a plain `{% for %}`. Re-verified
+2026-10-02: none is left open.
+
+Fixed 2026-09-06, paginated or fetched a page at a time: the album "add existing photo" picker
+(`AlbumEligibleImagesView`), Immich "nearby" import (as far as Immich's API allows), wiki edit and article revision
+history, the pin-to-wiki share picker, Vault's pin-albums panel, the Settings API-key list (10 a page, working keys
+first, `api_keys_page`), Memories > Sharing and > Journal, the pin import-failure queue, and the pin-list overview map
+(`pin_lists._MAP_PIN_LIMIT`, 500).
+
+Decided against, by measurement: lazy-loading the Settings Security and API-Keys tabs. Their context is 5 of the
+page's 22 queries and under 3 ms; `hx-trigger="load"` would add two round trips and break the one-time key reveal.
+What made that page heavy was inline script, tracked as P83.
+
+Left deliberately, because each is bounded by something other than account age (the site's award count, friend
+count, a seven-day window): the safety check-in overview, DM conversation list, achievement catalogue, undo history,
+friends page and pin-list panel. Each now has a row-cost test asserting one row costs under 10% of the empty page
+(`test_*_render_scaling.py`: undo_history, friends_page, safety_home, conversation_list, achievement_catalogue,
+pin_lists_panel). Organize's active label tab is P66.
+
+The lesson the nine fixes shared: the slice is rarely the whole fix. Each had a count that gated an empty state, a
+numbering defined against the whole set, a group-by that had to move into SQL first, or a per-row query that
+outlived the cap.
