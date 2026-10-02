@@ -54,7 +54,7 @@ from urbanlens.dashboard.external_api.serializers_wiki import (
 )
 from urbanlens.dashboard.external_api.views import ExternalApiView, OwnedPinMixin
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.models.aliases.model import WikiAlias
+from urbanlens.dashboard.models.aliases.model import AliasType, WikiAlias
 from urbanlens.dashboard.models.article.model import ArticleRevision
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
@@ -92,7 +92,7 @@ from urbanlens.dashboard.services.wiki.articles import (
 )
 from urbanlens.dashboard.services.wiki.concealment import conceal_article, concealment_active, redact_edit_changes, visible_rows, writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
-from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
+from urbanlens.dashboard.services.wiki.wiki_aliases import WikiAliasExistsError, WikiAliasNameError, create_wiki_alias, promote_wiki_alias_to_name
 from urbanlens.dashboard.services.wiki.wiki_detail import build_wiki_detail, masked_editor_name
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditConflictError, WikiEditValidationError, apply_wiki_edit, revert_wiki_edit
 
@@ -382,7 +382,7 @@ class WikiAliasesView(WikiApiView):
         _location, wiki, profile = self.resolve(request, location_slug)
         return Response(WikiAliasSerializer(visible_rows(wiki.aliases.all(), wiki, profile).order_by("pk"), many=True, context={"wiki": wiki}).data)
 
-    @extend_schema(request=WikiAliasCreateSerializer, responses={201: WikiAliasSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    @extend_schema(request=WikiAliasCreateSerializer, responses={201: WikiAliasSerializer, 400: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
     def post(self, request: Request, location_slug: str) -> Response:
         """Add an alias to the wiki."""
         _location, wiki, profile = self.resolve(request, location_slug)
@@ -391,13 +391,12 @@ class WikiAliasesView(WikiApiView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        alias = WikiAlias(wiki=wiki, name=data["name"], created_by=profile)
-        if data.get("kind"):
-            alias.kind = data["kind"]
-        alias.save()
-        # Serialized after save(), like the promote endpoint below and for the
-        # same reason: _AliasBase.save() sanitizes ``name``, so the row the
-        # client is told about must be read back rather than echoed.
+        try:
+            alias = create_wiki_alias(writable_wiki(wiki), profile, name=data["name"], kind=data.get("kind") or AliasType.ALTERNATE)
+        except WikiAliasExistsError as exc:
+            return Response({"error": exc.message}, status=409)
+        except WikiAliasNameError as exc:
+            return Response({"error": exc.message}, status=400)
         return Response(WikiAliasSerializer(alias, context={"wiki": wiki}).data, status=201)
 
 
@@ -725,7 +724,7 @@ class WikiLinksView(WikiApiView):
             with transaction.atomic():
                 link = WikiLink.objects.create(wiki=wiki, name=data.get("name", ""), url=data["url"], created_by=profile)
         except IntegrityError:
-            return Response({"detail": "That link is already on this page."}, status=400)
+            return Response({"error": "That link is already on this page."}, status=400)
         return Response(WikiLinkSerializer(link).data, status=201)
 
 

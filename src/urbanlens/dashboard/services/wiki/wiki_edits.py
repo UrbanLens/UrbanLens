@@ -10,7 +10,7 @@ from django.db.models import Max
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.geo.wiki_boundary_edits import boundary_type_for_change_key, is_boundary_change_key, revert_boundary_change
 
 if TYPE_CHECKING:
@@ -114,8 +114,12 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
         The recorded :class:`WikiEdit`, or ``None`` when nothing changed.
 
     Raises:
-        WikiEditValidationError: A description over :data:`MAX_WIKI_DESCRIPTION_LENGTH`, an unrecognized security level, or a date that isn't ``YYYY-MM-DD``.
+        WikiEditValidationError: A name that is not text, is empty only once sanitized, or is too long for its column, a description over
+            :data:`MAX_WIKI_DESCRIPTION_LENGTH`, an unrecognized security level, or a date that isn't ``YYYY-MM-DD``.
         WikiEditConflictError: A field the edit changes was written by someone else in the meantime."""
+    from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
+    from urbanlens.dashboard.services.locations.naming import sanitize_name
+
     valid_security = {value for value, _label in SecurityLevel.choices}
     # new_vals holds the actual Python values to set on the wiki.
     # audit holds JSON-safe strings for the WikiEdit audit record.
@@ -158,6 +162,16 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
             if length_error:
                 raise WikiEditValidationError(length_error, field)
             new_val = raw
+        elif field == "name":
+            if not isinstance(raw, str):
+                raise WikiEditValidationError("Name must be text.", field)
+            # Checked as Wiki.save() will store it; an explicit "" stays possible, since undo restores an unnamed wiki.
+            new_val = sanitize_name(raw.strip()) or ""
+            if raw.strip() and not new_val:
+                raise WikiEditValidationError("Name has nothing left once symbols are removed.", field)
+            length_error = column_length_error(WikiModel, "name", new_val, "Name")
+            if length_error:
+                raise WikiEditValidationError(length_error, field)
         else:
             new_val = raw
 
