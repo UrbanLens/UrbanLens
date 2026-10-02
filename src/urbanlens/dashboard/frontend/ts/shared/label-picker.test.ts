@@ -2,7 +2,7 @@
  * isSimpleGroups() decides whether a parsed label formula can be shown as the interactive 2-column Include/Exclude UI.
  */
 import { describe, expect, test } from "bun:test";
-import { emitsNoFollowUpClick, isSimpleGroups, matchesLabelFilter, type LabelGroup } from "./label-picker"
+import { createChipPicker, emitsNoFollowUpClick, isSimpleGroups, matchesLabelFilter, type LabelGroup } from "./label-picker";
 import { safeColor } from "./color-safety";
 
 describe("isSimpleGroups", () => {
@@ -168,3 +168,33 @@ describe("emitsNoFollowUpClick", () => {
         expect(emitsNoFollowUpClick(event({ button: 0, detail: 1 }))).toBe(false);
     });
 });
+
+describe("createChipPicker", () => {
+    test("the search box's arrow keys and Enter add a suggestion as a chip", () => {
+        document.body.innerHTML = `<div id="chips"></div><input id="search"><div id="sugg" hidden></div>`;
+        const searchEl = document.getElementById("search") as HTMLInputElement;
+        const changes: string[][] = [];
+        const picker = createChipPicker({
+            chipsEl: document.getElementById("chips")!,
+            searchEl,
+            suggEl: document.getElementById("sugg")!,
+            onChange: () => changes.push(picker.getSelectedIds()),
+        });
+        picker.setCandidates([
+            { id: "1", name: "Mill" },
+            { id: "2", name: "Mine" },
+        ]);
+        searchEl.focus();
+        searchEl.value = "mi";
+        searchEl.dispatchEvent(new Event("input"));
+        const key = (name: string) => searchEl.dispatchEvent(new KeyboardEvent("keydown", { key: name, cancelable: true }));
+
+        key("ArrowDown");
+        key("ArrowDown");
+        key("Enter");
+
+        expect(changes).toEqual([["2"]]);
+        expect(document.getElementById("sugg")!.hidden).toBe(true);
+    });
+});
+

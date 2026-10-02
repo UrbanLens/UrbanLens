@@ -745,7 +745,8 @@ $org-stat-col-color-w: 2.75rem;
     cursor: pointer;
     transition: transform .1s, box-shadow .12s;
 
-    &:hover {
+    &:hover,
+    &.is-active {
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, #6366f1) 40%, transparent);
     }
 

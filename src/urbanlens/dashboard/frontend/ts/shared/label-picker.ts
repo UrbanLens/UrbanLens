@@ -18,6 +18,7 @@ export interface LabelGroup {
 
 import { safeColor } from "./color-safety";
 import { escHtml } from "./escape-html";
+import { installSuggestionKeys } from "./suggestion-keys";
 
 type ChipMode = "incl" | "excl";
 
@@ -1109,6 +1110,14 @@ export function createChipPicker(options: ChipPickerOptions): ChipPickerApi {
 
     searchEl.addEventListener("input", () => renderSuggestions(searchEl.value));
     searchEl.addEventListener("focus", () => renderSuggestions(searchEl.value));
+    installSuggestionKeys({
+        input: searchEl,
+        items: () => Array.from(suggEl.querySelectorAll<HTMLElement>(".apdlg-label-sugg-item")),
+        isOpen: () => !suggEl.hidden,
+        close: () => {
+            suggEl.hidden = true;
+        },
+    });
     searchEl.addEventListener("blur", () =>
         setTimeout(() => {
             suggEl.hidden = true;

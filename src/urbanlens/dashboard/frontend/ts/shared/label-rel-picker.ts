@@ -1,5 +1,7 @@
 import Sortable from "sortablejs";
 
+import { handleSuggestionKey } from "./suggestion-keys";
+
 /**
  * Parent/child relationship chip picker used by organize's create/edit/bulk-edit dialogs (dashboard/partials/labels/*).
  */
@@ -246,6 +248,20 @@ function onPickerClick(event: MouseEvent): void {
     else LabelRelPicker.setTab(context.instanceId, context.relType, control.dataset.kind ?? "", control);
 }
 
+function onPickerKeydown(event: KeyboardEvent): void {
+    const field = event.target;
+    if (!(field instanceof HTMLInputElement) || !field.classList.contains("label-rel-search")) return;
+    const popup = field.closest<HTMLElement>(".label-rel-popup");
+    if (!popup) return;
+    handleSuggestionKey(event, {
+        items: () => Array.from(popup.querySelectorAll<HTMLElement>(".label-rel-suggestion:not(.label-rel-suggestion--hidden)")).filter((button) => button.style.display !== "none"),
+        isOpen: () => !popup.hidden,
+        close: () => {
+            popup.hidden = true;
+        },
+    });
+}
+
 function onPickerInput(event: Event): void {
     const field = event.target;
     if (!(field instanceof HTMLInputElement) || !field.classList.contains("label-rel-search")) return;
@@ -266,6 +282,7 @@ export function installGlobalLabelRelPicker(): void {
     });
     document.addEventListener("click", onPickerClick);
     document.addEventListener("input", onPickerInput);
+    document.addEventListener("keydown", onPickerKeydown);
 }
 
 declare global {

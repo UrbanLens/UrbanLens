@@ -1374,7 +1374,8 @@ img.leaflet-marker-icon.is-selected {
     transition: background .1s;
 
     &:hover,
-    &:focus {
+    &:focus,
+    &.is-active {
         background: var(--ul-hover-bg);
         outline: none;
     }

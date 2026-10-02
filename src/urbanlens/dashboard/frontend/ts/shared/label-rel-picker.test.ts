@@ -165,6 +165,19 @@ describe("LabelRelPicker controls in markup", () => {
         expect(shown()).toEqual(["ruin"]);
     });
 
+    test("the search box's arrow keys and Enter pick a suggestion, and Escape closes the popup", () => {
+        click("add-parent");
+        const search = document.getElementById("search-parent") as HTMLInputElement;
+        const key = (name: string) => search.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+        key("ArrowDown");
+        key("ArrowDown");
+        expect(document.querySelector("#edit-7-suggestions-parent .is-active")?.id).toBe("ruin");
+        key("Enter");
+        expect(LabelRelPicker.getSelectedIds("edit-7", "parent")).toEqual([5, 8]);
+        key("Escape");
+        expect(popup().hidden).toBe(true);
+    });
+
     test("a suggestion picks, and a chip's remove button removes it, whoever built the chip", () => {
         click("add-parent");
         click("hospital-name");
