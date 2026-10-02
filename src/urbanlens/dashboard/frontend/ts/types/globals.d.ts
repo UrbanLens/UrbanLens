@@ -64,6 +64,8 @@ export interface GalleryMarkerImage {
     marker_thumb_url?: string;
     latitude: number | null;
     longitude: number | null;
+    /** What the photo lightbox shows for it, as the gallery would show it. */
+    lightbox?: LightboxInput;
 }
 
 export interface CommentMapComposerOptions {
@@ -116,8 +118,8 @@ declare global {
         // Set by shared/photo-pin-confirm.ts for the organize queue cards' "Create pin" buttons.
         photosLoadPinConfirm?: (url: string) => void;
         // Set by shared/photo-gallery.ts (else shared/album-items.ts), for the page's map and lightbox.
-        galleryOpenLightbox?: (imgId: number, fallback?: { url: string; caption?: string }) => void;
-        galleryRepositionImage?: (imgId: number, lat: number, lng: number, onRejected?: () => void) => void;
+        galleryOpenLightbox?: (imgId: number, fallback?: LightboxInput) => void;
+        galleryRepositionImage?: (imgId: number, lat: number, lng: number, onRejected?: () => void) => Promise<void>;
         gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
         photosToggleSelectMode?: () => void;
         // Set by entries/map-annotations.ts, where the page has a map.

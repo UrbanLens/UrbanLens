@@ -9,6 +9,7 @@
 import { toast } from "./dialogs";
 import { escHtml } from "./escape-html";
 import { initAdaptivePagination } from "./adaptive-pagination";
+import { writePhotoIds } from "./photo-tile";
 
 declare global {
     interface Window {
@@ -399,6 +400,12 @@ export class PinMediaGallery {
     private onDragStart(event: DragEvent): void {
         const item = event.target instanceof Element ? event.target.closest<HTMLElement>('.media-item[draggable="true"]') : null;
         if (!item || !event.dataTransfer) return;
+        // One of the viewer's own photos already has a row; the map moves it rather than saving a copy.
+        if (item.dataset.mediaSource === "photos") {
+            const id = Number.parseInt(item.dataset.imageId ?? "", 10);
+            if (id) writePhotoIds(event.dataTransfer, [id]);
+            return;
+        }
         event.dataTransfer.effectAllowed = "copy";
         window._mediaDragItemEl = item;
         event.dataTransfer.setData(

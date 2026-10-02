@@ -8,9 +8,10 @@ import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, setAttribution, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
-import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, reclusterOnDrag, returnToCluster } from "../shared/map-clusters";
+import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick } from "../shared/map-clusters";
 import type { MarkupToolbar } from "../shared/markup-toolbar";
-import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
+import { createPhotoMarkerLayer, type PhotoMapItem } from "../shared/photo-map";
+import { type LightboxInput, lightboxItemFromTile, parsePhotoIds, PHOTO_IDS_TYPE, tileFromJson, writePhotoIds } from "../shared/photo-tile";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 import { observeMediaGalleryProcessing, openMediaLightbox } from "../shared/media-lightbox";
 
@@ -57,9 +58,33 @@ interface DetailPinEntry {
 interface PhotoPanelItem {
     id: number;
     url: string;
+    /** The small rendition drawn on the map. */
+    markerUrl: string;
     lat: number | null;
     lng: number | null;
     mine: boolean;
+    /** The child pin a nested photo belongs to; such a photo is moved from that pin's own page. */
+    ownerName: string;
+    /** What the photo lightbox shows, as the gallery would show it. */
+    lightbox: LightboxInput | null;
+}
+
+/** One photo of the pin's map layer: gallery JSON (`image_to_gallery_json`), plus the child pin a nested photo belongs to. */
+type PhotoLayerImage = Record<string, unknown> & {
+    id: number;
+    url: string;
+    marker_thumb_url?: string;
+    latitude: number | null;
+    longitude: number | null;
+    is_mine?: boolean;
+    child_pin_name?: string;
+};
+
+/** The pin's photo map layer, as `PinGalleryJsonView` sends it: only photos that have a place. */
+interface PhotoLayerJson {
+    images?: PhotoLayerImage[];
+    truncated?: boolean;
+    total?: number;
 }
 
 interface NearbyPinEntry {
@@ -693,7 +718,22 @@ function init(): void {
     detailPinLayer.addTo(map);
     markupLayer.addTo(map);
 
-    const photoLayer = createPhotoClusterGroup(map).addTo(map);
+    const photoMarkers = createPhotoMarkerLayer(map, {
+        onMove: (id, lat, lng) => movePhoto(id, lat, lng),
+        onSelect: (id) => openPhoto(id),
+        onHover: (id, on) => window._galleryHighlightMarker?.(id, on),
+        onContextMenu: (id, event) => {
+            showMapContextMenu({
+                lat: event.latlng.lat,
+                lng: event.latlng.lng,
+                zoom: map.getZoom(),
+                clientX: event.originalEvent.clientX,
+                clientY: event.originalEvent.clientY,
+                extraItems: [{ icon: "visibility_off", label: "Hide from map", onClick: () => window.gallerySetPhotoMapHidden?.(id, true) }],
+            });
+        },
+    });
+    const photoLayer = photoMarkers.layer;
 
     function detailsVisible(): boolean {
         return map.hasLayer(detailPinLayer);
@@ -1001,7 +1041,6 @@ function init(): void {
     //: Whether the server capped the photo map layer, and how many there were.
     let photoLayerTruncated = false;
     let photoLayerTotal = 0;
-    const photoMarkers: Record<number, { marker: L.Marker; url: string; lat: number; lng: number; highlighted: boolean }> = {};
 
     function hexToRgb(hex: string): string {
         const r = Number.parseInt(hex.slice(1, 3), 16);
@@ -1186,11 +1225,19 @@ function init(): void {
 
     // Detail pin list sidebar toggle - same collapse/expand mechanic as the
     // main map's #pin-list-panel/.pin-list-handle (window._togglePinListPanel).
+    function selectPanelTab(tab: "details" | "photos"): void {
+        document.querySelectorAll<HTMLElement>(".map-panel-tab").forEach((b) => b.classList.toggle("is-active", b.dataset.tab === tab));
+        (document.getElementById("map-panel-details") as HTMLElement).hidden = tab !== "details";
+        (document.getElementById("map-panel-photos") as HTMLElement).hidden = tab !== "photos";
+    }
+
     function toggleDetailPinListPanel(): void {
         const panel = document.getElementById("detail-pin-list-panel");
         const handle = document.getElementById("detail-pin-list-handle");
         if (!panel) return;
         const isOpen = panel.classList.toggle("open");
+        // Opening onto an empty Details list would hide the only thing there is to show.
+        if (isOpen && !detailPins.length && !toolbar.getMarkupItems().length && photoPanelItems.length) selectPanelTab("photos");
         if (handle) {
             handle.classList.toggle("open", isOpen);
             handle.setAttribute("aria-expanded", String(isOpen));
@@ -1504,11 +1551,8 @@ function init(): void {
                     marker.on("click", (e) => {
                         handleDetailPinSelectClick(entry, marker, e);
                     });
-                    if (!entry.owner_name) {
-                        reclusterOnDrag(marker, detailPinLayer, map, () => detailSelectMode);
-                    }
+                    // markercluster re-files a dragged child itself on dragend.
                     marker.on("dragend", () => {
-                        returnToCluster(marker, detailPinLayer, map);
                         const pos = marker.getLatLng();
                         fetch(`${dpEditBase}${dp.uuid}/`, {
                             method: "POST",
@@ -1528,7 +1572,6 @@ function init(): void {
                             .catch(() => {
                                 toast.error("Failed to save new position.");
                                 marker.setLatLng([entry.latitude, entry.longitude]);
-                                returnToCluster(marker, detailPinLayer, map);
                             });
                     });
                     marker.addTo(detailPinLayer);
@@ -1905,107 +1948,73 @@ function init(): void {
     });
 
     // -- Photo panel -----------------------------------------------------------
-    // Icon and sizing come from shared/photo-map so this map and an album's map render a photo identically.
-    function photoMarkerSize(highlighted?: boolean): number {
-        return sharedPhotoMarkerSize(map.getZoom(), highlighted);
+    // Markers come from shared/photo-map so this map and an album's map behave identically.
+    function photoMapItem(item: PhotoPanelItem): PhotoMapItem {
+        return {
+            id: item.id,
+            url: item.markerUrl,
+            lat: item.lat ?? 0,
+            lng: item.lng ?? 0,
+            movable: item.mine && !item.ownerName,
+            caption: item.ownerName ? `Photo from ${item.ownerName}` : undefined,
+        };
     }
 
-    function addPhotoMarker(imgId: number, url: string, lat: number, lng: number, ownerName?: string): void {
-        if (photoMarkers[imgId]) photoLayer.removeLayer(photoMarkers[imgId]!.marker);
-        // Photos belonging to a child pin (ownerName) are display-only on this
-        // map - they're repositioned from their own pin's page.
-        const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, photoMarkerSize(false), false), draggable: !ownerName });
-        tagPhotoMarker(marker, url, imgId);
-        if (ownerName) marker.bindTooltip(`Photo from ${escHtml(ownerName)}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
-        if (!ownerName) reclusterOnDrag(marker, photoLayer, map);
-        marker.on("dragend", () => {
-            returnToCluster(marker, photoLayer, map);
-            const pos = marker.getLatLng();
-            const prevLat = photoMarkers[imgId]!.lat;
-            const prevLng = photoMarkers[imgId]!.lng;
-            photoMarkers[imgId]!.lat = pos.lat;
-            photoMarkers[imgId]!.lng = pos.lng;
-            const item = photoPanelItems.find((p) => p.id === imgId);
-            if (item) {
-                item.lat = pos.lat;
-                item.lng = pos.lng;
-            }
-            if (window.galleryRepositionImage) {
-                window.galleryRepositionImage(imgId, pos.lat, pos.lng, () => {
-                    // Server rejected the move - snap back to the last known-good position.
-                    marker.setLatLng([prevLat, prevLng]);
-                    photoMarkers[imgId]!.lat = prevLat;
-                    photoMarkers[imgId]!.lng = prevLng;
-                    if (item) {
-                        item.lat = prevLat;
-                        item.lng = prevLng;
-                    }
-                    returnToCluster(marker, photoLayer, map);
-                    buildPhotoPanel();
-                });
+    function showPhotoMarker(item: PhotoPanelItem): void {
+        if (item.lat != null && item.lng != null) photoMarkers.set(photoMapItem(item));
+    }
+
+    function openPhoto(imgId: number): void {
+        const item = photoPanelItems.find((p) => p.id === imgId);
+        const fallback = item?.lightbox ?? { url: item?.url ?? "" };
+        if (window.galleryOpenLightbox) window.galleryOpenLightbox(imgId, fallback);
+        else window.galleryOpenLightboxItem?.([fallback], 0);
+    }
+
+    /** Persists a dragged photo; rejects, after restoring the panel, when the server refuses. */
+    async function movePhoto(imgId: number, lat: number, lng: number): Promise<void> {
+        const item = photoPanelItems.find((p) => p.id === imgId);
+        const prev = item ? { lat: item.lat, lng: item.lng } : null;
+        if (item) {
+            item.lat = lat;
+            item.lng = lng;
+        }
+        buildPhotoPanel();
+        let refused = false;
+        await window.galleryRepositionImage?.(imgId, lat, lng, () => {
+            refused = true;
+            if (item && prev) {
+                item.lat = prev.lat;
+                item.lng = prev.lng;
             }
             buildPhotoPanel();
         });
-        marker.on("mouseover", () => window._galleryHighlightMarker?.(imgId, true));
-        marker.on("mouseout", () => window._galleryHighlightMarker?.(imgId, false));
-        // Open the photo in the gallery lightbox.
-        marker.on("click", () => window.galleryOpenLightbox?.(imgId, { url }));
-        marker.on("contextmenu", (event: L.LeafletMouseEvent) => {
-            L.DomEvent.stop(event);
-            showMapContextMenu({
-                lat: event.latlng.lat,
-                lng: event.latlng.lng,
-                zoom: map.getZoom(),
-                clientX: event.originalEvent.clientX,
-                clientY: event.originalEvent.clientY,
-                extraItems: [
-                    {
-                        icon: "visibility_off",
-                        label: "Hide from map",
-                        onClick: () => {
-                            if (typeof window.gallerySetPhotoMapHidden === "function") {
-                                window.gallerySetPhotoMapHidden(imgId, true);
-                            }
-                        },
-                    },
-                ],
-            });
-        });
-        marker.addTo(photoLayer);
-        photoMarkers[imgId] = { marker, url, lat, lng, highlighted: false };
+        if (refused) throw new Error("the server refused the move");
     }
 
-    // Rescale photo thumbnails when the user zooms in/out so they don't cover
-    // a disproportionate area of the map when zoomed far out.
-    map.on("zoomend", () => {
-        Object.values(photoMarkers).forEach((entry) => {
-            entry.marker.setIcon(makePhotoIcon(entry.url, photoMarkerSize(entry.highlighted), entry.highlighted));
-        });
-    });
-
     window._galleryAddMarker = (img) => {
-        if (!photoPanelItems.find((p) => p.id === img.id)) photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
-        if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.marker_thumb_url || img.url, img.latitude, img.longitude);
+        let item = photoPanelItems.find((p) => p.id === img.id);
+        if (item) {
+            item.lat = img.latitude;
+            item.lng = img.longitude;
+        } else {
+            item = { id: img.id, url: img.url, markerUrl: img.marker_thumb_url || img.url, lat: img.latitude, lng: img.longitude, mine: true, ownerName: "", lightbox: img.lightbox ?? null };
+            photoPanelItems.push(item);
+        }
+        showPhotoMarker(item);
         buildPhotoPanel();
         refreshPanelHeader();
     };
 
     window._galleryRemoveMarker = (imgId) => {
         photoPanelItems = photoPanelItems.filter((p) => p.id !== imgId);
-        if (photoMarkers[imgId]) {
-            photoLayer.removeLayer(photoMarkers[imgId]!.marker);
-            delete photoMarkers[imgId];
-        }
+        photoMarkers.remove(imgId);
         buildPhotoPanel();
         refreshPanelHeader();
     };
 
     window._galleryHighlightMarker = (imgId, on) => {
-        const entry = photoMarkers[imgId];
-        if (entry) {
-            entry.highlighted = !!on;
-            entry.marker.setIcon(makePhotoIcon(entry.url, photoMarkerSize(entry.highlighted), entry.highlighted));
-        }
+        photoMarkers.highlight(imgId, !!on);
         document.querySelectorAll<HTMLElement>(".photo-panel-item").forEach((li) => {
             li.classList.toggle("is-highlighted", +(li.dataset.id ?? "") === imgId && !!on);
         });
@@ -2130,7 +2139,7 @@ function init(): void {
             li.className = "photo-panel-item";
             li.dataset.id = String(img.id);
             li.draggable = true;
-            li.title = "Click to view";
+            li.title = hasCoords ? "Show on map" : "Click to view";
             // The place button carries its own styling: .photo-panel-item is a
             // bare thumbnail tile with no button treatment to inherit.
             li.innerHTML = `
@@ -2154,14 +2163,17 @@ function init(): void {
             li.addEventListener("mouseenter", () => window._galleryHighlightMarker?.(img.id, true));
             li.addEventListener("mouseleave", () => window._galleryHighlightMarker?.(img.id, false));
             li.addEventListener("dragstart", (e) => {
-                e.dataTransfer?.setData("text/photoid", String(img.id));
-                if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+                if (e.dataTransfer) writePhotoIds(e.dataTransfer, [img.id]);
                 li.classList.add("is-dragging");
             });
             li.addEventListener("dragend", () => li.classList.remove("is-dragging"));
             li.addEventListener("click", () => {
-                if (hasCoords) map.panTo([img.lat!, img.lng!]);
-                window.galleryOpenLightbox?.(img.id, { url: img.url });
+                if (img.lat == null || img.lng == null) {
+                    openPhoto(img.id);
+                    return;
+                }
+                map.panTo([img.lat, img.lng]);
+                photoMarkers.flash(img.id);
             });
             ul.appendChild(li);
         });
@@ -2170,34 +2182,35 @@ function init(): void {
 
     function placePhotoAt(imgId: number, latlng: L.LatLng): void {
         const item = photoPanelItems.find((p) => p.id === imgId);
-        if (!item) return;
+        if (!item) {
+            // The layer lists only photos that already have a place, so a first placement is drawn from the server's answer.
+            let refused = false;
+            void window.galleryRepositionImage?.(imgId, latlng.lat, latlng.lng, () => (refused = true)).then(() => {
+                if (!refused) loadPhotoLayer();
+            });
+            return;
+        }
         const prevLat = item.lat;
         const prevLng = item.lng;
         item.lat = latlng.lat;
         item.lng = latlng.lng;
-        addPhotoMarker(imgId, item.url, latlng.lat, latlng.lng);
-        if (window.galleryRepositionImage) {
-            window.galleryRepositionImage(imgId, latlng.lat, latlng.lng, () => {
-                // Server rejected the move - snap back, or remove the marker
-                // entirely if the photo had no prior coordinates.
-                item.lat = prevLat;
-                item.lng = prevLng;
-                if (prevLat != null && prevLng != null) {
-                    addPhotoMarker(imgId, item.url, prevLat, prevLng);
-                } else if (photoMarkers[imgId]) {
-                    photoLayer.removeLayer(photoMarkers[imgId]!.marker);
-                    delete photoMarkers[imgId];
-                }
-                buildPhotoPanel();
-            });
-        }
+        showPhotoMarker(item);
+        void window.galleryRepositionImage?.(imgId, latlng.lat, latlng.lng, () => {
+            // Server rejected the move - snap back, or remove the marker
+            // entirely if the photo had no prior coordinates.
+            item.lat = prevLat;
+            item.lng = prevLng;
+            if (prevLat != null && prevLng != null) showPhotoMarker(item);
+            else photoMarkers.remove(imgId);
+            buildPhotoPanel();
+        });
         buildPhotoPanel();
         refreshPanelHeader();
     }
 
-    // Drop photo onto map to assign coordinates.
+    // Drop one of the viewer's photos - from this panel, the gallery, or the Media section - onto the map to place it there.
     mapEl.addEventListener("dragover", (e) => {
-        if (!e.dataTransfer?.types.includes("text/photoid")) return;
+        if (!e.dataTransfer?.types.includes(PHOTO_IDS_TYPE)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         map.getContainer().classList.add("photo-drop-target");
@@ -2207,13 +2220,15 @@ function init(): void {
     });
     mapEl.addEventListener("drop", (e) => {
         map.getContainer().classList.remove("photo-drop-target");
-        const idStr = e.dataTransfer?.getData("text/photoid");
-        if (!idStr) return;
+        if (!e.dataTransfer?.types.includes(PHOTO_IDS_TYPE)) return;
+        const ids = parsePhotoIds(e.dataTransfer);
+        if (!ids.length) return;
         e.preventDefault();
         // A completed drop resolves whatever the user had armed for a tap.
         disarmPlacement();
         // Leaflet's own conversion: it subtracts the container's border and undoes CSS scaling, which a bounding-rect offset does not.
-        placePhotoAt(Number.parseInt(idStr, 10), map.mouseEventToLatLng(e));
+        const latlng = map.mouseEventToLatLng(e);
+        for (const id of ids) placePhotoAt(id, latlng);
     });
 
     // Drop a Media-section item (external provider result, not yet a real Image row - see PinController.media_relevance) onto the map.
@@ -2276,34 +2291,42 @@ function init(): void {
 
     // Tab switching.
     document.querySelectorAll<HTMLElement>(".map-panel-tab").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll(".map-panel-tab").forEach((b) => b.classList.remove("is-active"));
-            btn.classList.add("is-active");
-            const tab = btn.dataset.tab;
-            (document.getElementById("map-panel-details") as HTMLElement).hidden = tab !== "details";
-            (document.getElementById("map-panel-photos") as HTMLElement).hidden = tab !== "photos";
-        });
+        btn.addEventListener("click", () => selectPanelTab(btn.dataset.tab === "photos" ? "photos" : "details"));
     });
 
-    // Load gallery photos on page load.
-    fetch(cfg.photoGalleryJsonUrl)
-        .then((r) => r.json())
-        .then((data) => {
-            photoPanelItems = [];
-            // The layer is capped for locations with thousands of photos. The
-            // server keeps a spatially spread subset rather than the first N, so
-            // the map still shows the whole site - but the count is not the
-            // whole count, and saying nothing would be a quiet lie.
-            photoLayerTruncated = Boolean(data.truncated);
-            photoLayerTotal = Number(data.total) || 0;
-            (data.images || []).forEach((img: any) => {
-                photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
-                if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.marker_thumb_url || img.url, img.latitude, img.longitude, img.child_pin_name);
-            });
-            buildPhotoPanel();
-            refreshPanelHeader();
-        })
-        .catch((err) => console.warn("Could not load gallery photos for panel:", err));
+    function loadPhotoLayer(): void {
+        fetch(cfg.photoGalleryJsonUrl)
+            .then((r) => r.json())
+            .then(showPhotoLayer)
+            .catch((err) => console.warn("Could not load gallery photos for panel:", err));
+    }
+
+    function showPhotoLayer(data: PhotoLayerJson): void {
+        // The layer is capped for locations with thousands of photos. The
+        // server keeps a spatially spread subset rather than the first N, so
+        // the map still shows the whole site - but the count is not the
+        // whole count, and saying nothing would be a quiet lie.
+        photoLayerTruncated = Boolean(data.truncated);
+        photoLayerTotal = Number(data.total) || 0;
+        photoPanelItems = (data.images || []).map((img) => {
+            const tile = tileFromJson(img);
+            return {
+                id: img.id,
+                url: img.url,
+                markerUrl: img.marker_thumb_url || img.url,
+                lat: img.latitude,
+                lng: img.longitude,
+                mine: !!img.is_mine,
+                ownerName: img.child_pin_name || "",
+                lightbox: tile ? lightboxItemFromTile(tile) : null,
+            };
+        });
+        photoMarkers.replaceAll(photoPanelItems.filter((item) => item.lat != null && item.lng != null).map(photoMapItem));
+        buildPhotoPanel();
+        refreshPanelHeader();
+    }
+
+    loadPhotoLayer();
 
     // -- Boundary editor (property + building) ----------------------------------
     // Two typed boundaries render in different colors.

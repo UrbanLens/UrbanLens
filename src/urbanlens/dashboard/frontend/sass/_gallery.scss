@@ -1127,24 +1127,52 @@
   .cover-hero-remove { opacity: .85; }
 }
 
-// Photo map marker
-.photo-map-marker {
-  border: 2px solid #fff;
-  border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(0,0,0,.35);
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform .15s, box-shadow .15s;
+// Photo map marker (shared/photo-map.ts). Highlighting toggles a class on the drawn icon rather than
+// rebuilding it, so a pointer resting on the photo stays on the same element.
+$photo-marker-ring: #2563eb;
 
-  &:hover {
-    transform: scale(1.1);
-    box-shadow: 0 4px 10px rgba(0,0,0,.4);
+.photo-marker {
+  cursor: pointer;
+}
+
+.photo-marker-img {
+  display: block;
+  object-fit: cover;
+  border: 2px solid #fff;
+  border-radius: 5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+  transition: transform .15s, box-shadow .15s;
+}
+
+.photo-marker.is-highlighted .photo-marker-img {
+  transform: scale(1.27);
+  box-shadow: 0 0 0 3px $photo-marker-ring, 0 3px 10px rgba(0, 0, 0, .45);
+}
+
+.photo-marker.is-flashing .photo-marker-img,
+.photo-cluster-icon.is-flashing .photo-cluster__img--front {
+  animation: photo-marker-flash .8s ease-out 3;
+}
+
+.photo-cluster-icon.is-highlighted .photo-cluster__img--front {
+  box-shadow: 0 0 0 3px $photo-marker-ring, 0 3px 10px rgba(0, 0, 0, .45);
+}
+
+@keyframes photo-marker-flash {
+  0% { box-shadow: 0 0 0 3px $photo-marker-ring, 0 0 0 3px rgba($photo-marker-ring, .55); }
+  100% { box-shadow: 0 0 0 3px $photo-marker-ring, 0 0 0 22px rgba($photo-marker-ring, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-marker.is-flashing .photo-marker-img,
+  .photo-cluster-icon.is-flashing .photo-cluster__img--front {
+    animation: none;
   }
 }
 
 // Stacked-photo cluster: the top image sits on the second, which peeks as a
 // border. Hover fans them apart so the collection is obvious before a click.
-.leaflet-div-icon.photo-cluster-icon {
+.photo-cluster-icon {
   background: transparent;
   border: none;
   overflow: visible !important;

@@ -42,6 +42,7 @@
   <ul class="gallery-grid" id="gallery-grid">
     {% for img in images %}
     <li class="gallery-item" id="gallery-item-{{ img.pk }}"
+        {% if img.profile == profile and not img.pending_scan %}draggable="true"{% endif %}
         data-id="{{ img.pk }}"
         data-uuid="{{ img.uuid }}"
         data-url="{% if not img.pending_scan %}{{ img.display_url }}{% endif %}"

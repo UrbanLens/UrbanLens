@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
-import type { LightboxInput } from "./photo-tile";
+import { type LightboxInput, PHOTO_IDS_TYPE } from "./photo-tile";
 import { installPhotoGallery, setPhotoMapHidden } from "./photo-gallery";
 
 interface Call {
@@ -260,6 +260,16 @@ describe("lightbox", () => {
         expect(opened?.list.map((i) => i.url)).toEqual(["/m/42.jpg"]);
     });
 
+    test("a map photo off this page keeps everything the map knows about it", () => {
+        window.galleryOpenLightbox?.(42, { url: "/m/42.jpg", imageId: 42, caption: "North gate", author: "Ann", isMine: true, latitude: 1, longitude: 2 });
+        const item = opened?.list[0];
+        expect(item?.imageId).toBe(42);
+        expect(item?.caption).toBe("North gate");
+        expect(item?.author).toBe("Ann");
+        expect(item?.isMine).toBe(true);
+        expect(item?.latitude).toBe(1);
+    });
+
     test("reads the tiles as they are now, not as the page loaded", async () => {
         respond = () => new Response(JSON.stringify({ latitude: "1.5", longitude: "2.5", map_hidden: false }), { status: 200 });
         window.galleryRepositionImage?.(1, 1.5, 2.5);
@@ -325,5 +335,27 @@ describe("drop to upload", () => {
         drag("drop", overlay, [new File(["x"], "a.jpg")]);
         await settle();
         expect(calls).toEqual([]);
+    });
+});
+
+describe("dragging a photo out of the gallery", () => {
+    function drag(el: Element): Map<string, string> {
+        const data = new Map<string, string>();
+        const event = new Event("dragstart", { bubbles: true });
+        Object.defineProperty(event, "dataTransfer", { value: { effectAllowed: "", setData: (type: string, value: string) => data.set(type, value) } });
+        el.dispatchEvent(event);
+        return data;
+    }
+
+    test("one of your photos carries its id, so the map can place it where it is dropped", () => {
+        render("pin", [tile(4)]);
+        const data = drag(document.querySelector("#gallery-item-4 .gallery-thumb")!);
+        expect(data.get(PHOTO_IDS_TYPE)).toBe("[4]");
+    });
+
+    test("a photo that is someone else's, or has no file yet, carries nothing", () => {
+        render("wiki", [tile(5, { mine: "false" }), tile(6, { processing: "pending" })]);
+        expect(drag(document.getElementById("gallery-item-5")!).size).toBe(0);
+        expect(drag(document.getElementById("gallery-item-6")!).size).toBe(0);
     });
 });

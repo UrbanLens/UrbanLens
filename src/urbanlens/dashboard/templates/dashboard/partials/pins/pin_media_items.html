@@ -27,7 +27,7 @@
      {% if entry.is_mine is not None %}data-mine="{% if entry.is_mine %}true{% else %}false{% endif %}"{% endif %}
      data-copied-from-label="{{ entry.copied_from_label|default:"" }}"
      {% if entry.processing %}data-id="{{ entry.image_id }}" data-processing="{{ entry.processing }}" data-processing-url="{% url 'vault.photos.processing' %}"{% endif %}
-     {% if not wiki_mode and source_key != "photos" %}draggable="true"{% endif %}
+     {% if not wiki_mode %}{% if source_key != "photos" or entry.is_mine and not entry.processing %}draggable="true"{% endif %}{% endif %}
      {% if item.caption %}data-tooltip="{{ item.caption }}" data-tooltip-float="true" data-tooltip-pos="above"{% endif %}>
     {% if not wiki_mode and source_key != "photos" %}
     <button type="button" class="media-item-select-check" title="Select photo" data-media-action="select" hidden>

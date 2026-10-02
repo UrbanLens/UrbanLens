@@ -13,7 +13,7 @@ import { getCsrfToken } from "./csrf";
 import { confirmAction, toast } from "./dialogs";
 import { fetchJson, sendJson } from "./fetch-json";
 import { observeProcessingTiles, type ProcessingItem } from "./photo-processing";
-import { lightboxItemFromTile, renderPhotoTile, tileFromElement, tileFromJson, tilesForImage, type PhotoTile } from "./photo-tile";
+import { type LightboxInput, lightboxItemFromTile, renderPhotoTile, tileFromElement, tileFromJson, tilesForImage, type PhotoTile, writePhotoIds } from "./photo-tile";
 
 const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 const PROGRESS_LINGER_MS = 800;
@@ -80,13 +80,20 @@ function coordsBadge(): HTMLSpanElement {
 
 function markerImage(tile: PhotoTile, raw: ProcessingItem | null): GalleryMarkerImage {
     const markerThumb = raw?.marker_thumb_url;
-    return { id: tile.id, url: tile.url, latitude: tile.lat, longitude: tile.lng, ...(typeof markerThumb === "string" && markerThumb ? { marker_thumb_url: markerThumb } : {}) };
+    return {
+        id: tile.id,
+        url: tile.url,
+        latitude: tile.lat,
+        longitude: tile.lng,
+        lightbox: lightboxItemFromTile(tile),
+        ...(typeof markerThumb === "string" && markerThumb ? { marker_thumb_url: markerThumb } : {}),
+    };
 }
 
 /** A tile for a photo the viewer just uploaded, matching the server-rendered ones. */
 export function buildGalleryTile(tile: PhotoTile, uploaded: boolean): HTMLLIElement {
     const li = renderPhotoTile(tile, { inAlbum: false });
-    li.draggable = false;
+    li.draggable = tile.mine && !tile.processing;
     li.id = `gallery-item-${tile.id}`;
     li.dataset.uploaded = uploaded ? "true" : "false";
     li.dataset.onPin = "false";
@@ -243,13 +250,13 @@ export async function deletePhoto(imgId: number): Promise<void> {
 }
 
 /** Open the lightbox on this grid's photos. `fallback` shows a photo that is not on the rendered page, e.g. from a map marker. */
-export function openLightbox(imgId: number, fallback?: { url: string; caption?: string }): void {
+export function openLightbox(imgId: number, fallback?: LightboxInput): void {
     const tiles = gridTiles()
         .map(tileFromElement)
         .filter((tile): tile is PhotoTile => !!tile && !tile.processing);
     const idx = tiles.findIndex((tile) => tile.id === imgId);
     if (idx < 0 && fallback?.url) {
-        window.galleryOpenLightboxItem?.([{ url: fallback.url, caption: fallback.caption ?? "", imageId: null }], 0);
+        window.galleryOpenLightboxItem?.([fallback], 0);
         return;
     }
     window.galleryOpenLightboxItem?.(tiles.map(lightboxItemFromTile), Math.max(idx, 0));
@@ -465,6 +472,15 @@ function onClick(event: MouseEvent): void {
     }
 }
 
+/** One of the viewer's own photos dragged out of the grid carries its id (or the selection it belongs to), which the pin map places where it lands. */
+function onDragStart(event: DragEvent): void {
+    const item = event.target instanceof Element ? event.target.closest<HTMLElement>("#gallery-grid .gallery-item[data-id]") : null;
+    const tile = item ? tileFromElement(item) : null;
+    if (!item || !tile?.mine || tile.processing || !event.dataTransfer) return;
+    const selection = selectedIds();
+    writePhotoIds(event.dataTransfer, item.classList.contains("is-selected") && selection.length ? selection : [tile.id]);
+}
+
 function onHover(on: boolean) {
     return (event: MouseEvent): void => {
         const item = event.target instanceof Element ? event.target.closest<HTMLElement>("#gallery-grid .gallery-item[data-id]") : null;
@@ -479,11 +495,12 @@ export function installPhotoGallery(): void {
     if (installed) return;
     installed = true;
     window.galleryOpenLightbox = openLightbox;
-    window.galleryRepositionImage = (imgId, lat, lng, onRejected) => void repositionPhoto(imgId, lat, lng, onRejected);
+    window.galleryRepositionImage = repositionPhoto;
     window.gallerySetPhotoMapHidden = (imgId, hidden, onRejected) => void setPhotoMapHidden(imgId, hidden, onRejected);
     window.photosToggleSelectMode = toggleSelectMode;
 
     document.addEventListener("click", onClick);
+    document.addEventListener("dragstart", onDragStart);
     document.addEventListener("mouseover", onHover(true));
     document.addEventListener("mouseout", onHover(false));
     document.addEventListener("change", (event) => {

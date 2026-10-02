@@ -135,27 +135,6 @@ export function createPinClusterGroup(options: PinClusterGroupOptions = {}, map?
 }
 
 /**
- * Pull a marker out of a cluster group for the length of a drag, then put it back.
- * @param marker - The marker that may be dragged.
- * @param group - Cluster group (or plain LayerGroup fallback) that owns it.
- * @param map - The map, so the marker can sit on it mid-drag.
- * @param skip - When this returns true, leave the marker in the group (e.g. select mode).
- */
-export function reclusterOnDrag(marker: L.Marker, group: L.LayerGroup, map: L.Map, skip?: () => boolean): void {
-    marker.on("dragstart", () => {
-        if (skip?.()) return;
-        group.removeLayer(marker);
-        marker.addTo(map);
-    });
-}
-
-/** Put a marker that was pulled out for dragging back into its cluster group. */
-export function returnToCluster(marker: L.Marker, group: L.LayerGroup, map: L.Map): void {
-    if (map.hasLayer(marker)) map.removeLayer(marker);
-    group.addLayer(marker);
-}
-
-/**
  * True when the Leaflet (or native) mouse event was a ctrl/cmd click.
  * @param event - A Leaflet mouse event or a native MouseEvent.
  */
