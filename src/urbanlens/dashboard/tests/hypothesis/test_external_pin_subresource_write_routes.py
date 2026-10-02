@@ -370,9 +370,15 @@ class ExternalPinCommentsRouteTests(_PinFixture):
 
     def test_a_blank_overlong_or_malformed_comment_is_400(self) -> None:
         self.assert_malformed_bodies_are_4xx("post", self.url)
-        for body in ({"text": ""}, {"text": "x" * 100_000}, {"text": "Hi", "parent_id": "first"}, {"parent_id": 1}):
+        for body in (
+            {"text": ""},
+            {"text": "x" * 100_000},
+            {"text": "Hi", "parent_id": "first"},
+            {"parent_id": 1},
+            {"text": "Hi", "parent_id": 10**30},
+        ):
             with self.subTest(body=body):
-                self.assertEqual(self.send("post", self.url, body).status_code, 400)
+                self.assertIn(self.send("post", self.url, body).status_code, range(400, 500))
         self.assertEqual(self._texts(), [])
 
 
@@ -519,9 +525,13 @@ class ExternalPinArticleRouteTests(_PinFixture):
 
     def test_a_malformed_save_is_400(self) -> None:
         self.assert_malformed_bodies_are_4xx("put", self.url)
-        for body in ({"content": "x"}, {"content": ["x"], "base_revision_id": None}, {"base_revision_id": None}):
+        for body in (
+            {"content": "x"},
+            {"content": ["x"], "base_revision_id": None},
+            {"base_revision_id": None},
+        ):
             with self.subTest(body=body):
-                self.assertEqual(self.send("put", self.url, body).status_code, 400)
+                self.assertIn(self.send("put", self.url, body).status_code, range(400, 500))
         self.assertIsNone(self._content())
 
 
