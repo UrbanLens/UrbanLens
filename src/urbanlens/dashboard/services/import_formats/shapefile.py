@@ -3,12 +3,10 @@ Shapefiles are always distributed as a set of same-stem sidecar files rather tha
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import datetime
 import logging
 from pathlib import Path
 import shutil
-import tempfile
 from typing import IO, TYPE_CHECKING, Any
 
 import geopandas
@@ -30,14 +28,6 @@ logger = logging.getLogger(__name__)
 _SHAPEFILE_PART_EXTENSIONS = frozenset({"shp", "dbf", "shx", "prj", "cpg"})
 _REQUIRED_PARTS = frozenset({"shp", "dbf"})
 _BATCH_FEATURES = 1000
-
-
-@dataclass
-class ShapefileBundle:
-    """The same-stem sidecar files that make up one Shapefile."""
-
-    stem: str
-    parts: dict[str, bytes] = field(default_factory=dict)
 
 
 def _extension(filename: str) -> str:
@@ -63,42 +53,10 @@ def is_shapefile_part(filename: str) -> bool:
     return _extension(filename) in _SHAPEFILE_PART_EXTENSIONS
 
 
-def extract_shapefile_bundles(files: list[tuple[str, bytes]]) -> tuple[list[ShapefileBundle], list[tuple[str, bytes]]]:
-    """Split *files* into Shapefile bundles (grouped by stem) and everything else.
-
-    Args:
-        files: ``(filename, raw_bytes)`` pairs, e.g. already expanded from an uploaded ZIP archive.
-
-    Returns:
-        A ``(bundles, remaining_files)`` tuple."""
-    grouped: dict[str, ShapefileBundle] = {}
-    remaining: list[tuple[str, bytes]] = []
-
-    for filename, data in files:
-        ext = _extension(filename)
-        if ext not in _SHAPEFILE_PART_EXTENSIONS:
-            remaining.append((filename, data))
-            continue
-        stem = _stem(filename)
-        bundle = grouped.setdefault(stem, ShapefileBundle(stem=stem))
-        bundle.parts[ext] = data
-
-    bundles: list[ShapefileBundle] = []
-    for stem, bundle in grouped.items():
-        missing = _REQUIRED_PARTS - bundle.parts.keys()
-        if missing:
-            logger.warning("Skipping incomplete shapefile bundle '%s': missing .%s", stem, ", .".join(sorted(missing)))
-            continue
-        bundles.append(bundle)
-
-    return bundles, remaining
-
-
 class ShapefileSpool:
     """Shapefile sidecar parts copied to disk as they arrive, grouped by stem, so none is held in memory.
 
-    A later part with the same stem and extension replaces an earlier one, as :func:`extract_shapefile_bundles`
-    lets it.
+    A later part with the same stem and extension replaces an earlier one.
     """
 
     def __init__(self, directory: str) -> None:
@@ -140,35 +98,6 @@ class ShapefileSpool:
     def _base(self, stem: str) -> Path:
         # Named by arrival rather than by stem, which is the uploader's to choose.
         return self.directory / f"bundle-{list(self._parts).index(stem)}"
-
-
-@untrusted_parse("geo.shapefile")
-def shapefile_to_dict(bundle: ShapefileBundle, user_profile: Profile) -> list[dict[str, Any]]:
-    """Convert one Shapefile bundle into pin dicts.
-
-    Args:
-        bundle: The grouped sidecar files for one Shapefile.
-        user_profile: The profile to associate with each pin.
-
-    Returns:
-        List of pin dicts, one per feature with a resolvable centroid.
-
-    Raises:
-        OSError: If the bundle can't be written to a temporary directory.
-        ValueError: If GDAL rejects the bundle's geometry/attribute data.
-        pyogrio.errors.DataSourceError: If GDAL cannot read the bundle as a Shapefile."""
-    try:
-        with tempfile.TemporaryDirectory(prefix="urbanlens_shp_") as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            for ext, data in bundle.parts.items():
-                (tmp_path / f"{bundle.stem}.{ext}").write_bytes(data)
-            pins = list(iter_shapefile_pins(tmp_path / f"{bundle.stem}.shp", bundle.stem, user_profile))
-    except (OSError, ValueError, pyogrio.errors.DataSourceError) as e:
-        logger.exception("Failed to import pins from shapefile bundle '%s': %s", bundle.stem, e)
-        raise
-
-    logger.debug("Converted %s features from shapefile bundle '%s' to pins.", len(pins), bundle.stem)
-    return pins
 
 
 @untrusted_parse("geo.shapefile")

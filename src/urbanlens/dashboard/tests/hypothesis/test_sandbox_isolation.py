@@ -216,7 +216,6 @@ class DecoratedParserTests(SimpleTestCase):
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
         from urbanlens.dashboard.services.import_formats.gpx_tracks import gpx_tracks_to_routes
         from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
-        from urbanlens.dashboard.services.import_formats.shapefile import shapefile_to_dict
         from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 
         for func in (gpx_to_dict, osm_xml_to_dict, wkt_to_dict, wkb_to_dict):
@@ -224,8 +223,6 @@ class DecoratedParserTests(SimpleTestCase):
                 func(b"", object())  # type: ignore[arg-type]
         with self.assertRaises(UnsandboxedParseError):
             gpx_tracks_to_routes(b"", object(), "t.gpx")  # type: ignore[arg-type]
-        with self.assertRaises(UnsandboxedParseError):
-            shapefile_to_dict(object(), object())  # type: ignore[arg-type]
         with self.assertRaises(UnsandboxedParseError):
             GoogleMapsGateway.takeout_kml_to_dict(object(), b"", object())  # type: ignore[arg-type]
 
