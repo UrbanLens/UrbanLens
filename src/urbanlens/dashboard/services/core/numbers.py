@@ -3,7 +3,7 @@ Views that call `int(request.POST.get(...))` directly therefore turn a malformed
 
 from __future__ import annotations
 
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 import math
 from typing import TYPE_CHECKING
 
@@ -130,7 +130,9 @@ def decimal_for_column(value: Decimal, column: DecimalField) -> Decimal | None:
     integer_digits = column.max_digits - column.decimal_places
     if not value.is_zero() and value.adjusted() >= integer_digits:
         return None
-    rounded = value.quantize(Decimal(1).scaleb(-column.decimal_places), rounding=ROUND_HALF_UP)
+    with localcontext() as context:
+        context.prec = max(context.prec, column.max_digits + 1)
+        rounded = value.quantize(Decimal(1).scaleb(-column.decimal_places), rounding=ROUND_HALF_UP)
     if not rounded.is_zero() and rounded.adjusted() >= integer_digits:
         return None
     return rounded

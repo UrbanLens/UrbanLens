@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 import json
 
+from django.db.models import DecimalField
 import pytest
 
 from hypothesis import given, strategies as st
@@ -12,6 +14,7 @@ from urbanlens.dashboard.services.core.numbers import (
     LONGITUDE_BOUND,
     clamp_int,
     coordinate_or_none,
+    decimal_for_column,
     safe_int,
     safe_int_or_none,
 )
@@ -96,3 +99,17 @@ class TestCoordinateOrNone:
     def test_anything_returned_is_finite_and_in_range(self, value: float) -> None:
         parsed = coordinate_or_none(value, bound=LONGITUDE_BOUND)
         assert parsed is None or -LONGITUDE_BOUND <= parsed <= LONGITUDE_BOUND
+
+
+class TestDecimalForColumnPrecision:
+    """A column wider than the default decimal context's 28 digits still rounds rather than raising."""
+
+    def test_a_value_wider_than_the_default_context_is_rounded(self) -> None:
+        column = DecimalField(max_digits=40, decimal_places=10)
+
+        assert decimal_for_column(Decimal("1" + "0" * 29), column) == Decimal("1" + "0" * 29)
+
+    def test_a_value_past_a_wide_column_is_refused(self) -> None:
+        column = DecimalField(max_digits=40, decimal_places=10)
+
+        assert decimal_for_column(Decimal("1" + "0" * 30), column) is None
