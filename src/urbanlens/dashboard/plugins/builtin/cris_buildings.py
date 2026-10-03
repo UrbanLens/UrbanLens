@@ -363,6 +363,13 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         else:
             self._fetch_now(pin)
 
+    @staticmethod
+    def _link_register_listings(pin: Pin) -> None:
+        """Link the National Register listings this record now shows to be the pin's own; the registers may have landed first."""
+        from urbanlens.dashboard.plugins.builtin.redata_historic_registers import HistoricRegisterPanelSource
+
+        HistoricRegisterPanelSource().link_own_listings(pin)
+
     def _fetch_now(self, pin: Pin) -> None:
         """:meth:`fetch`, unshared."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -464,6 +471,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             data["district"] = district
         LocationCache.set(pin.location, self.cache_source, data, query_key=query_key)
         self._request_extractions(pin.location.pk, unextracted)
+        self._link_register_listings(pin)
         if site_scope:
             self._seed_from_site(pin.location)
 
@@ -818,6 +826,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             return False
         self._write_answer(pin.location, answer, row.updated, keep_media_ready=False)
         self._request_extractions(pin.location.pk, unextracted)
+        self._link_register_listings(pin)
         return True
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
@@ -838,12 +847,27 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         meta = []
         if address_parts:
             meta.append({"label": "Address", "value": " ".join(address_parts)})
-        for key, label in (("City", "City"), ("Zip", "ZIP Code"), ("USNNum", "NYSHPO USN Number"), ("NRNum", "National Register Number"), ("EligibilityDesc", "Eligibility Status")):
+        # NRNum is NYSHPO's own number for the listing (its layer's alias), not NPS's reference number.
+        for key, label in (("City", "City"), ("Zip", "ZIP Code"), ("USNNum", "NYSHPO USN Number"), ("NRNum", "NYSHPO National Register Number"), ("EligibilityDesc", "Eligibility Status")):
             value = data.get(key)
             if value:
                 meta.append({"label": label, "value": value})
+            if key == "NRNum" and value and (nrhp := self._nrhp_reference(pin, str(usn_name))):
+                meta.append(nrhp)
 
         return {"heading_name": usn_name, "meta": meta}
+
+    @staticmethod
+    def _nrhp_reference(pin: Pin, listing_name: str) -> dict[str, str] | None:
+        """NPS's reference number for the National Register listing CRIS names, linked, when the registers cached one."""
+        from urbanlens.dashboard.services.locations.national_register import nps_record_url, reference_named
+
+        location = pin.location
+        reference = reference_named(location, listing_name) if location is not None else None
+        url = nps_record_url(reference)
+        if reference is None or url is None:
+            return None
+        return {"label": "NRHP Reference Number", "value": reference, "href": url}
 
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn cached CRIS attachments (photos, documents, and extracted images) into gallery items.

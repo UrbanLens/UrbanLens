@@ -348,6 +348,7 @@ class PinLinkSerializer(serializers.Serializer):
     name = serializers.CharField(source="display_name", read_only=True)
     url = serializers.CharField(read_only=True)
     wayback_url = serializers.SerializerMethodField()
+    auto_source = serializers.SerializerMethodField()
     order = serializers.IntegerField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
 
@@ -364,6 +365,17 @@ class PinLinkSerializer(serializers.Serializer):
             The snapshot url, or None.
         """
         return link.wayback_url or None
+
+    def get_auto_source(self, link) -> str | None:
+        """The provider that added the link automatically (an ``AutoLinkSource`` value), or null when a person did.
+
+        Args:
+            link: The link being serialized.
+
+        Returns:
+            The source, or None.
+        """
+        return link.auto_source or None
 
 
 class PinLinkCreateSerializer(serializers.Serializer):

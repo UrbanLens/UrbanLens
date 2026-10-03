@@ -121,7 +121,19 @@ class WikiLinkSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True, allow_blank=True)
     url = serializers.CharField(read_only=True)
     wayback_url = serializers.CharField(read_only=True, allow_null=True)
+    auto_source = serializers.SerializerMethodField()
     order = serializers.IntegerField(read_only=True)
+
+    def get_auto_source(self, link) -> str | None:
+        """The provider that added the link automatically (an ``AutoLinkSource`` value), or null when a person did.
+
+        Args:
+            link: The link being serialized.
+
+        Returns:
+            The source, or None.
+        """
+        return link.auto_source or None
 
 
 class WikiLinkCreateSerializer(serializers.Serializer):

@@ -66,9 +66,10 @@ _NOT_A_DESCRIPTION: frozenset[str] = frozenset({"archaeological_buffer_area"})
 _MAX_ROWS = 10
 
 #: Fields kept from each row.
-#: The rest of ``CulturalResourceSerializer`` - ``attributes``, ``detail_payload``, ``geometry``,
-#: both coordinate pairs - is either per-provider, large, or both, and this card renders none of it.
-_KEPT_FIELDS = ("provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type", "contains_point")
+#: The rest of ``CulturalResourceSerializer`` - ``attributes``, ``detail_payload``, ``geometry``, the searched-from
+#: coordinate - is either per-provider, large, or both. ``external_id`` is NPS's reference number on a National
+#: Register row, and the resource's own point says which building it is.
+_KEPT_FIELDS = ("provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type", "contains_point", "external_id", "source_latitude", "source_longitude")
 
 
 def register_label(provider: str) -> str:
@@ -90,7 +91,9 @@ def register_rows(resources: list[Any]) -> list[dict[str, str]]:
         resources: Cached ``CulturalResourceSerializer``-shaped rows.
 
     Returns:
-        ``{"register", "name", "detail", "scope"}`` dicts, nearest-first order preserved, skipping rows that would render as an unlabelled blank and rows that describe no property."""
+        ``{"register", "name", "detail", "scope"}`` dicts, plus ``href`` (NPS's record) on a National Register row with a reference number, nearest-first order preserved, skipping rows that would render as an unlabelled blank and rows that describe no property."""
+    from urbanlens.dashboard.services.locations.national_register import nps_record_url, reference_number
+
     rows: list[dict[str, str]] = []
     for resource in resources:
         if not isinstance(resource, dict):
@@ -101,14 +104,18 @@ def register_rows(resources: list[Any]) -> list[dict[str, str]]:
         if not name:
             continue
         facts = [str(resource.get(key) or "").strip() for key in ("year_built", "use_type", "architectural_style", "status")]
-        rows.append(
-            {
-                "register": register_label(str(resource.get("provider") or "")),
-                "name": name,
-                "detail": ", ".join(fact for fact in facts if fact),
-                "scope": str(resource.get("scope") or ""),
-            },
-        )
+        reference = reference_number(resource)
+        if reference:
+            facts.append(f"#{reference}")
+        row = {
+            "register": register_label(str(resource.get("provider") or "")),
+            "name": name,
+            "detail": ", ".join(fact for fact in facts if fact),
+            "scope": str(resource.get("scope") or ""),
+        }
+        if url := nps_record_url(reference):
+            row["href"] = url
+        rows.append(row)
     return rows
 
 
@@ -117,7 +124,38 @@ def _name_words(name: str) -> set[str]:
     return {word for word in re.findall(r"[a-z0-9]+", name.lower()) if len(word) >= 4}
 
 
-def national_register_note(pin: Pin, resources: list[dict[str, Any]]) -> str | None:
+def _national_register_listings(pin: Pin, resources: list[dict[str, Any]], *, one_building: bool) -> list[dict[str, Any]]:
+    """The National Register rows to choose this place's listing from, with CRIS's site record when REData missed it."""
+    from urbanlens.dashboard.services.locations import register_names
+    from urbanlens.dashboard.services.locations.national_register import cris_lists_building
+
+    listings = [resource for resource in resources if isinstance(resource, dict) and resource.get("provider") == _NATIONAL_REGISTER and str(resource.get("name") or "").strip()]
+    if not any(resource.get("contains_point") is True for resource in listings) and pin.location is not None:
+        # REData's near-point search can miss the listing CRIS's site record says holds the pin. One building of
+        # that site is the listing's only when CRIS's record of the building says so.
+        if (cris_name := register_names.cris_register_listing(pin.location)) and (not one_building or cris_lists_building(pin.location)):
+            listings = [{"provider": _NATIONAL_REGISTER, "name": cris_name, "status": "Listed", "scope": "site", "contains_point": True}, *listings]
+    return listings
+
+
+def _best_listing(pin: Pin, listings: list[dict[str, Any]]) -> dict[str, Any]:
+    """The listing most plausibly this place, from a non-empty list - see :func:`national_register_note`."""
+    place_words = _name_words(pin.location.official_name or "") if pin.location else set()
+    return min(
+        enumerate(listings),
+        key=lambda item: (item[1].get("contains_point") is not True, item[1].get("scope") != "site", -len(place_words & _name_words(str(item[1]["name"]))), item[0]),
+    )[1]
+
+
+def national_register_reference(pin: Pin, resources: list[dict[str, Any]], *, one_building: bool = False) -> str | None:
+    """NPS's reference number for the listing :func:`national_register_note` names, when one was published."""
+    from urbanlens.dashboard.services.locations.national_register import reference_number
+
+    listings = _national_register_listings(pin, resources, one_building=one_building)
+    return reference_number(_best_listing(pin, listings)) if listings else None
+
+
+def national_register_note(pin: Pin, resources: list[dict[str, Any]], *, one_building: bool = False) -> str | None:
     """Name the National Register listing that is most plausibly this place.
 
     A near-point search also finds neighbours' listings, so one whose boundary holds the pin wins, then a site-level
@@ -126,24 +164,16 @@ def national_register_note(pin: Pin, resources: list[dict[str, Any]]) -> str | N
     Args:
         pin: The pin, for its location's name and CRIS site record.
         resources: The cached register rows.
+        one_building: Whether the pin stands for one building of a larger site.
 
     Returns:
         One sentence, or None when no National Register listing is known here.
     """
-    from urbanlens.dashboard.services.locations import register_names
-
-    listings = [resource for resource in resources if isinstance(resource, dict) and resource.get("provider") == _NATIONAL_REGISTER and str(resource.get("name") or "").strip()]
-    if not any(resource.get("contains_point") is True for resource in listings) and pin.location is not None:
-        # REData's near-point search can miss the listing CRIS's site record says holds the pin.
-        if cris_name := register_names.cris_register_listing(pin.location):
-            listings = [{"provider": _NATIONAL_REGISTER, "name": cris_name, "status": "Listed", "scope": "site", "contains_point": True}, *listings]
+    listings = _national_register_listings(pin, resources, one_building=one_building)
     if not listings:
         return None
+    best = _best_listing(pin, listings)
     place_words = _name_words(pin.location.official_name or "") if pin.location else set()
-    best = min(
-        enumerate(listings),
-        key=lambda item: (item[1].get("contains_point") is not True, item[1].get("scope") != "site", -len(place_words & _name_words(str(item[1]["name"]))), item[0]),
-    )[1]
     name = str(best["name"]).strip()
     status = str(best.get("status") or "").strip()
     register = register_label(_NATIONAL_REGISTER)
@@ -157,6 +187,14 @@ def national_register_note(pin: Pin, resources: list[dict[str, Any]]) -> str | N
     if others:
         note += f", with {others} other listing{'s' if others != 1 else ''} nearby"
     return note
+
+
+def _meta_entry(row: dict[str, str]) -> dict[str, str]:
+    """One register row as a card metadata entry, linked when it carries NPS's record."""
+    entry = {"label": row["register"], "value": f"{row['name']} - {row['detail']}" if row["detail"] else row["name"]}
+    if row.get("href"):
+        entry["href"] = row["href"]
+    return entry
 
 
 class HistoricRegisterPanelSource(RedataInfoPanelSource):
@@ -202,6 +240,48 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
         """Keep only the standardized fields this card renders - see :data:`_KEPT_FIELDS`."""
         return [{key: row.get(key) for key in _KEPT_FIELDS} for row in results if isinstance(row, dict)]
 
+    def fetch(self, pin: Pin) -> None:
+        """Cache the registers' rows, then link this place's own listings - see :meth:`link_own_listings`."""
+        super().fetch(pin)
+        self.link_own_listings(pin)
+
+    def link_own_listings(self, pin: Pin) -> None:
+        """Add NPS's record of each National Register listing that is this pin's own to its links and its wiki's.
+
+        Args:
+            pin: The pin whose cached rows to read.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.locations.national_register import containing_listings, link_listings
+
+        if (row := LocationCache.get_fresh(pin.location, self.cache_source)) is None:
+            return
+        one_building = self.one_building_of_a_site(pin)
+        resources = self.own_resources(pin, row.data, one_building=one_building)
+        link_listings(pin, resources if one_building else containing_listings(pin.location, resources))
+
+    def one_building_of_a_site(self, pin: Pin) -> bool:
+        """Whether the pin stands for one building nested under a site on another location."""
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
+        return not is_site_scope(pin) and self.nesting_site(pin) is not None
+
+    def own_resources(self, pin: Pin, data: dict | None, *, one_building: bool) -> list[dict[str, Any]]:
+        """The cached rows describing this pin: for one building of a site, only that building's own records.
+
+        Args:
+            pin: The pin being read.
+            data: Its cached payload.
+            one_building: :meth:`one_building_of_a_site` for the pin.
+
+        Returns:
+            The rows, in REData's order.
+        """
+        from urbanlens.dashboard.services.locations.national_register import building_register_rows
+
+        resources = [row for row in (data or {}).get(self.payload_key) or [] if isinstance(row, dict)]
+        return building_register_rows(pin.location, resources) if one_building else resources
+
     def has_content(self, data: dict | None) -> bool:
         """A row with no name renders nothing worth a tab."""
         return bool(register_rows((data or {}).get(self.payload_key) or []))
@@ -209,13 +289,16 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """List what each register says, site-level records first for a parcel pin.
         Structure rows are not dropped, only ordered after: a campus whose only records are its buildings should still show them."""
+        from urbanlens.dashboard.services.locations.national_register import nps_record_url
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
-        resources = (data or {}).get(self.payload_key) or []
+        one_building = self.one_building_of_a_site(pin)
+        resources = self.own_resources(pin, data, one_building=one_building)
         rows = register_rows(resources)
         if not rows:
             return None
-        note = national_register_note(pin, resources)
+        note = national_register_note(pin, resources, one_building=one_building)
+        note_url = nps_record_url(national_register_reference(pin, resources, one_building=one_building)) if note else None
         if is_site_scope(pin):
             rows = sorted(rows, key=lambda row: row["scope"] != "site")
 
@@ -224,8 +307,9 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
             by_register[row["register"]] = by_register.get(row["register"], 0) + 1
 
         chips = [register if count == 1 else f"{register} ({count})" for register, count in sorted(by_register.items(), key=lambda item: (-item[1], item[0]))]
-        meta = [{"label": row["register"], "value": f"{row['name']} - {row['detail']}" if row["detail"] else row["name"]} for row in rows[:_MAX_ROWS]]
-        return {"chips": chips, "facts": [{"icon": "account_balance", "text": note}] if note else [], "meta": meta}
+        meta = [_meta_entry(row) for row in rows[:_MAX_ROWS]]
+        facts = [{"icon": "account_balance", "text": note, **({"href": note_url} if note_url else {})}] if note else []
+        return {"chips": chips, "facts": facts, "meta": meta}
 
 
 class HistoricRegistersPlugin(UrbanLensPlugin):

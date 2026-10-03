@@ -180,9 +180,10 @@ class NominatimPanelSource(LocationCachePanelSource):
             location: The pin's location, for reaching its wiki (if any).
             osm_url: The OSM element URL from the reverse-geocode result.
         """
+        from urbanlens.dashboard.models.links.model import AutoLinkSource
         from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
 
-        add_pin_and_wiki_link(pin, location, osm_url, "OpenStreetMap")
+        add_pin_and_wiki_link(pin, location, osm_url, "OpenStreetMap", source=AutoLinkSource.OPENSTREETMAP)
 
 
 class NominatimEnrichmentSource(LocationCacheEnrichmentSource):

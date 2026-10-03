@@ -1580,7 +1580,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             # pressing it will do.
             unpinned_count = len(missing_buildings(pin))
             debug = self._debug_entry(request, PARCEL_BUILDINGS_CACHE_SOURCE, cached.query_key, from_cache=True, count=len(rows))
-            building_slugs = {marker.slug for marker in descendants if marker.pin_type == PinType.BUILDING and marker.slug}
+            # A child covering a building record stands for that building, whatever type it is stored as.
+            building_slugs = {marker.slug for marker in descendants if marker.pin_type == PinType.BUILDING and marker.slug} | {row["child_slug"] for row in external_rows if row["child_slug"]}
         else:
             building_slugs = {child.slug for child in children if child.pin_type == PinType.BUILDING and child.slug}
         if not rows and not child_rows:

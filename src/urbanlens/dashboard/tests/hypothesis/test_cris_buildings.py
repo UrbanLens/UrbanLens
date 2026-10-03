@@ -422,7 +422,7 @@ def _stub_pin(*, site_scope: bool = False):
 
     ``is_site_scope`` short-circuits on the instance memo, so setting it directly decides the answer without
     needing a database (these are SimpleTestCases)."""
-    return SimpleNamespace(_site_scope_cache=site_scope)
+    return SimpleNamespace(_site_scope_cache=site_scope, location=None)
 
 
 class RenderContextTests(SimpleTestCase):
@@ -501,7 +501,7 @@ class SiteScopeRenderTests(SimpleTestCase):
         ctx = self.source.render_context(_stub_pin(site_scope=True), data)
         assert ctx is not None
         self.assertEqual(ctx["heading_name"], "Hudson River State Hospital, Main Building")
-        self.assertIn({"label": "National Register Number", "value": "94NR00622"}, ctx["meta"])
+        self.assertIn({"label": "NYSHPO National Register Number", "value": "94NR00622"}, ctx["meta"])
 
     def test_a_parcel_scope_card_leaves_the_campus_buildings_to_the_buildings_list(self) -> None:
         """Jess, 2026-09-30: the Buildings on this Property list carries CRIS's buildings; a second list here was a duplicate."""

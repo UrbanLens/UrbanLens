@@ -9,7 +9,7 @@ from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+from urbanlens.dashboard.models.links.model import AutoLinkSource, PinLink, WikiLink
 from urbanlens.dashboard.models.links.queryset import LinkQuerySet
 from urbanlens.dashboard.services.locations.external_links import add_pin_link, add_wiki_link
 
@@ -50,25 +50,25 @@ class DuplicateExternalLinkTests(TestCase):
         PinLink.objects.create(pin=self.pin, url=_URL, name="the winner")
 
         with mock.patch.object(LinkQuerySet, "exists", return_value=False):
-            self.assertFalse(add_pin_link(self.pin, _URL, "the loser"))
+            self.assertFalse(add_pin_link(self.pin, _URL, "the loser", source=AutoLinkSource.WIKIPEDIA))
 
         self.assertEqual(PinLink.objects.filter(pin=self.pin, url=_URL).count(), 1)
         self.assertEqual(PinLink.objects.get(pin=self.pin, url=_URL).name, "the winner")
 
     def test_first_add_still_creates(self) -> None:
-        self.assertTrue(add_pin_link(self.pin, _URL, "official site"))
+        self.assertTrue(add_pin_link(self.pin, _URL, "official site", source=AutoLinkSource.WIKIPEDIA))
 
         link = PinLink.objects.get(pin=self.pin, url=_URL)
         self.assertEqual(link.name, "official site")
 
     def test_second_add_is_a_no_op(self) -> None:
-        add_pin_link(self.pin, _URL, "official site")
+        add_pin_link(self.pin, _URL, "official site", source=AutoLinkSource.WIKIPEDIA)
 
-        self.assertFalse(add_pin_link(self.pin, _URL, "a different name"))
+        self.assertFalse(add_pin_link(self.pin, _URL, "a different name", source=AutoLinkSource.WIKIPEDIA))
         self.assertEqual(PinLink.objects.filter(pin=self.pin, url=_URL).count(), 1)
 
     def test_wiki_link_add_is_idempotent(self) -> None:
-        self.assertTrue(add_wiki_link(self.wiki, _URL, "official site"))
+        self.assertTrue(add_wiki_link(self.wiki, _URL, "official site", source=AutoLinkSource.WIKIPEDIA))
 
-        self.assertFalse(add_wiki_link(self.wiki, _URL, "a different name"))
+        self.assertFalse(add_wiki_link(self.wiki, _URL, "a different name", source=AutoLinkSource.WIKIPEDIA))
         self.assertEqual(WikiLink.objects.filter(wiki=self.wiki, url=_URL).count(), 1)

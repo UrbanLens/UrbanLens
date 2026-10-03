@@ -44,6 +44,7 @@ def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance
     title = _title(instance.data)
 
     def _run() -> None:
+        from urbanlens.dashboard.models.links.model import AutoLinkSource
         from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.services.locations.external_links import add_wiki_link
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
@@ -58,7 +59,7 @@ def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance
         seed_wiki_article_from_wikipedia(location)
 
         if url and (wiki := Wiki.objects.existing_for_location(location)) is not None:
-            add_wiki_link(wiki, url, "Wikipedia")
+            add_wiki_link(wiki, url, "Wikipedia", source=AutoLinkSource.WIKIPEDIA)
 
         if title:
             try:

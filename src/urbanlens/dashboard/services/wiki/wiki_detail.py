@@ -167,7 +167,7 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         # so this payload cannot drift from WikiAliasSerializer, which documents
         # the field, or from the delete guard, which decides what the rule means.
         "aliases": [{"id": alias.pk, "name": alias.name, "kind": alias.kind, "source": alias.source, "is_current": alias_is_current_name(alias, wiki)} for alias in aliases],
-        "links": [{"id": link.pk, "name": link.name, "url": link.url, "wayback_url": link.wayback_url or None, "order": link.order} for link in links],
+        "links": [{"id": link.pk, "name": link.name, "url": link.url, "wayback_url": link.wayback_url or None, "auto_source": link.auto_source or None, "order": link.order} for link in links],
         "stats": _stats(wiki, profile, conceal=conceal),
         "article": _article_summary(wiki, profile),
         # Gated, so the number cannot disagree with the thread the viewer is

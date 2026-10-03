@@ -1,1 +1,1 @@
-from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+from urbanlens.dashboard.models.links.model import AutoLinkSource, PinLink, WikiLink
