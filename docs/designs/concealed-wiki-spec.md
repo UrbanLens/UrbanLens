@@ -55,7 +55,7 @@ Implemented as a read-only presentation proxy (§4), never by mutating rows.
 
 | Field | File | Concealed value |
 |---|---|---|
-| `name` | `models/wiki/model.py:68` | `location.official_name` if set, else `WikiManager._placeholder_name(location)` (`wiki/queryset.py (draft/claim code, removed 2026-08-25)-133`). **Never** the stored value. |
+| `name` | `models/wiki/model.py:68` | `location.provider_name` (the official name only when a provider is recorded as its source) if set, else `WikiManager._placeholder_name(location)` (`wiki/queryset.py (draft/claim code, removed 2026-08-25)-133`). **Never** the stored value. |
 | `slug` | `model.py:65` | Omit `wiki_slug` from payloads, or emit `slugify(concealed_name)`. The stored slug is a frozen snapshot of the name at first save and is never regenerated (`abstract/model.py:194-198`). |
 | `description` | `model.py:69` | `""`. No automatic writer exists — every write path is a person. |
 | `date_abandoned`, `date_last_active` | `model.py:71-72` | `None`. Sole writer is `wiki_edits.py:136-147`. |
@@ -77,7 +77,7 @@ Implemented as a read-only presentation proxy (§4), never by mutating rows.
 | `uuid` | `abstract/model.py:75` | Unchanged. |
 | `created` | `abstract/model.py:46` | Month-truncated, or omitted. It is, to within a Celery hop, the moment the first user pinned the place (`tasks.py:27-61` queued from `models/pin/signals.py:280-281`). Must agree with the concealed `first_pinned` so the two cannot be differenced. |
 | `updated` | `abstract/model.py:47` | `= concealed created`. Blanket rule; see §2.6. |
-| Address proxies (`address`, `city`, `county`, `state`, `country`, `latitude`, `longitude`, `point`, `official_name`, `place_name`, `cid`, …) | `abstract/addressable.py:30-102` | **Unchanged.** Read-only delegations to `Location`; the wiki edit surface has no path to any of them. |
+| Address proxies (`address`, `city`, `county`, `state`, `country`, `latitude`, `longitude`, `point`, `official_name`, `place_name`, `cid`, …) | `abstract/addressable.py:30-102` | **Unchanged.** Read-only delegations to `Location`; the wiki edit surface has no path to any of them. `Wiki.official_name` overrides the delegation with `location.provider_name`, so a name of unknown origin is never shown as official (P186). |
 | `effective_latitude` / `effective_longitude` | `model.py:358-372` | Unchanged for the root wiki. Not emitted for child wikis (which are concealed wholesale). |
 
 **Model methods:**

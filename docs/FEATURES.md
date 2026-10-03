@@ -131,18 +131,26 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   have the matching helper, `Location.objects.get_exact_or_create`
   (`models/location/queryset.py`), for a caller that must keep a submitted point exactly as given
   rather than snapping it onto a nearby Location the way `get_nearby_or_create`'s dedup radius does
-- **Child pin and child wiki slugs** start with a short parent prefix (the shortest compact alias,
-  or one derived from the parent's long name — `HRSH` for Hudson River State Hospital, `ford` for
-  Ford Motors, `switz` for Switzerland). Trailing words that would overflow a readable length are
+- **Child pin and child wiki slugs** start with a short parent prefix (`HRSH` for Hudson River State
+  Hospital, `ford` for Ford Motors, `switz` for Switzerland): for a pin, the shortest compact alias of the
+  parent or one derived from its long name; for a wiki, one derived from the parent Location's provider
+  name only. Trailing words that would overflow a readable length are
   dropped as a unit, including hyphenated compounds (`non-contributing`), rather than clipped
   mid-word; dropped words are added back only when the ideal slug is not unique or is too short
 - **Wiki URLs** are `/location/<location slug>/wiki/...`; `/location/<slug>/` redirects (302) to the wiki.
-  A wiki route reached by the Location's uuid while the Location has another slug answers a 301 to the
-  same route at that slug, keeping the rest of the path and the query string. Only a GET or HEAD from
-  someone the wiki itself would serve is redirected; anything else runs in place, and anyone else gets the
-  wiki's usual 404 (`redirect_to_canonical_location` in `controllers/location_wiki.py`). A Location created
-  with an `official_name` takes its slug from it, which P186 shows can be client text. One created without a
-  name keeps its uuid slug until child-wiki alignment replaces it, and re-minting those waits on P186
+  A Location's slug comes only from a provider's name for it, or its uuid: `Location.provider_name` is
+  `official_name` when `official_name_source` records which provider supplied it. Client text, pin names
+  and community wiki names never reach `official_name`, and a name of unknown origin (legacy rows the P186
+  migration could not prove) mints no slug, names no new wiki, is never shown as official on the wiki or
+  to a concealed viewer, and is never a shared search name (`search_names.shared_names`). A uuid slug is re-minted when a provider's name arrives (`Location.save`); a later
+  provider rename keeps the minted slug. A slug the Location gives up goes to `LocationSlugHistory` and is
+  never minted for another Location. A wiki route reached by the uuid or a former slug answers a 301 to the
+  same route at the current slug, keeping the rest of the path and the query string; `get_location_or_404`
+  resolves both too, so a POST or an API call at an old slug lands in place. Only a GET or HEAD from
+  someone the wiki itself would serve is redirected (`Cache-Control: private, no-store`); anyone else gets
+  the wiki's usual 404 (`redirect_to_canonical_location` in `controllers/location_wiki.py`). `Wiki.slug`,
+  informational and not routed, follows the same rule. Pin slugs, scoped to and seen only by their owner,
+  still come from `Pin.effective_name` and the parent pin's aliases
 - Private per-pin notes (`PinNote`), independent of public comments
 - **Articles** — Wikipedia-style long-form write-ups (sections, links, references) with full
   **revision history** (every saved version stored, restorable from the Edit History tab); private
