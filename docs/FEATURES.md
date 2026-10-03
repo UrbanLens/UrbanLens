@@ -1318,7 +1318,7 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 
 ## AI Integration
 
-- Pluggable AI provider gateway (OpenAI, Cloudflare, Anthropic, Hugging Face). The AI chat
+- Pluggable AI provider gateway (OpenAI, Cloudflare, Anthropic). The AI chat
   assistant is pinned to Anthropic regardless of the site-wide provider setting, since its
   tool-calling protocol needs reliable instruction-following that smaller/free models don't
   consistently provide.

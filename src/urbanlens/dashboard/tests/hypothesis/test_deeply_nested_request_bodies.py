@@ -493,11 +493,11 @@ class ChatSocketFrameTests(TransactionTestCase):
 #: ``json.loads`` calls in request-handling code that never see client input: the server's own HX-Trigger headers
 #: and response bodies, and an upstream map style. Keyed by file and enclosing function.
 _TRUSTED_JSON_LOADS = {
-    ("controllers/albums.py", "post"),
+    ("controllers/albums.py", "AlbumUploadView.post"),
     ("controllers/aliases.py", "_show_toast"),
-    ("controllers/basemap_tiles.py", "get"),
+    ("controllers/basemap_tiles.py", "VectorBasemapStyleView.get"),
     ("controllers/custom_fields.py", "_show_toast"),
-    ("controllers/custom_layers.py", "post"),
+    ("controllers/custom_layers.py", "CustomLayerShareToWikiView.post"),
     ("controllers/notifications.py", "_merge_triggers"),
     ("controllers/pin_lists.py", "_show_toast"),
     ("controllers/property_owner.py", "_show_toast"),
@@ -506,16 +506,19 @@ _TRUSTED_JSON_LOADS = {
 
 
 class _JsonLoadsCalls(ast.NodeVisitor):
-    """Every ``json.loads(...)`` call in a module, with the function enclosing it."""
+    """Every ``json.loads(...)`` call in a module, with the qualified name of the function enclosing it."""
 
     def __init__(self) -> None:
         self.stack: list[str] = []
         self.found: list[tuple[str | None, int]] = []
 
-    def _enter(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+    def _enter(self, node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.stack.append(node.name)
         self.generic_visit(node)
         self.stack.pop()
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._enter(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._enter(node)
@@ -531,7 +534,7 @@ class _JsonLoadsCalls(ast.NodeVisitor):
             and isinstance(func.value, ast.Name)
             and func.value.id == "json"
         ):
-            self.found.append((self.stack[-1] if self.stack else None, node.lineno))
+            self.found.append((".".join(self.stack) or None, node.lineno))
         self.generic_visit(node)
 
 
@@ -555,3 +558,13 @@ class NoBareDecodeOfClientJsonTests(SimpleTestCase):
         calls.visit(ast.parse("def f(raw):\n    return json.loads(raw)\n"))
 
         self.assertEqual(calls.found, [("f", 2)])
+
+    def test_the_scan_names_the_class_too(self) -> None:
+        calls = _JsonLoadsCalls()
+        calls.visit(
+            ast.parse(
+                "class A:\n    def post(self, raw):\n        return json.loads(raw)\nclass B:\n    def post(self):\n        pass\n"
+            )
+        )
+
+        self.assertEqual(calls.found, [("A.post", 3)])
