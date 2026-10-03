@@ -9,6 +9,7 @@ from urbanlens.dashboard.plugins.builtin.searxng_images import (
     assemble_image_query,
     build_image_query,
 )
+from urbanlens.dashboard.services.pins.search_names import search_names
 
 _hyp = hyp_settings(max_examples=50, deadline=None)
 
@@ -122,19 +123,20 @@ class BuildImageQueryTests(TestCase):
         # No pin name, no official name, no wiki -> only the "Unnamed Location"
         # placeholder remains, which is not a meaningful search name.
         pin = self._pin(pin_name="", locality="Albany", state="NY", country="USA")
-        self.assertIsNone(build_image_query(pin))
+        for scope in search_names(pin).scopes:
+            self.assertIsNone(build_image_query(pin, scope))
 
     def test_us_pin_uses_state_and_city_as_area(self):
-        pin = self._pin(pin_name="Old Mill", locality="Troy", state="New York", country="USA")
-        query = build_image_query(pin)
+        pin = self._pin(pin_name="Old Mill", locality="Troy", state="New York", country="USA", official_name="Old Mill")
+        query = build_image_query(pin, search_names(pin).base)
         assert query is not None
         self.assertIn('"Old Mill"', query)
         self.assertIn('"New York"', query)
         self.assertIn('"Troy"', query)
 
     def test_non_us_pin_uses_country_and_city_as_area(self):
-        pin = self._pin(pin_name="Ruined Cathedral", locality="Valencia", state="", country="Spain")
-        query = build_image_query(pin)
+        pin = self._pin(pin_name="", locality="Valencia", state="", country="Spain", official_name="Ruined Cathedral")
+        query = build_image_query(pin, search_names(pin).base)
         assert query is not None
         self.assertIn('"Spain"', query)
         self.assertIn('"Valencia"', query)
@@ -145,10 +147,13 @@ class BuildImageQueryTests(TestCase):
         pin = self._pin(pin_name="Real Name", locality="Troy", state="NY", country="USA")
         PinAlias.objects.create(pin=pin, name="Official Alt", kind=AliasType.ALTERNATE)
         PinAlias.objects.create(pin=pin, name="Secret Nick", kind=AliasType.NICKNAME)
-        query = build_image_query(pin)
+        own = search_names(pin).own
+        assert own is not None
+        query = build_image_query(pin, own)
         assert query is not None
-        self.assertIn('"Official Alt"', query)
-        self.assertNotIn("Secret Nick", query)
+        self.assertIn('"official alt"', query)
+        for scope in search_names(pin).scopes:
+            self.assertNotIn("secret nick", (build_image_query(pin, scope) or "").casefold())
 
     def test_child_pin_includes_ancestor_group(self):
         from model_bakery import baker
@@ -173,14 +178,17 @@ class BuildImageQueryTests(TestCase):
         )
         child = baker.make(Pin, location=child_location, name="Superintendent's Cottage", parent_pin=parent)
 
-        query = build_image_query(child)
+        names = search_names(child)
+        assert names.own is not None
+        query = build_image_query(child, names.own)
         assert query is not None
         self.assertIn('"Superintendent\'s Cottage"', query)
-        self.assertIn('"Hudson River State Hospital"', query)
+        self.assertIn('"hudson river state hospital"', query)
+        self.assertNotIn("hudson river", build_image_query(child, names.base) or "")
 
     def test_top_level_pin_has_no_ancestor_group(self):
-        pin = self._pin(pin_name="Old Mill", locality="Troy", state="New York", country="USA")
-        query = build_image_query(pin)
+        pin = self._pin(pin_name="", locality="Troy", state="New York", country="USA", official_name="Old Mill")
+        query = build_image_query(pin, search_names(pin).base)
         assert query is not None
         # Three groups only: aliases, area, subject - no ancestor group.
         self.assertEqual(query.count("("), 3)

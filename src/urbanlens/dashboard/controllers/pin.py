@@ -5,7 +5,7 @@ from datetime import timedelta
 import json
 import logging
 from typing import TYPE_CHECKING, TypeVar
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
@@ -38,7 +38,7 @@ from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.core.request_body import drf_data_object
 from urbanlens.dashboard.services.locations.site_scope import rederive_pin_type
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
-from urbanlens.dashboard.services.search.search import format_search_date, search_web
+from urbanlens.dashboard.services.search.search import search_web
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_from_cached_wikipedia
@@ -454,7 +454,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if source == "photos":
             return self._photos_media_preview(request, pin_slug)
 
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source, panel_visible_to
 
@@ -480,7 +479,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not panel.gate(pin):
             return HttpResponse(status=204)
 
-        cached = LocationCache.get_fresh(location, panel.cache_source)
+        cached = panel.cached_entry(pin)
         # A row whose media half was never filled in is not an answer for this
         # gallery, even though it is one for the info panel sharing the row.
         if cached is None or not panel.media_is_ready(cached.data or {}):
@@ -800,7 +799,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return self._web_search_response(request, pin_slug, force_refresh=True)
 
     def _web_search_response(self, request: HttpRequest, pin_slug: str, *, force_refresh: bool):
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.search.pin_web_search import annotate_results, cached_web_searches, merged_results, pin_web_searches, store_web_search
 
         try:
             pin: Pin = Pin.objects.select_related("location", "profile").get(slug=pin_slug, profile__user=request.user)
@@ -809,11 +808,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         # The place's own name is enough. Requiring an official name dropped pins whose
         # title came from the owner or from Wikipedia, and the panel then vanished on 204.
-        search_name = pin.get_unique_search_name(quote_name=True, quote_locality=True)
-        if not search_name:
+        searches = pin_web_searches(pin)
+        if not searches:
             if request.GET.get("surface") == "article":
                 return render(request, "dashboard/pages/location/web_search.html", {"pin": pin, "search_results": [], "page_obj": None})
             return HttpResponse("", status=204)
+        search_name = " || ".join(search.query for search in searches)
 
         article_surface = request.GET.get("surface") == "article"
         search_allowed = user_has_feature(request.user, SiteFeature.SEARCH)
@@ -826,21 +826,21 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             )
 
         location = pin.location
-        # Shared across every pin/wiki at this Location, keyed on the search query text -- two pins with the
-        # same effective name (the common case) hit the same cache entry instead of each paying for their own.
-        cached = LocationCache.get_fresh(location, "web_search") if location else None
-        if cached is not None and cached.query_key != search_name:
-            cached = None
+        # The shared search is read by every pin at this Location; one built from this pin's own names only by pins
+        # with exactly the same names. A row is a hit only for the query that produced it.
+        cached = cached_web_searches(location, searches) if location else {}
+        answered = len(cached) == len(searches)
 
-        can_refresh = cached is not None and timezone.now() - cached.updated >= _WEB_SEARCH_MIN_REFRESH_AGE
+        can_refresh = answered and timezone.now() - max(row.updated for row in cached.values()) >= _WEB_SEARCH_MIN_REFRESH_AGE
 
         if force_refresh:
             if not can_refresh:
                 return HttpResponse("Search results were cached too recently to refresh.", status=429)
-            cached = None
+            cached = {}
+            answered = False
 
-        if cached is not None:
-            results = cached.data.get("results", [])
+        if answered:
+            results = merged_results((cached[search.scope.audience].data or {}).get("results", []) for search in searches)
             if not results and not article_surface:
                 return HttpResponse("", status=204)
             page_obj = get_page(request, results, _WEB_SEARCH_PAGE_SIZE)
@@ -867,41 +867,39 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
-        try:
-            # Deadline-bounded: this is the one external fetch still made on the request path (interactive,
-            # VIP-gated, and cached below), so a slow search backend degrades to the error card instead of
-            # holding the request open. search_web() tries every configured provider in priority order, so one
-            # unconfigured/rate-limited provider doesn't fail the whole request.
-            search_results = call_with_deadline(
-                lambda: search_web(search_name),
-                timeout=EXTERNAL_CALL_DEADLINE,
-                default=None,
-                name="web_search",
-            )
-            if search_results is None:
+        answers: dict[str, list[dict]] = {audience: (row.data or {}).get("results", []) for audience, row in cached.items()}
+        for search in searches:
+            if search.scope.audience in answers:
+                continue
+            try:
+                # Deadline-bounded: this is the one external fetch still made on the request path (interactive,
+                # VIP-gated, and cached below), so a slow search backend degrades to the error card instead of
+                # holding the request open. search_web() tries every configured provider in priority order, so one
+                # unconfigured/rate-limited provider doesn't fail the whole request.
+                search_results = call_with_deadline(
+                    lambda query=search.query: search_web(query),
+                    timeout=EXTERNAL_CALL_DEADLINE,
+                    default=None,
+                    name="web_search",
+                )
+                if search_results is None:
+                    return render(
+                        request,
+                        "dashboard/pages/location/web_search.html",
+                        {"pin": pin, "error": "Search unavailable. Please try again later."},
+                    )
+            except (OSError, ValueError, RuntimeError, RequestCancelledError) as e:
+                logger.exception("Unable to contact web search API: %s", e)
                 return render(
                     request,
                     "dashboard/pages/location/web_search.html",
                     {"pin": pin, "error": "Search unavailable. Please try again later."},
                 )
-        except (OSError, ValueError, RuntimeError, RequestCancelledError) as e:
-            logger.exception("Unable to contact web search API: %s", e)
-            return render(
-                request,
-                "dashboard/pages/location/web_search.html",
-                {"pin": pin, "error": "Search unavailable. Please try again later."},
-            )
+            answers[search.scope.audience] = annotate_results(search_results)
+            if location:
+                store_web_search(location, search, answers[search.scope.audience])
 
-        for r in search_results:
-            try:
-                r["domain"] = urlparse(r.get("link", "")).netloc.removeprefix("www.")
-            except (ValueError, AttributeError):
-                r["domain"] = ""
-            r["date_display"] = format_search_date(r.get("date"))
-
-        if location:
-            LocationCache.set(location, "web_search", {"results": search_results}, query_key=search_name)
-
+        search_results = merged_results(answers[search.scope.audience] for search in searches)
         if not search_results and request.GET.get("surface") != "article":
             return HttpResponse("", status=204)
 
@@ -1214,7 +1212,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Media gallery's "yelp" photo tab (see plugins.builtin.yelp.YelpPanelSource) -
         whichever loads first populates it for both.
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.plugins.builtin.yelp import YelpPanelSource
 
         panel = YelpPanelSource()
@@ -1230,7 +1227,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not panel.gate(pin):
             return HttpResponse(status=204)
 
-        cached = LocationCache.get_fresh(location, panel.cache_source)
+        cached = panel.cached_entry(pin)
         if cached is None:
             return self._pending_panel(request, pin, "yelp")
         data = cached.data or None
@@ -1333,8 +1330,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not location or not pin.effective_latitude or not pin.effective_longitude:
             return HttpResponse(status=204)
 
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
         sources: list[LocationCachePanelSource] = [source for key in _LOCATION_DATA_BESPOKE_KEYS if isinstance(source := get_panel_source(key), LocationCachePanelSource)]
         sources += [source for source in tabbed_panels(panel_sources().values(), PanelPlacement.LOCATION) if _viewer_may_see_panel(request, source)]
 
@@ -1349,7 +1344,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for source in sources:
             # A fresh row, not `is_ready`. Asking it here meant a *fetched* source whose answer was legitimately
             # empty looked unfetched, got rescheduled on every render, and was never added to `empty_keys`.
-            cached = LocationCache.get_fresh(location, source.cache_source)
+            cached = source.cached_entry(pin)
             if cached is not None:
                 piece = source.overview_summary(pin, cached.data or {})
                 if piece is None:
@@ -1378,7 +1373,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for source in tabbed_panels(panel_sources().values(), PanelPlacement.PROPERTY):
             if source.key == "property_records" or not _viewer_may_see_panel(request, source) or (parcel and source.key == "overture_building_attributes"):
                 continue
-            cached = LocationCache.get_fresh(location, source.cache_source)
+            cached = source.cached_entry(pin)
             if cached is None:
                 # Fetched now so an empty Property Records tab is found and hidden, not left until someone opens it.
                 pending_any = schedule_panel_fetch(source.key, pin) or pending_any
@@ -1652,7 +1647,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns:
             The panel, its placeholder, a 204 when there is nothing to show, or a 404.
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, get_panel_source
 
         panel = get_panel_source(panel_key)
@@ -1677,7 +1671,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         section_id = f"{panel.section_id}--{pin.slug}" if in_building_card else panel.section_id
-        cached = LocationCache.get_fresh(location, panel.cache_source)
+        cached = panel.cached_entry(pin)
         if cached is None:
             return self._pending_panel(request, pin, panel_key, section_id=section_id)
         data = cached.data or {}

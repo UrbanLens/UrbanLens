@@ -12,6 +12,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
 from urbanlens.dashboard.services.pins.external_data import MediaPanelSource, get_panel_source
+from urbanlens.dashboard.services.pins.search_names import search_names
 
 _BOOK_SCAN = "File:American Ancestry 4.djvu"
 _PHOTO = "File:Hudson River Psychiatric Center front view.jpg"
@@ -129,13 +130,15 @@ class WikimediaSearchTermsTests(SimpleTestCase):
         return pin
 
     def test_the_name_is_searched_as_a_phrase(self) -> None:
-        terms = MediaPanelSource.search_terms(self._pin(), WikimediaGateway())
+        pin = self._pin()
+        terms = MediaPanelSource.search_terms(pin, WikimediaGateway(), search_names(pin).base)
 
         self.assertTrue(terms)
         for term in terms:
             self.assertIn('"Hudson River State Hospital"', term)
 
     def test_the_narrow_query_is_the_phrase_and_its_locality(self) -> None:
-        terms = MediaPanelSource.search_terms(self._pin(), WikimediaGateway())
+        pin = self._pin()
+        terms = MediaPanelSource.search_terms(pin, WikimediaGateway(), search_names(pin).base)
 
         self.assertEqual(terms[-1], '"Hudson River State Hospital" Poughkeepsie NY')

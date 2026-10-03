@@ -204,7 +204,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P182 | open | 2026-10-01 | A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P186 | open | 2026-10-02 | `Location.official_name` is seeded from text the client sent, and a new Location takes its URL slug from it at creation; a new wiki adopts it as its automatic name and concealment shows it as the provider name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P187 | open | 2026-10-02 | A source error is cached as an empty answer for seven days, so a few hours' REData outage blanked every Location it touched | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location (fixed for name-built searches: per name-set audiences; Wikipedia campus fallback and an alias cache-drop left) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P193 | open | 2026-10-02 | Two product questions and two unchecked gaps left by the write-route audit (P29) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P196 | open | 2026-10-02 | Media galleries keep results that match the search words, not the place; Commons books were dropped instead of filed as documents | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P197 | open | 2026-10-02 | "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them; Jess: build both, batched | [`docs/PROBLEMS.md`](PROBLEMS.md) |

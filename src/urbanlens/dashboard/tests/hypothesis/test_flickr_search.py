@@ -20,6 +20,17 @@ from urbanlens.dashboard.services.apis.flickr.search import (
     build_feed_tag_queries,
     build_search_query,
 )
+from urbanlens.dashboard.services.pins.search_names import SearchScope, search_names
+
+
+def _shared(pin) -> SearchScope:
+    return search_names(pin).base
+
+
+def _own(pin) -> SearchScope:
+    own = search_names(pin).own
+    assert own is not None, "the pin has no names of its own"
+    return own
 
 
 def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None):
@@ -66,11 +77,12 @@ class BuildSearchQueryTests(TestCase):
             latitude=Decimal("41.700000"),
             longitude=Decimal("-73.930000"),
             administrative_area_level_1="New York",
+            official_name="Hudson River State Hospital",
         )
         self.pin = baker.make_recipe("dashboard.pin", location=self.location, name="Hudson River State Hospital")
 
     def test_includes_name_state_and_urbex_terms(self) -> None:
-        query = build_search_query(self.pin)
+        query = build_search_query(self.pin, _shared(self.pin))
         self.assertIn('"Hudson River State Hospital"', query)
         self.assertIn('"New York"', query)
         self.assertIn('"abandoned"', query)
@@ -81,7 +93,7 @@ class BuildSearchQueryTests(TestCase):
     def test_no_state_returns_none(self) -> None:
         self.location.administrative_area_level_1 = ""
         self.location.save(update_fields=["administrative_area_level_1", "updated"])
-        self.assertIsNone(build_search_query(self.pin))
+        self.assertIsNone(build_search_query(self.pin, _shared(self.pin)))
 
     def test_no_meaningful_name_returns_none(self) -> None:
         # A fresh pin/location with no name at all - unlike clearing
@@ -95,41 +107,41 @@ class BuildSearchQueryTests(TestCase):
             official_name="",
         )
         nameless_pin = baker.make_recipe("dashboard.pin", location=nameless_location, name="")
-        self.assertIsNone(build_search_query(nameless_pin))
+        self.assertIsNone(build_search_query(nameless_pin, _shared(nameless_pin)))
+        self.assertIsNone(search_names(nameless_pin).own)
 
-    def test_includes_non_nickname_pin_aliases(self) -> None:
+    def test_a_non_nickname_pin_alias_is_searched_on_its_own_not_in_the_shared_search(self) -> None:
         baker.make(PinAlias, pin=self.pin, name="HRSH", kind=AliasType.ALTERNATE)
-        query = build_search_query(self.pin)
-        self.assertIn('"HRSH"', query)
+        self.assertIn('"hrsh"', build_search_query(self.pin, _own(self.pin)))
+        self.assertNotIn("hrsh", build_search_query(self.pin, _shared(self.pin)).casefold())
 
     def test_excludes_nickname_pin_aliases(self) -> None:
         baker.make(PinAlias, pin=self.pin, name="My Secret Spot", kind=AliasType.NICKNAME)
-        query = build_search_query(self.pin)
-        self.assertNotIn("My Secret Spot", query)
+        self.assertIsNone(search_names(self.pin).own)
+        self.assertNotIn("my secret spot", build_search_query(self.pin, _shared(self.pin)).casefold())
 
     def test_includes_non_nickname_wiki_aliases(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Hudson River State Hospital")
         baker.make(WikiAlias, wiki=wiki, name="Hudson River Psychiatric Center", kind=AliasType.OFFICIAL)
-        query = build_search_query(self.pin)
+        query = build_search_query(self.pin, _shared(self.pin))
         self.assertIn('"Hudson River Psychiatric Center"', query)
 
     def test_excludes_nickname_wiki_aliases(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Hudson River State Hospital")
         baker.make(WikiAlias, wiki=wiki, name="that creepy place", kind=AliasType.NICKNAME)
-        query = build_search_query(self.pin)
+        query = build_search_query(self.pin, _shared(self.pin))
         self.assertNotIn("that creepy place", query)
 
     def test_excludes_address_derived_alias_names(self) -> None:
         self.location.locality = "Poughkeepsie"
         self.location.save(update_fields=["locality", "updated"])
         baker.make(PinAlias, pin=self.pin, name="Poughkeepsie", kind=AliasType.ALTERNATE)
-        query = build_search_query(self.pin)
-        # "Poughkeepsie" alone identifies the surroundings, not the place -
-        # it must not appear as a standalone quoted term in the name group.
-        self.assertNotIn('"Poughkeepsie"', query)
+        # "Poughkeepsie" alone identifies the surroundings, not the place - it is no search of its own.
+        self.assertIsNone(build_search_query(self.pin, _own(self.pin)))
+        self.assertNotIn('"poughkeepsie"', build_search_query(self.pin, _shared(self.pin)).casefold())
 
     def test_no_wiki_does_not_raise(self) -> None:
-        query = build_search_query(self.pin)
+        query = build_search_query(self.pin, _shared(self.pin))
         self.assertIsNotNone(query)
 
     def test_child_pin_includes_parent_name_as_required_clause(self) -> None:
@@ -143,13 +155,13 @@ class BuildSearchQueryTests(TestCase):
         child = baker.make_recipe(
             "dashboard.detail_pin", location=child_location, parent_pin=self.pin, name="Superintendent's Cottage"
         )
-        query = build_search_query(child)
+        query = build_search_query(child, _own(child))
         assert query is not None
-        self.assertIn('"Superintendent\'s Cottage"', query)
-        self.assertIn('"Hudson River State Hospital"', query)
+        self.assertIn('"superintendent\'s cottage"', query)
+        self.assertIn('"hudson river state hospital"', query)
 
     def test_top_level_pin_has_no_ancestor_clause(self) -> None:
-        query = build_search_query(self.pin)
+        query = build_search_query(self.pin, _shared(self.pin))
         assert query is not None
         # Only two parenthesised OR-groups (names, urbex terms) - state
         # renders as a bare quoted term, and there's no ancestor group.
@@ -241,7 +253,7 @@ class BuildFeedTagQueriesTests(TestCase):
 
     def test_crosses_names_with_every_urbex_term(self) -> None:
         baker.make(PinAlias, pin=self.pin, name="HRSH", kind=AliasType.ALTERNATE)
-        queries = build_feed_tag_queries(self.pin)
+        queries = build_feed_tag_queries(self.pin, _own(self.pin))
         # 2 names (own name + alias) x 3 urbex terms.
         self.assertEqual(len(queries), 6)
         self.assertIn("hudsonriverstatehospital,newyork,abandoned", queries)
@@ -252,20 +264,20 @@ class BuildFeedTagQueriesTests(TestCase):
     def test_no_state_returns_empty_list(self) -> None:
         self.location.administrative_area_level_1 = ""
         self.location.save(update_fields=["administrative_area_level_1", "updated"])
-        self.assertEqual(build_feed_tag_queries(self.pin), [])
+        self.assertEqual(build_feed_tag_queries(self.pin, _own(self.pin)), [])
 
     def test_dedupes_names_that_normalize_to_the_same_tag(self) -> None:
         # "H.R.S.H." and "HRSH" both normalize to the same tag token.
         baker.make(PinAlias, pin=self.pin, name="H.R.S.H.", kind=AliasType.ALTERNATE)
         baker.make(PinAlias, pin=self.pin, name="HRSH", kind=AliasType.ALTERNATE)
-        queries = build_feed_tag_queries(self.pin)
+        queries = build_feed_tag_queries(self.pin, _own(self.pin))
         hrsh_queries = [q for q in queries if q.startswith("hrsh,")]
         self.assertEqual(len(hrsh_queries), 3)  # one per urbex term, not six
 
     def test_caps_distinct_names_queried(self) -> None:
         for i in range(10):
             baker.make(PinAlias, pin=self.pin, name=f"Alias Number {i}", kind=AliasType.ALTERNATE)
-        queries = build_feed_tag_queries(self.pin)
+        queries = build_feed_tag_queries(self.pin, _own(self.pin))
         distinct_names = {q.split(",")[0] for q in queries}
         self.assertLessEqual(len(distinct_names), flickr_search._FEED_MAX_NAMES)
 
@@ -279,7 +291,7 @@ class BuildFeedTagQueriesTests(TestCase):
         child = baker.make_recipe(
             "dashboard.detail_pin", location=child_location, parent_pin=self.pin, name="Superintendent's Cottage"
         )
-        queries = build_feed_tag_queries(child)
+        queries = build_feed_tag_queries(child, _own(child))
         # One name x 3 urbex terms - same fan-out as a parentless pin; the
         # ancestor tag is folded into each query, not crossed separately.
         self.assertEqual(len(queries), 3)
@@ -363,12 +375,12 @@ class FlickrMediaPanelSourceTests(TestCase):
         self.source = FlickrMediaPanelSource("flickr", FlickrSearchGateway.service_key, FlickrSearchGateway)
 
     def test_search_terms_wraps_the_built_query_for_the_api_gateway(self) -> None:
-        terms = self.source.search_terms(self.pin, FlickrSearchGateway())
-        self.assertEqual(terms, [build_search_query(self.pin)])
+        terms = self.source.search_terms(self.pin, FlickrSearchGateway(), _own(self.pin))
+        self.assertEqual(terms, [build_search_query(self.pin, _own(self.pin))])
 
     def test_search_terms_uses_tag_queries_for_the_feed_gateway(self) -> None:
-        terms = self.source.search_terms(self.pin, FlickrFeedSearchGateway())
-        self.assertEqual(terms, build_feed_tag_queries(self.pin))
+        terms = self.source.search_terms(self.pin, FlickrFeedSearchGateway(), _own(self.pin))
+        self.assertEqual(terms, build_feed_tag_queries(self.pin, _own(self.pin)))
 
     def test_gate_false_when_pin_has_no_state(self) -> None:
         self.location.administrative_area_level_1 = ""

@@ -3476,30 +3476,33 @@ def run_scheduled_enrichment(self) -> dict:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def refresh_pin_web_search(self, pin_id: int) -> int:
-    """Pre-warm the shared web-search cache for a pin's Location."""
-    from urllib.parse import urlparse
+    """Pre-warm the web-search cache a pin's page reads: the shared search, and its own names' when it has any.
 
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    Args:
+        pin_id: PK of the pin; its names are read now, not when the task was queued.
+
+    Returns:
+        How many results the searches made here found; searches already cached are not made again.
+    """
     from urbanlens.dashboard.models.pin import Pin
-    from urbanlens.dashboard.services.search.search import format_search_date, search_web
+    from urbanlens.dashboard.services.search.pin_web_search import annotate_results, cached_web_searches, pin_web_searches, store_web_search
+    from urbanlens.dashboard.services.search.search import search_web
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
     if pin is None or pin.location is None:
         return 0
-    query = pin.get_unique_search_name(quote_name=True, quote_locality=True)
-    if not query:
-        return 0
-    update_task_progress(self, current=0, total=1, message="Refreshing web search...")
-    results = search_web(query)
-    for result in results:
-        try:
-            result["domain"] = urlparse(result.get("link", "")).netloc.removeprefix("www.")
-        except (ValueError, AttributeError):
-            result["domain"] = ""
-        result["date_display"] = format_search_date(result.get("date"))
-    LocationCache.set(pin.location, "web_search", {"results": results}, query_key=query)
-    update_task_progress(self, current=1, total=1, message="Web search refreshed")
-    return len(results)
+    searches = pin_web_searches(pin)
+    cached = cached_web_searches(pin.location, searches)
+    missing = [search for search in searches if search.scope.audience not in cached]
+    found = 0
+    for done, search in enumerate(missing):
+        update_task_progress(self, current=done, total=len(missing), message="Refreshing web search...")
+        results = annotate_results(search_web(search.query))
+        store_web_search(pin.location, search, results)
+        found += len(results)
+    if missing:
+        update_task_progress(self, current=len(missing), total=len(missing), message="Web search refreshed")
+    return found
 
 
 # These safety check-in beat tasks share the RUN_LOCK_CACHE_KEY-style guard already used by

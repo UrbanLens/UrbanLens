@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.pins.search_names import SearchScope
 
 logger = logging.getLogger(__name__)
 
@@ -70,16 +71,15 @@ class _QueryComponents:
     state: str
 
 
-def _search_components(pin: Pin) -> _QueryComponents | None:
-    """Gather the pin's known names, ancestor names, and state, shared by both query renderers.
+def _search_components(pin: Pin, scope: SearchScope) -> _QueryComponents | None:
+    """Gather one search's names, ancestor names, and the pin's state, shared by both query renderers.
 
     Args:
         pin: The pin to gather query components for.
+        scope: The search, whose names and context the query uses.
 
     Returns:
         The raw (undeduped, unquoted) names, ancestor names, and state, or None when the pin has no known state at all - both renderers require one."""
-    from django.core.exceptions import ObjectDoesNotExist
-
     from urbanlens.dashboard.services.locations.naming import is_address_derived_name, is_meaningful_name
 
     location = pin.location
@@ -87,44 +87,27 @@ def _search_components(pin: Pin) -> _QueryComponents | None:
     if not state:
         return None
 
-    names: list[str] = []
-    for name in (pin.meaningful_official_name, pin.meaningful_name):
-        if name:
-            names.append(name)
-
-    for alias in pin.aliases.all():
-        if alias.is_nickname or not is_meaningful_name(alias.name):
-            continue
-        names.append(alias.name)
-
+    names = [name for name in scope.names if is_meaningful_name(name)]
     if location is not None:
-        try:
-            wiki = location.wiki
-        except ObjectDoesNotExist:
-            wiki = None
-        if wiki is not None:
-            for wiki_alias in wiki.aliases.all():
-                if wiki_alias.is_nickname or not is_meaningful_name(wiki_alias.name):
-                    continue
-                names.append(wiki_alias.name)
         # A name that's really just a fragment of the address (a street name,
         # the city) carries no landmark-identifying power and would only add
         # noise to the query.
         names = [name for name in names if not is_address_derived_name(name, location)]
 
-    return _QueryComponents(names=names, ancestor_names=pin.ancestor_search_names(), state=state)
+    return _QueryComponents(names=names, ancestor_names=list(scope.context), state=state)
 
 
-def build_search_query(pin: Pin) -> str | None:
+def build_search_query(pin: Pin, scope: SearchScope) -> str | None:
     """Build the required-operator Flickr full-text search query for a pin.
     The name group and the state are both required - a pin with neither is skipped rather than searched with a weaker query, since a Flickr full-text search without them returns mostly off-topic noise.
 
     Args:
         pin: The pin to build a search query for.
+        scope: The search, whose names and context the query uses.
 
     Returns:
         The query string, or None when the pin has no usable name or no known state."""
-    components = _search_components(pin)
+    components = _search_components(pin, scope)
     if components is None:
         return None
 
@@ -140,17 +123,18 @@ def build_search_query(pin: Pin) -> str | None:
     return " ".join(clauses)
 
 
-def build_feed_tag_queries(pin: Pin) -> list[str]:
+def build_feed_tag_queries(pin: Pin, scope: SearchScope) -> list[str]:
     """Decompose a pin's required-operator query into public-feed tag-AND queries.
 
     Args:
         pin: The pin to build tag queries for.
+        scope: The search, whose names and context the queries use.
 
     Returns:
         Comma-joined tag strings (name, [ancestor,] state, urbex term; each normalized the same way Flickr normalizes tags for matching), or ``[]`` when the pin has no usable name or state."""
     from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 
-    components = _search_components(pin)
+    components = _search_components(pin, scope)
     if components is None:
         return []
 
@@ -306,17 +290,18 @@ class FlickrMediaPanelSource(MediaPanelSource):
     """Flickr's Media gallery provider: a required-operator, urbex-scoped query."""
 
     @staticmethod
-    def search_terms(pin: Pin, gateway: MediaProvider) -> list[str]:
-        """This pin's Flickr query terms, shaped for whichever gateway is active.
+    def search_terms(pin: Pin, gateway: MediaProvider, scope: SearchScope) -> list[str]:
+        """One of this pin's Flickr searches, shaped for whichever gateway is active.
 
         Args:
             pin: The pin to build search queries for.
             gateway: The active gateway - determines which query shape to build.
+            scope: The search, whose names and context the query uses.
 
         Returns:
-            The query terms for ``gateway``, or ``[]`` when the pin has no usable name or state.
+            The query terms for ``gateway``, or ``[]`` when the search has no usable name or the pin no state.
         """
         if isinstance(gateway, FlickrFeedSearchGateway):
-            return build_feed_tag_queries(pin)
-        query = build_search_query(pin)
+            return build_feed_tag_queries(pin, scope)
+        query = build_search_query(pin, scope)
         return [query] if query else []

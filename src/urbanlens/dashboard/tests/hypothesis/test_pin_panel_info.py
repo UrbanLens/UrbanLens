@@ -123,7 +123,10 @@ class PanelAiExtractButtonTests(RedataConfiguredMixin, TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Riverside Mill")
+        location = baker.make_recipe("dashboard.location", official_name="Riverside Mill")
+        self.pin: Pin = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, name="Riverside Mill", location=location
+        )
         LocationCache.set(
             self.pin.location,
             GdeltPanelSource.cache_source,

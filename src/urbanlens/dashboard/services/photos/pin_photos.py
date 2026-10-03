@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.utils import timezone
-
-from urbanlens.dashboard.models.site_settings import SiteSettings
-from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, gate_allows, get_panel_source, panel_visible_to, schedule_panel_fetch
+from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, cached_entries, gate_allows, get_panel_source, panel_visible_to, schedule_panel_fetch
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -139,7 +135,6 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
     Returns:
         The listing.
     """
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
     from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
     from urbanlens.dashboard.services.media.previews import gallery_urls
@@ -150,16 +145,15 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
         return listing
 
     sources = _visible_sources(pin, user)
-    cutoff = timezone.now() - timedelta(days=SiteSettings.get_current().external_data_cache_days)
-    fresh = LocationCache.objects.filter(location=location, source__in=[source.cache_source for source in sources], updated__gte=cutoff)
-    rows = {row.source: row.data or {} for row in fresh}
+    entries = cached_entries(pin, sources)
     relevance: dict[tuple[str, str], bool | None] = {
         (source, key): is_relevant for source, key, is_relevant in MediaRelevance.objects.filter(profile=profile, location=location, source__in=[source.key for source in sources]).values_list("source", "item_key", "is_relevant")
     }
 
     candidates: list[ExternalPhoto] = []
     for source in sources:
-        data = rows.get(source.cache_source)
+        entry = entries[source.key]
+        data = None if entry is None else entry.data
         if data is not None and not source.media_is_ready(data):
             data = None
         if data is None:

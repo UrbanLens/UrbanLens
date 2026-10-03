@@ -51,7 +51,9 @@ class PinPhotosTabTestCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)
-        self.pin = baker.make_recipe("dashboard.pin", name="Hudson River State Hospital")
+        # The place's public name, so the pin reads the shared rows the tests seed (P188).
+        location = baker.make_recipe("dashboard.location", official_name="Hudson River State Hospital")
+        self.pin = baker.make_recipe("dashboard.pin", name="Hudson River State Hospital", location=location)
         self.profile = self.pin.profile
         self.client.force_login(self.profile.user)
         patcher = patch(_SCHEDULE, return_value=False)
@@ -357,7 +359,8 @@ class PhotosPanelTests(PinPhotosTabTestCase):
         self.assertContains(response, 'id="albums-external-status" hx-swap-oob="true"')
 
     def test_another_accounts_pin_is_not_listed(self) -> None:
-        other = baker.make_recipe("dashboard.pin", location=self.pin.location)
+        # Its own slug: an unnamed pin here would take the place's name, and so this pin's slug.
+        other = baker.make_recipe("dashboard.pin", location=self.pin.location, name="Kirkbride Wing")
         self._cache("wikimedia", [_wikimedia_item(1)])
 
         for params in ("external=1", "external_section=1", "mine=1"):
