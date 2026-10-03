@@ -1350,6 +1350,9 @@ LOGGING = {
         "redact_secrets": {
             "()": "urbanlens.UrbanLens.logging_filters.SecretRedactionFilter",
         },
+        "retry_later": {
+            "()": "urbanlens.UrbanLens.logging_filters.RetryLaterFilter",
+        },
     },
     "handlers": {
         "console": {
@@ -1376,9 +1379,10 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
-        # Full tracebacks for 5xx.
+        # Full tracebacks for 5xx, but not for a 503 the view answered on purpose.
         "django.request": {
             "handlers": _log_handlers,
+            "filters": ["retry_later"],
             "level": "ERROR",
             "propagate": False,
         },

@@ -16,6 +16,7 @@ from urbanlens.dashboard.services.media.previews import PREVIEW_RETRY_AFTER_SECO
 from urbanlens.dashboard.services.media.remote_copies import COPY_PENDING_TTL, COPY_RATE, COPY_THROTTLE_SCOPE, TILE_SIZE, pending_marker, retry_is_due
 from urbanlens.dashboard.services.security import throttle
 from urbanlens.dashboard.services.security.throttle import account_or_address
+from urbanlens.UrbanLens.logging_filters import mark_retry_later
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -24,7 +25,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _not_yet(retry_after: int | None = None) -> HttpResponse:
+def _not_yet(request: HttpRequest, retry_after: int | None = None) -> HttpResponse:
+    mark_retry_later(request)
     response = HttpResponse(status=503)
     response["Retry-After"] = str(retry_after or PREVIEW_RETRY_AFTER_SECONDS)
     response["Cache-Control"] = "no-store"
@@ -58,18 +60,18 @@ class RemoteImageCopyView(View):
 
         marker = pending_marker(digest)
         if cache.get(marker) == RENDER_QUEUED:
-            return _not_yet()
+            return _not_yet(request)
         if not retry_is_due(copy):
             return HttpResponse(status=404)
         caller = account_or_address(request)
         if not throttle.allow(COPY_THROTTLE_SCOPE, caller, COPY_RATE):
-            return _not_yet(throttle.retry_after(COPY_THROTTLE_SCOPE, caller, COPY_RATE))
+            return _not_yet(request, throttle.retry_after(COPY_THROTTLE_SCOPE, caller, COPY_RATE))
         if not cache.add(marker, RENDER_QUEUED, COPY_PENDING_TTL):
-            return _not_yet()
+            return _not_yet(request)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import fetch_remote_image_copy
 
         if safely_enqueue_task(fetch_remote_image_copy, copy.pk, durable=False) is None:
             cache.delete(marker)
-        return _not_yet()
+        return _not_yet(request)

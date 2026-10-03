@@ -1,10 +1,26 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.security.redact import redact_urls
 
+if TYPE_CHECKING:
+    from django.http import HttpRequest
+
+#: Set on a request whose 503 is an answer the view chose ("ask again after Retry-After"), not a failure.
+RETRY_LATER_ATTRIBUTE = "ul_retry_later"
+
 _TRACEBACKS = logging.Formatter()
+
+
+def mark_retry_later(request: HttpRequest) -> None:
+    """Keep this request's 503 out of ``django.request``'s errors; for a view whose 503 means "not yet, ask again".
+
+    Args:
+        request: The request being answered with 503 and ``Retry-After``.
+    """
+    setattr(request, RETRY_LATER_ATTRIBUTE, True)
 
 
 class HealthCheckAccessLogFilter(logging.Filter):
@@ -67,3 +83,20 @@ def redact_every_handler() -> None:
         for handler in logger.handlers:
             if not any(isinstance(existing, SecretRedactionFilter) for existing in handler.filters):
                 handler.addFilter(SecretRedactionFilter())
+
+
+class RetryLaterFilter(logging.Filter):
+    """Drop ``django.request``'s record of a 503 its view marked with :data:`RETRY_LATER_ATTRIBUTE`."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Keep every record but a marked request's 503.
+
+        Args:
+            record: A ``django.request`` record, which carries ``status_code`` and ``request``.
+
+        Returns:
+            False for the deliberate 503, True otherwise.
+        """
+        if getattr(record, "status_code", None) != 503:
+            return True
+        return not getattr(getattr(record, "request", None), RETRY_LATER_ATTRIBUTE, False)
