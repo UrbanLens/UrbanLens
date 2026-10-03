@@ -1251,6 +1251,13 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   name: the container's own item limit, or that setting's validator maximum when it is unlimited.
 - **`beat_lock` / `acquire_lock` / `release_lock`** (`services/core/locks.py`) - a named overlap lock in
   the cache for scheduled sweeps; release deletes the key only while the caller's token still holds it.
+- **Log redaction** (`UrbanLens/logging_filters.py::SecretRedactionFilter`, `services/security/redact.py::redact_urls`)
+  - every handler in `LOGGING`, and every handler a Celery worker installs, rewrites the URLs a record prints, in the
+  message and the traceback: a credential parameter becomes a `redact_secret` token, a coordinate parameter or
+  `lat,lng` value a `redact_coordinate` token, and a `user:password@` password a token. A `requests` error, whose
+  text is its URL, can be logged as it is (P203).
+- **`mark_retry_later(request)`** (`UrbanLens/logging_filters.py`) - for a view whose 503 with `Retry-After` means
+  "not yet": `django.request` drops that request's 503 instead of logging it at ERROR. media-copy uses it (P204).
 
 ## Background Work (Celery)
 

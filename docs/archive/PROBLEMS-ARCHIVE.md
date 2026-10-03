@@ -20493,3 +20493,77 @@ module alone misses) for the P29 routes that branch on it: `external_api:wikis.d
 `wikis.cover_photo`. Each write lands on the real row and leaves a stranger's writing intact, a stranger's edit or
 alias is a 404, both vote routes report only the viewer's ballot, and no response carries the stranger's text. A
 control test checks the gate is on while patched and off without it. No bug found.
+
+## RESOLVED 2026-10-03: A requests error's text is its URL, so a query-string API key reached the log; every log handler now redacts URLs
+
+`id: P203` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: infrastructure's 0.8.0 deploy findings, item 6`
+
+`GoogleMapsGateway._generate_satellite_slides` (`services/apis/locations/google/maps.py`) logged a `requests`
+exception with `%s`. `raise_for_status()` writes that exception's text as "403 Client Error: Forbidden for url:
+<request URL>", and Static Maps takes its key in the query string, so the worker's WARNING carried `key=` to Loki. The
+URL also carried `center=<lat>,<lng>`, although the gateway redacts its own coordinate arguments. The call site was
+one of many: any logger handed a `requests` exception (as `%s`, `%r` or a traceback), Celery's failure line for a
+task that raises one, and `urllib3`'s retry warnings all print the URL. Reproduced before the fix through the
+configured handlers and formatter, with a 403 from a transport adapter mounted on the gateway's session: the key and
+the coordinates were in the WARNING line, in an `exc_info` traceback, and on the root logger's handlers.
+
+Fixed with one filter rather than call-site edits. `UrbanLens/logging_filters.py::SecretRedactionFilter` is on every
+handler in `LOGGING`. It passes each record's formatted message and rendered traceback (and stack) through
+`services/security/redact.py::redact_urls`, which replaces:
+
+- a credential query parameter with a `redact_secret` token. `is_sensitive_param_name` matches `SENSITIVE_PARAM_NAMES`
+  (now public, and the same list `redact_params` uses) or any name ending in key, token, secret, password, signature
+  or credential, in any case and with any separators.
+- a coordinate parameter, or any value shaped like `lat,lng`, with a `redact_coordinate` token.
+- the password in `user:password@`.
+
+Plain and percent-encoded query strings (a URL inside another URL's parameter) are both covered. Other parameters,
+and prose such as `location=%s`, are left alone. A Celery worker replaces the root logger's handlers with its own, so
+`UrbanLens/celery.py` connects `after_setup_logger` and `after_setup_task_logger` to `redact_every_handler()`, which
+puts the filter on every handler any logger holds. There is no Sentry; `sentry_sdk` is not a dependency.
+
+Tests: `tests/hypothesis/test_logged_url_secrets.py`. `StaticMapsRefusalTests` is the exploit, and it failed 4 of 4
+before the fix with the key and coordinates in the output. `CeleryWorkerLoggingTests` runs Celery's real
+`setup_logging_subsystem`, then a task that fails on the refused key. `RedactionIsWiredTests` checks the config and
+the live handlers. `NothingElseIsRedactedTests` are the negative controls. `AnyCredentialParameterPropertyTests` is a
+hypothesis test: any credential name, in any case, in an argument, a repr, a traceback or a nested URL.
+`RedactUrlsTests` covers the helper. `core/tests/log_output.py::handler_output` reads what the configured handlers
+write.
+
+Not covered:
+
+- A failed task's exception text stays unredacted in the result backend (Dragonfly). That is not a log, but Flower
+  would show it.
+- A handler a server adds outside `LOGGING` in a web process, such as gunicorn's `gunicorn.error`, is not filtered.
+  Nothing in the app hands one an upstream URL today.
+- Celery's failure record carries the raw text in `extra={"data": ...}`, which only a structured formatter would
+  print.
+- A failed task's ERROR line prints its arguments, which can be coordinates (P212).
+
+The key's rotation, and restrictions that admit the worker, are the infrastructure side's.
+
+## RESOLVED 2026-10-03: media-copy's "not yet" 503 is no longer logged as an ERROR
+
+`id: P204` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: infrastructure's 0.8.0 deploy findings, item 7`
+
+`RemoteImageCopyView` answers 503 with `Retry-After` while a copy is being made, while it is queued, and to a caller
+over the copy rate. Django's `log_response` logs every 5xx on `django.request` at ERROR, about twelve lines an hour in
+production. The status stays 503. Every client loads this URL as an image, either through the `remote_copy` template
+filter or through `photo-lightbox.ts::awaitRemoteCopy`, which probes with `new Image()`. Both retry on the image's
+`error` event and never read the status, so a 202 would have changed only the log line.
+
+The view now calls `mark_retry_later(request)` (`UrbanLens/logging_filters.py`) before each deliberate 503, and
+`RetryLaterFilter` on `django.request` drops a 503 record whose request carries the mark. `django.request` is passed
+the request, not the response, so the mark goes on the request. A 500 on a marked request is still logged.
+
+Tests: `tests/hypothesis/test_media_copy_retry_later_logging.py`. The three deliberate 503s write nothing through the
+configured handlers; these tests failed 3 of 3 before the fix. A 500 raised before the view chose to retry later, a
+500 raised after it, and an unmarked 503 are all still ERROR.
+
+Not changed: other views' 503s that also mean "ask again". These are `remote_tiles.py::_not_yet` and
+`proxied_media.retry_later_response`, used by the pin preview proxy and Immich thumbnails. Each still logs at ERROR,
+and each can call `mark_retry_later` if its 503 is noise too.

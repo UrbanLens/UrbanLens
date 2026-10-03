@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P214` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P213` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -212,8 +212,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P200 | open | 2026-10-02 | A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P201 | open | 2026-10-02 | An upload that meets a Garage quorum failure is a 500, and the photo is lost | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P202 | open | 2026-10-02 | The scheduled database backup cannot work on Kubernetes, and a restore turns it back on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P203 | open | 2026-10-02 | A Static Maps 403 logs the full request URL, Google API key included | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P204 | open | 2026-10-02 | `media-copy`'s designed 503 is logged as an ERROR a dozen times an hour | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P205 | open | 2026-10-02 | One Overpass 504 marks every Overpass endpoint down until the next day | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P206 | open | 2026-10-02 | `dashboard_location_cache` is 81% of production's database | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |
@@ -222,3 +220,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P209 | open | 2026-10-03 | Opening a group chat's own URL shows "Select a conversation" until its row is clicked | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P211 | open | 2026-10-03 | On a wiki page, the purple "Community wiki" pill overlaps the onboarding card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P212 | open | 2026-10-03 | A failed task's ERROR line prints its arguments, so `fetch_recorded_weather_at`'s coordinates reach the log | [`docs/PROBLEMS.md`](PROBLEMS.md) |
