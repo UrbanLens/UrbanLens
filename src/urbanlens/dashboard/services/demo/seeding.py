@@ -209,6 +209,9 @@ def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str 
 #: Real coordinates, like everything else seeded here - a pin is a claim that a place exists at a
 #: point, and the whole Private Pin page (boundaries, parcel lookup, wiki) answers emptily for a
 #: point nobody has ever surveyed.
+#: Name source for a landmark this module curates, which is no person's text.
+DEMO_SEED_NAME_SOURCE = "demo_seed"
+
 HUDSON_RIVER_STATE_HOSPITAL = {
     "name": "Hudson River State Hospital",
     "latitude": "41.733000",
@@ -287,6 +290,7 @@ def seed_landmark_pin(profile: Profile, landmark: dict[str, str] | None = None) 
         landmark["longitude"],
         defaults={
             "official_name": landmark["name"],
+            "official_name_source": DEMO_SEED_NAME_SOURCE,
             "locality": landmark["locality"],
             "administrative_area_level_1": landmark["administrative_area_level_1"],
             "country": landmark["country"],

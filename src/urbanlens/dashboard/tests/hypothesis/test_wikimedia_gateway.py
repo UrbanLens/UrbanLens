@@ -124,6 +124,7 @@ class WikimediaSearchTermsTests(SimpleTestCase):
             locality="Poughkeepsie",
             administrative_area_level_1="NY",
             official_name="Hudson River State Hospital",
+            official_name_source="google_places",
         )
         pin = Pin()
         pin._state.fields_cache["location"] = location

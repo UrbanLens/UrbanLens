@@ -67,7 +67,7 @@ class WriteRouteSmokeTests(TestCase):
         self.client.force_login(self.user)
         profile = self.user.profile
 
-        location = baker.make(Location, official_name="Smoke Location")
+        location = baker.make(Location, official_name="Smoke Location", official_name_source="google_places")
         pin = baker.make(Pin, profile=profile, location=location, name="Smoke Pin")
         trip = baker.make(Trip, creator=profile, name="Smoke Trip")
         trip.profiles.add(profile)

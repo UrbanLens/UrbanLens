@@ -120,7 +120,7 @@ def _unstored[ResponseT: HttpResponseBase](response: ResponseT) -> ResponseT:
 
 
 def redirect_to_canonical_location[**P](view: Callable[Concatenate[HttpRequest, P], HttpResponseBase]) -> Callable[Concatenate[HttpRequest, P], HttpResponseBase]:
-    """Wrap a ``location_slug`` route so a GET that names its Location by uuid moves permanently to the slug.
+    """Wrap a ``location_slug`` route so a GET that names its Location by uuid or a former slug moves permanently to the slug.
 
     Anything but GET and HEAD runs in place, because a redirect would turn a POST into a GET and drop its body.
     Anonymous requests run in place too, and reach the view's own login redirect.

@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Name source for a place REData's public-locations catalog names.
+REDATA_PUBLIC_LOCATIONS_NAME_SOURCE = "redata_public_locations"
+
 
 def manifest_path() -> Path | None:
     """The configured manifest path, or None when none is set."""
@@ -70,7 +73,7 @@ def import_location_entries(entries: list[dict[str, Any]]) -> tuple[int, int]:
     """Create or refresh a Location (and its Wiki) for each entry, in one transaction.
 
     Args:
-        entries: Entries in export format (``latitude``, ``longitude``, ``official_name``, ``wiki``).
+        entries: Entries in export format (``latitude``, ``longitude``, ``official_name``, ``official_name_source``, ``wiki``).
 
     Returns:
         ``(created, updated)`` location counts."""
@@ -86,7 +89,7 @@ def import_location_entries(entries: list[dict[str, Any]]) -> tuple[int, int]:
             location, was_created = Location.objects.get_exact_or_create(
                 entry["latitude"],
                 entry["longitude"],
-                defaults={"official_name": entry.get("official_name") or ""},
+                defaults={"official_name": entry.get("official_name") or "", "official_name_source": entry.get("official_name_source") or ""},
             )
             if was_created:
                 created += 1
@@ -94,7 +97,8 @@ def import_location_entries(entries: list[dict[str, Any]]) -> tuple[int, int]:
                 updated += 1
                 if entry.get("official_name") and not location.official_name:
                     location.official_name = entry["official_name"]
-                    location.save(update_fields=["official_name"])
+                    location.official_name_source = entry.get("official_name_source") or ""
+                    location.save(update_fields=["official_name", "official_name_source"])
 
             wiki_data = entry.get("wiki")
             if not wiki_data:
@@ -118,7 +122,7 @@ def redata_demo_locations() -> list[dict[str, Any]]:
     """Public demo locations published by REData's ``/public-locations/`` catalog.
 
     Returns:
-        Entries in export format (``latitude``, ``longitude``, ``official_name``, ``wiki``) - possibly empty."""
+        Entries in export format (``latitude``, ``longitude``, ``official_name``, ``official_name_source``, ``wiki``) - possibly empty."""
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
     from urbanlens.dashboard.services.apis.locations.redata_public_locations_gateway import RedataPublicLocationsGateway
 
@@ -136,6 +140,7 @@ def redata_demo_locations() -> list[dict[str, Any]]:
                 "latitude": latitude,
                 "longitude": longitude,
                 "official_name": name or "",
+                "official_name_source": REDATA_PUBLIC_LOCATIONS_NAME_SOURCE if name else "",
                 # No wiki payload of its own - unlike a PASSED PublicPinCandidate, REData's catalog
                 # carries no cached photos or aliases, only the coordinate and name.
                 # import_public_locations still gives it a minimal Wiki so the location isn't pinned

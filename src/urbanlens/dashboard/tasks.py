@@ -169,10 +169,10 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     except Exception:
         logger.exception("enrich_wiki_location: cached name refresh failed for location %s", location.pk)
     wiki.refresh_from_db(fields=["name"])
-    location.refresh_from_db(fields=["official_name"])
+    location.refresh_from_db(fields=["official_name", "official_name_source"])
 
     if not is_meaningful_name(wiki.name):
-        place_name, source = location.official_name, OFFICIAL_NAME_SOURCE
+        place_name, source = location.provider_name, OFFICIAL_NAME_SOURCE
         if not is_meaningful_name(place_name):
             source = GOOGLE_PLACES_NAME_SOURCE
             try:

@@ -47,6 +47,7 @@ class Command(BaseCommand):
                     "latitude": str(location.latitude),
                     "longitude": str(location.longitude),
                     "official_name": location.official_name or "",
+                    "official_name_source": location.official_name_source,
                     "wiki": self._wiki_payload(location),
                 },
             )

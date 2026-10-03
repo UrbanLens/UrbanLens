@@ -39,6 +39,9 @@ class Location(abstract.PublicDashboardModel):
     # External-source name for this place (e.g. from Google). User edits never
     # write this field; the community-editable name lives on Wiki.name.
     official_name = CharField(max_length=255, null=True, blank=True)
+    # The provider key ``official_name`` came from (a name source such as ``google_places`` or ``wikipedia``).
+    # Empty when unknown: such a name is never treated as a provider's, so it mints no slug and names no wiki.
+    official_name_source = CharField(max_length=50, blank=True, default="")
 
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
@@ -282,11 +285,58 @@ class Location(abstract.PublicDashboardModel):
             "longitude": float(self.longitude),
         }
 
+    @property
+    def provider_name(self) -> str | None:
+        """``official_name`` when a provider is known to have supplied it, else None.
+
+        The only name that may reach a wiki URL, a wiki's automatic name, or anyone who sees only what providers say.
+        """
+        return self.official_name if self.official_name and self.official_name_source else None
+
     def _slugify_base(self) -> str:
-        # The community-facing name lives on Wiki; a Location slug is only a
-        # stable URL routing token, so fall back to the uuid to stay unique and
-        # avoid churn when many locations share a blank official_name.
-        return self.official_name or str(self.uuid)
+        # Wiki URLs are routed by this slug, so it comes from a provider's name or the uuid, never from community text.
+        return self.provider_name or str(self.uuid)
+
+    def _slug_is_taken(self, candidate: str) -> bool:
+        """A slug is unavailable while another Location holds it now or held it before."""
+        from urbanlens.dashboard.models.location.slug_history import LocationSlugHistory
+
+        return super()._slug_is_taken(candidate) or LocationSlugHistory.objects.filter(slug=candidate).exclude(location_id=self.pk).exists()
+
+    def _slug_awaits_provider_name(self) -> bool:
+        """Whether a uuid slug should give way to the provider name this Location now has."""
+        from urbanlens.dashboard.services.core.slugs import is_uuid_slug
+
+        return bool(self.pk and self.provider_name and (not self.slug or is_uuid_slug(self.slug)))
+
+    def _sync_slug_after_save(self, *, wrote_slug: bool) -> None:
+        """Re-mint a uuid slug from a newly known provider name, and keep the slug history current.
+
+        Args:
+            wrote_slug: Whether the save just made wrote the slug column.
+        """
+        from urbanlens.dashboard.models.location.slug_history import LocationSlugHistory
+        from urbanlens.dashboard.services.core.slugs import is_uuid_slug
+
+        if self._slug_awaits_provider_name() and not self.__dict__.get("_reminting_slug"):
+            # regenerate_slug saves again, which records the change through this method.
+            self._reminting_slug = True
+            try:
+                self.regenerate_slug()
+            finally:
+                self._reminting_slug = False
+            from urbanlens.dashboard.models.wiki.model import Wiki
+
+            wiki = Wiki.objects.filter(location_id=self.pk).first()
+            if wiki is not None and is_uuid_slug(wiki.slug):
+                wiki.regenerate_slug()
+            return
+        if not wrote_slug:
+            return
+        persisted = self.__dict__.get("_persisted_slug")
+        if persisted is not None and persisted != self.slug:
+            LocationSlugHistory.record(self, persisted, self.slug)
+        self._persisted_slug = self.slug
 
     @classmethod
     def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Location:  # noqa: ARG003
@@ -306,6 +356,8 @@ class Location(abstract.PublicDashboardModel):
         ordered_names = list(field_names)
         ordered_values = list(values)
         instance._immutable_originals = {name: ordered_values[ordered_names.index(name)] for name in cls.IMMUTABLE_FIELDS if name in ordered_names}  # noqa: SLF001
+        if "slug" in ordered_names:
+            instance._persisted_slug = ordered_values[ordered_names.index("slug")]  # noqa: SLF001
         return instance
 
     @staticmethod
@@ -382,7 +434,12 @@ class Location(abstract.PublicDashboardModel):
 
             self.place = Place.objects.resolve_for_point(self.latitude, self.longitude)
 
+        writes_slug = update_fields is None or "slug" in update_fields or not self.slug
+        if self.pk is not None and writes_slug and "_persisted_slug" not in self.__dict__:
+            self._persisted_slug = type(self).objects.filter(pk=self.pk).values_list("slug", flat=True).first()
+
         super().save(*args, **kwargs)
+        self._sync_slug_after_save(wrote_slug=writes_slug)
 
     def __setattr__(self, name: str, value) -> None:
         """Support lightweight GooglePlace doubles on unsaved model instances.

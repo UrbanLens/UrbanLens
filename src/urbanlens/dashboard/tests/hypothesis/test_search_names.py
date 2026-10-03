@@ -62,7 +62,9 @@ class AudienceKeyTests(SimpleTestCase):
 class SearchNamesForPinTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.location = baker.make(Location, official_name=OFFICIAL, locality="Poughkeepsie")
+        self.location = baker.make(
+            Location, official_name=OFFICIAL, official_name_source="historic_register", locality="Poughkeepsie"
+        )
         self.wiki = baker.make(Wiki, location=self.location, name="HRSH Campus")
         WikiAlias.objects.create(wiki=self.wiki, name="Kirkbride")
         WikiAlias.objects.create(wiki=self.wiki, name="The Castle", kind=AliasType.NICKNAME)
@@ -76,6 +78,16 @@ class SearchNamesForPinTests(TestCase):
 
     def test_shared_names_are_the_places_official_and_wiki_names(self) -> None:
         self.assertEqual(search_names(self.pin()).shared, (OFFICIAL, "HRSH Campus", "Kirkbride"))
+
+    def test_an_official_name_of_unknown_origin_is_not_shared(self) -> None:
+        """P186: a legacy name no provider is recorded for may be a person's own text, e.g. a pin name."""
+        Location.objects.filter(pk=self.location.pk).update(official_name_source="")
+        self.location.refresh_from_db()
+
+        names = search_names(self.pin())
+
+        self.assertNotIn(OFFICIAL, names.shared)
+        self.assertEqual(names.shared, ("HRSH Campus", "Kirkbride"))
 
     def test_the_pins_name_and_aliases_are_custom(self) -> None:
         names = search_names(self.pin("Blueberry", name="Ward Seven"))

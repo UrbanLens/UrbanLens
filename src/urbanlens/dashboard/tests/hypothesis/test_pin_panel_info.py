@@ -123,7 +123,9 @@ class PanelAiExtractButtonTests(RedataConfiguredMixin, TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        location = baker.make_recipe("dashboard.location", official_name="Riverside Mill")
+        location = baker.make_recipe(
+            "dashboard.location", official_name="Riverside Mill", official_name_source="google_places"
+        )
         self.pin: Pin = baker.make_recipe(
             "dashboard.pin", profile=self.profile, name="Riverside Mill", location=location
         )

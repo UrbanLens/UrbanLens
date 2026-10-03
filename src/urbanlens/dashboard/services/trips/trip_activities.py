@@ -6,7 +6,7 @@ import datetime
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
-from django.db.models import F, Max
+from django.db.models import CharField, F, Max
 from django.utils import timezone
 
 from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -206,7 +206,7 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
     """Resolve an activity's target place from submitted location fields.
 
     Args:
-        body: Submitted fields - any of ``pin_uuid``/``pin_slug``, ``location_uuid``/``location_slug``, ``geocoded_lat``/``geocoded_lng`` (plus optional ``geocoded_name``/``title``).
+        body: Submitted fields - any of ``pin_uuid``/``pin_slug``, ``location_uuid``/``location_slug``, ``geocoded_lat``/``geocoded_lng``.
         profile: The submitting profile; pin lookups are scoped to their own pins.
 
     Returns:
@@ -240,15 +240,7 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
 
     location_ref = (body.get("location_uuid") or body.get("location_slug") or "").strip()
     if location_ref:
-        # Slug first, and the uuid form only once it parses.
-        # Handing a non-uuid string to a ``UUIDField`` filter raises ``ValidationError`` from the
-        # ORM - which a plain view does not turn into a 400, so it is a 500.
-        location = Location.objects.filter(slug=location_ref).first()
-        if location is None:
-            try:
-                location = Location.objects.filter(uuid=uuid_module.UUID(location_ref)).first()
-            except ValueError:
-                location = None
+        location = Location.objects.from_url_slug(location_ref)
         if location is not None:
             return location, None
 
@@ -260,9 +252,8 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
             lng = float(geocoded_lng)
             if not (-90 <= lat <= 90 and -180 <= lng <= 180):
                 return None, None
-            name = (body.get("geocoded_name") or body.get("title") or f"{lat:.6f}, {lng:.6f}").strip()
-
-            location, _ = Location.objects.get_exact_or_create(lat, lng, defaults={"official_name": name or "Activity Location"})
+            # No name from the request: it is client text, and a Location's name reaches its shared wiki.
+            location, _ = Location.objects.get_exact_or_create(lat, lng)
             # Wikis are user-created only; a trip activity location gets one
             # when someone explicitly creates it from a Private Pin page.
             return location, None
@@ -539,6 +530,11 @@ def create_activity(
     _checked_schedule(scheduled_at, "The start time")
     _checked_schedule(scheduled_end, "The end time")
     location, pin = resolve_activity_place(place or {}, actor)
+    if clean_title is None and pin is None:
+        # The picked place's name is the activity's own, never the shared Location's.
+        title_field = TripActivity._meta.get_field("title")  # noqa: SLF001 - _meta is public API
+        geocoded_name = _clean_text((place or {}).get("geocoded_name"))
+        clean_title = geocoded_name[: title_field.max_length] if geocoded_name and isinstance(title_field, CharField) else geocoded_name
     child_trip = _resolve_child_trip(child_trip_uuid, actor)
 
     clean_status = str(status or "").strip()

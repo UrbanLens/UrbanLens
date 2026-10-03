@@ -68,6 +68,7 @@ class MediaPanelSourceSearchTermsRejectAddressDerivedTests(SimpleTestCase):
             locality="Cincinnati",
             administrative_area_level_1="OH",
             official_name="1265 Section Rd",
+            official_name_source="google_places",
         )
         pin = _pin(loc)
         self.assertEqual(MediaPanelSource.search_terms(pin, _RejectingGateway(), search_names(pin).base), [])
@@ -79,6 +80,7 @@ class MediaPanelSourceSearchTermsRejectAddressDerivedTests(SimpleTestCase):
             locality="Cincinnati",
             administrative_area_level_1="OH",
             official_name="1265 Section Rd",
+            official_name_source="google_places",
         )
         pin = _pin(loc)
         terms = MediaPanelSource.search_terms(pin, _BareGateway(), search_names(pin).base)
@@ -91,6 +93,7 @@ class MediaPanelSourceSearchTermsRejectAddressDerivedTests(SimpleTestCase):
             locality="Springfield",
             administrative_area_level_1="IL",
             official_name="Riverside Mill",
+            official_name_source="google_places",
         )
         pin = _pin(loc)
         terms = MediaPanelSource.search_terms(pin, _RejectingGateway(), search_names(pin).base)
@@ -108,6 +111,7 @@ class MediaPanelSourceSearchTermsIncludeAddressTests(SimpleTestCase):
             locality="Springfield",
             administrative_area_level_1="IL",
             official_name="Riverside Mill",
+            official_name_source="google_places",
         )
         pin = _pin(loc)
         with_address = MediaPanelSource.search_terms(pin, _BareGateway(), search_names(pin).base)
@@ -231,6 +235,7 @@ class InternetArchiveMediaProviderRelevanceFlagsTests(SimpleTestCase):
             locality="Cincinnati",
             administrative_area_level_1="OH",
             official_name="Summit Road",
+            official_name_source="google_places",
         )
         pin = _pin(loc)
         terms = MediaPanelSource.search_terms(pin, InternetArchiveMediaProvider(), search_names(pin).base)
@@ -263,6 +268,7 @@ class SmithsonianMediaProviderRelevanceFlagsTests(SimpleTestCase):
             locality="Cincinnati",
             administrative_area_level_1="OH",
             official_name="Summit Road",
+            official_name_source="google_places",
         )
         pin = _pin(loc)
         terms = MediaPanelSource.search_terms(pin, SmithsonianMediaProvider(), search_names(pin).base)

@@ -706,7 +706,8 @@ def _retire_rejected_name(location: Location, wiki, rejected: Sequence[NameCandi
     if normalize_name_for_comparison(location.official_name) not in names or not location.pk:
         return False, wiki_renamed
     location.official_name = ""
-    location.save(update_fields=["official_name", "updated"])
+    location.official_name_source = ""
+    location.save(update_fields=["official_name", "official_name_source", "updated"])
     return True, wiki_renamed
 
 
@@ -761,9 +762,10 @@ def update_location_name_from_external_sources(
     wiki_changed = False
     if resolved is not None:
         name = resolved.name
-        if location.official_name != name:
+        if location.official_name != name or location.official_name_source != resolved.source:
             location.official_name = name
-            changed_fields.add("official_name")
+            location.official_name_source = resolved.source
+            changed_fields.update(("official_name", "official_name_source"))
         if changed_fields and save and location.pk:
             location.save(update_fields=[*sorted(changed_fields), "updated"])
         if wiki is not None and save and wiki.pk:

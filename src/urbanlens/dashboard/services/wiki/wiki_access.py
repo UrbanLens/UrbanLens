@@ -352,13 +352,13 @@ def wiki_accessible_to(wiki: Wiki, profile: Profile) -> bool:
 
 
 def get_location_or_404(location_slug: str, *, related: tuple[str, ...] = ()) -> Location:
-    """The Location a slug or uuid names, else a bare Http404.
+    """The Location a slug, a former slug or a uuid names, else a bare Http404.
 
     Bare, so a missing location and a real one the viewer cannot see raise identically: get_object_or_404's
     message would tell a DEBUG page which slugs exist.
 
     Args:
-        location_slug: Slug or uuid of the Location.
+        location_slug: Slug, former slug or uuid of the Location.
         related: Relations to ``select_related``.
 
     Returns:
@@ -369,9 +369,7 @@ def get_location_or_404(location_slug: str, *, related: tuple[str, ...] = ()) ->
     """
     from urbanlens.dashboard.models.location.model import Location
 
-    queryset = Location.objects.slug_or_uuid(location_slug)
-    # select_related() with no arguments follows every foreign key.
-    location = (queryset.select_related(*related) if related else queryset).first()
+    location = Location.objects.from_url_slug(location_slug, related=related)
     if location is None:
         raise Http404
     return location
@@ -408,22 +406,26 @@ def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Locat
 def canonical_location_slug(request: HttpRequest, location_slug: str) -> str | None:
     """The slug a wiki route should be addressed by, when *location_slug* reaches it under another name.
 
-    Only a uuid can name a Location other than by its slug, so anything else answers None without a query.
-    A wiki the requester could not open also answers None, leaving its view to raise the usual 404: a redirect
+    A uuid or a former slug names a Location other than by its current slug.
+    A wiki the requester could not open answers None, leaving its view to raise the usual 404: a redirect
     there would name the place.
 
     Args:
         request: The current request (used for the requesting profile).
-        location_slug: Slug or uuid taken from the URL.
+        location_slug: Slug, former slug or uuid taken from the URL.
 
     Returns:
         The Location's slug, or None when the URL already uses it or the requester may not see the wiki."""
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.location.slug_history import LocationSlugHistory
     from urbanlens.dashboard.services.core.slugs import is_uuid_slug
 
-    if not is_uuid_slug(location_slug):
-        return None
-    current = Location.objects.slug_or_uuid(location_slug).values_list("slug", flat=True).first()
+    if is_uuid_slug(location_slug):
+        current = Location.objects.slug_or_uuid(location_slug).values_list("slug", flat=True).first()
+    else:
+        current = LocationSlugHistory.objects.filter(slug=location_slug).values_list("location__slug", flat=True).first()
+        if current and Location.objects.filter(slug=location_slug).exists():
+            return None
     if not current or current == location_slug:
         return None
     try:

@@ -134,7 +134,12 @@ class LocationSlugTests(TestCase):
 
     def test_save_assigns_slug_from_name(self) -> None:
         loc: Location = baker.make(
-            Location, official_name="Unnamed Location", latitude="40.0", longitude="-74.0", slug=None
+            Location,
+            official_name_source="google_places",
+            official_name="Unnamed Location",
+            latitude="40.0",
+            longitude="-74.0",
+            slug=None,
         )
         self.assertEqual(loc.slug, "unnamed-location")
 
@@ -142,14 +147,32 @@ class LocationSlugTests(TestCase):
         # _generate_slug() appends a random (not sequential) numeric suffix on
         # collision, to avoid a race between concurrent writers reading the
         # same "next available" counter.
-        first: Location = baker.make(Location, official_name="Unnamed Location", latitude="40.0", longitude="-74.0")
-        second: Location = baker.make(Location, official_name="Unnamed Location", latitude="41.0", longitude="-73.0")
+        first: Location = baker.make(
+            Location,
+            official_name_source="google_places",
+            official_name="Unnamed Location",
+            latitude="40.0",
+            longitude="-74.0",
+        )
+        second: Location = baker.make(
+            Location,
+            official_name_source="google_places",
+            official_name="Unnamed Location",
+            latitude="41.0",
+            longitude="-73.0",
+        )
         self.assertEqual(first.slug, "unnamed-location")
         self.assertNotEqual(second.slug, first.slug)
         self.assertRegex(second.slug, r"^unnamed-location-\d+$")
 
     def test_ensure_slug_backfills_legacy_row(self) -> None:
-        loc: Location = baker.make(Location, official_name="Old Factory", latitude="40.0", longitude="-74.0")
+        loc: Location = baker.make(
+            Location,
+            official_name_source="google_places",
+            official_name="Old Factory",
+            latitude="40.0",
+            longitude="-74.0",
+        )
         Location.objects.filter(pk=loc.pk).update(slug=None)
         loc.refresh_from_db()
         self.assertIsNone(loc.slug)

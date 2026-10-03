@@ -17,7 +17,7 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Im
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.locations.naming import GOOGLE_PLACES_NAME_SOURCE, is_meaningful_name
 from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
 from urbanlens.dashboard.services.social.connections import are_connections
 
@@ -193,7 +193,8 @@ def resolve_location_for_point(latitude: float | Decimal, longitude: float | Dec
         update_fields.append("google_place")
         if is_meaningful_name(google_place.cached_place_name):
             location.official_name = google_place.cached_place_name.strip()
-            update_fields.append("official_name")
+            location.official_name_source = GOOGLE_PLACES_NAME_SOURCE
+            update_fields += ["official_name", "official_name_source"]
         location.save(update_fields=update_fields)
     return location
 

@@ -137,14 +137,14 @@ def shared_names(location: Location | None) -> tuple[str, ...]:
         location: The shared Location, or None.
 
     Returns:
-        Its meaningful official name, then its wiki's name and non-nickname aliases, without repeats.
+        Its provider-sourced official name, then its wiki's name and non-nickname aliases, without repeats.
     """
     from urbanlens.dashboard.models.aliases.model import AliasType
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     if location is None:
         return ()
-    names: list[str | None] = [location.official_name]
+    names: list[str | None] = [location.provider_name]
     wiki = Wiki.objects.existing_for_location(location) if location.pk else None
     if wiki is not None:
         names.append(wiki.name)

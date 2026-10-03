@@ -95,6 +95,7 @@ class RedataDemoLocationsTests(SimpleTestCase):
                     "latitude": 41.7,
                     "longitude": -72.7,
                     "official_name": "Example City",
+                    "official_name_source": "redata_public_locations",
                     "wiki": {"name": "Example City", "aliases": [], "photos": []},
                 }
             ],

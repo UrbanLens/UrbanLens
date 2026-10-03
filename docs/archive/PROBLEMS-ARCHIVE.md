@@ -20642,3 +20642,61 @@ reads per pin. The scope only labels and is never cached. New test:
 
 mypy over the whole tree would have flagged both calls as missing an argument. The P188 run checked only its own changed
 files.
+
+## RESOLVED 2026-10-03: Wiki URLs and wiki names come only from a provider's name for the place; client text never reaches Location.official_name
+
+`id: P186` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: the readable-location-slug work, 2026-10-02`
+
+`Location.official_name` was treated as provider data, but add-pin (`place_canonical_name` from the POST) and trip
+activities (`geocoded_name`, else the activity's title) seeded it with client text, and a Location created with a name
+minted its slug from it at insert. Child-wiki alignment also copied a child wiki's slug, built from its community name
+and its parent's aliases, onto a uuid Location slug. `migrations/0003_v0_4_0_data.py` had named older Locations from pin
+names.
+
+**Ruled by Jess 2026-10-02:** "Slugs for wikis should only come from official sources, not user provided text. Pin
+slugs can be determined from official sources or user provided text, such as aliases, since that only impacts the user
+and no one else. Re-mint any that don't match our current conventions."
+
+What was built:
+
+- `Location.official_name_source` records the provider key the name came from (`google_places`, `wikipedia`,
+  `nominatim`, `cris`, `historic_register`, ...); empty means unknown. `Location.provider_name` is `official_name` only
+  when a source is recorded. It alone feeds the Location slug, `Wiki.slug`, a new wiki's automatic name
+  (`get_or_create_for_location`, `enrich_wiki_location`), concealment's fallback name, and `Wiki.official_name` (the
+  wiki's "Official Name" card and JSON, which concealed viewers see), and P188's `shared_names()`, so a name of
+  unknown origin is searched only under its owner's own audience, never in the shared cache.
+- Writers: `update_location_name_from_external_sources` writes the resolved source (and clears it with the name);
+  `resolve_location_for_point` writes `google_places`; demo seeding, the REData catalog import and the public-location
+  export/import carry a source. Add-pin no longer writes the Location: `place_canonical_name` becomes the pin's own name
+  when the name field is blank (`name_is_user_provided` stays False). A trip activity's new Location gets no name; an
+  untitled activity takes `geocoded_name` as its title. `_align_child_location_slug` is gone.
+- A uuid slug is re-minted from a provider name when one arrives (`Location.save`, so every writer), along with the
+  wiki's uuid slug. A later provider rename keeps the minted slug, so after the migration every readable Location slug
+  was minted from a provider name.
+- `LocationSlugHistory` keeps every readable slug a Location gives up; a former slug is never minted for another
+  Location. `get_location_or_404` and `Location.objects.from_url_slug` resolve it (a current slug wins), and
+  `canonical_location_slug` 301s it to the current slug through the same gate as the uuid redirect: the wiki's usual
+  404, with no `Location` header and no current slug in the body, for anyone the wiki would not serve; `private,
+  no-store` on the redirect.
+- `0040_location_official_name_source` (schema) and `0041_location_slug_remint` (data). The data migration counts a
+  name as a provider's only when stored provider data holds it, compared case-, space- and punctuation-insensitively:
+  the linked GooglePlace's `cached_place_name`, or the exact field each name provider reads from the Location's own
+  `LocationCache` row (Nominatim `name`/`old_name`, Wikipedia `title`, CRIS `USNName` and its containing district,
+  REData building `name`, register rows that contain the point, Azure Maps, EPA ECHO, NPS, Google Places details
+  `name`). A whole-payload match was rejected: cached responses can echo the query, which may be the text in question.
+  Wiki aliases were not accepted as proof. A proven Location keeps a slug that already matches its name (up to a
+  numeric suffix) and is otherwise re-minted; every other Location goes to its uuid, its old readable slug to the
+  history. Wiki slugs are re-minted the same way, with no history (they are not routed). Unproven names stay in
+  `official_name` with no source, so they mint, name and show nothing official; a provider naming the place later
+  fixes it.
+
+Not measured: how many production rows the migration proves, re-mints or moves to a uuid (production was not read), or
+the migration's run time on production's table sizes.
+
+Tests: `test_location_official_name_provenance.py` (the former strict xfails, now plain tests, plus the pin keeping the
+clicked name, the untitled activity, and the official-by-contract readers), `test_location_slug_provenance.py`
+(re-minting, community text, wiki slugs, slug history, pin slugs), `test_location_canonical_urls.py`
+(`FormerSlugRedirectTests`, `FormerSlugLeakTests`), `test_location_slug_remint_migration.py`, `test_child_slugs.py`,
+`test_search_names.py`.

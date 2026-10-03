@@ -95,6 +95,7 @@ user: Recipe[User] = Recipe(
 location: Recipe[Location] = Recipe(
     "dashboard.Location",
     official_name=seq("Location "),
+    official_name_source="google_places",
     latitude=seq(Decimal("40.001"), increment_by=Decimal("0.001")),
     longitude=seq(Decimal("-74.001"), increment_by=Decimal("0.001")),
 )

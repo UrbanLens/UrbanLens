@@ -235,71 +235,62 @@ class ChildPinSlugTests(TestCase):
 
 
 class ChildWikiSlugTests(TestCase):
-    """Child wikis mint the same prefixed slug, and copy it onto a UUID location slug."""
+    """Wiki slugs come from the Location's provider name, prefixed by the parent's; never from community text."""
 
     def setUp(self) -> None:
         super().setUp()
         baker.make("auth.User")
         self._seq = 0
 
-    def _location(self, **kwargs) -> Location:
+    def _location(self, name: str | None = None) -> Location:
         self._seq += 1
-        return Location.objects.create(latitude=42.6 + self._seq / 1000, longitude=-73.7 - self._seq / 1000, **kwargs)
+        return Location.objects.create(
+            latitude=42.6 + self._seq / 1000,
+            longitude=-73.7 - self._seq / 1000,
+            official_name=name,
+            official_name_source="historic_register" if name else "",
+        )
 
     def test_root_wiki_is_not_prefixed(self) -> None:
-        wiki = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
+        wiki = Wiki.objects.create(location=self._location("Hudson River State Hospital"), name="Anything")
         self.assertEqual(wiki.slug, "hudson-river-state-hospital")
 
-    def test_child_wiki_uses_the_parent_alias_as_a_prefix(self) -> None:
-        parent = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
-        WikiAlias.objects.create(wiki=parent, name="HRSH")
-        child = Wiki.objects.create(
-            location=self._location(),
-            name="Powerhouse",
-            parent_wiki=parent,
-        )
+    def test_child_wiki_uses_the_parent_provider_name_as_a_prefix(self) -> None:
+        parent = Wiki.objects.create(location=self._location("Hudson River State Hospital"), name="Anything")
+        child = Wiki.objects.create(location=self._location("Powerhouse"), name="Boiler", parent_wiki=parent)
+        self.assertEqual(child.slug, "hrsh-powerhouse")
+
+    def test_a_parent_alias_never_shapes_the_prefix(self) -> None:
+        parent = Wiki.objects.create(location=self._location("Hudson River State Hospital"), name="Anything")
+        WikiAlias.objects.create(wiki=parent, name="SAMS")
+        child = Wiki.objects.create(location=self._location("Powerhouse"), name="Boiler", parent_wiki=parent)
         self.assertEqual(child.slug, "hrsh-powerhouse")
 
     def test_a_grandchild_wiki_takes_its_prefix_from_its_parent_not_the_root(self) -> None:
-        root = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
-        WikiAlias.objects.create(wiki=root, name="HRSH")
-        powerhouse = Wiki.objects.create(location=self._location(), name="Powerhouse", parent_wiki=root)
+        root = Wiki.objects.create(location=self._location("Hudson River State Hospital"), name="Anything")
+        powerhouse = Wiki.objects.create(location=self._location("Powerhouse"), name="PH", parent_wiki=root)
 
-        grandchild = Wiki.objects.create(location=self._location(), name="Boiler Room", parent_wiki=powerhouse)
+        grandchild = Wiki.objects.create(location=self._location("Boiler Room"), name="BR", parent_wiki=powerhouse)
 
         self.assertEqual(powerhouse.slug, "hrsh-powerhouse")
         self.assertEqual(grandchild.slug, "powerhouse-boiler-room")
 
-    def test_uuid_location_slug_is_replaced_with_the_child_wiki_slug(self) -> None:
-        parent = Wiki.objects.create(
-            location=self._location(official_name="Hudson River State Hospital"), name="Hudson River State Hospital"
-        )
-        WikiAlias.objects.create(wiki=parent, name="HRSH")
-        child_location = self._location()  # no official_name → UUID slug
+    def test_a_child_wiki_without_a_provider_name_keeps_its_uuid(self) -> None:
+        parent = Wiki.objects.create(location=self._location("Hudson River State Hospital"), name="Anything")
+        child = Wiki.objects.create(location=self._location(), name="Powerhouse", parent_wiki=parent)
+        self.assertEqual(child.slug, str(child.uuid))
+
+    def test_a_uuid_location_slug_is_left_alone(self) -> None:
+        parent = Wiki.objects.create(location=self._location("Hudson River State Hospital"), name="Anything")
+        child_location = self._location()
         self.assertTrue(is_uuid_slug(child_location.slug))
-        child = Wiki.objects.create(location=child_location, name="Powerhouse", parent_wiki=parent)
-        child_location.refresh_from_db()
-        self.assertEqual(child.slug, "hrsh-powerhouse")
-        self.assertEqual(child_location.slug, "hrsh-powerhouse")
-
-    def test_a_colliding_location_slug_is_left_alone(self) -> None:
-        """The location copy is skipped when the wiki's own slug already belongs to another Location."""
-        parent = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
-        WikiAlias.objects.create(wiki=parent, name="HRSH")
-        Location.objects.create(latitude=10.0, longitude=10.0, slug="hrsh-powerhouse")
-        child_location = self._location()  # no official_name → UUID slug
-        original_slug = child_location.slug
-        child = Wiki.objects.create(location=child_location, name="Powerhouse", parent_wiki=parent)
-        child_location.refresh_from_db()
-        self.assertEqual(child.slug, "hrsh-powerhouse")
-        self.assertEqual(child_location.slug, original_slug)
-
-    def test_a_named_location_slug_is_left_alone(self) -> None:
-        parent = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
-        WikiAlias.objects.create(wiki=parent, name="HRSH")
-        child_location = self._location(official_name="Powerhouse Building")
-        original_slug = child_location.slug
         Wiki.objects.create(location=child_location, name="Powerhouse", parent_wiki=parent)
         child_location.refresh_from_db()
-        self.assertEqual(child_location.slug, original_slug)
-        self.assertEqual(original_slug, "powerhouse-building")
+        self.assertEqual(child_location.slug, str(child_location.uuid))
+
+    def test_a_named_location_slug_is_left_alone(self) -> None:
+        parent = Wiki.objects.create(location=self._location("Hudson River State Hospital"), name="Anything")
+        child_location = self._location("Powerhouse Building")
+        Wiki.objects.create(location=child_location, name="Powerhouse", parent_wiki=parent)
+        child_location.refresh_from_db()
+        self.assertEqual(child_location.slug, "powerhouse-building")

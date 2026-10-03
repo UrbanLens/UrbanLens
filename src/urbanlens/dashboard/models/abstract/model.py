@@ -118,6 +118,17 @@ class PublicDashboardModel(FrontendDashboardModel):
         """
         return self._slug_max_length()
 
+    def _slug_is_taken(self, candidate: str) -> bool:
+        """Whether ``candidate`` is unavailable as this instance's slug.
+
+        Args:
+            candidate: A proposed slug.
+
+        Returns:
+            True when another row in the uniqueness scope already uses it.
+        """
+        return self._slugify_qs().filter(slug=candidate).exists()
+
     def _generate_slug(self) -> str:
         """Derive a unique slug for this instance.
         Truncates at a word boundary so a too-long name loses whole trailing tokens (``non-contributing`` as a unit) rather than a mid-word clip.
@@ -125,10 +136,9 @@ class PublicDashboardModel(FrontendDashboardModel):
         from urbanlens.dashboard.services.core.slugs import unique_slug
 
         max_len = self._slug_max_length()
-        qs = self._slugify_qs()
         return unique_slug(
             self._slugify_base(),
-            is_taken=lambda candidate: qs.filter(slug=candidate).exists(),
+            is_taken=self._slug_is_taken,
             prefix=self._slug_parent_prefix(),
             max_length=max_len,
             preferred_length=self._slug_preferred_length(),
