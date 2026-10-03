@@ -3120,27 +3120,6 @@ the building wiki takes CRIS's name and slug and is a child of the parcel's wiki
 - On a Private Pin page, add "remove from my results": a per-user hide that never deletes the shared row, so other
   users are unaffected.
 
-## P234 — Article > Sources lists only three documents, even with child pin details on
-
-`id: P234` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-Expected: every CRIS document for the campus and each child building, plus the other sources: register nominations,
-Commons documents (P196), search results. On production this was P187 (outage-cached empties), partly fixed by the
-infrastructure side's row deletion. Re-check on the release branch with P187 and P196 merged, and with child pins
-aggregated when the toggle is on. Fix whatever is still missing.
-
-## P235 — Article > News shows no results for HRSH
-
-`id: P235` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
-
-There should obviously be news results for this place. Check on the release branch. Candidates:
-- P187 (an outage cached as empty, fixed);
-- P188's audience split, which made register names base-only;
-- GDELT query shape or availability;
-- P196's relevance rule dropping news items whose text omits the name.
-Find the cause and fix it, with a test that HRSH's real query returns items through the whole path. Use a recorded
-fixture, not the network.
-
 ## P236 — A wiki URL's response time tells whether a Location exists under that slug
 
 `id: P236` · `status: open` · `updated: 2026-10-03` · `found by: adversarial review of P186`
@@ -3209,3 +3188,20 @@ Options, for the release's migration squash (see the release migration notes): r
 0.8.0 and drop the command and its test; or make the download part of an ordinary data migration's follow-up (a task
 queued by 0033 itself) so no current code ever runs on the old schema. Not Jess's call unless the first option
 changes the supported upgrade path.
+
+## P260 — A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources
+
+`id: P260` · `status: open` · `updated: 2026-10-03` · `found by: the P234 investigation`
+
+`GalleryMediaSource.gallery_items` drops every document from a gallery, on the grounds that documents belong under
+Article > Sources (P196). Only Commons (`DocumentMediaPanelSource`) and CRIS are document sources, so a document among
+the Library of Congress, Internet Archive, Smithsonian, Digital Commonwealth or Chronicling America results
+(`plugins/builtin/media_archives.py`) is shown nowhere.
+
+Not seen yet: REData returns these archives' record pages rather than files (`archive.org/details/...`,
+`loc.gov/item/...`), and none of the 82 archive items cached for HRSH-named locations on dev was a document.
+Smithsonian's `url` falls back to the media `content` link, which can be a file.
+
+Making them `DocumentMediaPanelSource`s fixes the listing but makes every Sources tab schedule and poll for five more
+REData searches, and the Sources tests assume CRIS and Commons are the only sources. Either accept that, or let a
+non-document source keep its documents as gallery tiles.

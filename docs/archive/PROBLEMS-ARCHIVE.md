@@ -21020,3 +21020,112 @@ same.
 answer resets the run; a stated wait is honoured and capped at a day; a refused connection backs off the same way; an
 endpoint omitting data stays out until the next day. The existing failover tests in
 `test_location_background_services.py` still pass.
+
+## RESOLVED 2026-10-03: A campus's Article > Sources lists every CRIS record on the site, its reviews and its nested buildings' own documents
+
+`id: P234` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0) at HRSH, reported as "lists only three documents, even with child pin details
+on". P187's outage-cached empties were part of it on production. On the release branch, with P187 and P196 merged,
+the CRIS site pass itself still dropped most of the campus. Measured against REData's live answer for the campus point (41.73328, -73.92812, 500 m, `ny_cris`),
+recorded as `tests/hypothesis/fixtures/hrsh_cris_lookup.json`, and dev's cached rows:
+
+- **Wrong site.** `cris_buildings.site_resource` took the first building district in the answer, whatever its
+  boundary. Dev's campus row (cached 2026-09-30) had Quiet Cove Riverfront Park as the site, a neighbouring district
+  that does not contain the point (`contains_point: false`), and kept only the buildings inside it: 12 documents,
+  ten of them from riverfront buildings or ones CRIS marks "outside HD bounds".
+- **One record's boundary.** Today's answer has no district, so the site is the National Register listing, whose
+  polygon covers the main building's grounds: 9 of the 124 buildings on CRIS's own campus survey (12SD00541,
+  "Hudson River State Hospital/Hudson River Psychiatric Center"). REData answers the campus through the union of
+  every boundary holding the point and that survey's roster; the plugin then cut it back to one polygon.
+- **Caps.** At most 40 campus buildings, nearest first. Buildings with no published position (30 on HRSH, 18
+  documents) never counted.
+- **Reviews never listed.** The consultation projects bounding the redevelopment (Hudson Heritage, 37 documents) and
+  any second record holding the point were ignored.
+- **Child pin details.** Sources read the page's own location only.
+- **Gallery limit.** `MediaProvider.get_media` kept 24 items counting documents, so a Commons PDF ranked after 24
+  images never reached Sources.
+
+**Fix.** `site_resource` given the point never picks a record whose boundary excludes it, and prefers one containing
+it. The site's boundary is the union of every district, listing and consultation project whose own boundary holds the
+point (`containing_site_records`, `site_boundary`); a project reaching past `_MAX_SITE_RADIUS_METERS` (a road, a
+power line) does not count. `_campus_candidates` adds every building, positioned or not, on a survey that names more than
+half of the buildings on the site and has more than half of its own positioned buildings on it. The second test keeps
+out a town survey that happens to include a small site's buildings: REData returns every survey's whole roster. On
+HRSH the campus survey has 58 of its 94 positioned buildings on the site. The 40-building cap is gone; live detail fetches keep their per-pass cap
+and time budget, and REData has already detailed all 154 HRSH buildings. The other containing records' documents are
+listed at site scope only (`site_building`), with no AI extraction and no gallery tiles, and are not copied to
+building children. With child pin details on, a pin page also lists the documents its own descendants' locations
+have cached (shared rows only, never fetched from here), a wiki page its child wikis', and the document proxy serves
+them (`source_documents.nested_documents`, `SourcesScope.nested_locations`). The wiki page now passes its toggle to
+Sources. A provider's gallery limit counts tiles only. `0044_cris_site_rows_refetch` drops CRIS rows cached at site
+scope or naming a neighbour as the district, so the next visit fetches them again.
+
+On the recorded answer the campus now lists every document of the 124 survey buildings (91), the NR nomination form
+and photo, and the 37 review documents; nothing from Dutchess County Jail, Marist or other off-campus records.
+
+**Not changed.** REData's archive providers (LoC, Internet Archive, Smithsonian, Digital Commonwealth, Chronicling
+America) are not document sources, so a PDF among their results is dropped from both the gallery and Sources (P260).
+None of HRSH's 82 cached archive items was one.
+
+**Tests.** `test_cris_campus_documents.py` runs the fetch against the recorded answer (every survey document listed;
+the nomination; the reviews; Quiet Cove never the site; off-campus records left out; reviews cost no extraction and
+no tiles; a building page keeps to its building and listing; a building child answered from the campus gets its own
+records and the listing, not the reviews; a town survey shared by one or two buildings on a small site brings in
+none of the town, while the site's own survey still brings in its unpositioned buildings).
+`test_article_sources_completeness.py` covers the gallery limit and the
+nested merge, `test_article_sources.py::NestedSourcesTests` the toggle, the proxy, another account's pins and child
+wikis, `test_cris_site_rows_refetch_migration.py` the migration. Red before the fix: 7 of the 12 campus tests ("82
+of 91 campus documents missing"; Quiet Cove taken as the site), the gallery-limit test, and both town-survey cases. The DB-backed tests
+(`NestedSourcesTests`, the migration test, and the existing `test_cris_buildings.py` and `test_name_tiers.py` cases
+adjusted for the new site rule) were written but not run in this session: the test-runner sync was refused in its
+worktree. Every DB-free test class in the files touching these modules passed on the host (158).
+
+## RESOLVED 2026-10-03: Article > News searches for the place by name and town, not its quoted street address
+
+`id: P235` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0) at HRSH.
+
+**Cause.** Article > News is the pin page's web search (`pin.web_search?surface=article`, `services/search/pin_web_search.py`,
+REData `/search/web/`), not the GDELT News card. Its query quoted the name, the street address and "Town ST", then
+appended the country. REData's engines treat every quoted phrase as required. HRSH's shared search was
+`"Hudson River State Hospital" "83 Hudson View Dr" "Poughkeepsie NY" United States`. Recorded against REData on
+2026-10-03, Brave answered it with nothing. Without the address it found one page; with the town and state left
+unquoted, it found ten about the hospital.
+
+None of the other candidates was the cause:
+
+- P187's outage empties are fixed.
+- P188's split already gives the shared search the name ("Hudson River State Hospital", from Wikipedia).
+- P196's relevance rule does not apply here: the web search lists what REData returns.
+
+**Fix.** `web_search_query` builds the query as the name, quoted, then the town and state. The town is quoted too
+only when the name is itself an address (`is_address_derived_name`), because a bare street address needs its town to
+stay specific. The street address and the country are left out. The view, the refresh task and the cache keys all
+build the query through the same function. A row cached under the old query is a miss, so it is fetched again.
+
+**GDELT card.** `GdeltPanelSource`'s query for HRSH, `"Hudson River State Hospital" (Poughkeepsie OR "Dutchess County")
+sourcelang:english sourcecountry:unitedstates`, also came back empty (probed live through REData, 2026-10-03 22:04Z).
+UrbanLens sends no `months`, so REData's default window of 24 months applies. In that window, the 50 English-language
+US articles GDELT ranked highest for "Poughkeepsie" all date from 2026-07-08 to 2026-10-02.
+
+GDELT refuses any window that reaches before 2017. REData's cap of 120 months is past that limit
+(`docs/handoffs/redata-gdelt-months-cap.md`). Whether a window of up to 117 months would find HRSH coverage is
+untested: GDELT answered 429 to every later probe.
+
+The card is not filtered by UrbanLens. It shows only what GDELT returns. Which other public names should feed the shared
+searches is left for Jess to decide. Candidates are CRIS's survey name "Hudson River State Hospital/Hudson River
+Psychiatric Center", "Hudson River Psychiatric Center", and the "Hudson Heritage" redevelopment.
+
+**Tests.** `tests/hypothesis/fixtures/hrsh_redata_web_search.json` records REData's answers to the old and new
+queries.
+
+- `test_article_news_search.py::NewsQueryTests` checks HRSH's query and the case where the name is an address.
+- `RecordedNewsSearchTests` runs the recorded answers through the parser.
+- `ArticleNewsTabTests` renders the tab end to end through `pin.web_search?surface=article`, with REData's transport
+  stubbed to the fixture.
+
+Before the fix, three of these failed. After it, the DB-free ones pass (4). `ArticleNewsTabTests` was written but not
+run in this session, because the test-runner sync was refused in this worktree. `test_web_search_view.py` and
+`test_misc_unnamed_write_routes.py` now build their cache keys through `web_search_query`.
