@@ -3012,6 +3012,8 @@ That changes the key of every cached item that carries them, so check first whet
 
 `id: P216` · `status: open` · `updated: 2026-10-03` · `found by: P196, checking each provider's fields, 2026-10-03`
 
+REData's half is asked for in `docs/handoffs/redata-chronicling-america-description-dropped.md`.
+
 Since P196, a Media gallery item must name the place to be shown. A Chronicling America item has no text that could.
 LoC returns a page's OCR excerpt as a *list* of strings in `description`. REData's `ChroniclingAmericaGateway` passes it
 through `_strip_html`, which returns `""` for anything that is not a `str`, so the description is always empty. Its sibling
