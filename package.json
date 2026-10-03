@@ -11,6 +11,7 @@
     "sass": "bun node_modules/sass/sass.js --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
     "sass:dev": "bun node_modules/sass/sass.js --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
     "sass:watch": "bun node_modules/sass/sass.js --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+    "scss:report": "bun run bin/report_unused_scss.ts",
     "build": "bun run bin/build-frontend.ts",
     "deploy": "bun run bin/build-frontend.ts --minify",
     "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 180 -k gthread --threads 4 --backlog 256 --max-requests 1000 --max-requests-jitter 100 -c gunicorn.conf.py",
