@@ -3017,3 +3017,50 @@ it. It also sets the nightly dump's size and its 12 minutes. Questions: which re
 fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows? Measure on
 `development_main` first. Production's `pg_stat_statements` is being loaded on the infrastructure side and will name
 the queries.
+
+## P207 — A worker's gen-2 collection still walks the startup heap, and that pause has never been timed on a real worker
+
+`id: P207` · `status: open` · `updated: 2026-10-02`
+
+Not measured. Do not measure it on the Windows checkout: that machine does not run the app, and an import there dies in `django.setup()` before any collection (`ModuleNotFoundError: psycopg`, then `botocore`). Time it on chiron, in a fresh interpreter that has done what a worker does at boot.
+
+A June 2026 writeup (Deepanshu Kartikey, <https://www.clickpost.ai/blog/hidden-latency-in-python>) found gen-2 collections walking about 1.07 million startup objects and holding the GIL long enough to stall a sibling request for seconds. `gc.freeze()` after startup cut their worst pause from 5.2 s to 226 ms. A shorter social post of the same work quotes different numbers (1.27 s to 88 ms, 1.5 million objects, and URL-resolver caching cutting GIL wait by 80%). Those figures are not in the writeup, and they are not a prediction for this heap. The profiler they published (<https://github.com/deepanshu406/python-ebpf-profiling>) hardcodes CPython 3.11 struct offsets, needs root and BCC, and lists 3.12 support as unstarted. This project requires 3.12 (`pyproject.toml`). Do not run it.
+
+Already done, so this check is not a repeat of it:
+
+- `warm_urlconf()` (`src/urbanlens/core/warmup.py`) imports the URLconf and builds the reverse table at boot. That was 1.4–2.3 s of CPU plus 0.364 s, paid on request one because it held the GIL (N22 H62). About 240 `path()` entries remain. Do not add a resolve cache unless a profile on the real worker shows `resolve()` is hot.
+- `RequestTelemetryMiddleware` logs `wall_ms`, `cpu_ms` (`time.thread_time()`), and `sql_ms` above `UL_SLOW_REQUEST_MS` (default 1000, `settings/app.py`). Thread CPU does not include time spent waiting for the GIL, so a large wall with a small CPU and almost no SQL is a request that waited. The line does not say whether the wait was gen-2, a lock, or a socket.
+- Heavy routes sit on a sync pool so they do not share a GIL with light requests (D11). Do not raise `--threads` to drain a handoff queue. Twelve workers × 4 threads is 48 connections against `ul_web`'s limit of 54.
+- `post_fork` in `gunicorn.conf.py` deliberately does not warm the URLconf. Work that has to see the warmed heap goes in `post_worker_init`, and daphne needs the same call from `asgi.py` or the two drift again.
+
+In a fresh interpreter, after `django.setup()` and `warm_urlconf()`:
+
+```python
+import gc, time
+gc.collect()  # drop startup trash; the timed calls should walk survivors
+print(tuple(len(gc.get_objects(g)) for g in (0, 1, 2)))
+for _ in range(5):
+    t0 = time.perf_counter()
+    unreachable = gc.collect(2)
+    print(f"{(time.perf_counter() - t0) * 1000:.1f} ms, unreachable={unreachable}")
+gc.freeze()
+print("frozen", gc.get_freeze_count(), "still tracked", tuple(len(gc.get_objects(g)) for g in (0, 1, 2)))
+for _ in range(5):
+    t0 = time.perf_counter()
+    unreachable = gc.collect(2)
+    print(f"{(time.perf_counter() - t0) * 1000:.1f} ms, unreachable={unreachable}")
+gc.unfreeze()
+```
+
+An interpreter that imported the app before the probe reports a warm heap and times the wrong thing; `test_urlconf_warmup.py` says why its probes are subprocesses. Read the five settled collections, not the first: the first full collection also frees trash and clears freelists.
+
+- Settled pauses of tens of milliseconds or less: close this. Do not freeze on a small number. `gc.freeze()` moves every tracked object into a permanent generation that later collections do not scan. A frozen container that afterwards stores a new cyclic object is not scanned, and the collector can free that object while the container still points at it. Refcounting still keeps acyclic objects alive. This app mutates module-level state after boot; `ext-api-deadline` in `services/core/timeout_utils.py` is a 64-thread pool inside the web process, the same shape as the background pool that triggered their collections.
+- Settled pauses of hundreds of milliseconds or more: freeze after a successful warm, not inside `warm_urlconf()`. `test_urlconf_warmup.py` calls `warm_urlconf()` in the pytest process, and a freeze there immortalises that process's heap for the rest of the session. Add a separate function in `warmup.py`, call it from gunicorn's `_warm_urlconf` and from `asgi.py`'s `_warm_urlconf` only after `warm_urlconf()` returns, `gc.collect()` then `gc.freeze()`, and log `gc.get_freeze_count()` on the existing "URLconf warmed" line so a boot that froze nothing is visible. Do both servers. daphne is one process with `cpus: 1`, and a gen-2 pause there stalls every WebSocket. Re-time in a fresh worker and record both numbers when this entry moves to the archive. Their 5.2 s is their heap.
+
+While on that host, three reads. None of them is a reason to add threads or to install the profiler:
+
+- Slow-request lines where `wall_ms` is far above `cpu_ms + sql_ms`. If the deployed logs have none, the "seconds the tracer could not see" story is not this app's.
+- nginx `$upstream_response_time` against the django-prometheus request histogram. The difference is time before Django's timer, including gunicorn's in-process handoff queue. N26 measured `$upstream_connect_time` at 0.24 ms. A small gap closes the handoff question. Their writeup's multi-second gap was that queue, fixed by adding threads, which this connection budget does not allow.
+- Confirm the running worker class. N26 (2026-09-21) found the image then in production was still `gunicorn -k gevent`. This tree's `package.json` `start` script is `-k gthread --threads 4`. GIL waits between threads exist on gthread. A gen-2 pause stops the whole worker on either class.
+
+Python 3.13's incremental collector is the runtime's own reduction of this pause. It is not part of this check.

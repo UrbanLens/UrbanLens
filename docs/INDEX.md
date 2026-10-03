@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P207` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P208` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -220,3 +220,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P206 | open | 2026-10-02 | `dashboard_location_cache` is 81% of production's database | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |
 | N33 | current | 2026-10-02 | Ask: run `localize_article_images` and `sweep_unnamed_pin_images --delete` on staging and production now, per Jess; restore tooling is infrastructure's | [`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`](handoffs/infrastructure-jess-decisions-2026-10-02.md) |
+| P207 | open | 2026-10-02 | A worker's gen-2 collection still walks the startup heap, and that pause has never been timed on a real worker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
