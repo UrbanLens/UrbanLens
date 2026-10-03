@@ -145,7 +145,7 @@ def create_pin_for_profile(
         tag_ids: Tag-kind label ids to attach when ``label_ids`` wasn't given.
         category_ids: Category-kind label ids to attach when ``label_ids`` wasn't given.
         google_place_id: A Google Place id to link on both the pin and location.
-        place_canonical_name: Canonical name to seed a newly-created Location with.
+        place_canonical_name: The clicked marker's title, sent by the client. It names the pin when ``name`` is blank, and never the Location: only a provider's name may reach the shared place.
         client_uuid: A caller-generated uuid making the create idempotent: when a pin with this uuid already belongs to ``profile``, that pin is returned (``result.created`` False) instead of creating a duplicate.
         parent_id: An existing pin of this profile's to create this one as a child (detail pin) of.
         name_is_user_provided: Whether ``name`` was deliberately typed by the owner, rather than produced by a parser/importer.
@@ -189,13 +189,13 @@ def create_pin_for_profile(
     if new_parent is not None:
         # A child pin keeps its own exact point (and may not stack on another of
         # this profile's pins) - see resolve_child_pin_location.
-        location = resolve_child_pin_location(profile, lat_f, lon_f, defaults={"official_name": place_canonical_name})
+        location = resolve_child_pin_location(profile, lat_f, lon_f)
     else:
         # The user's exact coordinate is kept, always.
         # Consolidating two drops at one place is the *place's* job now: they resolve onto the same
         # parcel and share its wiki, its community, and its "places in common" entry without either
         # coordinate being thrown away.
-        location, _ = Location.objects.get_exact_or_create(lat_f, lon_f, defaults={"official_name": place_canonical_name})
+        location, _ = Location.objects.get_exact_or_create(lat_f, lon_f)
 
     # Resolve what this coordinate stands on, from geometry already known. No
     # provider is called here - provisioning stays in the background task, so
@@ -225,7 +225,7 @@ def create_pin_for_profile(
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     create_kwargs: dict = {
-        "name": name,
+        "name": name if (name or "").strip() else (place_canonical_name or name),
         # Defaults to False because a create is not inherently a rename: file and offline-client
         # imports commonly put a coordinate or another parser fallback in ``name``, and marking
         # every non-empty value as user-provided made that placeholder permanently outrank names

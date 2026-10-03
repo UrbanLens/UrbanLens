@@ -76,6 +76,7 @@ class WikiAboutCardIdentityFieldsTests(TestCase):
         location = baker.make(
             Location,
             official_name="Riverside Mill",
+            official_name_source="google_places",
             latitude="41.73610",
             longitude="-73.75790",
             street_number="42",

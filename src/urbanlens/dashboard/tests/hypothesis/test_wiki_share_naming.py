@@ -24,7 +24,11 @@ class WikiCreationNamingTests(TestCase):
     def _pin(self, *, name: str | None) -> Pin:
         self._seq += 1
         location = baker.make(
-            Location, latitude=41.73332 + self._seq / 10000, longitude=-73.92794, official_name=_ADDRESS
+            Location,
+            latitude=41.73332 + self._seq / 10000,
+            longitude=-73.92794,
+            official_name=_ADDRESS,
+            official_name_source="google_places",
         )
         return baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name=name)
 

@@ -67,8 +67,8 @@ _WRAPPING_PUNCTUATION = "()[]{}<>,.;:!?\"'"
 
 
 def is_uuid_slug(value: str | None) -> bool:
-    """Return True when ``value`` is a UUID (the Location fallback slug).
-    Child-wiki locations are often created before the wiki has a name, so they mint a UUID slug; once the wiki slug exists we replace that fallback.
+    """Return True when ``value`` is a UUID (the Location and Wiki fallback slug).
+    A Location keeps it until a provider names the place, when it is re-minted from that name.
 
     Args:
         value: A slug, or None.

@@ -25,7 +25,11 @@ class WikiShareServiceTests(TestCase):
 
     def setUp(self):
         self.location = baker.make(
-            "dashboard.Location", latitude="40.000000", longitude="-74.000000", official_name="Old Mill"
+            "dashboard.Location",
+            latitude="40.000000",
+            longitude="-74.000000",
+            official_name="Old Mill",
+            official_name_source="google_places",
         )
         self.pin = baker.make(
             "dashboard.Pin",

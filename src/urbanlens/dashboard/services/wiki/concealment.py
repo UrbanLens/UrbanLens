@@ -105,7 +105,7 @@ def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]
         from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
 
         location = wiki.location
-        values["name"] = (location.official_name if location else "") or WikiModel.objects._placeholder_name(location)  # noqa: SLF001
+        values["name"] = (location.provider_name if location else "") or WikiModel.objects._placeholder_name(location)  # noqa: SLF001
     return values
 
 

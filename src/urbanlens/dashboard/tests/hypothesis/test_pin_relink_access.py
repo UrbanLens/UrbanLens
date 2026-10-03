@@ -29,7 +29,10 @@ class PinRelinkAccessTests(TestCase):
 
         # A place they have never discovered, with a community wiki.
         self.undiscovered = Location.objects.create(
-            latitude=41.5, longitude=-73.5, official_name="Hudson River State Hospital"
+            latitude=41.5,
+            longitude=-73.5,
+            official_name="Hudson River State Hospital",
+            official_name_source="historic_register",
         )
         self.wiki = baker.make(Wiki, location=self.undiscovered, name="Hudson River State Hospital")
 

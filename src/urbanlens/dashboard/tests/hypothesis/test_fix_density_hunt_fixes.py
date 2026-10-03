@@ -29,7 +29,13 @@ class ActivityLocationRefTests(TestCase):
         # failure reachable. A nameless location can slug from its own uuid and
         # parse cleanly, so a fixture without a name tests nothing here - the
         # first version of this test did exactly that and passed either way.
-        self.location = baker.make(Location, latitude=42.35, longitude=-71.05, official_name="Bennett School for Girls")
+        self.location = baker.make(
+            Location,
+            latitude=42.35,
+            longitude=-71.05,
+            official_name="Bennett School for Girls",
+            official_name_source="wikipedia",
+        )
         self.location.ensure_slug()
 
     def _resolve(self, **body) -> tuple:

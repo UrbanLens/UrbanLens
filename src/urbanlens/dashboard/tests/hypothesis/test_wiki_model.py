@@ -17,7 +17,9 @@ class WikiLocationRelationTests(TestCase):
     """Wiki links 1:1 to a Location and proxies its address."""
 
     def test_get_or_create_is_lazy_and_idempotent(self) -> None:
-        loc = baker.make(Location, official_name="Old Mill", latitude="40.0", longitude="-74.0")
+        loc = baker.make(
+            Location, official_name="Old Mill", official_name_source="wikipedia", latitude="40.0", longitude="-74.0"
+        )
         wiki1, created1 = Wiki.objects.get_or_create_for_location(loc)
         wiki2, created2 = Wiki.objects.get_or_create_for_location(loc)
         self.assertTrue(created1)
@@ -82,7 +84,7 @@ class WikiLookupTests(TestCase):
         self.assertFalse(Wiki.objects.filter(location=loc).exists())
 
     def test_get_or_create_names_from_the_location(self) -> None:
-        loc = self._location(official_name="Old Mill")
+        loc = self._location(official_name="Old Mill", official_name_source="wikipedia")
         wiki, created = Wiki.objects.get_or_create_for_location(loc)
         self.assertTrue(created)
         self.assertEqual(wiki.name, "Old Mill")
@@ -157,7 +159,7 @@ class EnrichWikiLocationNameTests(TestCase):
         self.assertEqual(wiki.name, "Unnamed Location")
 
     def test_official_name_is_preferred_over_live_resolution(self) -> None:
-        location = self._location(official_name="Official Mill")
+        location = self._location(official_name="Official Mill", official_name_source="wikipedia")
         wiki = baker.make(Wiki, location=location, name="Unnamed Location")
         self._run(wiki, resolved_name="Should Not Be Used")
         wiki.refresh_from_db()

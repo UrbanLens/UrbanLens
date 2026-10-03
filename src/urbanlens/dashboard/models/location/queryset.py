@@ -58,6 +58,21 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet["Location"]):
     def by_cid(self, cid: int):
         return self.filter(google_place__cid=cid)
 
+    def from_url_slug(self, value: str, *, related: tuple[str, ...] = ()) -> Location | None:
+        """The Location a URL segment names: its current slug, its uuid, else a slug it had before.
+
+        A current slug always wins, so the former-slug lookup costs a query only when nothing else matched.
+
+        Args:
+            value: The slug or uuid taken from a URL.
+            related: Relations to ``select_related``.
+
+        Returns:
+            The Location, or None when nothing matches.
+        """
+        queryset = self.select_related(*related) if related else self
+        return queryset.slug_or_uuid(value).first() or queryset.filter(slug_history__slug=value).first()
+
     def within_bounding_box(self, latitude: float, longitude: float) -> Self:
         """Locations sharing the access domain of whatever is at this coordinate.
         Resolution happens once, on Place, and the answer is a single real-world thing - so "which locations cover this point?" is no longer a geometry query over every location that ever copied a polygon, but a lookup of the domain the point resolves into.

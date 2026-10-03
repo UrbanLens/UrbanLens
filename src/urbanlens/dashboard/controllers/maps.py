@@ -231,8 +231,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
             google_place_id = request.POST.get("google_place_id") or None
-            # Canonical name supplied by the client when adding from a Google Places or Wikipedia/NPS marker -
-            # avoids a synchronous geocoding API round-trip when creating a new Location.
+            # The clicked marker's title; client text, so it can name only this pin.
             place_canonical_name = request.POST.get("place_canonical_name") or None
 
             try:

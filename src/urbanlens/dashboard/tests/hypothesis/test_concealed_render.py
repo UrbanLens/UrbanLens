@@ -37,7 +37,13 @@ class ConcealedRenderTests(TestCase):
         # official_name is what enrichment resolves and what every creation
         # path names a wiki from, so it is the automatic name a concealed
         # viewer should end up seeing.
-        self.location = baker.make(Location, latitude=43.0731, longitude=-89.4012, official_name="Provider Name")
+        self.location = baker.make(
+            Location,
+            latitude=43.0731,
+            longitude=-89.4012,
+            official_name="Provider Name",
+            official_name_source="google_places",
+        )
         self.wiki = baker.make(Wiki, location=self.location, name="Provider Name")
 
         # A real automatic write. Without one, every field falls to its model
@@ -126,7 +132,13 @@ class ConcealedHistoryTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.location = baker.make(Location, latitude=44.9778, longitude=-93.2650, official_name="Provider Name")
+        self.location = baker.make(
+            Location,
+            latitude=44.9778,
+            longitude=-93.2650,
+            official_name="Provider Name",
+            official_name_source="google_places",
+        )
         self.wiki = baker.make(Wiki, location=self.location, name="Provider Name")
         self.stranger = baker.make(User).profile
         self.viewer_user = baker.make(User)
@@ -181,7 +193,13 @@ class ConcealedPanelTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.location = baker.make(Location, latitude=39.7392, longitude=-104.9903, official_name="Provider Name")
+        self.location = baker.make(
+            Location,
+            latitude=39.7392,
+            longitude=-104.9903,
+            official_name="Provider Name",
+            official_name_source="google_places",
+        )
         self.wiki = baker.make(Wiki, location=self.location, name="Provider Name")
         self.stranger = baker.make(User).profile
         self.viewer_user = baker.make(User)
@@ -230,7 +248,13 @@ class ConcealedMediaTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.location = baker.make(Location, latitude=47.6062, longitude=-122.3321, official_name="Provider Name")
+        self.location = baker.make(
+            Location,
+            latitude=47.6062,
+            longitude=-122.3321,
+            official_name="Provider Name",
+            official_name_source="google_places",
+        )
         self.wiki = baker.make(Wiki, location=self.location, name="Provider Name")
         self.stranger = baker.make(User).profile
         self.viewer_user = baker.make(User)
@@ -309,7 +333,13 @@ class FriendVisibilityTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.location = baker.make(Location, latitude=42.3601, longitude=-71.0589, official_name="Provider Name")
+        self.location = baker.make(
+            Location,
+            latitude=42.3601,
+            longitude=-71.0589,
+            official_name="Provider Name",
+            official_name_source="google_places",
+        )
         self.wiki = baker.make(Wiki, location=self.location, name="Provider Name")
         self.viewer_user = baker.make(User)
         self.friend = baker.make(User).profile

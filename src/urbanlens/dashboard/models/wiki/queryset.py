@@ -85,7 +85,7 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         Args:
             location: The shared Location to attach the wiki to.
             defaults: Optional field overrides for the created Wiki. A ``name``
-                key wins over the location's ``official_name``, which is adopted as a
+                key wins over the location's ``provider_name``, which is adopted as a
                 stand-in that later public names may replace.
 
         Returns:
@@ -116,5 +116,5 @@ class WikiManager(_WikiManagerBase["Wiki"]):
 
         from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
 
-        adopt_public_name(wiki, location.official_name, source=OFFICIAL_NAME_SOURCE)
+        adopt_public_name(wiki, location.provider_name, source=OFFICIAL_NAME_SOURCE)
         return wiki, True

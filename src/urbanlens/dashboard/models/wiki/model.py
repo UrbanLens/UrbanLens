@@ -214,7 +214,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
             if place_id is not None and not type(self).objects.filter(place_id=place_id).exclude(pk=self.pk).exists():
                 self.place_id = place_id
         super().save(*args, **kwargs)
-        self._align_child_location_slug()
         if update_fields is not None and "name" not in update_fields:
             return
         if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):
@@ -325,27 +324,28 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
             "border_opacity": self.detail_border_opacity,
         }
 
+    def _provider_name(self) -> str | None:
+        """The provider's name for this wiki's Location, the only name a wiki slug may come from."""
+        location = self.location if self.location_id else None
+        return location.provider_name if location is not None else None
+
+    @property
+    def official_name(self) -> str | None:
+        """The provider's name for the Location; a shared page never labels a name of unknown origin official."""
+        return self._provider_name()
+
     def _slugify_base(self) -> str:
-        return self.name or "wiki"
+        return self._provider_name() or str(self.uuid)
 
     def _slug_parent_prefix(self) -> str:
-        """Short alias of ``parent_wiki``, when this wiki is nested under one."""
+        """Short form of the parent wiki's provider name, when this wiki is nested under one and has a provider name itself."""
         from urbanlens.dashboard.services.core.slugs import parent_slug_prefix
 
         parent = self.parent_wiki
-        if parent is None:
+        if parent is None or not self._provider_name():
             return ""
-        names: list[str] = []
-        for value in (parent.name, parent.slug):
-            if value:
-                names.append(value)
-        location = getattr(parent, "location", None)
-        official_name = getattr(location, "official_name", None) if location is not None else None
-        if official_name:
-            names.append(official_name)
-        if parent.pk:
-            names.extend(parent.aliases.values_list("name", flat=True))
-        return parent_slug_prefix(names)
+        parent_name = parent._provider_name()  # noqa: SLF001 - same class
+        return parent_slug_prefix([parent_name]) if parent_name else ""
 
     def _slug_preferred_length(self) -> int:
         from urbanlens.dashboard.services.core.slugs import PREFERRED_CHILD_SLUG_LENGTH
@@ -353,24 +353,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         if self.parent_wiki_id:
             return min(PREFERRED_CHILD_SLUG_LENGTH, self._slug_max_length())
         return self._slug_max_length()
-
-    def _align_child_location_slug(self) -> None:
-        """Replace a UUID location slug with this child wiki's own slug.
-        Wiki pages are routed by ``Location.slug``, and a child wiki's location is often created before the wiki has a name, so it would otherwise keep a UUID in the URL.
-        """
-        from urbanlens.dashboard.services.core.slugs import is_uuid_slug
-
-        if not self.parent_wiki_id or not self.location_id or not self.slug:
-            return
-        location = self.location
-        if not is_uuid_slug(location.slug):
-            return
-        from urbanlens.dashboard.models.location.model import Location
-
-        if Location.objects.filter(slug=self.slug).exclude(pk=location.pk).exists():
-            return
-        location.slug = self.slug
-        location.save(update_fields=["slug", "updated"])
 
     class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta, abstract.AddressableModel.Meta):
         db_table = "dashboard_wikis"
