@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P217` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P247` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -205,7 +205,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P197 | open | 2026-10-02 | "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P198 | open | 2026-10-02 | A player who leaves or is kicked mid-game disappears from the final scoreboard and from their own history | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P199 | open | 2026-10-02 | A site admin can see and revoke only the subscription grants they made | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P200 | open | 2026-10-02 | A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P201 | open | 2026-10-02 | An upload that meets a Garage quorum failure is a 500, and the photo is lost | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P202 | open | 2026-10-02 | The scheduled database backup cannot work on Kubernetes, and a restore turns it back on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -221,3 +220,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | P214 | open | 2026-10-03 | Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P215 | open | 2026-10-03 | Commons file URLs now carry `utm_` parameters, so a file's `media_item_key` changes under it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P245 | open | 2026-10-03 | A revoked subscription grant records when it was revoked, not who revoked it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P246 | open | 2026-10-03 | Deleting an admin's account deletes every subscription grant they made | [`docs/PROBLEMS.md`](PROBLEMS.md) |

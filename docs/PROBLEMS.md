@@ -2813,15 +2813,6 @@ reads `.active()`, so a departed player drops out of both, though their points s
 2026-10-02:** list them on the end-of-game scoreboard marked "Left" (or "Removed" for a kick, if the row says so),
 with their points, and keep the game in their own history. They still lose the session's live view.
 
-## P199 — A site admin can see and revoke only the subscription grants they made
-
-`id: P199` · `status: open` · `updated: 2026-10-02` · `found by: the audit re-check (P19 unit 19)`
-
-`controllers/site_admin.py` scopes both the grant list and the revoke to `granted_by=request.user`, so a grant made
-by another admin, or by one who has left, can't be seen or revoked through the UI. **Jess, 2026-10-02:** every
-site admin sees and can revoke every grant. Each grant still shows who made it. Non-admins keep getting nothing,
-which needs a test written as an exploit attempt first (a non-admin revoking someone's grant).
-
 ## P200 — A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown
 
 `id: P200` · `status: open` · `updated: 2026-10-02` · `found by: Jess's HRSH report`
@@ -3027,3 +3018,24 @@ To fix it, REData should join the list as its LoC gateway does. Then the datelin
 which reads as a conflict for any place elsewhere ("Pierce County" against Dutchess). Judge a newspaper page on its text
 alone, for example by keeping the dateline out of `title` and `caption`, or have the source tell the judge to skip them.
 Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03.
+
+## P245 — A revoked subscription grant records when it was revoked, not who revoked it
+
+`id: P245` · `status: open` · `updated: 2026-10-03` · `found by: P199`
+
+Since P199 any site admin can revoke any admin's grant, but `UserSubscription` has only `revoked_at`. The one record of
+who revoked is an INFO line from `controllers/site_admin.py` ("Subscription grant %s revoked by user %s"), which lives as
+long as the logs do. A duration change records nobody either. A `revoked_by` foreign key (`SET_NULL`), set in the same
+`update()` that sets `revoked_at`, would keep it with the row; the grant list could then show revoked grants with who
+ended them, if that is wanted.
+
+## P246 — Deleting an admin's account deletes every subscription grant they made
+
+`id: P246` · `status: open` · `updated: 2026-10-03` · `found by: P199`
+
+`UserSubscription.granted_by` and `PendingSubscriptionGrant.granted_by` are `on_delete=CASCADE`
+(`models/subscriptions/model.py`). `services/profile/account_deletion.hard_delete_profile` deletes the `User`, so when an
+admin's account is deleted every grant they made disappears with it, and each grantee silently loses the role. P199
+keeps a grant by a demoted or deactivated admin listed and revocable; a deleted one leaves nothing to list. Not tested.
+Likely fix: `granted_by` nullable with `SET_NULL`, and the grant list showing "deleted account" for a null. Rows are only
+deleted on Jess's say-so, so that is hers to confirm.

@@ -20783,3 +20783,25 @@ images are deduplicated only against Commons items the Commons tab shows.
   scanned 1940 census district description naming the hospital, and two copies of a patient's memoir whose subject
   heading is "Hudson River State Hospital (Poughkeepsie, N.Y.)", which go to Sources. The other 25 were OCR matches in
   books about something else.
+
+## RESOLVED 2026-10-03: Every site admin sees, changes and revokes every subscription grant, and each shows who made it
+
+`id: P199` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: the audit re-check (P19 unit 19)`
+
+`SiteAdminSubscriptionsView` listed, revoked and re-timed only grants with `granted_by=request.user`
+(`UserSubscription.objects.granted_by_admin`). A grant by another admin could not be seen or changed through the UI, nor
+could one by an admin since demoted or deactivated. **Jess, 2026-10-02:** every site admin sees and can revoke every
+grant.
+
+The list now reads `UserSubscription.objects.grants_for_site_admin()`, every non-revoked grant, with a "Granted by"
+column (the admin and the grant's date). Revoke and update act on any non-revoked grant. The gate is unchanged: the
+`dashboard.view_site_admin` permission, held through the `site_admin` group or as a superuser; anyone else gets 403 on
+GET and POST. Revoke is a CSRF-protected POST and now touches only a row not yet revoked, so a second revoke keeps the
+first `revoked_at`. Who revoked is logged but not stored (P245); deleting an admin's account still deletes their grants
+(P246).
+
+`tests/hypothesis/test_site_admin_subscription_grants.py`: the exploit attempts (a member, the grantee, a staff flag
+without the permission, a demoted admin, anonymous) were written first and passed before the change. Nine of its 21
+tests failed before it, and all pass after.

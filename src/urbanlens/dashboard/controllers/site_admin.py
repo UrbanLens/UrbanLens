@@ -22,7 +22,6 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
-from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http.response import HttpResponseForbidden
@@ -586,9 +585,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         from urbanlens.dashboard.services.admin.cost_tracking import cost_per_user
         from urbanlens.dashboard.services.billing import stripe_client
 
-        if not isinstance(request.user, User):
-            raise PermissionDenied
-        grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
+        grants = UserSubscription.objects.grants_for_site_admin()
         roles = SubscriptionRole.objects.all().annotate(
             active_grant_count=Count("user_subscriptions", filter=Q(user_subscriptions__revoked_at__isnull=True), distinct=True),
             paid_subscriber_count=Count(
@@ -614,10 +611,10 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         )
 
     def _grants_list_response(self, request: HttpRequest, *, toast: tuple[str, str] | None = None) -> HttpResponse:
-        """Re-render the "Your active grants" partial, optionally with a toast.
+        """Re-render the "Active grants" partial, optionally with a toast.
 
         Args:
-            request: The current request (used for ``request.user`` scoping).
+            request: The current request.
             toast: Optional (level, message) toast to trigger via HX-Trigger.
 
         Returns:
@@ -625,9 +622,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         """
         from urbanlens.dashboard.models.subscriptions import UserSubscription
 
-        if not isinstance(request.user, User):
-            raise PermissionDenied
-        grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
+        grants = UserSubscription.objects.grants_for_site_admin()
         response = render(request, "dashboard/partials/site_admin/_subscription_grants_list.html", {"grants": grants})
         if toast:
             response["HX-Trigger"] = json.dumps({"showToast": {"level": toast[0], "message": toast[1]}})
@@ -643,13 +638,15 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         action = request.POST.get("action", "grant")
 
         if action == "revoke":
-            UserSubscription.objects.filter(pk=safe_int_or_none(request.POST.get("subscription_id")), granted_by=request.user).update(revoked_at=timezone.now())
+            subscription_id = safe_int_or_none(request.POST.get("subscription_id"))
+            if UserSubscription.objects.not_revoked().filter(pk=subscription_id).update(revoked_at=timezone.now()):
+                logger.info("Subscription grant %s revoked by user %s", subscription_id, request.user.pk)
             if is_htmx:
                 return self._grants_list_response(request, toast=("info", "Subscription revoked."))
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=revoked")
 
         if action == "update":
-            sub = UserSubscription.objects.filter(pk=safe_int_or_none(request.POST.get("subscription_id")), granted_by=request.user).first()
+            sub = UserSubscription.objects.not_revoked().filter(pk=safe_int_or_none(request.POST.get("subscription_id"))).first()
             if sub:
                 sub.set_duration_months(_parse_duration_months(request.POST.get("duration_months")))
                 sub.save(update_fields=["expires_at", "updated"])

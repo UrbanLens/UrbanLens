@@ -74,16 +74,13 @@ class UserSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         """
         return self.active().filter(user=user)
 
-    def granted_by_admin(self, admin_user: User) -> UserSubscriptionQuerySet:
-        """Not-revoked subscriptions a given admin has granted.
-
-        Args:
-            admin_user: The admin who issued the grants.
+    def grants_for_site_admin(self) -> UserSubscriptionQuerySet:
+        """Every not-revoked grant, whoever made it, with what the grant list shows of each preloaded.
 
         Returns:
             Matching subscriptions.
         """
-        return self.not_revoked().filter(granted_by=admin_user)
+        return self.not_revoked().select_related("user", "role", "granted_by")
 
 
 _UserSubscriptionManagerBase = abstract.DashboardManager.from_queryset(UserSubscriptionQuerySet)

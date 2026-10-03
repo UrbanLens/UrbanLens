@@ -1334,7 +1334,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   before an upload, `Capacity.ceiling()` to bound a posted id list. Import steps skip the overflow
   with one warning; undo restores raise `UndoExpiredError` via `undo.base.restore_capacity`
 - Subscription roles grant feature flags (`SiteFeature`) per user; pending grants can attach to an
-  email invite for users who haven't joined yet
+  email invite for users who haven't joined yet. Site Admin → Subscriptions lists every active grant
+  with who made it and when, and any site admin can change or revoke any of them
 - `/health/` returns a liveness response for Docker healthchecks and load-balancer probes
   (`controllers/health.py`, `AllowAny`) - the compose stack gates `app`/`app-ws`/`nginx` startup on it
 - `/health/ready` and `/health/primary` reuse the migration state (30s) and connection count (5s) per
