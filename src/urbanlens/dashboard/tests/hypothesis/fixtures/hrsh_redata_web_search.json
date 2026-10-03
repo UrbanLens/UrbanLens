@@ -1,0 +1,102 @@
+{
+ "recorded": "2026-10-03",
+ "path": "/api/v1/search/web/",
+ "note": "REData's answers for the Hudson River State Hospital campus pin's shared Article > News search: the query the page sent before P235's fix, and the one it sends after.",
+ "responses": [
+  {
+   "params": {
+    "q": "\"Hudson River State Hospital\" \"83 Hudson View Dr\" \"Poughkeepsie NY\" United States",
+    "limit": 10
+   },
+   "body": {
+    "count": 0,
+    "results": [],
+    "provider": "brave_search",
+    "query": "\"Hudson River State Hospital\" \"83 Hudson View Dr\" \"Poughkeepsie NY\" United States"
+   }
+  },
+  {
+   "params": {
+    "q": "\"Hudson River State Hospital\" Poughkeepsie NY",
+    "limit": 10
+   },
+   "body": {
+    "count": 10,
+    "results": [
+     {
+      "title": "Preserving Hudson River State Hospital in Poughkeepsie, NY - Olmsted Network",
+      "link": "https://olmsted.org/blog/2025/02/14/preserving-hudson-river-state-hospital-in-poughkeepsie-ny/",
+      "snippet": "A site of national significance, this remarkable Kirkbride hospital and its grounds— designed by Olmsted and Vaux— are currently at risk. Yvonne Laube and Robert Kirkbride February 14, 2025 ... A visit by students from Dr. Robert Kirkbride’s adaptive reuse studio at Parsons School of Design. Features the replacement roof after 2018 fire and partial installation of windows by developer. Photo by Yvonne Laube. At the Olmsted Network’s 2024 Annual Conference, Poughkeepsie’s Hudson River State Hospital (HRSH) was featured in a panel discussion, Preservation and Mental Health: Adapting Olmsted Designs to Modern Needs, about how communities are using and adapting state institutions and their landscapes.",
+      "date": "March 20, 2026",
+      "thumbnail": "https://imgs.search.brave.com/fqp4EFQCK17YRbEbr3ncSVv05cQj9dk24Nvevf93gNc/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9vbG1z/dGVkLm9yZy93cC1j/b250ZW50L3VwbG9h/ZHMvMjAyNS8wMi8y/X0hSU0hfMjAyMF9B/ZXJpYWxPdmVydmll/d19MaXNhTWFyaWVC/bG9obS5qcGc"
+     },
+     {
+      "title": "Hudson River State Hospital - Wikipedia",
+      "link": "https://en.wikipedia.org/wiki/Hudson_River_State_Hospital",
+      "snippet": "The <strong>Hudson</strong> <strong>River</strong> <strong>State</strong> <strong>Hospital</strong> was a New York <strong>state</strong> psychiatric <strong>hospital</strong> that operated from 1873 until its closure in the early 2000s. The campus is notable for its main building, known as a &quot;Kirkbride&quot;, which has been designated a National Historic Landmark due to its exemplary High Victorian Gothic architecture, the first use of that style for an American institutional building. It is located on US 9 on the <strong>Poughkeepsie</strong>...",
+      "date": "1 month ago",
+      "thumbnail": null
+     },
+     {
+      "title": "Hudson River State Hospital in Poughkeepsie",
+      "link": "https://www.atlasobscura.com/places/hudson-river-state-hospital",
+      "snippet": "Hudson River State Hospital is <strong>permanently closed</strong>. This entry remains in the Atlas as a record of its history, but it is no longer accessible to visitors. ... The hospital, located in Poughkeepsie, New York, is a former New York state psychiatric ...",
+      "date": "September 11, 2015",
+      "thumbnail": "https://imgs.search.brave.com/e3lxOD-NKx7G684RMUUoMew_JGZqngPYGZzPkeiiqKM/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9pbWcu/YXRsYXNvYnNjdXJh/LmNvbS9jTWY2MXct/eXExY0R1b2NnaXJf/SC1mXzRDZE9BMko5/UmJDczJuMExCRnFJ/L3JzOmZpbGw6Nzgw/OjUyMDoxL2c6Y2Uv/Yzo2MDA6NDAwOm5v/d2U6MDozMjEvcTo4/MS9zbToxL3NjcDox/L2FyOjEvYUhSMGNI/TTZMeTloZEd4aC9j/eTFrWlhZdWN6TXVZ/VzFoL2VtOXVZWGR6/TG1OdmJTOTEvY0d4/dllXUnpMM0JzWVdO/bC9YMmx0WVdkbGN5/ODVOVEF6L01EazRa/R1k0WWpoaU5UY3cv/Wm1KZmQyVmlYMmx0/WjE4eS9NREUwTVRF/eE5GOHhOVE01L01E/YzJNamhmYUdSeUxt/cHcvWncuanBn"
+     },
+     {
+      "title": "The Legacy of the Hudson River State Hospital – A People’s Guide to the Hudson Valley",
+      "link": "https://peoplesgeographyofthehudsonvalley.vassarspaces.net/poughkeepsie/the-legacy-of-the-hudson-river-state-hospital/",
+      "snippet": "The facility, touted for its innovative approaches and size, received patients from all across the Hudson Valley and New York State. Other city and town hospitals sent their patients, coining the phrase “send them to Poughkeepsie.” Patient wings were overcrowded, possibly best exemplified by the partial use of the Clarence O’Cheney building for housing and worsened by the fact that only two of the female wards in the Kirkbride building were constructed due to poor planning.",
+      "date": "December 9, 2023",
+      "thumbnail": null
+     },
+     {
+      "title": "New York State Office of Mental Health Map and Architectural Drawings of the Hudson River State Hospital for the Insane | NYSA Finding AID discovery",
+      "link": "https://findingaids.nysed.gov/do/bd9d1b39-fb1a-5db4-b8d8-6b306427e43d",
+      "snippet": "The series consists of one site map and a set of 11 architectural drawings of details of the Hudson River (&quot;H.R.&quot;) State Hospital for the Insane at Poughkeepsie, New York. The facility is currently known as the <strong>Hudson River Psychiatric Center</strong>.",
+      "date": null,
+      "thumbnail": null
+     },
+     {
+      "title": "Inside the Abandoned Hudson River State Hospital in Poughkeepsie - Untapped New York",
+      "link": "https://untappedcities.com/2015/02/19/inside-the-abandoned-hudson-river-state-hospital-in-poughkeepsie/",
+      "snippet": "The Hudson River State Hospital, <strong>located outside of Poughkeepsie in the Hudson Valley</strong>, is a National Landmark but has been abandoned since the early 2000s.",
+      "date": "November 17, 2022",
+      "thumbnail": "https://imgs.search.brave.com/WhUfKg7sFzhgIzSK2jsJ5x1xob6e5bSIsMEN_DjV32o/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly91bnRh/cHBlZGNpdGllcy5j/b20vd3AtY29udGVu/dC91cGxvYWRzLzIw/MTUvMDIvYWJhbmRv/bmVkLWh1ZHNvbi1y/aXZlci1ob3NwaXRh/bC1wb3Vna2VlcHNp/ZS03LmpwZw"
+     },
+     {
+      "title": "Are You Insane? Common Reasons to Be Admitted to the Hudson River State Hospital",
+      "link": "https://poklib.org/hudson-river-state-hospital/",
+      "snippet": "<strong>29 North Hamilton Street Room 224</strong> Poughkeepsie, NY 12601",
+      "date": "September 10, 2024",
+      "thumbnail": null
+     },
+     {
+      "title": "r/urbanexploration on Reddit: The Abandoned Hudson River State Hospital - A Surviving Kirkbride",
+      "link": "https://www.reddit.com/r/urbanexploration/comments/1ovn5wg/the_abandoned_hudson_river_state_hospital_a/",
+      "snippet": "This is called the Hudson River State hospital and it&#x27;s <strong>located at the Poughkeepsie/Hyde Park border in New York</strong>. It&#x27;s on the New York historic registry because of its architecture, so just being torn down is not in the cards.",
+      "date": "November 13, 2025",
+      "thumbnail": "https://imgs.search.brave.com/Q2TRVu9L-zZYhRyWdeY7rKJa1qspudqsdV4aTWn7u48/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9pLnJl/ZGQuaXQvdGhlLWFi/YW5kb25lZC1odWRz/b24tcml2ZXItc3Rh/dGUtaG9zcGl0YWwt/YS1zdXJ2aXZpbmct/djAtbDZlaXI0aHQ5/eDBnMS5qcGc_d2lk/dGg9MjA0OCZmb3Jt/YXQ9cGpwZyZhdXRv/PXdlYnAmcz00OTY4/OWI5MGJkODM3NmJm/MDE5YzM2N2U4MTgw/OTVjNjgzNGVkNzRh"
+     },
+     {
+      "title": "Poughkeepsie's Abandoned Psychiatric Hospital Gets an Update",
+      "link": "https://hvmag.com/home-real-estate/poughkeepsie-abandoned-psychiatric-hospital-hudson-heritage/",
+      "snippet": "<strong>Built in 1871</strong>, the Hudson River State Hospital grounds prepare for a second life in the community as Hudson Heritage in Dutchess County.",
+      "date": "May 16, 2023",
+      "thumbnail": "https://imgs.search.brave.com/6mNiRVwMtZ0EPLzhnldHp-PthE4WBbNLoQLzGnH3SFQ/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9hc3Nl/dHMuaHZtYWcuY29t/LzIwMjMvMDUvN21p/cjQ4WGktSHVkc29u/LVJpdmVyLVN0YXRl/LUhvc3BpdGFsLUNy/b3AuanBn"
+     },
+     {
+      "title": "Hudson River State Hospital - Abandoned",
+      "link": "https://abandonedonline.net/location/hudson-river-state-hospital/",
+      "snippet": "Hudson River State Hospital is an <strong>abandoned mental institution in Poughkeepsie, New York</strong>, and was the first state hospital for the insane located on land received, by gift, from the citizens of the…",
+      "date": "March 19, 2024",
+      "thumbnail": "https://imgs.search.brave.com/sahjLUVhPnGmbh_RHDP5Cww5ZJ7fP1kF1cZFuLQdQV0/rs:fit:200:200:1:0/g:ce/aHR0cHM6Ly9pMC53/cC5jb20vYWJhbmRv/bmVkb25saW5lLm5l/dC93cC1jb250ZW50/L3VwbG9hZHMvMjAy/Mi8wMS8yMDIyMDYx/MC1ESklfMDI1Ny1F/ZGl0LmpwZz9maXQ9/MTIwMCUyQzg5OSYj/MDM4O3F1YWxpdHk9/ODAmIzAzODtzc2w9/MQ"
+     }
+    ],
+    "provider": "brave_search",
+    "query": "\"Hudson River State Hospital\" Poughkeepsie NY"
+   }
+  }
+ ]
+}
