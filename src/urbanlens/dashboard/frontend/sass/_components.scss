@@ -153,6 +153,15 @@
 	@include dialog-footer;
 }
 
+// An element between a dialog and its body and footer, such as an htmx swap target or a form. It carries the
+// dialog's column through, so the body scrolls and the footer stays in view however short the viewport.
+.ul-dialog-frame {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+
 // Alias kept for backwards-compatibility; prefer .dialog-close going forward.
 .ul-dialog-close {
 	@include icon-btn(28px);

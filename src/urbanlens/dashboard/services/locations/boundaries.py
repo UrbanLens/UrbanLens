@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings 
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 from urbanlens.dashboard.services.geo.area import area_sqm
 from urbanlens.dashboard.services.security.redact import redact_coordinate
@@ -132,8 +133,13 @@ class BoundaryProviderChain:
                 # provider would just burn the remaining time budget and risk the hard time limit
                 # SIGKILLing the worker mid-write.
                 raise
-            except Exception:
+            except Exception as exc:
                 # TODO: Catch specific exception
+                if is_source_outage(exc):
+                    # Unreachable says nothing about whether it has a boundary here, so it is asked again.
+                    logger.warning("Boundary provider %s unavailable for %s,%s: %s", provider.service_key, redact_coordinate(latitude), redact_coordinate(longitude), exc)
+                    resolved.deferred.append(provider.service_key or type(provider).__name__)
+                    continue
                 logger.exception("Boundary provider %s failed for %s,%s", provider.service_key, redact_coordinate(latitude), redact_coordinate(longitude))
                 continue
             property_polygon = _plausible(PlaceKind.PARCEL, _as_multipolygon(typed.get("property")), provider.service_key)

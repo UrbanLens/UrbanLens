@@ -203,3 +203,58 @@ class OverpassSiteSizeCapTests(SimpleTestCase):
         with mock.patch.object(OverpassGateway, "elements_for_query", return_value=[element]):
             typed = OverpassGateway().get_typed_boundaries(_LAT, _LON)
         self.assertIsNone(typed["property"])
+
+
+class _Unreachable:
+    boundary_kind = "property"
+
+    def __init__(self, service_key: str, failure: BaseException) -> None:
+        self.service_key = service_key
+        self.failure = failure
+
+    def get_typed_boundaries(self, latitude, longitude, *, name=None):
+        raise self.failure
+
+
+def _http_error(status: int):
+    import requests
+
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(str(status), response=response)
+
+
+class AnUnreachableProviderIsADeferralTests(SimpleTestCase):
+    """P214: a provider the chain couldn't reach is asked again, not recorded as having no boundary here."""
+
+    def test_refused_timed_out_and_503_each_defer(self) -> None:
+        import requests
+
+        for failure in (requests.ConnectionError("refused"), requests.Timeout("slow"), _http_error(503)):
+            with self.subTest(failure=type(failure).__name__):
+                resolved = BoundaryProviderChain(
+                    providers=(_Unreachable("overpass", failure), _Empty())
+                ).get_boundaries(_LAT, _LON)
+                self.assertEqual(resolved.deferred, ["overpass"])
+
+    def test_a_bug_in_a_provider_is_not_a_deferral(self) -> None:
+        resolved = BoundaryProviderChain(
+            providers=(_Unreachable("overpass", ValueError("bad geometry")),)
+        ).get_boundaries(_LAT, _LON)
+
+        self.assertEqual(resolved.deferred, [])
+
+    def test_overpass_with_no_endpoint_answering_defers(self) -> None:
+        from django.core.cache import cache
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        response = mock.Mock(status_code=503, headers={}, text="")
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.return_value = response
+        with mock.patch("urbanlens.dashboard.services.apis.locations.boundaries.overpass.time.sleep"):
+            resolved = BoundaryProviderChain(providers=(gateway,)).get_boundaries(_LAT, _LON)
+            again = BoundaryProviderChain(providers=(gateway,)).get_boundaries(_LAT, _LON)
+
+        self.assertEqual(resolved.deferred, ["overpass"])
+        self.assertEqual(again.deferred, ["overpass"], "every endpoint flagged down is still unreachable, not empty")

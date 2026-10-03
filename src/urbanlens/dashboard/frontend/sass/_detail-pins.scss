@@ -743,10 +743,6 @@
 }
 
 .building-import-form {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-
     .dialog-actions {
         padding: .85rem 1.25rem 1rem;
         border-top: 1px solid var(--ul-surface-border);
@@ -757,7 +753,6 @@
     display: grid;
     grid-template-columns: minmax(16rem, .9fr) minmax(20rem, 1.1fr);
     gap: 1rem;
-    min-height: 22rem;
     padding: 1rem 1.25rem;
 }
 
@@ -1017,8 +1012,6 @@
 @include down($breakpoint-sm) {
     .building-import-layout {
         grid-template-columns: 1fr;
-        max-height: calc(100vh - 13rem);
-        overflow-y: auto;
     }
 
     .building-import-list {

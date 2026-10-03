@@ -15,6 +15,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
     SatelliteViewProvider,
     create_bbox_str,
 )
+from urbanlens.dashboard.services.core.gateway import is_source_outage
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -51,7 +52,7 @@ class EsriGateway(SatelliteViewProvider):
         height: int = 400,
         limit: int = -1,
     ) -> Generator[SatelliteSlide]:
-        """Return a list of current Esri World Imagery slides for the given bounding box.
+        """Yield the current Esri World Imagery and USGS slides, then Esri Wayback's historical releases.
 
         Args:
             latitude: WGS-84 latitude.
@@ -60,8 +61,11 @@ class EsriGateway(SatelliteViewProvider):
             width: Image width in pixels (max 1280).
             height: Image height in pixels (max 1280).
 
-        Returns:
-            List of SatelliteSlide, empty when no imagery is available or the request fails.
+        Yields:
+            The current Esri and USGS slides, then one per Wayback release.
+
+        Raises:
+            requests.RequestException: The Wayback release list couldn't be fetched.
         """
         bbox_str = create_bbox_str(latitude, longitude)
 
@@ -111,6 +115,9 @@ class EsriGateway(SatelliteViewProvider):
 
         Returns:
             One slide per selected release that publishes a tile template.
+
+        Raises:
+            requests.RequestException: The release list couldn't be fetched.
         """
         if max_count <= 0:
             return []
@@ -144,7 +151,11 @@ class EsriGateway(SatelliteViewProvider):
         return slides
 
     def _get_wayback_releases(self) -> list[dict[str, Any]]:
-        """Return cached Esri Wayback release metadata."""
+        """Return cached Esri Wayback release metadata.
+
+        Raises:
+            requests.RequestException: Esri couldn't be asked, or didn't answer.
+        """
         releases: list[dict[str, Any]] = cache.get(_WAYBACK_CACHE_KEY) or []
         if releases:
             return releases
@@ -159,6 +170,8 @@ class EsriGateway(SatelliteViewProvider):
                 )
             response.raise_for_status()
         except requests.exceptions.RequestException as exc:
+            if is_source_outage(exc):
+                raise
             logger.debug("Could not fetch Esri Wayback config: %s", exc)
             return []
 
