@@ -3017,22 +3017,6 @@ The toggle should show or hide the child pins' details in place, through htmx sw
 page reload. Save the preference the same way it is saved now. Find every panel that reads the setting: map markers,
 photos, visits, notes, Article > Sources, building outlines (P222).
 
-## P226 — Property Records: the Overview tab is blank, and the two historic tabs should be one
-
-`id: P226` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-- The Overview tab is empty. It should summarise the other tabs: owner, parcel, year built, historic status and
-  register number.
-- "NY Historic Preservation (CRIS)" and "Historic Registers" become one tab, "Historic Preservation", with each
-  source attributed. Repeated facts appear once.
-
-## P227 — "Site Conditions" should be a tab of the Location Data panel, not a panel of its own
-
-`id: P227` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
-
-Move it, keeping its lazy loading: an off-tab panel loads when its tab opens (P53). Make sure no second panel request
-is left behind.
-
 ## P229 — The Ownership panel shows a subscriber only the owner's name
 
 `id: P229` · `status: open` · `updated: 2026-10-03` · `found by: Jess, a subscriber, on production (v0.8.0) HRSH`

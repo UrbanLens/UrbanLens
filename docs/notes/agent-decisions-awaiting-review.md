@@ -72,13 +72,9 @@ Each is an agent's disposition. The two security ones and the unverified one com
 
 ## Questions raised 2026-09-29, after the rulings
 
-- **Overview and Property Records.** `14783279d` moved Historic Registers and Building Characteristics to
-  Property Records. Since then the Overview neither names a National Register listing nor prefetches those
-  tabs (`location_data_overview` skips uncached PROPERTY sources), so an empty Property tab isn't hidden until
-  something else fetches it. `HistoricRegisterPanelSource.overview_summary` and the Overture one are
-  unreached, the Playwright spec `hrsh-panel-layout.spec.ts` still expects the Overview mention, and
-  `test_location_data_overview.py::test_nothing_ready_schedules_every_source_and_returns_pending` fails.
-  Restore the Overview mention and prefetch, or retire them with their tests?
+- **Overview and Property Records.** Answered by P226 (2026-10-03, archived): Property Records has its own
+  Overview, which names the place's National Register listing and fetches its own tabs to remove the empty
+  ones. Location Data's Overview no longer looks at Property Records sources.
 - **P49.** Dated records (designs, archive, audits) hold 92 citations past the end of today's files, so CI's
   citation check is red. Exempt dated directories from the check, or rewrite those citations?
 - **P165.** Provider thumbnails (media gallery, web search, historical sheets, satellite slides) load

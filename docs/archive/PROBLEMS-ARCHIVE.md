@@ -21214,3 +21214,80 @@ is, CRIS's record must stand on the building, CRIS's site record alone lists not
 building and a site row's point picks none, campus and standalone pins keep the listing, the link reaches only the
 listed building, a row covered by a child of another type opens in place. Six of the first twelve failed before the
 fix; the site-row test came from review afterwards.
+
+## RESOLVED 2026-10-03: Property Records' Overview summarises its tabs, a tab still fetching shows its spinner, and the two historic tabs are one, "Historic Preservation"
+
+`id: P226` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0), HRSH: the Overview tab was empty; "NY Historic Preservation (CRIS)" and
+"Historic Registers" should be one tab.
+
+**Cause, the blank tab.** The Overview tab was not an overview: it loaded the Property Records panel
+(`pin.panel/property_records/`) into the tab body. Whenever that panel's data was not cached (never fetched, or older
+than the 7-day cache window, as HRSH's dev row of 2026-09-23 is), the response was `panel_pending.html`, which renders
+`hidden`. That is right for a card of its own, which shows itself when its content lands; in a tab body the
+placeholder is the tab's only content, so the tab was blank for the whole fetch. If the polling then ended with
+nothing (a 204 after an outage's suppression, an empty answer, or the 60 s budget running out), the fallback handler
+dismissed the hidden placeholder, leaving the tab blank for good where a tab button's own 204 would have said "No data
+available." Every tab placed in a card (Regional Data, Location Data, Property Records, and Location Data's own
+Overview and Nominatim) had the same defect. Reproduced in Chromium with htmx 1.9.11 and fragments rendered from the
+templates: the tab body read "" while fetching and "" after the last poll. Production's own rows and logs were not
+inspected, so which of these left HRSH's tab blank there is not known.
+
+**A second defect, the same cards.** A card collapsed when the page opened never loaded its first tab once restored:
+the lazy load was skipped while collapsed, and the restore control fires `ul:unhide`, which no tab button listens for.
+Reproduced in the same harness: restoring the card made no request and left "Loading...".
+
+**Fix.**
+
+- `panel_pending.html` takes `in_tab`; `_render_info_panel`, Nominatim's tab and the card Overviews pass it, so a tab
+  shows its spinner. `shared/external-panel-fallbacks.ts` replaces a placeholder inside a tab body with "No data
+  available." on a 204 and "This data is temporarily unavailable." on an error or network failure, instead of
+  dismissing it. `shared/collapsible-sections.ts` loads what a section skipped while collapsed when it is restored,
+  leaving to `ul:unhide` anything that already listens for it.
+- The Overview is a summary, `PinController.property_records_overview`. It shares `_card_overview` with Location
+  Data's (`location_data_overview`), merging each tab source's `overview_summary()`: owner, parcel number and year
+  built (`PropertyRecordsPanelSource`), the National Register listing and its number linked to NPS
+  (`HistoricRegisterPanelSource`), and CRIS's status (`CrisBuildingPanelSource`). The owner's name is shown only when
+  `can_see_official_owners(viewer_of(pin))`, the Parcel tab's own gate and the function the Ownership panel's
+  `visible_owners` uses; anyone else gets "Owner on record - subscribers only". Only the place's own records count,
+  by P228/P230's rules: `containing_listings`, or `own_resources` for one building of a site, and a CRIS record that
+  `stands_on` the building or, on a site, a site record holding it. The parcel record is now the "Parcel" tab.
+- The Overview fetches its tabs' data and names the empty tabs (`HX-Trigger: pinTabsEmpty`), which Location Data's
+  Overview used to do for both cards. A source whose gate refuses the pin is neither fetched nor kept as a tab.
+- CRIS declares `shown_in = "redata_historic_registers"` (`InfoPanelSource.shown_in`): it has no tab of its own, and
+  the registers' tab, labelled "Historic Preservation", renders both (`PinController._render_merged_panel`,
+  `_merged_info_panel.html`), each under its source's title. Each source keeps its own gate, fetch and polling, and
+  the registers' own rendering, so P230's building-only rows and P228's NPS links are unchanged. A later source's
+  fact that repeats a link or a label and value an earlier one gave is dropped (`external_data.without_repeats`):
+  CRIS's "NRHP Reference Number" when the registers' row already links the same record. A building's card on its
+  campus page asks for the merged panel once rather than each source.
+
+**Tests.** `test_property_records_overview.py`: the card's tabs, the owner for a subscriber and only the locked chip
+for anyone else, parcel and year built, the listing and its number, a neighbour's listing and a neighbour's CRIS
+record left out, a number two tabs share given once, fetching and polling, empty tabs named, a source outside its
+region not fetched, the query count flat as register rows grow, and a pending tab or Overview visible while a
+pending card stays hidden. `test_historic_preservation_tab.py`: one tab, attribution, NPS's number once, P230's
+listed and unlisted buildings, a source still fetching, both pending, both empty, outside New York, and the building
+card. `external-panel-fallbacks.test.ts` and `collapsible-sections.test.ts` for the client. 31 of the 36 new Python
+tests and 5 of the 7 new TypeScript tests failed before the fix; the rest are guards that held before it (a pending
+card stays hidden, a strip loaded before it was collapsed is not reloaded).
+
+## RESOLVED 2026-10-03: Site Conditions is a tab of the Location Data card, requested only when its tab opens
+
+`id: P227` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0).
+
+**Fix.** `SiteConditionsPanelSource.placement` is `PanelPlacement.LOCATION`, so the page renders it as the last
+Location Data tab and drops its card from the standalone loop; no template names it. Its button keeps htmx's default
+click trigger, so it is requested when its tab opens, like every other off-tab panel (P53). Location Data's Overview
+fetches it so an empty tab can be removed, but only where its gate allows: it is USA-only and REData-backed, and the
+Overview no longer schedules a source whose gate refuses the pin (P226), which would have spent REData calls on every
+pin abroad.
+
+**Tests.** `test_site_conditions_tab.py`: the declaration, exactly one element on the page requests the panel, that
+element is a Location Data tab with no load trigger, the card is gone, the tab renders nested, and the Overview
+fetches it, keeps it with data, removes it when empty, and neither fetches nor keeps it outside the USA. The page's
+load-triggered requests fell from 43 to 42, and `test_pin_detail_fanout_budget.py`'s ceiling was lowered to 42 to
+hold it. Nine of the ten tests failed before the fix; the tenth, one requesting element, held for the card too.
