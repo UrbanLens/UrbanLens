@@ -566,8 +566,9 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     def _campus_candidates(resources: list[dict], site_detail: dict, polygon: BaseGeometry | None, latitude: float, longitude: float, *, skip: set[str]) -> list[dict]:
         """The site's other CRIS buildings: those on it nearest first, then the rest of its survey's roster, then any the site record links.
 
-        A survey naming most of the buildings on the site is CRIS's own roster of it, so its members off the site's
-        boundary or with no published position are the site's too.
+        A survey naming most of the buildings on the site, most of whose positioned buildings lie on it, is CRIS's own
+        roster of the site, so its members off the site's boundary or with no published position are the site's too. A
+        town survey that merely includes the site fails the second test.
 
         Args:
             resources: The lookup's resource dicts.
@@ -598,7 +599,8 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         on_site.sort(key=lambda pair: pair[0])
 
         coverage = Counter(survey for _distance, resource in on_site for survey in _survey_uuids(resource))
-        site_surveys = {survey for survey, count in coverage.items() if 2 * count > len(on_site)}
+        positioned = Counter(survey for resource in buildings if resource.get("source_latitude") is not None and resource.get("source_longitude") is not None for survey in _survey_uuids(resource))
+        site_surveys = {survey for survey, count in coverage.items() if 2 * count > len(on_site) and 2 * count > positioned[survey]}
         on_roster = [resource for resource in buildings if site_surveys & _survey_uuids(resource)]
         linked = [ref for ref in site_detail.get("linked_resources") or [] if isinstance(ref, dict) and ref.get("resource_type") == _RESOURCE_TYPE and ref.get("uuid")]
 

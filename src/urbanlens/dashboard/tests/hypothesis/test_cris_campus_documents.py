@@ -57,11 +57,18 @@ def _roster(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 class _HrshFetchMixin:
-    def fetch(self, *, site_scope: bool = True, with_neighbour: bool = False) -> dict[str, Any]:
-        """Run the panel's fetch against the recorded lookup and return the payload it caches."""
-        rows = _lookup(with_neighbour=with_neighbour)
+    def fetch(
+        self,
+        *,
+        site_scope: bool = True,
+        with_neighbour: bool = False,
+        rows: list[dict[str, Any]] | None = None,
+        point: tuple[float, float] = (_LATITUDE, _LONGITUDE),
+    ) -> dict[str, Any]:
+        """Run the panel's fetch against the recorded lookup, or ``rows``, and return the payload it caches."""
+        rows = _lookup(with_neighbour=with_neighbour) if rows is None else rows
         by_uuid = {row["uuid"]: row for row in rows}
-        location = Location(latitude=Decimal("41.733280"), longitude=Decimal("-73.928120"))
+        location = Location(latitude=Decimal(str(point[0])), longitude=Decimal(str(point[1])))
         pin = Pin(location=location)
         pin._site_scope_cache = site_scope
         self.detail_calls: list[str] = []
@@ -155,11 +162,96 @@ class BuildingChildFromSiteTests(_HrshFetchMixin, SimpleTestCase):
             latitude=Decimal(str(chapel["source_latitude"])), longitude=Decimal(str(chapel["source_longitude"]))
         )
         answer = CrisBuildingPanelSource()._answer_from_site(site_data, location)
-        self.assertIsNotNone(answer)
+        if answer is None:
+            self.fail("the campus payload did not answer the chapel")
         self.assertEqual(
             self.listed(answer, site_scope=False),
             _document_ids(chapel) | _document_ids(_named(rows, _NR_LISTING)),
         )
+
+
+_PARCEL = (42.0, -74.0)
+
+
+def _survey(name: str) -> dict[str, str]:
+    return {"uuid": f"survey-{name}", "resource_type": "survey", "external_id": name, "name": name}
+
+
+def _building(uuid: str, position: tuple[float, float] | None, surveys: list[str]) -> dict[str, Any]:
+    latitude, longitude = position or (None, None)
+    return {
+        "uuid": uuid,
+        "provider": "ny_cris",
+        "resource_type": "building",
+        "name": uuid,
+        "source_latitude": latitude,
+        "source_longitude": longitude,
+        "detail_retrieved_at": "2026-10-01T00:00:00Z",
+        "attributes": {"USNName": uuid},
+        "attachments": [
+            {
+                "id": 1,
+                "kind": "document",
+                "name": "Inventory Form",
+                "content_type": "application/pdf",
+                "extracted_at": "2026-10-01T00:00:00Z",
+            }
+        ],
+        "linked_from": [_survey(name) for name in surveys],
+        "linked_resources": [],
+    }
+
+
+def _parcel_lookup(*, inside: int, outside: int) -> list[dict[str, Any]]:
+    """A listed parcel holding ``inside`` buildings of a town survey, ``outside`` more of it nearby, and one unpositioned building of the parcel's own survey."""
+    lat, lng = _PARCEL
+    listing: dict[str, Any] = {
+        "uuid": "listing",
+        "provider": "ny_cris",
+        "resource_type": "national_register_listing",
+        "name": "Listed Parcel",
+        "source_latitude": None,
+        "source_longitude": None,
+        "detail_retrieved_at": "2026-10-01T00:00:00Z",
+        "attributes": {"HistoricName": "Listed Parcel"},
+        "attachments": [],
+        "linked_from": [],
+        "linked_resources": [],
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [lng - 0.0005, lat - 0.0005],
+                    [lng + 0.0005, lat - 0.0005],
+                    [lng + 0.0005, lat + 0.0005],
+                    [lng - 0.0005, lat + 0.0005],
+                    [lng - 0.0005, lat - 0.0005],
+                ]
+            ],
+        },
+    }
+    rows = [listing]
+    rows += [_building(f"inside-{n}", (lat + 0.0001 * n, lng), ["PARCEL", "TOWN"]) for n in range(inside)]
+    rows += [_building(f"town-{n}", (lat + 0.002 + 0.0005 * n, lng), ["TOWN"]) for n in range(outside)]
+    rows.append(_building("parcel-unpositioned", None, ["PARCEL"]))
+    return rows
+
+
+class SurveyRosterTests(_HrshFetchMixin, SimpleTestCase):
+    """A survey counts as the site's roster only when it names most of the site and most of its own buildings lie on it."""
+
+    def test_a_town_survey_shared_by_the_sites_buildings_brings_in_none_of_the_town(self) -> None:
+        for inside, outside in ((1, 5), (2, 3)):
+            with self.subTest(inside=inside, outside=outside):
+                data = self.fetch(rows=_parcel_lookup(inside=inside, outside=outside), point=_PARCEL)
+                listed = {document_id.rpartition(".")[0] for document_id in self.listed(data)}
+                self.assertEqual({uuid for uuid in listed if uuid.startswith("town-")}, set())
+                self.assertEqual({f"inside-{n}" for n in range(1, inside)} - listed, set())
+
+    def test_the_sites_own_survey_still_brings_in_its_unpositioned_buildings(self) -> None:
+        data = self.fetch(rows=_parcel_lookup(inside=2, outside=3), point=_PARCEL)
+        listed = {document_id.rpartition(".")[0] for document_id in self.listed(data)}
+        self.assertIn("parcel-unpositioned", listed)
 
 
 class SiteRecordChoiceTests(SimpleTestCase):
@@ -167,7 +259,8 @@ class SiteRecordChoiceTests(SimpleTestCase):
 
     def test_a_neighbour_listed_first_is_passed_over_for_the_listing_containing_the_point(self) -> None:
         chosen = site_resource(_lookup(with_neighbour=True), _LATITUDE, _LONGITUDE)
-        self.assertIsNotNone(chosen)
+        if chosen is None:
+            self.fail("no site record chosen")
         self.assertEqual(chosen["name"], _NR_LISTING)
 
     def test_only_a_neighbour_means_no_site(self) -> None:
