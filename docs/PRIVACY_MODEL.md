@@ -125,9 +125,19 @@ site** — not your record of it. Rulings below are Jess's.
 `date_built`, `date_abandoned`, `date_last_active` ·
 `fences`, `alarms`, `cameras`, `security`, `signs`, `vps`, `plywood`, `locked`
 
+`location` is the one snapshotted when the share was made (`PinShare.location`). The rest are copied **as of
+acceptance**, so an edit the sender makes to them before the recipient accepts travels (Jess, 2026-10-02): a share
+is copied when accepted, but only as far as the sender consented, and nothing they did not consent to is ever shared.
+
 **Name** — only with explicit consent. The sharer may supply `shared_name`; otherwise the
 recipient's pin is named from an **official** `WikiAlias` (`source != USER`), never from
-the sharer's own label.
+the sharer's own label, and is not flagged `name_is_user_provided`.
+
+**Before acceptance, too.** Every surface that shows a share to its recipient - the notification, the share page
+and its bundled children, the DM and group-chat cards, Memories > Sharing - names it by `PinShare.safe_place_label`:
+the `shared_name`, else the snapshotted location's name, address or coordinates. None reads the sender's pin, so a
+rename or a move after sharing never reaches the recipient. A group member the pin was not shared with is told
+nothing about the place, and the default group message is "Shared a pin".
 
 **Never shared:**
 
@@ -178,8 +188,9 @@ the sharer's own label.
    pass through `visible_to`.* Left unencrypted deliberately: unlike `exif_data` it is a search
    field, and ciphertext does not match.
 6. **Existing profiles** predate the stricter photo default and still need migrating.
-7. **Nit:** `pin_sharing.py:217` sets `name_is_user_provided=True` when the name actually
-   came from an official alias rather than from the sharer.
+7. ~~**Nit:** `pin_sharing.py:217` sets `name_is_user_provided=True` when the name actually
+   came from an official alias rather than from the sharer.~~ — **fixed 2026-10-02** (P193): it is
+   `bool(shared_name)`.
 
 ### The reputation ledger (new, 2026-08-24)
 

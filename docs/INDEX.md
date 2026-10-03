@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P196` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
+**Next free id:** `P211` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N33`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -120,7 +120,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | R9 | current | 2026-09-10 | Uploads decode only in a network-isolated worker, except one unsandboxed label-icon resize (P103) | [`docs/MEDIA_PIPELINE.md`](MEDIA_PIPELINE.md) |
 | R10 | current | 2026-09-03 | /metrics is off by default and unrouted when off, and undercounts silently unless multiprocess mode is on | [`docs/METRICS.md`](METRICS.md) |
 | R11 | current | 2026-09-03 | Twenty-nine non-obvious behaviours that read as bugs until explained; eleven source files cite it by name | [`docs/NOTES.md`](NOTES.md) |
-| R12 | current | 2026-08-27 | Nothing is visible until both the container gate and the owner's settings gate say yes; three items still open | [`docs/PRIVACY_MODEL.md`](PRIVACY_MODEL.md) |
+| R12 | current | 2026-10-02 | Nothing is visible until both the container gate and the owner's settings gate say yes; three items still open | [`docs/PRIVACY_MODEL.md`](PRIVACY_MODEL.md) |
 | R13 | current | 2026-09-10 | Every diagnostic here exists because a specific defect got through without it; twelve checkers now run in CI | [`docs/TOOLING.md`](TOOLING.md) |
 | R14 | current | 2026-09-01 | Where a fallback exists, asserting the shape of the answer passes forever - assert provenance instead | [`docs/audits/TEST_COVERAGE_GAPS.md`](audits/TEST_COVERAGE_GAPS.md) |
 | R15 | current | 2026-09-01 | SpotGuessr's rules: pinned-by-everyone eligibility, Glicko-2 for players and locations, wiki-only photos | [`docs/designs/drafts/spotguessr.md`](designs/drafts/spotguessr.md) |
@@ -207,6 +207,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P186 | open | 2026-10-02 | `Location.official_name` is seeded from text the client sent, and a new Location takes its URL slug from it at creation; a new wiki adopts it as its automatic name and concealment shows it as the provider name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P187 | open | 2026-10-02 | Production's celery workers likely cannot reach REData: the LAN answers redata.urbanlens.org with NPM's private address, which the celery egress policy refuses, so no CRIS documents, CRIS photos or web images land | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P193 | open | 2026-10-02 | Two product questions and two unchecked gaps left by the write-route audit (P29) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P195 | open | 2026-10-02 | 17 dashboard views and the check-in photo reposition parse a body with `json.loads` directly, so a deeply nested one is a 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |

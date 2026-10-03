@@ -3050,43 +3050,6 @@ Not changed, because it trades recall for privacy: a Location with no official n
 first pins. One option is to build shared-cache queries only from Location- and wiki-level names, and to treat a
 pin-name-driven search as the owner's own, cached per pin.
 
-## P193 — Two product questions and two unchecked gaps left by the write-route audit (P29)
-
-`id: P193` · `status: open` · `updated: 2026-10-02` · `found by: P29's write-route tests, 2026-10-02`
-
-P29 (archived) put a behavioural test on every write route. These are what it left, none of them a route without a
-test.
-
-- **Product question: may an API client claim an `official` wiki alias?** `external_api:wikis.aliases` accepts every
-  `AliasType`, including `official`, which the dashboard never offers and the name sync is meant to own. It is kept, as
-  a validated choice; restricting it removes a capability a client may use.
-- **Product question: is a shared pin copied as of sharing or as of acceptance?** `create_pin_from_share` reads the
-  sender's live pin (type, dates, security indicators) when the recipient accepts, so edits the sender made after
-  sharing travel with it. `services/sharing/CLAUDE.md` makes the share the consent; whether that consent covers later
-  edits is not decided.
-- **Integers past their column were stored as their low bits, not refused (fixed 2026-10-02).** Django sends an
-  `IntegerField` write as psycopg's `Int4` (`Int2` for a small one), and with `server_side_binding` on,
-  psycopg-binary 3.2.13's C dumpers keep the low 32 (16) bits without checking: `Label.order = 2**31` was stored
-  as -2**31, `2**32 + 1` as 1, and a `smallint` 2**16 + 3 as 3. Past 2**63 the `Int8` dumper raised
-  `OverflowError`. Measured in the runner; psycopg's 3.3 changelog lists no fix. Anything that skipped a form's
-  range validators wrapped silently: a DM's `key_version` past 2**32 stored the ciphertext under the wrong key
-  version, and a safety auto-delete window of 2**32 days was stored as 0. Two layers now:
-  - **The database layer refuses.** `core/integer_dumpers.py` registers range-checked pure-Python dumpers for
-    `Int2`/`Int4`/`Int8` on every connection (`connection_created`, from `DashboardConfig.ready`), raising
-    `DataError` with the server's wording. A missed bound is now a 500, never a wrong number
-    (`core/tests/test_integer_dumpers.py`). It also covers `__in` on a non-primary-key integer column, which
-    matched the wrapped value's rows.
-  - **The external API's serializers bound every writable integer** (`test_external_api_integer_bounds.py`,
-    one class per route), so a client gets a 400. `auto_delete_after_days` is capped at 36,500
-    (`MAX_AUTO_DELETE_AFTER_DAYS`): a window the column holds but a timestamp can't had broken
-    `delete_expired_safety_checkins` for every profile. The dashboard's grace-period parse had the same shape
-    (inf, nan, 1e10 hours were 500s); it now clamps to 15 minutes..a week.
-  - **Not checked:** a custom field's number value past `numeric(24,6)` (`Decimal("1e30")` raised
-    `numeric field overflow` in an ORM probe; whether the value route reaches it was not run).
-- **No test exercises a concealed viewer**, because `concealment_active` returns `False`.
-- `SafetyCheckinWikiOptionView.get` (a read route) parses its coordinates with a bare `float()`; a NaN matches no wiki
-  rather than failing, so it was left.
-
 ## P195 — 17 dashboard views and the check-in photo reposition parse a body with `json.loads` directly, so a deeply nested one is a 500
 
 `id: P195` · `status: open` · `updated: 2026-10-02` · `found by: the P37 handler tests, 2026-10-02`
@@ -3104,3 +3067,18 @@ since 2026-10-02, the external API's parser answer it with a 400. Not reproduced
 The fix is to route each through `posted_json_object`/`posted_fields`, and to add the deep-nesting body to
 `MALFORMED_JSON_BODIES` in `tests/hypothesis/external_api_helpers.py` and to the no-5xx sweep
 (`test_write_route_smoke.py`), so every route is held to it.
+
+## P210 — Pin-share notifications stored before 2026-10-02 still name the sender's own pin
+
+`id: P210` · `status: open` · `updated: 2026-10-02` · `found by: P193's share-consent tests, 2026-10-02`
+
+Until P193's fix, `create_pin_share` wrote the recipient's notification as `"{sender} shared {pin.display_label} with
+you."`: the sender's own name for the pin, or its address when it had none, which a share without `shared_name` never
+consents to pass on. New notifications use `PinShare.safe_place_label`. Rows already stored keep the old text, and the
+inbox and notification history render `NotificationLog.message` as stored
+(`partials/notifications/notification_item.html:16`), so a recipient still reads it. Copies already sent by email or
+text cannot be recalled. How many rows exist was not counted.
+
+The fix is a data migration rewriting `message` on `notification_type=PIN_SHARED` rows that still have a `pin_share`,
+built the way `create_pin_share` builds it now (sender name through `resolve_visible_identity`, then the child-pin and
+already-pinned suffixes). Not done: it rewrites stored rows users see, which wants Jess's say-so.
