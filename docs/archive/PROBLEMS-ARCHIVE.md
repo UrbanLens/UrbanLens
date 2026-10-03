@@ -20914,3 +20914,28 @@ s2cloudless year already shown at a point stays blurry until REData re-renders i
 a property test that the chosen zoom is never finer than the source and the next one is.
 `test_redata_satellite_provider.py::NativeResolutionZoomTests` covers the zoom sent for each delivery and bound,
 and `test_redata_imagery_gateway.py` checks the query parameter. Before the fix, 16 of the new tests failed.
+
+## RESOLVED 2026-10-03: A failed task's ERROR line names its arguments by parameter, with coordinates and other values redacted
+
+`id: P212` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by P203's review of the Celery failure path.
+
+**Cause.** `UrbanLens/celery.py::log_task_failure` logged `args=%s kwargs=%s` raw for every failed task.
+`fetch_recorded_weather_at(latitude, longitude, iso_days)` retries on `OSError`, so a provider outage ended in an
+ERROR line with a raw latitude and longitude. P203's `SecretRedactionFilter` reads URLs, and a tuple of floats isn't
+one. The test reproduced it: `args=(41.7234567, -73.9312345)` in the line.
+
+**Fix.** The line now logs `arguments=`, built by `services/security/redact.py::redact_call_arguments`. It binds the
+call to the task body's signature, so each value has its parameter name. A record id (`pk`, `*_id`, `*_ids` holding
+integers) passes through, so a failure can still be traced to its row. Everything else is redacted as `redact_params`
+would redact a request parameter of that name, so coordinates become coordinate tokens and unknown values become
+opaque tags. Arguments the signature rejects, and a failure with no task, are named by position and redacted the same
+way.
+
+Whether a task should take coordinates at all was left alone. `fetch_recorded_weather_at` is keyed by coordinate on
+purpose: visits and trips both queue it, and neither has a single `Location`.
+
+**Tests.** `test_task_failure_log_redaction.py`: the weather task's coordinates never reach the line, a sender-less
+failure is redacted, arguments are named by the signature, record ids pass through, an id-named value that isn't one
+is redacted, and so are arguments the signature rejects. The two log tests failed before the fix.

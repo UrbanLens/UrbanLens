@@ -4,13 +4,15 @@ That is the whole point: a hash - even a keyed one - is a function of its input,
 from __future__ import annotations
 
 from collections import OrderedDict
+from contextlib import suppress
+import inspect
 import re
 import secrets
 import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
 #: Parameter names whose values are secrets, compared casefolded with separators dropped (``X-Api-Key`` is ``xapikey``).
 SENSITIVE_PARAM_NAMES = frozenset(
@@ -197,6 +199,38 @@ def redact_params(params: Mapping[str, Any]) -> dict[str, Any]:
         else:
             redacted[key] = redact_text(str(value)) if value is not None else "<none>"
     return redacted
+
+
+#: A parameter naming database rows by primary key: ``pk``, ``pin_id``, ``location_ids``.
+_RECORD_ID_NAME = re.compile(r"(?:^|_)(?:pk|id)s?$")
+
+
+def _is_record_id(name: str, value: object) -> bool:
+    if not _RECORD_ID_NAME.search(name.casefold()):
+        return False
+    values = value if isinstance(value, (list, tuple)) else (value,)
+    return all(isinstance(item, int) and not isinstance(item, bool) for item in values)
+
+
+def redact_call_arguments(function: Callable[..., object] | None, args: Sequence[object], kwargs: Mapping[str, object]) -> dict[str, Any]:
+    """A call's arguments by parameter name, safe to pass to a logger.
+
+    Record ids pass through, so a failure can be traced to its row. Everything else is redacted as
+    :func:`redact_params` would a request parameter of the same name.
+
+    Args:
+        function: The function called, for its parameter names; None names them by position.
+        args: The positional arguments.
+        kwargs: The keyword arguments.
+
+    Returns:
+        Each argument, by parameter name, either a record id or a redacted value.
+    """
+    named: Mapping[str, object] = {f"arg{index}": value for index, value in enumerate(args)} | dict(kwargs)
+    if function is not None:
+        with suppress(TypeError, ValueError):
+            named = inspect.signature(function).bind_partial(*args, **kwargs).arguments
+    return {name: value if _is_record_id(name, value) else redact_params({name: value})[name] for name, value in named.items()}
 
 
 def is_sensitive_param_name(name: str) -> bool:

@@ -30,13 +30,14 @@ def redact_worker_log_handlers(**_extra) -> None:
 
 @task_failure.connect
 def log_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **_extra) -> None:
-    """Log Celery task failures."""
+    """Log Celery task failures, with the task's arguments redacted."""
+    from urbanlens.dashboard.services.security.redact import redact_call_arguments
+
     logger.error(
-        "Celery task failed: task=%s id=%s args=%s kwargs=%s exception=%s",
+        "Celery task failed: task=%s id=%s arguments=%s exception=%s",
         getattr(sender, "name", sender),
         task_id,
-        args,
-        kwargs,
+        redact_call_arguments(getattr(sender, "run", None), args or (), kwargs or {}),
         exception,
         exc_info=einfo.exc_info if einfo else None,
     )

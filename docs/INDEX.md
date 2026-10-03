@@ -216,7 +216,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P209 | open | 2026-10-03 | Opening a group chat's own URL shows "Select a conversation" until its row is clicked | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P211 | open | 2026-10-03 | On a wiki page, the purple "Community wiki" pill overlaps the onboarding card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P212 | open | 2026-10-03 | A failed task's ERROR line prints its arguments, so `fetch_recorded_weather_at`'s coordinates reach the log | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P214 | open | 2026-10-03 | Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P215 | open | 2026-10-03 | Commons file URLs now carry `utm_` parameters, so a file's `media_item_key` changes under it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |

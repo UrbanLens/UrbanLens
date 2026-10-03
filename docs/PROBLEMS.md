@@ -2953,18 +2953,6 @@ On the wiki page, the "Community wiki" badge draws over the `page-onboarding--wi
 `page-onboarding--wiki.png` and `page-onboarding--unmodified-sibling-on-pin-page.png` show it. Fix it in a browser, and
 assert with `elementFromPoint` that the card's top-left text is the topmost element.
 
-## P212 — A failed task's ERROR line prints its arguments, so `fetch_recorded_weather_at`'s coordinates reach the log
-
-`id: P212` · `status: open` · `updated: 2026-10-03` · `found by: P203's review of the Celery failure path`
-
-`UrbanLens/celery.py::log_task_failure` logs `args=%s kwargs=%s` for every failed task. Most tasks take primary keys,
-but `tasks.py::fetch_recorded_weather_at(latitude, longitude, iso_days)` takes coordinates, and it retries on `OSError`,
-so a provider outage ends in an ERROR line carrying a raw latitude and longitude. That breaks the `redact_coordinate`
-policy in `services/security/redact.py`. P203's `SecretRedactionFilter` does not catch it: it reads URLs, and a tuple of
-floats is not one. Not reproduced in a test yet. Either drop the arguments from that line (the task id and name already
-correlate it with Celery's own lines) or pass them through `redact_params` by the task signature's parameter names; and
-decide whether a task should take coordinates at all when a `Location` pk would do.
-
 ## P214 — Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache
 
 `id: P214` · `status: open` · `updated: 2026-10-03` · `found by: reconciling P187 with P203's tests`
