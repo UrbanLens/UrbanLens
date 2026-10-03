@@ -42,13 +42,15 @@ const SELECTOR = `[${ATTRIBUTES.after}], [${ATTRIBUTES.success}], [data-ul-succe
 
 const actions = new Map<string, HtmxAction>();
 const bound = new WeakSet<Element>();
+/** The dialog each requesting element was in when its request started; a response can swap it out of the dialog. */
+const startedIn = new WeakMap<Element, HTMLDialogElement>();
 
 function byId(id: string): HTMLElement | null {
     return id ? document.getElementById(id) : null;
 }
 
 const BUILTIN_ACTIONS: Record<string, HtmxAction> = {
-    "close-dialog": (el) => el.closest("dialog")?.close(),
+    "close-dialog": (el) => (el.closest("dialog") ?? startedIn.get(el))?.close(),
     reset: (el) => {
         if (el instanceof HTMLFormElement) el.reset();
     },
@@ -128,12 +130,14 @@ function succeeded(el: HTMLElement, detail: HtmxRequestDetail): boolean {
     return true;
 }
 
-function onAfterRequest(this: HTMLElement, event: Event): void {
+function onAfterRequest(event: Event): void {
+    const el = event.currentTarget;
+    if (!(el instanceof HTMLElement)) return;
     const htmxEvent = event as CustomEvent<HtmxRequestDetail>;
-    runTokens(this, this.getAttribute(ATTRIBUTES.after), htmxEvent);
-    if (!succeeded(this, htmxEvent.detail ?? {})) return;
-    runTokens(this, this.getAttribute(ATTRIBUTES.success), htmxEvent);
-    const message = this.dataset.ulSuccessToast;
+    runTokens(el, el.getAttribute(ATTRIBUTES.after), htmxEvent);
+    if (!succeeded(el, htmxEvent.detail ?? {})) return;
+    runTokens(el, el.getAttribute(ATTRIBUTES.success), htmxEvent);
+    const message = el.dataset.ulSuccessToast;
     if (message) toast.success(message);
 }
 
@@ -149,7 +153,11 @@ function onBeforeRequest(event: Event): void {
     if (!(origin instanceof Element)) return;
     for (let el: Element | null = origin; el; el = el.parentElement) {
         if (!(el instanceof HTMLElement)) continue;
-        if (el.matches(SELECTOR)) bind(el);
+        if (el.matches(SELECTOR)) {
+            bind(el);
+            const dialog = el.closest("dialog");
+            if (dialog) startedIn.set(el, dialog);
+        }
         if (el.hasAttribute(ATTRIBUTES.before)) runTokens(el, el.getAttribute(ATTRIBUTES.before), htmxEvent);
     }
 }

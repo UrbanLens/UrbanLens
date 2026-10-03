@@ -1,7 +1,7 @@
 {% comment %}The swappable half of the building-import dialog - everything but the header.{% endcomment %}
 {% load map_components %}
-<div id="building-import-dialog-body">
-<form class="building-import-form"
+<div id="building-import-dialog-body" class="ul-dialog-frame">
+<form class="building-import-form ul-dialog-frame"
       data-restructure="{{ restructure|yesno:'1,0' }}"
       hx-post="{{ form_action }}"
       hx-target="#building-import-dialog-body" hx-swap="outerHTML"

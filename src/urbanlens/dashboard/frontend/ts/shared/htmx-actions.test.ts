@@ -26,6 +26,19 @@ beforeEach(() => {
 });
 
 describe("data-ul-on-success", () => {
+    test("close-dialog closes the dialog the request started in, though the response swapped the form out", () => {
+        document.body.innerHTML =
+            '<dialog id="d" open><h3>Choose buildings to add</h3><div id="body"><form data-ul-on-success="close-dialog"><button></button></form></div></dialog>';
+        const form = document.querySelector("form")!;
+        const dialog = document.getElementById("d") as HTMLDialogElement;
+
+        fire(form, "htmx:beforeRequest", { successful: true });
+        document.getElementById("body")!.outerHTML = "";
+        fire(form, "htmx:afterRequest", { successful: true });
+
+        expect(dialog.open).toBe(false);
+    });
+
     test("runs its actions only when the request succeeded", () => {
         document.body.innerHTML = '<dialog id="d" open><form data-ul-on-success="close-dialog"><button></button></form></dialog>';
         const form = document.querySelector("form")!;
