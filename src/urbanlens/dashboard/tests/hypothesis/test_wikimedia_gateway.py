@@ -279,3 +279,14 @@ class WikimediaSearchTermsTests(SimpleTestCase):
         terms = MediaPanelSource.search_terms(pin, WikimediaGateway(), search_names(pin).base)
 
         self.assertEqual(terms[-1], '"Hudson River State Hospital" Poughkeepsie NY')
+
+
+class CommonsTrackingParametersTests(_GatewayTestCase):
+    """P215: Commons began adding ``utm_`` parameters to file URLs on 2026-09-23; a file keeps one URL regardless."""
+
+    def test_the_items_urls_carry_no_tracking_parameters(self) -> None:
+        item = self.item(_PHOTO)
+
+        self.assertEqual(item.url, f"{_UPLOAD}/6/68/Cheney_bldg_Hudson_River_State_Hospital_NY3.jpg")
+        self.assertNotIn("utm_", item.thumb_url)
+        self.assertNotIn("utm_", item.page_url)

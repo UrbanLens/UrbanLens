@@ -2968,21 +2968,6 @@ P187 also left these stores unswept: `Boundary.generated_at` (does a failed gene
 `GooglePlaceLinkEnrichmentSource`. Each needs the same test as `test_outage_not_cached_registry.py`: refused, timed out
 and 503, then assert nothing settled was written.
 
-## P215 — Commons file URLs now carry `utm_` parameters, so a file's `media_item_key` changes under it
-
-`id: P215` · `status: open` · `updated: 2026-10-03` · `found by: P196's live Commons check, 2026-10-03`
-
-On 2026-10-03, Commons' `imageinfo` `url` comes back as
-`https://upload.wikimedia.org/.../Hudson_River_Psychiatric_Center_front_view.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original`.
-`media_item_key` hashes the whole URL, so the same file gets a new key whenever the query string appears or changes. Any
-`MediaRelevance` mark, wiki vote or remote copy keyed on the old form no longer matches the item. The dev database's
-`wikimedia` cache rows mix the two forms: rows containing a `utm_source` URL were 9 of 131 written on 2026-09-23, 0 of 29
-on 09-28 and 3 of 5 on 09-30. When Wikimedia began adding them, and whether production marks were orphaned, was not
-checked.
-
-The likely fix is to drop `utm_*` parameters from Commons URLs in `WikimediaGateway` before they become an item's `url`.
-That changes the key of every cached item that carries them, so check first whether any stored mark uses the `utm` form.
-
 ## P216 — Historic Newspapers shows nothing, because no page reaches UrbanLens with its text
 
 `id: P216` · `status: open` · `updated: 2026-10-03` · `found by: P196, checking each provider's fields, 2026-10-03`

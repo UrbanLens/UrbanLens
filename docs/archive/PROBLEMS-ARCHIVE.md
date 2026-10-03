@@ -20967,3 +20967,32 @@ discard users' photos over a server-side fault.
 helper, the middleware, a gallery upload and an overlay upload through a fake Garage answering 403, the admin notice
 being sent once per interval, sent from processing, not sent for transient or missing-file failures, and not sent
 when the cache is down. Before the fix, 10 of 11 failed.
+
+## RESOLVED 2026-10-03: A media item keeps one identity whether or not Wikimedia adds utm_ parameters to its URL
+
+`id: P215` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by P196's live Commons check, 2026-10-03.
+
+**Cause.** Commons' `imageinfo` began returning file URLs with `?utm_source=…&utm_campaign=imageinfo&utm_content=original`,
+and Wikipedia's parser did the same for article media (`utm_campaign=parser`). Neither did it every time. On dev, 78
+cache rows across `wikimedia`, `wikipedia_media` and `wikipedia` carry them. `media_item_key` hashed the whole URL,
+so a file's identity changed with them. A relevance mark, wiki vote or copied photo made under one form no longer
+matched the item under the other.
+
+**Fix.** `services/core/tracking_params.py::without_tracking_params` drops `utm_*` query parameters and keeps every
+other part of the URL as written. `MediaItem` applies it to `url`, `thumb_url` and `page_url` on construction. That
+covers every media provider, and old cache rows too as they are read. `media_item_key` applies it before hashing.
+Migration 0043 re-keys what was keyed under a tracked URL. A mark has no URL of its own, so its old key is matched
+against the URLs in its location's cached results. Where the user already has a mark on the clean key, that one
+wins and the tracked duplicate goes. A copied photo is matched the same way, and also by the URL it was fetched
+from (`source_media_url`). The migration starts from the marks and copies, which are few, rather than scanning
+`dashboard_location_cache`, which is 81% of production's database (P206).
+
+Whether production marks were orphaned was not checked (no production access). If any were, the migration restores
+them.
+
+**Tests.** `test_tracking_params.py` covers the helper (including idempotence as a property), the key, and the
+migration: a mark moves, a clean-key mark wins over its duplicate, a copy moves by cache or by its fetched URL, and
+another location's marks are left alone. `test_wikimedia_gateway.py::CommonsTrackingParametersTests` checks that a
+Commons item's URLs carry no parameters.

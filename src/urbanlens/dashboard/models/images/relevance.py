@@ -21,9 +21,11 @@ def media_item_key(url: str) -> str:
             field ``MediaProvider.get_media`` dedupes provider results on).
 
     Returns:
-        A 40-character hex digest suitable for ``MediaRelevance.item_key``.
+        A 40-character hex digest suitable for ``MediaRelevance.item_key``, the same with or without tracking parameters.
     """
-    return hashlib.sha1(url.encode("utf-8"), usedforsecurity=False).hexdigest()
+    from urbanlens.dashboard.services.core.tracking_params import without_tracking_params
+
+    return hashlib.sha1(without_tracking_params(url).encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 class MediaRelevance(abstract.DashboardModel):

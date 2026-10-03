@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import urlsplit
 
 from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
+from urbanlens.dashboard.services.core.tracking_params import without_tracking_params
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -30,6 +31,8 @@ _QUERY_KEY_MAX_LENGTH = 255
 @dataclass(frozen=True)
 class MediaItem:
     """A single piece of captioned media from an external archive.
+
+    Its URLs are kept without tracking parameters, so a file has one identity however the provider links it.
 
     Attributes:
         url: Full-resolution image URL.
@@ -57,6 +60,10 @@ class MediaItem:
     keywords: str = ""
     latitude: float | None = None
     longitude: float | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("url", "thumb_url", "page_url"):
+            object.__setattr__(self, name, without_tracking_params(getattr(self, name)))
 
     @property
     def is_document(self) -> bool:
