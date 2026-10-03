@@ -160,6 +160,18 @@ class BuildingRegisterRecordTests(_Campus):
         self.assertIsNotNone(self._render(laundry, own))
         self.assertIsNone(self._render(self.storage, own))
 
+    def test_a_districts_point_landing_on_a_building_does_not_make_it_the_districts(self) -> None:
+        district = _listing(
+            name="Hudson River State Hospital Historic District",
+            resource_type="building_district",
+            scope="site",
+            contains_point=False,
+            source_latitude=float(_STORAGE[0]),
+            source_longitude=float(_STORAGE[1]),
+        )
+
+        self.assertIsNone(self._render(self.storage, district))
+
     def test_the_campus_shows_its_listing(self) -> None:
         context = self._render(self.campus, _listing())
 

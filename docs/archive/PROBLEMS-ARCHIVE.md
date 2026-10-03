@@ -21003,14 +21003,15 @@ and so no wiki link. On the dev stack every HRSH building child is typed a build
 was not inspected.
 
 **Fix.** A pin standing for one building nested under a site on another location shows only its building's own
-records (`HistoricRegisterPanelSource.own_resources`, `national_register.building_register_rows`). Those are a row
-whose own point stands on the building, and a listing holding the building when CRIS's record of it calls it listed.
-That CRIS record must stand on the building too. The CRIS fallback in the note follows the same rule. Campus and root
-pins are unchanged. The automatic link (P228) follows it as well. Every row a child pin covers opens its card, whatever
-the child's type. Naming still takes a listing holding a building as a candidate (`register_listing_names`), which may
-bear on P231.
+records (`HistoricRegisterPanelSource.own_resources`, `national_register.building_register_rows`). Those are a
+structure row whose own point stands on the building (a site-level row's point picks no building), and a listing
+holding the building when CRIS's record of it calls it listed. That CRIS record must stand on the building too. The
+CRIS fallback in the note follows the same rule. Campus and root pins are unchanged. The automatic link (P228) follows
+it as well. Every row a child pin covers opens its card, whatever the child's type. Naming still takes a listing
+holding a building as a candidate (`register_listing_names`), which may bear on P231.
 
 **Tests.** `test_building_register_records.py`: a building inside the boundary isn't listed by it, the listed building
 is, CRIS's record must stand on the building, CRIS's site record alone lists nothing, a listing's own point picks its
-building, campus and standalone pins keep the listing, the link reaches only the listed building, a row covered by a
-child of another type opens in place. Six of the twelve failed before the fix.
+building and a site row's point picks none, campus and standalone pins keep the listing, the link reaches only the
+listed building, a row covered by a child of another type opens in place. Six of the first twelve failed before the
+fix; the site-row test came from review afterwards.

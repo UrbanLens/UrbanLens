@@ -66,6 +66,10 @@ REVIEWED: dict[str, str] = {
         "drop_name_built_searches deletes cached name-built search rows, which may hold results found by someone's "
         "own names. They are a cache; the old code refetches them."
     ),
+    "0044_location_cache_drop_historic_registers.py": (
+        "drop_historic_registers deletes cached Historic Registers rows so they refetch with each row's reference "
+        "number and position. They are a cache; the old code refetches them."
+    ),
 }
 
 

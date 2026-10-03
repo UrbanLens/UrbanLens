@@ -476,7 +476,7 @@ direct-only because REData's contract can't reproduce what they show:
   (`plugins.builtin.redata_historic_registers`). A National Register row shows NPS's reference
   number linked to its NPGallery record, and fetching adds that link to the pin's and wiki's links
   (marked automatic) for each listing that is the place's own. On one building of a larger site,
-  only that building's own records show: a listing whose own point stands on it, or the listing
+  only that building's own records show: a structure listing whose own point stands on it, or the listing
   holding it when CRIS's record of the building calls it listed; the campus listing whose boundary
   merely holds a building does not (`services.locations.national_register`, P230)
 - **NY Historic Preservation (CRIS)** (New York) — the nearest surveyed building's USN record

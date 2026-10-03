@@ -27,6 +27,7 @@ _HISTORIC_REGISTERS_CACHE_SOURCE = "redata_historic_registers"
 _CRIS_CACHE_SOURCE = "cris_building_usn"
 _CRIS_LISTED = "listed"
 _CONTAINS_POINT_KEY = "contains_point"
+_SITE_SCOPE = "site"
 
 
 def nps_record_url(reference: str | None) -> str | None:
@@ -113,13 +114,14 @@ def building_register_rows(location: Location, rows: list[dict[str, Any]]) -> li
         rows: Its cached Historic Registers rows.
 
     Returns:
-        Rows whose own point stands on the building (marked as holding it), and, when CRIS's record of the building
-        calls it listed, the listings whose boundary holds it.
+        Structure rows whose own point stands on the building (marked as holding it), and, when CRIS's record of the
+        building calls it listed, the listings whose boundary holds it. A site-level row's point is somewhere on the
+        whole site, so it never picks one building.
     """
     listed = None
     own: list[dict[str, Any]] = []
     for row in rows:
-        if stands_on(location, row.get("source_latitude"), row.get("source_longitude")):
+        if row.get("scope") != _SITE_SCOPE and stands_on(location, row.get("source_latitude"), row.get("source_longitude")):
             own.append({**row, _CONTAINS_POINT_KEY: True})
             continue
         if row.get(_CONTAINS_POINT_KEY) is not True:
