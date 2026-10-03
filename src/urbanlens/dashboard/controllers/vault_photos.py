@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_fields, posted_json_object
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion, reject_visit_suggestion
@@ -636,10 +637,8 @@ class PhotoUploadFailureCreateView(LoginRequiredMixin, View):
         """Store filename + error for the current profile."""
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            body = json.loads(request.body or b"{}")
-        except (TypeError, ValueError):
-            return JsonResponse({"error": "Invalid request data."}, status=400)
-        if not isinstance(body, dict):
+            body = posted_json_object(request)
+        except MalformedBodyError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
         filename = str(body.get("filename") or "photo")[:255]
         error = str(body.get("error") or "This photo couldn't be shown.")
@@ -726,12 +725,8 @@ class PhotoMetadataConflictResolveView(LoginRequiredMixin, View):
             profile=profile,
             status=PhotoIssueStatus.PENDING,
         )
-        try:
-            body = json.loads(request.body or b"{}")
-        except (TypeError, ValueError):
-            body = request.POST
         choices: dict[str, int] = {}
-        raw_choices = body.get("choices") if isinstance(body, dict) else None
+        raw_choices = posted_fields(request).get("choices")
         if isinstance(raw_choices, dict):
             for key, value in raw_choices.items():
                 try:

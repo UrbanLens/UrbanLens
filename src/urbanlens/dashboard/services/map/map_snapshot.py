@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -12,6 +11,7 @@ from django.utils.dateformat import format as format_date
 
 from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
 from urbanlens.dashboard.services.core.colors import sanitize_hex_color, sanitize_optional_color
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -158,8 +158,8 @@ def parse_map_data(request: HttpRequest, field: str = "map_data") -> dict | None
     if not raw:
         return None
     try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
+        data = decode_json(raw)
+    except MalformedBodyError:
         logger.warning("Ignoring malformed map_data in POST field %r", field)
         return None
     return sanitize_map_data(data)

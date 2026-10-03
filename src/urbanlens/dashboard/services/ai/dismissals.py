@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import json
 import logging
 from typing import Any
+
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,8 @@ def parse_dismissals_json(raw: str) -> tuple[DismissalEntry, ...]:
     if not raw:
         return ()
     try:
-        data = json.loads(raw)
-    except (TypeError, ValueError):
+        data = decode_json(raw)
+    except MalformedBodyError:
         logger.debug("Ignoring malformed assistant dismissals payload")
         return ()
     return dismissals_from_list(data if isinstance(data, list) else None)

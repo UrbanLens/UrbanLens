@@ -7,7 +7,6 @@ cut to its origin and path, stripped of control characters and truncated before 
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -18,6 +17,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
@@ -109,8 +109,8 @@ class CspReportView(View):
         if not length.isdigit() or int(length) > MAX_REPORT_BYTES:
             return HttpResponse(status=413)
         try:
-            payload = json.loads(request.body)
-        except ValueError:
+            payload = decode_json(request.body)
+        except MalformedBodyError:
             return HttpResponse(status=400)
         for report in iter_reports(payload):
             fields = {key: _pick(report, names) for key, names in _FIELDS.items()}

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import json
 import logging
 from typing import TYPE_CHECKING
 import uuid
@@ -17,7 +16,7 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.core.request_body import posted_fields
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_fields, posted_json_object
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.place.model import Place
@@ -309,11 +308,9 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         place = _building_place(pin)
 
         try:
-            document = json.loads(request.body or b"{}")
-        except ValueError:
-            return JsonResponse({"ok": False, "error": "Invalid JSON."}, status=400)
-        if not isinstance(document, dict):
-            return JsonResponse({"ok": False, "error": "Expected a document object."}, status=400)
+            document = posted_json_object(request)
+        except MalformedBodyError:
+            return JsonResponse({"ok": False, "error": "Expected a JSON document object."}, status=400)
         version_uuid = _parse_uuid(document.get("uuid"))
         if document.get("uuid") and version_uuid is None:
             return JsonResponse({"ok": False, "error": "uuid must name a plan version."}, status=400)

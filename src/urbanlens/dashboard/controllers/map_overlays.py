@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.apis.request_upstreams import HistoricalMapsBrowseUpstream
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.core.request_upstream import Outcome, UpstreamResult
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.map.image_overlays import (
@@ -165,8 +166,8 @@ def _parse_corners(raw: str | None) -> list[list[float]] | None:
     if not raw:
         return None
     try:
-        parsed = json.loads(raw)
-    except (TypeError, ValueError):
+        parsed = decode_json(raw)
+    except MalformedBodyError:
         return None
     if not isinstance(parsed, list) or len(parsed) != len(CORNERS):
         return None

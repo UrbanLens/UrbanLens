@@ -46,3 +46,27 @@ class LinkUrlField(serializers.CharField):
         except InvalidLinkUrlError:
             self.fail("not_a_link")
             raise
+
+
+class JSONField(serializers.JSONField):
+    """DRF's JSON field, refusing a form-posted value nested past the recursion limit as invalid rather than a 500.
+
+    A form post hands the field raw text, which DRF decodes with ``json.loads`` and catches only ``ValueError``.
+    """
+
+    def to_internal_value(self, data: Any) -> Any:
+        """Decode *data*, or check that an already-decoded value serializes.
+
+        Args:
+            data: The submitted value.
+
+        Returns:
+            The decoded value.
+
+        Raises:
+            ValidationError: *data* is not JSON, or nests too deeply to decode.
+        """
+        try:
+            return super().to_internal_value(data)
+        except RecursionError:
+            self.fail("invalid")

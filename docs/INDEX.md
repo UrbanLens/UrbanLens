@@ -206,7 +206,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P187 | open | 2026-10-02 | A source error is cached as an empty answer for seven days, so a few hours' REData outage blanked every Location it touched | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P193 | open | 2026-10-02 | Two product questions and two unchecked gaps left by the write-route audit (P29) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P195 | open | 2026-10-02 | 17 dashboard views and the check-in photo reposition parse a body with `json.loads` directly, so a deeply nested one is a 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P196 | open | 2026-10-02 | Media galleries keep results that match the search words, not the place; Commons books were dropped instead of filed as documents | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P197 | open | 2026-10-02 | "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them; Jess: build both, batched | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P198 | open | 2026-10-02 | A player who leaves mid-game disappears from the final scoreboard and their own history; Jess: list them as "Left" | [`docs/PROBLEMS.md`](PROBLEMS.md) |

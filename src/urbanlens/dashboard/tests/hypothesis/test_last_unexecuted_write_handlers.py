@@ -37,13 +37,10 @@ from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, 
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.text_limits import MAX_PROFILE_BIO_LENGTH
-from urbanlens.dashboard.tests.hypothesis.external_api_helpers import ExternalApiRouteCase
+from urbanlens.dashboard.tests.hypothesis.external_api_helpers import DEEPLY_NESTED_JSON, ExternalApiRouteCase
 
 if TYPE_CHECKING:
     from django.test.client import _MonkeyPatchedWSGIResponse as TestResponse
-
-#: Valid JSON nested past the interpreter's recursion limit.
-_DEEPLY_NESTED = "[" * 100_000 + "]" * 100_000
 
 
 class _OwnerAndStranger(TestCase):
@@ -221,7 +218,7 @@ class ExternalProfileNoteEditRouteTests(ExternalApiRouteCase):
             {"content": {"text": "a"}},
             {"content": "a\x00b"},
             {"content": "x" * (MAX_PROFILE_BIO_LENGTH + 1)},
-            _DEEPLY_NESTED,
+            DEEPLY_NESTED_JSON,
         )
         for body in bad:
             with self.subTest(body=str(body)[:40]):
@@ -310,7 +307,7 @@ class ExternalSafetyContactDefaultsReplaceRouteTests(ExternalApiRouteCase):
             {"contacts": [{"email": "not-an-address"}]},
             {"contacts": [{"email": "mo@example.com", "name": "x" * 151}]},
             {"contacts": [{"email": "mo@example.com"}, {"email": "broken"}]},
-            _DEEPLY_NESTED,
+            DEEPLY_NESTED_JSON,
         )
         for body in bad:
             with self.subTest(body=str(body)[:60]):
@@ -499,7 +496,7 @@ class WikiImageRepositionRouteTests(_OwnerAndStranger):
             {"latitude": 0, "longitude": "Infinity"},
             {"latitude": None, "longitude": None},
             {"latitude": True, "longitude": 0},
-            _DEEPLY_NESTED,
+            DEEPLY_NESTED_JSON,
         )
         for body in bad:
             with self.subTest(body=str(body)[:40]):

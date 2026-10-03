@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.external_api.fields import JSONField
 from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus, SpotGuessrMode
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX
 from urbanlens.dashboard.services.spotguessr import relevance as spotguessr_relevance, session as spotguessr_session
@@ -168,7 +169,7 @@ class SpotGuessrSessionCreateSerializer(serializers.Serializer):
     #: A GeoJSON *object*, not the JSON-encoded string the HTML form posts. A JSON API client already has a
     #: parsed object; making it re-encode one only to have the server parse it again is a needless round trip
     #: and an easy source of double-encoding bugs.
-    geo_bounds = serializers.JSONField(required=False, allow_null=True)
+    geo_bounds = JSONField(required=False, allow_null=True)
     label_id = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=DB_BIGINT_MAX)
 
     def validate_label_id(self, value: int | None) -> int | None:

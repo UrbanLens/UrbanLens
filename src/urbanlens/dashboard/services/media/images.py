@@ -22,6 +22,7 @@ from django.utils import timezone
 from PIL import Image as PILImage, ImageOps
 from PIL.ExifTags import GPSTAGS, TAGS
 
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
@@ -100,11 +101,9 @@ def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
 
     Raises:
         ValueError: On malformed JSON, a non-object payload, missing keys, non-numeric/non-finite values, or out-of-range coordinates."""
-    import json
-
     try:
-        data = json.loads(body)
-    except (TypeError, ValueError) as exc:
+        data = decode_json(body)
+    except MalformedBodyError as exc:
         raise ValueError("Invalid request data.") from exc
     return coerce_coordinates(data)
 
@@ -122,11 +121,9 @@ def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
 
     Raises:
         ValueError: Malformed JSON, a reposition payload that fails :func:`coerce_coordinates`, or a ``map_hidden`` that is not a boolean."""
-    import json
-
     try:
-        data = json.loads(body or b"{}")
-    except (TypeError, ValueError, RecursionError) as exc:
+        data = decode_json(body or b"{}")
+    except MalformedBodyError as exc:
         raise ValueError("Invalid request data.") from exc
     if not isinstance(data, dict):
         raise ValueError("Invalid request data.")  # noqa: TRY004

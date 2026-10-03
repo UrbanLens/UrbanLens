@@ -8,15 +8,18 @@ from django.urls import NoReverseMatch, get_resolver, reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip
+from urbanlens.dashboard.tests.hypothesis.external_api_helpers import DEEPLY_NESTED_JSON
 
 #: Marker text from ``core.testing_network``. A route that trips the guard is
 #: reaching for a real integration; that is the environment, not a bug.
@@ -50,8 +53,8 @@ _SKIP_ROUTES = {
 }
 
 
-#: Well-formed JSON that is not an object, and bodies that are not JSON at all.
-_MALFORMED_JSON_BODIES = ("[]", "null", '"text"', "{", "[" * 5000)
+#: Well-formed JSON that is not an object, bodies that are not JSON at all, and JSON nested past the recursion limit.
+_MALFORMED_JSON_BODIES = ("[]", "null", '"text"', "{", "[" * 5000, DEEPLY_NESTED_JSON)
 
 
 class WriteRouteSmokeTests(TestCase):
@@ -112,11 +115,11 @@ class WriteRouteSmokeTests(TestCase):
         }
 
     @staticmethod
-    def _image_with_file(profile, pin, location):
+    def _image_with_file(profile: Profile, pin: Pin, location: Location) -> Image:
         """An Image row whose file actually exists, as every real upload path leaves it."""
         from django.core.files.base import ContentFile
 
-        image = baker.make("dashboard.Image", profile=profile, pin=pin, location=location)
+        image = baker.make(Image, profile=profile, pin=pin, location=location)
         image.image.save("smoke.jpg", ContentFile(b"not-a-real-jpeg"), save=True)
         return image
 

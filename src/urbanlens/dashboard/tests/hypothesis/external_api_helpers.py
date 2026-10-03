@@ -14,8 +14,12 @@ from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 if TYPE_CHECKING:
     from django.http import HttpResponse
 
+#: Valid JSON nested past the interpreter's recursion limit: ``json.loads`` raises ``RecursionError``, not a
+#: ``ValueError``, on it.
+DEEPLY_NESTED_JSON = "[" * 100_000 + "]" * 100_000
+
 #: JSON that parses to something other than an object, and bodies that do not parse at all.
-MALFORMED_JSON_BODIES = ("[]", "null", '"text"', "{", "[1,")
+MALFORMED_JSON_BODIES = ("[]", "null", '"text"', "{", "[1,", DEEPLY_NESTED_JSON)
 
 
 class ExternalApiRouteCase(TestCase):
@@ -77,7 +81,7 @@ class ExternalApiRouteCase(TestCase):
     def assert_malformed_bodies_are_4xx(self, method: str, url: str) -> None:
         """Every non-object or unparseable JSON body is answered 4xx, never 2xx or 5xx."""
         for raw in MALFORMED_JSON_BODIES:
-            with self.subTest(body=raw):
+            with self.subTest(body=raw[:20]):
                 status = self.send(method, url, raw).status_code
-                self.assertGreaterEqual(status, 400, raw)
-                self.assertLess(status, 500, raw)
+                self.assertGreaterEqual(status, 400, raw[:20])
+                self.assertLess(status, 500, raw[:20])

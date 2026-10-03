@@ -20,7 +20,6 @@ players than for web ones, which no test on either side would catch.
 from __future__ import annotations
 
 from datetime import timedelta
-import json
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -77,6 +76,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     Guess,
     SpotGuessrMode,
 )
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.spotguessr import (
     overview as spotguessr_overview,
@@ -133,8 +133,8 @@ def _parse_geo_bounds_query(raw: str | None) -> tuple[dict | None, Response | No
         response)`` carrying the 400 to return as-is.
     """
     try:
-        geo_bounds_geojson = json.loads(raw) if raw else None
-    except (TypeError, ValueError):
+        geo_bounds_geojson = decode_json(raw) if raw else None
+    except MalformedBodyError:
         return None, Response({"error": "Invalid geo_bounds - must be GeoJSON."}, status=400)
 
     config = spotguessr_session.GameConfig(geo_bounds_geojson=geo_bounds_geojson)

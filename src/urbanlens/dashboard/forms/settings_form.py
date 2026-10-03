@@ -1,6 +1,5 @@
 """User settings form - privacy, contact, and style preferences."""
 
-import json
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +16,7 @@ from urbanlens.dashboard.models.profile.model import (
     ThemeChoice,
     VisibilityChoice,
 )
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -115,8 +115,8 @@ class HotkeySettingsForm(ProfileSettingsForm):
     def clean_keyboard_shortcuts(self) -> dict[str, str]:
         raw = self.cleaned_data.get("keyboard_shortcuts") or "{}"
         try:
-            parsed = json.loads(raw)
-        except (TypeError, ValueError):
+            parsed = decode_json(raw)
+        except MalformedBodyError:
             return {}
         if not isinstance(parsed, dict):
             return {}

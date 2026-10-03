@@ -13,6 +13,7 @@ from django.conf import settings
 
 from urbanlens.dashboard.services.core.frame_limits import ConnectionRate, FrameBudget
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.core.session_access import NotAnActiveParticipantError, SessionAccess
 from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
 
@@ -383,8 +384,8 @@ class InboundVolumeMixin(_CredentialScopeBase):
             return None
 
         try:
-            data = json.loads(text_data)
-        except (json.JSONDecodeError, TypeError):
+            data = decode_json(text_data)
+        except MalformedBodyError:
             logger.warning("%s received an unparseable frame", type(self).__name__)
             return None
         if not isinstance(data, dict):

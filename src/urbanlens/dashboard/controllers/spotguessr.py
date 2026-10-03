@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date as date_cls, timedelta
-import json
 import logging
 import math
 from typing import TYPE_CHECKING
@@ -32,6 +31,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     SpotGuessrMode,
 )
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, coordinate_or_none
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.geo.longitude import normalize_longitude
 from urbanlens.dashboard.services.spotguessr import (
     chat as spotguessr_chat,
@@ -72,8 +72,8 @@ def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResp
         return ``error_response`` immediately when...
     """
     try:
-        geo_bounds_geojson = json.loads(geo_bounds_raw) if geo_bounds_raw else None
-    except (TypeError, ValueError):
+        geo_bounds_geojson = decode_json(geo_bounds_raw) if geo_bounds_raw else None
+    except MalformedBodyError:
         return None, JsonResponse({"error": "Invalid geo_bounds - must be GeoJSON."}, status=400)
 
     config = spotguessr_session.GameConfig(geo_bounds_geojson=geo_bounds_geojson)

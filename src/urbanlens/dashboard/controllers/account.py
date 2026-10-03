@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import timedelta
-import json
 import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -34,6 +33,7 @@ from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDIN
 from urbanlens.dashboard.services.auth.username import USERNAME_RULES, USERNAME_UNAVAILABLE, username_is_available
 from urbanlens.dashboard.services.core import counters
 from urbanlens.dashboard.services.core.counters import Outage
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
 from urbanlens.dashboard.services.security.client_ip import client_ip
 from urbanlens.dashboard.services.security.throttle import Rate
 
@@ -1134,10 +1134,8 @@ def validate_password_policy(request: HttpRequest) -> JsonResponse:
     from django.contrib.auth.password_validation import validate_password
 
     try:
-        body = json.loads(request.body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"error": "Invalid JSON body."}, status=400)
-    if not isinstance(body, dict):
+        body = posted_json_object(request)
+    except MalformedBodyError:
         return JsonResponse({"error": "Invalid JSON body."}, status=400)
     password = body.get("password")
     if not isinstance(password, str) or not password:

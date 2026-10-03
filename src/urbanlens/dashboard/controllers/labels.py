@@ -7,7 +7,6 @@ Views read ``label_kind`` from the URL (see ``urls.py``).
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -33,6 +32,7 @@ from urbanlens.dashboard.services.core.capacity import CapacityExceededError
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import DB_INTEGER_MAX, DB_INTEGER_MIN, clamp_int, safe_int, safe_int_or_none
+from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
@@ -400,25 +400,28 @@ def _owned_label(request: HttpRequest, label_id: int, kind: str, *, require_owne
     return label
 
 
-def _parse_ids_json(request: HttpRequest) -> tuple[list[int] | None, HttpResponse | None]:
+def _parse_ids_json(request: HttpRequest) -> tuple[list[int], dict[str, Any]] | HttpResponse:
     """Parse a JSON body containing an ``ids`` list.
 
     Bounded by ``settings.LABEL_BULK_EDIT_MAX_IDS``: every bulk label view reached
     through here does per-id work against the database, and the list is whatever
     the client sent.
+
+    Returns:
+        The ids and the whole decoded body, or the 400 to answer with.
     """
     from django.conf import settings
 
     try:
-        data = json.loads(request.body)
+        data = posted_json_object(request)
         ids = [int(x) for x in data.get("ids", [])]
-    except (json.JSONDecodeError, ValueError, TypeError, OverflowError, AttributeError):
-        return None, JsonResponse({"error": "Invalid data"}, status=400)
+    except (ValueError, TypeError, OverflowError):
+        return JsonResponse({"error": "Invalid data"}, status=400)
     if not ids:
-        return None, HttpResponse("No items specified.", status=400)
+        return HttpResponse("No items specified.", status=400)
     if len(ids) > settings.LABEL_BULK_EDIT_MAX_IDS:
-        return None, JsonResponse({"error": f"Select at most {settings.LABEL_BULK_EDIT_MAX_IDS} items at a time."}, status=400)
-    return ids, None
+        return JsonResponse({"error": f"Select at most {settings.LABEL_BULK_EDIT_MAX_IDS} items at a time."}, status=400)
+    return ids, data
 
 
 def _posted_label_ids(request: HttpRequest, key: str) -> list[int]:
@@ -868,14 +871,14 @@ class LabelReorderView(_LabelKindMixin, LoginRequiredMixin, View):
         if self.kind not in _ORGANIZE_KINDS:
             return JsonResponse({"error": "Not supported for this label kind"}, status=404)
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             id_key = {
                 KIND_TAG: "tag_ids",
                 KIND_CATEGORY: "category_ids",
                 KIND_STATUS: "status_ids",
             }[self.kind]
             label_ids = [int(x) for x in data.get(id_key, [])]
-        except (json.JSONDecodeError, ValueError, AttributeError, OverflowError, TypeError):
+        except (ValueError, OverflowError, TypeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
         profile = _request_profile(request)
@@ -1002,10 +1005,10 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             target_id = int(data.get("target_id", 0))
             source_ids = [int(x) for x in data.get("source_ids", [])]
-        except (json.JSONDecodeError, ValueError, TypeError, KeyError, OverflowError, AttributeError):
+        except (ValueError, TypeError, OverflowError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
         if not target_id:
@@ -1079,9 +1082,10 @@ class LabelBulkDeleteView(_LabelKindMixin, LoginRequiredMixin, View):
     """Bulk-delete user-owned labels (JSON POST)."""
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        ids, err = _parse_ids_json(request)
-        if err:
-            return err
+        parsed = _parse_ids_json(request)
+        if isinstance(parsed, HttpResponse):
+            return parsed
+        ids, _ = parsed
 
         profile = _request_profile(request)
         # Protection is a property of the label, not of its kind - the single
@@ -1098,14 +1102,10 @@ class LabelBulkEditView(_LabelKindMixin, LoginRequiredMixin, View):
     """Bulk-edit icon, color, description, order, and parents (JSON POST)."""
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        ids, err = _parse_ids_json(request)
-        if err:
-            return err
-
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid data"}, status=400)
+        parsed = _parse_ids_json(request)
+        if isinstance(parsed, HttpResponse):
+            return parsed
+        ids, data = parsed
 
         profile = _request_profile(request)
         payload = _parse_bulk_payload(data)
@@ -1166,14 +1166,10 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
         if not new_kind:
             return HttpResponse(status=404)
 
-        ids, err = _parse_ids_json(request)
-        if err:
-            return err
-
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid data"}, status=400)
+        parsed = _parse_ids_json(request)
+        if isinstance(parsed, HttpResponse):
+            return parsed
+        ids, data = parsed
 
         profile = _request_profile(request)
         payload = _parse_bulk_payload(data)

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from urbanlens.dashboard.external_api.fields import LinkUrlField
+from urbanlens.dashboard.external_api.fields import JSONField, LinkUrlField
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.aliases.model import AliasType
@@ -396,7 +396,7 @@ class WikiBoundaryUpdateSerializer(serializers.Serializer):
     """Save or clear one typed boundary. A null ``polygon`` clears the custom drawing."""
 
     boundary_type = serializers.ChoiceField(choices=BoundaryType.choices)
-    polygon = serializers.JSONField(required=False, allow_null=True)
+    polygon = JSONField(required=False, allow_null=True)
 
 
 class WikiCoverPhotoUpdateSerializer(serializers.Serializer):
