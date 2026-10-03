@@ -485,7 +485,8 @@ direct-only because REData's contract can't reproduce what they show:
   scanned books and reports (PDF, DjVu) go to Article > Sources rather than the gallery
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
-  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`)
+  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`). Empty since P196:
+  no page reaches UrbanLens with text that could name the place (P216)
 - **Aerial & Drone footage** — a Media-gallery tab of overhead views, from REData's pooled media
   index filtered with `is_aerial` (`plugins.builtin.redata_aerial_media`)
 - **Digital Commonwealth** (Massachusetts) — photographs, maps, and documents from MA libraries/museums/archives, via REData; Massachusetts pins only

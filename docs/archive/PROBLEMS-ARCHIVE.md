@@ -20536,7 +20536,9 @@ Places, Yelp, LoopNet, Wikipedia's matched article, aerial) are not judged. Jess
   match). This last rule is our interpretation.
 - **Conflicts** come from GeoNames (cities of 15,000+, US states and counties, countries; CC BY 4.0):
   a named city more than 40 km from the place, a different US state or county, another country. A city within 15 km
-  is consistent. A city followed by a state ("Salem, OR") is looked up in that state. To avoid reading names as
+  is consistent. A state is its name, its postal code in capitals, or an older abbreviation after punctuation
+  ("Salem, Mass.", "W. Va."). A city followed by a state ("Salem, OR") is looked up in that state, and the place's own city or
+  county followed by another state is somewhere else. To avoid reading names as
   places, a conflict needs capitals and must stand alone: not after "the", not inside a longer proper noun ("George
   Washington", "Binghamton State Hospital", "Washington Street"), not an everyday word ("Union", "Mobile"); IN, OR, ME,
   OK and HI are not states in text written all in capitals.
@@ -20569,6 +20571,8 @@ images are deduplicated only against Commons items the Commons tab shows.
   reads as a conflict unless a state follows it.
 - Rows cached before 2026-10-03 have no description, categories or coordinates, so for up to their 7-day life fewer of
   their items match.
+- Outside the US only cities and countries are checked: GeoNames' extract has no names for other countries'
+  regions, so "Beelitz-Heilstätten, Bayern" matches a subject in Brandenburg.
 - Historic Newspapers now shows nothing: REData drops each page's text, leaving only the newspaper's dateline (P216).
 - On the two HRSH queries of 2026-10-03, Commons returned 29 distinct files and four are kept: the HRPC front view, a
   scanned 1940 census district description naming the hospital, and two copies of a patient's memoir whose subject

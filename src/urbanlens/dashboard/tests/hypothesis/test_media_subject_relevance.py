@@ -28,6 +28,17 @@ HRSH = MediaSubject(
 )
 MANSION = replace(HRSH, names=("Historic Mansion",))
 STAFF_HOUSE = replace(HRSH, names=("Staff House",), context=("Hudson River State Hospital", "HRSH"))
+SEVEN_GABLES = MediaSubject(
+    names=("House of the Seven Gables",),
+    latitude=42.5222,
+    longitude=-70.8850,
+    bbox=BoundingBox.around(42.5222, -70.8850, 250),
+    city="Salem",
+    county="Essex County",
+    state="MA",
+    zipcode="01970",
+    country="United States",
+)
 
 
 def _item(caption: str = "", **fields) -> MediaItem:
@@ -125,6 +136,50 @@ class GeographyTests(_TableTestCase):
 
     def test_a_different_state_code_in_mixed_case_conflicts(self) -> None:
         self.assert_matches(HRSH, ("Hudson River State Hospital, Salem, OR",), expected=False)
+
+    def test_abbreviated_state_names_are_indicators(self) -> None:
+        """Archives and newspapers abbreviate states the old way: "N.Y.", "Mass.", "W. Va."."""
+        self.assert_matches(HRSH, ("HRSH, N.Y.", "Hudson River State Hospital (Poughkeepsie, N.Y.)"), expected=True)
+        self.assert_matches(
+            HRSH,
+            ("HRSH, Mass.", "HRSH, Wis.", "HRSH, Calif.", "HRSH, Pa.", "HRSH, W. Va.", "HRSH, W.Va."),
+            expected=False,
+        )
+
+    def test_an_abbreviation_in_prose_is_a_word(self) -> None:
+        self.assert_matches(
+            HRSH,
+            (
+                "HRSH chapel before Mass",
+                "Miss Smith at HRSH",
+                "HRSH: wash house",
+                "Annual report of the HRSH, ill., maps",
+                "HRSH chapel; they went to Mass. Then home.",
+            ),
+            expected=True,
+        )
+
+    def test_the_subjects_city_or_county_followed_by_another_state_is_somewhere_else(self) -> None:
+        self.assert_matches(
+            SEVEN_GABLES,
+            (
+                "House of the Seven Gables, Salem, Mass.",
+                "House of the Seven Gables, Salem, MA",
+                "House of the Seven Gables, Salem",
+                "House of the Seven Gables, Essex County, Mass.",
+            ),
+            expected=True,
+        )
+        self.assert_matches(
+            SEVEN_GABLES,
+            (
+                "House of the Seven Gables, Salem, Ore.",
+                "House of the Seven Gables, Salem, Oregon",
+                "House of the Seven Gables, Salem, OR",
+                "House of the Seven Gables, Essex County, N.J.",
+            ),
+            expected=False,
+        )
 
     def test_a_city_far_from_the_place_conflicts_and_one_beside_it_does_not(self) -> None:
         self.assert_matches(HRSH, ("HRSH, Albany",), expected=False)

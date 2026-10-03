@@ -301,6 +301,60 @@ _EVERYDAY_PLACE_NAMES = frozenset(
 )
 #: State postal codes that are also English words; ignored in text written all in capitals.
 _WORDLIKE_STATE_CODES = frozenset({"IN", "OR", "ME", "OK", "HI"})
+#: The older abbreviations archives and newspapers use ("Mass.", "W. Va."), by folded words; read only with their periods.
+_STATE_ABBREVIATIONS: dict[str, str] = {
+    "ala": "al",
+    "ariz": "az",
+    "ark": "ar",
+    "cal": "ca",
+    "calif": "ca",
+    "colo": "co",
+    "conn": "ct",
+    "d c": "dc",
+    "del": "de",
+    "fla": "fl",
+    "ga": "ga",
+    "ill": "il",
+    "ind": "in",
+    "kan": "ks",
+    "kans": "ks",
+    "ky": "ky",
+    "la": "la",
+    "mass": "ma",
+    "md": "md",
+    "mich": "mi",
+    "minn": "mn",
+    "miss": "ms",
+    "mo": "mo",
+    "mont": "mt",
+    "n c": "nc",
+    "n d": "nd",
+    "n h": "nh",
+    "n j": "nj",
+    "n m": "nm",
+    "n y": "ny",
+    "neb": "ne",
+    "nebr": "ne",
+    "nev": "nv",
+    "okla": "ok",
+    "ore": "or",
+    "oreg": "or",
+    "pa": "pa",
+    "penn": "pa",
+    "penna": "pa",
+    "r i": "ri",
+    "s c": "sc",
+    "s d": "sd",
+    "tenn": "tn",
+    "tex": "tx",
+    "va": "va",
+    "vt": "vt",
+    "w va": "wv",
+    "wash": "wa",
+    "wis": "wi",
+    "wisc": "wi",
+    "wyo": "wy",
+}
 #: Words after which a place name is part of something else's name ("Hudson River", "Washington Street").
 _FEATURE_WORDS = GENERIC_WORDS | {"avenue", "ave", "blvd", "boulevard", "dr", "drive", "highway", "lane", "parkway", "place", "rd", "route", "way"}
 _COUNTY_SUFFIXES = (" county", " parish", " borough")
@@ -372,6 +426,7 @@ class _Token:
     text: str
     folded: str
     after_break: bool
+    dotted: bool = False
     used: bool = False
 
     @property
@@ -393,7 +448,8 @@ def _tokens(text: str) -> list[_Token]:
     end = 0
     for match in _WORD.finditer(plain):
         word = match.group(0)
-        tokens.append(_Token(word, word.casefold(), not tokens or _BREAK.search(plain, end, match.start()) is not None))
+        after_break = not tokens or _BREAK.search(plain, end, match.start()) is not None
+        tokens.append(_Token(word, word.casefold(), after_break, dotted=plain.startswith(".", match.end())))
         end = match.end()
     return tokens
 
@@ -683,14 +739,14 @@ class MediaSubject:
     def _indicator(self, segment: list[_Token], index: int, size: int, *, shouting: bool) -> tuple[_Level, bool | None] | None:
         span = segment[index : index + size]
         phrase = " ".join(token.folded for token in span)
-        if phrase in STOP_WORDS or phrase in _EVERYDAY_PLACE_NAMES:
+        if (phrase in STOP_WORDS or phrase in _EVERYDAY_PLACE_NAMES) and _abbreviated_state(span) is None:
             return None
         if size == 1 and self._zipcode and phrase == self._zipcode:
             return _Level.LOCAL, True
         if self._city and phrase == self._city:
-            return _Level.LOCAL, True
+            return _Level.LOCAL, self._in_this_state(segment, index + size)
         if phrase in self._counties:
-            return _Level.COUNTY, True
+            return _Level.COUNTY, self._in_this_state(segment, index + size)
         if len(self._state) > 2 and phrase == self._state:
             return _Level.STATE, True
         if (state := _state_at(span, shouting=shouting)) is not None:
@@ -702,6 +758,15 @@ class MediaSubject:
         if phrase.endswith(" county") and phrase in gazetteer.us_counties():
             return _Level.COUNTY, False
         return self._city_at(segment, index + size, phrase)
+
+    def _in_this_state(self, segment: list[_Token], following: int) -> bool:
+        """Whether the place named just before ``following`` is this one's, judged by any state named after it ("Salem, Ore.")."""
+        state = _state_following(segment, following)
+        if state is None:
+            return True
+        if self._state:
+            return state == self._state
+        return not self._country or self._is_usa
 
     def _city_at(self, segment: list[_Token], following: int, phrase: str) -> tuple[_Level, bool | None] | None:
         """Whether the city ``phrase`` names is this place's, judged by its distance; a state named after it narrows the candidates."""
@@ -752,8 +817,17 @@ def _is_state_code(token: _Token) -> bool:
     return len(token.text) == 2 and token.text.isupper() and _state_at([token], shouting=False) is not None
 
 
+def _abbreviated_state(span: list[_Token]) -> str | None:
+    """The lowercase postal code of a state written the old way after punctuation ("Salem, Mass.", "(Wheeling, W. Va.)")."""
+    if not span or not span[0].after_break or not all(token.dotted and token.capitalized for token in span):
+        return None
+    return _STATE_ABBREVIATIONS.get(" ".join(token.folded for token in span))
+
+
 def _state_at(span: list[_Token], *, shouting: bool) -> str | None:
-    """The lowercase postal code of the US state ``span`` names: its full name, or its code written in capitals."""
+    """The lowercase postal code of the US state ``span`` names: its full name, an old abbreviation, or its code in capitals."""
+    if (abbreviated := _abbreviated_state(span)) is not None:
+        return abbreviated
     if len(span) == 1 and len(span[0].text) == 2 and span[0].text.isupper():
         if shouting and span[0].text in _WORDLIKE_STATE_CODES:
             return None
