@@ -12,7 +12,7 @@ import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
 import { fetchJson, HttpError } from "./fetch-json";
 import { tileLayer } from "./map-layers";
-import type { LightboxInput } from "./photo-tile";
+import { type LightboxInput, relevanceAttr } from "./photo-tile";
 import type { FetchInit } from "./site-runtime";
 
 declare const L: typeof import("leaflet") | undefined;
@@ -268,7 +268,7 @@ export class PhotoLightbox {
         }
         const relevance = el("lightbox-relevance-actions");
         if (relevance) {
-            relevance.hidden = !item.canRelevance;
+            relevance.hidden = !(item.canRelevance && d.pinMediaRelevanceUrl);
             el("lightbox-relevant-btn")?.classList.toggle("is-active", item.relevant === true);
             el("lightbox-not-relevant-btn")?.classList.toggle("is-active", item.relevant === false);
         }
@@ -504,6 +504,9 @@ export class PhotoLightbox {
         this.showMeta(item, dialog);
         const tile = Array.from(document.querySelectorAll<HTMLElement>("#media-gallery-grid .media-item")).find((t) => t.dataset.mediaSource === item.mediaSource && t.dataset.mediaKey === item.mediaKey);
         if (tile) window._mediaApplyRelevanceState?.(tile, next);
+        for (const publicTile of document.querySelectorAll<HTMLElement>(".gallery-item--external")) {
+            if (publicTile.dataset.mediaSource === item.mediaSource && publicTile.dataset.mediaKey === item.mediaKey) publicTile.dataset.relevant = relevanceAttr(next);
+        }
         try {
             const data = await fetchJson(url, {
                 method: "POST",

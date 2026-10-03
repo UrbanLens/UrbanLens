@@ -58,6 +58,18 @@ export interface LightboxItem {
     mediaKey?: string;
 }
 
+/** A tile's `data-relevant` or `data-media-relevant` as a relevance mark. */
+export function parseRelevant(raw: string | undefined): boolean | null {
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+    return null;
+}
+
+/** A relevance mark as the attribute `parseRelevant` reads back. */
+export function relevanceAttr(value: boolean | null): string {
+    return value === true ? "true" : value === false ? "false" : "";
+}
+
 /** A lightbox item as a page builds it from tile markup; the lightbox reads an absent field as its default. */
 export type LightboxInput = Partial<LightboxItem> & { mediaType?: string };
 
@@ -156,8 +168,8 @@ export function lightboxItemFromExternalTile(el: HTMLElement): LightboxItem | nu
         imageId: null,
         uuid: "",
         isMine: false,
-        canRelevance: false,
-        relevant: null,
+        canRelevance: true,
+        relevant: parseRelevant(el.dataset.relevant),
         latitude: null,
         longitude: null,
         mapHidden: false,

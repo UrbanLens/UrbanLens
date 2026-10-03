@@ -107,7 +107,8 @@ describe("one lightbox across your photos and public ones", () => {
         expect(list[1]).toMatchObject({
             imageId: null,
             isMine: false,
-            canRelevance: false,
+            canRelevance: true,
+            relevant: null,
             url: RAW.url,
             sourceName: "Wikimedia Commons",
             sourceUrl: RAW.page_url,
@@ -115,6 +116,22 @@ describe("one lightbox across your photos and public ones", () => {
             mediaSource: "wikimedia",
             mediaKey: "abc123",
         });
+    });
+});
+
+describe("a public photo's relevance", () => {
+    test("the viewer's mark travels from the payload into the lightbox, which offers the votes", () => {
+        document.body.innerHTML = `<div data-lightbox-scope><ul id="public"></ul></div>`;
+        const grid = document.getElementById("public")!;
+        grid.append(external({ key: "up", relevant: true }), external({ key: "down", relevant: false }), external({ key: "none" }));
+
+        const { list } = lightboxListFromGrid(document.querySelector<HTMLElement>("[data-lightbox-scope]")!, grid.querySelector("button")!);
+
+        expect(list.map((item) => [item.mediaKey, item.canRelevance, item.relevant])).toEqual([
+            ["up", true, true],
+            ["down", true, false],
+            ["none", true, null],
+        ]);
     });
 });
 

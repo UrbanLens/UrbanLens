@@ -2,6 +2,7 @@
  * The pin Photos tab's "From public sources" grid: the Media panel's external photos, paged and attributed.
  */
 
+import { relevanceAttr } from "./photo-tile";
 import { bindPhotoGrid } from "./photo-virtual-grid";
 
 export interface ExternalPhoto {
@@ -15,6 +16,8 @@ export interface ExternalPhoto {
     caption: string;
     author: string;
     pageUrl: string;
+    /** The viewer's relevance mark: true, false, or null for none. */
+    relevant: boolean | null;
 }
 
 /** A provider-supplied link, kept only when it is a plain web or same-site address. */
@@ -43,6 +46,7 @@ export function externalPhotoFromJson(raw: Record<string, unknown>): ExternalPho
         caption: String(raw.caption ?? ""),
         author: String(raw.author ?? ""),
         pageUrl: safeLink(raw.page_url),
+        relevant: typeof raw.relevant === "boolean" ? raw.relevant : null,
     };
 }
 
@@ -59,6 +63,7 @@ export function renderExternalPhotoTile(photo: ExternalPhoto): HTMLLIElement {
     li.dataset.author = photo.author;
     li.dataset.sourceUrl = photo.pageUrl;
     li.dataset.sourceName = photo.sourceName;
+    li.dataset.relevant = relevanceAttr(photo.relevant);
     li.innerHTML =
         `<button type="button" class="gallery-thumb-btn" data-photo-open><img alt="" class="gallery-thumb" loading="lazy" decoding="async"><span class="gallery-child-ribbon"></span></button>` +
         `<a class="gallery-label-btn" target="_blank" rel="noopener noreferrer" title="Open source"><i class="material-symbols-outlined">open_in_new</i></a>` +

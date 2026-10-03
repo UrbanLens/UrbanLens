@@ -182,6 +182,26 @@ describe("relevance", () => {
         expect(tile?.querySelector("img")?.getAttribute("src")).toBe("/media/local.jpg");
     });
 
+    test("a vote on a public photo is posted for its key and kept on its Photos-tab tile", async () => {
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            `<ul><li class="gallery-item gallery-item--external" data-media-source="wikimedia" data-media-key='k"]2' data-relevant=""></li></ul>`,
+        );
+        window.galleryOpenLightboxItem?.([{ url: "https://upload.test/a.jpg", canRelevance: true, relevant: null, mediaSource: "wikimedia", mediaKey: 'k"]2' }], 0);
+        expect(el("lightbox-relevance-actions").hidden).toBe(false);
+        el("lightbox-not-relevant-btn").click();
+        await settle();
+        expect(calls.at(-1)?.url).toBe("/pin/p/relevance/");
+        expect(JSON.parse(calls.at(-1)?.body ?? "{}")).toMatchObject({ source: "wikimedia", item_key: 'k"]2', is_relevant: false });
+        expect(document.querySelector<HTMLElement>(".gallery-item--external")?.dataset.relevant).toBe("false");
+    });
+
+    test("no votes are offered where the page has nowhere to post them", () => {
+        el("gallery-lightbox").removeAttribute("data-pin-media-relevance-url");
+        window.galleryOpenLightboxItem?.([{ url: "/a.jpg", canRelevance: true, relevant: null }], 0);
+        expect(el("lightbox-relevance-actions").hidden).toBe(true);
+    });
+
     test("pressing the active choice again clears it", () => {
         window.galleryOpenLightboxItem?.([{ url: "/a.jpg", canRelevance: true, relevant: true }], 0);
         el("lightbox-relevant-btn").click();
