@@ -73,8 +73,9 @@ export async function receivedShareIds(recipientPage: Page): Promise<Set<number>
 
 /** The snapshotted coordinates a share detail page centres its map on, or null. */
 export function sharedCoordinates(html: string): { lat: number; lng: number } | null {
-    const lat = /const lat = (-?\d+(?:\.\d+)?)\s*;/.exec(html)?.[1];
-    const lng = /const lng = (-?\d+(?:\.\d+)?)\s*;/.exec(html)?.[1];
+    const map = /<div id="shared-pin-map"[^>]*>/.exec(html)?.[0] ?? "";
+    const lat = /data-lat="(-?\d+(?:\.\d+)?)"/.exec(map)?.[1];
+    const lng = /data-lng="(-?\d+(?:\.\d+)?)"/.exec(map)?.[1];
     return lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
 }
 
