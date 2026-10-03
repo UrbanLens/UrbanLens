@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P221` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P236` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -221,3 +221,18 @@ still resolves after it is fixed, and the id is never handed out again.
 | P215 | open | 2026-10-03 | Commons file URLs now carry `utm_` parameters, so a file's `media_item_key` changes under it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P220 | open | 2026-10-03 | A background photo import stops at the first object store refusal, and the rest of the selection is never imported | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P221 | open | 2026-10-03 | The pin page's "Choose buildings to add" dialog can't scroll to its submit button, and its header stays after submitting | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P222 | open | 2026-10-03 | Only one building's outline shows on the HRSH pin map, and it shows whether "show child pin details" is on or off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P223 | open | 2026-10-03 | When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P224 | open | 2026-10-03 | Toggling "show child pin details" reloads the whole page | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P225 | open | 2026-10-03 | A "Reference Documents" panel titles HRSH's National Register entry "Marist University", the campus across the street | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P226 | open | 2026-10-03 | Property Records: the Overview tab is blank, and the two historic tabs should be one | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P227 | open | 2026-10-03 | "Site Conditions" should be a tab of the Location Data panel, not a panel of its own | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P228 | open | 2026-10-03 | A known National Register number should link to its listing, and the link should join the pin's and wiki's links | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P229 | open | 2026-10-03 | The Ownership panel shows a subscriber only the owner's name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P230 | open | 2026-10-03 | "Buildings on this Property" shows National Register details for some buildings and not others, and not every building links its wiki | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P231 | open | 2026-10-03 | A building child pin's wiki is named after the campus, not the building, and isn't nested under the campus wiki | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P232 | open | 2026-10-03 | Sentinel-2 cloudless slides are blurry at the pin's zoom: each imagery source should be shown at a zoom its resolution supports | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P233 | open | 2026-10-03 | Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P234 | open | 2026-10-03 | Article > Sources lists only three documents, even with child pin details on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P235 | open | 2026-10-03 | Article > News shows no results for HRSH | [`docs/PROBLEMS.md`](PROBLEMS.md) |

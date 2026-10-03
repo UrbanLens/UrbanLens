@@ -3033,3 +3033,163 @@ A likely fix: retry on `storage_errors.STORAGE_ERRORS` with a backoff that outla
 uses `min(60 * 2**retries, 900)`), and say in the progress message that storage was unavailable. Most tasks in
 `tasks.py` declare `autoretry_for=(OSError,)`, so whether to widen all of them is a separate question. Not reproduced
 in a test.
+
+## P221 — The pin page's "Choose buildings to add" dialog can't scroll to its submit button, and its header stays after submitting
+
+`id: P221` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH, 2026-10-03`
+
+On the Private Pin page, "Choose buildings to add":
+
+- When zoomed in far enough, the dialog doesn't scroll, so its submit button can sit entirely off screen with no way
+  to reach it. The body must scroll inside a dialog capped to the viewport (`max-height` in `dvh`), with the actions
+  in a footer that stays visible.
+- After submitting, the dialog's contents disappear but its header stays on screen. Submitting must close the whole
+  dialog, then toast the outcome.
+
+Reproduce in Playwright at a narrow, tall-content viewport. Assert the submit button is reachable (`scrollIntoView`,
+then `elementFromPoint`), and that the `<dialog>` is closed (`open` false) after submit. Check the other dialogs
+built the same way for the same overflow fault.
+
+## P222 — Only one building's outline shows on the HRSH pin map, and it shows whether "show child pin details" is on or off
+
+`id: P222` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
+
+The pin map draws the morgue's outline (building 45) and no other building's. The morgue's outline also ignores the
+"show child pin details" toggle. Expected: every building child pin's outline is drawn when the toggle is on, and none
+when it is off, unless an outline belongs to the pin itself. Find where building outlines come from (child pins'
+boundaries, `parcel_buildings`, `Place` outlines) and why only one resolves. Two suspects: P182 (an OSM relation
+returned as a point, so a building place has no outline) and outline-less fiat building places. Reproduce on
+`development_main` HRSH first.
+
+## P223 — When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves
+
+`id: P223` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
+
+Zoomed in on HRSH, the whole viewport is inside the parcel polygon, so:
+
+- A left click anywhere opens the boundary's context menu, and a click elsewhere opens another instead of closing the
+  first. A click outside an open context menu should only close it.
+- Hovering anywhere shows the "Property Boundary" tooltip. It should show only while the pointer rests and no context
+  menu is open, and hide on movement or when a menu opens.
+
+The fix belongs in the shared map layer code, so every polygon layer behaves this way, not only the parcel's. Test in
+Playwright with the viewport inside a polygon (see the memory note on reaching the Leaflet map).
+
+## P224 — Toggling "show child pin details" reloads the whole page
+
+`id: P224` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
+
+The toggle should show or hide the child pins' details in place, through htmx swaps of the affected panels, with no
+page reload. Save the preference the same way it is saved now. Find every panel that reads the setting: map markers,
+photos, visits, notes, Article > Sources, building outlines (P222).
+
+## P225 — A "Reference Documents" panel titles HRSH's National Register entry "Marist University", the campus across the street
+
+`id: P225` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
+
+A "Reference Documents" panel shows NRHP information under the title "Marist University". Marist is across Route 9
+from HRSH. Jess: the panel isn't needed. Find why Marist matches this place (a radius search instead of containment?
+the nearest record winning? a register row's `contains_point`?) and fix the matching, so the same error can't reach
+any other surface: Property Records, links (P228), Article > Sources. Then remove the panel. Check what else reads its
+data before deleting anything.
+
+## P226 — Property Records: the Overview tab is blank, and the two historic tabs should be one
+
+`id: P226` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
+
+- The Overview tab is empty. It should summarise the other tabs: owner, parcel, year built, historic status and
+  register number.
+- "NY Historic Preservation (CRIS)" and "Historic Registers" become one tab, "Historic Preservation", with each
+  source attributed. Repeated facts appear once.
+
+## P227 — "Site Conditions" should be a tab of the Location Data panel, not a panel of its own
+
+`id: P227` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
+
+Move it, keeping its lazy loading: an off-tab panel loads when its tab opens (P53). Make sure no second panel request
+is left behind.
+
+## P228 — A known National Register number should link to its listing, and the link should join the pin's and wiki's links
+
+`id: P228` · `status: open` · `updated: 2026-10-03` · `found by: Jess`
+
+Property Records shows the NRHP reference number but doesn't link it. Link it to the National Park Service's NRHP
+record and to CRIS's record for the place, after checking each URL form against the live sites. Add those links to
+the pin's links and the wiki's links automatically, de-duplicated and attributed as automatic. Stop on a link the
+user removed: record the removal so it isn't re-added.
+
+## P229 — The Ownership panel shows a subscriber only the owner's name
+
+`id: P229` · `status: open` · `updated: 2026-10-03` · `found by: Jess, a subscriber, on production (v0.8.0) HRSH`
+
+A subscriber sees "EFG/DRA Heritage LLC" and nothing else: no sale history, no contact, nothing related. Find out
+whether the panel asks REData for those fields, whether REData has them for this parcel, and whether the subscriber
+gate is applied. A subscriber should see everything the property-owner feature offers. Check production's entitlement
+logic on the dev stack with the e2e `subscriber` role.
+
+## P230 — "Buildings on this Property" shows National Register details for some buildings and not others, and not every building links its wiki
+
+`id: P230` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
+
+Some rows have an accordion with NRHP listing details and a wiki link, and others don't. Several of those with NRHP
+details aren't National Register buildings at all; they only share the parcel with one. Expected: every building
+child pin links its wiki, and register details appear on exactly the buildings the register lists, not by
+parcel. Investigate what decides which rows get the accordion: CRIS USN rows per building, or the register row by
+parcel. Fix it so it reflects the source's own record.
+
+## P231 — A building child pin's wiki is named after the campus, not the building, and isn't nested under the campus wiki
+
+`id: P231` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
+
+From `/dashboard/map/pin/hrpc-bldg-33powerhouse-machine-shop-1929/`, the wiki link goes to
+`/dashboard/location/<uuid>/wiki/`. That wiki is titled "Hudson River State Hospital", not CRIS's building name. CRIS
+already names the private pin "BLDG 33/POWERHOUSE & MACHINE SHOP (1929)", and the wiki should get the same name from
+the same provider name: CRIS is a provider, so this fits P186's ruling. The building's wiki is also not nested as a
+child of the campus wiki, though the private child pin is nested under the user's campus pin. Check on the release
+branch, which has P186's naming rules: the URL being a uuid means no provider name reached that Location. Expected:
+the building wiki takes CRIS's name and slug and is a child of the parcel's wiki.
+
+## P232 — Sentinel-2 cloudless slides are blurry at the pin's zoom: each imagery source should be shown at a zoom its resolution supports
+
+`id: P232` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
+
+Sentinel-2 cloudless is 10 m a pixel, so at the pin's zoom (17–18) its tiles are upsampled and grainy. The other
+sources are fine. Elegant fix: each imagery provider declares its native ground resolution, from REData's catalogue
+or the source's metadata. A slide is rendered at the deepest zoom whose metres-per-pixel at that latitude is no finer
+than that resolution, and shows a wider area instead of an enlarged one. Test the zoom choice as a pure function over
+resolution and latitude.
+
+## P233 — Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete
+
+`id: P233` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
+
+- Old cached photos no longer meet the search criteria. Remove automatically any cached public-source photo that:
+  - nobody has interacted with (no vote, no relevance mark, no copy, no reference);
+  - doesn't name the subject (pin name or aliases, by P188's audience rules; the base row only by public names);
+  - and isn't geolocated inside the property.
+  Do it as a sweep that also runs when the rule changes. P196's read-time filter already hides such items on the
+  release branch; this removes them from storage too (see P206).
+- The lightbox for these photos has no relevance up/down votes. Add them, as the Media gallery's tiles have.
+- On a Private Pin page, add "remove from my results": a per-user hide that never deletes the shared row, so other
+  users are unaffected.
+
+## P234 — Article > Sources lists only three documents, even with child pin details on
+
+`id: P234` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
+
+Expected: every CRIS document for the campus and each child building, plus the other sources: register nominations,
+Commons documents (P196), search results. On production this was P187 (outage-cached empties), partly fixed by the
+infrastructure side's row deletion. Re-check on the release branch with P187 and P196 merged, and with child pins
+aggregated when the toggle is on. Fix whatever is still missing.
+
+## P235 — Article > News shows no results for HRSH
+
+`id: P235` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
+
+There should obviously be news results for this place. Check on the release branch. Candidates:
+- P187 (an outage cached as empty, fixed);
+- P188's audience split, which made register names base-only;
+- GDELT query shape or availability;
+- P196's relevance rule dropping news items whose text omits the name.
+Find the cause and fix it, with a test that HRSH's real query returns items through the whole path. Use a recorded
+fixture, not the network.
