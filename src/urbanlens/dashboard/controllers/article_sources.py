@@ -73,12 +73,12 @@ class SourcesScope:
         from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
 
         if self.pin_slug and self.driver is not None:
-            nested = PinModel.objects.filter(pk=self.driver.pk).with_descendants().filter(profile_id=self.driver.profile_id)
+            location_ids = set(PinModel.objects.filter(pk=self.driver.pk).with_descendants().filter(profile_id=self.driver.profile_id).values_list("location_id", flat=True))
         elif self.wiki is not None:
-            nested = WikiModel.objects.filter(pk=self.wiki.pk).with_descendants()
+            location_ids = set(WikiModel.objects.filter(pk=self.wiki.pk).with_descendants().values_list("location_id", flat=True))
         else:
             return []
-        location_ids = set(nested.exclude(location_id=self.location.pk).values_list("location_id", flat=True))
+        location_ids.discard(self.location.pk)
         return list(LocationModel.objects.filter(pk__in=location_ids).select_related("place").order_by("pk"))
 
     def document_url(self, source_key: str, document_id: str) -> str:
