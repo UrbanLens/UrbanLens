@@ -368,7 +368,7 @@ class ArticleImageUploadView(ArticleViewBase):
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload, storage_failures_refused
 
         # Scanned asynchronously instead: prepare_photo_upload below marks the row
         # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
@@ -380,7 +380,7 @@ class ArticleImageUploadView(ArticleViewBase):
         checksum = compute_checksum(image_file)
         location = scope.location or (scope.pin.location if scope.pin else None)
         try:
-            with reserve_upload(scope.profile, image_file.size):
+            with storage_failures_refused(), reserve_upload(scope.profile, image_file.size):
                 # Stored already stripped - see services.media.images.prepare_photo_upload.
                 prepared = prepare_photo_upload(image_file, scope.profile)
                 img = Image.objects.create(
@@ -394,7 +394,7 @@ class ArticleImageUploadView(ArticleViewBase):
                     **prepared.metadata,
                 )
         except UploadRefusedError as exc:
-            return JsonResponse({"error": exc.message}, status=exc.status)
+            return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

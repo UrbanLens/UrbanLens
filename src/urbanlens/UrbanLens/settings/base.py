@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
+from botocore.config import Config as BotocoreConfig
 from celery.schedules import crontab
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
@@ -142,6 +143,8 @@ MIDDLEWARE = [
     "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
     # Records the viewer the request actually acts as.
     "urbanlens.dashboard.middleware.WriteSourceMiddleware",
+    # A storage failure a view let escape is a 503 with Retry-After, not a 500.
+    "urbanlens.dashboard.middleware.StorageUnavailableMiddleware",
 ]
 
 if UL_METRICS_INSTRUMENTED:
@@ -664,13 +667,19 @@ _S3_STORAGE_OPTIONS = {
     "access_key": _app_settings.s3_access_key_id,
     "secret_key": _app_settings.s3_secret_access_key,
     "region_name": _app_settings.s3_region_name,
-    "addressing_style": _app_settings.s3_addressing_style,
+    # S3Storage ignores its addressing_style and signature_version options once client_config is given.
+    "client_config": BotocoreConfig(
+        s3={"addressing_style": _app_settings.s3_addressing_style},
+        signature_version="s3v4",
+        connect_timeout=_app_settings.s3_connect_timeout_seconds,
+        read_timeout=_app_settings.s3_read_timeout_seconds,
+        retries={"mode": "standard", "total_max_attempts": _app_settings.s3_max_attempts},
+    ),
     # Private bucket: no per-object ACL, no direct serving.
     "default_acl": None,
     "querystring_auth": True,
     # Never overwrite; differs from S3Storage's default.
     "file_overwrite": False,
-    "signature_version": "s3v4",
 }
 
 # Manifest storage needs collectstatic; tests use plain storage.

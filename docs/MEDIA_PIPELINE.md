@@ -187,7 +187,8 @@ that cannot be re-encoded is retried and then removed, never published as upload
 carrier and format and searches every output for it.
 
 **Waiting for storage.** The upload is already in media storage, so a failure that
-outlasts a task's own retries (about 30 minutes) needs nothing from its owner: the
+outlasts a task's own retries (about 30 minutes for an icon, avatar or comment image,
+about 7 for a photo, video or document) needs nothing from its owner: the
 upload stays held or pending and gets an `UploadRetry` row, and
 `services/media/upload_retry.py`'s `retry_waiting_uploads` (beat, every 5 minutes,
 maintenance queue) queues it again. The first retry comes 5 minutes after it starts
@@ -200,16 +201,29 @@ another upload since, because storage pointed at the wrong bucket or prefix also
 every file gone. An upload waiting over a day, with storage serving other uploads since it
 last failed, is reported once to the admins (`NotificationEvent.UPLOAD_STUCK`, routed by
 `notify_stuck_uploads_*`), since that suggests a failure retrying cannot fix. The admin's
-Upload retries list has a Give up action, which drops a held upload or rejects a comment.
+Upload retries list has a Give up action, which drops a held upload, rejects a comment, or
+offers a photo back to its owner to retry or discard (as the stall sweep below does).
 `adopt_stalled_comment_scans` (hourly) gives a pending comment whose scan was never
 queued an `UploadRetry` row.
+
+`process_image_upload` waits the same way (target `dashboard.Image.image`, P201). An
+object store failure while it opens the upload, while the scanner reads it (the scanner
+reports a failed read of its stream as itself being down, so the cause is checked), or
+while the re-encode reads or writes it, is retried and then waits; before, a Garage timeout
+there was taken for an undecodable or unscannable file and the upload was removed after
+about seven minutes. On the filesystem backend an OSError opening the upload waits too; an
+OSError inside the decode still cannot be told from a bad file, and is retried, then
+rejected. `requeue_stalled_pending_uploads` leaves an upload that is waiting to the retry
+sweep. A failed derived copy is left to its hourly backfill; a backfill that meets a
+transient storage failure (a timeout, a lost connection, a 5xx) stops its batch without
+setting `media_unreadable_at`, which keeps a row out of the walk for a week.
 
 Comment and trip comment images, custom icons (label, pin, achievement) and avatars
 from every writer go through the same encoder (`images.reencode_image_file`), under a
 random name rather than the uploaded one. A comment image is re-encoded by
 `stored_field.reencode_stored_field` before its `pending_scan` clears, in the same
 update; one that cannot be decoded is rejected, and one storage cannot read or
-write (any of `held_upload.STORAGE_ERRORS`) is retried, then left pending to wait for
+write (any of `storage_errors.STORAGE_ERRORS`) is retried, then left pending to wait for
 storage (below). The image is read before the malware scan, so storage refusing that read is
 not mistaken for the scanner being down; a scanner that stays down still rejects.
 
@@ -473,6 +487,21 @@ Three things a deployment has to know:
   three whenever the s3 backend is selected.
 - **botocore rejects a hostname containing an underscore.** A container named
   `urbanlens_garage` cannot be an endpoint host.
+- **A stalled store fails a request inside the proxy's window.** The client
+  retries in botocore's `standard` mode, `UL_S3_MAX_ATTEMPTS` (2) attempts per
+  call, each giving up after `UL_S3_CONNECT_TIMEOUT_SECONDS` (2) to connect and
+  `UL_S3_READ_TIMEOUT_SECONDS` (14) of silence. An upload's name check and write
+  then give up within about 66 s, 86 s after the 20 s upload reservation wait,
+  under Cloudflare's 100 s; `test_object_store_client_config.py` holds the sum
+  to that. The read timeout bounds silence, not a slow transfer, and how long a
+  healthy write to production's Garage waits for its answer was not measured. A
+  request whose upload storage refused answers 503 with `Retry-After: 30` in
+  its endpoint's own error shape (`storage.storage_failures_refused`,
+  `StorageUnavailableError`), and nothing is left behind: the row, a comment
+  posted with its photo, a label or pin created with its icon are written in the
+  transaction the write failed in. Storage holds no copy of the bytes, so the
+  client sends them again; `StorageUnavailableMiddleware` and the external API's
+  error handler answer the same way for any view that let a failure escape.
 - **Building an export containing photos is not ported yet.**
   `services/import_export/export.py` uses `FileField.path` twice, which raises
   on a non-filesystem storage.

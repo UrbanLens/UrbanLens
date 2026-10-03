@@ -546,7 +546,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.images.model import MediaKind
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload, storage_failures_refused
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = request.FILES.get("image")
@@ -562,7 +562,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(message, status=status)
         checksum = compute_checksum(image)
         try:
-            with reserve_upload(profile, None) as reservation:
+            with storage_failures_refused(), reserve_upload(profile, None) as reservation:
                 if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
                     return HttpResponse("You already uploaded this photo to this pin.", status=409)
                 reservation.reserve(image.size or 0)
@@ -570,7 +570,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 prepared = prepare_photo_upload(image, profile)
                 img = Image.objects.create(image=prepared.file, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=prepared.size, **prepared.metadata)
         except UploadRefusedError as exc:
-            return HttpResponse(exc.message, status=exc.status)
+            return HttpResponse(exc.message, status=exc.status, headers=exc.headers)
         safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
 
@@ -797,7 +797,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.services.media.held_upload import discard_held_upload, hold_upload, queue_held_upload
 
         if custom_icon:
-            touched.append(hold_upload(pin, "custom_icon", custom_icon))
+            from urbanlens.dashboard.services.media.storage import StorageUnavailableError
+
+            try:
+                touched.append(hold_upload(pin, "custom_icon", custom_icon))
+            except StorageUnavailableError as exc:
+                return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
         elif request.POST.get("clear_custom_icon"):
             pin.custom_icon = None
             touched += ["custom_icon", discard_held_upload(pin, "custom_icon")]

@@ -27,16 +27,18 @@ class PhotoUploadError(Exception):
         message: User-facing explanation, safe to return to an untrusted caller.
         status: The HTTP status the calling view should respond with (400 for an unusable file, 403 for a feature the account lacks, 409 for a duplicate, 413 for a quota overrun, 429 while another upload holds the reservation)."""
 
-    def __init__(self, message: str, status: int) -> None:
+    def __init__(self, message: str, status: int, *, retry_after: int | None = None) -> None:
         """Store the user-facing message and the HTTP status it maps to.
 
         Args:
             message: User-facing explanation of the refusal.
             status: HTTP status code the caller should respond with.
+            retry_after: Seconds before sending the upload again is worth it, when storage failed.
         """
         super().__init__(message)
         self.message = message
         self.status = status
+        self.retry_after = retry_after
 
     #: A generic, status-keyed message a catch site can show instead of
     #: relaying ``message`` - kept here, next to ``status``, so every caller
@@ -47,7 +49,15 @@ class PhotoUploadError(Exception):
         409: "You already uploaded this file.",
         413: "That file is too large, or you're out of storage.",
         429: "Another upload is still being saved. Try again in a moment.",
+        503: "Storage is briefly unavailable, so this upload wasn't saved. Try again in a minute.",
     }
+
+    @property
+    def headers(self) -> dict[str, str]:
+        """Response headers the refusal needs, such as ``Retry-After``."""
+        from urbanlens.dashboard.services.media.storage import retry_after_headers
+
+        return retry_after_headers(self.retry_after)
 
     @property
     def generic_message(self) -> str:
@@ -111,7 +121,7 @@ def upload_photo(
     Raises:
         PhotoUploadError: The upload was refused; see the exception's ``status`` for how to answer the caller."""
     from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-    from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
+    from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload, storage_failures_refused
 
     media_type = _resolve_media_type(file_obj, profile)
 
@@ -144,7 +154,7 @@ def upload_photo(
     row_metadata.setdefault("pending_scan", True)
 
     try:
-        with reserve_upload(profile, None) as reservation:
+        with storage_failures_refused(), reserve_upload(profile, None) as reservation:
             if Image.objects.filter(profile=profile, checksum=checksum).exists():
                 raise PhotoUploadError("You already uploaded this file.", 409)
             reservation.reserve(file_obj.size or 0)
@@ -161,7 +171,7 @@ def upload_photo(
                 **row_metadata,
             )
     except UploadRefusedError as exc:
-        raise PhotoUploadError(exc.message, exc.status) from exc
+        raise PhotoUploadError(exc.message, exc.status, retry_after=exc.retry_after) from exc
 
     # After the commit, so the worker finds the row.
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task

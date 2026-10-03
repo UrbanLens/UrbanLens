@@ -1468,10 +1468,10 @@ class SafetyGalleryView(LoginRequiredMixin, View):
             return JsonResponse({"error": caption_error}, status=400)
 
         checksum = compute_checksum(image_file)
-        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload, storage_failures_refused
 
         try:
-            with reserve_upload(profile, None) as reservation:
+            with storage_failures_refused(), reserve_upload(profile, None) as reservation:
                 if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
                     return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
                 reservation.reserve(image_file.size or 0)
@@ -1488,7 +1488,7 @@ class SafetyGalleryView(LoginRequiredMixin, View):
                     **prepared.metadata,
                 )
         except UploadRefusedError as exc:
-            return JsonResponse({"error": exc.message}, status=exc.status)
+            return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 

@@ -256,6 +256,10 @@ def create_pin_for_profile(
     try:
         with transaction.atomic():
             pin = Pin.objects.create(**create_kwargs)
+            if custom_icon:
+                from urbanlens.dashboard.services.media.held_upload import hold_upload
+
+                pin.save(update_fields=[hold_upload(pin, "custom_icon", custom_icon)])
     except IntegrityError as exc:
         # Two constraints can fire here; both have well-defined answers: - uuid collision: a
         # concurrent retry of the same client_uuid won the race (return its pin - the idempotent
@@ -273,9 +277,8 @@ def create_pin_for_profile(
         raise
 
     if custom_icon:
-        from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
+        from urbanlens.dashboard.services.media.held_upload import queue_held_upload
 
-        pin.save(update_fields=[hold_upload(pin, "custom_icon", custom_icon)])
         queue_held_upload(pin, "custom_icon")
 
     # visible_to keeps the id__in lookups from resolving another user's

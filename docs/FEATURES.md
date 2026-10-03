@@ -1210,6 +1210,11 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   `s3` for Garage/MinIO/AWS). The switch changes nothing about who may read a file: `FileField.url`
   still returns `/media/...` and every read still passes the gate. `exports/`, `imports/` and
   `preview_sources/` stay on local disk either way.
+- **An object store outage is a 503 the client can retry, not a 500** — the S3 client gives up
+  inside Cloudflare's 100 s (`UL_S3_*_TIMEOUT_SECONDS`, `UL_S3_MAX_ATTEMPTS`), every upload path
+  answers 503 with `Retry-After` and leaves nothing half-written, and processing an upload waits
+  for storage (`services/media/upload_retry.py`) rather than removing it. See
+  `docs/MEDIA_PIPELINE.md`, "Where the bytes are stored".
 - **Four delivery paths, one authorization path** — `X-Accel-Redirect` to nginx off the media
   volume, `FileResponse` off disk, `X-Accel-Redirect` to an internal nginx proxy carrying a URL
   Django signed, or a stream from the object store through Django. Adding a fifth is a

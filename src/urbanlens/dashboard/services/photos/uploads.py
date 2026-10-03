@@ -11,7 +11,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
+from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload, retry_after_headers, storage_failures_refused
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -25,11 +25,18 @@ class UploadRejection:
 
     Attributes:
         message: User-facing explanation, safe to show in a toast.
-        status: HTTP status describing the refusal (400/409/413/415).
+        status: HTTP status describing the refusal (400/409/413/415, or 503 when storage failed).
+        retry_after: Seconds before sending the upload again is worth it, for a refusal that is not about the upload.
     """
 
     message: str
     status: int
+    retry_after: int | None = None
+
+    @property
+    def headers(self) -> dict[str, str]:
+        """Response headers the refusal needs, such as ``Retry-After``."""
+        return retry_after_headers(self.retry_after)
 
 
 def _owner_fields(owner: Pin | Wiki | Profile) -> dict:
@@ -282,7 +289,7 @@ def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_
         return UploadRejection(caption_error, 400)
 
     try:
-        with reserve_upload(profile, None) as reservation:
+        with storage_failures_refused(), reserve_upload(profile, None) as reservation:
             if existing_photo_for_upload(owner, profile, checksum=checksum) is not None:
                 _scope, noun = _duplicate_scope(owner)
                 return UploadRejection(f"You already uploaded this photo to this {noun}.", 409)
@@ -305,4 +312,4 @@ def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_
                 **prepared.metadata,
             )
     except UploadRefusedError as exc:
-        return UploadRejection(exc.message, exc.status)
+        return UploadRejection(exc.message, exc.status, retry_after=exc.retry_after)

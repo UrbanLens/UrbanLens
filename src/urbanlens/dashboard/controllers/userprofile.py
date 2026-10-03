@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.auth.username import USERNAME_UNAVAILABLE, use
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.media.storage import StorageUnavailableError
 from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
@@ -134,6 +135,8 @@ class ViewProfileView(LoginRequiredMixin, View):
             except AvatarScanUnavailableError as exc:
                 logger.warning("avatar upload scan unavailable for %s: %s", profile.pk, exc)
                 messages.error(request, "Our antivirus scanner is temporarily unavailable. Please try again shortly.")
+            except StorageUnavailableError as exc:
+                messages.error(request, exc.message)
             except AvatarUploadError as exc:
                 logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
                 messages.error(request, "That avatar couldn't be uploaded.")
@@ -475,6 +478,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             except AvatarScanUnavailableError as exc:
                 logger.warning("avatar upload scan unavailable for %s: %s", profile.pk, exc)
                 return JsonResponse({"error": "Our antivirus scanner is temporarily unavailable. Please try again shortly."}, status=503)
+            except StorageUnavailableError as exc:
+                return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
             except AvatarUploadError as exc:
                 logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
                 return JsonResponse({"error": "That avatar couldn't be uploaded."}, status=400)
@@ -566,7 +571,10 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         img = AvatarService.download(url)
         if not img:
             return JsonResponse({"error": "No Gravatar found for your email address."}, status=404)
-        profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(img))])
+        try:
+            profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(img))])
+        except StorageUnavailableError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
         queue_held_upload(profile, "avatar")
         return JsonResponse({"ok": True, "avatar_url": profile.avatar.url if profile.avatar else None, "avatar_pending": True})
 
@@ -582,11 +590,14 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         """
         from urbanlens.dashboard.services.profile.avatar import DEFAULT_AVATAR_ANIMAL, DEFAULT_AVATAR_COLOR, set_profile_avatar_from_emoji
 
-        set_profile_avatar_from_emoji(
-            profile,
-            request.POST.get("animal", DEFAULT_AVATAR_ANIMAL),
-            request.POST.get("color", DEFAULT_AVATAR_COLOR),
-        )
+        try:
+            set_profile_avatar_from_emoji(
+                profile,
+                request.POST.get("animal", DEFAULT_AVATAR_ANIMAL),
+                request.POST.get("color", DEFAULT_AVATAR_COLOR),
+            )
+        except StorageUnavailableError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
         return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
 
 

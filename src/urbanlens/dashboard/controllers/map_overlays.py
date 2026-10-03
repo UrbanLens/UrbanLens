@@ -38,6 +38,7 @@ from urbanlens.dashboard.services.map.image_overlays import (
     owner_kwargs,
 )
 from urbanlens.dashboard.services.media.remote_copies import RemoteImage, copy_urls
+from urbanlens.dashboard.services.media.storage import StorageUnavailableError
 from urbanlens.dashboard.services.security.throttle import Rate, account_or_address
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -206,6 +207,9 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
 
     Returns:
         Tuple of (Image or None, error message or None).
+
+    Raises:
+        StorageUnavailableError: Storage failed to store an uploaded image.
     """
     # An existing photo already on this pin/wiki, picked from the dialog's own media grid - already a real, owned
     # Image, so it is reused rather than re-downloaded.
@@ -235,6 +239,8 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
         except PhotoUploadError as exc:
             # Reuse the existing row instead - the user asked to overlay this image, not to store a second copy.
             logger.info("overlay upload rejected for profile %s: %s", profile.pk, exc.message)
+            if exc.status == StorageUnavailableError.status:
+                raise StorageUnavailableError(exc.generic_message) from exc
             if exc.status != 409:
                 return None, exc.generic_message
             existing = Image.objects.filter(profile=profile, checksum=compute_checksum(upload)).exclude(image="")
@@ -475,7 +481,12 @@ class MapOverlayListView(LoginRequiredMixin, View):
             if corners is None:
                 return fail("Could not read where to place the overlay on the map.")
 
-        image, error = _image_from_request(request, owner, profile)
+        try:
+            image, error = _image_from_request(request, owner, profile)
+        except StorageUnavailableError as exc:
+            if _wants_json(request):
+                return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
+            return HttpResponse(exc.message, status=exc.status, headers=exc.headers, content_type="text/plain; charset=utf-8")
         if image is None:
             return fail(error or "Choose an image to overlay.")
 

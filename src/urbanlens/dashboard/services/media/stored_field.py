@@ -17,8 +17,8 @@ import uuid
 from django.core.files.base import ContentFile
 from PIL.Image import DecompressionBombError
 
-from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
 from urbanlens.dashboard.services.media.images import reencode_image_file
+from urbanlens.dashboard.services.media.storage_errors import STORAGE_ERRORS
 
 if TYPE_CHECKING:
     from django.core.files.storage import Storage

@@ -1,7 +1,7 @@
-"""Uploads storage failed on wait for storage to recover, rather than being dropped or rejected (P119).
+"""Uploads storage failed on wait for storage to recover, rather than being dropped or rejected (P119, P201).
 
-A held icon or avatar and a pending comment image are already in media storage, so retrying needs nothing from their
-owner. Waiting must not cost anyone else: each upload's attempts back off from :data:`RETRY_BASE` to :data:`RETRY_CAP`,
+A held icon or avatar, a pending comment image and a photo, video or document being processed are already in media
+storage, so retrying needs nothing from their owner. Waiting must not cost anyone else: each upload's attempts back off from :data:`RETRY_BASE` to :data:`RETRY_CAP`,
 one :func:`retry_waiting_uploads` run queues at most :data:`RETRY_BATCH`, and while storage is failing for everyone only
 one upload is tried. An upload that keeps failing while storage accepts others is reported to the admins.
 """
@@ -46,6 +46,7 @@ STALLED_SCAN_AGE = timedelta(hours=1)
 
 COMMENT_IMAGE = "dashboard.Comment.image"
 TRIP_COMMENT_IMAGE = "dashboard.TripComment.image"
+IMAGE = "dashboard.Image.image"
 
 _LAST_SUCCESS = "upload-storage:last-success"
 _LAST_FAILURE = "upload-storage:last-failure"
@@ -191,7 +192,8 @@ def adopt_stalled_comment_scans() -> int:
 
 
 def give_up(waiting: UploadRetry) -> None:
-    """Stop waiting on an upload: drop the held one, or reject the pending comment and tell its author.
+    """Stop waiting on an upload: drop the held one, reject the pending comment and tell its author, or offer the photo
+    back to its owner to retry or discard.
 
     Args:
         waiting: The upload.
@@ -206,6 +208,12 @@ def give_up(waiting: UploadRetry) -> None:
         comment = model.objects.filter(pk=waiting.object_id, pending_scan=True).first()
         if comment is not None:
             reject_comment_upload(comment, "That photo couldn't be processed.")
+    elif waiting.target == IMAGE:
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.media.upload_failures import record_upload_processing_failure
+
+        if Image.objects.filter(pk=waiting.object_id, pending_scan=True).exists():
+            record_upload_processing_failure(waiting.object_id, "This upload couldn't be processed while storage was failing. Retry it, or discard it and upload again.")
     waiting.delete()
 
 
@@ -251,6 +259,14 @@ def _attempt(waiting: UploadRetry) -> tuple[Callable[..., Any], *tuple[Any, ...]
         return (tasks.scan_comment_image, waiting.object_id)
     if waiting.target == TRIP_COMMENT_IMAGE:
         return (tasks.scan_trip_comment_image, waiting.object_id)
+    if waiting.target == IMAGE:
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.photos.photo_enrichment import enriched_max_dimension
+
+        # A profile-less row is provider imagery, whose size cap is recovered from its source.
+        row = Image.objects.filter(pk=waiting.object_id).values("profile_id", "source").first()
+        max_dimension = enriched_max_dimension(row["source"]) if row is not None and row["profile_id"] is None else None
+        return (tasks.process_image_upload, waiting.object_id, max_dimension)
     return None
 
 

@@ -2833,21 +2833,6 @@ browser, before the fix. Likely suspects are a lightbox drawn under the map's pa
 or one opened inside a container that clips it. A Playwright test must assert the lightbox is visible and on top
 (`elementFromPoint` at its centre), not merely present.
 
-## P201 — An upload that meets a Garage quorum failure is a 500, and the photo is lost
-
-`id: P201` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 4`
-
-Garage runs two nodes with `replication_factor = 2`, so a write needs both. When a node has stalled for more than
-about 75 s, writes fail with a 503 ("Timeout" or "Not connected") until it reconnects. That happened 140 times in the
-week to 2026-10-02. `GatedS3Storage` has no `client_config`, so botocore's defaults apply: 5 attempts and a 60 s read
-timeout. `services/photos/uploads.py:upload_photo_for_owner` catches only `UploadRefusedError`. A "Not connected" gap
-is a 500 with no row. A "Timeout" stall can hold a thread for about 5 × 60 s, past Cloudflare's 100 s, and the row can
-then appear after the user saw an error. Their asks:
-
-- catch `botocore` `ClientError`/`EndpointConnectionError` and `S3UploadFailedError` on every direct upload path, and
-  answer 503 with `Retry-After`, keeping the bytes if the P119 retry machinery can hold them;
-- set a `client_config` with a read timeout well under 100 s and an explicit retry mode.
-
 ## P202 — The scheduled database backup cannot work on Kubernetes, and a restore turns it back on
 
 `id: P202` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 5`
@@ -3029,3 +3014,22 @@ To fix it, REData should join the list as its LoC gateway does. Then the datelin
 which reads as a conflict for any place elsewhere ("Pierce County" against Dutchess). Judge a newspaper page on its text
 alone, for example by keeping the dateline out of `title` and `caption`, or have the source tell the judge to skip them.
 Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03.
+
+## P220 — A background photo import stops at the first object store refusal, and the rest of the selection is never imported
+
+`id: P220` · `status: open` · `updated: 2026-10-03` · `found by: P201's audit of storage writes`
+
+`import_immich_photos`, `import_flickr_photos`, `import_flickr_album_photos` and `import_google_photos` (`tasks.py`)
+store each photo with `Image.objects.create(image=ContentFile(...))` inside `reserve_upload` and catch only
+`UploadRefusedError`. Each task retries as a whole on `OSError` (`autoretry_for=(OSError,)`, `retry_backoff=True`, 3
+retries). A botocore read or connect timeout is an `OSError`, so it is retried, but after about 1, 2 and 4 s, all
+inside one Garage stall. A 503 (`ClientError`) or an `EndpointConnectionError` is not an `OSError`, so the task fails
+at once. Either way the rest of the selection is not imported. Photos already stored stay, and nothing is half-written:
+the row and its file share the reservation's transaction. The archive import stores photos and map overlay images the
+same way (`services/import_export/import_data.py`, `_import_photos` and the overlay importer), also catching only
+`UploadRefusedError`; what the import job does with the error that escapes was not traced.
+
+A likely fix: retry on `storage_errors.STORAGE_ERRORS` with a backoff that outlasts a stall (`process_image_upload`
+uses `min(60 * 2**retries, 900)`), and say in the progress message that storage was unavailable. Most tasks in
+`tasks.py` declare `autoretry_for=(OSError,)`, so whether to widen all of them is a separate question. Not reproduced
+in a test.

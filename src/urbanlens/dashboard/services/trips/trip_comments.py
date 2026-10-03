@@ -314,8 +314,9 @@ def add_comment(
         TripPermissionError: The actor may not comment on this trip.
         TripValidationError: Nothing was submitted, the text exceeds the shared limit, or the image was rejected
             or is still being processed.
-        TripNotFoundError: ``parent_id`` is not a comment on this trip, or a block hides it from the actor."""
-    from urbanlens.dashboard.controllers.comments import attach_existing_comment_image, comment_image_error, existing_image_error, start_comment_image_scan
+        TripNotFoundError: ``parent_id`` is not a comment on this trip, or a block hides it from the actor.
+        StorageUnavailableError: Storage could not store the image, and nothing was saved."""
+    from urbanlens.dashboard.controllers.comments import comment_image_error, create_comment_with_image, existing_image_error
     from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 
     require_perform(actor, trip, trip.allow_comments, COMMENT_DENIED)
@@ -344,19 +345,12 @@ def add_comment(
         # A block hides the reply from the parent's author, so it is not announced to them either.
         notify_parent = parent.author is not None and parent.author != actor and not blocks.hides_profile(parent.author_id)
 
-    comment = TripComment.objects.create(
-        trip=trip,
-        author=actor,
-        text=clean_text,
-        parent=parent,
-        markup_map=materialize_markup_map(actor, map_data, context=trip),
+    comment = create_comment_with_image(
+        lambda: TripComment.objects.create(trip=trip, author=actor, text=clean_text, parent=parent, markup_map=materialize_markup_map(actor, map_data, context=trip)),
+        image,
+        existing_image_id,
+        actor,
     )
-    if image:
-        comment.image = image
-        comment.save(update_fields=["image"])
-        start_comment_image_scan(comment)
-    elif existing_image_id:
-        attach_existing_comment_image(comment, existing_image_id, actor)
 
     if parent is not None and notify_parent:
         notify_reply(actor, parent, reply=comment)

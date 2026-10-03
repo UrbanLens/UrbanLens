@@ -325,7 +325,7 @@ class AchievementAdmin(admin.ModelAdmin):
 
 @admin.register(UploadRetry)
 class UploadRetryAdmin(admin.ModelAdmin):
-    """Uploads storage failed on, waiting to be tried again; giving up drops a held upload or rejects a comment."""
+    """Uploads storage failed on, waiting to be tried again; giving up drops a held upload, rejects a comment or offers a photo back."""
 
     list_display = ["target", "object_id", "attempts", "created", "updated", "next_attempt_at", "gone_since", "admin_notified_at", "last_error"]
     list_filter = ["target"]
@@ -342,7 +342,7 @@ class UploadRetryAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
         return False
 
-    @admin.action(description="Give up on the selected uploads (drops held uploads, rejects comments)", permissions=["view"])
+    @admin.action(description="Give up on the selected uploads (drops held uploads, rejects comments, offers photos back to their owners)", permissions=["view"])
     def give_up_selected(self, request: HttpRequest, queryset) -> None:
         from urbanlens.dashboard.services.media.upload_retry import give_up
 

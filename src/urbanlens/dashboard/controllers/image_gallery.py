@@ -70,7 +70,7 @@ def create_uploaded_photo(
         if result.status != 409:
             pin = owner if isinstance(owner, Pin) else None
             record_photo_upload_failure(profile, image_file.name or "photo", result.message, pin=pin, album=album)
-        return None, JsonResponse({"error": result.message}, status=result.status)
+        return None, JsonResponse({"error": result.message}, status=result.status, headers=result.headers)
 
     # Imported here rather than at module scope: dashboard.tasks pulls in the
     # service layer, which imports this module back.

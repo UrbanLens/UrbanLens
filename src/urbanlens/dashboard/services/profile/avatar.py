@@ -294,6 +294,7 @@ def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile
         AvatarUnsupportedFormatError: The file isn't an accepted image type, or its declared type doesn't match its bytes.
         AvatarMalwareDetectedError: The antivirus scan flagged the file.
         AvatarScanUnavailableError: The antivirus scanner couldn't be reached.
+        StorageUnavailableError: Storage could not store the upload.
     """
     from django.conf import settings
 
@@ -337,8 +338,13 @@ def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> 
         color: A ``MaterialColor`` hex value.
 
     Returns:
-        The same profile, with the generated SVG saved to ``avatar``."""
+        The same profile, with the generated SVG saved to ``avatar``.
+
+    Raises:
+        StorageUnavailableError: Storage could not store the SVG."""
     from django.core.files.base import ContentFile
+
+    from urbanlens.dashboard.services.media.storage import storage_failures_refused
 
     emoji = AvatarService.ANIMAL_EMOJIS.get(animal) or AvatarService.ANIMAL_EMOJIS[DEFAULT_AVATAR_ANIMAL]
     if (color or "").lower() not in {value.lower() for value in MaterialColor.values}:
@@ -347,7 +353,8 @@ def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> 
     svg = AvatarService.generate_emoji_svg(emoji, color)
     from urbanlens.dashboard.services.media.held_upload import discard_held_upload
 
-    profile.avatar.save(f"emoji_{profile.pk}.svg", ContentFile(svg.encode("utf-8")), save=False)
+    with storage_failures_refused():
+        profile.avatar.save(f"emoji_{profile.pk}.svg", ContentFile(svg.encode("utf-8")), save=False)
     profile.save(update_fields=["avatar", discard_held_upload(profile, "avatar")])
     return profile
 
