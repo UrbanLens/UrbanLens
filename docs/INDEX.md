@@ -47,7 +47,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-09-24 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P36 | open, decided | 2026-10-02 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P36 | open, awaiting Jess's rulings | 2026-10-03 | 43 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render; review page published | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-29 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open, decided | 2026-10-02 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-10-02 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -220,3 +220,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |
 | N33 | current | 2026-10-02 | Ask: run `localize_article_images` and `sweep_unnamed_pin_images --delete` on staging and production now, per Jess; restore tooling is infrastructure's | [`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`](handoffs/infrastructure-jess-decisions-2026-10-02.md) |
 | P207 | open | 2026-10-02 | A worker's gen-2 collection still walks the startup heap, and that pause has never been timed on a real worker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P209 | open | 2026-10-03 | Opening a group chat's own URL shows "Select a conversation" until its row is clicked | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P211 | open | 2026-10-03 | On a wiki page, the purple "Community wiki" pill overlaps the onboarding card | [`docs/PROBLEMS.md`](PROBLEMS.md) |

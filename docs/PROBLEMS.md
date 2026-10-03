@@ -702,13 +702,31 @@ lowercase values, `resource_type` as `"district"` against REData's `"building_di
 just `:read`. A read-only key gets 403 on all three and therefore yields zero attachments, however
 correct this code is. The bulk call's 403 is tolerated: aggregation still proceeds on live fetches.
 
-## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
+## P36 — 43 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
 
-`id: P36` · `status: open, decided` · `updated: 2026-10-02`
+`id: P36` · `status: open, awaiting Jess's rulings` · `updated: 2026-10-03`
 
 **Jess, 2026-10-02: show her each one.** Make a screenshot list: each modifier, the element it is on, what it renders
 as now, and what it was presumably meant to mark. Publish it as a decision page she can rule on (style it, or drop the
 class). Nothing is styled or dropped before her ruling.
+
+**The review page is up (2026-10-03): <https://claude.ai/artifact/EEcw3K7NH1FhU52w3qrE3b>.** Her choices land in its
+database, collection `p36`, one document per modifier: `{modifier, choice: style|drop|other, notes}`. It has 41 entries:
+`_KNOWN_UNSTYLED` holds 43, not 45, and the three `notif-item__icon-wrap--*` members are grouped into one. Each entry was
+screenshotted on `development_main` with and without the class, and in 38 of them the computed styles match. Three
+couldn't be screenshotted: the assistant needs the AI worker, the subscriptions page is staff-only, and the games need
+the alpha entitlement. Evidence and capture scripts are in the session scratchpad (`p36/`). What the review found besides:
+
+- **`map-overlay-btn--cancel` is a visible defect.** The boundary bar's Cancel label is rgb(247,247,247) on a white pill
+  in the light theme. Clear and Done have their own colour rules; Cancel has none.
+- **Notification icon colours:** only 8 of the 33 `NotificationType`s have a colour rule, and each applies only while
+  unread. The templated `notif-item__icon-wrap--{{ n.notification_type }}` class is invisible to the check.
+- **`visit-source--{{ visit.source }}`** is templated too, so the check doesn't see it. Its `manual`, `geolocation` and
+  `safety_checkin` values have no rule.
+- **`card--secondary`** counts as styled, but its only rule is scoped under `.child-building-detail`, so it does nothing
+  on the pin page.
+- **`btn--sel`:** an unused `.tag-view-btn--sel` rule looks like the class this button was meant to carry.
+- **`org-bulk-btn--merge`** also carries a stray `btn` class, which gives Merge a shadow that Edit and Delete lack.
 
 Previously titled "50 BEM modifiers are applied in templates with no CSS rule, so intended visual
 states never render", before that "45 BEM modifiers applied in templates with no CSS rule", and
@@ -3076,3 +3094,20 @@ Python 3.13's incremental collector is the runtime's own reduction of this pause
 fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows? Measure on
 `development_main` first. Production's `pg_stat_statements` is being loaded on the infrastructure side and will name
 the queries.
+
+## P209 — Opening a group chat's own URL shows "Select a conversation" until its row is clicked
+
+`id: P209` · `status: open` · `updated: 2026-10-03` · `found by: the P36 screenshot pass`
+
+Loading `/dashboard/messages/g/<uuid>/` directly, from a notification link, a bookmark or a reload, shows the messages
+page's empty "Select a conversation" state, not that group's thread. Clicking the group's row in the list opens it. A
+direct-message URL should be checked for the same fault. Reproduce in Playwright: load the URL cold and assert the
+thread is showing.
+
+## P211 — On a wiki page, the purple "Community wiki" pill overlaps the onboarding card
+
+`id: P211` · `status: open` · `updated: 2026-10-03` · `found by: the P36 screenshot pass`
+
+On the wiki page, the "Community wiki" badge draws over the `page-onboarding--wiki` card. The P36 pass's screenshots
+`page-onboarding--wiki.png` and `page-onboarding--unmodified-sibling-on-pin-page.png` show it. Fix it in a browser, and
+assert with `elementFromPoint` that the card's top-left text is the topmost element.
