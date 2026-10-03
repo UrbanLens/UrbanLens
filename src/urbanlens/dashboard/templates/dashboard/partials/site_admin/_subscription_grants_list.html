@@ -39,7 +39,7 @@
             <div class="subscription-list__col subscription-list__col--granted-by">
                 <span class="subscription-list__label">Granted by</span>
                 <div class="subscription-list__value">
-                    <strong class="subscription-list__username">{{ grant.granted_by.username }}</strong>
+                    <strong class="subscription-list__username">{% if grant.granted_by %}{{ grant.granted_by.username }}{% else %}Deleted account{% endif %}</strong>
                     <span class="subscription-list__granted-on">{{ grant.created|date:'M j, Y' }}</span>
                 </div>
             </div>

@@ -3107,29 +3107,6 @@ Options, for the release's migration squash (see the release migration notes): r
 queued by 0033 itself) so no current code ever runs on the old schema. Not Jess's call unless the first option
 changes the supported upgrade path.
 
-## P245 — A revoked subscription grant records when it was revoked, not who revoked it
-
-`id: P245` · `status: open` · `updated: 2026-10-03` · `found by: P199`
-
-Since P199 any site admin can revoke any admin's grant, but `UserSubscription` has only `revoked_at`. The one record of
-who revoked is an INFO line from `controllers/site_admin.py` ("Subscription grant %s revoked by user %s"), which lives as
-long as the logs do. A duration change records nobody either. A `revoked_by` foreign key (`SET_NULL`), set in the same
-`update()` that sets `revoked_at`, would keep it with the row; the grant list could then show revoked grants with who
-ended them, if that is wanted.
-
-## P246 — Deleting an admin's account deletes every subscription grant they made
-
-`id: P246` · `status: open` · `updated: 2026-10-03` · `found by: P199`
-
-`UserSubscription.granted_by` and `PendingSubscriptionGrant.granted_by` are `on_delete=CASCADE`
-(`models/subscriptions/model.py`). `services/profile/account_deletion.hard_delete_profile` deletes the `User`, so when an
-admin's account is deleted every grant they made disappears with it, and each grantee silently loses the role. P199
-keeps a grant by a demoted or deactivated admin listed and revocable; a deleted one leaves nothing to list. Not tested.
-Likely fix: `granted_by` nullable with `SET_NULL`, and the grant list showing "deleted account" for a null. Rows are only
-deleted on Jess's say-so, so that is hers to confirm.
-
-The P199 merge commit (57e583cd7) says `granted_by` is kept on `SET_NULL`. It is not; it is still `CASCADE`.
-
 ## P250 — A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name
 
 `id: P250` · `status: open` · `updated: 2026-10-03` · `found by: rerunning 0041 against dev, P186 follow-up`

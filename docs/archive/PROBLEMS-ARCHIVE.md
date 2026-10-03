@@ -21404,3 +21404,45 @@ Found by Jess on production (v0.8.0) at HRSH.
   - no label while the pointer moved, and the label after a one-second rest, gone on the next move;
   - a left click opened the boundary menu, and no label showed while it was open;
   - a click elsewhere left no menu, the next click opened one, and a right-click moved it.
+
+## RESOLVED 2026-10-03: Deleting an admin's account deletes every subscription grant they made
+
+`id: P246` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by P199.
+
+**Cause.** `UserSubscription.granted_by` was `on_delete=CASCADE`, and `hard_delete_profile` deletes the `User`. Deleting
+an admin's account deleted every grant they had made, and each grantee silently lost the role.
+
+**Fix.** `granted_by` is nullable with `SET_NULL` (migration 0048, which also adds P245's `revoked_by`). The grant
+outlives its granter. It stays active and stays listed, with "Deleted account" in place of a name, and any other admin
+can still revoke it.
+
+`PendingSubscriptionGrant.granted_by` is left `CASCADE`. A pending grant hangs off a friend invitation, whose
+`inviter` is `CASCADE` too and is always the same admin (`friendship.py` sets `granted_by=inviter.user`). Deleting the
+admin removes the invitation, and with it the gift it carried, whatever the grant's own foreign key says.
+
+**Tests.** `test_subscription_grant_audit.py::DeletedGranterTests`. Through `hard_delete_profile`, the grant survives
+with no granter, the grantee keeps the role, the list names "Deleted account", and another admin can still revoke it.
+All were red before the fix (the grant was gone).
+
+## RESOLVED 2026-10-03: A revoked subscription grant records when it was revoked, not who revoked it
+
+`id: P245` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by P199.
+
+**Cause.** Since P199 any site admin can revoke any admin's grant. `UserSubscription` recorded only `revoked_at`, so who
+revoked a grant lived only in an INFO log line.
+
+**Fix.**
+- `UserSubscription.revoked_by` (`SET_NULL`, migration 0048) is set in the same `update()` as `revoked_at`, by the
+  site-admin view and by `UserSubscription.revoke(by=...)`.
+- A second revoke matches no row, so the first revoker stays.
+- Regranting makes a new row, so the new grant has no revoker.
+- A duration change now logs who made it, as a revoke always did. Neither is shown in the UI; the grant list shows
+  active grants only.
+
+**Tests.** `test_subscription_grant_audit.py::RevokedByTests`: the view and the model method record the revoker, a
+second revoke keeps the first, the record outlives the revoker's account, and a regrant starts clean. All were red
+before the fix.

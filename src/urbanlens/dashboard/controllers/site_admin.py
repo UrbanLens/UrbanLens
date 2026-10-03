@@ -639,7 +639,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
 
         if action == "revoke":
             subscription_id = safe_int_or_none(request.POST.get("subscription_id"))
-            if UserSubscription.objects.not_revoked().filter(pk=subscription_id).update(revoked_at=timezone.now()):
+            if UserSubscription.objects.not_revoked().filter(pk=subscription_id).update(revoked_at=timezone.now(), revoked_by=request.user):
                 logger.info("Subscription grant %s revoked by user %s", subscription_id, request.user.pk)
             if is_htmx:
                 return self._grants_list_response(request, toast=("info", "Subscription revoked."))
@@ -650,6 +650,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             if sub:
                 sub.set_duration_months(_parse_duration_months(request.POST.get("duration_months")))
                 sub.save(update_fields=["expires_at", "updated"])
+                logger.info("Subscription grant %s duration changed by user %s", sub.pk, request.user.pk)
             if is_htmx:
                 return self._grants_list_response(request, toast=("success", "Subscription updated."))
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=updated")

@@ -225,8 +225,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P236 | open | 2026-10-03 | A wiki URL's response time tells whether a Location exists under that slug | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P245 | open | 2026-10-03 | A revoked subscription grant records when it was revoked, not who revoked it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P246 | open | 2026-10-03 | Deleting an admin's account deletes every subscription grant they made | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P250 | open | 2026-10-03 | A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P255 | open | 2026-10-03 | A building pin's CRIS card can show a neighbouring building's record | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P256 | open | 2026-10-03 | NPS's record link opens an empty page for listings NPGallery does not carry | [`docs/PROBLEMS.md`](PROBLEMS.md) |

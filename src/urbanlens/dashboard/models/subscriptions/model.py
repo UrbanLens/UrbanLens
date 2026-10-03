@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -207,12 +207,14 @@ class UserSubscription(abstract.DashboardModel):
 
     user = ForeignKey(User, on_delete=CASCADE, related_name="subscriptions")
     role = ForeignKey(SubscriptionRole, on_delete=CASCADE, related_name="user_subscriptions")
-    granted_by = ForeignKey(User, on_delete=CASCADE, related_name="granted_subscriptions")
+    granted_by = ForeignKey(User, on_delete=SET_NULL, null=True, blank=True, related_name="granted_subscriptions")
+    revoked_by = ForeignKey(User, on_delete=SET_NULL, null=True, blank=True, related_name="revoked_subscriptions")
 
     if TYPE_CHECKING:
         user_id: int
         role_id: int
-        granted_by_id: int
+        granted_by_id: int | None
+        revoked_by_id: int | None
 
     objects = UserSubscriptionManager()
 
@@ -236,9 +238,15 @@ class UserSubscription(abstract.DashboardModel):
     def set_duration_months(self, months: int | None) -> None:
         self.expires_at = None if months is None else timezone.now() + timedelta(days=months * 30)
 
-    def revoke(self) -> None:
+    def revoke(self, *, by: User | None = None) -> None:
+        """End the grant now.
+
+        Args:
+            by: The admin revoking it, if a person is.
+        """
         self.revoked_at = timezone.now()
-        self.save(update_fields=["revoked_at", "updated"])
+        self.revoked_by = by
+        self.save(update_fields=["revoked_at", "revoked_by", "updated"])
 
     def __str__(self) -> str:
         return f"{self.user} → {self.role}"
