@@ -221,3 +221,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P214 | open | 2026-10-03 | Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P215 | open | 2026-10-03 | Commons file URLs now carry `utm_` parameters, so a file's `media_item_key` changes under it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P250 | open | 2026-10-03 | A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
