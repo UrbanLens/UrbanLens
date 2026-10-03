@@ -22,6 +22,7 @@ from django.utils import timezone
 from urbanlens.dashboard.exceptions import DashboardError
 from urbanlens.dashboard.models.abstract.versioning import current_write_actor
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError
+from urbanlens.dashboard.services.core.outages import is_unanswered_status, record_unanswered
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 logger = logging.getLogger(__name__)
@@ -781,8 +782,14 @@ class _RateLimitedSession:
         breaker = breaker_for(self._service_key)
         if breaker is not None and (wait := breaker.wait(str(url), kwargs.get("params"))) is not None:
             log_api_call(self._service_key, success=False, endpoint=endpoint, was_rate_limited=True)
+            record_unanswered(self._service_key)
             raise UpstreamThrottledError(self._service_key, retry_after=wait)
-        entry_pk = _reserve_call(self._service_key, endpoint=endpoint)
+        try:
+            entry_pk = _reserve_call(self._service_key, endpoint=endpoint)
+        except RequestCancelledError as exc:
+            if exc.transient:
+                record_unanswered(self._service_key)
+            raise
 
         # requests has no default timeout at all: a gateway call that forgets timeout= would
         # otherwise block its caller (and, when running under a call_with_deadline guard, pin an
@@ -803,10 +810,13 @@ class _RateLimitedSession:
             _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate, status_code=resp.status_code)
             if breaker is not None:
                 breaker.observe(str(url), kwargs.get("params"), resp)
+            if is_unanswered_status(resp.status_code):
+                record_unanswered(self._service_key)
             return resp
         except Exception:
             elapsed_ms = int((time.monotonic() - t0) * 1000)
             _finalize_call(entry_pk, success=False, response_ms=elapsed_ms)
+            record_unanswered(self._service_key)
             raise
 
 

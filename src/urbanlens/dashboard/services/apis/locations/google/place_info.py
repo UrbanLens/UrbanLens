@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.core.outages import outages_observed
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
@@ -21,6 +22,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
+
+#: What a place with no name Google knows of is called.
+NO_INFORMATION = "No Information Available"
 
 _COORD_QUANT = Decimal("0.000001")
 
@@ -179,13 +183,17 @@ class GooglePlaceService:
             google_place: Row to read or populate.
 
         Returns:
-            Resolved place name, or the sentinel ``No Information Available``.
+            Resolved place name, or :data:`NO_INFORMATION`, which is stored only when every source answered.
         """
         if google_place.cached_place_name:
             return google_place.cached_place_name
-        name = self._resolve_name(float(google_place.latitude), float(google_place.longitude))
+        with outages_observed() as unanswered:
+            name = self._resolve_name(float(google_place.latitude), float(google_place.longitude))
         if not name:
-            name = "No Information Available"
+            if unanswered:
+                # A lookup that couldn't reach its source found nothing; storing that would stop it being asked again.
+                return NO_INFORMATION
+            name = NO_INFORMATION
         GooglePlace.objects.filter(pk=google_place.pk).update(cached_place_name=name)
         google_place.cached_place_name = name
         return name

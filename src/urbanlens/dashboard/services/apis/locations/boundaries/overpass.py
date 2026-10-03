@@ -370,7 +370,12 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return self.elements_for_query(query)
 
     def nearby_boundary_candidates(self, latitude: float, longitude: float, radius_meters: int = 100) -> list[dict[str, Any]]:
-        """Return OSM ways/relations likely to describe a real place boundary near, or around, a coordinate."""
+        """Return OSM ways/relations likely to describe a real place boundary near, or around, a coordinate.
+
+        Raises:
+            requests.RequestException: No endpoint answered, so nothing is known about this coordinate.
+            OverpassUnavailableError: Every endpoint is flagged down.
+        """
         query = self._nearby_features_query(
             latitude,
             longitude,
@@ -381,7 +386,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
             ql_timeout=self.ql_timeout,
             containing_filter=_CONTAINING_SITE_TAG_FILTER,
         )
-        return self.elements_for_query(query)
+        return self.elements_for_query(query, strict=True)
 
     def buildings_within(self, polygon: Polygon | MultiPolygon) -> list[dict[str, Any]]:
         """Return every OSM building whose footprint falls inside a polygon.

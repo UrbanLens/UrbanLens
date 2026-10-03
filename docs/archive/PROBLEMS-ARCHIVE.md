@@ -21020,3 +21020,60 @@ same.
 answer resets the run; a stated wait is honoured and capped at a day; a refused connection backs off the same way; an
 endpoint omitting data stays out until the next day. The existing failover tests in
 `test_location_background_services.py` still pass.
+
+## RESOLVED 2026-10-03: Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache
+
+`id: P214` · `status: fixed` · `resolved: 2026-10-03`
+
+Found reconciling P187 with P203's tests: P187's rule (an outage caches nothing) hadn't reached the stores outside
+`LocationCache`.
+
+**Causes.**
+- **Google's satellite slide.** `GoogleMapsGateway._generate_satellite_slides` caught every `RequestException` and
+  returned, so a connection failure, timeout or 5xx read as a complete run with no slides. The empty list was cached
+  for `external_data_cache_seconds()`.
+- **Esri's Wayback slides.** `EsriGateway._get_wayback_releases` returned no releases for any `RequestException`, so
+  the carousel run, with its two current slides, read as complete and was cached without the historical releases.
+  The other slide generators (REData satellite and street view) already let an outage propagate.
+- **Google's Street View slide.** "No panorama in range" escaped as a bare `ValueError`, so a place with no coverage
+  was never cached and re-asked Google on every warm. `OVER_QUERY_LIMIT` was a `ValueError` too, so the photo
+  backfill (`StreetViewEnrichmentSource`) recorded an exhausted quota as `found: False` for good.
+- **The boundary chain.** It logged and skipped any provider exception. An unreachable Overpass, or a 503 from a
+  footprint source, counted as "no boundary here". With nothing else answering, `attach_location(location, None)`
+  stamped a miss. With a fallback answering, its outline was settled for the whole boundary cache window, and the
+  authoritative source was never asked again. Overpass's own lookup swallowed a total failure as no elements.
+- **Google Place link.** `GooglePlaceService.resolve_place_name` stored "No Information Available" on the shared
+  `GooglePlace` row whenever no name came back. Every layer below it (`resolve_name_from_nearby`, the geocoder, the
+  resolver chain) turns a failure into `None`, so one outage stamped the row permanently. `_merge_into_existing`
+  never re-resolves a non-empty name.
+- `Boundary.generated_at` is written only by child-pin boundary derivation, which asks no upstream. Generation runs
+  are keyed on `Location.place_resolved_at`, which the chain fix now covers.
+
+**Fixes.**
+- The Google satellite generator re-raises an outage (`is_source_outage`) and keeps swallowing only a refusal such
+  as a 403, which is a cached answer.
+- Esri's Wayback list re-raises an outage, so the run is degraded and keeps the current slides it already yielded; a
+  4xx is still an answer.
+- Street View raises `StreetViewNotFoundError` for "nothing in range" (the generator ends normally, so it is
+  cached) and `StreetViewStatusError` for an API status. Its `is_outage` is true for `OVER_QUERY_LIMIT` and
+  `UNKNOWN_ERROR`, so the carousel degrades and the photo backfill raises instead of recording a miss. Both stay
+  `ValueError`s for existing callers.
+- The chain records a provider that raised an outage as deferred. The existing deferral machinery then leaves the
+  miss unstamped, or re-runs with `force` when a fallback placed the location. Overpass's boundary lookup is
+  strict.
+- `services/core/outages.py` adds `outages_observed()`, a context-scoped record of unanswered upstream calls.
+  `_RateLimitedSession._do_request` notes a connection failure, a timeout, a 5xx/408/429, a breaker wait or a
+  transient limiter refusal into every active block. `resolve_place_name` stores the sentinel only when nothing
+  inside its lookup went unanswered. Code whose gateways turn failures into "nothing found" can use the same
+  check before storing a settled empty answer, without threading an error through every layer.
+
+**Tests.**
+- `test_outage_not_cached_slides.py`: Google satellite, Google Street View and Esri Wayback slides under
+  refusal, timeout and 503, plus the settled answers that are cached.
+- `test_photo_enrichment.py::GetSatelliteImageBytesTests` asserted the generator swallowed a connection failure; it
+  now asserts the carousel skips it as a degraded run.
+- `test_boundary_deferral.py::AnUnreachableProviderIsADeferralTests`: refused, timed out and 503 each defer; a
+  provider bug doesn't; an Overpass with no endpoint answering defers, and still does once every endpoint is
+  flagged down.
+- `test_outage_not_cached_place_name.py`: the observer's scoping, and Google place names under refused, timed out
+  and 503 at the socket, through the real session.

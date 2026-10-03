@@ -34,6 +34,7 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 # every user has re-imported. See legacy_cid_coordinate_fix's module docstring.
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates, repoint_cid_to_corrected_location
 from urbanlens.dashboard.services.core.capacity import CapacityExceededError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
@@ -345,6 +346,31 @@ class _PreviewFile:
     history: ImportedHistory = field(default_factory=ImportedHistory)
 
 
+class StreetViewNotFoundError(ValueError):
+    """Google has no Street View panorama within the search radius."""
+
+
+#: Street View statuses that mean Google couldn't answer for now, rather than that the request was refused.
+_STREET_VIEW_TRANSIENT_STATUSES = frozenset({"OVER_QUERY_LIMIT", "UNKNOWN_ERROR"})
+
+
+class StreetViewStatusError(GatewayRequestError, ValueError):
+    """Street View answered with an account or request-level status instead of a panorama.
+
+    Attributes:
+        status: The API's ``status``, such as ``OVER_QUERY_LIMIT`` or ``REQUEST_DENIED``.
+    """
+
+    def __init__(self, status: str) -> None:
+        super().__init__(f"Street View API error: {status}")
+        self.status = status
+
+    @property
+    def is_outage(self) -> bool:
+        """Whether Google couldn't answer for now (an exhausted quota or a server error), not a refusal."""
+        return self.status in _STREET_VIEW_TRANSIENT_STATUSES
+
+
 @dataclass(kw_only=True)
 class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     """Gateway for the Google Maps API."""
@@ -388,13 +414,18 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             latitude: WGS-84 latitude of the target location.
             longitude: WGS-84 longitude of the target location.
 
-        Returns:
-            SatelliteSlide with a ``data:`` URI image source, or ``None`` when no API key is configured or the request fails.
+        Yields:
+            One slide with a ``data:`` URI image source; none without an API key, or when Google refuses the request.
+
+        Raises:
+            requests.RequestException: Google couldn't be asked, or didn't answer.
         """
         try:
             content = self.get_satellite_image_bytes(latitude, longitude)
         except requests.exceptions.RequestException as exc:
-            logger.warning("Google satellite image unavailable for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
+            if is_source_outage(exc):
+                raise
+            logger.warning("Google refused the satellite image for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
         if content is None:
             return
@@ -454,7 +485,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             Tuple of ``(image_bytes, capture_date, pano_latitude, pano_longitude)`` - the pano's own coordinates are returned alongside the image (rather than just echoing back the input) since a widened search radius can resolve to a pano some distance from the requested point.
 
         Raises:
-            ValueError: No Street View imagery was found within ``max_radius``, or the API returned a non-recoverable status."""
+            StreetViewNotFoundError: No Street View imagery was found within ``max_radius``.
+            StreetViewStatusError: The API answered with an account or request-level status.
+            requests.RequestException: The request failed."""
         street_view_url = "https://maps.googleapis.com/maps/api/streetview/metadata"
         logger.debug("Getting street view for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude))
 
@@ -499,16 +532,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 return image_response.content, metadata.get("date"), metadata["location"]["lat"], metadata["location"]["lng"]
 
             if status not in {"ZERO_RESULTS", "NOT_FOUND"}:
-                # Anything other than "genuinely no pano here yet" (e.g. OVER_QUERY_LIMIT,
-                # REQUEST_DENIED, INVALID_REQUEST, UNKNOWN_ERROR) is an account/request-level
-                # failure a wider radius can never fix - looping through the whole radius range
-                # would just repeat the identical failure up to (max_radius -
-                raise ValueError(f"Street View API error: {status}")
+                # An account or request-level failure that a wider radius can't fix.
+                raise StreetViewStatusError(status)
 
             radius += radius_increment
             logger.debug("Street view not found at radius %s, increasing to %s", radius - radius_increment, radius)
 
-        raise ValueError("No Street View imagery found within the maximum search radius.")
+        raise StreetViewNotFoundError("No Street View imagery found within the maximum search radius.")
 
     def _street_view_slide(self, image_bytes: bytes, capture_date: str, pano_latitude: float, pano_longitude: float) -> StreetViewSlide:
         """Return a StreetViewSlide from the given image bytes, capture date, and the pano's actual coordinates."""
@@ -522,8 +552,21 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         )
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
-        """Yield Street View slides for the given latitude and longitude."""
-        image_bytes, capture_date, pano_latitude, pano_longitude = self.get_street_view_single(latitude, longitude, radius=int(radius))
+        """Yield Street View slides for the given latitude and longitude.
+
+        Raises:
+            StreetViewStatusError: Google couldn't answer for now, such as an exhausted quota.
+            requests.RequestException: The request failed.
+        """
+        try:
+            image_bytes, capture_date, pano_latitude, pano_longitude = self.get_street_view_single(latitude, longitude, radius=int(radius))
+        except StreetViewNotFoundError:
+            return
+        except StreetViewStatusError as exc:
+            if exc.is_outage:
+                raise
+            logger.warning("Google Street View refused the request: %s", exc.status)
+            return
         yield self._street_view_slide(image_bytes, capture_date, pano_latitude, pano_longitude)
 
     def calculate_heading(self, lat1, lng1, lat2, lng2):

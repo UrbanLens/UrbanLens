@@ -248,10 +248,10 @@ class Location(abstract.PublicDashboardModel):
         """Fetch the canonical place name from Google and cache it on GooglePlace.
         Blocks on a live API call when nothing is cached yet - safe to call from a Celery task (see tasks.resolve_location_place_name), never from a request/response cycle.
         """
-        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+        from urbanlens.dashboard.services.apis.locations.google.place_info import NO_INFORMATION, GooglePlaceService
 
         if self.latitude is None or self.longitude is None or not (-90 <= float(self.latitude) <= 90) or not (-180 <= float(self.longitude) <= 180):
-            return "No Information Available"
+            return NO_INFORMATION
         service = GooglePlaceService()
         google_place = service.get_or_create_for_coordinates(self.latitude, self.longitude)
         if self.pk and self.google_place_id != google_place.pk:

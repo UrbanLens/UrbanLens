@@ -2945,21 +2945,6 @@ On the wiki page, the "Community wiki" badge draws over the `page-onboarding--wi
 `page-onboarding--wiki.png` and `page-onboarding--unmodified-sibling-on-pin-page.png` show it. Fix it in a browser, and
 assert with `elementFromPoint` that the card's top-left text is the topmost element.
 
-## P214 — Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache
-
-`id: P214` · `status: open` · `updated: 2026-10-03` · `found by: reconciling P187 with P203's tests`
-
-`StreetViewProvider`/`SatelliteViewProvider.get_satellite_slides` (`services/apis/locations/base.py`) caches only a
-`SlideState.COMPLETE` run. `_collect_slides` treats a raised `GatewayRequestError`/`OSError` as `DEGRADED`, and a degraded
-run isn't cached. `GoogleMapsGateway._generate_satellite_slides` (`google/maps.py`) catches `RequestException` itself
-and returns, so a connection failure, timeout or 5xx reads as a complete run with no slides, and that empty list is
-cached for `external_data_cache_seconds()`. Let an outage (`services.core.gateway.is_source_outage`) propagate from the
-generator, and keep swallowing only a settled refusal such as a 403. Check every other `_generate_*_slides` the same way.
-
-P187 also left these stores unswept: `Boundary.generated_at` (does a failed generation stamp it?) and
-`GooglePlaceLinkEnrichmentSource`. Each needs the same test as `test_outage_not_cached_registry.py`: refused, timed out
-and 503, then assert nothing settled was written.
-
 ## P216 — Historic Newspapers shows nothing, because no page reaches UrbanLens with its text
 
 `id: P216` · `status: open` · `updated: 2026-10-03` · `found by: P196, checking each provider's fields, 2026-10-03`

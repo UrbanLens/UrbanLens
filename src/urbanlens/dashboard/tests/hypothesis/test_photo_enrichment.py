@@ -337,4 +337,7 @@ class GetSatelliteImageBytesTests(SimpleTestCase):
             api_key="key", session=mock.Mock(get=mock.Mock(side_effect=requests.ConnectionError()))
         )
 
-        self.assertEqual(list(gateway._generate_satellite_slides(1.0, 2.0)), [])
+        fetch = gateway.get_satellite_slides(1.0, 2.0)
+
+        self.assertEqual(fetch.slides, [])
+        self.assertTrue(fetch.degraded, "an unanswered request is not a settled 'no imagery'")
