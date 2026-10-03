@@ -163,11 +163,22 @@ def pending_marker(digest: str) -> str:
     return f"ul_remote_copy_{digest}"
 
 
-def _is_remote(url: str) -> bool:
+def absolute_remote_url(url: str) -> str | None:
+    """The http(s) address *url* names on another host, or None when it names none.
+
+    A protocol-relative ``//host/path`` (SearXNG returns them) is another host's image, fetched over https.
+
+    Args:
+        url: An image address as a provider or page gave it.
+
+    Returns:
+        The absolute URL, or None for an in-app path, a ``data:`` URI, or anything ``urlsplit`` refuses.
+    """
+    absolute = f"https:{url}" if url.startswith("//") else url
     try:
-        return urlsplit(url).scheme in ("http", "https")
+        return absolute if urlsplit(absolute).scheme in ("http", "https") else None
     except ValueError:
-        return False
+        return None
 
 
 def copy_urls(images: Iterable[RemoteImage]) -> dict[str, str]:
@@ -177,26 +188,26 @@ def copy_urls(images: Iterable[RemoteImage]) -> dict[str, str]:
         images: The images a page is about to show.
 
     Returns:
-        Each http(s) source URL mapped to its in-app address. Anything else (an in-app path, a ``data:`` URI) is left
-        out, for the caller to use as it is.
+        Each remote source URL, as given, mapped to its in-app address. Anything else (an in-app path, a ``data:`` URI)
+        is left out, for the caller to use as it is.
     """
-    remote = {image.url: image for image in images if image.url and _is_remote(image.url)}
+    remote = {image.url: (absolute, image) for image in images if image.url and (absolute := absolute_remote_url(image.url))}
     if not remote:
         return {}
     RemoteImageCopy.objects.bulk_create(
         [
             RemoteImageCopy(
-                url_digest=url_digest(url, image.edition),
-                source_url=url,
+                url_digest=url_digest(absolute, image.edition),
+                source_url=absolute,
                 edition=image.edition,
                 provider=image.provider[:64],
                 page_url=image.page_url,
             )
-            for url, image in remote.items()
+            for absolute, image in remote.values()
         ],
         ignore_conflicts=True,
     )
-    return {url: reverse("media.remote_copy", args=[url_digest(url, image.edition)]) for url, image in remote.items()}
+    return {url: reverse("media.remote_copy", args=[url_digest(absolute, image.edition)]) for url, (absolute, image) in remote.items()}
 
 
 def copy_url(url: str, *, provider: str, page_url: str = "", edition: str = "") -> str:

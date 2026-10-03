@@ -83,6 +83,26 @@ class CopyRecordTests(TestCase):
         self.assertFalse(RemoteImageCopy.objects.exists())
         self.assertEqual(copy_url("/local.jpg", provider="x"), "/local.jpg")
 
+    def test_a_protocol_relative_address_is_a_remote_image_copied_over_https(self) -> None:
+        """SearXNG returns ``//live.staticflickr.com/...``; it names another host, not a path on this one."""
+        copies = copy_urls([RemoteImage("//live.staticflickr.com/1/a_c.jpg", "searxng_images")])
+
+        self.assertEqual(
+            copies,
+            {
+                "//live.staticflickr.com/1/a_c.jpg": reverse(
+                    "media.remote_copy", args=[url_digest("https://live.staticflickr.com/1/a_c.jpg")]
+                )
+            },
+        )
+        self.assertEqual(
+            list(RemoteImageCopy.objects.values_list("source_url", flat=True)),
+            ["https://live.staticflickr.com/1/a_c.jpg"],
+        )
+        self.assertNotEqual(
+            copy_url("//live.staticflickr.com/1/b.jpg", provider="article"), "//live.staticflickr.com/1/b.jpg"
+        )
+
     def test_an_address_the_url_parser_refuses_is_left_as_it_is(self) -> None:
         """An article can name ``https://[x/a.jpg``; ``urlsplit`` raises on it, which failed the save."""
         self.assertEqual(copy_urls([RemoteImage("https://[x/a.jpg", "article")]), {})
@@ -507,6 +527,14 @@ class GalleryUrlTests(TestCase):
         self.assertEqual((urls.thumb, urls.view), (f"{copy}?size=thumb", copy))
         self.assertEqual(RemoteImageCopy.objects.count(), 1)
 
+    def test_a_protocol_relative_provider_image_becomes_a_copy_never_a_link(self) -> None:
+        (urls,) = gallery_urls(
+            [_item("//live.staticflickr.com/1/a_c.jpg", "//live.staticflickr.com/1/a_c.jpg")], provider="searxng_images"
+        )
+
+        copy = reverse("media.remote_copy", args=[url_digest("https://live.staticflickr.com/1/a_c.jpg")])
+        self.assertEqual((urls.thumb, urls.view), (f"{copy}?size=thumb", copy))
+
     def test_an_in_app_document_is_previewed_in_place(self) -> None:
         (urls,) = gallery_urls([_item("/dashboard/cris/attachment/r1/2/", "", "application/pdf")], provider="cris")
 
@@ -544,13 +572,15 @@ class GalleryPageTests(TestCase):
         LocationCache.set(self.pin.location, "stub_gallery", {}, query_key="")
         self.client.force_login(self.pin.profile.user)
 
-    def _gallery(self) -> HttpResponseBase:
+    def _gallery(self, items: list[MediaItem] | None = None) -> HttpResponseBase:
         panel = MagicMock(spec=GalleryMediaSource)
         panel.required_feature = None
         panel.cache_source = "stub_gallery"
         panel.gate.return_value = True
         panel.media_is_ready.return_value = True
-        panel.gallery_items.return_value = [_item("https://provider.test/full.jpg", "https://provider.test/thumb.jpg")]
+        panel.gallery_items.return_value = items or [
+            _item("https://provider.test/full.jpg", "https://provider.test/thumb.jpg")
+        ]
 
         with patch("urbanlens.dashboard.services.pins.external_data.get_panel_source", return_value=panel):
             return self.client.get(reverse("pin.media", args=[self.pin.slug, "stub_gallery"]))
@@ -590,6 +620,17 @@ class GalleryPageTests(TestCase):
             f'data-media-view-url="{reverse("media.remote_copy", args=[url_digest("https://provider.test/full.jpg")])}"',
         )
         self.assertContains(response, 'data-media-url="https://provider.test/full.jpg"')
+
+    def test_a_protocol_relative_provider_photo_is_never_handed_to_the_browser_to_load(self) -> None:
+        flickr = "//live.staticflickr.com/65535/52134103249_50c04fa1b1_c.jpg"
+
+        response = self._gallery([_item(flickr, flickr)])
+
+        self.assertNotContains(response, f'src="{flickr}"')
+        self.assertNotContains(response, f'data-media-thumb="{flickr}"')
+        copy = reverse("media.remote_copy", args=[url_digest(f"https:{flickr}")])
+        self.assertContains(response, f'src="{copy}?size=thumb"')
+        self.assertContains(response, f'data-media-view-url="{copy}"')
 
     def test_the_wikipedia_panel_uses_a_copy(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache

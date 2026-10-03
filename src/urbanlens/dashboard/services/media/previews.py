@@ -197,7 +197,8 @@ def _gallery_url(source: str, copies: dict[str, str], declared: str) -> str:
 
     if source in copies:
         return tile_copy_url(copies[source])
-    if source.startswith("/"):
+    # ``//host/...`` is another site's file, never a path on this one.
+    if source.startswith("/") and not source.startswith("//"):
         return tile_preview_url(source) if needs_server_side_preview(source, declared) else source
     return ""
 
