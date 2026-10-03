@@ -85,6 +85,34 @@ class Gateway(Service, ABC):
 class GatewayRequestError(RuntimeError):
     """Raised when an external gateway call fails or returns an unusable response."""
 
+    @property
+    def is_outage(self) -> bool:
+        """Whether nothing was learned about what was asked, so the failure must not be cached as an empty answer.
+
+        True unless a subclass knows the upstream answered, as REData does when it reports "no record here".
+        """
+        return True
+
+
+def is_source_outage(exc: BaseException) -> bool:
+    """Whether ``exc`` means the upstream could not be asked or did not answer, rather than that it found nothing.
+
+    A ``LocationCache`` row marks its source fetched for the whole cache term, so a caller that stores an empty
+    payload after one of these turns a passing outage into a lasting "nothing here".
+
+    Args:
+        exc: What a gateway call raised.
+
+    Returns:
+        True for a connection failure, a timeout, a 5xx, a throttle, or a gateway error that reports one.
+    """
+    if isinstance(exc, GatewayRequestError):
+        return exc.is_outage
+    if isinstance(exc, requests.HTTPError):
+        status = exc.response.status_code if exc.response is not None else None
+        return status is None or status >= 500 or status in (408, 429)
+    return isinstance(exc, (requests.RequestException, OSError))
+
 
 class GatewayRateLimitedError(GatewayRequestError):
     """Raised when an external gateway reports that its own request budget is exhausted.

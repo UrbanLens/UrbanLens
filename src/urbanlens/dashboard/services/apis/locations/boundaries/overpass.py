@@ -18,7 +18,7 @@ from django.utils import timezone
 import requests
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _is_reasonable_default, best_polygon_from_geometry
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,10 @@ _RETRY_BACKOFF_SECONDS = 0.5
 # by one worker keeps every other worker off that instance too.
 _DOWN_CACHE_KEY = "overpass:endpoint_down:{}"
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
+
+
+class OverpassUnavailableError(GatewayRequestError):
+    """Every Overpass endpoint is flagged down, so the query was not sent."""
 
 
 def _seconds_until_next_day() -> int:
@@ -212,16 +216,16 @@ class OverpassGateway(Gateway, BoundaryProvider):
                 ``self.timeout``.
 
         Returns:
-            The decoded JSON payload, or an empty dict if the response was not a JSON object or every endpoint is currently down.
+            The decoded JSON payload, or an empty dict if the response was not a JSON object.
 
         Raises:
             requests.RequestException: If every available endpoint fails transiently, or on the first non-retryable HTTP error.
+            OverpassUnavailableError: Every endpoint is flagged down, so nothing was asked.
         """
         http_timeout = timeout or self.timeout
         candidates = self._available_endpoints()
         if not candidates:
-            logger.warning("All Overpass endpoints are flagged down until the next day; skipping query")
-            return {}
+            raise OverpassUnavailableError("All Overpass endpoints are flagged down until the next day")
         last_error: requests.RequestException | None = None
         suspect_empty: tuple[str, dict[str, Any]] | None = None
         for attempt, url in enumerate(candidates):
@@ -271,11 +275,27 @@ class OverpassGateway(Gateway, BoundaryProvider):
             raise last_error
         return {}
 
-    def elements_for_query(self, query: str, *, timeout: int | None = None) -> list[dict[str, Any]]:
-        """Run Overpass QL and return the element list, logging failures as empty results."""
+    def elements_for_query(self, query: str, *, timeout: int | None = None, strict: bool = False) -> list[dict[str, Any]]:
+        """Run Overpass QL and return the element list.
+
+        Args:
+            query: The Overpass QL program to execute.
+            timeout: Optional HTTP timeout override in seconds.
+            strict: Raise when no endpoint answered, for a caller that caches the result; otherwise that is logged and
+                returned as no elements.
+
+        Returns:
+            The elements, possibly empty.
+
+        Raises:
+            requests.RequestException: With ``strict``, no endpoint answered.
+            OverpassUnavailableError: With ``strict``, every endpoint is flagged down.
+        """
         try:
             payload = self.query(query, timeout=timeout)
-        except (requests.RequestException, ValueError):
+        except (requests.RequestException, OverpassUnavailableError, ValueError):
+            if strict:
+                raise
             # Still non-fatal - callers treat an empty result as "no boundary data" - but a
             # sustained run of these now warrants a look. logger.warning (not .exception) so it
             # doesn't read as a crash, matching GDELT's gateway, which handles its external failures
@@ -332,6 +352,10 @@ class OverpassGateway(Gateway, BoundaryProvider):
         Returns:
             One dict per building - ``{"name", "latitude", "longitude", "osm_id", "osm_type", "source"}`` plus a GeoJSON
             ``geometry`` footprint when OSM has one - matching the record shape ``plugins.builtin.parcel_buildings`` caches.
+
+        Raises:
+            requests.RequestException: No endpoint answered.
+            OverpassUnavailableError: Every endpoint is flagged down, so nothing was asked.
         """
         ring = self._largest_exterior_ring(polygon)
         if ring is None:
@@ -349,7 +373,7 @@ out body geom;
 """.strip()
 
         buildings: list[dict[str, Any]] = []
-        for element in self.elements_for_query(query):
+        for element in self.elements_for_query(query, strict=True):
             footprint = _polygon_from_element(element)
             # The whole element's bounding-box centre, which is what `out center` reported, so markers stay
             # put - a multi-part relation's footprint is only its largest part.

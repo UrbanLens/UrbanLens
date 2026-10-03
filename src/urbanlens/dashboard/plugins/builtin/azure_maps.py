@@ -35,7 +35,7 @@ class AzureMapsPanelSource(LocationCachePanelSource):
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the nearest POI, if any.
-        An empty result is cached explicitly when neither call finds anything, so the panel degrades to quietly absent rather than polling forever."""
+        An empty result is cached explicitly when neither call finds anything, so the panel degrades to quietly absent rather than polling forever; a failed call caches nothing."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.azure.geocoding import AzureMapsGeocodingGateway
         from urbanlens.dashboard.services.apis.locations.azure.search import AzureMapsSearchGateway

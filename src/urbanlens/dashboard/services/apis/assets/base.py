@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -123,7 +123,10 @@ class MediaProvider(Gateway, ABC):
             search_names: The names the terms were built from, kept on the row.
 
         Returns:
-            Tuple of (list of ``MediaItem``s, empty when the provider found nothing or failed; whether the result was served from cache).
+            Tuple of (list of ``MediaItem``s, empty when the provider found nothing; whether the result was served from cache).
+
+        Raises:
+            Exception: The outage that left every query unanswered, so that nothing is cached (see ``is_source_outage``).
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
@@ -144,6 +147,7 @@ class MediaProvider(Gateway, ABC):
 
         items: list[MediaItem] = []
         seen_urls: set[str] = set()
+        outage: Exception | None = None
         for search_term in search_terms:
             if not search_term or (limit > 0 and len(items) >= limit):
                 continue
@@ -155,9 +159,16 @@ class MediaProvider(Gateway, ABC):
                     items.append(item)
                     if limit > 0 and len(items) >= limit:
                         break
-            except Exception:
+            except Exception as exc:
                 # TODO: Catch specific exceptions
-                logger.exception("%s media lookup failed for %r", self.service_key, search_term)
+                if is_source_outage(exc):
+                    logger.warning("%s media lookup unavailable for %r: %s", self.service_key, search_term, exc)
+                    outage = exc
+                else:
+                    logger.exception("%s media lookup failed for %r", self.service_key, search_term)
+
+        if outage is not None and not items:
+            raise outage
 
         data: dict = {"items": [asdict(item) for item in items]}
         if search_names is not None:

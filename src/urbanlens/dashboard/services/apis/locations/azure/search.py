@@ -6,10 +6,7 @@ from dataclasses import dataclass
 import logging
 from typing import Any
 
-import requests
-
 from urbanlens.dashboard.services.apis.locations.azure.gateway import AzureMapsGateway
-from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +59,11 @@ class AzureMapsSearchGateway(AzureMapsGateway):
             limit: Maximum number of results (1-100).
 
         Returns:
-            Normalized result dicts, most relevant first; empty when nothing matched or the request failed.
+            Normalized result dicts, most relevant first; empty when nothing matched.
 
         Raises:
             ValueError: When no subscription key is configured.
+            requests.exceptions.RequestException: When the request failed.
         """
         if not query:
             return []
@@ -75,11 +73,7 @@ class AzureMapsSearchGateway(AzureMapsGateway):
             params["lon"] = longitude
             if radius is not None:
                 params["radius"] = radius
-        try:
-            body = self._get("/search/fuzzy/json", api_version=SEARCH_API_VERSION, params=params)
-        except requests.exceptions.RequestException:
-            logger.warning("Azure Maps search failed for %r", query, exc_info=True)
-            return []
+        body = self._get("/search/fuzzy/json", api_version=SEARCH_API_VERSION, params=params)
         return [_normalize_result(result) for result in body.get("results") or []]
 
     def search_poi(
@@ -102,10 +96,11 @@ class AzureMapsSearchGateway(AzureMapsGateway):
             limit: Maximum number of results (1-100).
 
         Returns:
-            Normalized POI dicts ordered by distance; empty when nothing was found nearby or the request failed.
+            Normalized POI dicts ordered by distance; empty when nothing was found nearby.
 
         Raises:
             ValueError: When no subscription key is configured.
+            requests.exceptions.RequestException: When the request failed.
         """
         params: dict[str, Any] = {"lat": latitude, "lon": longitude, "radius": radius, "limit": max(1, min(int(limit), 100))}
         # "poi" takes a free-text query; "nearby" (no query param) ranks every
@@ -113,11 +108,7 @@ class AzureMapsSearchGateway(AzureMapsGateway):
         path = "/search/poi/json" if query else "/search/nearby/json"
         if query:
             params["query"] = query
-        try:
-            body = self._get(path, api_version=SEARCH_API_VERSION, params=params)
-        except requests.exceptions.RequestException:
-            logger.warning("Azure Maps POI search failed near %s, %s", redact_coordinate(latitude), redact_coordinate(longitude), exc_info=True)
-            return []
+        body = self._get(path, api_version=SEARCH_API_VERSION, params=params)
         return [_normalize_result(result) for result in body.get("results") or []]
 
     def find_nearest_poi(self, latitude: float, longitude: float, *, radius: int = 75) -> dict[str, Any] | None:
@@ -135,6 +126,7 @@ class AzureMapsSearchGateway(AzureMapsGateway):
 
         Raises:
             ValueError: When no subscription key is configured.
+            requests.exceptions.RequestException: When the request failed.
         """
         results = self.search_poi(latitude, longitude, radius=radius, limit=1)
         return results[0] if results else None

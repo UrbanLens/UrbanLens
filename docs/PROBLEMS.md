@@ -2794,37 +2794,6 @@ already minted from typed text stay in their URLs until something re-mints them,
 a Location whose old URL was its uuid.
 
 
-## P187 — A source error is cached as an empty answer for seven days, so a few hours' REData outage blanked every Location it touched
-
-`id: P187` · `status: open` · `updated: 2026-10-02` · `found by: the HRSH report on production v0.8.0; measured by the infrastructure repo (its 0.8.0 deploy findings, item 11)`
-
-**The outage itself is fixed and was environmental.** Production's celery workers couldn't reach REData: the LAN
-answers `redata.urbanlens.org` with NPM's private address, and the celery egress policy refused private ranges. The
-infrastructure repo fixed the policy (`23d8b1e`, deployed 05:37Z on 2026-10-02). It found no refusals after 05:17Z.
-
-**What's left is the app's: the failures were cached as empty answers.** This entry used to claim that "a refusal
-caches nothing". On production that was false. Between 01:00Z and 05:40Z, while every REData call from celery was
-refused, these sources wrote empty rows to `dashboard_location_cache`:
-
-| Source | Rows written in the window | Empty |
-|---|---|---|
-| `cris_building_usn` | 50 | 50 |
-| `redata_place_details` | 50 | 50 |
-| `parcel_buildings` | 51 | 48 |
-| `redata_building_attributes` | 50 | 47 |
-| `smithsonian`, `library_of_congress`, `internet_archive`, `web_search`, `redata_historic_registers`, `redata_site_features` | 1 each (HRSH) | all |
-
-`{"items": []}`, `{"results": []}`, `{"resources": []}` and `{}` then held for `external_data_cache_days` (7 on
-production). HRSH's `cris_building_usn` row was still the 2026-08-01 one, because the 02:32Z refetch failed and left it.
-With Jess's yes, the infrastructure side deleted the 203 empty rows from that window at about 17:45Z, so the next view
-refetches.
-
-**Fix:** a source error must cache nothing, or at most a short negative entry that the reader treats as "unknown", not
-as "nothing here". A source error is `REASON_SOURCE_ERROR`, a connection failure, a timeout, or a 5xx. This applies to
-every source in the table and to every media-search provider. A real empty answer still caches for the full term.
-Reproduce first: for each source, a test where the gateway raises or reports a source error, asserting that no
-`LocationCache` row is written and that an existing good row is left alone.
-
 ## P188 — Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location
 
 `id: P188` · `status: open, two related gaps left` · `updated: 2026-10-02` · `found by: the HRSH Commons investigation, 2026-10-02`
@@ -3079,7 +3048,13 @@ policy in `services/security/redact.py`. P203's `SecretRedactionFilter` does not
 floats is not one. Not reproduced in a test yet. Either drop the arguments from that line (the task id and name already
 correlate it with Celery's own lines) or pass them through `redact_params` by the task signature's parameter names; and
 decide whether a task should take coordinates at all when a `Location` pk would do.
-||||||| parent of ffea8d26e (docs(P206): nothing prunes the location cache, and dev's rows are 20x smaller than production's)
-fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows? Measure on
-`development_main` first. Production's `pg_stat_statements` is being loaded on the infrastructure side and will name
-the queries.
+
+## P213 — SpotGuessr's pin picker returns a 500: two callers still call `get_unique_search_name()` with no scope
+
+`id: P213` · `status: open` · `updated: 2026-10-03` · `found by: the P187 test sweep`
+
+P188 made `Pin.get_unique_search_name(scope, ...)` take a required `SearchScope`. `controllers/spotguessr.py:696` and
+`external_api/views_games.py:378` still call it with none, so building a pin label raises `TypeError` and the pins
+endpoint returns a 500. `test_spotguessr_controller.py::SpotGuessrPinsViewTests::test_only_returns_the_requesting_profiles_own_pins`
+fails on `release/v_0_9_0` as it stands. The fix needs a decision on which audience's names a game label may use. The
+viewer is the pin's owner here, so the owner's scope is the likely answer.

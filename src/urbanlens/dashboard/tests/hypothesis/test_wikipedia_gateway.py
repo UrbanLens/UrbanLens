@@ -224,8 +224,17 @@ class GetArticleMediaTests(SimpleTestCase):
             media = self.gateway.get_article_media("No Such Article")
         self.assertEqual(media, [])
 
-    def test_request_failure_returns_empty_list(self) -> None:
-        with mock.patch.object(self.gateway.session, "get", side_effect=ConnectionError("boom")):
+    def test_an_unreachable_wikipedia_raises_rather_than_answering_no_images(self) -> None:
+        """``[]`` here is cached as "no images" for the whole cache term (P187)."""
+        with (
+            mock.patch.object(self.gateway.session, "get", side_effect=ConnectionError("boom")),
+            self.assertRaises(ConnectionError),
+        ):
+            self.gateway.get_article_media("Example Article")
+
+    def test_an_unreadable_response_returns_empty_list(self) -> None:
+        with mock.patch.object(self.gateway.session, "get", return_value=self._response(status_code=200)) as get:
+            get.return_value.json.side_effect = ValueError("not json")
             media = self.gateway.get_article_media("Example Article")
         self.assertEqual(media, [])
 

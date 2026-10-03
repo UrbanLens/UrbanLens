@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredError, _consumer_credentials
 from urbanlens.dashboard.services.apis.flickr.public import photo_web_url
+from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
 
 if TYPE_CHECKING:
@@ -182,7 +183,10 @@ class FlickrSearchGateway(MediaProvider):
             text: The full boolean query text, from :func:`build_search_query`.
 
         Returns:
-            Raw photo dicts from Flickr's response, or ``[]`` on any failure.
+            Raw photo dicts from Flickr's response, or ``[]`` when Flickr refused the query.
+
+        Raises:
+            Exception: Flickr could not be asked (see ``is_source_outage``).
         """
         try:
             api_key, _secret = _consumer_credentials()
@@ -204,8 +208,10 @@ class FlickrSearchGateway(MediaProvider):
             response = self.session.get(REST_ENDPOINT, params=params, timeout=_REQUEST_TIMEOUT)
             response.raise_for_status()
             body = response.json()
-        except Exception:
+        except Exception as exc:
             # TODO: Catch specific exceptions
+            if is_source_outage(exc):
+                raise
             logger.exception("Flickr search failed for %r", text)
             return []
         if body.get("stat") != "ok":
@@ -248,15 +254,20 @@ class FlickrFeedSearchGateway(MediaProvider):
                 :func:`build_feed_tag_queries`.
 
         Returns:
-            The feed's raw item dicts, or ``[]`` on any failure.
+            The feed's raw item dicts, or ``[]`` when the feed could not be read.
+
+        Raises:
+            Exception: Flickr could not be asked (see ``is_source_outage``).
         """
         params = {"tags": tags_csv, "tagmode": "all", "format": "json", "nojsoncallback": "1"}
         try:
             response = self.session.get(FEED_ENDPOINT, params=params, timeout=_FEED_TIMEOUT)
             response.raise_for_status()
             body = response.json()
-        except Exception:
+        except Exception as exc:
             # TODO: Catch specific exceptions
+            if is_source_outage(exc):
+                raise
             logger.exception("Flickr public feed request failed for tags=%r", tags_csv)
             return []
         return body.get("items", [])

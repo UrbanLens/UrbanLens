@@ -391,26 +391,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Returns:
             SatelliteSlide with a ``data:`` URI image source, or ``None`` when no API key is configured or the request fails.
         """
-        if not self.api_key:
-            return
-
         try:
-            resp = self.session.get(
-                "https://maps.googleapis.com/maps/api/staticmap",
-                params={
-                    "center": f"{latitude},{longitude}",
-                    "zoom": "18",
-                    "size": "640x400",
-                    "maptype": "satellite",
-                    "key": self.api_key,
-                },
-                timeout=15,
-            )
-            resp.raise_for_status()
-            google_b64 = base64.b64encode(resp.content).decode("ascii")
+            content = self.get_satellite_image_bytes(latitude, longitude)
         except requests.exceptions.RequestException as exc:
             logger.warning("Google satellite image unavailable for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
+        if content is None:
+            return
+        google_b64 = base64.b64encode(content).decode("ascii")
 
         yield SatelliteSlide(
             img_src=f"data:image/jpeg;base64,{google_b64}",
@@ -420,20 +408,33 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         )
 
     def get_satellite_image_bytes(self, latitude: float, longitude: float) -> bytes | None:
-        """Return the raw JPEG bytes of a Google Maps Static satellite image, or None if unavailable.
+        """Return the raw JPEG bytes of a Google Maps Static satellite image.
 
         Args:
             latitude: WGS-84 latitude of the target location.
             longitude: WGS-84 longitude of the target location.
 
         Returns:
-            Raw JPEG bytes, or None when no API key is configured or the request fails.
+            Raw JPEG bytes, or None when no API key is configured.
+
+        Raises:
+            requests.exceptions.RequestException: The request failed.
         """
-        slide = next(self._generate_satellite_slides(latitude, longitude), None)
-        if slide is None:
+        if not self.api_key:
             return None
-        _prefix, _sep, b64_data = slide.img_src.partition(",")
-        return base64.b64decode(b64_data)
+        resp = self.session.get(
+            "https://maps.googleapis.com/maps/api/staticmap",
+            params={
+                "center": f"{latitude},{longitude}",
+                "zoom": "18",
+                "size": "640x400",
+                "maptype": "satellite",
+                "key": self.api_key,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.content
 
     def get_street_view_single(
         self,

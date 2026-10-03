@@ -8,9 +8,12 @@ from typing import TYPE_CHECKING
 
 from django.db import DatabaseError
 
+from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
@@ -24,7 +27,12 @@ def ensure_location_address(location: Location | None) -> bool:
         location: The location to backfill; no-ops when None or already addressed.
 
     Returns:
-        True when at least one address component was written."""
+        True when at least one address component was written.
+
+    Raises:
+        Exception: Google did not supply the address and a provider could not be asked (see ``is_source_outage``);
+            whatever OpenStreetMap wrote is kept.
+    """
     if not location or location.route:
         return False
     lat = float(location.latitude) if location.latitude is not None else None
@@ -32,7 +40,21 @@ def ensure_location_address(location: Location | None) -> bool:
     if lat is None or lng is None:
         return False
 
-    return _google_address(location, lat, lng) or _openstreetmap_admin_address(location, lat, lng)
+    outages: list[Exception] = []
+    written = False
+    backfills: tuple[Callable[[Location, float, float], bool], ...] = (_google_address, _openstreetmap_admin_address)
+    for backfill in backfills:
+        try:
+            written = backfill(location, lat, lng)
+        except Exception as exc:
+            if not is_source_outage(exc):
+                raise
+            outages.append(exc)
+        if written:
+            break
+    if outages:
+        raise outages[0]
+    return written
 
 
 #: OpenStreetMap names some municipalities by their form of government ("Town of Poughkeepsie"); addresses use the bare name.
@@ -52,12 +74,17 @@ def _openstreetmap_admin_address(location: Location, lat: float, lng: float) -> 
 
     Returns:
         True when at least one field was written.
+
+    Raises:
+        Exception: Nominatim could not be asked (see ``is_source_outage``).
     """
     from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
 
     try:
         admin = NominatimGateway().reverse_geocode_admin(lat, lng)
-    except Exception:
+    except Exception as exc:
+        if is_source_outage(exc):
+            raise
         logger.warning("OpenStreetMap address fallback failed for location pk=%s", getattr(location, "pk", None), exc_info=True)
         return False
     if not admin:
@@ -78,7 +105,11 @@ def _openstreetmap_admin_address(location: Location, lat: float, lng: float) -> 
 
 
 def _google_address(location: Location, lat: float, lng: float) -> bool:
-    """Fill the address from Google's reverse geocode; False when there is no key or no answer."""
+    """Fill the address from Google's reverse geocode; False when there is no key or no answer.
+
+    Raises:
+        Exception: Google could not be asked (see ``is_source_outage``).
+    """
     try:
         from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway, parse_address_components
         from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -113,6 +144,8 @@ def _google_address(location: Location, lat: float, lng: float) -> bool:
         if update_fields:
             location.save(update_fields=update_fields)
         return bool(update_fields)
-    except (ImportError, OSError, ValueError, DatabaseError, RequestCancelledError):
+    except (ImportError, OSError, ValueError, DatabaseError, RequestCancelledError) as exc:
+        if is_source_outage(exc):
+            raise
         logger.exception("Reverse geocoding failed for location pk=%s", getattr(location, "pk", None))
         return False

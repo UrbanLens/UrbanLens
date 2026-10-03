@@ -6,12 +6,15 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from django.contrib.gis.geos import GEOSGeometry
 
     from urbanlens.dashboard.models.location.model import Location
@@ -169,27 +172,36 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         location: The location whose parcel to enumerate.
 
     Returns:
-        ``{"buildings": [...], "provider": "redata"|"osm"}``, or ``{}`` when neither provider found anything."""
+        ``{"buildings": [...], "provider": "redata"|"osm"|"cris"}``, or ``{}`` when every provider answered and none
+        found anything.
+
+    Raises:
+        Exception: A provider could not be asked and no other found anything, so there is no answer to cache (see
+            ``is_source_outage``).
+    """
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
     latitude = float(location.latitude or 0)
     longitude = float(location.longitude or 0)
+    outages: list[Exception] = []
 
     try:
         gateway = RedataGateway()
         parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
         buildings = gateway.lookup_buildings(parcel_uuid) if parcel_uuid else []
-    except (PropertyRecordsUnavailableError, ValueError):
+    except (PropertyRecordsUnavailableError, ValueError) as exc:
         # handful of candidates, and exc_info would re-leak the exact coordinate
         # from the failed request's own URL. See services/security/redact.py.
         logger.debug("parcel_buildings: REData unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
         buildings = []
+        if is_source_outage(exc):
+            outages.append(exc)
 
     if buildings:
         return {"buildings": list(buildings), "provider": "redata"}
 
-    osm_buildings = _overpass_buildings(location)
-    cris_buildings = _cris_buildings(location)
+    osm_buildings = _asked(_overpass_buildings, location, outages)
+    cris_buildings = _asked(_cris_buildings, location, outages)
     if osm_buildings:
         from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
@@ -200,7 +212,29 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         merged = merge_cris_buildings([], cris_buildings, parcel_polygon_for_location(location))
         if merged:
             return {"buildings": merged, "provider": "cris"}
+    if outages:
+        raise outages[0]
     return {}
+
+
+def _asked(lookup: Callable[[Location], list[dict[str, Any]]], location: Location, outages: list[Exception]) -> list[dict[str, Any]]:
+    """One fallback's buildings, or none with its outage noted in ``outages``.
+
+    Args:
+        lookup: The fallback.
+        location: The location whose parcel to search.
+        outages: Where an outage is noted.
+
+    Returns:
+        The fallback's buildings.
+    """
+    try:
+        return lookup(location)
+    except Exception as exc:
+        if not is_source_outage(exc):
+            raise
+        outages.append(exc)
+        return []
 
 
 def _cris_buildings(location: Location) -> list[dict[str, Any]]:
@@ -214,6 +248,9 @@ def _cris_buildings(location: Location) -> list[dict[str, Any]]:
 
     Returns:
         CRIS building resources, unfiltered by parcel, or ``[]``.
+
+    Raises:
+        PropertyRecordsUnavailableError: CRIS could not be asked.
     """
     from urbanlens.dashboard.plugins.builtin.cris_buildings import radius_covering
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
@@ -229,8 +266,10 @@ def _cris_buildings(location: Location) -> list[dict[str, Any]]:
     radius = min(radius_covering(shapely_wkt.loads(polygon.wkt), latitude, longitude), _MAX_CRIS_RADIUS_METERS)
     try:
         resources = RedataGateway().lookup_cultural_resources(latitude, longitude, radius_meters=radius, provider="ny_cris")
-    except (PropertyRecordsUnavailableError, ValueError):
+    except (PropertyRecordsUnavailableError, ValueError) as exc:
         logger.debug("parcel_buildings: CRIS unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
+        if is_source_outage(exc):
+            raise
         return []
     return [resource for resource in resources if isinstance(resource, dict) and resource.get("resource_type") == "building"]
 
@@ -301,7 +340,11 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
         location: The location whose property boundary bounds the search.
 
     Returns:
-        Building records, or ``[]`` when there's no real boundary to search inside or Overpass found nothing."""
+        Building records, or ``[]`` when there's no real boundary to search inside or Overpass found nothing.
+
+    Raises:
+        Exception: Overpass could not be asked (see ``is_source_outage``).
+    """
     from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
     from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
@@ -311,11 +354,10 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
 
     try:
         return OverpassGateway().buildings_within(polygon)
-    except Exception:
-        # Matches OverpassGateway's own callers (services.locations.boundaries):
-        # every failure mode here - transient mirror outage, rate limit, a
-        # malformed ring - is a missing list, never a broken page.
+    except Exception as exc:
         logger.debug("parcel_buildings: Overpass lookup failed for location %s", location.pk, exc_info=True)
+        if is_source_outage(exc):
+            raise
         return []
 
 

@@ -186,6 +186,6 @@ class RedataImageryGateway(RedataLocationContextGateway):
         if response.status_code in (400, 404) and reason in _NO_IMAGE_REASONS:
             return None
         if response.status_code in (400, 404, 503):
-            raise LocationContextUnavailableError(reason, error_body.get("message", ""))
+            raise LocationContextUnavailableError(reason, error_body.get("message", ""), rejected=response.status_code != 503)
         logger.warning("REData imagery capture request failed (%s): %s", response.status_code, response.text[:500])
         raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")

@@ -231,14 +231,13 @@ class RedataPlaceDetailsEnrichmentSourceTests(TestCase):
         self.assertEqual(query_key, "123456789012345678")
         mock_gateway_cls.return_value.get_place_detail.assert_called_once_with(123456789012345678)
 
-    def test_fetch_swallows_a_transient_gateway_failure_as_nothing_found(self) -> None:
+    def test_fetch_raises_a_gateway_failure_rather_than_answering_nothing_found(self) -> None:
+        """Returning None here is cached as "no details" for the whole cache term (P187)."""
         location = _location_with_cid(123456789012345678)
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_place_detail.side_effect = GatewayRequestError("REData unreachable")
-            data, query_key = self.source.fetch(location)
-
-        self.assertIsNone(data)
-        self.assertEqual(query_key, "123456789012345678")
+            with self.assertRaises(GatewayRequestError):
+                self.source.fetch(location)
 
     def test_missing_filter_excludes_locations_without_a_cid(self) -> None:
         from urbanlens.dashboard.models.location.model import Location

@@ -673,18 +673,32 @@ class EnrichmentSourceTests(TestCase):
         self.assertEqual(payload["resource_uuid"], "res-1")
         self.assertEqual(query_key, "42.650000,-73.750000")
 
-    def test_fetch_returns_none_payload_when_unavailable(self) -> None:
+    def test_fetch_returns_none_payload_when_cris_has_no_record(self) -> None:
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
 
         with patch.object(
             RedataGateway,
             "lookup_cultural_resources",
-            side_effect=PropertyRecordsUnavailableError("source_error", "boom"),
+            side_effect=PropertyRecordsUnavailableError("no_data_found", ""),
         ):
             payload, query_key = CrisBuildingEnrichmentSource().fetch(location)
 
         self.assertIsNone(payload)
         self.assertEqual(query_key, "42.650000,-73.750000")
+
+    def test_fetch_raises_an_outage_rather_than_answering_nothing(self) -> None:
+        """None here is cached as "no CRIS record" for the whole cache term (P187)."""
+        location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
+
+        with (
+            patch.object(
+                RedataGateway,
+                "lookup_cultural_resources",
+                side_effect=PropertyRecordsUnavailableError("source_error", "boom"),
+            ),
+            self.assertRaises(PropertyRecordsUnavailableError),
+        ):
+            CrisBuildingEnrichmentSource().fetch(location)
 
     def test_enrichment_does_not_claim_the_media_half(self) -> None:
         """Enrichment fills the info card only - attachments need a per-resource

@@ -27,8 +27,8 @@ class SearchWebRedataConfiguredTests(SimpleTestCase):
         self.assertEqual(results, mock_results)
         mock_gateway_class.return_value.search_web.assert_called_once_with("abandoned hospital", max_results=7)
 
-    def test_unavailable_error_degrades_to_empty_list(self) -> None:
-        """No fallback exists once REData is the sole provider - an outage yields ``[]`` so the pin panel's existing "no results" handling degrades gracefully rather than surfacing an error card (see ``PinController._web_search_response``)."""
+    def test_an_outage_raises_rather_than_answering_no_results(self) -> None:
+        """``[]`` here is cached as "no results" for the whole cache term (P187)."""
         from urbanlens.dashboard.services.search.search import search_web
 
         with (
@@ -37,6 +37,19 @@ class SearchWebRedataConfiguredTests(SimpleTestCase):
         ):
             mock_gateway_class.return_value.search_web.side_effect = LocationContextUnavailableError(
                 "all_providers_unavailable", "every source failed"
+            )
+            with self.assertRaises(LocationContextUnavailableError):
+                search_web("query")
+
+    def test_a_rejected_query_is_no_results(self) -> None:
+        from urbanlens.dashboard.services.search.search import search_web
+
+        with (
+            patch("urbanlens.dashboard.services.search.search.redata_configured", return_value=True),
+            patch(_GATEWAY_CLASS_PATH) as mock_gateway_class,
+        ):
+            mock_gateway_class.return_value.search_web.side_effect = LocationContextUnavailableError(
+                "invalid_query", "q is required", rejected=True
             )
             results = search_web("query")
 

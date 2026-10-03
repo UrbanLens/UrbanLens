@@ -685,13 +685,18 @@ def backfill_location_address(location_id: int) -> bool:
         True when at least one address component was written.
     """
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
     from urbanlens.dashboard.services.locations.addresses import ensure_location_address
 
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
         logger.info("backfill_location_address: location %s no longer exists", location_id)
         return False
-    return ensure_location_address(location)
+    try:
+        return ensure_location_address(location)
+    except RequestCancelledError as exc:
+        logger.info("backfill_location_address: geocoding refused for location %s, left for a later view: %s", location_id, exc)
+        return False
 
 
 def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
@@ -3485,6 +3490,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         How many results the searches made here found; searches already cached are not made again.
     """
     from urbanlens.dashboard.models.pin import Pin
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
     from urbanlens.dashboard.services.search.pin_web_search import annotate_results, cached_web_searches, pin_web_searches, store_web_search
     from urbanlens.dashboard.services.search.search import search_web
 
@@ -3497,7 +3503,11 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     found = 0
     for done, search in enumerate(missing):
         update_task_progress(self, current=done, total=len(missing), message="Refreshing web search...")
-        results = annotate_results(search_web(search.query))
+        try:
+            results = annotate_results(search_web(search.query))
+        except LocationContextUnavailableError as exc:
+            logger.warning("refresh_pin_web_search: search unavailable for pin %s, leaving it to the page: %s", pin_id, exc)
+            continue
         store_web_search(pin.location, search, results)
         found += len(results)
     if missing:

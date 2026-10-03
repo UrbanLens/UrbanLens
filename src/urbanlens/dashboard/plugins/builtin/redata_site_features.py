@@ -54,7 +54,7 @@ class SiteFeaturesPanelSource(RedataInfoPanelSource):
         excluded = _SHOWN_ELSEWHERE | _TOO_GENERIC
         wanted = [tag for tag in applicable_provider_tags(latitude, longitude) if tag not in excluded]
         if not wanted:
-            # Nothing covers this point (or discovery failed).
+            # Nothing covers this point.
             # An empty envelope rather than an unfiltered request: asking with no `provider` would
             # fan out across the whole registry, which is the one thing the capability lookup exists
             # to avoid.

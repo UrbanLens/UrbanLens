@@ -32,11 +32,18 @@ class LocationContextUnavailableError(GatewayRequestError):
     """Raised when a REData location-context request fails or answers with a blackout.
 
     Attributes:
-        reason: One of the module's ``REASON_*`` constants, or REData's own ``error`` code verbatim for a ``400`` (e.g. ``"invalid_coordinates"``, ``"unknown_provider"``) - REData's fixed reason taxonomy for these endpoints (see the module docstring)."""
+        reason: One of the module's ``REASON_*`` constants, or REData's own ``error`` code verbatim for a ``400`` (e.g. ``"invalid_coordinates"``, ``"unknown_provider"``) - REData's fixed reason taxonomy for these endpoints (see the module docstring).
+        rejected: REData refused the request itself (a ``400``), which asking again will not change."""
 
-    def __init__(self, reason: str, message: str) -> None:
+    def __init__(self, reason: str, message: str, *, rejected: bool = False) -> None:
         self.reason = reason
+        self.rejected = rejected
         super().__init__(message)
+
+    @property
+    def is_outage(self) -> bool:
+        """Only a rejected request is an answer; every other failure left the question unasked."""
+        return not self.rejected
 
 
 class LocationContextBusyError(LocationContextUnavailableError, UpstreamBusyError):
@@ -127,7 +134,7 @@ class RedataLocationContextGateway(Gateway):
             The parsed :class:`LocationContextEnvelope`.
 
         Raises:
-            LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), a REData-side validation error, or the request itself failed outright.
+            LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), an empty answer with a source that did not answer, a REData-side validation error, or the request itself failed outright.
         """
         params: dict[str, Any] = {"lat": latitude, "lng": longitude}
         if radius_meters is not None:
@@ -208,12 +215,16 @@ class RedataLocationContextGateway(Gateway):
                 raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
             if not isinstance(body, dict):
                 raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "REData returned an unexpected response shape.")
-            return LocationContextEnvelope(
+            envelope = LocationContextEnvelope(
                 count=int(body.get("count") or 0),
                 complete=bool(body.get("complete", True)),
                 results=list(body.get("results") or []),
                 providers=list(body.get("providers") or []),
             )
+            if not envelope.complete and not envelope.results:
+                # Nothing found, and a source that might have found something did not answer: not an answer.
+                raise LocationContextUnavailableError(REASON_ALL_PROVIDERS_UNAVAILABLE, "A source covering the request failed to answer, and none of the rest found anything.")
+            return envelope
         return self._raise_for_error_status(response, path)
 
     def _request(self, path: str, params: dict[str, Any]) -> requests.Response:
@@ -243,7 +254,7 @@ class RedataLocationContextGateway(Gateway):
             except ValueError:
                 body = {}
             reason = body.get("error") or REASON_SOURCE_ERROR
-            raise LocationContextUnavailableError(reason, body.get("message", ""))
+            raise LocationContextUnavailableError(reason, body.get("message", ""), rejected=response.status_code == 400)
 
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
         if response.status_code == 429:

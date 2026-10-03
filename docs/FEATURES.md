@@ -625,6 +625,11 @@ is left over after real traffic, spread evenly so multi-day quotas can't be burn
 Sources are plugin-contributable (`EnrichmentSource`) and admin-tunable (run window, reserve
 buffer, per-run caps).
 
+Neither path caches an outage. A failure `services/core/gateway.py::is_source_outage` recognises (connection failure,
+timeout, 5xx, throttle, REData `source_error`, an empty envelope REData marks incomplete) writes no `LocationCache`
+row, so the next view or batch asks again; a real empty answer is cached for `external_data_cache_days`.
+`tests/hypothesis/test_outage_not_cached_registry.py` holds every registered panel and enrichment source to this.
+
 ## Extensibility: Plugin System
 
 Third-party integrations are packaged as **plugins** (`dashboard/plugins/builtin/`) — see

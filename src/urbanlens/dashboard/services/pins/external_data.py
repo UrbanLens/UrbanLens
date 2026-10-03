@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
-from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
+from urbanlens.dashboard.services.core.gateway import UpstreamBusyError, is_source_outage
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 from urbanlens.dashboard.services.pins.search_names import SHARED_SCOPE, search_names
@@ -1493,8 +1493,11 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
             FAILURE_SKIP_TTL_SECONDS,
         )
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
-    except Exception:
-        logger.exception("Panel fetch %s for pin %s failed after %.1fs", source_key, pin.pk, time.monotonic() - started)
+    except Exception as exc:
+        if is_source_outage(exc):
+            logger.warning("Panel fetch %s for pin %s could not reach its upstream: %s", source_key, pin.pk, exc)
+        else:
+            logger.exception("Panel fetch %s for pin %s failed after %.1fs", source_key, pin.pk, time.monotonic() - started)
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     else:
         logger.debug("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)

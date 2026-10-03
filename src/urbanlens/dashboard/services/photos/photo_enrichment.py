@@ -9,7 +9,7 @@ from django.db.models import Exists, OuterRef, Q
 import requests
 
 from urbanlens.dashboard.models.images.model import ImageSource
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
 from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
 
 if TYPE_CHECKING:
@@ -210,6 +210,8 @@ class StreetViewEnrichmentSource(_BackfillMarkerSource):
         try:
             content, _capture_date, _pano_lat, _pano_lng = gateway.get_street_view_single(float(location.latitude), float(location.longitude))
         except (ValueError, requests.exceptions.RequestException) as exc:
+            if is_source_outage(exc):
+                raise
             logger.info("Street View unavailable for location=%s: %s", location.pk, exc)
         else:
             found = True
@@ -240,7 +242,13 @@ class SatelliteEnrichmentSource(_BackfillMarkerSource):
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         gateway = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "")
-        content = gateway.get_satellite_image_bytes(float(location.latitude), float(location.longitude))
+        try:
+            content = gateway.get_satellite_image_bytes(float(location.latitude), float(location.longitude))
+        except requests.exceptions.RequestException as exc:
+            if is_source_outage(exc):
+                raise
+            logger.info("Satellite image unavailable for location=%s: %s", location.pk, exc)
+            content = None
         if content:
             _save_enriched_image(location, content, source=ImageSource.GOOGLE_SATELLITE, caption="Satellite view", max_dimension=_STATIC_IMAGE_MAX_DIMENSION)
 

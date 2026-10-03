@@ -55,7 +55,11 @@ def applicable_providers(domain_tag: str, latitude: float, longitude: float) -> 
         longitude: WGS-84 longitude.
 
     Returns:
-        The applicable provider tags, or an empty list when REData is unreachable or reports no coverage. **Empty is ambiguous on purpose** and each caller has to decide what it means for them: for a registry where a provider-less request fans out across..."""
+        The applicable provider tags; empty only when REData reports no coverage.
+
+    Raises:
+        LocationContextUnavailableError: The index could not be read, so coverage is unknown rather than empty.
+    """
     from django.core.cache import cache
 
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
@@ -80,7 +84,7 @@ def applicable_providers(domain_tag: str, latitude: float, longitude: float) -> 
             redact_coordinate(longitude),
             exc.reason,
         )
-        return []
+        raise
 
     tags: list[str] = []
     for domain in index.get("domains") or []:

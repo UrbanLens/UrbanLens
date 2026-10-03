@@ -181,7 +181,7 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
 
         wanted = [tag for tag in applicable_provider_tags(latitude, longitude) if tag not in _SHOWN_ELSEWHERE]
         if not wanted:
-            # Nothing covers this point, or discovery failed.
+            # Nothing covers this point.
             # An empty envelope rather than an unfiltered request: naming no provider runs every
             # register in the registry, which is the one outcome the capability lookup exists to
             # avoid.

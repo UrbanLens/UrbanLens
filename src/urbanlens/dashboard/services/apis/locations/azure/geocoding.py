@@ -6,10 +6,7 @@ from dataclasses import dataclass
 import logging
 from typing import Any
 
-import requests
-
 from urbanlens.dashboard.services.apis.locations.azure.gateway import AzureMapsGateway
-from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -52,18 +49,15 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
             query: Address or place-name query string.
 
         Returns:
-            The best-matching normalized result, or None when nothing matched or the request failed.
+            The best-matching normalized result, or None when nothing matched.
 
         Raises:
             ValueError: When no subscription key is configured.
+            requests.exceptions.RequestException: When the request failed.
         """
         if not query:
             return None
-        try:
-            body = self._get("/geocode", api_version=GEOCODING_API_VERSION, params={"query": query})
-        except requests.exceptions.RequestException:
-            logger.warning("Azure Maps geocode failed for %r", query, exc_info=True)
-            return None
+        body = self._get("/geocode", api_version=GEOCODING_API_VERSION, params={"query": query})
         features = body.get("features") or []
         return _normalize_feature(features[0]) if features else None
 
@@ -75,19 +69,16 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            The normalized address result, or None when nothing matched or the request failed.
+            The normalized address result, or None when nothing matched.
 
         Raises:
             ValueError: When no subscription key is configured.
+            requests.exceptions.RequestException: When the request failed.
         """
-        try:
-            body = self._get(
-                "/reverseGeocode",
-                api_version=GEOCODING_API_VERSION,
-                params={"coordinates": f"{longitude},{latitude}"},
-            )
-        except requests.exceptions.RequestException:
-            logger.warning("Azure Maps reverse geocode failed for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude), exc_info=True)
-            return None
+        body = self._get(
+            "/reverseGeocode",
+            api_version=GEOCODING_API_VERSION,
+            params={"coordinates": f"{longitude},{latitude}"},
+        )
         features = body.get("features") or []
         return _normalize_feature(features[0]) if features else None

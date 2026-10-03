@@ -20,7 +20,11 @@ def search_web(query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
         max_results: Maximum number of results to request.
 
     Returns:
-        Result dicts (``title``, ``link``, ``snippet``, ``date``, ``thumbnail``), or ``[]`` when REData is unconfigured or every provider it tried failed to answer."""
+        Result dicts (``title``, ``link``, ``snippet``, ``date``, ``thumbnail``), or ``[]`` when REData is unconfigured or rejected the query.
+
+    Raises:
+        LocationContextUnavailableError: REData could not be reached, or every provider it tried failed to answer; nothing was learned, so a caller must not cache it as "no results".
+    """
     if not redata_configured():
         return []
     from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataSearchGateway
@@ -28,7 +32,9 @@ def search_web(query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
     try:
         return RedataSearchGateway().search_web(query, max_results=max_results)
     except LocationContextUnavailableError as exc:
-        logger.warning("REData web search unavailable for %r: %s", query, exc)
+        if exc.is_outage:
+            raise
+        logger.warning("REData web search rejected %r: %s", query, exc)
         return []
 
 

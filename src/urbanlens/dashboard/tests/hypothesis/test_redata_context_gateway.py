@@ -149,6 +149,42 @@ class NearPointTests(SimpleTestCase):
         self.assertEqual(envelope.results, [])
         self.assertEqual(envelope.providers, [])
 
+    def test_an_empty_answer_with_a_source_that_did_not_answer_raises(self) -> None:
+        """Returning it would let any caller cache "nothing here" for a question that was never fully asked (P187)."""
+        session = mock.Mock()
+        session.get.return_value = _response(
+            200,
+            {"count": 0, "complete": False, "results": [], "providers": [{"provider": "a", "status": "unavailable"}]},
+        )
+
+        with pytest.raises(LocationContextUnavailableError) as raised:
+            _gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0)
+
+        self.assertTrue(raised.value.is_outage)
+
+    def test_an_incomplete_answer_with_results_is_returned(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(200, {"count": 1, "complete": False, "results": [{"provider": "b"}]})
+
+        envelope = _gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0)
+
+        self.assertEqual(envelope.results, [{"provider": "b"}])
+
+    def test_a_complete_empty_answer_is_returned(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(200, {"count": 0, "complete": True, "results": []})
+
+        self.assertEqual(_gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0).results, [])
+
+    def test_a_rejected_request_is_not_an_outage(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(400, {"error": "invalid_coordinates", "message": "lat out of range"})
+
+        with pytest.raises(LocationContextUnavailableError) as raised:
+            _gateway(session).near_point("/api/v1/hazards/", 91.0, 2.0)
+
+        self.assertFalse(raised.value.is_outage)
+
     def test_non_dict_body_raises(self) -> None:
         session = mock.Mock()
         session.get.return_value = _response(200, [1, 2, 3])

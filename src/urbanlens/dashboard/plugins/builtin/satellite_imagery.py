@@ -67,8 +67,12 @@ def _wanted_providers(latitude: float, longitude: float) -> list[str]:
     Returns:
         Provider tags to request, in REData's own order."""
     from urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway import applicable_providers
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 
-    discovered = applicable_providers("imagery", latitude, longitude)
+    try:
+        discovered = applicable_providers("imagery", latitude, longitude)
+    except LocationContextUnavailableError:
+        discovered = []
     if not discovered:
         return list(_REDATA_PROVIDER_NAMES)
     return [tag for tag in discovered if tag not in _SHOWN_ELSEWHERE and not tag.startswith(_HISTORICAL_MAP_PREFIX)]

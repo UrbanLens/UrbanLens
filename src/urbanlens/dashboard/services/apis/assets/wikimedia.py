@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlsplit
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -69,7 +69,11 @@ class WikimediaGateway(MediaProvider):
     # -- private ----------------------------------------------------------------
 
     def _search_files(self, query: str) -> list[str]:
-        """Return up to _MAX_RESULTS file titles from a Commons full-text search."""
+        """Return up to _MAX_RESULTS file titles from a Commons full-text search.
+
+        Raises:
+            Exception: Commons could not be asked (see ``is_source_outage``).
+        """
         params: dict[str, str | int] = {
             "action": "query",
             "list": "search",
@@ -84,7 +88,9 @@ class WikimediaGateway(MediaProvider):
             resp.raise_for_status()
             hits = resp.json().get("query", {}).get("search", [])
             return [h["title"] for h in hits]
-        except Exception:
+        except Exception as exc:
+            if is_source_outage(exc):
+                raise
             logger.exception("Wikimedia search failed for %r", query)
             return []
 
@@ -96,7 +102,11 @@ class WikimediaGateway(MediaProvider):
         return results
 
     def _fetch_image_info_batch(self, titles: list[str]) -> list[dict[str, Any]]:
-        """Fetch image info for a single batch of at most _TITLES_BATCH_SIZE titles."""
+        """Fetch image info for a single batch of at most _TITLES_BATCH_SIZE titles.
+
+        Raises:
+            Exception: Commons could not be asked (see ``is_source_outage``).
+        """
         params: dict[str, str | int] = {
             "action": "query",
             "titles": "|".join(titles),
@@ -113,7 +123,9 @@ class WikimediaGateway(MediaProvider):
                 logger.warning("Wikimedia imageinfo fetch returned an error: %r", data["error"])
                 return []
             pages = data.get("query", {}).get("pages", {}).values()
-        except Exception:
+        except Exception as exc:
+            if is_source_outage(exc):
+                raise
             logger.exception("Wikimedia imageinfo fetch failed")
             return []
 
