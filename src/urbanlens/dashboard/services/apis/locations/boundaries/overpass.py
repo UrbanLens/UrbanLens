@@ -42,6 +42,15 @@ _RETRY_BACKOFF_SECONDS = 0.5
 # shared Django cache (Dragonfly/Redis in deployed environments) so a down mark set
 # by one worker keeps every other worker off that instance too.
 _DOWN_CACHE_KEY = "overpass:endpoint_down:{}"
+_STRIKES_CACHE_KEY = "overpass:endpoint_strikes:{}"
+#: How long one transient failure takes an endpoint out of rotation; each consecutive one doubles it.
+DOWN_BASE_SECONDS = 120
+#: The longest a run of transient failures takes an endpoint out.
+DOWN_CAP_SECONDS = 3600
+#: The longest an endpoint's own ``Retry-After`` is honoured for.
+DOWN_STATED_MAX_SECONDS = 86_400
+#: How long a run of failures is remembered after its last one.
+_STRIKES_MEMORY_SECONDS = 6 * 3600
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
 
 
@@ -50,20 +59,52 @@ class OverpassUnavailableError(GatewayRequestError):
 
 
 def _seconds_until_next_day() -> int:
-    """Seconds from now until the next UTC midnight.
-    Used as the TTL for a downed-endpoint flag so a failed instance is retried at the start of the next day."""
+    """Seconds from now until the next UTC midnight."""
     now = timezone.now()
     next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, int((next_midnight - now).total_seconds()))
 
 
-def _mark_endpoint_down(url: str) -> None:
-    """Take an Overpass endpoint out of rotation until the next day.
-    Cache failures are swallowed: if the shared cache is unavailable we simply can't remember the outage, which is safe (the endpoint just gets tried again) and must never break a boundary lookup."""
+def _mark_endpoint_down(url: str, *, stated_seconds: int | None = None) -> None:
+    """Take an Overpass endpoint out of rotation after a transient failure.
+
+    For the wait it stated, or else for :data:`DOWN_BASE_SECONDS`, doubled for each failure since it last answered,
+    up to :data:`DOWN_CAP_SECONDS`. Cache failures are swallowed: an outage that can't be remembered only means the
+    endpoint is tried again, and must never break a boundary lookup.
+
+    Args:
+        url: The endpoint.
+        stated_seconds: The endpoint's own ``Retry-After``, when it sent one.
+    """
+    try:
+        strikes_key = _STRIKES_CACHE_KEY.format(url)
+        strikes = int(cache.get(strikes_key) or 0) + 1
+        cache.set(strikes_key, strikes, timeout=_STRIKES_MEMORY_SECONDS)
+        seconds = stated_seconds if stated_seconds is not None else min(DOWN_BASE_SECONDS * 2 ** min(strikes - 1, 20), DOWN_CAP_SECONDS)
+        cache.set(_DOWN_CACHE_KEY.format(url), 1, timeout=max(1, min(seconds, DOWN_STATED_MAX_SECONDS)))
+    except Exception:
+        logger.debug("Could not record Overpass endpoint %s as down", url, exc_info=True)
+
+
+def _mark_endpoint_incomplete(url: str) -> None:
+    """Take an endpoint out of rotation until the next UTC day: it answered, but without data another endpoint has."""
     try:
         cache.set(_DOWN_CACHE_KEY.format(url), 1, timeout=_seconds_until_next_day())
     except Exception:
-        logger.debug("Could not record Overpass endpoint %s as down", url, exc_info=True)
+        logger.debug("Could not record Overpass endpoint %s as incomplete", url, exc_info=True)
+
+
+def _mark_endpoint_answering(url: str) -> None:
+    """Forget an endpoint's run of failures, so its next one backs off from the start."""
+    try:
+        cache.delete(_STRIKES_CACHE_KEY.format(url))
+    except Exception:
+        logger.debug("Could not reset Overpass endpoint %s's failures", url, exc_info=True)
+
+
+def _stated_wait(response: requests.Response) -> int | None:
+    header = str(response.headers.get("Retry-After", "")).strip()
+    return int(header) if header.isdigit() else None
 
 
 def _endpoint_is_down(url: str) -> bool:
@@ -208,7 +249,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
     def query(self, query: str, *, timeout: int | None = None) -> dict[str, Any]:
         """Run a raw Overpass QL query and return the decoded JSON payload.
-        Any endpoint that fails that way is taken out of rotation until the next day (:func:`_mark_endpoint_down`), so a chronically overloaded instance stops being tried at all.
+        An endpoint that fails transiently is taken out of rotation for a while, longer on each repeat (:func:`_mark_endpoint_down`).
 
         Args:
             query: The Overpass QL program to execute.
@@ -225,7 +266,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
         http_timeout = timeout or self.timeout
         candidates = self._available_endpoints()
         if not candidates:
-            raise OverpassUnavailableError("All Overpass endpoints are flagged down until the next day")
+            raise OverpassUnavailableError("Every Overpass endpoint is flagged down")
         last_error: requests.RequestException | None = None
         suspect_empty: tuple[str, dict[str, Any]] | None = None
         for attempt, url in enumerate(candidates):
@@ -242,12 +283,13 @@ class OverpassGateway(Gateway, BoundaryProvider):
                 continue
             if response.status_code in _RETRYABLE_STATUS:
                 last_error = requests.HTTPError(f"{response.status_code} Server Error from {url}", response=response)
-                _mark_endpoint_down(url)
+                _mark_endpoint_down(url, stated_seconds=_stated_wait(response))
                 logger.debug("Overpass endpoint %s returned %d; marked down, trying next", url, response.status_code)
                 continue
             # Any remaining non-2xx (e.g. 400) is a query-level error identical
             # across every mirror - surface it without downing this endpoint.
             response.raise_for_status()
+            _mark_endpoint_answering(url)
             payload = response.json()
             payload = payload if isinstance(payload, dict) else {}
             if suspect_empty is None and url != self.base_url and payload.get("elements") == []:
@@ -259,7 +301,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
             if suspect_empty is not None and isinstance(payload.get("elements"), list) and payload["elements"]:
                 # The cross-check found data where the suspect found none - the
                 # suspect endpoint lied by omission; drop it from rotation.
-                _mark_endpoint_down(suspect_empty[0])
+                _mark_endpoint_incomplete(suspect_empty[0])
                 logger.warning(
                     "Overpass endpoint %s returned 0 elements where %s returned %d; marked down as incomplete",
                     suspect_empty[0],

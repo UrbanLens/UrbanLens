@@ -236,7 +236,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # Each logical lookup may spend more than one call when it fails over.
         calls_per_minute=240,
         calls_per_day=24_000,
-        notes="Free API. Load is distributed across several public Overpass instances, and any instance that errors/times out is dropped until the next day. Each logical lookup may spend more than one call when it fails over.",
+        notes="Free API. Load is distributed across several public Overpass instances, and an instance that errors or times out is dropped for minutes, longer on each repeat, or for the wait it states. Each logical lookup may spend more than one call when it fails over.",
         # Free per this entry's own notes; see `ServiceDefaults.billable`.
         billable=False,
     ),

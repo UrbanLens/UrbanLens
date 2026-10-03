@@ -2846,14 +2846,6 @@ settings row. A restore or re-seed brings the old row back, and with it the task
 data. Asks: let a deployment turn the task off where the row can't override it (`UL_BACKUP_ENABLED=false` winning over
 the row); and, if the task stays, write `pg_dump -Fc` or gzip, which cuts 11 GB to about 1.
 
-## P205 — One Overpass 504 marks every Overpass endpoint down until the next day
-
-`id: P205` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 8`
-
-At 01:17Z on 2026-10-02 one 504 from `overpass-api.de` marked all Overpass endpoints down "until the next day"
-(`overpass.py`), and 46 warnings followed. A transient upstream error should back off for minutes, per endpoint, and
-grow on repeats. A day-long block should be reserved for a quota answer that means it.
-
 ## P206 — `dashboard_location_cache` is 81% of production's database
 
 `id: P206` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 9`

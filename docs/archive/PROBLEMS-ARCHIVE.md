@@ -20996,3 +20996,27 @@ them.
 migration: a mark moves, a clean-key mark wins over its duplicate, a copy moves by cache or by its fetched URL, and
 another location's marks are left alone. `test_wikimedia_gateway.py::CommonsTrackingParametersTests` checks that a
 Commons item's URLs carry no parameters.
+
+## RESOLVED 2026-10-03: A transient Overpass failure takes one endpoint out for minutes, growing on repeats, not every endpoint until the next day
+
+`id: P205` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by infrastructure's 0.8.0 deploy findings, item 8. At 01:17Z on 2026-10-02 one 504 from `overpass-api.de`
+took Overpass out of rotation until the next day, and 46 warnings followed.
+
+**Cause.** `overpass._mark_endpoint_down` set every failure's down flag to expire at the next UTC midnight: a 504, a
+429, a timeout or a refused connection. A query fails over through every endpoint, so one bad minute across them
+left Overpass unused for up to a day.
+
+**Fix.** A transient failure (a timeout, a refused connection, 429/502/503/504) takes only that endpoint out, for
+`DOWN_BASE_SECONDS` (2 minutes). Each consecutive failure doubles it, up to `DOWN_CAP_SECONDS` (an hour). The run is
+counted per endpoint in the shared cache, forgotten six hours after its last failure, and reset whenever the endpoint
+answers. A `Retry-After` the endpoint sends is honoured instead, up to a day. That is the only way a block now lasts
+that long. An endpoint caught omitting data another endpoint has (the empty-fallback cross-check) still stays out
+until the next UTC day, since that is a stale database rather than load. The rate limiter's service note says the
+same.
+
+**Tests.** `test_overpass_endpoint_backoff.py` covers: one 504 is two minutes; repeats double and stop at the cap; an
+answer resets the run; a stated wait is honoured and capped at a day; a refused connection backs off the same way; an
+endpoint omitting data stays out until the next day. The existing failover tests in
+`test_location_background_services.py` still pass.
