@@ -31,6 +31,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`redata-chronicling-america-description-dropped.md`](redata-chronicling-america-description-dropped.md) — Chronicling America records reach UrbanLens with no description, because a list is stripped to ""; the Historic Newspapers tab is empty (P216) | outbound, `../REData` | OPEN 2026-10-03 |
 | [`redata-imagery-composed-past-native-resolution.md`](redata-imagery-composed-past-native-resolution.md) — Sentinel-2 cloudless is composed at z18 from 10 m data, and the first render is kept forever; clamp by `resolution_meters` and re-render (P232) | outbound, `../REData` | OPEN 2026-10-03 |
 | [`redata-overture-near-point-lookups.md`](redata-overture-near-point-lookups.md) — `/buildings/` and the `overture` points-of-interest provider time out on the deployed REData, which UrbanLens now depends on inside the US (P110, P240); plus unsynced roof fields and `operating_status`, and applicability wider than the synced shards | outbound, `../REData` | OPEN 2026-10-03 |
+| [`redata-gdelt-months-cap.md`](redata-gdelt-months-cap.md) — `/search/news/` accepts `months` up to 120, but GDELT refuses a window reaching before 2017, so anything over 117 fails today | outbound, `../REData` | OPEN 2026-10-03 |
 
 ## The convention
 

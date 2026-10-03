@@ -117,6 +117,24 @@ def parcel_buildings(location: Location | None) -> list[dict] | None:
     return list((cached.data or {}).get("buildings") or [])
 
 
+def site_buildings(location: Location) -> list[dict]:
+    """Every building known on the parcel ``location`` stands on, from cache only.
+
+    Args:
+        location: A building's or a site's location.
+
+    Returns:
+        The location's own parcel list, else that of the first site it is nested under that has one, else ``[]``.
+    """
+    buildings = parcel_buildings(location)
+    if buildings:
+        return buildings
+    for site in enclosing_site_locations(location):
+        if buildings := parcel_buildings(site):
+            return buildings
+    return []
+
+
 def has_multiple_buildings(location: Location | None) -> bool:
     """True when the parcel at this location is known to hold several buildings."""
     buildings = parcel_buildings(location)

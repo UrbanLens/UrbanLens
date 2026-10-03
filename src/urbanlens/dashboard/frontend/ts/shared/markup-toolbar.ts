@@ -6,6 +6,7 @@ import type { ShapeSpec } from "./markup-engine";
 import { markupItemToShapeSpec } from "./markup-shape";
 import { wireMarkupPanel, wireMarkupTools } from "./markup-panel";
 import { escHtml } from "./escape-html";
+import { bindAreaTooltip } from "./map-tooltips";
 import { fetchResponse, fetchText } from "./fetch-json";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
@@ -328,7 +329,9 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
             if (!interactive.on) return;
             if (!item.owner_name) interactive.on!("click", () => openMarkupEditDialog(item));
             const tooltip = item.owner_name ? `${item.label ? `${item.label} — ` : ""}inside ${item.owner_name}` : item.label || "";
-            if (tooltip && interactive.bindTooltip) {
+            if (tooltip && l instanceof L.Path) {
+                bindAreaTooltip(map, l, escHtml(tooltip), { className: "detail-pin-tooltip" });
+            } else if (tooltip && interactive.bindTooltip) {
                 interactive.bindTooltip!(escHtml(tooltip), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
             }
         });

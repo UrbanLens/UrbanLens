@@ -2968,22 +2968,6 @@ uses `min(60 * 2**retries, 900)`), and say in the progress message that storage 
 `tasks.py` declare `autoretry_for=(OSError,)`, so whether to widen all of them is a separate question. Not reproduced
 in a test.
 
-## P221 — The pin page's "Choose buildings to add" dialog can't scroll to its submit button, and its header stays after submitting
-
-`id: P221` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH, 2026-10-03`
-
-On the Private Pin page, "Choose buildings to add":
-
-- When zoomed in far enough, the dialog doesn't scroll, so its submit button can sit entirely off screen with no way
-  to reach it. The body must scroll inside a dialog capped to the viewport (`max-height` in `dvh`), with the actions
-  in a footer that stays visible.
-- After submitting, the dialog's contents disappear but its header stays on screen. Submitting must close the whole
-  dialog, then toast the outcome.
-
-Reproduce in Playwright at a narrow, tall-content viewport. Assert the submit button is reachable (`scrollIntoView`,
-then `elementFromPoint`), and that the `<dialog>` is closed (`open` false) after submit. Check the other dialogs
-built the same way for the same overflow fault.
-
 ## P222 — Only one building's outline shows on the HRSH pin map, and it shows whether "show child pin details" is on or off
 
 `id: P222` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
@@ -2994,20 +2978,6 @@ when it is off, unless an outline belongs to the pin itself. Find where building
 boundaries, `parcel_buildings`, `Place` outlines) and why only one resolves. Two suspects: P182 (an OSM relation
 returned as a point, so a building place has no outline) and outline-less fiat building places. Reproduce on
 `development_main` HRSH first.
-
-## P223 — When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves
-
-`id: P223` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-Zoomed in on HRSH, the whole viewport is inside the parcel polygon, so:
-
-- A left click anywhere opens the boundary's context menu, and a click elsewhere opens another instead of closing the
-  first. A click outside an open context menu should only close it.
-- Hovering anywhere shows the "Property Boundary" tooltip. It should show only while the pointer rests and no context
-  menu is open, and hide on movement or when a menu opens.
-
-The fix belongs in the shared map layer code, so every polygon layer behaves this way, not only the parcel's. Test in
-Playwright with the viewport inside a polygon (see the memory note on reaching the Leaflet map).
 
 ## P224 — Toggling "show child pin details" reloads the whole page
 
@@ -3051,27 +3021,6 @@ the building wiki takes CRIS's name and slug and is a child of the parcel's wiki
 - The lightbox for these photos has no relevance up/down votes. Add them, as the Media gallery's tiles have.
 - On a Private Pin page, add "remove from my results": a per-user hide that never deletes the shared row, so other
   users are unaffected.
-
-## P234 — Article > Sources lists only three documents, even with child pin details on
-
-`id: P234` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-Expected: every CRIS document for the campus and each child building, plus the other sources: register nominations,
-Commons documents (P196), search results. On production this was P187 (outage-cached empties), partly fixed by the
-infrastructure side's row deletion. Re-check on the release branch with P187 and P196 merged, and with child pins
-aggregated when the toggle is on. Fix whatever is still missing.
-
-## P235 — Article > News shows no results for HRSH
-
-`id: P235` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
-
-There should obviously be news results for this place. Check on the release branch. Candidates:
-- P187 (an outage cached as empty, fixed);
-- P188's audience split, which made register names base-only;
-- GDELT query shape or availability;
-- P196's relevance rule dropping news items whose text omits the name.
-Find the cause and fix it, with a test that HRSH's real query returns items through the whole path. Use a recorded
-fixture, not the network.
 
 ## P236 — A wiki URL's response time tells whether a Location exists under that slug
 
@@ -3213,3 +3162,20 @@ live on 2026-10-03: 89001166 (HRSH Main Building), 98001317 and 100001066 render
 through 2012 to the National Archives catalogue and later ones to NPGallery. REData's `nps_nrhp` rows carry
 `attributes.NARA_URL`, the archives' record for the listing, which UrbanLens does not cache. Decide whether to link it
 where NPGallery has nothing; whether NPGallery has a listing cannot be told from the status code.
+
+## P260 — A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources
+
+`id: P260` · `status: open` · `updated: 2026-10-03` · `found by: the P234 investigation`
+
+`GalleryMediaSource.gallery_items` drops every document from a gallery, on the grounds that documents belong under
+Article > Sources (P196). Only Commons (`DocumentMediaPanelSource`) and CRIS are document sources, so a document among
+the Library of Congress, Internet Archive, Smithsonian, Digital Commonwealth or Chronicling America results
+(`plugins/builtin/media_archives.py`) is shown nowhere.
+
+Not seen yet: REData returns these archives' record pages rather than files (`archive.org/details/...`,
+`loc.gov/item/...`), and none of the 82 archive items cached for HRSH-named locations on dev was a document.
+Smithsonian's `url` falls back to the media `content` link, which can be a file.
+
+Making them `DocumentMediaPanelSource`s fixes the listing but makes every Sources tab schedule and poll for five more
+REData searches, and the Sources tests assume CRIS and Commons are the only sources. Either accept that, or let a
+non-document source keep its documents as gallery tiles.

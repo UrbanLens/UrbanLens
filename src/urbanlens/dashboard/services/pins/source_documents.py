@@ -13,6 +13,8 @@ from urbanlens.dashboard.services.media.proxied_media import INLINE_MEDIA_TYPES,
 from urbanlens.dashboard.services.pins.external_data import DocumentPanelSource, DocumentUnavailableError, NameSearchSource, SourceDocument, document_panel_sources, get_panel_source, panel_visible_to
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.contrib.auth.base_user import AbstractBaseUser
     from django.contrib.auth.models import AnonymousUser
 
@@ -76,6 +78,7 @@ def collect_source_documents(
     may_fetch: bool,
     subject: MediaSubject | None = None,
     reader: Pin | None = None,
+    nested: Sequence[Location] = (),
 ) -> SourceListing:
     """Gather every visible source's documents for a location, scheduling a fetch for any source not ready yet.
 
@@ -87,6 +90,7 @@ def collect_source_documents(
         may_fetch: False once the caller's poll budget is spent.
         subject: The place, which documents found by searching must be about; without it they are not listed.
         reader: The pin whose own names' rows are read too (pin pages), or None for the shared rows alone (wiki pages).
+        nested: Locations of the markers nested under this one, whose documents are listed too (see :func:`nested_documents`).
 
     Returns:
         The listing. A source that is fetching contributes nothing yet; one that cannot fetch lists whatever it has.
@@ -95,9 +99,8 @@ def collect_source_documents(
 
     documents: list[ListedDocument] = []
     pending = False
-    for source in document_panel_sources():
-        if not panel_visible_to(viewer, source):
-            continue
+    sources = [source for source in document_panel_sources() if panel_visible_to(viewer, source)]
+    for source in sources:
         data = _cached_payload(location, source, reader)
         if data is None or not source.documents_ready(data, site_scope=site_scope):
             if may_fetch and driver is not None and source.gate(driver) and external_data.schedule_panel_fetch(source.key, driver):
@@ -106,7 +109,61 @@ def collect_source_documents(
             if data is None:
                 continue
         documents.extend(ListedDocument(source, document) for document in source.source_documents(data, site_scope=site_scope, subject=subject))
+    if nested:
+        listed = {(listed.source.key, listed.document.document_id) for listed in documents}
+        documents.extend(document for document in nested_documents(nested, sources) if (document.source.key, document.document.document_id) not in listed)
     return SourceListing(documents=documents, pending=pending)
+
+
+def nested_documents(locations: Sequence[Location], sources: Sequence[DocumentPanelSource]) -> list[ListedDocument]:
+    """The documents the shared cache rows of nested markers' locations list, as each one's own page lists them.
+
+    Never fetches: a nested marker's rows are filled by its own page. Documents found by searching are judged against
+    the nested place they were found for.
+
+    Args:
+        locations: The nested markers' locations.
+        sources: The document sources the viewer may see.
+
+    Returns:
+        Each document once, in location order, then source order.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.services.pins.search_names import SHARED_AUDIENCE
+
+    by_id = {location.pk: location for location in locations if location.pk is not None}
+    if not by_id or not sources:
+        return []
+    rows = LocationCache.objects.filter(location_id__in=list(by_id), source__in=[source.cache_source for source in sources], audience=SHARED_AUDIENCE, updated__gte=LocationCache.fresh_since())
+    payloads = {(row.location_id, row.source): row.data or {} for row in rows}
+    return documents_from_payloads([(location, source, payloads[location.pk, source.cache_source]) for location in by_id.values() for source in sources if (location.pk, source.cache_source) in payloads])
+
+
+def documents_from_payloads(payloads: Sequence[tuple[Location, DocumentPanelSource, dict]]) -> list[ListedDocument]:
+    """List the documents in cached payloads at building scope, each once.
+
+    Args:
+        payloads: ``(location, source, data)`` per cached row.
+
+    Returns:
+        The documents, in payload order.
+    """
+    from urbanlens.dashboard.services.media.subject_relevance import subject_for_location
+
+    documents: list[ListedDocument] = []
+    seen: set[tuple[str, str]] = set()
+    subjects: dict[int | None, MediaSubject] = {}
+    for location, source, data in payloads:
+        subject = None
+        if source.documents_judged and source.may_list_documents(data):
+            if location.pk not in subjects:
+                subjects[location.pk] = subject_for_location(location)
+            subject = subjects[location.pk]
+        for document in source.source_documents(data, site_scope=False, subject=subject):
+            if (source.key, document.document_id) not in seen:
+                seen.add((source.key, document.document_id))
+                documents.append(ListedDocument(source, document))
+    return documents
 
 
 def warm_site_scope_documents(pin: Pin) -> None:
@@ -127,7 +184,15 @@ def warm_site_scope_documents(pin: Pin) -> None:
             external_data.schedule_panel_fetch(source.key, pin)
 
 
-def find_listed_document(location: Location, source_key: str, document_id: str, *, viewer: AbstractBaseUser | AnonymousUser, site_scope: bool) -> ListedDocument | None:
+def find_listed_document(
+    location: Location,
+    source_key: str,
+    document_id: str,
+    *,
+    viewer: AbstractBaseUser | AnonymousUser,
+    site_scope: bool,
+    nested: Sequence[Location] = (),
+) -> ListedDocument | None:
     """The document with this id, only when the location's cached payload lists it for this viewer and scope.
 
     Args:
@@ -136,6 +201,8 @@ def find_listed_document(location: Location, source_key: str, document_id: str, 
         document_id: The document id from the URL.
         viewer: The requesting user.
         site_scope: Whether the page describes a parcel/site rather than one building.
+        nested: Locations of the markers nested under this one; a document their rows list (see
+            :func:`nested_documents`) is found too.
 
     Returns:
         The listed document, or None.
@@ -144,10 +211,10 @@ def find_listed_document(location: Location, source_key: str, document_id: str, 
     if not isinstance(source, DocumentPanelSource) or not panel_visible_to(viewer, source):
         return None
     data = _cached_payload(location, source)
-    if data is None:
-        return None
-    document = source.find_document(data, document_id, site_scope=site_scope)
-    return None if document is None else ListedDocument(source, document)
+    document = None if data is None else source.find_document(data, document_id, site_scope=site_scope)
+    if document is not None:
+        return ListedDocument(source, document)
+    return next((listed for listed in nested_documents(nested, [source]) if listed.document.document_id == document_id), None)
 
 
 @dataclass(frozen=True, slots=True)

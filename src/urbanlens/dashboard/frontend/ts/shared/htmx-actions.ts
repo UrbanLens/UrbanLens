@@ -157,6 +157,7 @@ function onBeforeRequest(event: Event): void {
             bind(el);
             const dialog = el.closest("dialog");
             if (dialog) startedIn.set(el, dialog);
+            else startedIn.delete(el);
         }
         if (el.hasAttribute(ATTRIBUTES.before)) runTokens(el, el.getAttribute(ATTRIBUTES.before), htmxEvent);
     }

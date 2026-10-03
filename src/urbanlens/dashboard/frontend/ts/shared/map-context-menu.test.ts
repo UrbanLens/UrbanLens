@@ -8,6 +8,7 @@ import {
     closeMapContextMenus,
     coordinateCopyPrecision,
     formatCopiedCoordinates,
+    isMapContextMenuOpen,
     showMapContextMenu,
     STREETVIEW_CHECK_URL,
 } from "./map-context-menu";
@@ -163,5 +164,53 @@ describe("coordinateCopyPrecision", () => {
         expect(formatCopiedCoordinates(1.23456789, 2.34567891, 10)).toBe("1.234568, 2.345679");
         expect(formatCopiedCoordinates(1.23456789, 2.34567891, 17)).toBe("1.2345679, 2.3456789");
         expect(formatCopiedCoordinates(1.23456789, 2.34567891, 19)).toBe("1.23456789, 2.34567891");
+    });
+});
+
+describe("dismissing the menu", () => {
+    const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+    test("a click on the map outside an open menu only closes it", async () => {
+        document.body.innerHTML = '<div class="leaflet-container"><svg><path id="polygon"></path></svg></div>';
+        let mapClicks = 0;
+        document.querySelector(".leaflet-container")!.addEventListener("click", () => mapClicks++);
+        open();
+        await tick();
+
+        document.getElementById("polygon")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        expect(document.querySelector(".map-context-menu")).toBeNull();
+        expect(mapClicks).toBe(0);
+    });
+
+    test("with no menu open, the map hears its clicks", () => {
+        document.body.innerHTML = '<div class="leaflet-container"><svg><path id="polygon"></path></svg></div>';
+        let mapClicks = 0;
+        document.querySelector(".leaflet-container")!.addEventListener("click", () => mapClicks++);
+
+        document.getElementById("polygon")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        expect(mapClicks).toBe(1);
+    });
+
+    test("a click outside any map closes the menu and still reaches its target", async () => {
+        document.body.innerHTML = '<button id="elsewhere"></button>';
+        let clicks = 0;
+        document.getElementById("elsewhere")!.addEventListener("click", () => clicks++);
+        open();
+        await tick();
+
+        document.getElementById("elsewhere")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        expect(document.querySelector(".map-context-menu")).toBeNull();
+        expect(clicks).toBe(1);
+    });
+
+    test("isMapContextMenuOpen follows the menu", () => {
+        expect(isMapContextMenuOpen()).toBe(false);
+        open();
+        expect(isMapContextMenuOpen()).toBe(true);
+        closeMapContextMenus();
+        expect(isMapContextMenuOpen()).toBe(false);
     });
 });

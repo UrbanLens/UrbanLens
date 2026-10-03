@@ -9,6 +9,7 @@ import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, setAttribution, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
+import { bindAreaTooltip } from "../shared/map-tooltips";
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick } from "../shared/map-clusters";
 import type { MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoMarkerLayer, type PhotoMapItem } from "../shared/photo-map";
@@ -2347,7 +2348,7 @@ function init(): void {
         // can edit each sub-polygon independently.
         const rings: [number, number][][][] | null = geojson.type === "MultiPolygon" ? geojson.coordinates : geojson.type === "Polygon" ? [geojson.coordinates] : null;
         const bindLabel = (layer: L.Layer) => {
-            if (label) layer.bindTooltip(escHtml(label), { sticky: true, direction: "top", className: "boundary-tooltip" });
+            if (label) bindAreaTooltip(map, layer, escHtml(label), { className: "boundary-tooltip" });
             return layer;
         };
         if (rings) {
@@ -2541,12 +2542,7 @@ function init(): void {
         boundaryGroups[from].removeLayer(layer);
         const path = layer as L.Path;
         path.setStyle(BOUNDARY_STYLES[to]);
-        layer.unbindTooltip();
-        layer.bindTooltip(to === "property" ? "Property boundary" : "Building boundary", {
-            sticky: true,
-            direction: "top",
-            className: "boundary-tooltip",
-        });
+        bindAreaTooltip(map, layer, to === "property" ? "Property boundary" : "Building boundary", { className: "boundary-tooltip" });
         boundaryGroups[to].addLayer(layer);
         attachBoundaryClickHandlers();
         try {

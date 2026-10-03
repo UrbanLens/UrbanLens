@@ -14,6 +14,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 from urbanlens.dashboard.services.pins.search_names import SearchScope, search_names
+from urbanlens.dashboard.services.search.pin_web_search import web_search_query
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -142,7 +143,7 @@ class LocationHasPlaceNameTests(TestCase):
 
 
 class UniqueSearchNameQuoteLocalityTests(TestCase):
-    """Pin.get_unique_search_name's quote_locality option: wraps "city state" as one exact-phrase term instead of two loose keywords, so a generic street address doesn't match the same address in an unrelated city - see the web_search view, which is the one caller that opts into this."""
+    """Pin.get_unique_search_name's quote_locality option: wraps "city state" as one exact-phrase term instead of two loose keywords, so a generic street address doesn't match the same address in an unrelated city - see web_search_query, which opts into it for a name that is an address."""
 
     def _make_pin(
         self, *, city: str | None = "Cincinnati", state: str | None = "Ohio", county: str | None = None
@@ -485,7 +486,7 @@ class WebSearchViewTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         pin = self._make_pin()
-        search_name = pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True)
+        search_name = web_search_query(pin, search_names(pin).base)
         assert search_name is not None
         LocationCache.set(pin.location, "web_search", {"results": []}, query_key=search_name)
         rf = RequestFactory()
@@ -615,7 +616,7 @@ class WebSearchViewTests(TestCase):
             pin.location,
             "web_search",
             {"results": []},
-            query_key=pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True),
+            query_key=web_search_query(pin, search_names(pin).base),
         )
 
         rf = RequestFactory()
@@ -643,7 +644,7 @@ class WebSearchViewTests(TestCase):
             pin.location,
             "web_search",
             {"results": []},
-            query_key=pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True),
+            query_key=web_search_query(pin, search_names(pin).base),
         )
         LocationCache.objects.filter(pk=entry.pk).update(updated=timezone.now() - timedelta(days=1, minutes=1))
 

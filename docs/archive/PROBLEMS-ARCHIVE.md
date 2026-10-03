@@ -21291,3 +21291,193 @@ element is a Location Data tab with no load trigger, the card is gone, the tab r
 fetches it, keeps it with data, removes it when empty, and neither fetches nor keeps it outside the USA. The page's
 load-triggered requests fell from 43 to 42, and `test_pin_detail_fanout_budget.py`'s ceiling was lowered to 42 to
 hold it. Nine of the ten tests failed before the fix; the tenth, one requesting element, held for the card too.
+
+## RESOLVED 2026-10-03: The pin page's "Choose buildings to add" dialog can't scroll to its submit button, and its header stays after submitting
+
+`id: P221` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0) at HRSH, 2026-10-03.
+
+**Causes.**
+- **No scroll.** The dialog is a flex column capped at the viewport, and `.ul-dialog-body` scrolls inside it. Here the
+  body and footer sit inside two wrappers, the htmx swap target `#building-import-dialog-body` and the form, and
+  neither carried the column. The form's own flex rules didn't reach the swap target, and the layout's
+  `min-height: 22rem` overrode the cap, so a short viewport pushed the footer off screen with nothing to scroll.
+- **Header left behind.** `close-dialog` closed `el.closest("dialog")` after the request. The response swapped the
+  form out of the dialog first, so the form no longer had a dialog ancestor and nothing closed. Only the body
+  emptied.
+
+**Fixes.**
+- `.ul-dialog-frame` (`_components.scss`) carries the column through any wrapper between a dialog and its body and
+  footer. The import dialog's swap target and form use it. The layout's fixed `min-height`, and its mobile
+  `max-height` and scroll, are gone; the map keeps its own `min-height`.
+- `htmx-actions.ts` records the dialog an element's request started in, at `htmx:beforeRequest`. `close-dialog`
+  falls back to it when the element has left the dialog. A request that starts outside any dialog clears the record,
+  so a later request can't close a dialog it never started in (found by adversarial review).
+
+**Verification.**
+- `htmx-actions.test.ts`: the dialog closes though the response swapped the form out (red before the fix), and a
+  stale record doesn't close a dialog reopened later (red before the follow-up).
+- Playwright on `development_main`, with a throwaway account's pin on HRSH's campus Location:
+  - At 1280×480 and 800×380, the dialog fits the viewport, its body scrolls (299 px of 360, 215 px of 336), and
+    `elementFromPoint` at the submit button's centre hits the button.
+  - Submitting one building closed the whole dialog and toasted "Added 1 building pin."
+- Every other `data-ul-on-success="close-dialog"` user either keeps its form inside its dialog or replaces its wrapper
+  on each request.
+- A walk of every template for a dialog body or footer behind an unflexed wrapper found the same fault in "Delete your
+  account" and Site admin's "Delete this user's account" (a bare `<form>`). Both forms now carry `.ul-dialog-frame`.
+  The pin edit form already had the column in its own rules, which now come from the frame class. At 390×300 the
+  account dialog's body scrolls and its footer stays in view; at 800×320 so does the pin edit dialog's.
+
+## RESOLVED 2026-10-03: A campus's Article > Sources lists every CRIS record on the site, its reviews and its nested buildings' own documents
+
+`id: P234` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0) at HRSH, reported as "lists only three documents, even with child pin details
+on". P187's outage-cached empties were part of it on production. On the release branch, with P187 and P196 merged,
+the CRIS site pass itself still dropped most of the campus. Measured against REData's live answer for the campus point (41.73328, -73.92812, 500 m, `ny_cris`),
+recorded as `tests/hypothesis/fixtures/hrsh_cris_lookup.json`, and dev's cached rows:
+
+- **Wrong site.** `cris_buildings.site_resource` took the first building district in the answer, whatever its
+  boundary. Dev's campus row (cached 2026-09-30) had Quiet Cove Riverfront Park as the site, a neighbouring district
+  that does not contain the point (`contains_point: false`), and kept only the buildings inside it: 12 documents,
+  ten of them from riverfront buildings or ones CRIS marks "outside HD bounds".
+- **One record's boundary.** Today's answer has no district, so the site is the National Register listing, whose
+  polygon covers the main building's grounds: 9 of the 124 buildings on CRIS's own campus survey (12SD00541,
+  "Hudson River State Hospital/Hudson River Psychiatric Center"). REData answers the campus through the union of
+  every boundary holding the point and that survey's roster; the plugin then cut it back to one polygon.
+- **Caps.** At most 40 campus buildings, nearest first. Buildings with no published position (30 on HRSH, 18
+  documents) never counted.
+- **Reviews never listed.** The consultation projects bounding the redevelopment (Hudson Heritage, 37 documents) and
+  any second record holding the point were ignored.
+- **Child pin details.** Sources read the page's own location only.
+- **Gallery limit.** `MediaProvider.get_media` kept 24 items counting documents, so a Commons PDF ranked after 24
+  images never reached Sources.
+
+**Fix.** `site_resource` given the point never picks a record whose boundary excludes it, and prefers one containing
+it. The site's boundary is the union of every district, listing and consultation project whose own boundary holds the
+point (`containing_site_records`, `site_boundary`); a project reaching past `_MAX_SITE_RADIUS_METERS` (a road, a
+power line) does not count. `_campus_candidates` adds every building, positioned or not, on a survey that names more than
+half of the buildings on the site and has more than half of its own positioned buildings on it. The second test keeps
+out a town survey that happens to include a small site's buildings: REData returns every survey's whole roster. On
+HRSH the campus survey has 58 of its 94 positioned buildings on the site. The 40-building cap is gone; live detail fetches keep their per-pass cap
+and time budget, and REData has already detailed all 154 HRSH buildings. The other containing records' documents are
+listed at site scope only (`site_building`), with no AI extraction and no gallery tiles, and are not copied to
+building children. With child pin details on, a pin page also lists the documents its own descendants' locations
+have cached (shared rows only, never fetched from here), a wiki page its child wikis', and the document proxy serves
+them (`source_documents.nested_documents`, `SourcesScope.nested_locations`). The wiki page now passes its toggle to
+Sources. A provider's gallery limit counts tiles only. `0047_cris_site_rows_refetch` drops CRIS rows cached at site
+scope or naming a neighbour as the district, so the next visit fetches them again.
+
+On the recorded answer the campus now lists every document of the 124 survey buildings (91), the NR nomination form
+and photo, and the 37 review documents; nothing from Dutchess County Jail, Marist or other off-campus records.
+
+**Not changed.** REData's archive providers (LoC, Internet Archive, Smithsonian, Digital Commonwealth, Chronicling
+America) are not document sources, so a PDF among their results is dropped from both the gallery and Sources (P260).
+None of HRSH's 82 cached archive items was one.
+
+**Tests.** `test_cris_campus_documents.py` runs the fetch against the recorded answer (every survey document listed;
+the nomination; the reviews; Quiet Cove never the site; off-campus records left out; reviews cost no extraction and
+no tiles; a building page keeps to its building and listing; a building child answered from the campus gets its own
+records and the listing, not the reviews; a town survey shared by one or two buildings on a small site brings in
+none of the town, while the site's own survey still brings in its unpositioned buildings).
+`test_article_sources_completeness.py` covers the gallery limit and the
+nested merge, `test_article_sources.py::NestedSourcesTests` the toggle, the proxy, another account's pins and child
+wikis, `test_cris_site_rows_refetch_migration.py` the migration. Red before the fix: 7 of the 12 campus tests ("82
+of 91 campus documents missing"; Quiet Cove taken as the site), the gallery-limit test, and both town-survey cases. The DB-backed tests
+(`NestedSourcesTests`, the migration test, and the existing `test_cris_buildings.py` and `test_name_tiers.py` cases
+adjusted for the new site rule) were written but not run in this session: the test-runner sync was refused in its
+worktree. Every DB-free test class in the files touching these modules passed on the host (158).
+
+## RESOLVED 2026-10-03: Article > News searches for the place by name and town, not its quoted street address
+
+`id: P235` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0) at HRSH.
+
+**Cause.** Article > News is the pin page's web search (`pin.web_search?surface=article`, `services/search/pin_web_search.py`,
+REData `/search/web/`), not the GDELT News card. Its query quoted the name, the street address and "Town ST", then
+appended the country. REData's engines treat every quoted phrase as required. HRSH's shared search was
+`"Hudson River State Hospital" "83 Hudson View Dr" "Poughkeepsie NY" United States`. Recorded against REData on
+2026-10-03, Brave answered it with nothing. Without the address it found one page; with the town and state left
+unquoted, it found ten about the hospital.
+
+None of the other candidates was the cause:
+
+- P187's outage empties are fixed.
+- P188's split already gives the shared search the name ("Hudson River State Hospital", from Wikipedia).
+- P196's relevance rule does not apply here: the web search lists what REData returns.
+
+**Fix.** `web_search_query` builds the query as the name, quoted, then the town and state. The town is quoted too
+only when the name is itself an address (`is_address_derived_name`), because a bare street address needs its town to
+stay specific. The street address and the country are left out. The view, the refresh task and the cache keys all
+build the query through the same function. A row cached under the old query is a miss, so it is fetched again.
+
+**GDELT card.** `GdeltPanelSource`'s query for HRSH, `"Hudson River State Hospital" (Poughkeepsie OR "Dutchess County")
+sourcelang:english sourcecountry:unitedstates`, also came back empty (probed live through REData, 2026-10-03 22:04Z).
+UrbanLens sends no `months`, so REData's default window of 24 months applies. In that window, the 50 English-language
+US articles GDELT ranked highest for "Poughkeepsie" all date from 2026-07-08 to 2026-10-02.
+
+GDELT refuses any window that reaches before 2017. REData's cap of 120 months is past that limit
+(`docs/handoffs/redata-gdelt-months-cap.md`). Whether a window of up to 117 months would find HRSH coverage is
+untested: GDELT answered 429 to every later probe.
+
+The card is not filtered by UrbanLens. It shows only what GDELT returns. Which other public names should feed the shared
+searches is left for Jess to decide. Candidates are CRIS's survey name "Hudson River State Hospital/Hudson River
+Psychiatric Center", "Hudson River Psychiatric Center", and the "Hudson Heritage" redevelopment.
+
+**Tests.** `tests/hypothesis/fixtures/hrsh_redata_web_search.json` records REData's answers to the old and new
+queries.
+
+- `test_article_news_search.py::NewsQueryTests` checks HRSH's query and the case where the name is an address.
+- `RecordedNewsSearchTests` runs the recorded answers through the parser.
+- `ArticleNewsTabTests` renders the tab end to end through `pin.web_search?surface=article`, with REData's transport
+  stubbed to the fixture.
+
+Before the fix, three of these failed. After it, the DB-free ones pass (4). `ArticleNewsTabTests` was written but not
+run in this session, because the test-runner sync was refused in this worktree. `test_web_search_view.py` and
+`test_misc_unnamed_write_routes.py` now build their cache keys through `web_search_query`.
+
+## RESOLVED 2026-10-03: When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves
+
+`id: P223` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0) at HRSH.
+
+**Causes.**
+- **Every click opened a menu.** A boundary layer opens the shared map menu on a left click, as well as on a
+  right-click. The menu's dismiss listener sat on `document` in the bubble phase, so it ran after Leaflet had already
+  handled the click. Under a polygon filling the view, a click meant to close the menu opened another at the new spot.
+- **The tooltip never left.** Boundary labels were bound `sticky`, which follows the pointer everywhere inside the
+  polygon. A polygon covering the view showed "Property boundary" the whole time, menu or not. Markup shapes' labels
+  (non-sticky) opened on entry and stayed until the pointer left, which under a large shape is the same thing.
+
+**Fixes.**
+- `shared/map-context-menu.ts`:
+  - The dismiss listener is captured on `document`. A click inside a `.leaflet-container` that lands outside an open
+    menu closes it and stops there, so the map and its layers never see it.
+  - A click elsewhere on the page still reaches its target.
+  - A right-click still opens a menu at the new spot.
+  - New `isMapContextMenuOpen()`.
+- New `shared/map-tooltips.ts`:
+  - `bindAreaTooltip(map, layer, html, options)` shows an area's label once the pointer has rested 600 ms. The label
+    hides on movement, a click, a right-click, the pointer leaving, or the map moving, and never opens while a map
+    menu is open.
+  - It binds the tooltip `permanent`, so Leaflet attaches none of its own hover handlers, and opens and closes it by
+    hand.
+  - Property and building boundaries (including a converted one) and markup shapes use it.
+  - Markers, lines (infrastructure), the building-import preview's footprints and the floorplan's room labels keep
+    their own tooltips: none of them can fill the view, and the import preview's hover is the selection feedback.
+- Left click on a boundary still opens its menu, which is how its edit actions are reached without a right button.
+
+**Tests.**
+- `map-context-menu.test.ts`: a click on the map outside an open menu only closes it, a click outside any map closes
+  it and reaches its target, and `isMapContextMenuOpen` follows the menu. Red before the fix.
+- `map-tooltips.test.ts`: the label binds shut, opens only after a rest, doesn't follow the pointer, never opens with a
+  menu open, hides on click, right-click, leaving or a map move, and rebinding or unbinding leaves no handlers. Red
+  before the fix (no module).
+- `inner-html-escaping.test.ts` reviews the helper's `html` parameter: every caller passes `escHtml(...)` or a literal.
+- Playwright on `development_main`, at zoom 20 with all four corners of the view inside HRSH's parcel polygon:
+  - no label while the pointer moved, and the label after a one-second rest, gone on the next move;
+  - a left click opened the boundary menu, and no label showed while it was open;
+  - a click elsewhere left no menu, the next click opened one, and a right-click moved it.
