@@ -11,6 +11,7 @@ import io
 import json
 import shutil
 import tempfile
+from typing import TYPE_CHECKING
 from unittest import mock
 
 from botocore.exceptions import ClientError
@@ -34,6 +35,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.safety.model import SafetyCheckin
 from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -44,6 +46,9 @@ from urbanlens.dashboard.tests.hypothesis.test_object_store_client_config import
     object_store,
     writes_fail,
 )
+
+if TYPE_CHECKING:
+    from django.test.client import _MonkeyPatchedWSGIResponse as TestResponse
 
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 _CORNERS = [[42.0, -73.0], [42.0, -72.99], [41.99, -72.99], [41.99, -73.0]]
@@ -83,15 +88,15 @@ class _OutageCase(TestCase):
         self.client.force_login(self.user)
         self.pin = baker.make(Pin, profile=self.profile, location=baker.make(Location))
 
-    def assert_retry_later(self, response: HttpResponse) -> None:
+    def assert_retry_later(self, response: TestResponse) -> None:
         self.assertEqual(response.status_code, 503, response.content[:300])
         self.assertEqual(response["Retry-After"], str(STORAGE_RETRY_AFTER_SECONDS))
 
-    def assert_json_error(self, response: HttpResponse) -> None:
+    def assert_json_error(self, response: TestResponse) -> None:
         self.assert_retry_later(response)
         self.assertTrue(json.loads(response.content)["error"])
 
-    def assert_text_error(self, response: HttpResponse) -> None:
+    def assert_text_error(self, response: TestResponse) -> None:
         self.assert_retry_later(response)
         self.assertTrue(response["Content-Type"].startswith("text/"))
         self.assertNotIn(b"<", response.content)
@@ -101,7 +106,7 @@ class _OutageCase(TestCase):
 class PinGalleryUploadTests(_OutageCase):
     """The pin, wiki and album gallery uploader (``image_gallery.create_uploaded_photo``)."""
 
-    def _post(self, image: SimpleUploadedFile | None = None) -> HttpResponse:
+    def _post(self, image: SimpleUploadedFile | None = None) -> TestResponse:
         return self.client.post(reverse("pin.gallery", args=[self.pin.slug]), {"image": image or _jpeg()})
 
     def test_a_write_garage_refuses_is_a_503_with_nothing_stored(self) -> None:
@@ -189,7 +194,7 @@ class InlinePhotoUploadTests(_OutageCase):
         self.assertFalse(Image.objects.exists())
 
     def test_the_safety_check_in_gallery(self) -> None:
-        checkin = baker.make("dashboard.SafetyCheckin", profile=self.profile, title="Hike")
+        checkin = baker.make(SafetyCheckin, profile=self.profile, title="Hike")
         with garage_down():
             response = self.client.post(
                 reverse("safety.checkin.gallery", kwargs={"checkin_slug": checkin.slug}), {"image": _jpeg()}

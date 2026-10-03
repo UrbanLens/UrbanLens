@@ -104,6 +104,7 @@ def object_store(respond: Callable[[AWSRequest], AWSResponse]) -> Iterator[list[
     with override_settings(STORAGES=backends, UL_MEDIA_STORAGE_BACKEND="s3"):
         storage = storages["default"]
         assert isinstance(storage, GatedS3Storage)
+        assert isinstance(default_storage, GatedS3Storage)
         assert default_storage.connection is storage.connection
         storage.connection.meta.client.meta.events.register("before-send.s3", handler)
         yield sent
