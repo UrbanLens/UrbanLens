@@ -44,8 +44,7 @@ class SharedPinCopyFidelityTests(TestCase):
         # pin_type_is_user_provided is the only thing stopping the automatic
         # building/parcel classifier from overwriting pin_type. Copying the type but
         # not the flag hands the recipient a type the classifier is free to replace -
-        # exactly what the flag exists to prevent. name_is_user_provided, the same
-        # pattern for the same reason, is copied.
+        # exactly what the flag exists to prevent.
         pin = Pin.objects.create(
             profile=self.sender,
             location=self.location,

@@ -150,7 +150,7 @@ def create_pin_share(
     pref = delivery_preference(recipient, "pin_shared")
     if pref != DeliveryPreference.NONE:
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
-        base_message = f"{sender_name} shared {pin.display_label} with you."
+        base_message = f"{sender_name} shared {share.safe_place_label} with you."
         if bundled_count:
             base_message += f" It comes with {bundled_count} child pin{'s' if bundled_count != 1 else ''}."
         if already_pinned:
@@ -216,11 +216,10 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         parent_pin=parent_pin,
         location=share.shared_location or source.location,
         name=share.shared_name or _official_name_for(share.shared_location or source.location),
-        name_is_user_provided=bool(share.shared_name) or source.name_is_user_provided,
+        name_is_user_provided=bool(share.shared_name),
         pin_type=source.pin_type,
-        # Copied alongside pin_type for the same reason name_is_user_provided is
-        # copied alongside name: it is the only thing stopping the automatic
-        # building/parcel classifier from overwriting a type the sender chose.
+        # The only thing stopping the automatic building/parcel classifier from
+        # overwriting a type the sender chose.
         pin_type_is_user_provided=source.pin_type_is_user_provided,
         indoor_outdoor=source.indoor_outdoor,
         date_built=source.date_built,

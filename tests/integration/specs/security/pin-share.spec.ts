@@ -26,11 +26,6 @@ import {
 } from "../../lib/pin-share.js";
 import { containsMarker, expectCanaryNotInDom, expectIndistinguishableFromMissing, expectNotServerError, markupCanary, MISSING_SLUG, uniqueMarker } from "../../lib/security.js";
 
-const LIVE_NAME_CONFLICT =
-    '"The recipient never gets access to the sender\'s actual pin, before or after acceptance" / "never a live reference" vs ' +
-    "templates/dashboard/pages/pin_share/detail.html:16 (share.safe_place_label -> models/pin_share/model.py place_label reads pin.display_label live) " +
-    "and controllers/memories.py:141-161 + partials/memories/_sharing_received.html:10 (group.pin.effective_name)";
-
 /** A share id no recipient holds; ids are sequential integers. */
 const MISSING_SHARE_ID = 2_147_000_000;
 
@@ -116,20 +111,14 @@ test.describe("pin -> pin share: the recipient never gets the sender's pin", () 
         expect(containsMarker(String(namedCopy.description), named.marker), "the copy carries the sender's private notes").toBeFalsy();
     });
 
-    ifSharingPair()("a copy accepted later carries the facts as they were shared, not the sender's edits in between", async ({ sharerApi, shareeApi, sharerPage, shareePage }) => {
-        test.fail();
-        test.info().annotations.push({
-            type: "goals-conflict",
-            description:
-                '"sender shares coordinates (+ optional bundled fields) as a suggestion ... never a live reference" vs ' +
-                "services/sharing/pin_sharing.py:136-172 (create_pin_from_share reads share.pin's date_built/security at accept time, not a snapshot taken at share time)",
-        });
+    ifSharingPair()("a copy accepted later carries the site's facts as they stand at acceptance", async ({ sharerApi, shareeApi, sharerPage, shareePage }) => {
+        // Jess, 2026-10-02: a share is copied as of acceptance, to the degree the sender consented; the facts are consented.
         // Its precondition (date_built travels at all) is asserted by "the accepted copy carries opted-in fields ...".
         const { pin, share } = await shareFreshPin(sharerApi, shareeApi, sharerPage, shareePage, "snap", { before: { date_built: "1901-02-03" } });
         await sharerApi.json("patch", `pins/${pin.slug}/`, { date_built: "1977-07-07" });
 
         const copy = await shareeApi.json<{ date_built: string | null }>("get", `pins/${await acceptShare(shareeApi, share.shareId)}/`);
-        expect(copy.date_built, "the copy took the sender's post-share edit: a pending share reads through to the live pin until it is accepted").toBe("1901-02-03");
+        expect(copy.date_built, "the copy kept the fact as it was shared rather than as it stood at acceptance").toBe("1977-07-07");
     });
 
     ifSharingPair()("the sender's later edits never reach the recipient's accepted pin", async ({ sharerApi, shareeApi, sharerPage, shareePage }) => {
@@ -170,7 +159,7 @@ test.describe("pin -> pin share: the recipient never gets the sender's pin", () 
     });
 
     ifSharingPair()("the recipient's share preview is reachable before and after accepting", async ({ sharerApi, shareeApi, sharerPage, shareePage }) => {
-        // Preconditions for the two expected-failure tests below, kept apart so a broken setup cannot pass as their expected failure.
+        // Preconditions for the two rename tests below, kept apart so a broken setup cannot pass as their result.
         const { pin, share } = await shareFreshPin(sharerApi, shareeApi, sharerPage, shareePage, "prev");
         const sharer = requireAccount(SHARER_ROLE).username;
 
@@ -191,8 +180,6 @@ test.describe("pin -> pin share: the recipient never gets the sender's pin", () 
     });
 
     ifSharingPair()("a pending share's preview does not follow the sender's later rename", async ({ sharerApi, shareeApi, sharerPage, shareePage }) => {
-        test.fail();
-        test.info().annotations.push({ type: "goals-conflict", description: LIVE_NAME_CONFLICT });
         const { pin, share } = await shareFreshPin(sharerApi, shareeApi, sharerPage, shareePage, "pend");
 
         const later = freshMarker("pendren");
@@ -205,8 +192,6 @@ test.describe("pin -> pin share: the recipient never gets the sender's pin", () 
     });
 
     ifSharingPair()("after accepting, the sender's rename reaches none of the recipient's share surfaces", async ({ sharerApi, shareeApi, sharerPage, shareePage }) => {
-        test.fail();
-        test.info().annotations.push({ type: "goals-conflict", description: LIVE_NAME_CONFLICT });
         const { pin, share } = await shareFreshPin(sharerApi, shareeApi, sharerPage, shareePage, "acc");
         await acceptShare(shareeApi, share.shareId);
 

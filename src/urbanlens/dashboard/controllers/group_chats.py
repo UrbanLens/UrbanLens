@@ -671,7 +671,7 @@ class GroupSharePinRespondView(LoginRequiredMixin, View):
         message = get_object_or_404(GroupMessage.objects.filter(group=group), pk=message_id)
         if hidden_by_block(message, profile):
             raise Http404
-        share = message.shares.select_related("pin_share__pin__location").filter(recipient=profile).first()
+        share = message.shares.select_related("pin_share__pin__location", "pin_share__location__wiki").filter(recipient=profile).first()
         if share is None or share.pin_share is None:
             raise Http404
 

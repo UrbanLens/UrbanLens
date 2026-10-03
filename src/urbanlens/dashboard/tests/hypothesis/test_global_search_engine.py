@@ -384,6 +384,7 @@ class PinShareSearchTests(TestCase):
         share = baker.make(
             "dashboard.PinShare",
             pin=sharer_pin,
+            location=sharer_pin.location,
             from_profile=self.sharer,
             to_profile=self.viewer,
             status=self.status.ACCEPTED,
@@ -401,6 +402,7 @@ class PinShareSearchTests(TestCase):
         baker.make(
             "dashboard.PinShare",
             pin=sharer_pin,
+            location=sharer_pin.location,
             from_profile=self.sharer,
             to_profile=self.viewer,
             status=self.status.ACCEPTED,
@@ -415,6 +417,7 @@ class PinShareSearchTests(TestCase):
         baker.make(
             "dashboard.PinShare",
             pin=sharer_pin,
+            location=sharer_pin.location,
             from_profile=self.sharer,
             to_profile=self.viewer,
             status=self.status.ACCEPTED,
@@ -429,6 +432,7 @@ class PinShareSearchTests(TestCase):
         baker.make(
             "dashboard.PinShare",
             pin=sharer_pin,
+            location=sharer_pin.location,
             from_profile=self.sharer,
             to_profile=self.viewer,
             status=self.status.ACCEPTED,
@@ -444,6 +448,7 @@ class PinShareSearchTests(TestCase):
         baker.make(
             "dashboard.PinShare",
             pin=sharer_pin,
+            location=sharer_pin.location,
             from_profile=self.sharer,
             to_profile=self.viewer,
             status=self.status.ACCEPTED,
@@ -463,6 +468,7 @@ class PinShareSearchTests(TestCase):
         baker.make(
             "dashboard.PinShare",
             pin=sharer_pin,
+            location=sharer_pin.location,
             from_profile=self.sharer,
             to_profile=self.viewer,
             status=self.status.PENDING,
@@ -477,6 +483,7 @@ class PinShareSearchTests(TestCase):
         baker.make(
             "dashboard.PinShare",
             pin=sharer_pin,
+            location=sharer_pin.location,
             from_profile=self.sharer,
             to_profile=self.viewer,
             status=self.status.ACCEPTED,

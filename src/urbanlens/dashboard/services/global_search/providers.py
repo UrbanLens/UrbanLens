@@ -571,7 +571,7 @@ class PinSearchProvider(SearchProvider):
             # so this also finds shares the recipient already had pinned - accepting those never
             # sets source_share, since no new Pin was created (see PinShare.resulting_pin).
             sharer_ann, sharer_q = person_match("from_profile", parsed.person, profile)
-            shared_with_me = PinShare.objects.filter(to_profile=profile, status=PinShareStatus.ACCEPTED, pin__location_id=OuterRef("location_id")).annotate(**sharer_ann).filter(sharer_q)
+            shared_with_me = PinShare.objects.filter(to_profile=profile, status=PinShareStatus.ACCEPTED, location_id=OuterRef("location_id")).annotate(**sharer_ann).filter(sharer_q)
             queryset = queryset.filter(Exists(shared_with_me))
         queryset = queryset.filter(date_range_filter("created", parsed))
         queryset = apply_label_clause(queryset, parsed)

@@ -149,6 +149,7 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
     def _detected_share(self, *, origin: str) -> PinShare:
         return PinShare.objects.create(
             pin=self.pin_a,
+            location=self.location,
             from_profile=self.profiles["a"],
             to_profile=self.profiles["b"],
             origin=origin,
@@ -163,8 +164,8 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
 
         groups = response.context["incoming_share_groups"]
         self.assertEqual(len(groups), 1)
-        self.assertIsNone(groups[0]["pin"])
-        self.assertNotIn("Sender's Private Cabin", response.content.decode())
+        self.assertNotIn("pin", groups[0])
+        self.assertNotIn("Sender&#x27;s Private Cabin", response.content.decode())
 
     def test_the_sharing_page_itself_never_carries_the_name_either(self):
         # The received half is fetched separately now. Kept as its own
@@ -184,8 +185,8 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
         response = self.client.get(reverse("memories.sharing.received"))
 
         groups = response.context["incoming_share_groups"]
-        self.assertIsNone(groups[0]["pin"])
-        self.assertNotIn("Sender's Private Cabin", response.content.decode())
+        self.assertNotIn("pin", groups[0])
+        self.assertNotIn("Sender&#x27;s Private Cabin", response.content.decode())
 
     def test_the_location_derived_label_is_shown_instead(self):
         self._detected_share(origin=PinShareOrigin.TRIP_ACTIVITY)
@@ -196,10 +197,12 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
         groups = response.context["incoming_share_groups"]
         self.assertEqual(groups[0]["place_label"], "Old Mill")
 
-    def test_an_explicit_pending_share_still_shows_the_pin(self):
-        """The fix must not hide a share the recipient actually needs to decide on."""
+    def test_an_explicit_pending_share_is_listed_by_the_place_not_the_pin(self):
+        """Still listed for the recipient to decide on, under the name the share carries - not the sender's own,
+        which a share without a ``shared_name`` never consented to pass on."""
         share = PinShare.objects.create(
             pin=self.pin_a,
+            location=self.location,
             from_profile=self.profiles["a"],
             to_profile=self.profiles["b"],
             status=PinShareStatus.PENDING,
@@ -209,17 +212,17 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
         response = self.client.get(reverse("memories.sharing.received"))
 
         groups = response.context["incoming_share_groups"]
-        self.assertEqual(groups[0]["pin"], self.pin_a)
         self.assertIn(share, groups[0]["shares"])
+        self.assertEqual(groups[0]["place_label"], "Old Mill")
         # Autoescaped output turns the apostrophe into &#x27; - assert on the
         # rendered form, not the raw name.
-        self.assertIn("Sender&#x27;s Private Cabin", response.content.decode())
+        self.assertNotIn("Sender&#x27;s Private Cabin", response.content.decode())
 
-    def test_a_mixed_group_with_one_actionable_share_still_shows_the_pin(self):
-        """A DETECTED share for a pin the recipient ALSO has a real (pending/accepted) share
-        for must not lose the pin - there's a legitimate share justifying the reveal."""
+    def test_a_mixed_group_lists_both_shares_under_the_place(self):
+        """A DETECTED share for a pin the recipient also has a pending share for groups with it."""
         PinShare.objects.create(
             pin=self.pin_a,
+            location=self.location,
             from_profile=self.profiles["a"],
             to_profile=self.profiles["b"],
             status=PinShareStatus.PENDING,
@@ -231,8 +234,8 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
 
         groups = response.context["incoming_share_groups"]
         self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0]["pin"], self.pin_a)
         self.assertEqual(len(groups[0]["shares"]), 2)
+        self.assertNotIn("Sender&#x27;s Private Cabin", response.content.decode())
 
 
 class MemoriesSharingMapsPageTests(_ShareChainTestCase):

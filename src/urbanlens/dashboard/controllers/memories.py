@@ -92,10 +92,10 @@ class _IncomingShareGroup(TypedDict):
     """One pin's entry in the Sharing page's ``incoming_share_groups`` list.
 
     Unlike :class:`_ShareGroup`, there's no chain/reshare count here - the chain machinery is rooted at
-    the *sender's* side, and the recipient only ever sees their own inbound shares of a given pin.
+    the *sender's* side, and the recipient only ever sees their own inbound shares of a given pin. Nor is
+    there a pin: the recipient is shown what the share recorded, never the sender's pin.
     """
 
-    pin: Pin | None
     place_label: str
     shares: list[PinShare]
 
@@ -136,29 +136,6 @@ def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tup
         recipient = host.recipient if host.sender_id == markup_map.profile_id else host.sender
         return f"Direct message to {recipient.username}", reverse("messages.conversation", args=[recipient.slug])
     return None, None
-
-
-def _safe_incoming_place_label(pin_shares: list[PinShare]) -> tuple[Pin | None, str]:
-    """The pin (if safe to show) and display label for one Sharing-page "received" group.
-
-    ``PinShareStatus.DETECTED`` shares (auto-recorded from a shared map, a DM, or a trip activity - see
-    the status's own docstring) are "never actionable, never materialize a Pin": the recipient never
-    explicitly agreed to see anything about them, unlike an EXPLICIT share awaiting accept/reject, where
-    a preview of the current pin name is the whole point.
-
-    Args:
-        pin_shares: Every incoming share grouped under one pin/location key.
-
-    Returns:
-        ``(pin, label)`` - matching ``(share.pin, share.place_label)`` whenever the group has at least
-        one non-DETECTED share, otherwise...
-    """
-    if any(share.reveals_live_pin for share in pin_shares):
-        # The group is keyed by pin/location, so every share in it points at the same place - one non-DETECTED
-        # member means the recipient was offered this pin and may see it.
-        share = pin_shares[0]
-        return share.pin, share.place_label
-    return None, pin_shares[0].safe_place_label
 
 
 def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]:
@@ -911,12 +888,9 @@ def _received_share_context(request: HttpRequest, profile: Profile) -> dict[str,
     from urbanlens.dashboard.models.markup.share import MarkupMapShare
     from urbanlens.dashboard.models.pin_share.model import PinShare
 
-    shares = PinShare.objects.received_by(profile).select_related("pin__location__wiki", "location__wiki", "from_profile__user")
+    shares = PinShare.objects.received_by(profile).select_related("location__wiki", "from_profile__user")
     groups, page = _place_grouped_page(request, shares, param="received_pins_page")
-    incoming_share_groups: list[_IncomingShareGroup] = []
-    for pin_shares in groups:
-        pin, place_label = _safe_incoming_place_label(pin_shares)
-        incoming_share_groups.append({"pin": pin, "place_label": place_label, "shares": pin_shares})
+    incoming_share_groups: list[_IncomingShareGroup] = [{"place_label": pin_shares[0].safe_place_label, "shares": pin_shares} for pin_shares in groups]
 
     map_shares = MarkupMapShare.objects.filter(to_profile=profile).select_related("markup_map", "from_profile__user")
     map_groups, map_page = _map_grouped_page(request, map_shares, param="received_maps_page")

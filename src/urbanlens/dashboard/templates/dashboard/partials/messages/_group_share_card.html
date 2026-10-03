@@ -3,7 +3,7 @@
   {% if viewer_share and viewer_share.pin_share %}
   <div class="dm-share-card__row">
     <i class="material-symbols-outlined">location_on</i>
-    <span class="dm-share-card__label">{{ viewer_share.pin_share.pin.display_label }}</span>
+    <span class="dm-share-card__label">{{ viewer_share.pin_share.safe_place_label }}</span>
   </div>
   {% if viewer_share.pin_share.status == "pending" %}
   <div class="dm-share-card__actions">
@@ -31,10 +31,11 @@
   {% endif %}
   {% else %}
   {% with any_share=message.shares.all|first %}
-  {% if any_share and any_share.pin_share %}
+  {# Only the sender: a member the pin was not shared with is told nothing about the place. #}
+  {% if any_share and any_share.pin_share and message.sender_id == viewer_id %}
   <div class="dm-share-card__row">
     <i class="material-symbols-outlined">location_on</i>
-    <span class="dm-share-card__label">{{ any_share.pin_share.pin.display_label }}</span>
+    <span class="dm-share-card__label">{{ any_share.pin_share.safe_place_label }}</span>
   </div>
   <p class="dm-share-card__status">Pin shared with the group.</p>
   {% else %}

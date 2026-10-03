@@ -7,7 +7,7 @@
         <div class="memories-sharing-card-header">
             <span class="memories-sharing-pin-link">
                 <i class="material-symbols-outlined">location_on</i>
-                {% if group.pin %}{{ group.pin.effective_name }}{% else %}{{ group.place_label }}{% endif %}
+                {{ group.place_label }}
             </span>
         </div>
         <ul class="memories-sharing-recipients">
