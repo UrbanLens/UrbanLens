@@ -66,6 +66,10 @@ REVIEWED: dict[str, str] = {
         "drop_name_built_searches deletes cached name-built search rows, which may hold results found by someone's "
         "own names. They are a cache; the old code refetches them."
     ),
+    "0044_cris_site_rows_refetch.py": (
+        "drop_stale_cris_rows deletes CRIS cache rows chosen by the old site rule. They are a cache; the old code "
+        "refetches them."
+    ),
 }
 
 

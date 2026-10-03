@@ -1042,6 +1042,7 @@ class CampusAggregationTests(TestCase):
         self.details["b-far"] = {**far, "attachments": [_inventory_form(91)]}
 
         neighbour = {**_CAMPUS_DISTRICT, "uuid": "dist-neighbour", "name": "Neighbouring District"}
+        self.details["dist-neighbour"] = {**neighbour, "attachments": [], "linked_resources": []}
 
         def lookup(radius_meters: float) -> list[dict]:
             if radius_meters > 1000:

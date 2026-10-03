@@ -48,6 +48,13 @@ _RESOURCE_TYPE = "building"
 #: ``render_context``).
 _SITE_RESOURCE_TYPES = ("building_district", "national_register_listing")
 
+#: A CRIS consultation project. Its reviewed area can bound a redevelopment site where the site's listing bounds
+#: only the main building's grounds, as REData's own site search assumes.
+_PROJECT_RESOURCE_TYPE = "project"
+
+#: REData's ``linked_from`` type for a CRIS survey, whose roster names the buildings it covered.
+_SURVEY_RESOURCE_TYPE = "survey"
+
 #: REData's ``CulturalResourceAttachmentKind`` values, lowercase (they are Django ``TextChoices``
 #: values, serialized verbatim by its ModelSerializer).
 #: Compared case-insensitively at every use so this plugin keeps working if REData ever normalizes
@@ -65,7 +72,8 @@ _SOURCE_NAME = "NY Historic Preservation (CRIS)"
 _SUBJECT_BUILDING = "building"
 _SUBJECT_SITE = "site"
 
-#: Marks an attachment gathered from another building on the same site, which only a site-scope page lists.
+#: Marks an attachment gathered from another record on the same site (a campus building, a review of the site), which
+#: only a site-scope page lists.
 _SITE_BUILDING_KEY = "site_building"
 
 #: A site-scope payload's roster of the campus buildings it resolved, from which each building child is answered.
@@ -90,19 +98,73 @@ def cris_only(resources: list[dict]) -> list[dict]:
     return [r for r in resources if r.get("provider") in (None, "", _PROVIDER)]
 
 
-def site_resource(resources: list[dict]) -> dict | None:
+def site_resource(resources: list[dict], latitude: float | None = None, longitude: float | None = None) -> dict | None:
     """Pick the best site-level CRIS resource from a lookup.
 
     Args:
         resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
+        latitude: The place's latitude. Given a point, a record whose own boundary excludes it is a neighbour and is
+            never picked, and one containing it wins over one publishing no boundary.
+        longitude: The place's longitude.
 
     Returns:
         The whole resource dict (so its ``uuid`` stays reachable for a detail fetch), or None when the lookup returned no site-level resource."""
-    for resource_type in _SITE_RESOURCE_TYPES:
-        match = next((r for r in cris_only(resources) if r.get("resource_type") == resource_type), None)
-        if match is not None:
-            return match
-    return None
+    records = [r for r in cris_only(resources) if r.get("resource_type") in _SITE_RESOURCE_TYPES]
+    if latitude is not None and longitude is not None:
+        records = [r for r in records if site_polygon(r) is None or site_contains(r, latitude, longitude)]
+
+    def rank(record: dict) -> tuple[bool, int]:
+        unbounded = latitude is not None and site_polygon(record) is None
+        return unbounded, _SITE_RESOURCE_TYPES.index(str(record.get("resource_type")))
+
+    return min(records, key=rank, default=None)
+
+
+def containing_site_records(resources: list[dict], latitude: float, longitude: float) -> list[dict]:
+    """Every CRIS site record and consultation project whose own boundary holds a point.
+
+    A project reaching farther than ``_MAX_SITE_RADIUS_METERS`` from the point (a road, a transmission line) describes
+    no one site and is left out.
+
+    Args:
+        resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
+        latitude: The place's latitude.
+        longitude: The place's longitude.
+
+    Returns:
+        The records, each once, in lookup order.
+    """
+    records: list[dict] = []
+    seen: set[str] = set()
+    for record in cris_only(resources):
+        resource_type = record.get("resource_type")
+        if resource_type not in (*_SITE_RESOURCE_TYPES, _PROJECT_RESOURCE_TYPE) or not record.get("uuid") or record["uuid"] in seen:
+            continue
+        polygon = site_polygon(record)
+        if polygon is None or not site_contains(record, latitude, longitude):
+            continue
+        if resource_type == _PROJECT_RESOURCE_TYPE and radius_covering(polygon, latitude, longitude) > _MAX_SITE_RADIUS_METERS:
+            continue
+        seen.add(record["uuid"])
+        records.append(record)
+    return records
+
+
+def site_boundary(resources: list[dict], latitude: float, longitude: float) -> BaseGeometry | None:
+    """The site a site-scope page describes: the boundaries of :func:`containing_site_records`, together.
+
+    Args:
+        resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
+        latitude: The place's latitude.
+        longitude: The place's longitude.
+
+    Returns:
+        Their union, or None when no record with an areal boundary holds the point.
+    """
+    from shapely.ops import unary_union
+
+    polygons = [polygon for record in containing_site_records(resources, latitude, longitude) if (polygon := site_polygon(record)) is not None]
+    return unary_union(polygons) if polygons else None
 
 
 def site_resource_attributes(resources: list[dict], latitude: float | None = None, longitude: float | None = None) -> dict:
@@ -115,7 +177,7 @@ def site_resource_attributes(resources: list[dict], latitude: float | None = Non
 
     Returns:
         The chosen resource's own ``attributes`` dict (the raw ArcGIS layer fields, same shape the building record is flattened into), plus a ``resource_type`` key and, given a point, ``contains_point``; ``{}`` when the lookup returned no site-level resource."""
-    match = site_resource(resources)
+    match = site_resource(resources, latitude, longitude)
     if match is None:
         return {}
     district = {**(match.get("attributes") or {}), "resource_type": match.get("resource_type")}
@@ -224,6 +286,11 @@ def is_detailed(resource: dict) -> bool:
     return bool(resource.get("attachments") or resource.get("detail_retrieved_at"))
 
 
+def _survey_uuids(resource: dict) -> set[str]:
+    """The CRIS surveys whose rosters name a resource."""
+    return {str(link["uuid"]) for link in resource.get("linked_from") or [] if isinstance(link, dict) and link.get("resource_type") == _SURVEY_RESOURCE_TYPE and link.get("uuid")}
+
+
 def campus_roster_entry(resource: dict, record: dict | None) -> dict | None:
     """One campus building as a site-scope payload records it.
 
@@ -304,8 +371,6 @@ _RADIUS_METERS = 200
 _SITE_RADIUS_METERS = 500
 #: Ceiling on the footprint-derived radius, so one sprawling district cannot turn into a county-wide query.
 _MAX_SITE_RADIUS_METERS = 1500
-#: Campus buildings considered per pass, nearest first.
-_MAX_SITE_BUILDINGS = 40
 #: Live detail fetches per pass for campus buildings REData has not fetched yet; the bulk queue warms the rest.
 _MAX_SITE_DETAIL_FETCHES = 12
 #: Campus detail fetches stop once the whole fetch has run this long, leaving the task's 110s soft limit room
@@ -384,14 +449,15 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         try:
             gateway = RedataGateway()
             resources = gateway.lookup_cultural_resources(lat, lng, radius_meters=radius, provider=_PROVIDER)
-            site = site_resource(resources)
-            polygon = site_polygon(site) if site_scope else None
+            site = site_resource(resources, lat, lng)
+            polygon = site_boundary(resources, lat, lng) if site_scope else None
             if polygon is not None:
                 covering = min(radius_covering(polygon, lat, lng), _MAX_SITE_RADIUS_METERS)
                 if covering > radius:
                     # Keep the site whose footprint set the radius.
                     radius = covering
                     resources = gateway.lookup_cultural_resources(lat, lng, radius_meters=radius, provider=_PROVIDER)
+                    polygon = site_boundary(resources, lat, lng)
         except PropertyRecordsUnavailableError as exc:
             if exc.reason in TRANSIENT_REASONS:
                 raise
@@ -442,13 +508,15 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         if site_scope:
             self._queue_site_details(gateway, lat, lng, radius)
             skip = {uuid for uuid in (data.get("resource_uuid"), district.get("resource_uuid")) if uuid}
+            reviews = [record for record in containing_site_records(resources, lat, lng) if record["uuid"] not in skip]
             candidates = self._campus_candidates(resources, site_detail, polygon, lat, lng, skip=skip)
-            records = self._campus_records(gateway, candidates[:_MAX_SITE_BUILDINGS], started=started)
+            records = self._campus_records(gateway, [*reviews, *candidates], started=started)
             attachments.extend(self._campus_attachments(candidates, records))
+            attachments.extend(self._campus_attachments(reviews, records, subject_kind=_SUBJECT_SITE))
             roster = [campus_roster_entry(building, building_record)] if building is not None else []
             roster.extend(campus_roster_entry(candidate, records.get(candidate["uuid"])) for candidate in candidates)
             data[_CAMPUS_BUILDINGS_KEY] = [entry for entry in roster if entry is not None]
-            if polygon is not None and district and site is not None:
+            if district and site is not None and site_polygon(site) is not None:
                 district["geometry"] = site.get("geometry")
 
         data["attachments"] = attachments
@@ -496,12 +564,15 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
 
     @staticmethod
     def _campus_candidates(resources: list[dict], site_detail: dict, polygon: BaseGeometry | None, latitude: float, longitude: float, *, skip: set[str]) -> list[dict]:
-        """The site's other CRIS buildings, nearest first, then any the site record links that the lookup missed.
+        """The site's other CRIS buildings: those on it nearest first, then the rest of its survey's roster, then any the site record links.
+
+        A survey naming most of the buildings on the site is CRIS's own roster of it, so its members off the site's
+        boundary or with no published position are the site's too.
 
         Args:
             resources: The lookup's resource dicts.
             site_detail: The site record's detail (its ``linked_resources`` roster), or ``{}``.
-            polygon: The site's footprint; without one every building in the lookup counts.
+            polygon: The site's footprint; without one every positioned building in the lookup is on it.
             latitude: The pin's latitude.
             longitude: The pin's longitude.
             skip: Resource uuids already covered (the pin's own building and the site record).
@@ -509,24 +580,31 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         Returns:
             Resource dicts, each with a ``uuid``.
         """
+        from collections import Counter
+
         from shapely.geometry import Point
 
         from urbanlens.dashboard.services.locations.site_scope import meters_between
 
-        positioned: list[tuple[float, dict]] = []
-        for resource in cris_only(resources):
+        buildings = [resource for resource in cris_only(resources) if resource.get("resource_type") == _RESOURCE_TYPE and resource.get("uuid")]
+        on_site: list[tuple[float, dict]] = []
+        for resource in buildings:
             lat, lng = resource.get("source_latitude"), resource.get("source_longitude")
-            if resource.get("resource_type") != _RESOURCE_TYPE or not resource.get("uuid") or lat is None or lng is None:
+            if lat is None or lng is None:
                 continue
             if polygon is not None and not polygon.intersects(Point(float(lng), float(lat))):
                 continue
-            positioned.append((meters_between(float(lat), float(lng), latitude, longitude), resource))
-        positioned.sort(key=lambda pair: pair[0])
+            on_site.append((meters_between(float(lat), float(lng), latitude, longitude), resource))
+        on_site.sort(key=lambda pair: pair[0])
+
+        coverage = Counter(survey for _distance, resource in on_site for survey in _survey_uuids(resource))
+        site_surveys = {survey for survey, count in coverage.items() if 2 * count > len(on_site)}
+        on_roster = [resource for resource in buildings if site_surveys & _survey_uuids(resource)]
         linked = [ref for ref in site_detail.get("linked_resources") or [] if isinstance(ref, dict) and ref.get("resource_type") == _RESOURCE_TYPE and ref.get("uuid")]
 
         candidates: list[dict] = []
         seen = set(skip)
-        for resource in [resource for _distance, resource in positioned] + linked:
+        for resource in [resource for _distance, resource in on_site] + on_roster + linked:
             if resource["uuid"] in seen:
                 continue
             seen.add(resource["uuid"])
@@ -542,7 +620,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
 
         Args:
             gateway: The :class:`RedataGateway` to fetch through.
-            candidates: From :meth:`_campus_candidates`, already capped.
+            candidates: The site's other records: its reviews and :meth:`_campus_candidates`.
             started: ``time.monotonic()`` when the whole fetch began.
 
         Returns:
@@ -563,12 +641,13 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
                     logger.debug("CrisBuildingPanelSource: no detail for campus building %s", resource["uuid"], exc_info=True)
         return records
 
-    def _campus_attachments(self, candidates: list[dict], records: dict[str, dict]) -> list[dict]:
-        """The campus buildings' attachments, each tagged with its building.
+    def _campus_attachments(self, candidates: list[dict], records: dict[str, dict], *, subject_kind: str = _SUBJECT_BUILDING) -> list[dict]:
+        """The attachments of the site's other records, each tagged with its record and listed only at site scope.
 
         Args:
-            candidates: From :meth:`_campus_candidates`.
+            candidates: The records, from :meth:`_campus_candidates` or :func:`containing_site_records`.
             records: From :meth:`_campus_records`.
+            subject_kind: What the records are: campus buildings, or reviews of the whole site.
 
         Returns:
             The attachments, without extracted images (extraction is per-document AI work, spent only on the pin's own building and site).
@@ -580,7 +659,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
                 continue
             resource_uuid = record.get("uuid") or resource["uuid"]
             own = [{**attachment, "resource_uuid": resource_uuid} for attachment in record.get("attachments") or [] if isinstance(attachment, dict)]
-            attachments.extend(self._tagged(own, subject=resource_name(record) or resource_name(resource), subject_kind=_SUBJECT_BUILDING, site_building=True))
+            attachments.extend(self._tagged(own, subject=resource_name(record) or resource_name(resource), subject_kind=subject_kind, site_building=True))
         return attachments
 
     @staticmethod
@@ -693,7 +772,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         attachments = self._tagged(self._attachments_with_extracted_images(resource_uuid, own, noted), subject=str(entry.get("name") or ""), subject_kind=_SUBJECT_BUILDING)
         district = dict(site_data.get("district") or {})
         if district:
-            documented = [attachment for attachment in site_attachments if attachment.get("subject_kind") == _SUBJECT_SITE]
+            documented = [attachment for attachment in site_attachments if attachment.get("subject_kind") == _SUBJECT_SITE and not attachment.get(_SITE_BUILDING_KEY)]
             attachments.extend(self._attachments_with_extracted_images(district.get("resource_uuid"), documented, noted))
             district["contains_point"] = site_contains({"geometry": district.pop("geometry", None)}, latitude, longitude)
             data["district"] = district

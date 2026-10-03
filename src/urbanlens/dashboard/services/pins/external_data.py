@@ -696,9 +696,22 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
     Attributes:
         documents_depend_on_site_scope: Whether a site-scope page lists different documents from a building's, so a
             pin that becomes a site has its documents fetched again.
+        documents_judged: Whether :meth:`source_documents` lists a document only when it is about the subject it is given.
     """
 
     documents_depend_on_site_scope: ClassVar[bool] = True
+    documents_judged: ClassVar[bool] = False
+
+    def may_list_documents(self, data: dict) -> bool:
+        """Whether a cached payload holds any document at all, before any is judged against a subject.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+
+        Returns:
+            False only when :meth:`source_documents` would list nothing whatever the subject.
+        """
+        return True
 
     def documents_ready(self, data: dict, *, site_scope: bool) -> bool:
         """Whether a cached payload can answer the Sources tab for a viewer of this scope.
@@ -959,6 +972,11 @@ class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
     """
 
     documents_depend_on_site_scope: ClassVar[bool] = False
+    documents_judged: ClassVar[bool] = True
+
+    def may_list_documents(self, data: dict) -> bool:
+        """Whether any of this provider's cached results is a document."""
+        return any(item.is_document for item in self.media_items(data))
 
     def source_documents(self, data: dict, *, site_scope: bool, subject: MediaSubject | None = None) -> list[SourceDocument]:
         """The documents among this provider's results that are about ``subject``; none without one."""

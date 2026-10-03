@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.pins.source_documents import ListedDocument
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class SourcesScope:
         panel_url: This scope's Sources panel endpoint.
         pin_slug: The pin page's slug (pin scope only).
         location_slug: The wiki's location slug (wiki scope only).
+        wiki: The wiki (wiki scope only).
     """
 
     location: Location
@@ -58,6 +60,26 @@ class SourcesScope:
     panel_url: str
     pin_slug: str = ""
     location_slug: str = ""
+    wiki: Wiki | None = None
+
+    def nested_locations(self) -> list[Location]:
+        """Where the markers nested under this page's stand: the pin's own descendants, or the wiki's child wikis.
+
+        Returns:
+            Their distinct locations, this page's own excluded.
+        """
+        from urbanlens.dashboard.models.location.model import Location as LocationModel
+        from urbanlens.dashboard.models.pin.model import Pin as PinModel
+        from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
+
+        if self.pin_slug and self.driver is not None:
+            nested = PinModel.objects.filter(pk=self.driver.pk).with_descendants().filter(profile_id=self.driver.profile_id)
+        elif self.wiki is not None:
+            nested = WikiModel.objects.filter(pk=self.wiki.pk).with_descendants()
+        else:
+            return []
+        location_ids = set(nested.exclude(location_id=self.location.pk).values_list("location_id", flat=True))
+        return list(LocationModel.objects.filter(pk__in=location_ids).select_related("place").order_by("pk"))
 
     def document_url(self, source_key: str, document_id: str) -> str:
         """The scoped proxy URL for one listed document."""
@@ -91,6 +113,7 @@ def resolve_sources_scope(request: HttpRequest, *, pin_slug: str = "", location_
             site_scope=is_site_scope(driver) if driver is not None else is_site_scope(wiki),
             panel_url=reverse("location.wiki.article.sources", kwargs={"location_slug": slug}),
             location_slug=slug,
+            wiki=wiki,
         )
     pin = owned_pin(request, pin_slug)
     slug = pin.ensure_slug()
@@ -134,6 +157,7 @@ class ArticleSourcesView(LoginRequiredMixin, View):
             may_fetch=attempt < SOURCES_MAX_POLL_ATTEMPTS,
             subject=subject_for_pin(reader) if reader is not None else subject_for_location(scope.location),
             reader=reader,
+            nested=scope.nested_locations() if include_children else (),
         )
 
         selected = request.GET.get("selected", "")
@@ -234,7 +258,7 @@ class ArticleSourceDocumentView(LoginRequiredMixin, View):
         scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
         listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=True)
         if listed is None:
-            listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=False)
+            listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=False, nested=scope.nested_locations())
         if listed is None:
             return HttpResponse("This document is no longer in the sources for this pin.", status=404, content_type="text/plain; charset=utf-8")
         document = document_bytes(listed)

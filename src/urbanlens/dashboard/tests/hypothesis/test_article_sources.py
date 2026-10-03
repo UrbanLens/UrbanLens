@@ -489,6 +489,91 @@ class WikiSourcesTests(_SourcesTestBase):
         self.assertContains(response, "attempt=1")
 
 
+class NestedSourcesTests(_SourcesTestBase):
+    """With child pin details on, a campus page lists its nested buildings' own documents too (P234)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.cache_payload(_campus_payload())
+        self.annex_location = baker.make(Location, latitude="41.734600", longitude="-73.925900", google_place=None)
+        self.annex = baker.make(
+            Pin,
+            profile=self.profile,
+            location=self.annex_location,
+            parent_pin=self.pin,
+            pin_type=PinType.BUILDING,
+            pin_type_is_user_provided=True,
+        )
+        self.annex_wiki = baker.make(
+            Wiki,
+            location=self.annex_location,
+            parent_wiki=self.wiki,
+            pin_type=PinType.BUILDING,
+            pin_type_is_user_provided=True,
+        )
+        self.cache_payload(
+            {
+                "resource_uuid": "b-annex",
+                "attachments_fetched": True,
+                "site_scope": False,
+                "attachments": [_form(71, "b-annex", "BLDG 71/ANNEX")],
+            },
+            self.annex_location,
+        )
+
+    @staticmethod
+    def _document_ids(response) -> list[str]:
+        return [item["url"].rstrip("/").rsplit("/", 1)[-1] for item in _items(response.content.decode())]
+
+    def test_a_nested_buildings_own_records_are_listed(self) -> None:
+        with patch(_SCHEDULE, return_value=False):
+            response = self.pin_panel()
+        self.assertIn("b-annex.71", self._document_ids(response))
+        self.assertEqual(self._document_ids(response).count("b-chapel.21"), 1)
+
+    def test_child_details_off_lists_the_pins_own_records_only(self) -> None:
+        with patch(_SCHEDULE, return_value=False):
+            response = self.pin_panel(children="0")
+        self.assertNotIn("b-annex.71", self._document_ids(response))
+
+    def test_a_nested_buildings_record_is_served_through_the_campus_proxy(self) -> None:
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(
+                RedataGateway, "download_cultural_resource_attachment", return_value=(_PDF, "application/pdf")
+            ) as mock_download,
+        ):
+            response = self.pin_document("b-annex.71")
+        self.assertEqual(response.status_code, 200)
+        mock_download.assert_called_once_with("b-annex", 71)
+
+    def test_another_accounts_pin_on_the_same_building_adds_nothing(self) -> None:
+        """Exploit: reading what someone else's pin cached through one's own campus page."""
+        stranger_site = baker.make(
+            Pin,
+            profile=baker.make(User).profile,
+            location=baker.make(Location, latitude="41.7", longitude="-73.9", google_place=None),
+        )
+        elsewhere = baker.make(Location, latitude="41.735000", longitude="-73.925000", google_place=None)
+        baker.make(Pin, profile=stranger_site.profile, location=elsewhere, parent_pin=stranger_site)
+        self.cache_payload({"attachments_fetched": True, "attachments": [_form(81, "b-theirs", "Theirs")]}, elsewhere)
+        with (
+            patch(_SCHEDULE, return_value=False),
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "download_cultural_resource_attachment") as mock_download,
+        ):
+            listed = self._document_ids(self.pin_panel())
+            served = self.pin_document("b-theirs.81")
+        self.assertNotIn("b-theirs.81", listed)
+        self.assertEqual(served.status_code, 404)
+        mock_download.assert_not_called()
+
+    def test_the_wiki_lists_its_child_wikis_records(self) -> None:
+        with patch(_SCHEDULE, return_value=False):
+            response = self.wiki_panel()
+        self.assertIn("b-annex.71", self._document_ids(response))
+
+
 class ArticleSubtabMarkupTests(_SourcesTestBase):
     """Both pages carry the Article sub-tab strip with a Sources tab wired to its endpoint."""
 
