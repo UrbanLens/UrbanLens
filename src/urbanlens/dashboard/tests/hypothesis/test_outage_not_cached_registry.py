@@ -157,6 +157,7 @@ class _OutageFixture(RedataConfiguredMixin, TestCase):
             latitude="41.7321",
             longitude="-73.9262",
             official_name="Hudson River State Hospital",
+            official_name_source="google_places",
             street_number="2400",
             route="Route 9",
             locality="Poughkeepsie",

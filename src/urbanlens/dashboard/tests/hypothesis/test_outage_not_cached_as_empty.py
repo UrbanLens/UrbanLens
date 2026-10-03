@@ -230,7 +230,12 @@ _PROPERTY_GATEWAY = "urbanlens.dashboard.services.apis.property_records.redata_g
 
 def _hrsh(**fields) -> Location:
     return baker.make(
-        Location, latitude=41.7321, longitude=-73.9262, official_name="Hudson River State Hospital", **fields
+        Location,
+        latitude=41.7321,
+        longitude=-73.9262,
+        official_name="Hudson River State Hospital",
+        official_name_source="google_places",
+        **fields,
     )
 
 
