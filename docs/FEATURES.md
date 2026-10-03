@@ -1339,7 +1339,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   before an upload, `Capacity.ceiling()` to bound a posted id list. Import steps skip the overflow
   with one warning; undo restores raise `UndoExpiredError` via `undo.base.restore_capacity`
 - Subscription roles grant feature flags (`SiteFeature`) per user; pending grants can attach to an
-  email invite for users who haven't joined yet
+  email invite for users who haven't joined yet. Site Admin → Subscriptions lists every active grant
+  with who made it and when, and any site admin can change or revoke any of them
 - `/health/` returns a liveness response for Docker healthchecks and load-balancer probes
   (`controllers/health.py`, `AllowAny`) - the compose stack gates `app`/`app-ws`/`nginx` startup on it
 - `/health/ready` and `/health/primary` reuse the migration state (30s) and connection count (5s) per
@@ -1587,7 +1588,10 @@ play, all three guess modes.** Everything below the line is not yet built.
   The host role passes to the earliest remaining joined player if the host leaves, the session is
   `ABANDONED` once nobody joined is left, and a round only the departed player was holding up is
   revealed at once. A departed player (`GameSessionParticipantStatus.LEFT`) loses every route back
-  in - HTTP, WebSocket connect, chat, their session history - until the host invites them again
+  in - HTTP, WebSocket connect, chat - until the host invites them again. One who left or was
+  removed once the game was under way stays on the final scoreboard with their points, marked
+  "Left" or "Removed" and ranked after everyone who finished, and keeps the game in their session
+  history (`departure`, `played()`/`in_history()`); a declined invite or a lobby departure does neither
 - **Live text chat** scoped to a session (WebSocket-only, no E2EE - unlike DMs, session banter
   between people already visible to each other on the scoreboard has no privacy surface to
   protect)
@@ -1655,7 +1659,8 @@ Everything below the line is not yet built.
   immediately at any time, and any participant can voluntarily leave (or decline an invite) -
   or be removed by the host from the pre-game lobby roster - at which point the host role
   transfers automatically if the host themselves leaves. A departed player loses every route
-  back in (HTTP, WebSocket connect, chat send) until the host invites them again
+  back in (HTTP, WebSocket connect, chat send) until the host invites them again; one who left
+  or was removed mid-game stays on the final scoreboard, marked "Left" or "Removed", as in SpotGuessr
 
 Not yet built: a moderation review UI for AI-rejected questions (the only way to inspect why a
 question was rejected today is direct DB access) - explicitly decided against, not just

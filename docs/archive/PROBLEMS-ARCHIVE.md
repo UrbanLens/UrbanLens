@@ -21020,3 +21020,64 @@ same.
 answer resets the run; a stated wait is honoured and capped at a day; a refused connection backs off the same way; an
 endpoint omitting data stays out until the next day. The existing failover tests in
 `test_location_background_services.py` still pass.
+
+## RESOLVED 2026-10-03: Every site admin sees, changes and revokes every subscription grant, and each shows who made it
+
+`id: P199` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: the audit re-check (P19 unit 19)`
+
+`SiteAdminSubscriptionsView` listed, revoked and re-timed only grants with `granted_by=request.user`
+(`UserSubscription.objects.granted_by_admin`). A grant by another admin could not be seen or changed through the UI, nor
+could one by an admin since demoted or deactivated. **Jess, 2026-10-02:** every site admin sees and can revoke every
+grant.
+
+The list now reads `UserSubscription.objects.grants_for_site_admin()`, every non-revoked grant, with a "Granted by"
+column (the admin and the grant's date). Revoke and update act on any non-revoked grant. The gate is unchanged: the
+`dashboard.view_site_admin` permission, held through the `site_admin` group or as a superuser; anyone else gets 403 on
+GET and POST. Revoke is a CSRF-protected POST and now touches only a row not yet revoked, so a second revoke keeps the
+first `revoked_at`. Who revoked is logged but not stored (P245); deleting an admin's account still deletes their grants
+(P246).
+
+`tests/hypothesis/test_site_admin_subscription_grants.py`: the exploit attempts (a member, the grantee, a staff flag
+without the permission, a demoted admin, anonymous) were written first and passed before the change. Nine of its 21
+tests failed before it, and all pass after.
+
+## RESOLVED 2026-10-03: A player who leaves or is removed mid-game stays on the final scoreboard, marked "Left" or "Removed", and keeps the game in their history
+
+`id: P198` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: the audit re-check (P19)`
+
+SpotGuessr's and Trivia's `session_summary` read `participants.joined()`. SpotGuessr's `overview.participated_sessions`,
+the external API's session history, read `.active()`; Trivia has no history surface. A player who left or was kicked
+mid-game became `LEFT` and dropped out of both, though their points stayed on their row. The row recorded neither
+whether they had played nor whether they were kicked, since `LEFT` also covers a declined invite and a lobby departure.
+**Jess, 2026-10-02:** list them on the end-of-game scoreboard with their points, marked "Left" (or "Removed" for a
+kick), and keep the game in their history. They still lose the live view.
+
+Both participant models now carry `departure` (`SessionDeparture`, `left` or `removed`, else blank; migration 0044).
+`_remove_participant` sets it only for a `JOINED` player while the session is `ACTIVE`, and sets `removed` for a kick.
+`played()` (joined, or departed mid-game) feeds `session_summary`, whose rows carry `departure`. `finishers_first`
+lists departed players after everyone who finished, each group by points: ranked by points alone, a player who quit
+could head, and in SpotGuessr be named the winner of, a game they did not finish. `in_history()` keeps the session in
+`participated_sessions`, which annotates `viewer_departure`. The external API returns that as `departure` on each
+history row, and returns `departure` on each summary participant. Live access is unchanged: `active()` still excludes
+`LEFT`, so a departed player's session routes, socket and chat still 404.
+
+The clients rank finishers from 1 and list departed players unranked with a neutral "Left" or "Removed" badge
+(`shared/game-scoreboard.ts`, used by SpotGuessr's and Trivia's summaries). SpotGuessr's "X wins!" headline ignores
+departed players. The page needs a frontend build (`bun run build`) to show it.
+
+Rows that left before 0042 record neither fact. The migration marks a `LEFT` row as `left` when it has a guess or
+answer in its session. A kick before 0042 therefore reads as "Left", and a player who left before answering anything
+stays off the scoreboard and out of their history.
+
+Consensus has no leave or kick: its participants are only ever `INVITED` or `JOINED`. It is unchanged.
+
+Tests: `test_spotguessr_leave_kick.py` (`SessionHistoryTests`, `FinalScoreboardTests`),
+`test_trivia_stall.py::FinalScoreboardTests`, `test_external_api_games.py`, `test_session_participant_departure_migration.py`,
+and `game-scoreboard.test.ts` and `spotguessr-format.test.ts`. The old
+`test_a_session_the_player_left_is_not_in_their_history` asserted the behaviour this replaces. Before the change, 18 of
+the 36 selected Python tests failed. The 18 that passed were the guards: a declined invite or a lobby departure stays
+off both, and a departed caller still gets 404. After it, all 174 tests in the three files pass.

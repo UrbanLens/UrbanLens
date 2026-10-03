@@ -5,6 +5,7 @@ import { getJson, postForm } from "../shared/session-request";
 import { installFriendPicker, pickFriendsToInvite, selectedFriendIds } from "../shared/friend-picker";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
+import { departureBadge, rankFinalScoreboard, type Departure } from "../shared/game-scoreboard";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 
@@ -90,7 +91,7 @@ interface SummaryPayload {
     status: string;
     total_rounds: number;
     rounds_played: number;
-    participants: { profile_id: number; username: string; avatar_url: string | null; total_points: number }[];
+    participants: { profile_id: number; username: string; avatar_url: string | null; total_points: number; departure?: Departure | null }[];
 }
 
 interface ChatMessagePayload {
@@ -404,6 +405,7 @@ interface ScoreRowData {
     /** null on the end-of-game list, where per-round correctness no longer applies. */
     correct: boolean | null;
     isSelf: boolean;
+    departure?: Departure | null;
 }
 
 function avatarInitial(username: string): string {
@@ -449,6 +451,8 @@ function buildScoreRow(data: ScoreRowData, index: number): HTMLLIElement {
         status.classList.add("material-symbols-outlined");
         status.textContent = data.correct ? "check" : "close";
     }
+    const badge = departureBadge(data.departure);
+    if (badge) status.appendChild(badge);
 
     const points = document.createElement("span");
     points.className = "trivia-score-card-points";
@@ -559,17 +563,18 @@ function renderSummary(summary: SummaryPayload): void {
     list.innerHTML = "";
 
     if (isMultiplayer && summary.participants.length) {
-        const ranked = summary.participants.slice().sort((a, b) => b.total_points - a.total_points);
-        ranked.forEach((participant, index) => {
+        const ranked = rankFinalScoreboard(summary.participants.map((participant) => ({ ...participant, points: participant.total_points })));
+        ranked.forEach(({ entry: participant, rank }, index) => {
             list.appendChild(
                 buildScoreRow(
                     {
-                        rank: index + 1,
+                        rank,
                         username: participant.username,
                         avatarUrl: participant.avatar_url,
                         points: participant.total_points,
                         correct: null,
                         isSelf: participant.profile_id === myProfileId,
+                        departure: participant.departure,
                     },
                     index,
                 ),

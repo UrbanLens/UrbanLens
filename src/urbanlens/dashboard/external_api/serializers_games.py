@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from rest_framework import serializers
 
 from urbanlens.dashboard.external_api.fields import JSONField
+from urbanlens.dashboard.models.abstract.session_departure import SessionDeparture
 from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus, SpotGuessrMode
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX
 from urbanlens.dashboard.services.spotguessr import relevance as spotguessr_relevance, session as spotguessr_session
@@ -261,6 +262,8 @@ class SpotGuessrParticipantSerializer(serializers.Serializer):
     rating_delta = serializers.FloatField(read_only=True)
     best_round_points = serializers.IntegerField(read_only=True, allow_null=True)
     best_round_distance_meters = serializers.FloatField(read_only=True, allow_null=True)
+    #: ``left`` or ``removed`` for a player who stopped playing mid-game, listed after everyone who finished.
+    departure = serializers.ChoiceField(choices=SessionDeparture.choices, read_only=True, allow_null=True)
 
 
 class SpotGuessrSummarySerializer(serializers.Serializer):
@@ -333,6 +336,9 @@ class SpotGuessrSessionSerializer(serializers.Serializer):
     ended_at = serializers.DateTimeField(read_only=True, allow_null=True)
     is_multiplayer = serializers.BooleanField(read_only=True)
     host_profile_slug = serializers.CharField(read_only=True, allow_null=True)
+    #: How the caller stopped playing this session, or null while they take part. A departed caller keeps the session
+    #: in their history but gets 404 from its session-scoped endpoints.
+    departure = serializers.ChoiceField(choices=SessionDeparture.choices, read_only=True, allow_null=True)
 
 
 class SpotGuessrSessionListQuerySerializer(serializers.Serializer):
@@ -408,9 +414,9 @@ class SpotGuessrEligiblePinSerializer(serializers.Serializer):
 def build_session_payload(session: GameSession, *, host_slug: str | None) -> dict[str, Any]:
     """Describe one session for the list and detail endpoints.
 
-    Reads the ``rounds_played``/``participant_count`` annotations
+    Reads the ``rounds_played``/``participant_count``/``viewer_departure`` annotations
     ``services.spotguessr.overview.participated_sessions`` attaches, so a page of rows costs one query
-    rather than two per row.
+    rather than three per row.
 
     Args:
         session: An annotated session row.
@@ -428,5 +434,6 @@ def build_session_payload(session: GameSession, *, host_slug: str | None) -> dic
         "started_at": session.started_at,
         "ended_at": session.ended_at,
         "is_multiplayer": getattr(session, "participant_count", 1) > 1,
+        "departure": getattr(session, "viewer_departure", "") or None,
         "host_profile_slug": host_slug,
     }

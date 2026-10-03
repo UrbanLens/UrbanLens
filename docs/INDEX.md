@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P243` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P247` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -204,8 +204,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P182 | open | 2026-10-01 | A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P197 | open | 2026-10-02 | "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P198 | open | 2026-10-02 | A player who leaves or is kicked mid-game disappears from the final scoreboard and from their own history | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P199 | open | 2026-10-02 | A site admin can see and revoke only the subscription grants they made | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P200 | open | 2026-10-02 | A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P202 | open | 2026-10-02 | The scheduled database backup cannot work on Kubernetes, and a restore turns it back on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P206 | open | 2026-10-02 | `dashboard_location_cache` is 81% of production's database | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -234,3 +232,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | P236 | open | 2026-10-03 | A wiki URL's response time tells whether a Location exists under that slug | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P245 | open | 2026-10-03 | A revoked subscription grant records when it was revoked, not who revoked it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P246 | open | 2026-10-03 | Deleting an admin's account deletes every subscription grant they made | [`docs/PROBLEMS.md`](PROBLEMS.md) |

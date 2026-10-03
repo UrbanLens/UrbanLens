@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.trivia.session import (
     join_session,
     kick_participant,
     leave_session,
+    session_summary,
     start_multiplayer_session,
     submit_answer,
 )
@@ -466,3 +467,89 @@ class KickParticipantTests(TestCase):
         next_round = get_or_create_round(session)
         assert next_round is not None
         self.assertEqual(next_round.question_id, second_question.pk)
+
+
+def _setup_game(players: int, total_rounds: int = 1):
+    host = _make_profile()
+    guests = [_make_profile() for _ in range(players - 1)]
+    location = _make_location()
+    baker.make(Pin, profile=host, location=location)
+    for guest in guests:
+        _befriend(host, guest)
+        baker.make(Pin, profile=guest, location=location)
+    _make_question(location)
+    session = start_multiplayer_session(host, TriviaConfig(), guests, total_rounds=total_rounds)
+    for guest in guests:
+        join_session(session, guest)
+    round_ = begin_session(session, host)
+    assert round_ is not None
+    return host, guests, session, round_
+
+
+def _summary_rows(session: TriviaSession) -> dict[int, dict]:
+    return {row["profile_id"]: row for row in session_summary(session)["participants"]}
+
+
+class FinalScoreboardTests(TestCase):
+    def test_a_player_who_left_mid_game_is_listed_as_left_with_their_points(self) -> None:
+        host, (leaver, other), session, round_ = _setup_game(players=3)
+        submit_answer(round_, leaver, "1937")
+        leave_session(session, leaver)
+
+        submit_answer(round_, host, "1937")
+        submit_answer(round_, other, "1937")
+
+        session.refresh_from_db()
+        self.assertEqual(session.status, TriviaSessionStatus.COMPLETED)
+        rows = _summary_rows(session)
+        self.assertEqual(set(rows), {host.pk, leaver.pk, other.pk})
+        self.assertEqual(rows[leaver.pk]["departure"], "left")
+        self.assertGreater(rows[leaver.pk]["total_points"], 0)
+        self.assertIsNone(rows[host.pk]["departure"])
+
+    def test_a_player_removed_mid_game_is_listed_as_removed(self) -> None:
+        host, (removed, _other), session, _round = _setup_game(players=3)
+
+        kick_participant(session, host, removed)
+
+        self.assertEqual(_summary_rows(session)[removed.pk]["departure"], "removed")
+
+    def test_the_end_of_game_broadcast_carries_the_departed_player(self) -> None:
+        host, (leaver, other), session, round_ = _setup_game(players=3)
+        leave_session(session, leaver)
+
+        with patch("urbanlens.dashboard.services.trivia.realtime.broadcast") as broadcast:
+            submit_answer(round_, host, "1937")
+            submit_answer(round_, other, "1937")
+
+        completed = [call.args[2] for call in broadcast.call_args_list if call.args[1] == "session.completed"]
+        self.assertEqual(len(completed), 1)
+        departures = {row["profile_id"]: row["departure"] for row in completed[0]["participants"]}
+        self.assertEqual(departures, {host.pk: None, leaver.pk: "left", other.pk: None})
+
+    def test_a_declined_invitation_or_a_lobby_departure_is_not_on_the_scoreboard(self) -> None:
+        host, lobby_leaver, declines, plays = _make_profile(), _make_profile(), _make_profile(), _make_profile()
+        location = _make_location()
+        for profile in (lobby_leaver, declines, plays):
+            _befriend(host, profile)
+        for profile in (host, plays):
+            baker.make(Pin, profile=profile, location=location)
+        _make_question(location)
+        session = start_multiplayer_session(host, TriviaConfig(), [lobby_leaver, declines, plays])
+        join_session(session, lobby_leaver)
+        join_session(session, plays)
+        leave_session(session, lobby_leaver)
+        leave_session(session, declines)
+        begin_session(session, host)
+
+        self.assertEqual(set(_summary_rows(session)), {host.pk, plays.pk})
+
+    def test_departed_players_rank_after_everyone_who_finished(self) -> None:
+        host, (leaver, other), session, _round = _setup_game(players=3)
+        leave_session(session, leaver)
+        for profile, points in ((host, 100), (leaver, 9000), (other, 500)):
+            TriviaSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=points)
+
+        order = [row["profile_id"] for row in session_summary(session)["participants"]]
+
+        self.assertEqual(order, [other.pk, host.pk, leaver.pk])

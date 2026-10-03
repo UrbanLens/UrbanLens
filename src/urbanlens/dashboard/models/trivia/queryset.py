@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
@@ -126,6 +128,12 @@ class TriviaSessionParticipantQuerySet(abstract.DashboardQuerySet["TriviaSession
         from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipantStatus
 
         return self.exclude(status=TriviaSessionParticipantStatus.LEFT)
+
+    def played(self) -> TriviaSessionParticipantQuerySet:
+        """Everyone who played: still joined, or left or removed once the game was under way."""
+        from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipantStatus
+
+        return self.filter(Q(status=TriviaSessionParticipantStatus.JOINED) | ~Q(departure=""))
 
 
 _TriviaSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(TriviaSessionParticipantQuerySet)

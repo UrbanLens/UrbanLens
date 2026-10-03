@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Subquery
 
 from urbanlens.dashboard.models.spotguessr.model import (
     GameSession,
@@ -62,7 +62,10 @@ def most_recent_rating(profile: Profile) -> PlayerModeRating | None:
 
 
 def participated_sessions(profile: Profile, *, status: str | None = None) -> QuerySet[GameSession]:
-    """Every session ``profile`` still takes part in (not one they left), annotated for list/detail display.
+    """``profile``'s session history, annotated for list/detail display.
+
+    Every session they still take part in, and every one they left or were removed from once it was under way;
+    ``viewer_departure`` says which of those (blank while they take part).
 
     Args:
         profile: The player whose sessions to list.
@@ -70,13 +73,14 @@ def participated_sessions(profile: Profile, *, status: str | None = None) -> Que
 
     Returns:
         An unevaluated queryset ordered newest-first."""
-    session_ids = GameSessionParticipant.objects.active().filter(profile=profile).values("session_id")
-    sessions = GameSession.objects.filter(pk__in=session_ids)
+    own_rows = GameSessionParticipant.objects.filter(profile=profile)
+    sessions = GameSession.objects.filter(pk__in=own_rows.in_history().values("session_id"))
     if status is not None:
         sessions = sessions.filter(status=status)
     return sessions.annotate(
         rounds_played=Count("rounds", distinct=True),
         participant_count=Count("participants", distinct=True),
+        viewer_departure=Subquery(own_rows.filter(session=OuterRef("pk")).values("departure")[:1]),
     ).order_by("-started_at")
 
 
@@ -88,5 +92,5 @@ def active_solo_session_id(profile: Profile) -> int | None:
 
     Returns:
         The session's primary key, or None when there is nothing to resume."""
-    session = participated_sessions(profile, status=GameSessionStatus.ACTIVE).filter(participant_count=1).first()
+    session = participated_sessions(profile, status=GameSessionStatus.ACTIVE).filter(participant_count=1, viewer_departure="").first()
     return session.pk if session is not None else None

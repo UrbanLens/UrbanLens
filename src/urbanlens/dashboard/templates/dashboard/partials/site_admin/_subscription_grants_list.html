@@ -1,9 +1,10 @@
-{# "Your active grants" list body - re-rendered via HTMX after grant/update/revoke. #}
-<div class="subscription-list" id="subscription-grants-list">
+{# "Active grants" list body - re-rendered via HTMX after grant/update/revoke. #}
+<div class="subscription-list subscription-list--grants" id="subscription-grants-list">
     <div class="subscription-list__head" aria-hidden="true">
         <span class="subscription-list__col subscription-list__col--user">User</span>
         <span class="subscription-list__col subscription-list__col--role">Role</span>
         <span class="subscription-list__col subscription-list__col--expires">Expires</span>
+        <span class="subscription-list__col subscription-list__col--granted-by">Granted by</span>
         <span class="subscription-list__col subscription-list__col--actions">Actions</span>
     </div>
     <ul class="subscription-list__items">
@@ -33,6 +34,13 @@
                     {% else %}
                     <span class="subscription-list__indefinite">Indefinite</span>
                     {% endif %}
+                </div>
+            </div>
+            <div class="subscription-list__col subscription-list__col--granted-by">
+                <span class="subscription-list__label">Granted by</span>
+                <div class="subscription-list__value">
+                    <strong class="subscription-list__username">{{ grant.granted_by.username }}</strong>
+                    <span class="subscription-list__granted-on">{{ grant.created|date:'M j, Y' }}</span>
                 </div>
             </div>
             <div class="subscription-list__col subscription-list__col--actions">

@@ -66,6 +66,22 @@ REVIEWED: dict[str, str] = {
         "drop_name_built_searches deletes cached name-built search rows, which may hold results found by someone's "
         "own names. They are a cache; the old code refetches them."
     ),
+    "0041_location_slug_remint.py": (
+        "remint_location_slugs replaces slugs drawn from user text with provider names or the uuid, and records each "
+        "readable slug given up in LocationSlugHistory (0040). A reverse to 0040 keeps both; every slug is still valid, "
+        "and old links resolve through the history."
+    ),
+    "0042_location_cache_drop_nearby_reference_documents.py": (
+        "drop_nearby_reference_documents deletes the removed panel's cached rows. They are a cache; the old code refetches them."
+    ),
+    "0043_media_keys_without_tracking_params.py": (
+        "rekey_tracked_media re-keys marks and copies to the hash of their URL without utm_ parameters. Which ones carried "
+        "them is not recoverable, but the rows stay valid; after a reverse the old code matches them only when the "
+        "upstream URL comes untracked, which is the behaviour it had before."
+    ),
+    "0044_session_participant_departure.py": (
+        "_backfill_departures fills the new departure column, which the schema reverse drops."
+    ),
 }
 
 

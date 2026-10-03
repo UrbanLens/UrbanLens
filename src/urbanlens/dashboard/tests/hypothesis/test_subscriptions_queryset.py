@@ -89,20 +89,17 @@ class UserSubscriptionActiveTests(TestCase):
         self.assertEqual(list(UserSubscription.objects.active_for(self.user)), [mine])
 
 
-class UserSubscriptionGrantedByAdminTests(TestCase):
-    def test_scopes_to_the_admin_and_excludes_revoked(self) -> None:
+class UserSubscriptionGrantsForSiteAdminTests(TestCase):
+    def test_every_admins_grants_and_no_revoked_ones(self) -> None:
         user = baker.make(User)
         admin = baker.make(User)
         other_admin = baker.make(User)
+        # Distinct roles: unique_active_user_subscription_role allows one non-revoked grant per (user, role).
         role_a, role_b, role_c = baker.make(SubscriptionRole, _quantity=3)
-        # A revoked grant on the same (user, role) as `mine` is otherwise blocked by
-        # unique_active_user_subscription_role, which only allows one non-revoked
-        # subscription per (user, role) at a time - use distinct roles per row so
-        # each assertion targets exactly the dimension it's testing.
         mine = baker.make(UserSubscription, user=user, role=role_a, granted_by=admin, revoked_at=None)
         baker.make(UserSubscription, user=user, role=role_b, granted_by=admin, revoked_at=timezone.now())
-        baker.make(UserSubscription, user=user, role=role_c, granted_by=other_admin, revoked_at=None)
-        self.assertEqual(list(UserSubscription.objects.granted_by_admin(admin)), [mine])
+        theirs = baker.make(UserSubscription, user=user, role=role_c, granted_by=other_admin, revoked_at=None)
+        self.assertEqual(set(UserSubscription.objects.grants_for_site_admin()), {mine, theirs})
 
 
 class PendingSubscriptionGrantForInvitationTests(TestCase):

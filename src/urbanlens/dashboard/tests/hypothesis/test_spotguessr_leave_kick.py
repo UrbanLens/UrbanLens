@@ -50,6 +50,7 @@ from urbanlens.dashboard.services.spotguessr.session import (
     join_session,
     kick_participant,
     leave_session,
+    session_summary,
     start_multiplayer_session,
     submit_guess,
 )
@@ -356,14 +357,143 @@ class KickParticipantTests(TestCase):
         self.assertEqual(left, [{"profile_id": guest.pk, "reason": "kicked", "new_host_profile_id": None}])
 
 
+def _history(profile: Profile) -> list[int]:
+    return list(overview.participated_sessions(profile).values_list("pk", flat=True))
+
+
+def _summary_rows(session: GameSession) -> dict[int, dict]:
+    return {row["profile_id"]: row for row in session_summary(session)["participants"]}
+
+
 class SessionHistoryTests(TestCase):
-    def test_a_session_the_player_left_is_not_in_their_history(self) -> None:
-        _host, (guest,), _locations, session, _round = _active_game()
-        self.assertIn(session.pk, overview.participated_sessions(guest).values_list("pk", flat=True))
+    def test_a_game_the_player_left_mid_game_stays_in_their_history(self) -> None:
+        _host, (guest, _other), _locations, session, _round = _active_game(players=3)
 
         leave_session(session, guest)
 
-        self.assertNotIn(session.pk, overview.participated_sessions(guest).values_list("pk", flat=True))
+        self.assertIn(session.pk, _history(guest))
+
+    def test_a_game_the_player_was_removed_from_mid_game_stays_in_their_history(self) -> None:
+        host, (guest, _other), _locations, session, _round = _active_game(players=3)
+
+        kick_participant(session, host, guest)
+
+        self.assertIn(session.pk, _history(guest))
+
+    def test_the_history_row_says_how_the_player_departed(self) -> None:
+        host, (leaver, removed), _locations, session, _round = _active_game(players=3)
+        leave_session(session, leaver)
+        kick_participant(session, host, removed)
+
+        departures = {
+            profile.pk: overview.participated_sessions(profile).get(pk=session.pk).viewer_departure
+            for profile in (host, leaver, removed)
+        }
+
+        self.assertEqual(departures, {host.pk: "", leaver.pk: "left", removed.pk: "removed"})
+
+    def test_a_declined_invitation_is_not_history(self) -> None:
+        _host, (declines,), session = _lobby(invited=1)
+
+        leave_session(session, declines)
+
+        self.assertNotIn(session.pk, _history(declines))
+
+    def test_leaving_the_lobby_before_play_is_not_history(self) -> None:
+        _host, (guest,), session = _lobby(joined=1)
+
+        leave_session(session, guest)
+
+        self.assertNotIn(session.pk, _history(guest))
+
+    def test_a_player_removed_from_the_lobby_has_no_history_of_it(self) -> None:
+        host, (guest,), session = _lobby(joined=1)
+
+        kick_participant(session, host, guest)
+
+        self.assertNotIn(session.pk, _history(guest))
+
+
+class FinalScoreboardTests(TestCase):
+    def test_a_player_who_left_mid_game_is_listed_as_left_with_their_points(self) -> None:
+        host, (leaver, other), (location,), session, round_ = _active_game(players=3)
+        submit_guess(round_, leaver, _point(location))
+        leave_session(session, leaver)
+
+        submit_guess(round_, host, _point(location))
+        submit_guess(round_, other, _point(location))
+
+        session.refresh_from_db()
+        self.assertEqual(session.status, GameSessionStatus.COMPLETED)
+        rows = _summary_rows(session)
+        self.assertEqual(set(rows), {host.pk, leaver.pk, other.pk})
+        self.assertEqual(rows[leaver.pk]["departure"], "left")
+        self.assertGreater(rows[leaver.pk]["total_points"], 0)
+        self.assertEqual(rows[leaver.pk]["best_round_points"], rows[leaver.pk]["total_points"])
+        self.assertIsNone(rows[host.pk]["departure"])
+        self.assertIsNone(rows[other.pk]["departure"])
+
+    def test_a_player_removed_mid_game_is_listed_as_removed(self) -> None:
+        host, (removed, _other), _locations, session, _round = _active_game(players=3)
+
+        kick_participant(session, host, removed)
+
+        self.assertEqual(_summary_rows(session)[removed.pk]["departure"], "removed")
+
+    def test_the_end_of_game_broadcast_carries_the_departed_player(self) -> None:
+        host, (leaver, other), (location,), session, round_ = _active_game(players=3)
+        leave_session(session, leaver)
+
+        with patch("urbanlens.dashboard.services.spotguessr.realtime.broadcast") as broadcast:
+            submit_guess(round_, host, _point(location))
+            submit_guess(round_, other, _point(location))
+
+        completed = [call.args[2] for call in broadcast.call_args_list if call.args[1] == "session.completed"]
+        self.assertEqual(len(completed), 1)
+        departures = {row["profile_id"]: row["departure"] for row in completed[0]["participants"]}
+        self.assertEqual(departures, {host.pk: None, leaver.pk: "left", other.pk: None})
+
+    def test_everyone_leaving_lists_everyone_who_played(self) -> None:
+        host, (guest,), _locations, session, _round = _active_game()
+
+        leave_session(session, guest)
+        leave_session(session, host)
+
+        session.refresh_from_db()
+        self.assertEqual(session.status, GameSessionStatus.ABANDONED)
+        self.assertEqual(
+            {pk: row["departure"] for pk, row in _summary_rows(session).items()}, {host.pk: "left", guest.pk: "left"}
+        )
+
+    def test_a_declined_invitation_or_a_lobby_departure_is_not_on_the_scoreboard(self) -> None:
+        host, (lobby_leaver, plays, declines), session = _lobby(joined=2, invited=1)
+        _pinned_photo_location(host, plays)
+        leave_session(session, lobby_leaver)
+        leave_session(session, declines)
+        begin_session(session, host)
+
+        self.assertEqual(set(_summary_rows(session)), {host.pk, plays.pk})
+
+    def test_departed_players_rank_after_everyone_who_finished(self) -> None:
+        host, (leaver, other), _locations, session, _round = _active_game(players=3)
+        leave_session(session, leaver)
+        for profile, points in ((host, 100), (leaver, 9000), (other, 500)):
+            GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=points)
+
+        order = [row["profile_id"] for row in session_summary(session)["participants"]]
+
+        self.assertEqual(order, [other.pk, host.pk, leaver.pk])
+
+    def test_departed_players_rank_by_points_among_themselves(self) -> None:
+        host, (low, high, _other), _locations, session, _round = _active_game(players=4)
+        leave_session(session, low)
+        kick_participant(session, host, high)
+        for profile, points in ((low, 10), (high, 20)):
+            GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=points)
+
+        order = [row["profile_id"] for row in session_summary(session)["participants"]]
+
+        self.assertEqual(order[-2:], [high.pk, low.pk])
 
 
 class LeaveKickRouteTests(TestCase):
