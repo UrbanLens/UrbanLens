@@ -21360,3 +21360,47 @@ queries.
 Before the fix, three of these failed. After it, the DB-free ones pass (4). `ArticleNewsTabTests` was written but not
 run in this session, because the test-runner sync was refused in this worktree. `test_web_search_view.py` and
 `test_misc_unnamed_write_routes.py` now build their cache keys through `web_search_query`.
+
+## RESOLVED 2026-10-03: When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves
+
+`id: P223` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0) at HRSH.
+
+**Causes.**
+- **Every click opened a menu.** A boundary layer opens the shared map menu on a left click, as well as on a
+  right-click. The menu's dismiss listener sat on `document` in the bubble phase, so it ran after Leaflet had already
+  handled the click. Under a polygon filling the view, a click meant to close the menu opened another at the new spot.
+- **The tooltip never left.** Boundary labels were bound `sticky`, which follows the pointer everywhere inside the
+  polygon. A polygon covering the view showed "Property boundary" the whole time, menu or not. Markup shapes' labels
+  (non-sticky) opened on entry and stayed until the pointer left, which under a large shape is the same thing.
+
+**Fixes.**
+- `shared/map-context-menu.ts`:
+  - The dismiss listener is captured on `document`. A click inside a `.leaflet-container` that lands outside an open
+    menu closes it and stops there, so the map and its layers never see it.
+  - A click elsewhere on the page still reaches its target.
+  - A right-click still opens a menu at the new spot.
+  - New `isMapContextMenuOpen()`.
+- New `shared/map-tooltips.ts`:
+  - `bindAreaTooltip(map, layer, html, options)` shows an area's label once the pointer has rested 600 ms. The label
+    hides on movement, a click, a right-click, the pointer leaving, or the map moving, and never opens while a map
+    menu is open.
+  - It binds the tooltip `permanent`, so Leaflet attaches none of its own hover handlers, and opens and closes it by
+    hand.
+  - Property and building boundaries (including a converted one) and markup shapes use it.
+  - Markers, lines (infrastructure), the building-import preview's footprints and the floorplan's room labels keep
+    their own tooltips: none of them can fill the view, and the import preview's hover is the selection feedback.
+- Left click on a boundary still opens its menu, which is how its edit actions are reached without a right button.
+
+**Tests.**
+- `map-context-menu.test.ts`: a click on the map outside an open menu only closes it, a click outside any map closes
+  it and reaches its target, and `isMapContextMenuOpen` follows the menu. Red before the fix.
+- `map-tooltips.test.ts`: the label binds shut, opens only after a rest, doesn't follow the pointer, never opens with a
+  menu open, hides on click, right-click, leaving or a map move, and rebinding or unbinding leaves no handlers. Red
+  before the fix (no module).
+- `inner-html-escaping.test.ts` reviews the helper's `html` parameter: every caller passes `escHtml(...)` or a literal.
+- Playwright on `development_main`, at zoom 20 with all four corners of the view inside HRSH's parcel polygon:
+  - no label while the pointer moved, and the label after a one-second rest, gone on the next move;
+  - a left click opened the boundary menu, and no label showed while it was open;
+  - a click elsewhere left no menu, the next click opened one, and a right-click moved it.

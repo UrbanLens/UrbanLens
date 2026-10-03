@@ -2979,20 +2979,6 @@ boundaries, `parcel_buildings`, `Place` outlines) and why only one resolves. Two
 returned as a point, so a building place has no outline) and outline-less fiat building places. Reproduce on
 `development_main` HRSH first.
 
-## P223 — When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves
-
-`id: P223` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-Zoomed in on HRSH, the whole viewport is inside the parcel polygon, so:
-
-- A left click anywhere opens the boundary's context menu, and a click elsewhere opens another instead of closing the
-  first. A click outside an open context menu should only close it.
-- Hovering anywhere shows the "Property Boundary" tooltip. It should show only while the pointer rests and no context
-  menu is open, and hide on movement or when a menu opens.
-
-The fix belongs in the shared map layer code, so every polygon layer behaves this way, not only the parcel's. Test in
-Playwright with the viewport inside a polygon (see the memory note on reaching the Leaflet map).
-
 ## P224 — Toggling "show child pin details" reloads the whole page
 
 `id: P224` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`

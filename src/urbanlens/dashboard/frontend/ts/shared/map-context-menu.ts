@@ -129,9 +129,14 @@ export function markerMenuAnchor(map: L.Map, event: L.LeafletMouseEvent, lat: nu
     return { x: rect.left + pt.x, y: rect.top + pt.y };
 }
 
+/** Whether a map menu is showing. */
+export function isMapContextMenuOpen(): boolean {
+    return document.querySelector(`.${MENU_CLASS}`) !== null;
+}
+
 export function closeMapContextMenus(): void {
     if (dismissHandler) {
-        document.removeEventListener("click", dismissHandler);
+        document.removeEventListener("click", dismissHandler, true);
         dismissHandler = null;
     }
     document.querySelectorAll(`.${MENU_CLASS}`).forEach((menu) => menu.remove());
@@ -258,12 +263,20 @@ export function showMapContextMenu(options: ShowMapContextMenuOptions): HTMLElem
     placeFloatingMenu(menu, options.clientX, options.clientY);
 
     const dismiss = (event: MouseEvent): void => {
-        if (!menu.contains(event.target as Node)) close();
+        const target = event.target as Element | null;
+        if (target && menu.contains(target)) return;
+        close();
+        // On a map that click only closes the menu: under a polygon filling the view it would open another.
+        if (target?.closest?.(".leaflet-container")) {
+            event.stopPropagation();
+            event.preventDefault();
+        }
     };
     dismissHandler = dismiss;
     // Deferred so the click that opened the menu doesn't immediately dismiss it. closeMapContextMenus() can run first.
+    // Captured, so the map never sees a dismissing click.
     setTimeout(() => {
-        if (dismissHandler === dismiss) document.addEventListener("click", dismiss);
+        if (dismissHandler === dismiss) document.addEventListener("click", dismiss, true);
     }, 0);
 
     return menu;

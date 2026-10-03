@@ -216,7 +216,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P220 | open | 2026-10-03 | A background photo import stops at the first object store refusal, and the rest of the selection is never imported | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P222 | open | 2026-10-03 | Only one building's outline shows on the HRSH pin map, and it shows whether "show child pin details" is on or off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P223 | open | 2026-10-03 | When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P224 | open | 2026-10-03 | Toggling "show child pin details" reloads the whole page | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P226 | open | 2026-10-03 | Property Records: the Overview tab is blank, and the two historic tabs should be one | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P227 | open | 2026-10-03 | "Site Conditions" should be a tab of the Location Data panel, not a panel of its own | [`docs/PROBLEMS.md`](PROBLEMS.md) |
