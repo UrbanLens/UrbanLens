@@ -36,6 +36,7 @@ from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's aut
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, beat_lock, release_lock
+from urbanlens.dashboard.services.media.storage_errors import OBJECT_STORE_ERRORS, STORAGE_ERRORS, is_transient
 from urbanlens.dashboard.services.pins import confirmed_import, import_preview
 from urbanlens.dashboard.services.sandbox import sandbox_queue
 from urbanlens.dashboard.services.sandbox.queues import Queue
@@ -498,7 +499,7 @@ def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
     Storage failing past the task's own retries leaves the upload held, waiting for :func:`retry_waiting_uploads`.
     """
     from urbanlens.dashboard.services.media import upload_retry
-    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS, drop_held, publish_held
+    from urbanlens.dashboard.services.media.held_upload import drop_held, publish_held
 
     try:
         published = publish_held(key, pk, held_name, attempt=self.request.id)
@@ -1081,6 +1082,9 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
     max_dimension, convert_webp = get_stored_photo_policy(image, max_dimension_override)
     try:
         replacement = downscale_stored_image(image, max_dimension, convert_webp)
+    except OBJECT_STORE_ERRORS:
+        # Also OSError for a timeout, but says nothing about the photo; process_image_upload waits for storage.
+        raise
     except (OSError, ValueError, EOFError, SyntaxError, PILDecompressionBombError) as exc:
         # DecompressionBombError derives from Exception alone, so it needs naming.
         logger.warning("Re-encoding failed for image %s: %s", image_id, exc, exc_info=True)
@@ -1096,21 +1100,21 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
     try:
         if write_image_thumbnail(image):
             update_fields["thumbnail"] = image.thumbnail.name
-    except (OSError, ValueError, PILDecompressionBombError) as exc:
+    except (*OBJECT_STORE_ERRORS, OSError, ValueError, PILDecompressionBombError) as exc:
         # A miss here is retried by the hourly backfill_image_thumbnails sweep
         logger.warning("Thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
 
     try:
         if write_image_marker_thumbnail(image):
             update_fields["marker_thumbnail"] = image.marker_thumbnail.name
-    except (OSError, ValueError, PILDecompressionBombError) as exc:
+    except (*OBJECT_STORE_ERRORS, OSError, ValueError, PILDecompressionBombError) as exc:
         # A miss here is retried by the hourly backfill_image_marker_thumbnails sweep
         logger.warning("Marker thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
 
     try:
         if write_image_analysis_thumbnail(image):
             update_fields["analysis_thumbnail"] = image.analysis_thumbnail.name
-    except (OSError, ValueError, PILDecompressionBombError) as exc:
+    except (*OBJECT_STORE_ERRORS, OSError, ValueError, PILDecompressionBombError) as exc:
         # A miss here is retried by the hourly backfill_image_analysis_thumbnails sweep. Keywording skips a
         # photo that has no analysis copy rather than decoding one itself - see services.photos.photo_keywords.
         logger.warning("Analysis thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
@@ -1153,6 +1157,8 @@ def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResul
     update_fields: dict[str, object] = {}
     try:
         replacement = convert_to_pdf(image)
+    except OBJECT_STORE_ERRORS:
+        raise
     except (OSError, ValueError) as exc:
         logger.warning("Document conversion failed for image %s: %s", image_id, exc, exc_info=True)
         replacement = None
@@ -1235,6 +1241,7 @@ def _scan_pending_upload(task, image: Image) -> bool:
 
     Raises:
         celery.exceptions.Retry: clamd was unreachable and retries remain.
+        UploadStorageFailedError: Storage could not open or read the upload.
     """
     from urbanlens.dashboard.services.security.malware_scan import (
         VIRUSTOTAL_ELIGIBLE_SOURCES,
@@ -1250,6 +1257,9 @@ def _scan_pending_upload(task, image: Image) -> bool:
             else:
                 malware_error = malware_error_for_upload(stored)
     except MalwareScanUnavailableError as exc:
+        if isinstance(exc.__cause__, OBJECT_STORE_ERRORS):
+            # The scanner reports a failed read of its stream as itself being down.
+            raise UploadStorageFailedError from exc.__cause__
         if task.request.retries < task.max_retries:
             # A clamd hiccup must not reject somebody's photo. Same backoff the comment scan uses; the upload
             # stays pending (invisible to anyone else) for as long as this takes.
@@ -1257,19 +1267,49 @@ def _scan_pending_upload(task, image: Image) -> bool:
         logger.exception("Malware scan permanently unavailable for image %s after %s retries", image.pk, task.request.retries)
         _reject_image_upload(image, "Our antivirus scanner was unavailable, so this upload could not be checked and was removed. Please try again.")
         return False
-    except OSError as exc:
-        # The stored file could not be opened at all. Treated as a scan failure instead, which is what it is:
-        # not scanned.
-        if task.request.retries < task.max_retries:
-            raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
-        logger.exception("Could not open image %s to scan it, after %s retries", image.pk, task.request.retries)
-        _reject_image_upload(image, "We couldn't read this file to check it, so it was removed. You can try uploading it again.")
-        return False
+    except STORAGE_ERRORS as exc:
+        raise UploadStorageFailedError from exc
 
     if malware_error:
         _reject_image_upload(image, malware_error)
         return False
     return True
+
+
+class UploadStorageFailedError(Exception):
+    """Storage could not read or write an upload being processed, which says nothing about the upload itself."""
+
+
+def _image_storage_failed(task, image: Image, name: str, exc: BaseException) -> bool:
+    """Retry an upload storage failed on, then leave it waiting for storage; reject a pending one once its file is gone.
+
+    Args:
+        task: The bound ``process_image_upload``.
+        image: The row being processed.
+        name: The stored name it failed on.
+        exc: What storage raised.
+
+    Returns:
+        False: the upload was not processed.
+
+    Raises:
+        celery.exceptions.Retry: While the task has retries left and the upload is not already waiting.
+    """
+    from urbanlens.dashboard.services.media import upload_retry
+
+    target = upload_retry.IMAGE
+    if upload_retry.means_file_is_gone(exc):
+        if upload_retry.file_is_gone(target, image.pk, name, exc):
+            logger.warning("Giving up on image %s: storage has not had its file for %s", image.pk, upload_retry.GONE_GRACE)
+            upload_retry.stop_waiting(target, image.pk)
+            if image.pending_scan:
+                _reject_image_upload(image, "This upload's file could not be found in storage, so it was removed. You can try uploading it again.")
+        return False
+    if task.request.retries < task.max_retries and not upload_retry.is_waiting(target, image.pk):
+        raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+    logger.warning("Storage could not read or write image %s; it waits for storage", image.pk, exc_info=exc)
+    upload_retry.wait_for_storage(target, image.pk, name, exc)
+    return False
 
 
 def _reject_image_upload(image: Image, reason: str) -> None:
@@ -1352,48 +1392,56 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media import upload_retry
     from urbanlens.dashboard.services.media.images import discard_superseded_file
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
     from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
     update_task_progress(self, current=0, total=1, message="Processing upload metadata...")
     image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location", "profile").first()
-    if image is None or not image.image:
+    if image is None or not image.image.name:
+        upload_retry.stop_waiting(upload_retry.IMAGE, image_id)
         return False
+    stored_name = image.image.name
 
-    if image.pending_scan and not _scan_pending_upload(self, image):
-        # Infected, or unscannable after every retry. The row and its file are
-        # already gone (_reject_image_upload); nothing left to process.
-        return False
-
-    # A profile with visit-history tracking off doesn't want its location trail reconstructible from any
-    # uploaded media either - GPS coordinates are neither extracted into the DB nor left embedded in the stored
-    # file below, and no visit suggestion is raised.
-    strip_location = image.profile is not None and not visit_logging_allowed(image.profile)
-
-    stored_size: int | None = None
-    with contextlib.suppress(OSError):
-        stored_size = image.image.size
-
-    if image.media_type == MediaKind.VIDEO:
-        result = _process_video_upload(image, strip_location)
-    elif image.media_type == MediaKind.DOCUMENT:
-        result = _process_document_upload(image, image_id)
-    else:
-        photo_result = _process_photo_upload(image, image_id, strip_location, max_dimension)
-        if photo_result is None:
-            if not image.pending_scan:
-                return False
-            # A fresh upload's stored file could not be opened at all - _process_photo_upload's own try/except
-            # swallows the OSError/ ValueError rather than raising, specifically so this task's
-            # autoretry_for=(OSError,) never sees it and never retries on its own; explicit retry here scopes
-            # that decision to this one failure.
-            if self.request.retries < self.max_retries:
-                raise self.retry(countdown=min(60 * (2**self.request.retries), 900))
-            # Retries exhausted.
-            _reject_image_upload(image, "We couldn't process this photo, so it was removed. You can try uploading it again.")
+    try:
+        if image.pending_scan and not _scan_pending_upload(self, image):
+            # Infected, or unscannable after every retry. The row and its file are
+            # already gone (_reject_image_upload); nothing left to process.
             return False
-        result = photo_result
+
+        # A profile with visit-history tracking off doesn't want its location trail reconstructible from any
+        # uploaded media either - GPS coordinates are neither extracted into the DB nor left embedded in the stored
+        # file below, and no visit suggestion is raised.
+        strip_location = image.profile is not None and not visit_logging_allowed(image.profile)
+
+        stored_size: int | None = None
+        with contextlib.suppress(OSError):
+            stored_size = image.image.size
+
+        if image.media_type == MediaKind.VIDEO:
+            result = _process_video_upload(image, strip_location)
+        elif image.media_type == MediaKind.DOCUMENT:
+            result = _process_document_upload(image, image_id)
+        else:
+            photo_result = _process_photo_upload(image, image_id, strip_location, max_dimension)
+            if photo_result is None:
+                if not image.pending_scan:
+                    return False
+                # A fresh upload's stored file could not be opened at all - _process_photo_upload's own try/except
+                # swallows the OSError/ ValueError rather than raising, specifically so this task's
+                # autoretry_for=(OSError,) never sees it and never retries on its own; explicit retry here scopes
+                # that decision to this one failure.
+                if self.request.retries < self.max_retries:
+                    raise self.retry(countdown=min(60 * (2**self.request.retries), 900))
+                # Retries exhausted.
+                _reject_image_upload(image, "We couldn't process this photo, so it was removed. You can try uploading it again.")
+                return False
+            result = photo_result
+    except UploadStorageFailedError as failed:
+        return _image_storage_failed(self, image, stored_name, failed.__cause__ or failed)
+    except OBJECT_STORE_ERRORS as exc:
+        return _image_storage_failed(self, image, stored_name, exc)
 
     update_fields, coords = result.update_fields, result.coords
 
@@ -1432,6 +1480,8 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
 
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
+    upload_retry.stop_waiting(upload_retry.IMAGE, image_id)
+    upload_retry.record_storage_success()
 
     # Only now, with the row naming the processed file.
     discard_superseded_file(image, result.superseded_name)
@@ -1700,7 +1750,10 @@ def generate_image_thumbnails(image_ids: list[int]) -> int:
                     fields.append("media_unreadable_at")
                 image.save(update_fields=fields)
                 written += 1
-        except (OSError, ValueError, PILDecompressionBombError) as exc:
+        except (*OBJECT_STORE_ERRORS, OSError, ValueError, PILDecompressionBombError) as exc:
+            if is_transient(exc):
+                logger.warning("Thumbnail generation stopped at image %s: storage failed: %s", image.pk, exc, exc_info=True)
+                break
             # Recorded, not only logged: the sweep resets its cursor and comes
             # round again, so without this a row whose bytes are gone is retried
             # hourly forever (N22 H64). Written with `.update()` because the
@@ -1845,13 +1898,18 @@ def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     from django.utils import timezone
 
     from urbanlens.dashboard.models.images.model import Image, QuotaExemption
+    from urbanlens.dashboard.models.upload_retry import UploadRetry
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.upload_retry import IMAGE
     from urbanlens.dashboard.services.photos.photo_enrichment import enriched_max_dimension
 
     cutoff = timezone.now() - STALLED_UPLOAD_AGE
     batch = STALLED_UPLOAD_BATCH if limit is None else max(1, limit)
     # Deduplicated siblings are deliberately excluded.
-    stalled = list(Image.objects.processing().filter(created__lt=cutoff).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source", "upload_sweep_attempts")[:batch])
+    waiting = UploadRetry.objects.filter(target=IMAGE).values("object_id")
+    stalled = list(
+        Image.objects.processing().filter(created__lt=cutoff).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).exclude(pk__in=waiting).order_by("created").values_list("pk", "profile_id", "source", "upload_sweep_attempts")[:batch],
+    )
     if not stalled:
         return _clear_orphaned_dedup_siblings(cutoff)
 
@@ -1995,7 +2053,10 @@ def generate_image_marker_thumbnails(image_ids: list[int]) -> int:
                     fields.append("media_unreadable_at")
                 image.save(update_fields=fields)
                 written += 1
-        except (OSError, ValueError, PILDecompressionBombError) as exc:
+        except (*OBJECT_STORE_ERRORS, OSError, ValueError, PILDecompressionBombError) as exc:
+            if is_transient(exc):
+                logger.warning("Marker thumbnail generation stopped at image %s: storage failed: %s", image.pk, exc, exc_info=True)
+                break
             # Recorded, not only logged: the sweep resets its cursor and comes
             # round again, so without this a row whose bytes are gone is retried
             # hourly forever (N22 H64). Written with `.update()` because the
@@ -2069,7 +2130,10 @@ def generate_image_analysis_thumbnails(image_ids: list[int]) -> int:
         try:
             if not write_image_analysis_thumbnail(image):
                 continue
-        except (OSError, ValueError, PILDecompressionBombError) as exc:
+        except (*OBJECT_STORE_ERRORS, OSError, ValueError, PILDecompressionBombError) as exc:
+            if is_transient(exc):
+                logger.warning("Analysis thumbnail generation stopped at image %s: storage failed: %s", image.pk, exc, exc_info=True)
+                break
             logger.warning("Analysis thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
             continue
         image.save(update_fields=["analysis_thumbnail", "updated"])
@@ -2325,7 +2389,6 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.services.media import upload_retry
-    from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
 
     target = f"{model._meta.label}.image"  # noqa: SLF001 - _meta is Django's public model API
