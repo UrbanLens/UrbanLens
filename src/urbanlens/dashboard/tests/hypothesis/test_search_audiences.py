@@ -48,6 +48,14 @@ def marks(text: str) -> set[int]:
     return {int(found) for found in _MARK.findall(text)}
 
 
+def _naming(query: str) -> str:
+    """A result's caption naming what was searched for, so the gallery's relevance rule keeps it (P196).
+
+    Custom names are searched casefolded; capitals let an acronym such as HRSH match as one.
+    """
+    return query.replace('"', "").upper()
+
+
 class Upstream:
     """Every provider, faked at its gateway boundary; each call answers with one result unique to that call."""
 
@@ -66,7 +74,7 @@ class Upstream:
         yield MediaItem(
             url=f"https://upload.wikimedia.org/p188-{number}.jpg",
             thumb_url=f"https://upload.wikimedia.org/thumb/p188-{number}.jpg",
-            caption=f"Photo p188-{number}",
+            caption=f"{_naming(search_term)} p188-{number}",
             source="Wikimedia Commons",
             page_url=f"https://commons.wikimedia.org/wiki/File:p188-{number}.jpg",
         )
@@ -77,7 +85,7 @@ class Upstream:
             {
                 "thumbnail": f"https://images.example/p188-{number}.jpg",
                 "link": f"https://images.example/page/p188-{number}",
-                "title": f"Image p188-{number}",
+                "title": f"{_naming(query)} p188-{number}",
             },
         ]
 

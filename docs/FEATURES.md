@@ -161,11 +161,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   source. Blocks the canvas can't model faithfully (raw HTML, footnote definitions, `#` headings)
   show as protected source, editable in Source mode (`frontend/ts/shared/article-source.ts`)
 - **Article > Sources** — a sub-tab on both the private pin page and the wiki page listing the
-  documents cached for the place (today the CRIS inventory forms and nomination PDFs, each naming
-  its building on a campus), viewable in a same-origin iframe or a new tab. Any cache-backed panel
+  documents cached for the place (the CRIS inventory forms and nomination PDFs, each naming
+  its building on a campus, and the PDF and DjVu books and reports Wikimedia Commons finds that
+  pass the media relevance rule), viewable in a same-origin iframe or a new tab. Any cache-backed panel
   becomes a source by subclassing `DocumentPanelSource`; the PDFs are served by a proxy scoped to
   what that pin's or wiki's own list names, and only bytes that really are a PDF
-  (`controllers.article_sources`, `services.pins.source_documents`)
+  (`controllers.article_sources`, `services.pins.source_documents`). A source whose document has
+  its own archive page sets `SourceDocument.page_url` and links there instead of proxying
+  (`DocumentMediaPanelSource`, used by Commons, whose scans run to tens of megabytes)
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
   records a provenance chain (`LocationExposure`) of how a location reached each user.
   `services.sharing.pin_sharing.create_pin_share` (gated by `require_pin_owner`) is the single
@@ -258,6 +261,14 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
   (net score up − down, highest ranked first); because relevance is stored per-Location
   (`MediaRelevance`), a relevance mark made on any user's Private Pin page already counts here
+- **Media subject relevance** — every name-searched gallery source (`GalleryMediaSource.judges_relevance`:
+  the archive providers, Flickr, Web Images) keeps only items that are about the place, judged at
+  read time on the pin Media gallery, the wiki gallery, the Photos tab and the external API: geolocated
+  in the place's box, or naming it with a consistent ZIP/city/county/state, or a distinctive name with
+  nothing contradicting it; a generic name ("Historic Mansion") needs a local indicator. Conflicts come
+  from a GeoNames gazetteer (`services.geo.gazetteer`, CC BY 4.0), bundled from `geonamescache` by
+  `bun run gazetteer:build`. An item the viewer
+  marked relevant, or the wiki voted above zero, stays (`services.media.subject_relevance`)
 - **REData photo relevance scoring** — every new photo (upload, Google Places business photo
   backfill, or Media-gallery item materialized via "mark relevant"/"send to wiki") is submitted to
   REData's photo-scoring service with whatever signal is available (capture/location coordinates,
@@ -478,10 +489,12 @@ direct-only because REData's contract can't reproduce what they show:
   on a site fetch already in flight. The sweep that creates building pins seeds them the same way
   (`external_data.seed_site_descendants`), and background enrichment takes a nested location's
   card from its site before looking it up. A child the roster does not cover fetches its own.
-- **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
+- **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider);
+  scanned books and reports (PDF, DjVu) go to Article > Sources rather than the gallery
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
-  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`)
+  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`). Empty since P196:
+  no page reaches UrbanLens with text that could name the place (P216)
 - **Aerial & Drone footage** — a Media-gallery tab of overhead views, from REData's pooled media
   index filtered with `is_aerial` (`plugins.builtin.redata_aerial_media`)
 - **Digital Commonwealth** (Massachusetts) — photographs, maps, and documents from MA libraries/museums/archives, via REData; Massachusetts pins only

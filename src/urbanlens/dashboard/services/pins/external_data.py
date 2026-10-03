@@ -19,7 +19,7 @@ from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 from urbanlens.dashboard.services.pins.search_names import SHARED_SCOPE, search_names
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Collection, Iterable, Sequence
     from datetime import datetime
 
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.media.subject_relevance import MediaSubject
     from urbanlens.dashboard.services.pins.search_names import SearchNames, SearchScope
 
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
@@ -575,9 +576,15 @@ class CoordinateGatedInfoPanelSource(InfoPanelSource, ABC):
 
 
 class GalleryMediaSource(LocationCachePanelSource, ABC):
-    """Base for anything that can appear as a source tab in the Media gallery."""
+    """Base for anything that can appear as a source tab in the Media gallery.
+
+    Attributes:
+        judges_relevance: Whether an item is shown only when it is about the place (``services.media.subject_relevance``),
+            for a source whose results come from a search rather than from the place itself.
+    """
 
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.MEDIA})
+    judges_relevance: ClassVar[bool] = False
 
     @abstractmethod
     def media_items(self, data: dict) -> list[MediaItem]:
@@ -602,6 +609,37 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         """
         return True
 
+    def relevant_media_items(self, data: dict, subject: MediaSubject, *, kept: Collection[str] = ()) -> list[MediaItem]:
+        """:meth:`media_items`, less any that are not about ``subject`` when this source judges relevance.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source.
+            subject: The place the items were found for.
+            kept: Keys (``media_item_key``) of items someone marked relevant, kept whatever the judgement.
+
+        Returns:
+            The items, in cached order.
+        """
+        items = self.media_items(data)
+        if not self.judges_relevance:
+            return items
+        from urbanlens.dashboard.models.images.relevance import media_item_key
+
+        return [item for item in items if (kept and media_item_key(item.url) in kept) or subject.matches(item)]
+
+    def gallery_items(self, data: dict, subject: MediaSubject, *, kept: Collection[str] = ()) -> list[MediaItem]:
+        """The items a gallery shows as tiles: :meth:`relevant_media_items` less documents, which belong on Article > Sources.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source.
+            subject: The place the items were found for.
+            kept: Keys (``media_item_key``) of items someone marked relevant.
+
+        Returns:
+            The items, in cached order.
+        """
+        return [item for item in self.relevant_media_items(data, subject, kept=kept) if not item.is_document]
+
     def api_media(self, data: dict) -> list[dict[str, Any]]:
         """This source's cached data as plain JSON media dicts.
 
@@ -614,11 +652,17 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         return [asdict(item) for item in self.media_items(data)]
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The provider's cached media as ``{"media": [...]}``, or None."""
+        """The provider's cached media as ``{"media": [...]}``, or None; only what is about the place, for a source that judges relevance."""
         data = self.cached_data(pin)
         if data is None:
             return None
-        return {PanelApiKind.MEDIA.value: self.api_media(data)}
+        if not self.judges_relevance:
+            return {PanelApiKind.MEDIA.value: self.api_media(data)}
+        from urbanlens.dashboard.models.images.relevance import MediaRelevance
+        from urbanlens.dashboard.services.media.subject_relevance import subject_for_pin
+
+        kept = set(MediaRelevance.objects.for_gallery(pin.profile, pin.location_id, self.key).filter(is_relevant=True).values_list("item_key", flat=True))
+        return {PanelApiKind.MEDIA.value: [asdict(item) for item in self.relevant_media_items(data, subject_for_pin(pin), kept=kept)]}
 
 
 @dataclass(frozen=True, slots=True)
@@ -631,6 +675,7 @@ class SourceDocument:
         content_type: What the proxy serves it as.
         subject: What it documents, e.g. one building's name.
         subject_kind: ``"building"``, ``"site"``, or ``""`` when unknown.
+        page_url: The provider's own page for it, when the document opens there rather than through the proxy.
     """
 
     document_id: str
@@ -638,6 +683,7 @@ class SourceDocument:
     content_type: str = "application/pdf"
     subject: str = ""
     subject_kind: str = ""
+    page_url: str = ""
 
 
 class DocumentUnavailableError(Exception):
@@ -645,7 +691,14 @@ class DocumentUnavailableError(Exception):
 
 
 class DocumentPanelSource(LocationCachePanelSource, ABC):
-    """A cache-backed panel whose payload names documents for the Article > Sources tab."""
+    """A cache-backed panel whose payload names documents for the Article > Sources tab.
+
+    Attributes:
+        documents_depend_on_site_scope: Whether a site-scope page lists different documents from a building's, so a
+            pin that becomes a site has its documents fetched again.
+    """
+
+    documents_depend_on_site_scope: ClassVar[bool] = True
 
     def documents_ready(self, data: dict, *, site_scope: bool) -> bool:
         """Whether a cached payload can answer the Sources tab for a viewer of this scope.
@@ -660,12 +713,13 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         return True
 
     @abstractmethod
-    def source_documents(self, data: dict, *, site_scope: bool) -> list[SourceDocument]:
+    def source_documents(self, data: dict, *, site_scope: bool, subject: MediaSubject | None = None) -> list[SourceDocument]:
         """The documents a cached payload lists, in display order.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict.
             site_scope: Whether the page describes a parcel/site rather than one building.
+            subject: The place, for a source whose documents were found by searching and must be about it.
 
         Returns:
             The documents, each with an id unique within this payload.
@@ -696,18 +750,19 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         """
         return f"ul_source_document_{self.key}_{document.document_id}"
 
-    def find_document(self, data: dict, document_id: str, *, site_scope: bool) -> SourceDocument | None:
+    def find_document(self, data: dict, document_id: str, *, site_scope: bool, subject: MediaSubject | None = None) -> SourceDocument | None:
         """The listed document with this id, or None when the payload does not list it.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict.
             document_id: The id from the proxy URL.
             site_scope: Whether the page describes a parcel/site rather than one building.
+            subject: The place, as for :meth:`source_documents`.
 
         Returns:
             The document, or None.
         """
-        return next((document for document in self.source_documents(data, site_scope=site_scope) if document.document_id == document_id), None)
+        return next((document for document in self.source_documents(data, site_scope=site_scope, subject=subject) if document.document_id == document_id), None)
 
 
 #: The key of a name-built row's payload naming the names its search was built from.
@@ -829,14 +884,14 @@ class GatewayMediaPanelSource(GalleryMediaSource):
         return self._gateway_factory()
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Rebuild ``MediaItem``s from this provider's cached ``{"items": [...]}``, less any the provider no longer admits."""
-        gateway = self.make_gateway()
-        items = (MediaItem(**item) for item in (data or {}).get("items", []))
-        return [item for item in items if gateway.admits(item)]
+        """Rebuild ``MediaItem``s from this provider's cached ``{"items": [...]}``."""
+        return [MediaItem(**item) for item in (data or {}).get("items", [])]
 
 
 class MediaPanelSource(NameSearchSource, GatewayMediaPanelSource):
     """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC), searched by the place's names."""
+
+    judges_relevance: ClassVar[bool] = True
 
     @staticmethod
     def search_terms(pin: Pin, gateway: MediaProvider, scope: SearchScope) -> list[str]:
@@ -895,6 +950,40 @@ class MediaPanelSource(NameSearchSource, GatewayMediaPanelSource):
         if gateway.geo_boundary is not None and not gateway.geo_boundary.contains(pin.effective_latitude, pin.effective_longitude):
             return False
         return any(self.search_terms(pin, gateway, scope) for scope in self.search_scopes(pin))
+
+
+class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
+    """A Media gallery provider whose results include books and scans, which are listed under Article > Sources.
+
+    A document opens on the provider's own page: a scanned book runs to tens of megabytes, more than the Sources proxy holds.
+    """
+
+    documents_depend_on_site_scope: ClassVar[bool] = False
+
+    def source_documents(self, data: dict, *, site_scope: bool, subject: MediaSubject | None = None) -> list[SourceDocument]:
+        """The documents among this provider's results that are about ``subject``; none without one."""
+        from urbanlens.dashboard.models.images.relevance import media_item_key
+
+        if subject is None:
+            return []
+        return [
+            SourceDocument(
+                document_id=media_item_key(item.url),
+                title=item.title or item.caption or "Document",
+                content_type=item.content_type,
+                page_url=item.page_url or item.url,
+            )
+            for item in self.relevant_media_items(data, subject)
+            if item.is_document
+        ]
+
+    def download_document(self, document: SourceDocument) -> tuple[bytes, str]:
+        """Never proxied: the Sources tab links to the provider's page instead.
+
+        Raises:
+            DocumentUnavailableError: Always.
+        """
+        raise DocumentUnavailableError(document.document_id)
 
 
 class BoundaryPanelSource(PanelSource):

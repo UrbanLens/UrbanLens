@@ -2788,27 +2788,6 @@ the pin's own `name`. News keeps register-listing names in the base search only.
   (`models/aliases/signals.py::_drop_name_sensitive_cache`), though neither search uses pin names any more; it costs
   everyone a refetch and leaks nothing.
 
-## P196 — Media galleries keep results that match the search words, not the place; Commons books were dropped instead of filed as documents
-
-`id: P196` · `status: open` · `updated: 2026-10-02` · `found by: Jess, on the HRSH Commons fix (f0fd2741a)`
-
-**Ruled by Jess 2026-10-02.** Returning a book is fine; the HRSH bug was an irrelevant one. Keep every relevant
-item, and put books and documents in Article > Sources like other documents. Keep and show only what explicitly
-matches the subject:
-
-- geolocated with coordinates inside the subject's bounding box; or
-- the subject's name plus a geographic indicator consistent with the place. Matches: "HRSH Poughkeepsie",
-  "Hudson River State Hospital NY", "HRPC <its ZIP>". Not matches: "HRSH Binghamton", "Hudson River Poughkeepsie"
-  (not the name), "HRPC OH".
-- A distinctive name alone matches ("HRSH", "Hudson River State Hospital") when nothing geographic contradicts
-  it. A generic name ("Historic Mansion") never matches on its name alone.
-
-What that undoes: f0fd2741a keeps only Commons files typed BITMAP or DRAWING, and `WikimediaGateway.admits` drops
-cached `.pdf`/`.djvu` rows. Documents from Commons (and any other provider) should become `SourceDocument`s in
-Article > Sources (`services/pins/source_documents.py`, `DocumentPanelSource`; CRIS is the only one today), filtered
-by the same relevance rule. Applies after P188, whose per-audience rows carry the names each row was searched with.
-
-
 ## P197 — "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them
 
 `id: P197` · `status: open` · `updated: 2026-10-02` · `found by: the audit re-check (P19 unit 14)`
@@ -3013,3 +2992,38 @@ generator, and keep swallowing only a settled refusal such as a 403. Check every
 P187 also left these stores unswept: `Boundary.generated_at` (does a failed generation stamp it?) and
 `GooglePlaceLinkEnrichmentSource`. Each needs the same test as `test_outage_not_cached_registry.py`: refused, timed out
 and 503, then assert nothing settled was written.
+
+## P215 — Commons file URLs now carry `utm_` parameters, so a file's `media_item_key` changes under it
+
+`id: P215` · `status: open` · `updated: 2026-10-03` · `found by: P196's live Commons check, 2026-10-03`
+
+On 2026-10-03, Commons' `imageinfo` `url` comes back as
+`https://upload.wikimedia.org/.../Hudson_River_Psychiatric_Center_front_view.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original`.
+`media_item_key` hashes the whole URL, so the same file gets a new key whenever the query string appears or changes. Any
+`MediaRelevance` mark, wiki vote or remote copy keyed on the old form no longer matches the item. The dev database's
+`wikimedia` cache rows mix the two forms: rows containing a `utm_source` URL were 9 of 131 written on 2026-09-23, 0 of 29
+on 09-28 and 3 of 5 on 09-30. When Wikimedia began adding them, and whether production marks were orphaned, was not
+checked.
+
+The likely fix is to drop `utm_*` parameters from Commons URLs in `WikimediaGateway` before they become an item's `url`.
+That changes the key of every cached item that carries them, so check first whether any stored mark uses the `utm` form.
+
+## P216 — Historic Newspapers shows nothing, because no page reaches UrbanLens with its text
+
+`id: P216` · `status: open` · `updated: 2026-10-03` · `found by: P196, checking each provider's fields, 2026-10-03`
+
+Since P196, a Media gallery item must name the place to be shown. A Chronicling America item has no text that could.
+LoC returns a page's OCR excerpt as a *list* of strings in `description`. REData's `ChroniclingAmericaGateway` passes it
+through `_strip_html`, which returns `""` for anything that is not a `str`, so the description is always empty. Its sibling
+`LibraryOfCongressGateway` joins the list. What remains is the title, which is the newspaper's own dateline: "Image 7 of
+River Falls journal (River Falls, Pierce County, Wis.), July 30, 1908". The Historic Newspapers tab is therefore empty
+for every place.
+
+Before P196 the tab showed everything LoC returned. On 2026-10-03 the live collection's 20 results for "Hudson River State
+Hospital" were 8 printings of one 1908 syndicated article naming the hospital, and 12 pages whose excerpt does not
+contain the name. LoC matches each word separately.
+
+To fix it, REData should join the list as its LoC gateway does. Then the dateline still names the paper's town and county,
+which reads as a conflict for any place elsewhere ("Pierce County" against Dutchess). Judge a newspaper page on its text
+alone, for example by keeping the dateline out of `title` and `caption`, or have the source tell the judge to skip them.
+Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03.

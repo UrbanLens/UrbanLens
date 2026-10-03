@@ -205,6 +205,52 @@ class FlickrSearchGatewayTests(TestCase):
         self.assertEqual(items[0].caption, "Main Building")
         self.assertEqual(items[0].page_url, "https://www.flickr.com/photos/12345@N00/1/")
 
+    def test_description_tags_and_geotag_are_asked_for_and_kept(self) -> None:
+        """Relevance (P196) reads them: Flickr's text search matches a photo's tags and description, not only its title."""
+        gw = self._gateway()
+        gw.session.get.return_value = _mock_response(
+            json_data={
+                "stat": "ok",
+                "photos": {
+                    "photo": [
+                        {
+                            "id": "1",
+                            "owner": "12345@N00",
+                            "title": "Hallway",
+                            "url_o": "https://example.com/1_o.jpg",
+                            "description": {"_content": "Ward wing, <b>HRSH</b>"},
+                            "tags": "hudsonriverstatehospital poughkeepsie abandoned",
+                            "latitude": "41.7333",
+                            "longitude": "-73.9281",
+                            "accuracy": "16",
+                        },
+                        {
+                            "id": "2",
+                            "owner": "12345@N00",
+                            "title": "Stairs",
+                            "url_o": "https://example.com/2_o.jpg",
+                            "description": {"_content": ""},
+                            "tags": "",
+                            "latitude": 0,
+                            "longitude": 0,
+                            "accuracy": 0,
+                        },
+                    ],
+                },
+            },
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.search._consumer_credentials", return_value=("key", "secret")
+        ):
+            tagged, untagged = gw._generate_media('("Hudson River State Hospital") "New York" ("abandoned")')
+
+        extras = gw.session.get.call_args.kwargs["params"]["extras"].split(",")
+        self.assertTrue({"description", "tags", "geo"} <= set(extras))
+        self.assertEqual(tagged.description, "Ward wing, HRSH")
+        self.assertEqual(tagged.keywords, "hudsonriverstatehospital|poughkeepsie|abandoned")
+        self.assertEqual((tagged.latitude, tagged.longitude), (41.7333, -73.9281))
+        self.assertEqual((untagged.latitude, untagged.longitude, untagged.keywords), (None, None, ""))
+
     def test_empty_search_term_yields_nothing_without_a_call(self) -> None:
         gw = self._gateway()
         items = list(gw._generate_media(""))
@@ -335,6 +381,7 @@ class FlickrFeedSearchGatewayTests(TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].url, "https://live.staticflickr.com/1_m.jpg")
         self.assertEqual(items[0].caption, "Main Building")
+        self.assertEqual(items[0].keywords, "hudsonriverstatehospital|newyork|abandoned")
         # Rebuilt from author_id + the numeric id in `link`, not `link` itself -
         # keeps the dedup key consistent with the NSID-based form the other
         # two Flickr paths store (see photo_web_url).

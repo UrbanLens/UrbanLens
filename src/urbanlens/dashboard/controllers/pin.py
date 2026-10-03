@@ -131,13 +131,6 @@ def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
     return panel_visible_to(request.user, source)
 
 
-def _is_gallery_document(item: object) -> bool:
-    """Whether a gallery item is a document that belongs on Article > Sources, not Photos."""
-    content_type = str(getattr(item, "content_type", "") or "").lower()
-    url = str(getattr(item, "url", "") or "").lower().split("?", 1)[0]
-    return "pdf" in content_type or url.endswith(".pdf")
-
-
 class PinController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the pin page
@@ -484,15 +477,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # gallery, even though it is one for the info panel sharing the row.
         if cached is None or not panel.media_is_ready(cached.data or {}):
             return self._pending_media(request, pin, source)
-        items = [item for item in panel.media_items(cached.data or {}) if not _is_gallery_document(item)]
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
         from urbanlens.dashboard.services.media.previews import gallery_urls
+        from urbanlens.dashboard.services.media.subject_relevance import subject_for_pin
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         relevance = dict(
             MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"),
         )
+        kept = {key for key, is_relevant in relevance.items() if is_relevant}
+        items = panel.gallery_items(cached.data or {}, subject_for_pin(pin), kept=kept)
         # The remote page_url stays the "Open source" link regardless, so the original is never lost.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         pictures = gallery_urls(items, provider=source)

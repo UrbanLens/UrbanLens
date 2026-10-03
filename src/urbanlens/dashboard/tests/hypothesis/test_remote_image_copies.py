@@ -550,7 +550,7 @@ class GalleryPageTests(TestCase):
         panel.cache_source = "stub_gallery"
         panel.gate.return_value = True
         panel.media_is_ready.return_value = True
-        panel.media_items.return_value = [_item("https://provider.test/full.jpg", "https://provider.test/thumb.jpg")]
+        panel.gallery_items.return_value = [_item("https://provider.test/full.jpg", "https://provider.test/thumb.jpg")]
 
         with patch("urbanlens.dashboard.services.pins.external_data.get_panel_source", return_value=panel):
             return self.client.get(reverse("pin.media", args=[self.pin.slug, "stub_gallery"]))

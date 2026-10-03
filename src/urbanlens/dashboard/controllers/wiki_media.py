@@ -64,13 +64,16 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         # gallery, even though it is one for the info panel sharing the row.
         if cached is None or not panel.media_is_ready(cached.data or {}):
             return self._pending(request, location, profile, source, panel)
-        items = panel.media_items(cached.data or {})
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
         from urbanlens.dashboard.services.media.previews import gallery_urls
+        from urbanlens.dashboard.services.media.subject_relevance import subject_for_location
 
         scores = MediaRelevance.objects.vote_scores(location, source)
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"))
+        # The community's net vote keeps an item the automatic judgement would drop.
+        kept = {key for key, score in scores.items() if score > 0}
+        items = panel.gallery_items(cached.data or {}, subject_for_location(location), kept=kept)
         # Prefer an already-materialized local copy over hot-linking the provider - see the matching comment in
         # controllers.pin. Voting is wiki-side too, so this is the same lookup either flow benefits from.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])

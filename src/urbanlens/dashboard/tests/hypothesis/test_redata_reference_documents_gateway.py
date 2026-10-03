@@ -127,6 +127,28 @@ class _ProviderMediaMappingMixin(_MixinBase):
         self.assertEqual(item.source, self.display_name)
         self.assertEqual(item.page_url, "https://example.test/a")
 
+    def test_keeps_the_description_subjects_and_location_relevance_reads(self) -> None:
+        """REData's ReferenceDocumentSerializer fields; the Library of Congress files ``attributes.subjects`` as a list."""
+        results = [
+            {
+                "kind": "photo",
+                "title": "Main building",
+                "description": "Hudson River State Hospital, Poughkeepsie",
+                "url": "https://example.test/a",
+                "attributes": {"subjects": ["hospitals", "poughkeepsie (n.y.)"], "original_format": ["photo"]},
+                "latitude": None,
+                "longitude": None,
+            },
+            {"title": "Located", "url": "https://example.test/b", "latitude": 41.7333, "longitude": -73.9281},
+        ]
+        unlocated, located = self._items(results)[0]
+
+        self.assertEqual(unlocated.description, "Hudson River State Hospital, Poughkeepsie")
+        self.assertEqual(unlocated.keywords, "hospitals|poughkeepsie (n.y.)")
+        self.assertIsNone(unlocated.latitude)
+        self.assertEqual((located.latitude, located.longitude), (41.7333, -73.9281))
+        self.assertEqual(located.keywords, "")
+
     def test_missing_thumbnail_falls_back_to_empty_string(self) -> None:
         items, _ = self._items([{"title": "No thumb", "url": "https://example.test/a"}])
         self.assertEqual(items[0].thumb_url, "")

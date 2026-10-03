@@ -124,7 +124,30 @@ class _RedataReferenceDocumentProvider(MediaProvider):
                 caption=doc.get("title") or "",
                 source=self.display_name,
                 page_url=url,
+                description=str(doc.get("description") or ""),
+                keywords=_subjects(doc.get("attributes")),
+                latitude=_number(doc.get("latitude")),
+                longitude=_number(doc.get("longitude")),
             )
+
+
+def _subjects(attributes: object) -> str:
+    """The subject headings an archive files a record under (the Library of Congress publishes them), joined with ``|``."""
+    subjects = attributes.get("subjects") if isinstance(attributes, dict) else None
+    if isinstance(subjects, str):
+        return subjects
+    if isinstance(subjects, list):
+        return "|".join(str(subject) for subject in subjects if subject)
+    return ""
+
+
+def _number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 @dataclass(slots=True, kw_only=True)

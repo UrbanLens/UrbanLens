@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.media.subject_relevance import MediaSubject
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
@@ -899,12 +900,13 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             return False
         return not site_scope or not data or data.get("site_scope") is True
 
-    def source_documents(self, data: dict, *, site_scope: bool) -> list[SourceDocument]:
+    def source_documents(self, data: dict, *, site_scope: bool, subject: MediaSubject | None = None) -> list[SourceDocument]:
         """The PDF attachments in a cached payload: the pin's own building and site, plus every campus building at site scope.
 
         Args:
             data: This source's cached payload.
             site_scope: Whether the page describes a parcel/site rather than one building.
+            subject: Unused: CRIS finds records by location, so every one is about the place.
 
         Returns:
             One document per ``(resource, attachment)``, identified as ``"<resource uuid>.<attachment id>"``.

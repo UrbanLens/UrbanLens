@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 REST_ENDPOINT = "https://api.flickr.com/services/rest/"
 _REQUEST_TIMEOUT = 20
 _PER_PAGE = 40
-_EXTRAS = "url_s,url_z,url_c,url_l,url_o"
+_EXTRAS = "url_s,url_z,url_c,url_l,url_o,description,tags,geo"
 
 FEED_ENDPOINT = "https://www.flickr.com/services/feeds/photos_public.gne"
 _FEED_TIMEOUT = 15
@@ -228,12 +228,18 @@ class FlickrSearchGateway(MediaProvider):
                 continue
             owner = photo.get("owner")
             photo_id = photo.get("id")
+            latitude, longitude = _geotag(photo.get("latitude"), photo.get("longitude"))
+            description = photo.get("description")
             yield MediaItem(
                 url=url,
                 thumb_url=photo.get("url_s") or photo.get("url_z") or url,
                 caption=photo.get("title") or "",
                 source=self.display_name,
                 page_url=photo_web_url(owner, photo_id) if owner and photo_id else "",
+                description=_plain_text(description.get("_content") if isinstance(description, dict) else description),
+                keywords=_tags(photo.get("tags")),
+                latitude=latitude,
+                longitude=longitude,
             )
 
 
@@ -294,7 +300,31 @@ class FlickrFeedSearchGateway(MediaProvider):
                 caption=item.get("title") or "",
                 source=self.display_name,
                 page_url=page_url,
+                description=_plain_text(item.get("description")),
+                keywords=_tags(item.get("tags")),
             )
+
+
+def _tags(tags: object) -> str:
+    """Flickr's space-separated tags, joined with ``|`` as ``MediaItem.keywords`` holds them."""
+    return "|".join(str(tags).split()) if tags else ""
+
+
+def _plain_text(text: object) -> str:
+    from urbanlens.dashboard.services.import_formats.html_description import strip_html
+
+    return strip_html(str(text)) if text else ""
+
+
+def _geotag(latitude: object, longitude: object) -> tuple[float | None, float | None]:
+    """A photo's position; Flickr reports an untagged photo as 0, 0, as a number or a string."""
+    try:
+        lat, lng = float(str(latitude)), float(str(longitude))
+    except ValueError:
+        return None, None
+    if lat == 0 and lng == 0:
+        return None, None
+    return lat, lng
 
 
 class FlickrMediaPanelSource(MediaPanelSource):

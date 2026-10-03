@@ -21,6 +21,7 @@
     "check:templates": "python3 bin/check_template_comments.py",
     "check:doc-line-refs": "python3 bin/check_doc_line_refs.py",
     "docs": "uv run python bin/build_docs.py",
+    "gazetteer:build": "uv run python -m urbanlens.dashboard.services.geo.build_gazetteer",
     "pre-commit": "uv run pre-commit run --all-files",
     "test": "bash bin/run_tests.sh",
     "test:host": "bash bin/host_pytest.sh",

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import re
 from typing import TYPE_CHECKING, Any, ClassVar
-from urllib.parse import urlsplit
 
-from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
+from urbanlens.dashboard.services.apis.assets.base import PAGED_DOCUMENT_CONTENT_TYPES, MediaItem, MediaProvider
 from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
 
 if TYPE_CHECKING:
@@ -23,9 +23,8 @@ _MAX_RESULTS = 60
 # "toomanyvalues" error, silently dropping every result. _MAX_RESULTS (60) is above that limit, so
 # imageinfo lookups must be chunked.
 _TITLES_BATCH_SIZE = 50
-#: Commons' media types for still images. A DjVu or PDF is OFFICE: a scanned book whose thumbnail is its first page.
-_PHOTO_MEDIATYPES = frozenset({"BITMAP", "DRAWING"})
-_DOCUMENT_EXTENSIONS = (".djvu", ".djv", ".pdf")
+_EXTMETADATA = "ImageDescription|ObjectName|Categories|GPSLatitude|GPSLongitude"
+_FILE_EXTENSION = re.compile(r"\.[A-Za-z0-9]{2,4}$")
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
@@ -59,7 +58,7 @@ class WikimediaGateway(MediaProvider):
             query: Human-readable wiki/place name used as the search term.
 
         Returns:
-            List of dicts with keys ``title``, ``url``, ``thumb``, ``description_url``, ``mime``.
+            List of dicts with keys ``title``, ``name``, ``url``, ``thumb``, ``description_url``, ``description``, ``caption``, ``categories``, ``latitude``, ``longitude``, ``mime``.
         """
         page_ids = self._search_files(query)
         if not page_ids:
@@ -102,7 +101,9 @@ class WikimediaGateway(MediaProvider):
         return results
 
     def _fetch_image_info_batch(self, titles: list[str]) -> list[dict[str, Any]]:
-        """Fetch image info for a single batch of at most _TITLES_BATCH_SIZE titles.
+        """Fetch image info and coordinates for a single batch of at most _TITLES_BATCH_SIZE titles.
+
+        Images and paged documents (PDF, DjVu) are kept; sound and video are not.
 
         Raises:
             Exception: Commons could not be asked (see ``is_source_outage``).
@@ -110,9 +111,12 @@ class WikimediaGateway(MediaProvider):
         params: dict[str, str | int] = {
             "action": "query",
             "titles": "|".join(titles),
-            "prop": "imageinfo",
-            "iiprop": "url|mime|mediatype|extmetadata",
+            "prop": "imageinfo|coordinates",
+            "iiprop": "url|mime|extmetadata",
+            "iiextmetadatafilter": _EXTMETADATA,
             "iiurlwidth": _THUMB_WIDTH,
+            # Commons returns coordinates for 10 pages unless asked for more.
+            "colimit": "max",
             "format": "json",
         }
         try:
@@ -134,33 +138,30 @@ class WikimediaGateway(MediaProvider):
             if "imageinfo" not in page:
                 continue
             info = page["imageinfo"][0]
-            if info.get("mediatype") not in _PHOTO_MEDIATYPES:
-                continue
             mime = info.get("mime", "")
+            if not (mime.startswith("image/") or mime in PAGED_DOCUMENT_CONTENT_TYPES):
+                continue
             ext_meta = info.get("extmetadata", {})
-            description = ext_meta.get("ImageDescription", {}).get("value", "") or ext_meta.get("ObjectName", {}).get("value", "") or page.get("title", "").replace("File:", "")
+            title = page.get("title", "").removeprefix("File:")
+            name = _strip_html(_meta(ext_meta, "ObjectName")) or _FILE_EXTENSION.sub("", title)
+            description = _strip_html(_meta(ext_meta, "ImageDescription"))
+            latitude, longitude = _location(page, ext_meta)
             results.append(
                 {
-                    "title": page.get("title", "").replace("File:", ""),
+                    "title": title,
+                    "name": name,
                     "url": info.get("url", ""),
                     "thumb": info.get("thumburl", ""),
                     "description_url": info.get("descriptionurl", ""),
-                    "description": _strip_html(description),
+                    "description": description,
+                    "caption": description or name or title,
+                    "categories": _meta(ext_meta, "Categories"),
+                    "latitude": latitude,
+                    "longitude": longitude,
                     "mime": mime,
                 },
             )
         return results
-
-    def admits(self, item: MediaItem) -> bool:
-        """Rejects a paged document, recognised by the extension of its Commons file URL.
-
-        Args:
-            item: A previously fetched item.
-
-        Returns:
-            False for a DjVu or PDF file.
-        """
-        return not urlsplit(item.url).path.lower().endswith(_DOCUMENT_EXTENSIONS)
 
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         if not search_term:
@@ -172,10 +173,41 @@ class WikimediaGateway(MediaProvider):
             yield MediaItem(
                 url=img.get("url") or img.get("thumb") or "",
                 thumb_url=img.get("thumb") or img.get("url") or "",
-                caption=img.get("description") or img.get("title") or "",
+                caption=img.get("caption") or "",
                 source=self.display_name,
                 page_url=img.get("description_url") or "",
+                content_type=img.get("mime") or "",
+                title=img.get("name") or "",
+                description=img.get("description") or "",
+                keywords=img.get("categories") or "",
+                latitude=img.get("latitude"),
+                longitude=img.get("longitude"),
             )
+
+
+def _meta(ext_meta: dict[str, Any], key: str) -> str:
+    """One extmetadata field's value, as text."""
+    value = (ext_meta.get(key) or {}).get("value")
+    return str(value) if value is not None else ""
+
+
+def _number(value: object) -> float | None:
+    try:
+        return float(str(value)) if value not in (None, "") else None
+    except ValueError:
+        return None
+
+
+def _location(page: dict[str, Any], ext_meta: dict[str, Any]) -> tuple[float | None, float | None]:
+    """Where Commons places a file: its primary coordinates, else the GPS position in its metadata."""
+    for coordinates in page.get("coordinates") or []:
+        latitude, longitude = _number(coordinates.get("lat")), _number(coordinates.get("lon"))
+        if latitude is not None and longitude is not None:
+            return latitude, longitude
+    latitude, longitude = _number(_meta(ext_meta, "GPSLatitude")), _number(_meta(ext_meta, "GPSLongitude"))
+    if latitude is None or longitude is None:
+        return None, None
+    return latitude, longitude
 
 
 def _strip_html(text: str) -> str:

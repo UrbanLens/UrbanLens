@@ -116,6 +116,7 @@ class SearxngImageMediaSource(NameSearchSource, GalleryMediaSource):
     icon = "travel_explore"
     title = "Web Images"
     results_per_row = _MAX_IMAGES
+    judges_relevance = True
 
     def gate(self, pin: Pin) -> bool:
         """Needs REData configured and a buildable relevance query."""
@@ -156,6 +157,7 @@ class SearxngImageMediaSource(NameSearchSource, GalleryMediaSource):
                 caption=item.get("title") or "",
                 source="Web Search",
                 page_url=item.get("link") or item["thumbnail"],
+                description=item.get("snippet") or "",
             )
             for item in items
             if item.get("thumbnail")
