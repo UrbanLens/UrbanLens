@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P247` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P251` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -234,3 +234,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P245 | open | 2026-10-03 | A revoked subscription grant records when it was revoked, not who revoked it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P246 | open | 2026-10-03 | Deleting an admin's account deletes every subscription grant they made | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P250 | open | 2026-10-03 | A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name | [`docs/PROBLEMS.md`](PROBLEMS.md) |

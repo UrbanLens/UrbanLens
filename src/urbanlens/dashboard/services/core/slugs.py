@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import random
+import re
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
@@ -37,6 +38,10 @@ PREFERRED_CHILD_SLUG_LENGTH = 40
 #: Ideal slugs shorter than this try to take back dropped words (including a
 #: partial word if that's all that fits) before giving up.
 MIN_SLUG_LENGTH = 8
+
+#: Range of the random number appended when every word-based candidate is taken.
+_SUFFIX_MIN = 2
+_SUFFIX_MAX = 90_000
 
 #: Articles and light prepositions skipped when building an acronym so
 #: "Hospital of the Hudson" does not become ``hoth``.
@@ -202,33 +207,83 @@ def unique_slug(
     Returns:
         A non-empty slug no longer than ``max_length``."""
     preferred = min(preferred_length or max_length, max_length)
-    prefix_slug = slugify(prefix) if prefix else ""
-    tokens = slug_tokens(name)
-    if prefix_slug and tokens and tokens[0] == prefix_slug:
-        tokens = tokens[1:]
-    if not tokens:
-        fallback_slug = slugify(fallback) or "item"
-        tokens = [fallback_slug]
+    prefix_slug, tokens = _prefixed_tokens(name, prefix, fallback)
 
     for candidate in _slug_candidates(prefix_slug, tokens, preferred=preferred, max_length=max_length, min_length=min_length):
         if not is_taken(candidate):
             return candidate
 
-    # Last resort: numeric suffix on the longest candidate that still leaves
-    # room, trimmed at a hyphen so we do not clip a word to make space.
-    longest = _join(prefix_slug, tokens)[:max_length].rstrip("-") or (prefix_slug or tokens[0] or "item")
+    longest = _longest(prefix_slug, tokens, max_length)
     for _ in range(40):
-        n = random.randint(2, 90_000)  # noqa: S311 # nosec: B311 - Used for slug generation
-        suffix = f"-{n}"
-        budget = max_length - len(suffix)
-        if budget < 1:
-            break
-        trimmed = _trim_at_hyphen(longest, budget) or longest[:budget]
-        candidate = (trimmed + suffix)[:max_length].rstrip("-")
+        n = random.randint(_SUFFIX_MIN, _SUFFIX_MAX)  # noqa: S311 # nosec: B311 - Used for slug generation
+        candidate = _suffixed(longest, n, max_length)
         if candidate and not is_taken(candidate):
             return candidate
 
     return f"{uuid4()}"[:max_length]
+
+
+def could_mint(
+    slug: str,
+    name: str,
+    *,
+    prefix: str = "",
+    max_length: int,
+    preferred_length: int | None = None,
+    min_length: int = MIN_SLUG_LENGTH,
+    fallback: str = "item",
+) -> bool:
+    """Whether :func:`unique_slug` could return ``slug`` for these arguments, whichever candidates were taken.
+    Its last-resort uuid is not counted: it says nothing about the name.
+
+    Args:
+        slug: An existing slug.
+        name: Raw display name the slug should come from.
+        prefix: Parent-derived prefix, as passed to :func:`unique_slug`.
+        max_length: Hard cap matching the slug column.
+        preferred_length: Soft cap for the ideal slug; defaults to ``max_length``.
+        min_length: As for :func:`unique_slug`.
+        fallback: As for :func:`unique_slug`.
+
+    Returns:
+        True when ``slug`` is one of the word-based candidates, or the longest one with a numeric suffix."""
+    if not slug:
+        return False
+    preferred = min(preferred_length or max_length, max_length)
+    prefix_slug, tokens = _prefixed_tokens(name, prefix, fallback)
+    if slug in _slug_candidates(prefix_slug, tokens, preferred=preferred, max_length=max_length, min_length=min_length):
+        return True
+    match = re.fullmatch(r".+-(\d+)", slug)
+    if match is None:
+        return False
+    n = int(match.group(1))
+    return _SUFFIX_MIN <= n <= _SUFFIX_MAX and _suffixed(_longest(prefix_slug, tokens, max_length), n, max_length) == slug
+
+
+def _prefixed_tokens(name: str, prefix: str, fallback: str) -> tuple[str, list[str]]:
+    """The slugified prefix and the name's tokens, without a leading token that repeats the prefix."""
+    prefix_slug = slugify(prefix) if prefix else ""
+    tokens = slug_tokens(name)
+    if prefix_slug and tokens and tokens[0] == prefix_slug:
+        tokens = tokens[1:]
+    if not tokens:
+        tokens = [slugify(fallback) or "item"]
+    return prefix_slug, tokens
+
+
+def _longest(prefix: str, tokens: Sequence[str], max_length: int) -> str:
+    """Every token, cut to ``max_length``: what a numeric suffix is appended to."""
+    return _join(prefix, tokens)[:max_length].rstrip("-") or (prefix or tokens[0] or "item")
+
+
+def _suffixed(longest: str, n: int, max_length: int) -> str:
+    """``longest`` with ``-n`` appended, trimmed at a hyphen rather than mid-word to make room; empty when nothing fits."""
+    suffix = f"-{n}"
+    budget = max_length - len(suffix)
+    if budget < 1:
+        return ""
+    trimmed = _trim_at_hyphen(longest, budget) or longest[:budget]
+    return (trimmed + suffix)[:max_length].rstrip("-")
 
 
 def _significant_words(name: str) -> list[str]:

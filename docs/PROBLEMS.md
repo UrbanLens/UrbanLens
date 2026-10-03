@@ -3212,3 +3212,30 @@ admin's account is deleted every grant they made disappears with it, and each gr
 keeps a grant by a demoted or deactivated admin listed and revocable; a deleted one leaves nothing to list. Not tested.
 Likely fix: `granted_by` nullable with `SET_NULL`, and the grant list showing "deleted account" for a null. Rows are only
 deleted on Jess's say-so, so that is hers to confirm.
+
+The P199 merge commit (57e583cd7) says `granted_by` is kept on `SET_NULL`. It is not; it is still `CASCADE`.
+
+## P250 — A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name
+
+`id: P250` · `status: open` · `updated: 2026-10-03` · `found by: rerunning 0041 against dev, P186 follow-up`
+
+At runtime a Location's slug is minted from a provider name only while it is still the uuid
+(`Location._slug_awaits_provider_name`). After that it is kept, through a provider rename and through a name being
+rejected and cleared. Migration 0041 does the opposite: a slug that `could_mint` says the current provider name could
+not have produced is re-minted, and a slug with no provider name behind it falls back to the uuid. The same row can
+therefore be correct today and re-minted by a later run of the same rule.
+
+On dev, Location 98249 (HRSH's Kirkbride) took Wikipedia's campus title "Hudson River State Hospital" and the slug
+`hudson-river-state-hospital-32655`. CRIS renamed it "BLDG 51/MAIN/ADMIN (1871) - NHL" after 0041 had run. Its wiki
+slug is still `hrsh-hudson-river-state-hospital`, which names the campus, not the building. Rerunning 0041 moves both.
+
+Since P186, `LocationSlugHistory` 301s a former slug, so re-minting on a rename no longer breaks a link. Decide which
+behaviour is wanted:
+
+- Re-mint on every provider rename or cleared name. Slugs then follow the current name, and a provider that flips
+  between two names leaves history rows behind.
+- Keep the first minted slug. 0041 should then accept any slug that a provider name once produced. It cannot know
+  that, so the runtime rule would need to record it.
+
+Wiki URLs route by the Location's slug, so a wiki's own slug only shows up as `wiki_slug` in API responses, and re-minting
+it breaks no link.
