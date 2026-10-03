@@ -3053,10 +3053,6 @@ While on that host, three reads. None of them is a reason to add threads or to i
 - Confirm the running worker class. N26 (2026-09-21) found the image then in production was still `gunicorn -k gevent`. This tree's `package.json` `start` script is `-k gthread --threads 4`. GIL waits between threads exist on gthread. A gen-2 pause stops the whole worker on either class.
 
 Python 3.13's incremental collector is the runtime's own reduction of this pause. It is not part of this check.
-||||||| parent of ffea8d26e (docs(P206): nothing prunes the location cache, and dev's rows are 20x smaller than production's)
-fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows? Measure on
-`development_main` first. Production's `pg_stat_statements` is being loaded on the infrastructure side and will name
-the queries.
 
 ## P209 — Opening a group chat's own URL shows "Select a conversation" until its row is clicked
 

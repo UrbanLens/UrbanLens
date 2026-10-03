@@ -20285,9 +20285,7 @@ is real; the 108 non-write callables the 2026-08-14 run also never reached were 
 
 ## RESOLVED 2026-10-02: Album grids and the add-to-album picker are paged, and an album holds at most 5,000 photos
 
-`id: P171` · `status: fixed` · `resolved: 2026-10-02`
-
-`id: P171` · `status: open` · `updated: 2026-09-29` · `found by: P166's "left open" list, re-verified 2026-09-29`
+`id: P171` · `status: fixed` · `resolved: 2026-10-02` · `found by: P166's "left open" list, re-verified 2026-09-29`
 
 P166 moved collections into SQL and said per-album size caps (T8b) and paging the album grid on the Photos
 tab were left for later; nothing tracked them after it was archived. `controllers/albums.py` renders every
