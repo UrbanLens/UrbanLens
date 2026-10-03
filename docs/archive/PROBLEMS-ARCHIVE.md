@@ -20621,3 +20621,71 @@ address backfill; 16 of its 38 tests failed on the old code, none of them a cont
 **Left open.** A fallback answer cached during an outage (Overpass buildings when REData was down) holds for the full
 term, as any partial answer does. Non-`LocationCache` stores were not swept: `Boundary.generated_at`, the satellite
 and street-view slide caches, and `GooglePlaceLinkEnrichmentSource`.
+
+## RESOLVED 2026-10-03: An upload that meets a Garage quorum failure is a 500, and the photo is lost
+
+`id: P201` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: infrastructure's 0.8.0 deploy findings, item 4`
+
+Garage runs two nodes with `replication_factor = 2`. After a node stalls for about 75 s, writes fail with a 503
+("Timeout" or "Not connected") until it reconnects: 140 times in the week to 2026-10-02. `GatedS3Storage` had no
+`client_config`, so botocore's defaults applied (5 attempts, 60 s read timeout), and a stall could hold a request past
+Cloudflare's 100 s. `upload_photo_for_owner` caught only `UploadRefusedError`, so a refusal was a 500.
+
+**The client gives up inside the proxy's window.** `_S3_STORAGE_OPTIONS["client_config"]` (`settings/base.py`) uses
+botocore's `standard` retry mode with `UL_S3_MAX_ATTEMPTS` (2) attempts, `UL_S3_CONNECT_TIMEOUT_SECONDS` (3) and
+`UL_S3_READ_TIMEOUT_SECONDS` (15), declared in `settings/app.py`. An upload's name check (a HEAD) and write (a PUT) give
+up within about 56 s, or 76 s after the 20 s upload reservation wait. Path-style addressing and SigV4 moved into the
+`Config`, because django-storages ignores its own `addressing_style` and `signature_version` once `client_config` is
+set.
+
+**A refused upload is a 503 with `Retry-After: 30`, and nothing is half-written.**
+`services/media/storage.py::storage_failures_refused()` turns any storage error into `StorageUnavailableError`, an
+`UploadRefusedError`. That covers an `OSError`, a botocore `ClientError`, a connection or timeout error, and either
+`S3UploadFailedError`; `services/media/storage_errors.py` lists them. Every direct upload path wraps its write in it
+and answers in its own shape:
+
+- JSON: the pin gallery (which still records a `PhotoUploadFailure` for the owner to resend), the vault, the external
+  API's photo and avatar uploads, the overlay uploader, article images, direct-message attachments, safety check-ins,
+  photo-scan suggestions, consensus rounds, a pin quick-edit icon, and the settings-page, Gravatar and emoji avatars.
+- Plain text, which htmx shows as a toast: the pin upload view, article-source images, and pin, wiki and trip comments.
+- A message and redirect: the profile card's avatar, and visit photos, where the visit is still logged.
+- Suggestion photos are skipped like any other refusal. A failed sign-in avatar is skipped, and sign-in proceeds.
+
+A comment posted with a photo, and a label or pin created with an icon, are written in the same transaction as the
+write that failed. `StorageUnavailableMiddleware` and the external API's `uniform_exception_handler` answer the same
+way for any view that lets a storage error escape; the label edit and pin create are such views.
+
+**The bytes are not kept.** P119's held-upload store is the same Garage, and k3s workers share no disk, so a write
+Garage refused has nowhere to wait. The client sends the photo again.
+
+**A 409 after a timeout means the photo is stored.** The file is saved before the row's INSERT, inside the reservation's
+transaction, so a failed write leaves no row and a retry is a 201. A retry is a 409 only when an earlier request
+committed, and then the row and its file are both there.
+
+**Processing waits for storage.** In `process_image_upload`, an object store failure while opening, scanning or
+re-encoding the upload is retried. Then the upload waits in `UploadRetry` under `dashboard.Image.image`, and
+`retry_waiting_uploads` paces it. Before, a timeout there was taken for an undecodable or unscannable file, and the
+upload was removed after about seven minutes. Giving up offers the photo back to its owner, and
+`requeue_stalled_pending_uploads` leaves a waiting upload alone. The thumbnail backfills stop their batch on a transient
+storage failure instead of setting `media_unreadable_at`, which kept the photo out of the walk for a week. An
+undecodable photo and a scanner that is down are still rejected. `docs/MEDIA_PIPELINE.md` has the detail.
+
+Tests. Each file failed before its fix:
+
+- `test_object_store_client_config.py` reads the real client: 7 of 10 failed before the fix.
+- `test_upload_storage_outage.py` has every path above: 28 of 30 failed before the fix. Its Garage outage is a
+  `before-send` handler on the real client.
+- `test_upload_processing_storage_outage.py`: 9 of 12 failed. The three that already passed are controls (a decode
+  failure, a scanner that is down, a file that is gone).
+- `test_async_malware_scan.py`: two tests now expect an unreadable document or video to wait, unpublished, instead of
+  being removed.
+
+Not changed:
+
+- Background imports (P220).
+- On the filesystem backend, an `OSError` inside the decode still cannot be told from a bad file.
+- A PUT that Garage finishes after the client gave up leaves an object no row names. Nothing serves it, since every
+  read goes through a row.
+- No client retries a 503 by itself. The toast asks the user to try again.
