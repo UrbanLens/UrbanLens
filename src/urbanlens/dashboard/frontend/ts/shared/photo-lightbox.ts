@@ -534,6 +534,46 @@ export class PhotoLightbox {
         }
     }
 
+    /**
+     * Remove the photo showing now from the viewer's own results: a private mark, so the shared cache and everyone
+     * else's galleries keep it. Its Photos-tab tile goes and the lightbox moves on, closing after the last.
+     */
+    private async removeFromMyResults(): Promise<void> {
+        const item = this.current;
+        const dialog = lightboxDialog();
+        const url = dialog?.dataset.pinMediaRelevanceUrl;
+        if (!item?.canRelevance || !url || !dialog) return;
+        try {
+            await fetchJson(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                body: JSON.stringify({ source: item.mediaSource, item_key: item.mediaKey, url: item.url, hidden: true }),
+                reportsItsOwnErrors: true,
+            });
+        } catch {
+            toast.error("Could not remove this photo from your results.");
+            return;
+        }
+        const matches = (tile: HTMLElement) => tile.dataset.mediaSource === item.mediaSource && tile.dataset.mediaKey === item.mediaKey;
+        for (const tile of Array.from(document.querySelectorAll<HTMLElement>(".gallery-item--external")).filter(matches)) {
+            const count = tile.closest("#albums-external")?.querySelector(".albums-count");
+            if (count?.textContent) count.textContent = String(Math.max(Number.parseInt(count.textContent, 10) - 1, 0));
+            tile.remove();
+        }
+        const mediaTile = Array.from(document.querySelectorAll<HTMLElement>("#media-gallery-grid .media-item")).find(matches);
+        if (mediaTile) window._mediaApplyRelevanceState?.(mediaTile, false);
+        const index = this.list.indexOf(item);
+        if (index >= 0) this.list.splice(index, 1);
+        if (index >= 0 && index < this.index) this.index -= 1;
+        toast.success("Removed from your results.");
+        if (!this.list.length) {
+            dialog.close();
+            return;
+        }
+        this.index = Math.min(this.index, this.list.length - 1);
+        this.show();
+    }
+
     // -- Picker: file to a pin, send to a wiki, share with a friend ---------------------------------
 
     /**
@@ -643,6 +683,8 @@ export class PhotoLightbox {
                 return void this.setRelevance(true);
             case "not-relevant":
                 return void this.setRelevance(false);
+            case "hide":
+                return void this.removeFromMyResults();
             case "pin-picker":
                 return this.openPicker("pin");
             case "wiki-picker":

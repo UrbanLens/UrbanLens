@@ -585,6 +585,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         An optional ``latitude``/``longitude`` pair (sent when the item was dragged onto the map rather than
         clicked "relevant") is applied to the materialized ``Image`` in the same request, so a freshly
         materialized photo never has a moment with no coordinates.
+
+        A ``hidden`` flag instead of ``is_relevant`` removes the item from this user's results, or restores it: a
+        private mark that is no vote, so no one else's gallery or score changes.
         """
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.media.images import coerce_coordinates
@@ -626,6 +629,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         item_key = data.get("item_key") or media_item_key(url)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
+        if "hidden" in data:
+            hidden = data["hidden"]
+            if not isinstance(hidden, bool):
+                return JsonResponse({"error": "Invalid request data."}, status=400)
+            if hidden:
+                MediaRelevance.objects.update_or_create(profile=profile, location=pin.location, source=source, item_key=item_key, defaults={"is_relevant": False, "is_vote": False})
+            else:
+                MediaRelevance.objects.for_gallery(profile, pin.location, source).filter(item_key=item_key, is_vote=False).delete()
+            return JsonResponse({"hidden": hidden})
+
         if is_relevant is None:
             MediaRelevance.objects.for_gallery(profile, pin.location, source).filter(item_key=item_key).delete()
             return JsonResponse({"is_relevant": None})
@@ -660,7 +673,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 location=pin.location,
                 source=source,
                 item_key=item_key,
-                defaults={"is_relevant": False},
+                defaults={"is_relevant": False, "is_vote": True},
             )
             # Marking "not relevant" never materializes a new copy - but if this item was already saved (e.g. an
             # earlier "relevant" vote, or a wiki send), REData should hear about the reversal too.

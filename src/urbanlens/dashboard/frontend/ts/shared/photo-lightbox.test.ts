@@ -58,6 +58,7 @@ const MARKUP = `
   <div id="lightbox-relevance-actions" hidden>
     <button id="lightbox-relevant-btn" data-lightbox-action="relevant"></button>
     <button id="lightbox-not-relevant-btn" data-lightbox-action="not-relevant"></button>
+    <button id="lightbox-hide-btn" data-lightbox-action="hide"></button>
   </div>
   <div id="lightbox-cover-actions" hidden><button id="lightbox-cover-btn" data-lightbox-action="cover"></button></div>
   <div id="lightbox-custom-fields"></div><div id="lightbox-media-labels"></div>
@@ -206,6 +207,49 @@ describe("relevance", () => {
         window.galleryOpenLightboxItem?.([{ url: "/a.jpg", canRelevance: true, relevant: true }], 0);
         el("lightbox-relevant-btn").click();
         expect(JSON.parse(calls.at(-1)?.body ?? "{}").is_relevant).toBeNull();
+    });
+});
+
+describe("removing a photo from my results", () => {
+    test("posts a private hide, drops the photo's tile and moves on to the next", async () => {
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            `<section id="albums-external"><span class="albums-count">2</span><ul>
+              <li class="gallery-item gallery-item--external" data-media-source="wikimedia" data-media-key="one"></li>
+              <li class="gallery-item gallery-item--external" data-media-source="wikimedia" data-media-key="two"></li>
+            </ul></section>`,
+        );
+        window.galleryOpenLightboxItem?.(
+            [
+                { url: "https://upload.test/1.jpg", caption: "one", canRelevance: true, mediaSource: "wikimedia", mediaKey: "one" },
+                { url: "https://upload.test/2.jpg", caption: "two", canRelevance: true, mediaSource: "wikimedia", mediaKey: "two" },
+            ],
+            0,
+        );
+
+        el("lightbox-hide-btn").click();
+        await settle();
+
+        expect(calls.at(-1)?.url).toBe("/pin/p/relevance/");
+        expect(JSON.parse(calls.at(-1)?.body ?? "{}")).toMatchObject({ source: "wikimedia", item_key: "one", hidden: true });
+        expect(Array.from(document.querySelectorAll<HTMLElement>(".gallery-item--external"), (tile) => tile.dataset.mediaKey)).toEqual(["two"]);
+        expect(document.querySelector(".albums-count")?.textContent).toBe("1");
+        expect(el("lightbox-caption").textContent).toBe("two");
+        expect((el("gallery-lightbox") as HTMLDialogElement).open).toBe(true);
+    });
+
+    test("a refusal keeps the photo; removing the last one closes the lightbox", async () => {
+        respond = () => new Response("{}", { status: 500 });
+        window.galleryOpenLightboxItem?.([{ url: "/a.jpg", caption: "a", canRelevance: true, mediaSource: "wikimedia", mediaKey: "a" }], 0);
+
+        el("lightbox-hide-btn").click();
+        await settle();
+        expect((el("gallery-lightbox") as HTMLDialogElement).open).toBe(true);
+
+        respond = () => new Response("{}", { status: 200 });
+        el("lightbox-hide-btn").click();
+        await settle();
+        expect((el("gallery-lightbox") as HTMLDialogElement).open).toBe(false);
     });
 });
 

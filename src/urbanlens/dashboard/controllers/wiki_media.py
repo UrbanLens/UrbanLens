@@ -70,7 +70,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.media.subject_relevance import subject_for_location
 
         scores = MediaRelevance.objects.vote_scores(location, source)
-        my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"))
+        my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).votes().values_list("item_key", "is_relevant"))
         # The community's net vote keeps an item the automatic judgement would drop.
         kept = {key for key, score in scores.items() if score > 0}
         items = panel.gallery_items(cached.data or {}, subject_for_location(location), kept=kept)
@@ -119,7 +119,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).select_related("profile").visible_to(profile).exclude(image="").servable().order_by("-created")[:_WIKI_PHOTOS_PREVIEW_LIMIT]
 
         scores = MediaRelevance.objects.vote_scores(location, "photos")
-        my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, "photos").values_list("item_key", "is_relevant"))
+        my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, "photos").votes().values_list("item_key", "is_relevant"))
         rendered_items = []
         for img in images:
             url = img.image.url
@@ -224,7 +224,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
 
         response: dict = {}
         if is_relevant is None:
-            MediaRelevance.objects.for_gallery(profile, location, source).filter(item_key=item_key).delete()
+            MediaRelevance.objects.for_gallery(profile, location, source).votes().filter(item_key=item_key).delete()
         elif is_relevant and source != "photos" and url:
             # An explicit click overrides any prior vote.
             result = record_relevant_and_cache(
@@ -248,7 +248,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 location=location,
                 source=source,
                 item_key=item_key,
-                defaults={"is_relevant": bool(is_relevant)},
+                defaults={"is_relevant": bool(is_relevant), "is_vote": True},
             )
             # image_id is only trusted after re-scoping to this wiki's own attached media - scoping to the
             # location alone let a caller record a vote against a pin-owned (not wiki-attached) photo at the
