@@ -20275,3 +20275,46 @@ and a `map_hidden` that was not a JSON boolean (`"false"`, `"0"`, `[false]`) hid
 Most of the roster's coverage came from P29's write-route tests. A subset run is a lower bound, so "executes" here
 is real; the 108 non-write callables the 2026-08-14 run also never reached were not re-measured. The deep-nesting
 500 is also reachable through the 17 dashboard views and one service that parse a body themselves: P195.
+
+## RESOLVED 2026-10-03: Client JSON nested past the recursion limit is a 400 everywhere a view, form or socket decodes it, not a 500
+
+`id: P195` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: the P37 handler tests, 2026-10-02`
+
+`json.loads` raises `RecursionError` on JSON nested past the interpreter's limit (from about 10,000 levels on Python
+3.12), and `RecursionError` is not a `ValueError`, so every `except ValueError` around a decode let it through as a
+500. Reproduced site by site before the fix, each a `RecursionError` 500:
+
+- Bodies, now through `posted_json_object`/`posted_fields`, each view keeping its error shape: the five bulk label
+  routes (`label.reorder`, `bulk_delete`, `bulk_edit`, `bulk_convert`, `multi_merge`), `vault.photos.failures`,
+  `vault.photos.conflicts.resolve` (a malformed body had resolved the conflict with no choices; it is now a 400),
+  `validate_password_policy`, `location.wiki.boundary`, `custom_fields.position`, `e2ee.change_password`,
+  `pin.floorplan.save`, `memories.visits.bulk`, `memories.locations.bulk`, `tools.photo_scan.upload`,
+  `location.wiki.media.vote`, and the check-in photo reposition (`services/media/images.py::parse_reposition_payload`).
+- Found beyond the grep: both passkey ceremonies (`settings.security.passkeys.register`, `login.2fa.verify`);
+  `geo_bounds` on `spotguessr.start`, `spotguessr.area_pin_count` and the external API's eligible-count query;
+  overlay `corners`; a visit's `map_data` (`services/map/map_snapshot.py`); the assistant's dismissals; the hotkey
+  settings form; the search form's regions and label groups; a form-posted value for any writable DRF `JSONField`
+  (saved filter `criteria`, list `smart_filter`/`smart_boundary`, wiki boundary `polygon`, game `geo_bounds`); and a
+  chat WebSocket frame, which killed the socket (the 32,768-character frame cap admits 16,000 levels).
+- `csp.report` takes either report format, so it uses the shape-agnostic decode.
+
+`services/core/request_body.py::decode_json` is the one decode for client JSON of any shape; it raises
+`MalformedBodyError` (a `BadRequest` and a `ValueError`) on undecodable or too-deep input, and `posted_json_object`
+calls it. `external_api/fields.py::JSONField` catches the `RecursionError` DRF's own field lets out. The passkey
+verify also answered a response missing a required field with a 500 (`InvalidJSONStructure` was uncaught); it is a
+400 too. `custom_fields.position` now parses with `bounded_float_or_none`, which also refuses an integer too large
+for a float rather than raising `OverflowError`.
+
+A JSON-only view now reads a form-encoded post as an empty object, as `posted_json_object` does everywhere, rather
+than failing to decode it. Where an empty object writes something (an empty floorplan, a default upload-failure
+card), an empty body already did the same.
+
+Tests: `tests/hypothesis/test_deeply_nested_request_bodies.py` sends the body to each route as its owner and checks
+for a 400 with nothing changed, guards that both bodies really overflow the decoder, scans `controllers/`,
+`external_api/`, `forms/` and `consumers.py` for any `json.loads` outside a short allowlist of server-produced JSON,
+and fails on any writable stock `serializers.JSONField`. The body is `DEEPLY_NESTED_JSON` in
+`tests/hypothesis/external_api_helpers.py`, part of `MALFORMED_JSON_BODIES` (every external API write route) and of
+the no-5xx write-route sweep, which found no further sites. Not covered: import files read in Celery
+(`services/import_export/import_data.py::_read_json`) fail the task rather than a request.
