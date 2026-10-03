@@ -384,7 +384,9 @@ separate `GameSessionInvite` model. The host's own row is created as `JOINED` im
   "N rounds, everyone plays the same N" scoreboard invariant).
 - **Eligibility uses only `JOINED` participants** — an invitee who never accepts must not
   gate what locations are playable (rule 6 in "Eligibility" above). Similarly, "has everyone
-  guessed this round" and the final scoreboard both read `JOINED` participants only.
+  guessed this round" reads `JOINED` participants only. The final scoreboard reads everyone who
+  played (`played()`): `JOINED` players, then anyone who left or was removed once the game was
+  under way, marked with their `departure`.
 
 ### Real-time sync: `GameSessionConsumer`
 
@@ -483,7 +485,10 @@ completion marker regardless of which of the above set it.
 ### Leave and kick (added 2026-10-02, mirroring Trivia)
 
 `GameSessionParticipantStatus.LEFT` marks a participant who left, declined, or was removed by the
-host (`leave_session`, `kick_participant`). A `LEFT` row keeps its guesses and is history, not
+host (`leave_session`, `kick_participant`). A `JOINED` player who departs while the session is
+`ACTIVE` also gets a `departure` (`left` or `removed`, P198), which keeps them on the final
+scoreboard and the session in their history (`played()`, `in_history()`); a decline or a lobby
+departure leaves it blank. A `LEFT` row keeps its guesses and is history, not
 access: `GameSessionParticipantQuerySet.active()` excludes it, so every route that resolves a session
 through `SessionAccess` 404s for it, and `join_session` refuses it until a fresh `invite_to_session`.
 `_remove_participant` locks the session, then the open round, then the participant row - the round

@@ -30,6 +30,7 @@ from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.ratings import DEFAULT_MU, DEFAULT_PHI, DEFAULT_VOLATILITY, Glicko2RatingFields
+from urbanlens.dashboard.models.abstract.session_departure import SessionDeparture
 from urbanlens.dashboard.models.spotguessr.queryset import (
     GameRoundManager,
     GameSessionChatMessageManager,
@@ -197,10 +198,12 @@ class GameSessionParticipant(abstract.DashboardModel):
         status: INVITED until the profile accepts, then JOINED; LEFT once
             they leave or are removed. A solo session's host row is created
             directly as JOINED - there is no invite step when you're the only
-            player. Eligibility, "has everyone in this round guessed," and the
-            final scoreboard all read JOINED participants only (see
-            ``docs/designs/drafts/spotguessr.md``'s eligibility rule 6) - an
-            invitee who never accepts is not yet a player.
+            player. Eligibility and "has everyone in this round guessed" read
+            JOINED participants only (see ``docs/designs/drafts/spotguessr.md``'s
+            eligibility rule 6) - an invitee who never accepts is not yet a player.
+        departure: How a JOINED player left once the game was under way; blank
+            otherwise. The final scoreboard and the player's history keep these
+            rows (``GameSessionParticipantQuerySet.played``/``in_history``).
         joined_at: When this row was created. Despite the name, this is set
             for INVITED rows too (it's really "created_at" - kept as
             ``joined_at`` since every Phase 1 row really was a join, and a
@@ -216,6 +219,7 @@ class GameSessionParticipant(abstract.DashboardModel):
     """
 
     status = CharField(max_length=10, choices=GameSessionParticipantStatus.choices, default=GameSessionParticipantStatus.JOINED)
+    departure = CharField(max_length=10, choices=SessionDeparture.choices, blank=True, default="")
     total_points = PositiveIntegerField(default=0)
     rating_delta = FloatField(default=0.0)
     joined_at = DateTimeField(auto_now_add=True)

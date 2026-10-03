@@ -149,6 +149,24 @@ describe("summaryHeadline", () => {
     test("an empty participant list doesn't crash and falls back to the tie message", () => {
         expect(summaryHeadline([], true, 1)).toEqual({ heading: "It's a tie!", icon: "handshake" });
     });
+
+    test("a player who left cannot win, however many points they had", () => {
+        const withLeaver = [
+            { profile_id: 1, username: "alice", total_points: 500 },
+            { profile_id: 2, username: "bob", total_points: 300 },
+            { profile_id: 3, username: "quitter", total_points: 9000, departure: "left" as const },
+        ];
+        expect(summaryHeadline(withLeaver, true, 3)).toEqual({ heading: "alice wins!", icon: "emoji_events" });
+    });
+
+    test("a removed player does not break a tie between the finishers", () => {
+        const tiedWithRemoved = [
+            { profile_id: 1, username: "alice", total_points: 400 },
+            { profile_id: 2, username: "bob", total_points: 400 },
+            { profile_id: 3, username: "removed", total_points: 50, departure: "removed" as const },
+        ];
+        expect(summaryHeadline(tiedWithRemoved, true, 1)).toEqual({ heading: "It's a tie!", icon: "handshake" });
+    });
 });
 
 describe("easeOutQuad", () => {

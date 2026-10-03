@@ -2804,15 +2804,6 @@ Settings offers both rows, but nothing in `src/` sends either `NotificationType`
 - Both honour the existing row's in-app, email and text toggles, as every other producer does
   (`notification_text_alerts.PREFERENCE_TYPE_FOR`).
 
-## P198 — A player who leaves or is kicked mid-game disappears from the final scoreboard and from their own history
-
-`id: P198` · `status: open` · `updated: 2026-10-02` · `found by: the audit re-check (P19)`
-
-In SpotGuessr and Trivia, `session_summary` reads `participants.joined()` and `overview.participated_sessions`
-reads `.active()`, so a departed player drops out of both, though their points stay on their row. **Jess,
-2026-10-02:** list them on the end-of-game scoreboard marked "Left" (or "Removed" for a kick, if the row says so),
-with their points, and keep the game in their own history. They still lose the session's live view.
-
 ## P200 — A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown
 
 `id: P200` · `status: open` · `updated: 2026-10-02` · `found by: Jess's HRSH report`

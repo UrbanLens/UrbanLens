@@ -204,7 +204,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P182 | open | 2026-10-01 | A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P188 | open | 2026-10-02 | Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P197 | open | 2026-10-02 | "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P198 | open | 2026-10-02 | A player who leaves or is kicked mid-game disappears from the final scoreboard and from their own history | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P200 | open | 2026-10-02 | A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P201 | open | 2026-10-02 | An upload that meets a Garage quorum failure is a 500, and the photo is lost | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P202 | open | 2026-10-02 | The scheduled database backup cannot work on Kubernetes, and a restore turns it back on | [`docs/PROBLEMS.md`](PROBLEMS.md) |

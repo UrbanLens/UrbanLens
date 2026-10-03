@@ -18,6 +18,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
+from urbanlens.dashboard.models.abstract.session_departure import SessionDeparture, finishers_first
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.spotguessr.model import (
     GameRound,
@@ -882,7 +883,9 @@ def _remove_participant(session: GameSession, participant: GameSessionParticipan
             return
         was_joined = participant.status == GameSessionParticipantStatus.JOINED
         participant.status = GameSessionParticipantStatus.LEFT
-        participant.save(update_fields=["status", "updated"])
+        if was_joined and locked.status == GameSessionStatus.ACTIVE:
+            participant.departure = SessionDeparture.REMOVED if removed_by is not None else SessionDeparture.LEFT
+        participant.save(update_fields=["status", "departure", "updated"])
 
         new_host_profile_id = None
         if locked.host_profile_id == participant.profile_id:
@@ -979,10 +982,11 @@ def complete_session(session: GameSession) -> GameSession:
 
 
 def session_summary(session: GameSession) -> dict:
-    """A JSON-ready summary: rounds played, per-participant totals, and each
-    participant's net rating change and best round this session.
+    """A JSON-ready summary: rounds played, and each player's totals, net rating change and best round this session.
+
+    A player who left or was removed mid-game is listed with their ``departure``, after everyone who finished.
     """
-    participants = session.participants.joined().select_related("profile__user").order_by("-total_points")
+    participants = finishers_first(session.participants.played().select_related("profile__user").order_by("-total_points"))
 
     guesses_by_profile: dict[int, list[Guess]] = {}
     for guess in Guess.objects.filter(round__session=session).only("profile_id", "points", "date_points", "bonus_points", "distance_meters"):
@@ -1006,6 +1010,7 @@ def session_summary(session: GameSession) -> dict:
                 "rating_delta": round(participant.rating_delta, 1),
                 "best_round_points": (best.points + best.date_points + best.bonus_points) if best else None,
                 "best_round_distance_meters": best.distance_meters if best else None,
+                "departure": participant.departure or None,
             },
         )
 

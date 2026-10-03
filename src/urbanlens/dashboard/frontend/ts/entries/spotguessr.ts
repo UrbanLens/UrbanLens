@@ -6,6 +6,7 @@ import { getJson, postForm } from "../shared/session-request";
 import { clearFriendSelection, installFriendPicker, pickFriendsToInvite, selectedFriendIds } from "../shared/friend-picker";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
+import { departureBadge, rankFinalScoreboard, type Departure } from "../shared/game-scoreboard";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 import { createMapLayers, registerRedataLayers, tileLayer } from "../shared/map-layers";
@@ -150,6 +151,7 @@ interface SummaryParticipant {
     rating_delta?: number;
     best_round_points?: number | null;
     best_round_distance_meters?: number | null;
+    departure?: Departure | null;
 }
 
 interface SummaryPayload {
@@ -928,9 +930,10 @@ interface ScoreCardData {
     points: number;
     subtitle?: string;
     ratingDelta?: number | null;
+    departure?: Departure | null;
 }
 
-function renderScoreCard(data: ScoreCardData, rank?: number, animatePoints = false): HTMLElement {
+function renderScoreCard(data: ScoreCardData, rank: number | null, animatePoints = false): HTMLElement {
     const template = el<HTMLTemplateElement>("sg-score-card-template");
     const node = template.content.firstElementChild?.cloneNode(true);
     if (!node) throw new Error("SpotGuessr: score card template is empty");
@@ -961,7 +964,11 @@ function renderScoreCard(data: ScoreCardData, rank?: number, animatePoints = fal
     const nameEl = card.querySelector<HTMLElement>(".spotguessr-score-card-name");
     if (nameEl) nameEl.textContent = data.username;
     const subtitleEl = card.querySelector<HTMLElement>(".spotguessr-score-card-subtitle");
-    if (subtitleEl) subtitleEl.textContent = data.subtitle ?? "";
+    if (subtitleEl) {
+        subtitleEl.textContent = data.subtitle ?? "";
+        const badge = departureBadge(data.departure);
+        if (badge) subtitleEl.prepend(badge, " ");
+    }
     const pointsEl = card.querySelector<HTMLElement>(".spotguessr-score-card-points");
     if (pointsEl) {
         if (animatePoints) {
@@ -984,9 +991,9 @@ function renderScoreCard(data: ScoreCardData, rank?: number, animatePoints = fal
 // Solo sessions show "Your score: X" instead of a username-labeled card.
 function renderScoreCardList(container: HTMLElement, entries: ScoreCardData[], options: { solo: boolean; animatePoints?: boolean }): void {
     container.innerHTML = "";
-    const sorted = [...entries].sort((a, b) => b.points - a.points);
-    const [only] = sorted;
-    if (options.solo && sorted.length === 1 && only) {
+    const ranked = rankFinalScoreboard(entries);
+    const only = ranked[0]?.entry;
+    if (options.solo && ranked.length === 1 && only) {
         const item = document.createElement("li");
         item.className = "spotguessr-score-card spotguessr-score-card--solo";
         const scoreLine = document.createElement("span");
@@ -1015,7 +1022,7 @@ function renderScoreCardList(container: HTMLElement, entries: ScoreCardData[], o
         container.appendChild(item);
         return;
     }
-    sorted.forEach((entry, index) => container.appendChild(renderScoreCard(entry, index + 1, options.animatePoints)));
+    ranked.forEach(({ entry, rank }) => container.appendChild(renderScoreCard(entry, rank, options.animatePoints)));
 }
 
 function renderResultsList(results: RoundRevealResult[]): void {
@@ -1209,6 +1216,7 @@ function showSummary(summary: SummaryPayload): void {
             points: participant.total_points,
             ratingDelta: participant.rating_delta,
             subtitle: summaryBestRoundSubtitle(participant),
+            departure: participant.departure,
         })),
         { solo: !state.isMultiplayer, animatePoints: true },
     );

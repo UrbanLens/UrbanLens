@@ -41,7 +41,14 @@ from urbanlens.dashboard.models.spotguessr.model import (
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.media.images import downscale_stored_image
-from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session, start_solo_session
+from urbanlens.dashboard.services.spotguessr.session import (
+    GameConfig,
+    join_session,
+    kick_participant,
+    leave_session,
+    start_multiplayer_session,
+    start_solo_session,
+)
 
 _coordinate_counter = count()
 
@@ -451,6 +458,48 @@ class SpotGuessrSessionListTests(_SpotGuessrApiTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["session_id"], session.pk)
 
+    def _game_hosted_by_the_bystander(self) -> GameSession:
+        friendship = Friendship.request(self.other_profile, self.profile)
+        assert friendship is not None
+        friendship.accept()
+        session = start_multiplayer_session(self.other_profile, SpotGuessrMode.PHOTOS, GameConfig(), [self.profile])
+        join_session(session, self.profile)
+        GameSession.objects.filter(pk=session.pk).update(status=GameSessionStatus.ACTIVE)
+        session.refresh_from_db()
+        return session
+
+    def test_a_game_the_caller_left_mid_game_stays_listed_marked_left(self) -> None:
+        session = self._game_hosted_by_the_bystander()
+        leave_session(session, self.profile)
+
+        rows = {row["session_id"]: row for row in self._get("external_api:games.spotguessr.sessions").json()["results"]}
+
+        self.assertEqual(rows[session.pk]["departure"], "left")
+
+    def test_a_game_the_caller_was_removed_from_is_marked_removed(self) -> None:
+        session = self._game_hosted_by_the_bystander()
+        kick_participant(session, self.other_profile, self.profile)
+
+        rows = {row["session_id"]: row for row in self._get("external_api:games.spotguessr.sessions").json()["results"]}
+
+        self.assertEqual(rows[session.pk]["departure"], "removed")
+
+    def test_a_game_the_caller_still_plays_has_no_departure(self) -> None:
+        start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
+
+        row = self._get("external_api:games.spotguessr.sessions").json()["results"][0]
+
+        self.assertIsNone(row["departure"])
+
+    def test_a_departed_caller_still_cannot_open_the_game(self) -> None:
+        session = self._game_hosted_by_the_bystander()
+        leave_session(session, self.profile)
+
+        for name in ("detail", "summary", "round"):
+            with self.subTest(name=name):
+                response = self._get(f"external_api:games.spotguessr.sessions.{name}", session.pk)
+                self.assertEqual(response.status_code, 404)
+
 
 class SpotGuessrSummaryTests(_SpotGuessrApiTestCase):
     """The final scoreboard."""
@@ -472,6 +521,23 @@ class SpotGuessrSummaryTests(_SpotGuessrApiTestCase):
         self.assertNotIn("profile_id", participant)
         self.assertIn("rating_delta", participant)
         self.assertIn("best_round_points", participant)
+        self.assertIsNone(participant["departure"])
+
+    def test_a_player_who_left_is_on_the_summary_marked_left(self) -> None:
+        friendship = Friendship.request(self.profile, self.other_profile)
+        assert friendship is not None
+        friendship.accept()
+        session = start_multiplayer_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig(), [self.other_profile])
+        join_session(session, self.other_profile)
+        GameSession.objects.filter(pk=session.pk).update(status=GameSessionStatus.ACTIVE)
+        session.refresh_from_db()
+        leave_session(session, self.other_profile)
+
+        response = self._get("external_api:games.spotguessr.sessions.summary", session.pk)
+
+        self.assertEqual(response.status_code, 200)
+        departures = {row["profile_slug"]: row["departure"] for row in response.json()["participants"]}
+        self.assertEqual(departures, {self.profile.slug: None, self.other_profile.slug: "left"})
 
 
 class MultiplayerContainmentTests(_SpotGuessrApiTestCase):

@@ -18,6 +18,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
+from urbanlens.dashboard.models.abstract.session_departure import SessionDeparture, finishers_first
 from urbanlens.dashboard.models.trivia.model import (
     TriviaAnswer,
     TriviaAnswerMatchKind,
@@ -580,7 +581,9 @@ def _remove_participant(session: TriviaSession, participant: TriviaSessionPartic
             return
         was_joined = participant.status == TriviaSessionParticipantStatus.JOINED
         participant.status = TriviaSessionParticipantStatus.LEFT
-        participant.save(update_fields=["status", "updated"])
+        if was_joined and locked.status == TriviaSessionStatus.ACTIVE:
+            participant.departure = SessionDeparture.REMOVED if removed_by is not None else SessionDeparture.LEFT
+        participant.save(update_fields=["status", "departure", "updated"])
 
         new_host_profile_id = None
         if locked.host_profile_id == participant.profile_id:
@@ -681,8 +684,11 @@ def complete_session(session: TriviaSession) -> TriviaSession:
 
 
 def session_summary(session: TriviaSession) -> dict:
-    """A JSON-ready summary: rounds played and per-(joined)-participant totals."""
-    participants = session.participants.joined().select_related("profile__user").order_by("-total_points")
+    """A JSON-ready summary: rounds played and each player's total.
+
+    A player who left or was removed mid-game is listed with their ``departure``, after everyone who finished.
+    """
+    participants = finishers_first(session.participants.played().select_related("profile__user").order_by("-total_points"))
     return {
         "session_id": session.pk,
         "status": session.status,
@@ -694,6 +700,7 @@ def session_summary(session: TriviaSession) -> dict:
                 "username": participant.profile.user.username,
                 "avatar_url": participant.profile.avatar.url if participant.profile.avatar else None,
                 "total_points": participant.total_points,
+                "departure": participant.departure or None,
             }
             for participant in participants
         ],

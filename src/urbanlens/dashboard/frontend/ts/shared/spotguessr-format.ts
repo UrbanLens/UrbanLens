@@ -2,6 +2,8 @@
  * Pure (no DOM/Leaflet dependency) formatting and small decision logic for spotguessr.ts, pulled out specifically so it's unit-testable.
  */
 
+import type { Departure } from "./game-scoreboard";
+
 export type PanelName = "settings" | "lobby" | "game" | "summary" | "empty";
 
 const PANEL_NAMES: PanelName[] = ["settings", "lobby", "game", "summary", "empty"];
@@ -72,6 +74,7 @@ export interface SummaryParticipantLike {
     total_points: number;
     best_round_points?: number | null;
     best_round_distance_meters?: number | null;
+    departure?: Departure | null;
 }
 
 export function summaryBestRoundSubtitle(participant: SummaryParticipantLike): string | undefined {
@@ -82,7 +85,8 @@ export function summaryBestRoundSubtitle(participant: SummaryParticipantLike): s
 }
 
 // Ties (or a lone solo participant) both fall through to the neutral message -
-// only a multiplayer game with a strict leader gets the winner callout.
+// only a multiplayer game with a strict leader gets the winner callout. A player
+// who left mid-game cannot be that leader.
 export function summaryHeadline(
     participants: SummaryParticipantLike[],
     multiplayer: boolean,
@@ -90,7 +94,7 @@ export function summaryHeadline(
 ): { heading: string; icon: string } {
     if (!multiplayer) return { heading: "Nice work!", icon: "explore" };
 
-    const sorted = [...participants].sort((a, b) => b.total_points - a.total_points);
+    const sorted = participants.filter((participant) => !participant.departure).sort((a, b) => b.total_points - a.total_points);
     const [leader, runnerUp] = sorted;
     if (!leader || (runnerUp && runnerUp.total_points === leader.total_points)) {
         return { heading: "It's a tie!", icon: "handshake" };

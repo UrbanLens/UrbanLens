@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
@@ -92,6 +94,18 @@ class GameSessionParticipantQuerySet(abstract.DashboardQuerySet["GameSessionPart
         from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipantStatus
 
         return self.exclude(status=GameSessionParticipantStatus.LEFT)
+
+    def played(self) -> GameSessionParticipantQuerySet:
+        """Everyone who played: still joined, or left or removed once the game was under way."""
+        from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipantStatus
+
+        return self.filter(Q(status=GameSessionParticipantStatus.JOINED) | ~Q(departure=""))
+
+    def in_history(self) -> GameSessionParticipantQuerySet:
+        """Rows that keep their session in the profile's history: every active row, and every departure mid-game."""
+        from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipantStatus
+
+        return self.exclude(status=GameSessionParticipantStatus.LEFT, departure="")
 
 
 _GameSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(GameSessionParticipantQuerySet)

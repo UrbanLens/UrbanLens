@@ -26,6 +26,7 @@ from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.ratings import DEFAULT_MU, DEFAULT_PHI, DEFAULT_VOLATILITY, Glicko2RatingFields
+from urbanlens.dashboard.models.abstract.session_departure import SessionDeparture
 from urbanlens.dashboard.models.trivia.queryset import (
     PlayerTriviaRatingManager,
     TriviaAnswerManager,
@@ -307,10 +308,12 @@ class TriviaSessionParticipant(abstract.DashboardModel):
 
     ``total_points`` is a denormalized cache, kept in sync by
     ``services.trivia.session`` as answers are submitted, mirroring
-    ``GameSessionParticipant.total_points``.
+    ``GameSessionParticipant.total_points``. ``departure`` mirrors
+    ``GameSessionParticipant.departure``.
     """
 
     status = CharField(max_length=10, choices=TriviaSessionParticipantStatus.choices, default=TriviaSessionParticipantStatus.JOINED)
+    departure = CharField(max_length=10, choices=SessionDeparture.choices, blank=True, default="")
     total_points = PositiveIntegerField(default=0)
     joined_at = DateTimeField(auto_now_add=True)
 
