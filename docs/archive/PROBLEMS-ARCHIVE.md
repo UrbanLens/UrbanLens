@@ -20388,3 +20388,57 @@ and fails on any writable stock `serializers.JSONField`. The body is `DEEPLY_NES
 `tests/hypothesis/external_api_helpers.py`, part of `MALFORMED_JSON_BODIES` (every external API write route) and of
 the no-5xx write-route sweep, which found no further sites. Not covered: import files read in Celery
 (`services/import_export/import_data.py::_read_json`) fail the task rather than a request.
+
+## RESOLVED 2026-10-03: A source error is no longer cached as an empty answer, so an outage leaves sources to refetch rather than blank for seven days
+
+`id: P187` · `status: fixed` · `resolved: 2026-10-03`
+
+**What was wrong.** A `LocationCache` row marks its source fetched for `external_data_cache_days`, and many paths
+turned "could not ask" into an empty row: gateways and helpers that caught every failure and returned `None`/`[]`, and
+callers that cached whatever came back. Production (v0.8.0, 2026-10-02 01:00Z-05:40Z, every REData call from celery
+refused) wrote 203 empty rows: `cris_building_usn` 50, `redata_place_details` 50, `parcel_buildings` 48,
+`redata_building_attributes` 47, and one each for HRSH's `smithsonian`, `library_of_congress`, `internet_archive`,
+`web_search`, `redata_historic_registers` and `redata_site_features`.
+
+The writers, by path:
+
+- The hourly batch (`LocationCacheEnrichmentSource.enrich` caches `data or {}`): `CrisBuildingEnrichmentSource.fetch`
+  and `RedataPlaceDetailsEnrichmentSource.fetch` caught every gateway error and returned `None`. The CRIS panel's
+  `_fetch_now` did re-raise; the 50 rows came from the batch.
+- `fetch_parcel_buildings` swallowed REData's `source_error`, Overpass and the CRIS fallback, and returned `{}`.
+  `redata_building_attributes` re-raised its own outage but answers from the cached building list when there is one,
+  so the batch's next source read the empty `parcel_buildings` row as "no buildings".
+- `MediaProvider.get_media` (every name-searched archive) caught every exception per query and cached
+  `{"items": []}`.
+- `search_web` returned `[]` on `LocationContextUnavailableError`, which the page and `refresh_pin_web_search`
+  stored.
+- `applicable_providers` returned `[]` when REData's capability index was unreachable, so the historic-register and
+  site-feature panels cached an empty envelope.
+
+The registry sweep below found the same flaw in Nominatim, Wikipedia (article lookup and article media), Wikimedia,
+Flickr, Azure Maps, TIGERweb, LoopNet, the Wikipedia-media panel (which cached no images while the article lookup
+had not landed), and the street-address, Street View and satellite backfill markers, which the batch never revisits.
+
+**What fixed it.** `services/core/gateway.py::is_source_outage` says whether a failure means the upstream could not
+be asked: a connection failure, timeout, 5xx, 408/429, a rate-limiter refusal, or a gateway error whose
+`is_outage` says so. `PropertyRecordsUnavailableError.is_outage` is its reason in `TRANSIENT_REASONS`, and
+`LocationContextUnavailableError.is_outage` is false only for a request REData rejected (a 400). Every catch site
+above re-raises an outage and keeps treating a settled answer as one, so nothing is written and the panel or batch
+asks again. `RedataLocationContextGateway._get_envelope` now raises on an empty envelope REData marks incomplete,
+which extends the panels' existing rule to every envelope reader. A partial answer that found something is still
+cached, and a real empty answer still caches for the full term. `run_panel_fetch` and the batch log an outage as a
+warning, without a traceback.
+
+**Tests.** `tests/hypothesis/test_outage_not_cached_registry.py` reads every registered `LocationCache` panel and
+every enrichment source from the registries and runs each with the network refused, timed out, and answering 503,
+asserting that nothing is written and that a stale good row (shared and audience) is left as it was. It also runs one
+batch in registry order (the `parcel_buildings` to `redata_building_attributes` cascade), and fails a source that
+asked no upstream or was gated out unless an exemption names it. On the old code all seven of its tests that run
+sources failed: 16 panels and 8 enrichment sources wrote rows in every mode, and the batch wrote 9, the four REData
+sources from production among them. `tests/hypothesis/test_outage_not_cached_as_empty.py` adds a test per writer
+above, each beside a control showing a genuine empty answer is still cached, plus `is_source_outage` itself and the
+address backfill; 16 of its 38 tests failed on the old code, none of them a control. All pass after the fix.
+
+**Left open.** A fallback answer cached during an outage (Overpass buildings when REData was down) holds for the full
+term, as any partial answer does. Non-`LocationCache` stores were not swept: `Boundary.generated_at`, the satellite
+and street-view slide caches, and `GooglePlaceLinkEnrichmentSource`.
