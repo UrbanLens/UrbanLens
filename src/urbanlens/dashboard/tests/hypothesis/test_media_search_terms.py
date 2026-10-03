@@ -16,6 +16,7 @@ from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gate
     SmithsonianMediaProvider,
 )
 from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
+from urbanlens.dashboard.services.pins.search_names import search_names
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -69,7 +70,7 @@ class MediaPanelSourceSearchTermsRejectAddressDerivedTests(SimpleTestCase):
             official_name="1265 Section Rd",
         )
         pin = _pin(loc)
-        self.assertEqual(MediaPanelSource.search_terms(pin, _RejectingGateway()), [])
+        self.assertEqual(MediaPanelSource.search_terms(pin, _RejectingGateway(), search_names(pin).base), [])
 
     def test_address_derived_name_still_searched_when_flag_is_off(self) -> None:
         loc = _location(
@@ -80,7 +81,7 @@ class MediaPanelSourceSearchTermsRejectAddressDerivedTests(SimpleTestCase):
             official_name="1265 Section Rd",
         )
         pin = _pin(loc)
-        terms = MediaPanelSource.search_terms(pin, _BareGateway())
+        terms = MediaPanelSource.search_terms(pin, _BareGateway(), search_names(pin).base)
         self.assertNotEqual(terms, [])
 
     def test_real_landmark_name_is_not_rejected(self) -> None:
@@ -92,7 +93,7 @@ class MediaPanelSourceSearchTermsRejectAddressDerivedTests(SimpleTestCase):
             official_name="Riverside Mill",
         )
         pin = _pin(loc)
-        terms = MediaPanelSource.search_terms(pin, _RejectingGateway())
+        terms = MediaPanelSource.search_terms(pin, _RejectingGateway(), search_names(pin).base)
         self.assertNotEqual(terms, [])
         self.assertIn("Riverside Mill", terms[0])
 
@@ -109,8 +110,8 @@ class MediaPanelSourceSearchTermsIncludeAddressTests(SimpleTestCase):
             official_name="Riverside Mill",
         )
         pin = _pin(loc)
-        with_address = MediaPanelSource.search_terms(pin, _BareGateway())
-        without_address = MediaPanelSource.search_terms(pin, _NoAddressGateway())
+        with_address = MediaPanelSource.search_terms(pin, _BareGateway(), search_names(pin).base)
+        without_address = MediaPanelSource.search_terms(pin, _NoAddressGateway(), search_names(pin).base)
         self.assertIn("Mill St", with_address[0])
         self.assertNotIn("Mill St", without_address[0])
         self.assertIn("Riverside Mill", without_address[0])
@@ -232,7 +233,7 @@ class InternetArchiveMediaProviderRelevanceFlagsTests(SimpleTestCase):
             official_name="Summit Road",
         )
         pin = _pin(loc)
-        terms = MediaPanelSource.search_terms(pin, InternetArchiveMediaProvider())
+        terms = MediaPanelSource.search_terms(pin, InternetArchiveMediaProvider(), search_names(pin).base)
         self.assertEqual(terms, ["Summit Road Cincinnati OH"])
 
 
@@ -264,5 +265,5 @@ class SmithsonianMediaProviderRelevanceFlagsTests(SimpleTestCase):
             official_name="Summit Road",
         )
         pin = _pin(loc)
-        terms = MediaPanelSource.search_terms(pin, SmithsonianMediaProvider())
+        terms = MediaPanelSource.search_terms(pin, SmithsonianMediaProvider(), search_names(pin).base)
         self.assertEqual(terms, ["Summit Road Cincinnati OH"])

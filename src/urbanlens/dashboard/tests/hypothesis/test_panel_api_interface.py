@@ -293,12 +293,13 @@ class PanelReadinessTests(TestCase):
     def test_cache_backed_sources_cost_a_constant_number_of_queries(self) -> None:
         """The whole point: readiness for N panels is not N queries.
 
-        One query for the site's cache-age setting, one for the location's fresh rows, and one more for the
-        payloads of the panels that opt into a content check (``inspects_content``) - those cannot answer "is
-        there anything to show" from a row's existence alone."""
+        One query for the pin's own names (which cached searches it reads), one for the site's cache-age setting,
+        one for the location's fresh rows, and one more for the payloads of the panels that opt into a content
+        check (``inspects_content``) - those cannot answer "is there anything to show" from a row's existence
+        alone."""
         cache_backed = [source for source in panel_sources().values() if hasattr(source, "cache_source")]
         self.assertGreater(len(cache_backed), 5)
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             panel_readiness(self.pin, cache_backed)
 
     def test_the_content_check_does_not_scale_with_how_many_panels_use_it(self) -> None:
@@ -312,7 +313,7 @@ class PanelReadinessTests(TestCase):
         inspecting = [source for source in cache_backed if source.inspects_content]
         self.assertGreaterEqual(len(inspecting), 2, "this asserts nothing unless several panels opt in")
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             panel_readiness(self.pin, cache_backed)
 
     def test_pin_without_a_location_is_ready_for_nothing(self) -> None:

@@ -4,31 +4,34 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
-from datetime import timedelta
 from enum import StrEnum
+import json
 import logging
 import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.cache import cache
-from django.utils import timezone
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
+from urbanlens.dashboard.services.pins.search_names import SHARED_SCOPE, search_names
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+    from datetime import datetime
 
     from django.contrib.auth.base_user import AbstractBaseUser
     from django.contrib.auth.models import AnonymousUser
 
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.subscriptions import SiteFeature
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.pins.search_names import SearchNames, SearchScope
 
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
 from urbanlens.dashboard.services.sandbox.queues import Queue
@@ -114,6 +117,21 @@ class OverviewSummary:
     fields: list[dict[str, str]] = field(default_factory=list)
     footer_link: dict[str, str] | None = None
     notes: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class CachedEntry:
+    """What a pin reads from one cache-backed source: its rows' payloads, combined.
+
+    Attributes:
+        data: The combined payload; ``{}`` means "we searched and found nothing".
+        query_key: The queries that filled it, joined.
+        rows: The rows it was combined from, the shared row first, for readers that judge each search on its own.
+    """
+
+    data: dict
+    query_key: str
+    rows: tuple[LocationCache, ...]
 
 
 #: Keys of an ``InfoPanelSource.render_context`` result that carry panel *data* rather than template
@@ -420,14 +438,46 @@ class LocationCachePanelSource(PanelSource, ABC):
         """
         return None
 
+    def search_scopes(self, pin: Pin, names: SearchNames | None = None) -> tuple[SearchScope, ...]:
+        """The cached searches ``pin`` reads from this source, the shared one first.
+
+        Args:
+            pin: The pin whose panel is being read or fetched.
+            names: ``search_names(pin)``, when the caller already has it.
+
+        Returns:
+            The one shared row, for a source whose fetch uses no names.
+        """
+        return (SHARED_SCOPE,)
+
+    def merge_cached(self, payloads: Sequence[dict]) -> dict:
+        """Combine the payloads of the rows a pin reads into one, the shared row's first.
+
+        Args:
+            payloads: One payload per :meth:`search_scopes` entry, in that order.
+
+        Returns:
+            The combined payload; for a single-row source, that row's.
+        """
+        return payloads[0] if payloads else {}
+
+    def cached_entry(self, pin: Pin) -> CachedEntry | None:
+        """What ``pin`` reads from this source, or None while any of its rows is missing or stale.
+
+        Args:
+            pin: The pin whose panel is being read.
+
+        Returns:
+            The combined entry.
+        """
+        return cached_entries(pin, [self])[self.key]
+
     def is_ready(self, pin: Pin) -> bool:
         """True when this source has something to show for ``pin``."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        row = LocationCache.get_fresh(pin.location, self.cache_source)
-        if row is None:
+        entry = self.cached_entry(pin)
+        if entry is None:
             return False
-        return self.has_content(row.data) if self.inspects_content else True
+        return self.has_content(entry.data) if self.inspects_content else True
 
     def cached_data(self, pin: Pin) -> dict | None:
         """This source's fresh cached payload, or None when nothing has landed.
@@ -436,14 +486,10 @@ class LocationCachePanelSource(PanelSource, ABC):
             pin: The pin whose panel is being read.
 
         Returns:
-            The row's ``data`` dict - possibly ``{}``, which means "we searched and found nothing", a real answer - or None when no fresh row exists (never fetched, or gone stale).
+            The rows' combined ``data`` - possibly ``{}``, which means "we searched and found nothing", a real answer - or None when a row is missing (never fetched, or gone stale).
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        if pin.location_id is None:
-            return None
-        row = LocationCache.get_fresh(pin.location, self.cache_source)
-        return None if row is None else (row.data or {})
+        entry = self.cached_entry(pin)
+        return None if entry is None else entry.data
 
 
 class InfoPanelSource(LocationCachePanelSource, ABC):
@@ -664,8 +710,105 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         return next((document for document in self.source_documents(data, site_scope=site_scope) if document.document_id == document_id), None)
 
 
-class MediaPanelSource(GalleryMediaSource):
-    """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC)."""
+#: The key of a name-built row's payload naming the names its search was built from.
+SEARCH_NAMES_KEY = "search_names"
+
+
+class NameSearchSource(LocationCachePanelSource, ABC):
+    """A cache-backed panel whose upstream query is built from the place's names.
+
+    The shared row is built from shared names only. A pin with custom names also reads a row cached for exactly that
+    set (see ``services.pins.search_names``), fetched once for every pin holding it. Each row keeps the names its
+    search was built from under :data:`SEARCH_NAMES_KEY`.
+
+    Attributes:
+        results_key: The payload key holding the results the rows are combined on.
+        results_per_row: How many of each row's results the combined payload keeps; None keeps them all.
+    """
+
+    results_key: ClassVar[str] = "items"
+    results_per_row: ClassVar[int | None] = None
+
+    def search_scopes(self, pin: Pin, names: SearchNames | None = None) -> tuple[SearchScope, ...]:
+        """The shared search, then the search for ``pin``'s custom names when it has any."""
+        return (names or search_names(pin)).scopes
+
+    def scope(self, pin: Pin) -> str:
+        """Location- and audience-scoped, so each name set's fetch is single-flight and suppressed on its own."""
+        audience = search_names(pin).audience
+        return f"loc{pin.location_id}:{audience}" if audience else f"loc{pin.location_id}"
+
+    def result_identity(self, result: object) -> str:
+        """What makes two results the same one, for combining rows.
+
+        Args:
+            result: One entry of a payload's :attr:`results_key` list.
+
+        Returns:
+            Its URL when it has one, else its JSON.
+        """
+        if isinstance(result, dict):
+            for key in ("url", "link", "thumbnail"):
+                if value := result.get(key):
+                    return str(value)
+        return json.dumps(result, sort_keys=True, default=str)
+
+    def merge_cached(self, payloads: Sequence[dict]) -> dict:
+        """The shared row's payload with every row's results, in row order, each result once."""
+        merged = dict(payloads[0]) if payloads else {}
+        merged.pop(SEARCH_NAMES_KEY, None)
+        seen: set[str] = set()
+        results: list = []
+        for payload in payloads:
+            for result in (payload.get(self.results_key) or [])[: self.results_per_row]:
+                identity = self.result_identity(result)
+                if identity not in seen:
+                    seen.add(identity)
+                    results.append(result)
+        merged[self.results_key] = results
+        return merged
+
+    def fetch(self, pin: Pin) -> None:
+        """Fetch each of ``pin``'s searches that has no fresh row, each once however many pins ask at a time."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.core.coalesce import coalesced
+
+        if pin.location is None:
+            return
+        for scope in self.search_scopes(pin):
+            if LocationCache.get_fresh(pin.location, self.cache_source, scope.audience) is not None:
+                continue
+            key = f"ulfetch:search:{self.key}:loc{pin.location_id}:{scope.audience or 'shared'}"
+            coalesced(key, lambda scope=scope: self.fetch_scope(pin, scope), ttl=FAILURE_SKIP_TTL_SECONDS)
+
+    @abstractmethod
+    def fetch_scope(self, pin: Pin, scope: SearchScope) -> None:
+        """Run one search and cache it under ``scope.audience``, through :meth:`store`.
+
+        A scope whose names build no query is cached as an empty answer without asking the upstream; an outage is
+        not cached at all.
+
+        Args:
+            pin: The pin whose panel is being fetched; its address and locality are shared context.
+            scope: The search to run.
+        """
+
+    def store(self, pin: Pin, scope: SearchScope, data: dict, query_key: str) -> None:
+        """Cache one search's payload under its audience, with the names that built it.
+
+        Args:
+            pin: The pin whose Location the row belongs to.
+            scope: The search that produced ``data``.
+            data: The payload.
+            query_key: The query sent.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        LocationCache.set(pin.location, self.cache_source, {**data, SEARCH_NAMES_KEY: scope.provenance()}, query_key=query_key[:255], audience=scope.audience)
+
+
+class GatewayMediaPanelSource(GalleryMediaSource):
+    """A Media gallery provider backed by one :class:`MediaProvider` gateway."""
 
     def __init__(self, key: str, cache_source: str, gateway_factory) -> None:
         """Bind this source to one media provider.
@@ -676,7 +819,7 @@ class MediaPanelSource(GalleryMediaSource):
                 LocationCache source).
             gateway_factory: Zero-argument callable building the gateway.
         """
-        # Per-instance rather than ClassVar: three providers share this class.
+        # Per-instance rather than ClassVar: several providers share this class.
         self.key = key
         self.cache_source = cache_source
         self._gateway_factory = gateway_factory
@@ -685,29 +828,38 @@ class MediaPanelSource(GalleryMediaSource):
         """Build this provider's gateway instance."""
         return self._gateway_factory()
 
+    def media_items(self, data: dict) -> list[MediaItem]:
+        """Rebuild ``MediaItem``s from this provider's cached ``{"items": [...]}``, less any the provider no longer admits."""
+        gateway = self.make_gateway()
+        items = (MediaItem(**item) for item in (data or {}).get("items", []))
+        return [item for item in items if gateway.admits(item)]
+
+
+class MediaPanelSource(NameSearchSource, GatewayMediaPanelSource):
+    """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC), searched by the place's names."""
+
     @staticmethod
-    def search_terms(pin: Pin, gateway: MediaProvider) -> list[str]:
-        """Candidate search queries for this pin, most specific first.
+    def search_terms(pin: Pin, gateway: MediaProvider, scope: SearchScope) -> list[str]:
+        """Candidate search queries for one of this pin's searches, most specific first.
 
         Args:
             pin: The pin to build search queries for.
             gateway: The provider gateway (controls quoting/country flags).
+            scope: The search, whose names the queries use.
 
         Returns:
             Ordered, de-duplicated list of query strings; may be empty.
         """
-        if gateway.reject_address_derived_names and pin.location is not None:
+        if gateway.reject_address_derived_names and pin.location is not None and scope.names:
             from urbanlens.dashboard.services.locations.naming import is_address_derived_name
 
-            fallback_name = pin.meaningful_official_name or pin.meaningful_name
-            # A pin with no real landmark name falls back to its raw street address as the "name" -
-            # a query built from that has no genuine narrowing power (just a house number and a
-            # generic street-type word), so a provider whose relevance ranking treats query words as
-            # independent OR terms is skipped entirely rather than fed a guaranteed-noisy query (see
-            if fallback_name and is_address_derived_name(fallback_name, pin.location):
+            # A query built from a raw street address has no narrowing power for a provider whose relevance
+            # ranking treats query words as independent OR terms, so such a provider is skipped instead.
+            if is_address_derived_name(scope.names[0], pin.location):
                 return []
 
         search_term = pin.get_unique_search_name(
+            scope,
             include_country=gateway.search_with_country,
             quote_name=gateway.quote_name,
             include_address=gateway.include_address,
@@ -718,6 +870,7 @@ class MediaPanelSource(GalleryMediaSource):
         terms = [search_term]
         if gateway.multi_query:
             narrow_term = pin.get_unique_search_name(
+                scope,
                 include_country=gateway.search_with_country,
                 quote_name=gateway.quote_name,
                 include_address=False,
@@ -727,29 +880,21 @@ class MediaPanelSource(GalleryMediaSource):
                 terms.append(narrow_term)
         return terms
 
-    def fetch(self, pin: Pin) -> None:
-        """Fetch this provider's media; ``get_media`` persists to LocationCache."""
+    def fetch_scope(self, pin: Pin, scope: SearchScope) -> None:
+        """Fetch this provider's media for one search; ``get_media`` persists to LocationCache."""
         gateway = self.make_gateway()
-        terms = self.search_terms(pin, gateway)
+        terms = self.search_terms(pin, gateway, scope)
         if not terms:
-            from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-            LocationCache.set(pin.location, self.cache_source, {"items": []}, query_key="")
+            self.store(pin, scope, {"items": []}, query_key="")
             return
-        gateway.get_media(pin.location, terms)
+        gateway.get_media(pin.location, terms, audience=scope.audience, search_names=scope.provenance())
 
     def gate(self, pin: Pin) -> bool:
         """Geo-restricted providers and pins with no usable search name are skipped."""
         gateway = self.make_gateway()
         if gateway.geo_boundary is not None and not gateway.geo_boundary.contains(pin.effective_latitude, pin.effective_longitude):
             return False
-        return bool(self.search_terms(pin, gateway))
-
-    def media_items(self, data: dict) -> list[MediaItem]:
-        """Rebuild ``MediaItem``s from this provider's cached ``{"items": [...]}``, less any the provider no longer admits."""
-        gateway = self.make_gateway()
-        items = (MediaItem(**item) for item in (data or {}).get("items", []))
-        return [item for item in items if gateway.admits(item)]
+        return any(self.search_terms(pin, gateway, scope) for scope in self.search_scopes(pin))
 
 
 class BoundaryPanelSource(PanelSource):
@@ -790,7 +935,7 @@ class BoundaryPanelSource(PanelSource):
 
         if pin.location_id is None or self.is_ready(pin):
             return
-        generate_location_boundaries(pin.location, name=pin.effective_name)
+        generate_location_boundaries(pin.location)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The pin's effective property and building geometry as GeoJSON.
@@ -1085,21 +1230,68 @@ def document_panel_sources() -> list[DocumentPanelSource]:
     return [source for source in panel_sources().values() if isinstance(source, DocumentPanelSource)]
 
 
-def _fresh_location_cache_sources(pin: Pin) -> set[str]:
-    """Every ``LocationCache.source`` that has a non-stale row for this pin's location.
+def _scopes_by_source(pin: Pin, sources: Sequence[LocationCachePanelSource]) -> dict[str, tuple[SearchScope, ...]]:
+    """Each source's cached searches for ``pin``, splitting the pin's names at most once."""
+    names = search_names(pin) if any(isinstance(source, NameSearchSource) for source in sources) else None
+    return {source.key: source.search_scopes(pin, names) for source in sources}
+
+
+def _fresh_location_cache_keys(pin: Pin, audiences: Iterable[str], since: datetime) -> set[tuple[str, str]]:
+    """Every ``(source, audience)`` of these audiences with a non-stale row at this pin's location.
 
     Args:
         pin: The pin whose location's cache rows are being examined.
+        audiences: The audiences to look at.
+        since: ``LocationCache.fresh_since()``.
 
     Returns:
-        The set of fresh source names; empty when the pin has no location."""
+        The fresh keys; empty when the pin has no location."""
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
-    from urbanlens.dashboard.models.site_settings import SiteSettings
 
     if pin.location_id is None:
         return set()
-    cutoff = timezone.now() - timedelta(days=SiteSettings.get_current().external_data_cache_days)
-    return set(LocationCache.objects.filter(location_id=pin.location_id, updated__gte=cutoff).values_list("source", flat=True))
+    rows = LocationCache.objects.filter(location_id=pin.location_id, audience__in=list(audiences), updated__gte=since)
+    return set(rows.values_list("source", "audience"))
+
+
+def _entries(pin: Pin, sources: Sequence[LocationCachePanelSource], scopes: dict[str, tuple[SearchScope, ...]], since: datetime | None = None) -> dict[str, CachedEntry | None]:
+    """:func:`cached_entries`, for a caller that has already worked out each source's scopes."""
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+    if pin.location_id is None:
+        return {source.key: None for source in sources}
+    audiences = {scope.audience for source in sources for scope in scopes[source.key]}
+    rows = LocationCache.fresh_rows(pin.location_id, {source.cache_source for source in sources}, audiences, since)
+    entries: dict[str, CachedEntry | None] = {}
+    for source in sources:
+        found = [rows.get((source.cache_source, scope.audience)) for scope in scopes[source.key]]
+        present = [row for row in found if row is not None]
+        if not present or len(present) < len(found):
+            entries[source.key] = None
+            continue
+        entries[source.key] = CachedEntry(
+            data=source.merge_cached([row.data or {} for row in present]),
+            query_key=" || ".join(row.query_key for row in present if row.query_key),
+            rows=tuple(present),
+        )
+    return entries
+
+
+def cached_entries(pin: Pin, sources: Sequence[LocationCachePanelSource]) -> dict[str, CachedEntry | None]:
+    """What ``pin`` reads from each source, in one query.
+
+    A pin reads the shared row and, for a name-built source, the row of its own name set, never another's.
+
+    Args:
+        pin: The pin whose panels are being read.
+        sources: The cache-backed sources to read.
+
+    Returns:
+        Source key to its combined entry, or to None while any row it needs is missing or stale.
+    """
+    if pin.location_id is None:
+        return {source.key: None for source in sources}
+    return _entries(pin, sources, _scopes_by_source(pin, sources))
 
 
 def gate_allows(source: PanelSource, pin: Pin) -> bool:
@@ -1137,24 +1329,22 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> d
     bespoke = [source for source in resolved if not isinstance(source, (LocationCachePanelSource, SlidesPanelSource))]
 
     if cache_backed:
-        fresh_sources = _fresh_location_cache_sources(pin)
-        # Panels that opt into a content check need their payload, which the set-of-names query
-        # above deliberately does not carry.
-        # Fetched in one extra query covering only those sources, so the common panel (whose answer
-        # is "a fresh row exists") still costs nothing more.
-        inspecting = [source for source in cache_backed if source.inspects_content and source.cache_source in fresh_sources]
-        payloads: dict[str, dict | None] = {}
-        if inspecting:
-            from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-            payloads = dict(
-                LocationCache.objects.filter(location_id=pin.location_id, source__in=[source.cache_source for source in inspecting]).values_list("source", "data"),
-            )
+        scopes = _scopes_by_source(pin, cache_backed)
+        since = LocationCache.fresh_since()
+        fresh = _fresh_location_cache_keys(pin, {scope.audience for source_scopes in scopes.values() for scope in source_scopes}, since)
+        landed = {source.key: all((source.cache_source, scope.audience) in fresh for scope in scopes[source.key]) for source in cache_backed}
+        # Panels that opt into a content check need their payload, which the key query above deliberately does not
+        # carry; fetched in one extra query covering only those sources.
+        inspecting = [source for source in cache_backed if source.inspects_content and landed[source.key]]
+        entries = _entries(pin, inspecting, scopes, since) if inspecting else {}
         for cache_source in cache_backed:
-            fresh = cache_source.cache_source in fresh_sources
-            if fresh and cache_source.inspects_content:
-                fresh = cache_source.has_content(payloads.get(cache_source.cache_source))
-            readiness[cache_source.key] = fresh
+            fresh_enough = landed[cache_source.key]
+            if fresh_enough and cache_source.inspects_content:
+                entry = entries.get(cache_source.key)
+                fresh_enough = cache_source.has_content(entry.data if entry is not None else None)
+            readiness[cache_source.key] = fresh_enough
 
     if slide_backed:
         ready_keys = {slide_source.key: slide_source.ready_key(pin) for slide_source in slide_backed}

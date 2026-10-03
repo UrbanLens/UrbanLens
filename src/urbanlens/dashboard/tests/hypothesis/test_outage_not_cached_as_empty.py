@@ -20,7 +20,9 @@ class SearxngImageOutageTests(TestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.profile = baker.make(User).profile
         location = baker.make(Location, latitude=41.73, longitude=-73.92, official_name="Hudson River State Hospital")
-        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name="HRSH")
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=location, parent_pin=None, name="Hudson River State Hospital"
+        )
 
     def _source(self):
         from urbanlens.dashboard.plugins.builtin.searxng_images import SearxngImageMediaSource

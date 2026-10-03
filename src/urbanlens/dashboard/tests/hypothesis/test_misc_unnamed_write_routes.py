@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.pins.search_names import search_names
 
 _SQUARE = {
     "type": "Polygon",
@@ -213,7 +214,9 @@ class PinWebSearchRefreshRouteTests(_Owners):
             self.location,
             "web_search",
             {"results": [{"title": "Old result", "link": "https://example.com/old"}]},
-            query_key=self.pin.get_unique_search_name(quote_name=True, quote_locality=True),
+            query_key=self.pin.get_unique_search_name(
+                search_names(self.pin).base, quote_name=True, quote_locality=True
+            ),
         )
         self.search = self.enterContext(
             mock.patch(

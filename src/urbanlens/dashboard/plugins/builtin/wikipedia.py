@@ -10,7 +10,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
-from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, MediaPanelSource
+from urbanlens.dashboard.services.pins.external_data import GatewayMediaPanelSource, LocationCachePanelSource
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -273,7 +273,7 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
         return True
 
 
-class WikipediaMediaPanelSource(MediaPanelSource):
+class WikipediaMediaPanelSource(GatewayMediaPanelSource):
     """Media panel backed by the pin's own matched Wikipedia article, not a generic name search - see ``WikipediaMediaGateway``.
     The "search term" ``fetch`` uses is the exact article title from the Wikipedia summary panel's own cache, so this naturally no-ops for any pin without a confidently-matched article - there's nothing to read images from yet."""
 

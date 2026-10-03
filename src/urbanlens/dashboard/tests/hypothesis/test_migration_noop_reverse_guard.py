@@ -62,6 +62,10 @@ REVIEWED: dict[str, str] = {
         "or onto none, and drops their parcel-buildings cache. A reverse leaves ordinary place links and unstamped "
         "Locations, which the old code reads and re-resolves; the cache is refetched."
     ),
+    "0038_location_cache_drop_name_built_searches.py": (
+        "drop_name_built_searches deletes cached name-built search rows, which may hold results found by someone's "
+        "own names. They are a cache; the old code refetches them."
+    ),
 }
 
 

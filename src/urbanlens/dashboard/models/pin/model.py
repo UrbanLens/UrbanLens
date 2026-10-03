@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from django.db.models.fetch_modes import FetchMode
 
     from urbanlens.dashboard.models.labels.model import Label
+    from urbanlens.dashboard.services.pins.search_names import SearchScope
 
 logger = logging.getLogger(__name__)
 
@@ -570,11 +571,13 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 names.append(candidate)
         return names
 
-    def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True, quote_locality: bool = False) -> str | None:
+    def get_unique_search_name(self, scope: SearchScope, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True, quote_locality: bool = False) -> str | None:
         """Name to use when searching for this location in external APIs.
         Address components fall back to the linked Location's geocoded address when the pin has none of its own, since a Location-linked pin's own address fields are typically blank (see ``effective_latitude``).
 
         Args:
+            scope: The search being built (see ``services.pins.search_names``); its first name is searched for, with
+                its nearest context name when the search has one.
             include_country: Whether to append the country to the query.
             quote_name: Whether to wrap the name in quotes for an exact-phrase search.
             include_address: Whether to include the street address. Some search
@@ -591,9 +594,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
                 this (other callers - Wikipedia, LoopNet, NPS, GDELT, etc. -
                 have their own tuned per-service defaults and are left as-is).
         """
-        name = self.meaningful_official_name or self.meaningful_name
-        if not name:
+        if not scope.names:
             return None
+        name = scope.names[0]
 
         address_basic = self.effective_address_basic
         city = self.effective_city
@@ -602,8 +605,8 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         country = self.effective_country
 
         parts = [f'"{name}"' if quote_name else name]
-        if ancestor_names := self.ancestor_search_names():
-            ancestor_name = ancestor_names[0]
+        if scope.context:
+            ancestor_name = scope.context[0]
             if ancestor_name.casefold() not in name.casefold():
                 parts.append(f'"{ancestor_name}"' if quote_name else ancestor_name)
 

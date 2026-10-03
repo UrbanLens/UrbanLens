@@ -7,12 +7,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
-from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
+from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, NameSearchSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
     from urbanlens.dashboard.services.pins.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.search_names import SearchScope
 
 #: Fixed subject-matter clause: at least one of these words must appear, so a place name that
 #: coincides with an operating business/brand doesn't flood the gallery with irrelevant marketing
@@ -80,30 +81,16 @@ def _or_group(terms: list[str]) -> str:
     return "(" + " OR ".join(f'"{term}"' for term in terms) + ")"
 
 
-def build_image_query(pin: Pin) -> str | None:
-    """Build the aggressive image-search query for a pin, or ``None`` if unbuildable.
+def build_image_query(pin: Pin, scope: SearchScope) -> str | None:
+    """Build the aggressive image-search query for one of a pin's searches, or ``None`` if unbuildable.
 
     Args:
-        pin: The pin whose place is being searched.
+        pin: The pin whose place is being searched; it supplies the area terms.
+        scope: The search, whose names and context the query uses.
 
     Returns:
-        The grouped query string, or ``None`` when the pin has no meaningful name to search on (the provider then stays quietly absent)."""
-    from urbanlens.dashboard.models.aliases.model import AliasType
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
-    aliases: list[str] = []
-    for name in (pin.meaningful_official_name, pin.meaningful_name):
-        if name:
-            aliases.append(name)
-    aliases.extend(pin.aliases.exclude(kind=AliasType.NICKNAME).values_list("name", flat=True))
-    if pin.location_id is not None:
-        wiki = Wiki.objects.filter(location_id=pin.location_id).first()
-        if wiki is not None:
-            if wiki.name:
-                aliases.append(wiki.name)
-            aliases.extend(wiki.aliases.exclude(kind=AliasType.NICKNAME).values_list("name", flat=True))
-
-    return assemble_image_query(aliases, _area_terms(pin), pin.ancestor_search_names())
+        The grouped query string, or ``None`` when the search has no meaningful name (the provider then stays quietly absent)."""
+    return assemble_image_query(list(scope.names), _area_terms(pin), list(scope.context))
 
 
 def _area_terms(pin: Pin) -> list[str]:
@@ -121,26 +108,32 @@ def _area_terms(pin: Pin) -> list[str]:
     return [term for term in (broad, municipality) if term]
 
 
-class SearxngImageMediaSource(GalleryMediaSource):
+class SearxngImageMediaSource(NameSearchSource, GalleryMediaSource):
     """Web-image search results for a pin's place, via REData's web-search endpoint."""
 
     key = "searxng_images"
     cache_source = "searxng_images"
     icon = "travel_explore"
     title = "Web Images"
+    results_per_row = _MAX_IMAGES
 
     def gate(self, pin: Pin) -> bool:
         """Needs REData configured and a buildable relevance query."""
-        return redata_configured() and build_image_query(pin) is not None
+        return redata_configured() and any(build_image_query(pin, scope) is not None for scope in self.search_scopes(pin))
 
-    def fetch(self, pin: Pin) -> None:
-        """Run the REData image search for the pin's relevance query and cache it."""
+    def result_identity(self, result: object) -> str:
+        """A web image is the picture itself."""
+        if isinstance(result, dict) and result.get("thumbnail"):
+            return str(result["thumbnail"])
+        return super().result_identity(result)
+
+    def fetch_scope(self, pin: Pin, scope: SearchScope) -> None:
+        """Run the REData image search for one of the pin's relevance queries and cache it."""
         import logging
 
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataSearchGateway
 
-        query = build_image_query(pin)
+        query = build_image_query(pin, scope)
         results: list[dict] = []
         if query:
             try:
@@ -149,7 +142,7 @@ class SearxngImageMediaSource(GalleryMediaSource):
                 # An outage must not be written to the cache.
                 logging.getLogger(__name__).warning("REData image search failed for %r, leaving it unfetched to retry: %s", query, exc)
                 return
-        LocationCache.set(pin.location, self.cache_source, {"items": results, "query": query or ""}, query_key=query or "")
+        self.store(pin, scope, {"items": results[:_MAX_IMAGES], "query": query or ""}, query_key=query or "")
 
     def media_items(self, data: dict) -> list[MediaItem]:
         """Rebuild ``MediaItem``s from the cached REData image results."""
@@ -164,7 +157,7 @@ class SearxngImageMediaSource(GalleryMediaSource):
                 source="Web Search",
                 page_url=item.get("link") or item["thumbnail"],
             )
-            for item in items[:_MAX_IMAGES]
+            for item in items
             if item.get("thumbnail")
         ]
 

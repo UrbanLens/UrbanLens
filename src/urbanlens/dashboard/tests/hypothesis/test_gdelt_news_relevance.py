@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.plugins.builtin.gdelt import GdeltPanelSource
 from urbanlens.dashboard.services.pins.news_query import MAX_QUERY_CHARACTERS, NewsQuery
+from urbanlens.dashboard.services.pins.search_names import search_names
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
@@ -112,29 +113,40 @@ def _hrsh_pin(*, city: str | None = "Poughkeepsie", state: str | None = "NY", co
     return pin
 
 
+def _shared_query(pin: Pin) -> NewsQuery | None:
+    return NewsQuery.for_pin(pin, search_names(pin).base)
+
+
+def _own_query(pin: Pin) -> NewsQuery | None:
+    own = search_names(pin).own
+    return None if own is None else NewsQuery.for_pin(pin, own)
+
+
 class NewsQueryTests(TestCase):
     """What the News panel sends to GDELT for a pin."""
 
     def test_queries_the_places_names_and_locality_not_its_street(self) -> None:
-        query = NewsQuery.for_pin(_hrsh_pin())
+        pin = _hrsh_pin()
+        shared, own = _shared_query(pin), _own_query(pin)
 
-        self.assertIsNotNone(query)
-        assert query is not None
-        text = query.gdelt_query()
-        self.assertIn('"Hudson River State Hospital"', text)
-        self.assertRegex(text, r"\bHRSH\b")
-        self.assertRegex(text, r"\bPoughkeepsie\b")
-        self.assertNotIn("Courtyard", text)
+        assert shared is not None
+        assert own is not None
+        self.assertIn('"Hudson River State Hospital"', shared.gdelt_query())
+        self.assertNotRegex(shared.gdelt_query(), r"(?i)\bHRSH\b")
+        self.assertRegex(own.gdelt_query(), r"(?i)\bHRSH\b")
+        for text in (shared.gdelt_query(), own.gdelt_query()):
+            self.assertRegex(text, r"\bPoughkeepsie\b")
+            self.assertNotIn("Courtyard", text)
 
     def test_single_words_are_not_quoted(self) -> None:
         """GDELT answers a quoted one-word phrase with "The specified phrase is too short." instead of results."""
-        query = NewsQuery.for_pin(_hrsh_pin())
-
-        assert query is not None
-        self.assertIsNone(re.search(r'"\w+"', query.gdelt_query()), query.gdelt_query())
+        pin = _hrsh_pin()
+        for query in (_shared_query(pin), _own_query(pin)):
+            assert query is not None
+            self.assertIsNone(re.search(r'"\w+"', query.gdelt_query()), query.gdelt_query())
 
     def test_restricts_language_and_source_country(self) -> None:
-        query = NewsQuery.for_pin(_hrsh_pin())
+        query = _shared_query(_hrsh_pin())
 
         assert query is not None
         self.assertIn("sourcelang:english", query.gdelt_query())
@@ -142,7 +154,7 @@ class NewsQueryTests(TestCase):
 
     def test_source_country_comes_from_the_coordinates_when_the_address_has_none(self) -> None:
         """Staging's HRSH location had no city, state or country at all."""
-        query = NewsQuery.for_pin(_hrsh_pin(city=None, state=None, country=""))
+        query = _shared_query(_hrsh_pin(city=None, state=None, country=""))
 
         assert query is not None
         text = query.gdelt_query()
@@ -156,7 +168,8 @@ class NewsQueryTests(TestCase):
         )
         pin: Pin = baker.make_recipe("dashboard.pin", location=location, name=None)
 
-        self.assertIsNone(NewsQuery.for_pin(pin))
+        self.assertIsNone(_shared_query(pin))
+        self.assertIsNone(search_names(pin).own)
 
     def test_a_one_word_register_head_is_not_a_place_name(self) -> None:
         """NRHP's "Roosevelt, Isaac, House" sits on the HRSH campus; "Roosevelt" alone would match every FDR story."""
@@ -173,7 +186,7 @@ class NewsQueryTests(TestCase):
         )
         row.save()
 
-        query = NewsQuery.for_pin(pin)
+        query = _shared_query(pin)
 
         assert query is not None
         self.assertNotIn('"Roosevelt"', query.gdelt_query())
@@ -194,7 +207,7 @@ class NewsQueryTests(TestCase):
         )
         row.save()
 
-        query = NewsQuery.for_pin(pin)
+        query = _shared_query(pin)
 
         assert query is not None
         self.assertNotIn("Roosevelt", query.gdelt_query())
@@ -204,20 +217,19 @@ class NewsQueryTests(TestCase):
         for index in range(8):
             baker.make("dashboard.PinAlias", pin=pin, name=f"Alternate Campus Name Number {index} " + "x" * 60)
 
-        query = NewsQuery.for_pin(pin)
+        query = _own_query(pin)
 
         assert query is not None
         self.assertLessEqual(len(query.gdelt_query()), MAX_QUERY_CHARACTERS)
-        self.assertRegex(query.gdelt_query(), r"\bHRSH\b")
+        self.assertRegex(query.gdelt_query(), r"(?i)alternate campus name number")
 
     def test_nickname_aliases_stay_out_of_the_query(self) -> None:
         pin = _hrsh_pin()
         baker.make("dashboard.PinAlias", pin=pin, name="Grandmas Spooky Castle", kind=AliasType.NICKNAME)
 
-        query = NewsQuery.for_pin(pin)
-
-        assert query is not None
-        self.assertNotIn("Spooky", query.gdelt_query())
+        for query in (_shared_query(pin), _own_query(pin)):
+            assert query is not None
+            self.assertNotIn("spooky", query.gdelt_query().casefold())
 
 
 class NewsPanelFetchTests(RedataConfiguredMixin, TestCase):
@@ -230,9 +242,11 @@ class NewsPanelFetchTests(RedataConfiguredMixin, TestCase):
         with mock.patch(_SEARCH_NEWS, return_value=[*_STAGING_BATCH, _RELEVANT]) as search:
             source.fetch(pin)
 
-        sent = search.call_args.args[0]
-        self.assertIn('"Hudson River State Hospital"', sent)
-        self.assertRegex(sent, r"\bPoughkeepsie\b")
+        sent = [call.args[0] for call in search.call_args_list]
+        self.assertEqual(len(sent), 2, "the shared search and the one for the pin's own name")
+        self.assertIn('"Hudson River State Hospital"', sent[0])
+        for text in sent:
+            self.assertRegex(text, r"\bPoughkeepsie\b")
         data = source.cached_data(pin)
         assert data is not None
         context = source.render_context(pin, data)
@@ -274,8 +288,11 @@ class NewsPanelFetchTests(RedataConfiguredMixin, TestCase):
         with mock.patch(_SEARCH_NEWS, return_value=[]) as search:
             source.fetch(pin)
 
-        row = LocationCache.objects.get(location=pin.location, source=source.cache_source)
-        self.assertEqual(row.query_key, search.call_args.args[0][:255])
+        rows = LocationCache.objects.filter(location=pin.location, source=source.cache_source)
+        self.assertEqual(
+            sorted(rows.values_list("query_key", flat=True)),
+            sorted(call.args[0][:255] for call in search.call_args_list),
+        )
 
     def test_no_redata_call_without_a_usable_name(self) -> None:
         location: Location = baker.make(
@@ -300,6 +317,9 @@ class NewsPanelEndpointTests(RedataConfiguredMixin, TestCase):
         pin.profile = user.profile
         pin.save()
         LocationCache.set(pin.location, GdeltPanelSource.cache_source, {"articles": [*_STAGING_BATCH, _RELEVANT]})
+        LocationCache.set(
+            pin.location, GdeltPanelSource.cache_source, {"articles": []}, audience=search_names(pin).audience
+        )
 
         response = self.client.get(reverse("pin.panel", args=[pin.slug, "gdelt"]))
 

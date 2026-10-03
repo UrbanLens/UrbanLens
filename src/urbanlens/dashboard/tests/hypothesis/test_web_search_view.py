@@ -13,6 +13,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.pins.search_names import SearchScope, search_names
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -164,13 +165,13 @@ class UniqueSearchNameQuoteLocalityTests(TestCase):
 
     def test_city_and_state_are_quoted_together(self) -> None:
         pin = self._make_pin(city="Cincinnati", state="Ohio")
-        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        result = pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True)
         assert result is not None
         self.assertIn('"Cincinnati Ohio"', result)
 
     def test_without_quote_locality_city_and_state_are_loose_keywords(self) -> None:
         pin = self._make_pin(city="Cincinnati", state="Ohio")
-        result = pin.get_unique_search_name(quote_name=True, quote_locality=False)
+        result = pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=False)
         assert result is not None
         self.assertNotIn('"Cincinnati Ohio"', result)
         self.assertIn("Cincinnati", result)
@@ -178,19 +179,19 @@ class UniqueSearchNameQuoteLocalityTests(TestCase):
 
     def test_county_used_when_no_city(self) -> None:
         pin = self._make_pin(city=None, state="Ohio", county="Hamilton County")
-        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        result = pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True)
         assert result is not None
         self.assertIn('"Hamilton County Ohio"', result)
 
     def test_state_only_is_still_quoted(self) -> None:
         pin = self._make_pin(city=None, state="Ohio", county=None)
-        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        result = pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True)
         assert result is not None
         self.assertIn('"Ohio"', result)
 
     def test_no_locality_data_omits_the_locality_term_entirely(self) -> None:
         pin = self._make_pin(city=None, state=None, county=None)
-        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        result = pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True)
         assert result is not None
         self.assertNotIn('""', result)
 
@@ -212,7 +213,7 @@ class UniqueSearchNameQuoteLocalityTests(TestCase):
         profile = Profile.objects.get(user=user)
         pin = baker.make(Pin, location=loc, profile=profile)
 
-        result = pin.get_unique_search_name(quote_name=True)
+        result = pin.get_unique_search_name(search_names(pin).base, quote_name=True)
         assert result is not None
         self.assertIn('"118 W 9th St"', result)
 
@@ -233,32 +234,44 @@ class UniqueSearchNameAncestorTests(TestCase):
         loc = baker.make(Location, official_name=name, latitude=39.2, longitude=-84.6)
         return baker.make(Pin, location=loc, profile=profile, name=name, parent_pin=parent)
 
+    @staticmethod
+    def _own(pin: Pin) -> SearchScope:
+        own = search_names(pin).own
+        assert own is not None
+        return own
+
     def test_child_pin_includes_parent_name(self) -> None:
         pin = self._make_pin(name="Superintendent's Cottage", parent_name="Hudson River State Hospital")
-        result = pin.get_unique_search_name(include_address=False)
+        result = pin.get_unique_search_name(self._own(pin), include_address=False)
         assert result is not None
         self.assertIn("Superintendent's Cottage", result)
-        self.assertIn("Hudson River State Hospital", result)
+        self.assertIn("hudson river state hospital", result.casefold())
+
+    def test_the_shared_search_has_no_ancestor_term(self) -> None:
+        pin = self._make_pin(name="Superintendent's Cottage", parent_name="Hudson River State Hospital")
+        result = pin.get_unique_search_name(search_names(pin).base, include_address=False)
+        self.assertEqual(result, "Superintendent's Cottage")
 
     def test_top_level_pin_has_no_ancestor_term(self) -> None:
         pin = self._make_pin(name="Hudson River State Hospital")
-        result = pin.get_unique_search_name(include_address=False)
+        result = pin.get_unique_search_name(search_names(pin).base, include_address=False)
         self.assertEqual(result, "Hudson River State Hospital")
+        self.assertIsNone(search_names(pin).own)
 
     def test_ancestor_name_is_quoted_when_quote_name_is_set(self) -> None:
         pin = self._make_pin(name="Staff House", parent_name="Hudson River State Hospital")
-        result = pin.get_unique_search_name(include_address=False, quote_name=True)
+        result = pin.get_unique_search_name(self._own(pin), include_address=False, quote_name=True)
         assert result is not None
         self.assertIn('"Staff House"', result)
-        self.assertIn('"Hudson River State Hospital"', result)
+        self.assertIn('"hudson river state hospital"', result)
 
     def test_redundant_ancestor_name_is_not_duplicated(self) -> None:
         pin = self._make_pin(
             name="Hudson River State Hospital - Boiler House", parent_name="Hudson River State Hospital"
         )
-        result = pin.get_unique_search_name(include_address=False)
+        result = pin.get_unique_search_name(self._own(pin), include_address=False)
         assert result is not None
-        self.assertEqual(result.count("Hudson River State Hospital"), 1)
+        self.assertEqual(result.casefold().count("hudson river state hospital"), 1)
 
 
 class SearchSubscriptionFeatureTests(TestCase):
@@ -357,9 +370,10 @@ class WebSearchViewTests(TestCase):
             response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 200)
-        mock_search_web.assert_called_once()
-        self.assertIn("Official Test Location", mock_search_web.call_args.args[0])
-        self.assertNotIn("User Edited Location", mock_search_web.call_args.args[0])
+        shared, own = (call.args[0] for call in mock_search_web.call_args_list)
+        self.assertIn("Official Test Location", shared)
+        self.assertNotIn("user edited location", shared.casefold())
+        self.assertIn("user edited location", own)
 
     def test_result_carries_a_bookmark_button_posting_to_pin_links(self) -> None:
         """Bookmarking a web search result reuses the same pin.links endpoint (and
@@ -460,7 +474,7 @@ class WebSearchViewTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         pin = self._make_pin()
-        search_name = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        search_name = pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True)
         assert search_name is not None
         LocationCache.set(pin.location, "web_search", {"results": []}, query_key=search_name)
         rf = RequestFactory()
@@ -501,7 +515,7 @@ class WebSearchViewTests(TestCase):
             view.web_search(request, pin_slug=pin.slug)
 
         mock_search_web.assert_called_once()
-        self.assertIn("User Edited Location", str(mock_search_web.call_args))
+        self.assertIn("user edited location", str(mock_search_web.call_args))
 
     def test_domain_key_added_to_each_result(self):
         from django.test import RequestFactory
@@ -590,7 +604,7 @@ class WebSearchViewTests(TestCase):
             pin.location,
             "web_search",
             {"results": []},
-            query_key=pin.get_unique_search_name(quote_name=True, quote_locality=True),
+            query_key=pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True),
         )
 
         rf = RequestFactory()
@@ -618,7 +632,7 @@ class WebSearchViewTests(TestCase):
             pin.location,
             "web_search",
             {"results": []},
-            query_key=pin.get_unique_search_name(quote_name=True, quote_locality=True),
+            query_key=pin.get_unique_search_name(search_names(pin).base, quote_name=True, quote_locality=True),
         )
         LocationCache.objects.filter(pk=entry.pk).update(updated=timezone.now() - timedelta(days=1, minutes=1))
 

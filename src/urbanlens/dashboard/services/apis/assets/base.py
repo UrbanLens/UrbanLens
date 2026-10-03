@@ -96,7 +96,16 @@ class MediaProvider(Gateway, ABC):
         """
         return True
 
-    def get_media(self, location: Location, search_terms: list[str], *, address: str | None = None, limit: int = 24) -> tuple[list[MediaItem], bool]:
+    def get_media(
+        self,
+        location: Location,
+        search_terms: list[str],
+        *,
+        address: str | None = None,
+        limit: int = 24,
+        audience: str = "",
+        search_names: dict[str, list[str]] | None = None,
+    ) -> tuple[list[MediaItem], bool]:
         """Return captioned media for ``location``, using the 7-day LocationCache.
 
         Args:
@@ -110,6 +119,8 @@ class MediaProvider(Gateway, ABC):
             address: The address of the location, if any. Some media providers
                 may use this, or quote it, differently than others.
             limit: Maximum number of items to return.
+            audience: Whose ``LocationCache`` row the results go in; the default is the one every viewer shares.
+            search_names: The names the terms were built from, kept on the row.
 
         Returns:
             Tuple of (list of ``MediaItem``s, empty when the provider found nothing or failed; whether the result was served from cache).
@@ -123,7 +134,7 @@ class MediaProvider(Gateway, ABC):
         # value that can actually be stored - otherwise an over-long key would never match what came
         # back and every request would re-fetch, hammering the provider instead of caching.
         query_key = " | ".join(term for term in search_terms if term)[:_QUERY_KEY_MAX_LENGTH]
-        cached = LocationCache.get_fresh(location, service_key)
+        cached = LocationCache.get_fresh(location, service_key, audience)
         # A cache row is only a hit for the query that produced it.
         # LocationCache.get_fresh answers "is this row still fresh?" by age alone, so without this
         # check a provider whose query construction has been changed (e.g. tightened for relevance)
@@ -148,5 +159,8 @@ class MediaProvider(Gateway, ABC):
                 # TODO: Catch specific exceptions
                 logger.exception("%s media lookup failed for %r", self.service_key, search_term)
 
-        LocationCache.set(location, service_key, {"items": [asdict(item) for item in items]}, query_key=query_key)
+        data: dict = {"items": [asdict(item) for item in items]}
+        if search_names is not None:
+            data["search_names"] = search_names
+        LocationCache.set(location, service_key, data, query_key=query_key, audience=audience)
         return items, False

@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.pins.search_names import SearchScope
 
 #: Most place names the query ORs together.
 MAX_NAMES = 6
@@ -172,26 +173,23 @@ def _register_names(location: Location) -> list[str]:
     return names
 
 
-def _raw_names(pin: Pin) -> list[str]:
-    """Every name the place is known by, most specific first, before any filtering."""
-    from urbanlens.dashboard.models.aliases.model import AliasType
+def _raw_names(pin: Pin, scope: SearchScope) -> list[str]:
+    """Every name one search knows the place by, most specific first, before any filtering.
 
-    names: list[str | None] = [pin.name, pin.effective_official_name]
-    wiki = pin.community_wiki
-    if wiki is not None:
-        names.append(wiki.name)
-    if pin.pk:
-        names.extend(pin.aliases.exclude(kind=AliasType.NICKNAME).values_list("name", flat=True))
-    if wiki is not None:
-        names.extend(wiki.aliases.exclude(kind=AliasType.NICKNAME).values_list("name", flat=True))
-    if pin.location is not None:
-        names.extend(_register_names(pin.location))
-    names.extend(pin.ancestor_search_names())
+    The shared search adds the register listings containing the place, which are public; a search for the owner's
+    own names adds the names of the pins they filed this one under.
+    """
+    names = list(scope.names)
+    if scope.is_shared:
+        if pin.location is not None:
+            names.extend(_register_names(pin.location))
+    else:
+        names.extend(scope.context)
     return [name for name in names if name]
 
 
-def place_names(pin: Pin) -> tuple[str, ...]:
-    """The names a news article about this pin's place would use.
+def place_names(pin: Pin, scope: SearchScope) -> tuple[str, ...]:
+    """The names a news article about this pin's place would use, for one of its searches.
 
     Street names and address fragments are left out: they name the surroundings, and are the generic
     phrases that match unrelated coverage. A name that contains another kept name is redundant in an
@@ -199,6 +197,7 @@ def place_names(pin: Pin) -> tuple[str, ...]:
 
     Args:
         pin: The pin whose place is being searched for.
+        scope: The search, whose names it uses.
 
     Returns:
         Up to :data:`MAX_NAMES` exact-phrase names.
@@ -206,7 +205,7 @@ def place_names(pin: Pin) -> tuple[str, ...]:
     from urbanlens.dashboard.services.locations.naming import is_address_derived_name, is_meaningful_name
 
     kept: list[str] = []
-    for raw in _raw_names(pin):
+    for raw in _raw_names(pin, scope):
         name = _phrase(raw)
         if not is_meaningful_name(name) or len(_NON_WORD.sub("", name)) < _MIN_NAME_CHARACTERS or _is_street_name(name):
             continue
@@ -247,9 +246,17 @@ class NewsQuery:
     country: str | None
 
     @classmethod
-    def for_pin(cls, pin: Pin) -> NewsQuery | None:
-        """The news search for a pin's place, or None when the place has no name worth searching for."""
-        names = place_names(pin)
+    def for_pin(cls, pin: Pin, scope: SearchScope) -> NewsQuery | None:
+        """One news search for a pin's place, or None when it has no name worth searching for.
+
+        Args:
+            pin: The pin whose place is searched for; it supplies the locality and country.
+            scope: The search, whose names it uses.
+
+        Returns:
+            The query, or None.
+        """
+        names = place_names(pin, scope)
         if not names:
             return None
         query = cls(
