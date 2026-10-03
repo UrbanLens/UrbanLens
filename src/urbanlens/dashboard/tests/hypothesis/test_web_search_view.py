@@ -153,6 +153,7 @@ class UniqueSearchNameQuoteLocalityTests(TestCase):
         loc = baker.make(
             Location,
             official_name="118 W 9th St",
+            official_name_source="google_places",
             latitude=39.1,
             longitude=-84.5,
             city=city,
@@ -202,6 +203,7 @@ class UniqueSearchNameQuoteLocalityTests(TestCase):
         loc = baker.make(
             Location,
             official_name="Old Mill Factory",
+            official_name_source="google_places",
             latitude=39.1,
             longitude=-84.5,
             city="Cincinnati",
@@ -229,9 +231,17 @@ class UniqueSearchNameAncestorTests(TestCase):
         profile = Profile.objects.get(user=user)
         parent = None
         if parent_name is not None:
-            parent_loc = baker.make(Location, official_name=parent_name, latitude=39.1, longitude=-84.5)
+            parent_loc = baker.make(
+                Location,
+                official_name=parent_name,
+                official_name_source="google_places",
+                latitude=39.1,
+                longitude=-84.5,
+            )
             parent = baker.make(Pin, location=parent_loc, profile=profile, name=parent_name)
-        loc = baker.make(Location, official_name=name, latitude=39.2, longitude=-84.6)
+        loc = baker.make(
+            Location, official_name=name, official_name_source="google_places", latitude=39.2, longitude=-84.6
+        )
         return baker.make(Pin, location=loc, profile=profile, name=name, parent_pin=parent)
 
     @staticmethod
@@ -299,6 +309,7 @@ class WebSearchViewTests(TestCase):
         loc = baker.make(
             Location,
             official_name="Official Test Location",
+            official_name_source="google_places",
             latitude=41.0,
             longitude=-81.5,
         )

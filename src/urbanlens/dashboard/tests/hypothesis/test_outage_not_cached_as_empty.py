@@ -24,7 +24,13 @@ class SearxngImageOutageTests(TestCase):
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.profile = baker.make(User).profile
-        location = baker.make(Location, latitude=41.73, longitude=-73.92, official_name="Hudson River State Hospital")
+        location = baker.make(
+            Location,
+            latitude=41.73,
+            longitude=-73.92,
+            official_name="Hudson River State Hospital",
+            official_name_source="google_places",
+        )
         self.pin = baker.make(
             Pin, profile=self.profile, location=location, parent_pin=None, name="Hudson River State Hospital"
         )
@@ -109,7 +115,13 @@ class RedataPartialProviderOutageTests(TestCase):
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.profile = baker.make(User).profile
-        location = baker.make(Location, latitude=41.73, longitude=-73.92, official_name="Hudson River State Hospital")
+        location = baker.make(
+            Location,
+            latitude=41.73,
+            longitude=-73.92,
+            official_name="Hudson River State Hospital",
+            official_name_source="google_places",
+        )
         self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name="HRSH")
 
     def _source(self):
@@ -183,7 +195,13 @@ class HistoricalMapMediaOutageTests(TestCase):
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.profile = baker.make(User).profile
-        location = baker.make(Location, latitude=41.73, longitude=-73.92, official_name="Hudson River State Hospital")
+        location = baker.make(
+            Location,
+            latitude=41.73,
+            longitude=-73.92,
+            official_name="Hudson River State Hospital",
+            official_name_source="google_places",
+        )
         self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name="HRSH")
 
     def _source(self):

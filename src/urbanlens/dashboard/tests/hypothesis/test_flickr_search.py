@@ -78,6 +78,7 @@ class BuildSearchQueryTests(TestCase):
             longitude=Decimal("-73.930000"),
             administrative_area_level_1="New York",
             official_name="Hudson River State Hospital",
+            official_name_source="google_places",
         )
         self.pin = baker.make_recipe("dashboard.pin", location=self.location, name="Hudson River State Hospital")
 

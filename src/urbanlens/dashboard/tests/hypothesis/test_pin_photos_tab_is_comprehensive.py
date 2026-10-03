@@ -52,7 +52,9 @@ class PinPhotosTabTestCase(TestCase):
         super().setUp()
         baker.make(User)
         # The place's public name, so the pin reads the shared rows the tests seed (P188).
-        location = baker.make_recipe("dashboard.location", official_name="Hudson River State Hospital")
+        location = baker.make_recipe(
+            "dashboard.location", official_name="Hudson River State Hospital", official_name_source="google_places"
+        )
         self.pin = baker.make_recipe("dashboard.pin", name="Hudson River State Hospital", location=location)
         self.profile = self.pin.profile
         self.client.force_login(self.profile.user)

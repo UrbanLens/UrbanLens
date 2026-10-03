@@ -116,6 +116,7 @@ class BuildImageQueryTests(TestCase):
             administrative_area_level_1=state,
             country=country,
             official_name=official_name or None,
+            official_name_source="google_places" if official_name else "",
         )
         return baker.make(Pin, location=location, name=pin_name)
 
@@ -164,6 +165,7 @@ class BuildImageQueryTests(TestCase):
         parent_location = baker.make(
             Location,
             official_name="Hudson River State Hospital",
+            official_name_source="google_places",
             locality="Poughkeepsie",
             administrative_area_level_1="New York",
             country="USA",
@@ -172,6 +174,7 @@ class BuildImageQueryTests(TestCase):
         child_location = baker.make(
             Location,
             official_name="Superintendent's Cottage",
+            official_name_source="google_places",
             locality="Poughkeepsie",
             administrative_area_level_1="New York",
             country="USA",

@@ -139,6 +139,7 @@ class AudienceTestCase(TestCase):
 
     def place(self, **fields: Any) -> Location:
         fields.setdefault("official_name", OFFICIAL)
+        fields.setdefault("official_name_source", "historic_register")
         return baker.make(
             Location,
             latitude=41.7321,

@@ -41,7 +41,9 @@ class _Owners(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.stranger_user = baker.make(User)
-        self.location = baker.make(Location, official_name="Old Mill", latitude=42.0, longitude=-73.0)
+        self.location = baker.make(
+            Location, official_name="Old Mill", official_name_source="google_places", latitude=42.0, longitude=-73.0
+        )
         self.pin = baker.make(Pin, profile=self.profile, location=self.location)
 
     def assert_login_redirect(self, response) -> None:
