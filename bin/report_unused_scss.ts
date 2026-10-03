@@ -4,17 +4,18 @@
  * Chromium already records the two facts this needs, so the script does not
  * reimplement the cascade:
  *
- * Playwright's `chromium.launch` talks to Chrome over a debugging pipe that bun
- * on Windows never connects, so this script starts the Playwright-installed
- * Chromium itself and speaks the same CDP methods Playwright coverage uses:
- * `CSS.startRuleUsageTracking` marks a rule observed when its selector matched
- * during style calculation. That is not proof it is unused: Django, HTMX, and
- * script-built markup can be absent from this DOM.
+ * - `CSS.startRuleUsageTracking` marks a rule observed when its selector matched
+ *   during style calculation. That is not proof it is unused: Django, HTMX, and
+ *   script-built markup can be absent from this DOM.
  * - `CSS.getMatchedStylesForNode` returns the rules that matched a node, in
  *   cascade order. The walk below is the one DevTools uses: visit low to high,
  *   and an earlier `!important` beats a later normal declaration. Specificity,
  *   layers, and source order stay inside Chrome. Longhands are judged only
  *   when Chrome reports `longhandProperties` on the shorthand.
+ *
+ * Playwright's `chromium.launch` talks to Chrome over a debugging pipe that bun
+ * on Windows never connects, so this script starts the Playwright-installed
+ * Chromium itself and speaks the same CDP methods Playwright coverage uses.
  *
  * States (viewport, `[data-theme]`, `CSS.forcePseudoState`,
  * `Emulation.setEmulatedMedia`) are applied in that one session. PurgeCSS,
@@ -36,6 +37,7 @@
  * candidates. Raise `--max-nodes` for a slower, wider sample. `--static-only`
  * skips Chromium and reports duplicate selectors, identical blocks, and
  * selectors whose classes and ids are not literals.
+ */
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
