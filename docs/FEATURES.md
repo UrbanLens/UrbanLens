@@ -296,7 +296,8 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider`, US-only,
   coverage varies by jurisdiction), then OSM/Overpass, Overture Maps, Microsoft Building
   Footprints, and Google Open Buildings; editable
-  by the user
+  by the user. Overture comes from REData's own Overture mirror inside the US and from Overture's
+  public release only elsewhere (`services.apis.locations.boundaries.overture.OvertureProvider`)
 - Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, freehand, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
@@ -529,7 +530,11 @@ direct-only because REData's contract can't reproduce what they show:
   `overview_summary()` into one unattributed list, then Nominatim, Photon, Building
   Characteristics, Elevation and Historic Registers. Tabs that settle with nothing to show are
   removed
-- **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
+- **Building Characteristics** — Overture Maps' class, height, floor count and roof of the building at
+  the pin, plus named places within 150 m. Inside the US it reads REData's Overture mirror (`/buildings/`
+  and the `overture` points-of-interest provider), and an empty answer there is final; elsewhere it reads
+  Overture's public release (`plugins.builtin.overture_building_attributes`, `OvertureProvider`). An
+  install without REData shows it only outside the US
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering

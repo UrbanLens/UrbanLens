@@ -20642,3 +20642,52 @@ reads per pin. The scope only labels and is never cached. New test:
 
 mypy over the whole tree would have flagged both calls as missing an argument. The P188 run checked only its own changed
 files.
+
+## RESOLVED 2026-10-03: Inside the US the app reads Overture from REData's mirror, and the public release only abroad
+
+`id: P110` · `status: fixed` · `resolved: 2026-10-03` · `follow-up: P240`
+
+**Jess, 2026-10-02: "We're self hosting Overture. Why are we contacting external services instead of using our self
+hosted instance?"** Because `OvertureMapsGateway` predated REData's Overture stack and was never moved onto it. Its
+three callers - `BoundaryProviderChain`'s Overture step and the Building Characteristics panel's
+`get_building_attributes` and `get_nearby_places` - read Overture's public GeoParquet on S3, with
+`stac.overturemaps.org` as the index, for every coordinate. REData syncs Overture's buildings, places, addresses and
+transportation for every US state and territory monthly and serves them from its own database.
+
+The entry opened 2026-09-10 as the cost of that public read. A 429 from the STAC index silently widened a lookup to
+the whole theme: one task allocated 1.7 GB, and the load suite's neighbour p95 reached its 60 s timeout during
+cooldown. The 2026-09-10 fix refuses a lookup the index cannot narrow, behind a 120 s per-process breaker and a 15 s
+deadline. The 2026-09-17 fix charges every read to an `overture_maps` budget (20 a minute, 500 a day). It stayed open
+for a live check that the budget stops the 429 loop. Inside the US that check no longer applies, since nothing there
+reaches Overture. Abroad it has still not been run.
+
+**What changed.** The three callers go through `services.apis.locations.boundaries.overture.OvertureProvider`, which
+routes by coordinate. `overture_maps.served_by_redata` uses the `is_usa_coordinates` boxes, the same boxes REData
+gates its own Overture providers on.
+
+- Inside the US, buildings come from `GET /buildings/?provider=overture&radius_meters=10` through the new
+  `RedataBuildingsGateway` (service key `redata_buildings`). Places come from
+  `GET /points-of-interest/lookup/?provider=overture&radius_meters=150` through the existing
+  `RedataPointsOfInterestGateway`. A REData `BuildingRecord`'s `attributes` are the Overture row's own properties, so
+  both sources go through the same parsing, `overture_maps.building_attributes` and `nearby_places`. The panel's
+  cache row keeps its shape.
+- An empty REData answer is final. Without REData configured, a US coordinate gets no Overture data, and the panel's
+  gate does not schedule it.
+- A REData outage raises, so the panel caches nothing (P187's rule). The chain's step defers instead of answering
+  "no building".
+- Abroad, `OvertureMapsGateway` reads the public release behind the guards above. It also refuses any bbox centred
+  inside the US with a `ValueError`, so no caller can reach the public release there by going around the provider.
+- "Cameras & Structures" (`redata_site_features`) no longer asks REData's `overture` provider. Those places are the
+  panel's nearby places, and a lookup that includes `overture` waits for its slow scan (P240).
+
+**Tests.** `tests/hypothesis/test_overture_served_by_redata.py` answers REData at the transport
+(`requests.adapters.HTTPAdapter.send`), with fixtures in the wire shapes of REData `main`'s serializers. It trips on
+every way into the public release: constructing the gateway, `_overture_geodataframe`, `_overture_core`, `urlopen`.
+On the old code 13 of its 15 tests failed, and both that passed were controls for the path abroad. All 15 now pass.
+The public reader's existing tests moved their fixture bbox from Boston to Paris.
+
+**Not verified:** a response from the deployed REData. Both lookups timed out when probed on 2026-10-03, which is
+P240, and that blocks this change from working in production. The fixtures follow REData's code and tests, not a
+captured response. The REData gaps (the timeout, unsynced roof fields and `operating_status`, applicability wider than
+the synced shards, the `buildings:read` backfill) are in
+[`../handoffs/redata-overture-near-point-lookups.md`](../handoffs/redata-overture-near-point-lookups.md).

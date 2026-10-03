@@ -28,6 +28,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`redata-osm-relation-building-returned-as-point.md`](redata-osm-relation-building-returned-as-point.md) — Kirkbride, an OSM multipolygon relation, comes back as its centre point, so its building place has no outline (P182) | outbound, `../REData` | ANSWERED 2026-10-01 by REData T10 (`docs/urbanlens-2026-10-01-replies.md`): fixed on REData `main`, deploy held until v0.8.0 ships; closes after a location run against deployed REData |
 | [`infrastructure-app-0.8.0-deploy-findings-reply.md`](infrastructure-app-0.8.0-deploy-findings-reply.md) — reply to their 0.8.0 deploy findings: `:main` waits for CI, P181's step is migration 0034, releases publish again | outbound, `UrbanLens/infrastructure` | SENT 2026-10-02 |
 | [`infrastructure-jess-decisions-2026-10-02.md`](infrastructure-jess-decisions-2026-10-02.md) — Jess wants `localize_article_images` and `sweep_unnamed_pin_images --delete` run now on staging and production; Postgres restore tooling is theirs | outbound, `UrbanLens/infrastructure` | OPEN 2026-10-02, for Jess to pass on |
+| [`redata-overture-near-point-lookups.md`](redata-overture-near-point-lookups.md) — `/buildings/` and the `overture` points-of-interest provider time out on the deployed REData, which UrbanLens now depends on inside the US (P110, P240); plus unsynced roof fields and `operating_status`, and applicability wider than the synced shards | outbound, `../REData` | OPEN 2026-10-03 |
 
 ## The convention
 

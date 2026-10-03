@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P215` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P241` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -62,7 +62,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL7 | live | 2026-09-11 | Making "no user can affect another user's availability" a property the tests can prove; phases 0, 1 and 5 done, 2 and 6 partly | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P85 | open | 2026-09-29 | Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P95 | open | 2026-10-02 | An import preview reads each file a chunk at a time, but one oversized element is still built whole at 10-13x its size | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P110 | open | 2026-10-02 | The app reads Overture from its public S3 copy, although REData serves the same themes from our own instance | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-17 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-17 | 54 verified places where one account's ordinary use can degrade the site for everyone else, all fixed except 4 parked by decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -221,3 +220,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P211 | open | 2026-10-03 | On a wiki page, the purple "Community wiki" pill overlaps the onboarding card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P212 | open | 2026-10-03 | A failed task's ERROR line prints its arguments, so `fetch_recorded_weather_at`'s coordinates reach the log | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P214 | open | 2026-10-03 | Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
