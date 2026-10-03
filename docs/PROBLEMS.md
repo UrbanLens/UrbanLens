@@ -3048,3 +3048,18 @@ policy in `services/security/redact.py`. P203's `SecretRedactionFilter` does not
 floats is not one. Not reproduced in a test yet. Either drop the arguments from that line (the task id and name already
 correlate it with Celery's own lines) or pass them through `redact_params` by the task signature's parameter names; and
 decide whether a task should take coordinates at all when a `Location` pk would do.
+
+## P214 — Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache
+
+`id: P214` · `status: open` · `updated: 2026-10-03` · `found by: reconciling P187 with P203's tests`
+
+`StreetViewProvider`/`SatelliteViewProvider.get_satellite_slides` (`services/apis/locations/base.py`) caches only a
+`SlideState.COMPLETE` run. `_collect_slides` treats a raised `GatewayRequestError`/`OSError` as `DEGRADED`, and a degraded
+run isn't cached. `GoogleMapsGateway._generate_satellite_slides` (`google/maps.py`) catches `RequestException` itself
+and returns, so a connection failure, timeout or 5xx reads as a complete run with no slides, and that empty list is
+cached for `external_data_cache_seconds()`. Let an outage (`services.core.gateway.is_source_outage`) propagate from the
+generator, and keep swallowing only a settled refusal such as a 403. Check every other `_generate_*_slides` the same way.
+
+P187 also left these stores unswept: `Boundary.generated_at` (does a failed generation stamp it?) and
+`GooglePlaceLinkEnrichmentSource`. Each needs the same test as `test_outage_not_cached_registry.py`: refused, timed out
+and 503, then assert nothing settled was written.

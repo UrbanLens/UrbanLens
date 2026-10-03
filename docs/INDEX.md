@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P214` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P215` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -220,3 +220,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P211 | open | 2026-10-03 | On a wiki page, the purple "Community wiki" pill overlaps the onboarding card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P212 | open | 2026-10-03 | A failed task's ERROR line prints its arguments, so `fetch_recorded_weather_at`'s coordinates reach the log | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P214 | open | 2026-10-03 | Google's satellite slides cache an outage as "no imagery", and P187's rule has not reached the stores outside LocationCache | [`docs/PROBLEMS.md`](PROBLEMS.md) |
