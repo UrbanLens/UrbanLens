@@ -20388,3 +20388,110 @@ and fails on any writable stock `serializers.JSONField`. The body is `DEEPLY_NES
 `tests/hypothesis/external_api_helpers.py`, part of `MALFORMED_JSON_BODIES` (every external API write route) and of
 the no-5xx write-route sweep, which found no further sites. Not covered: import files read in Celery
 (`services/import_export/import_data.py::_read_json`) fail the task rather than a request.
+
+## RESOLVED 2026-10-02: What the write-route audit left is closed: both product questions ruled on, eight places a share showed its recipient unconsented data fixed, and the three unchecked gaps fixed or tested
+
+`id: P193` · `status: fixed` · `resolved: 2026-10-02`
+
+`found by: P29's write-route tests, 2026-10-02`
+
+What P29's write-route audit left. The two product questions are ruled on, the share question turned up eight places
+a share showed its recipient more than its sender consented to, and the three unchecked gaps are fixed or tested.
+
+### Rulings (Jess, 2026-10-02)
+
+- **An API client may claim an `official` wiki alias.** `external_api:wikis.aliases` keeps accepting every
+  `AliasType`. No change.
+- **A shared pin is copied as of acceptance, but only as far as the sender consented to each piece of it.** Anything
+  they did not consent to is never shared. Recorded in `docs/PRIVACY_MODEL.md` §5.
+
+### What a share consents to, and what reaches the recipient
+
+A share records: `location` (snapshotted at share time), `shared_name` (only if typed), `message`, `images` (the ticked
+subset), `markup_map`, and one bundled child share per chosen child pin. The sender's pin itself is consented only for
+the site facts §5 lists. Checked against every row `create_pin_from_share` writes and every surface that shows a share
+to its recipient. Tests: `test_pin_share_consent.py` (new), `test_share_image_copy_fidelity.py`,
+`test_share_pin_copy_fidelity.py` (AST: every `Pin` field is copied or listed as skipped, with a reason),
+`test_pin_share_detail_hides_undisclosed_pins.py`, `test_pin_share_chain.py`.
+
+| Copied or shown | Read from | Consented? | Guard |
+|---|---|---|---|
+| Recipient pin's `location` | `share.location` | yes, as shared | `test_what_the_sender_adds_or_changes_after_sharing_...` (moves the pin first) |
+| `name` | `shared_name`, else the location's official name / non-user `WikiAlias` | yes | `test_share_image_copy_fidelity` |
+| `name_is_user_provided` | was the sender's own flag | **no - fixed**: `bool(shared_name)` | `test_an_unnamed_share_is_named_from_the_place...` |
+| type, indoor/outdoor, three dates, eight security indicators | sender's pin, at acceptance | yes (site facts, as of acceptance) | `test_the_sites_facts_are_read_as_of_acceptance` |
+| description, ratings, priority, icon, colour, styling | not copied | no | AST skip-list; the same test |
+| labels, notes, aliases, links, custom fields, visits | not copied | no | the same test, each added after sharing |
+| Photos | `share.images` minus pending scans; caption, EXIF, filename dropped | ticked ones only | `test_only_the_ticked_photos_travel...` |
+| Cover photo | sender's cover, only if among the ticked photos | yes | same, plus `test_share_pin_copy_fidelity` |
+| Children | bundled child shares only; nesting among them as of acceptance | yes | `test_a_child_added_after_sharing...`, `..._moved_under_an_unshared_pin...` |
+| Root's parent | never | no | `parent_pin` is the recipient-side parent or None |
+
+**Leaks in eight places, each reproduced by a failing test first, then fixed.** All showed the sender's own pin name (which a
+share without `shared_name` never consents to), and the share page and cards read it live, so a rename, or a move to an
+unnamed place (the label falls back to the address), reached the recipient before or after they answered:
+
+- the notification (site, email, SMS): `"{sender} shared {pin.display_label} with you."` (rows already stored keep
+  that text: P210);
+- the share page's title and Name row, its Address row (`pin.address_basic`, the pin's *current* location), and each
+  bundled child's label;
+- the DM share card;
+- the group-chat card, both the recipient's and the one shown to members the pin was not shared with at all;
+- the group message's default body, `"Shared {pin.display_label}"`, sent to every member;
+- Memories > Sharing > received (`group.pin.effective_name`);
+- the "pins from <sender>" search filter, which matched the recipient's pins at the sender's pin's *current* location;
+- the accepted copy's `name_is_user_provided` (above).
+
+Every recipient surface now names a share by `PinShare.safe_place_label` (`shared_name`, else the snapshotted
+location's name, address or coordinates), the share page's map and address read `share.location`, a group member
+without a share sees "Pin shared" and nothing else, the default body is "Shared a pin", and the search joins on
+`PinShare.location`. `reveals_live_pin`/`safe_pin` are gone: no recipient surface takes the pin. This reverses an
+earlier choice that an explicit share previews the sender's current pin name (`memories.py`, two tests, and three
+expected-failure Playwright specs in `tests/integration/specs/security/pin-share.spec.ts`, now plain tests; the
+snapshot-at-share spec now asserts as of acceptance). The Playwright specs were not run. The share dialog's name
+placeholder said "blank keeps the current name"; it now says blank shares the place's own name.
+
+Not changed: an acceptance whose snapshotted `Location` is gone falls back to the pin's current one
+(`PinShare.shared_location`). Nothing under `src/` deletes a `Location`, and `Pin.location` is `RESTRICT`.
+
+### Integers past their column were stored as their low bits (fixed 2026-10-02)
+
+Django sends an `IntegerField` write as psycopg's `Int4` (`Int2` for a small one), and with `server_side_binding` on,
+psycopg-binary 3.2.13's C dumpers keep the low 32 (16) bits without checking: `Label.order = 2**31` was stored as
+-2**31, `2**32 + 1` as 1, and a `smallint` 2**16 + 3 as 3. Past 2**63 the `Int8` dumper raised `OverflowError`. A DM's
+`key_version` past 2**32 stored the ciphertext under the wrong key version, and a safety auto-delete window of 2**32
+days was stored as 0. `core/integer_dumpers.py` now registers range-checked dumpers on every connection (a missed
+bound is a `DataError`, never a wrong number; `core/tests/test_integer_dumpers.py`), and the external API's serializers
+bound every writable integer (`test_external_api_integer_bounds.py`). `auto_delete_after_days` is capped at 36,500, and
+the dashboard's grace-period parse clamps to 15 minutes..a week.
+
+### A custom field's number past `numeric(24,6)` was a 500 (fixed)
+
+`CustomFieldValue.set_value` took any `Decimal`, so `1e30`, `1e18`, `1e400` or a value rounding past 18 integer digits
+raised `numeric field overflow` on save, and NaN/Infinity failed `DecimalField.to_python`. Every value write goes
+through it: the four dashboard routes (`pin.custom_fields.value`, `profile.custom_field_value`, `custom_fields.photo`,
+`custom_fields.markup_map`) via `save_value`, the external API's photo `PUT` via the same, and the archive import. It
+now refuses a non-finite number and one with more integer digits than the column holds (`NumberOutOfRangeError`,
+bounds read from the field's `max_digits`/`decimal_places` by `services/core/numbers.py::decimal_for_column`), and
+rounds extra decimals half-up, as the column would. The dashboard routes answer with their error toast, the API with
+a 400, the import skips the row. `test_custom_field_number_bounds.py`.
+
+### Safety check-in destinations were parsed with a bare `float()` (fixed)
+
+Not only on the read route. `SafetyCheckinWikiOptionView.get` matched no wiki for NaN or infinity; the create form and
+the autosave (`safety.checkin.create`, `safety.checkin.detail` POST) were 500s on text, on NaN/infinity
+(`DecimalField.to_python`) and on `1e400`, and stored a latitude of 91 or a longitude of 181. All three now parse the
+pair through `_parse_destination` (both or neither, each through `coordinate_or_none`): anything else is a 400 - the
+create form's error page, the autosave's JSON, `"Invalid coordinates."` on the fragment. No destination is still an
+empty toggle. `test_safety_destination_coordinates.py`.
+
+### The concealed viewer is tested
+
+`concealment_active` returns `False` by design until the gate is defined (`docs/designs/concealed-wiki-spec.md` §0.1).
+There is no setting; the code's single switch is that predicate, which eight suites already patch.
+`test_concealed_viewer_write_routes.py` patches it (and the name `external_api.views_wiki` imports, which patching the
+module alone misses) for the P29 routes that branch on it: `external_api:wikis.detail` PATCH and `location.wiki.edit`,
+`wikis.history.revert`, `wikis.votes` and `location.wiki.stat_vote`, `wikis.aliases` and `.aliases.use`, and
+`wikis.cover_photo`. Each write lands on the real row and leaves a stranger's writing intact, a stranger's edit or
+alias is a 404, both vote routes report only the viewer's ballot, and no response carries the stranger's text. A
+control test checks the gate is on while patched and off without it. No bug found.

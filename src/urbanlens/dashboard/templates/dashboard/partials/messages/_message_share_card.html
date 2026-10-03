@@ -3,7 +3,7 @@
   {% if share.kind == "pin" and share.pin_share %}
   <div class="dm-share-card__row">
     <i class="material-symbols-outlined">location_on</i>
-    <span class="dm-share-card__label">{{ share.pin_share.pin.display_label }}</span>
+    <span class="dm-share-card__label">{{ share.pin_share.safe_place_label }}</span>
   </div>
   {% if share.message.recipient_id == viewer_id %}
     {% if share.pin_share.status == "pending" %}

@@ -878,7 +878,7 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
         if existing is not None:
             return existing
 
-    message = create_group_message(sender, group, body or f"Shared {pin.display_label}", defer_broadcast=True, client_uuid=client_uuid)
+    message = create_group_message(sender, group, body or "Shared a pin", defer_broadcast=True, client_uuid=client_uuid)
     hidden = SharedSpaceBlocks.for_viewer(sender).hidden_from_at(message.created)
     for membership in group.active_memberships().exclude(profile_id__in={sender.pk, *hidden}).select_related("profile", "profile__user"):
         try:
@@ -924,9 +924,7 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
     # summarizes reactions per message (see
     # ``external_api.serializers_messaging.build_group_message_payload``); without it a 50-message
     # page issues 50 extra queries.
-    queryset = (
-        GroupMessage.objects.visible_window(membership, blocks=blocks).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "shares__pin_share__pins_created", "reactions__profile")
-    )
+    queryset = GroupMessage.objects.visible_window(membership, blocks=blocks).select_related("sender", "sender__user").prefetch_related("shares__pin_share__location__wiki", "shares__pin_share__pins_created", "reactions__profile")
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)
     page = list(queryset.order_by("-id")[: limit + 1])

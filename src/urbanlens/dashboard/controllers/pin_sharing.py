@@ -111,17 +111,16 @@ class PinShareCreateView(LoginRequiredMixin, View):
 
 class PinShareDetailView(LoginRequiredMixin, View):
     def get(self, request, share_id):
+        # No sender's pin in the context: the page shows only what the share itself recorded.
         share = get_object_or_404(
-            PinShare.objects.select_related("pin__location", "from_profile__user", "to_profile").prefetch_related("images", "bundled_shares__pin__location"),
+            PinShare.objects.select_related("location__wiki", "from_profile__user", "to_profile").prefetch_related("images", "bundled_shares__location__wiki"),
             pk=share_id,
             to_profile=request.user.profile,
         )
-        # share.safe_pin, not share.pin: a DETECTED share is a provenance record for a place the recipient
-        # learned about indirectly, not an offer of the sender's pin.
         return render(
             request,
             "dashboard/pages/pin_share/detail.html",
-            {"share": share, "pin": share.safe_pin, "bundled_shares": share.bundled_shares.all(), "show_map_footer": True},
+            {"share": share, "bundled_shares": share.bundled_shares.all(), "show_map_footer": True},
         )
 
 

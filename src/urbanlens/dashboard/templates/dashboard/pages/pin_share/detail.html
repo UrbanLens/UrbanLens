@@ -12,8 +12,8 @@
 {% endblock %}
 
 {% block content %}
-{# safe_place_label, not place_label: a DETECTED share must not read through to the sender's live pin name. #}
-{% with shared_name=share.shared_name|default:share.safe_place_label %}
+{# safe_place_label, never the sender's pin: a share carries a name only when the sender typed one. #}
+{% with shared_name=share.safe_place_label %}
 <div class="pin-detail-grid">
   <div class="pin-details location-details pin-share-detail-card card">
     <div class="card-header"><i class="material-symbols-outlined">ios_share</i><span>Shared Pin</span></div>
@@ -39,8 +39,7 @@
 
     <div class="details-grid">
       <div class="detail-row full-width"><span class="field-label">Name</span><span class="field-value">{{ shared_name }}</span></div>
-      {% comment %}pin.description is the sender's private personal notes, never something they opted to share.{% endcomment %}
-      {% if pin.address_basic %}<div class="detail-row full-width"><span class="field-label">Address</span><span class="field-value">{{ pin.address_basic }}</span></div>{% endif %}
+      {% if share.location.address_basic %}<div class="detail-row full-width"><span class="field-label">Address</span><span class="field-value">{{ share.location.address_basic }}</span></div>{% endif %}
     </div>
 
     {% if bundled_shares %}
@@ -113,7 +112,7 @@
   <div class="location-map pin-map card"><div class="card-header"><i class="material-symbols-outlined">place</i><h3>Location</h3></div>
     <div id="shared-pin-map-wrap" style="position:relative;height:420px">
       <div id="shared-pin-map" style="height:100%"
-           data-lat="{{ share.shared_location.latitude|default:''|unlocalize }}" data-lng="{{ share.shared_location.longitude|default:''|unlocalize }}"
+           data-lat="{{ share.location.latitude|default:''|unlocalize }}" data-lng="{{ share.location.longitude|default:''|unlocalize }}"
            data-name="{{ shared_name }}"></div>
       {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
       {% map_toolbar "screenshot" panel_id="shared-pin-map-buttons" %}

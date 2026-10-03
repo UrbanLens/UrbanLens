@@ -112,6 +112,7 @@ def _get_share_message(profile: Profile, partner: Profile, message_id: int) -> D
         DirectMessage.objects.between(profile, partner).select_related(
             "share",
             "share__pin_share__pin__location",
+            "share__pin_share__location__wiki",
             "share__recommended_profile",
         ),
         pk=message_id,

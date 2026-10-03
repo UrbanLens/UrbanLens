@@ -107,10 +107,8 @@ class PinShare(abstract.DashboardModel):
         max_length=MAX_PIN_SHARE_MESSAGE_LENGTH,
         validators=[MaxLengthValidator(MAX_PIN_SHARE_MESSAGE_LENGTH)],
     )
-    # Name to present for the shared pin, chosen by the sharer at share time - one of the pin's
-    # existing aliases, or a brand-new name (which also gets added to the sharer's own PinAlias
-    # list).
-    # Blank means "use the pin's current effective name" at both share and accept time.
+    # The name the sharer chose to share - one of the pin's aliases, or a new name (also added to the
+    # sharer's own PinAlias list). Blank shares no name: the recipient sees the place's own.
     shared_name = models.CharField(max_length=255, null=True, blank=True)
     # Photos the sharer opted to include - a subset of pin.images. Kept as a
     # reference to the sharer's own Image rows; accepting the share copies
@@ -156,53 +154,29 @@ class PinShare(abstract.DashboardModel):
 
     @property
     def place_label(self) -> str:
-        """Human-readable label of the shared place, safe for pin-less shares.
+        """The sender's own label for the shared place, for the sender's eyes only.
 
         Returns:
-            The pin's display label when a pin exists, otherwise the shared
-            location's display name / address / coordinates.
+            The pin's display label when a pin exists, otherwise :attr:`safe_place_label`'s location label.
         """
         if self.pin is not None:
             return self.pin.display_label
-        location = self.shared_location
-        if location is None:
-            return "a location"
-        if location.display_name and location.display_name != "Unnamed Location":
-            return location.display_name
-        return location.address or f"{location.latitude}, {location.longitude}"
-
-    @property
-    def reveals_live_pin(self) -> bool:
-        """Whether the recipient ever agreed to see the sender's actual pin.
-        ``DETECTED`` shares are auto-recorded when a place was revealed indirectly - a shared map's geometry, a DM's text, a trip activity (see :class:`~urbanlens.dashboard.models.pin_share.meta.PinShareStatus`).
-        Nobody offered the pin and nobody accepted it, so reading through to ``self.pin`` for one shows the recipient a live row they were never given: its current name, and whatever the sender renames it to next.
-
-        Returns:
-            True when this share's own pin may be shown to its recipient.
-        """
-        return self.status != PinShareStatus.DETECTED
-
-    @property
-    def safe_pin(self) -> Pin | None:
-        """The sender's pin, but only when :attr:`reveals_live_pin` allows it.
-
-        Returns:
-            The pin, or None when this share must be presented from its
-            snapshotted ``location`` instead.
-        """
-        return self.pin if self.reveals_live_pin else None
+        return self._location_label()
 
     @property
     def safe_place_label(self) -> str:
-        """:attr:`place_label`, resolved without reading a pin nobody shared.
+        """What the share calls the place to anyone but its sender: ``shared_name``, else the snapshotted location.
+
+        Never read through ``pin``. The sender's name for it is not shared unless they typed it as ``shared_name``,
+        and the pin may have been renamed or moved since.
 
         Returns:
-            The pin's display label for an explicit share, otherwise a label
-            derived from the snapshotted location.
+            The shared name, or the location's display name, address or coordinates.
         """
-        if self.reveals_live_pin:
-            return self.place_label
-        location = self.shared_location
+        return self.shared_name or self._location_label()
+
+    def _location_label(self) -> str:
+        location = self.location
         if location is None:
             return "a location"
         if location.display_name and location.display_name != "Unnamed Location":

@@ -1189,7 +1189,7 @@ def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = N
             "reply_to__sender",
             "share",
             "share__pin_share",
-            "share__pin_share__pin",
+            "share__pin_share__location__wiki",
             "share__trip",
             "share__trip_membership",
             "share__recommended_profile",
@@ -1198,7 +1198,7 @@ def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = N
         # reply_to__images: without it, the reply-quote payload's fallback
         # preview (`quoted.images.exists()` in serialize_direct_message)
         # issues one extra query per reply message in the page.
-        .prefetch_related("images", "reactions__profile", "markup_map__items", "location_mentions__location", "location_mentions__pin_share", "share__pin_share__pins_created", "share__pin_share__pin__location__wiki", "reply_to__images")
+        .prefetch_related("images", "reactions__profile", "markup_map__items", "location_mentions__location", "location_mentions__pin_share", "share__pin_share__pins_created", "reply_to__images")
     )
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)

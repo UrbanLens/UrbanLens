@@ -3,8 +3,12 @@ Views that call `int(request.POST.get(...))` directly therefore turn a malformed
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 import math
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from django.db.models import DecimalField
 
 #: The range of a Django ``IntegerField`` column. psycopg's binary dumper keeps only the low 32 bits of a value
 #: written past it (2**31 is stored as -2**31) and raises past 2**63, so the bound belongs on the parse.
@@ -105,3 +109,28 @@ def clamp_int(value: object, *, low: int, high: int, default: int) -> int:
         An integer within ``[low, high]``."""
     parsed = safe_int(value, default)
     return max(low, min(high, parsed))
+
+
+def decimal_for_column(value: Decimal, column: DecimalField) -> Decimal | None:
+    """Return ``value`` as a ``numeric(max_digits, decimal_places)`` column would store it, or ``None`` when it cannot.
+
+    PostgreSQL rounds input to the column's scale, half away from zero, and refuses more integer digits than
+    ``max_digits - decimal_places`` with ``numeric field overflow``. Rounding first means a value that only overflows
+    once rounded up is refused as well.
+
+    Args:
+        value: The parsed number.
+        column: The ``DecimalField`` the value is bound for.
+
+    Returns:
+        The rounded value, or ``None`` when ``value`` is NaN, infinite, or too large for the column.
+    """
+    if not value.is_finite():
+        return None
+    integer_digits = column.max_digits - column.decimal_places
+    if not value.is_zero() and value.adjusted() >= integer_digits:
+        return None
+    rounded = value.quantize(Decimal(1).scaleb(-column.decimal_places), rounding=ROUND_HALF_UP)
+    if not rounded.is_zero() and rounded.adjusted() >= integer_digits:
+        return None
+    return rounded
