@@ -1,18 +1,25 @@
 """Places known by name: cities of 15,000 or more people worldwide, US states and counties, and countries.
 
-The data is GeoNames' (CC BY 4.0), bundled by ``geonamescache``. It is read once per process into a compact index.
+The data is GeoNames' (CC BY 4.0), extracted from ``geonamescache`` by :mod:`.build_gazetteer` into two small files
+here, because parsing the package's JSON cost each process a second and 60 MB. Read once per process.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import cache, lru_cache
+import json
+import lzma
+from pathlib import Path
 import re
+from typing import Any
 import unicodedata
 
 from urbanlens.dashboard.services.geo.distance import haversine_km
 
 MIN_CITY_POPULATION = 15000
+CITIES_FILE = Path(__file__).with_name("data") / "geonames_cities.tsv.xz"
+REGIONS_FILE = Path(__file__).with_name("data") / "geonames_regions.json"
 
 _NON_ALNUM = re.compile(r"[^0-9a-z]+")
 
@@ -56,14 +63,22 @@ class GazetteerCity:
 
 @cache
 def _cities() -> dict[str, tuple[GazetteerCity, ...]]:
-    import geonamescache
-
     index: dict[str, list[GazetteerCity]] = {}
-    for row in geonamescache.GeonamesCache(min_city_population=MIN_CITY_POPULATION).get_cities().values():
-        city = GazetteerCity(str(row["name"]), float(row["latitude"]), float(row["longitude"]), str(row["countrycode"]), str(row.get("admin1code") or ""))
-        if folded := fold_place_name(city.name):
-            index.setdefault(folded, []).append(city)
+    with lzma.open(CITIES_FILE, "rt", encoding="utf-8") as lines:
+        for line in lines:
+            if line.startswith("#"):
+                continue
+            name, latitude, longitude, country_code, admin1 = line.rstrip("\n").split("\t")
+            if folded := fold_place_name(name):
+                index.setdefault(folded, []).append(GazetteerCity(name, float(latitude), float(longitude), country_code, admin1))
     return {name: tuple(cities) for name, cities in index.items()}
+
+
+@cache
+def _regions() -> dict[str, Any]:
+    with REGIONS_FILE.open(encoding="utf-8") as file:
+        regions: dict[str, Any] = json.load(file)
+    return regions
 
 
 def cities_named(folded_name: str) -> tuple[GazetteerCity, ...]:
@@ -85,17 +100,13 @@ def us_states() -> dict[str, str]:
     Returns:
         Folded state name to its two-letter postal code.
     """
-    import geonamescache
-
-    return {fold_place_name(str(state["name"])): str(code) for code, state in geonamescache.GeonamesCache().get_us_states().items()}
+    return {fold_place_name(str(name)): str(code) for code, name in _regions()["us_states"].items()}
 
 
 @cache
 def us_counties() -> frozenset[str]:
     """Every US county's folded name, e.g. ``"dutchess county"``."""
-    import geonamescache
-
-    return frozenset(fold_place_name(str(county["name"])) for county in geonamescache.GeonamesCache().get_us_counties())
+    return frozenset(fold_place_name(str(name)) for name in _regions()["us_counties"])
 
 
 @cache
@@ -105,17 +116,13 @@ def countries() -> dict[str, str]:
     Returns:
         Folded country name to its ISO 3166-1 alpha-2 code.
     """
-    import geonamescache
-
-    return {fold_place_name(str(country["name"])): str(code) for code, country in geonamescache.GeonamesCache().get_countries().items()}
+    return {fold_place_name(str(name)): str(code) for code, name in _regions()["countries"].items()}
 
 
 @cache
 def country_names_by_code() -> dict[str, str]:
     """Country names by ISO 3166-1 alpha-2 code."""
-    import geonamescache
-
-    return {str(code): str(country["name"]) for code, country in geonamescache.GeonamesCache().get_countries().items()}
+    return {str(code): str(name) for code, name in _regions()["countries"].items()}
 
 
 @lru_cache(maxsize=1024)
