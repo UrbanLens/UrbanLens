@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from rest_framework.request import Request
 
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, StreetViewSlide
-    from urbanlens.dashboard.services.pins.external_data import PanelSource, ProviderFetchResult
+    from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, LocationCachePanelSource, PanelSource, ProviderFetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,30 @@ def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
     return panel_visible_to(request.user, source)
 
 
+def _visible_panel_sources(request: HttpRequest) -> list[PanelSource]:
+    """Every registered panel source the viewer may see, in registry order."""
+    from urbanlens.dashboard.services.pins.external_data import panel_sources
+
+    return [source for source in panel_sources().values() if _viewer_may_see_panel(request, source)]
+
+
+def _property_tab_sources(sources: Iterable[PanelSource], pin: Pin) -> list[InfoPanelSource]:
+    """The Property Records card's tabs after its Overview, in tab order.
+
+    Args:
+        sources: The panel sources the viewer may see.
+        pin: The pin whose page holds the card.
+
+    Returns:
+        The card's tab panels; a parcel's building characteristics belong to its buildings, so a parcel has none.
+    """
+    from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+    from urbanlens.dashboard.services.pins.external_data import PanelPlacement, tabbed_panels
+
+    site_scope = is_site_scope(pin)
+    return [source for source in tabbed_panels(sources, PanelPlacement.PROPERTY) if not (site_scope and source.key == "overture_building_attributes")]
+
+
 class PinController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the pin page
@@ -205,19 +229,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         pin_lists = list(PinList.objects.for_profile(profile).with_pin_counts().order_by("name"))
 
-        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, panel_readiness, panel_sources, tabbed_panels
+        from urbanlens.dashboard.services.pins.external_data import PanelPlacement, own_panels, panel_readiness, tabbed_panels
 
         # Filter gated sources once so all surfaces stay consistent.
-        all_info_panels = [source for source in panel_sources().values() if isinstance(source, InfoPanelSource) and _viewer_may_see_panel(request, source)]
+        all_info_panels = own_panels(_visible_panel_sources(request))
         regional_sources = tabbed_panels(all_info_panels, PanelPlacement.REGIONAL)
         panel_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in regional_sources]
         location_data_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in tabbed_panels(all_info_panels, PanelPlacement.LOCATION)]
-        property_tabs = [
-            {"key": source.key, "label": source.label, "icon": source.icon}
-            for source in tabbed_panels(all_info_panels, PanelPlacement.PROPERTY)
-            if source.key != "property_records" and not (site_scope and source.key == "overture_building_attributes")
-        ]
-        simple_info_panels = [source for source in all_info_panels if source.placement == PanelPlacement.STANDALONE and source.key != "property_records" and not (site_scope and source.key == "redata_building_attributes")]
+        property_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in _property_tab_sources(all_info_panels, pin)]
+        simple_info_panels = [source for source in all_info_panels if source.placement == PanelPlacement.STANDALONE and not (site_scope and source.key == "redata_building_attributes")]
 
         # Show first tab with fresh cached data.
         # Bulk readiness check to avoid per-tab queries.
@@ -339,7 +359,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return 0
 
-    def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str, hide_tab_id: str | None = None, section_id: str | None = None):
+    def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str, hide_tab_id: str | None = None, section_id: str | None = None, *, in_tab: bool = False):
         """Schedule a panel fetch and return its polling placeholder.
 
         Args:
@@ -348,11 +368,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             source_key: An ``external_data.panel_sources()`` key.
             hide_tab_id: DOM id to hide on 204, if any.
             section_id: The placeholder's DOM id, when not the source's own.
+            in_tab: Whether the placeholder fills a tab body - see :meth:`_pending_placeholder`.
 
         Returns:
             The placeholder fragment, or 204 when suppressed or exhausted.
         """
-        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, get_panel_source, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, get_panel_source, schedule_panel_fetch
 
         attempt = self._poll_attempt(request)
         if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
@@ -360,19 +381,39 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         source = get_panel_source(source_key)
         if source is None:
             return HttpResponse(status=204)
+        return self._pending_placeholder(request, source, section_id=section_id or source.section_id, in_tab=in_tab, hide_tab_id=hide_tab_id)
+
+    def _pending_placeholder(self, request: HttpRequest, source: PanelSource, *, section_id: str, in_tab: bool, title: str | None = None, hide_tab_id: str | None = None) -> HttpResponse:
+        """The self-polling placeholder for a panel whose fetch is in flight.
+
+        Args:
+            request: The current request; its path is polled.
+            source: The panel being fetched.
+            section_id: The placeholder's DOM id.
+            in_tab: Whether it fills a tab body, where it is the tab's only content and so shows its spinner. A card of
+                its own stays hidden until there is something to show.
+            title: The heading, when not the source's own title.
+            hide_tab_id: DOM id to hide on 204, if any.
+
+        Returns:
+            The placeholder fragment.
+        """
+        from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS
+
         return render(
             request,
             "dashboard/partials/pins/panel_pending.html",
             {
-                "section_id": section_id or source.section_id,
+                "section_id": section_id,
                 "outer_class": source.outer_class,
                 "outer_is_card": source.outer_is_card,
                 "icon": source.icon,
-                "title": source.title,
+                "title": title or source.title,
                 "poll_url": request.path,
-                "next_attempt": attempt + 1,
+                "next_attempt": self._poll_attempt(request) + 1,
                 "poll_interval": POLL_INTERVAL_SECONDS,
                 "hide_tab_id": hide_tab_id,
+                "in_tab": in_tab,
             },
         )
 
@@ -1294,88 +1335,112 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def location_data_overview(self, request: HttpRequest, pin_slug: str):
+        """HTMX partial: the Location Data card's Overview, merging what each of its tabs knows about the place.
+
+        See :meth:`_card_overview`.
         """
-        HTMX partial: combined summary of every Location Data tab's cached data.
+        from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelPlacement, get_panel_source, tabbed_panels
 
-        Merges each source's :meth:`~LocationCachePanelSource.overview_summary` into one unattributed list of
-        facts about the place, scheduling a fetch for any source without fresh data. Renders what is ready and
-        keeps polling while anything is pending.
+        pin = self._overview_pin(request, pin_slug)
+        if isinstance(pin, HttpResponse):
+            return pin
+        tabs: list[LocationCachePanelSource] = [source for key in _LOCATION_DATA_BESPOKE_KEYS if isinstance(source := get_panel_source(key), LocationCachePanelSource)]
+        tabs += tabbed_panels(_visible_panel_sources(request), PanelPlacement.LOCATION)
+        return self._card_overview(request, pin, [(source.key, [source]) for source in tabs], overview_id="location-data-overview-body")
 
-        Also names, in an ``HX-Trigger`` event, the settled sources with nothing to show, so the page can hide
-        their tabs rather than leave them to land on "No data available."
+    def property_records_overview(self, request: HttpRequest, pin_slug: str):
+        """HTMX partial: the Property Records card's Overview - owner, parcel, year built, historic status and register number.
+
+        See :meth:`_card_overview`. A tab showing other panels inside it (Historic Preservation) is summarised from all of them.
         """
-        from urbanlens.dashboard.services.pins.external_data import (
-            MAX_POLL_ATTEMPTS,
-            POLL_INTERVAL_SECONDS,
-            InfoPanelSource,
-            LocationCachePanelSource,
-            PanelPlacement,
-            get_panel_source,
-            panel_sources,
-            schedule_panel_fetch,
-            tabbed_panels,
-        )
+        from urbanlens.dashboard.services.pins.external_data import panels_shown_in
 
+        pin = self._overview_pin(request, pin_slug)
+        if isinstance(pin, HttpResponse):
+            return pin
+        visible = _visible_panel_sources(request)
+        tabs: list[tuple[str, list[LocationCachePanelSource]]] = [(tab.key, [tab, *panels_shown_in(tab, visible)]) for tab in _property_tab_sources(visible, pin)]
+        return self._card_overview(request, pin, tabs, overview_id="property-records-overview-body")
+
+    @staticmethod
+    def _overview_pin(request: HttpRequest, pin_slug: str) -> Pin | HttpResponse:
+        """The viewer's pin an Overview describes, or the response for one it cannot.
+
+        Args:
+            request: The current request.
+            pin_slug: The pin's slug.
+
+        Returns:
+            The pin, a 404 for someone else's, or a 204 for one with no place to describe.
+        """
         try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+            pin = Pin.objects.select_related("location", "profile__user").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
-
-        location = pin.location
-        if not location or not pin.effective_latitude or not pin.effective_longitude:
+        if not pin.location or not pin.effective_latitude or not pin.effective_longitude:
             return HttpResponse(status=204)
+        return pin
 
-        sources: list[LocationCachePanelSource] = [source for key in _LOCATION_DATA_BESPOKE_KEYS if isinstance(source := get_panel_source(key), LocationCachePanelSource)]
-        sources += [source for source in tabbed_panels(panel_sources().values(), PanelPlacement.LOCATION) if _viewer_may_see_panel(request, source)]
+    def _card_overview(self, request: HttpRequest, pin: Pin, tabs: Sequence[tuple[str, Sequence[LocationCachePanelSource]]], *, overview_id: str) -> HttpResponse:
+        """A tabbed card's Overview: each tab's :meth:`~LocationCachePanelSource.overview_summary`, merged without attribution.
+
+        Schedules a fetch for any source without fresh data, renders what is ready and keeps polling while anything is
+        pending. Names, in an ``HX-Trigger`` event, the tabs whose sources all settled with nothing to show, so the page
+        can remove them rather than leave them to land on "No data available." A source whose gate refuses the pin is
+        neither fetched nor shown, as its own tab would not be.
+
+        Args:
+            request: The current request.
+            pin: The pin being viewed.
+            tabs: Each tab's key and the sources it shows, in tab order.
+            overview_id: The Overview body's DOM id.
+
+        Returns:
+            The merged summary, its pending placeholder, or a 204 when nothing is known.
+        """
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, InfoPanelSource, cached_entries, gate_allows, schedule_panel_fetch
+
+        sources = list(dict.fromkeys(source for _key, members in tabs for source in members))
+        applicable = [source for source in sources if gate_allows(source, pin)]
+        entries = cached_entries(pin, applicable)
+        empty = {source.key for source in sources if source not in applicable}
 
         heading_name: str | None = None
         chips: list[str] = []
         fields: list[dict] = []
         notes: list[dict] = []
         footer_links: list[dict] = []
+        seen_fields: set[tuple[str, str]] = set()
         seen_footer_urls: set[str] = set()
         pending_any = False
-        empty_keys: list[str] = []
-        for source in sources:
-            # A fresh row, not `is_ready`. Asking it here meant a *fetched* source whose answer was legitimately
-            # empty looked unfetched, got rescheduled on every render, and was never added to `empty_keys`.
-            cached = source.cached_entry(pin)
-            if cached is not None:
-                piece = source.overview_summary(pin, cached.data or {})
-                if piece is None:
-                    # Nothing for the Overview; the tab itself may still have something to show.
-                    if not (isinstance(source, InfoPanelSource) and source.render_context(pin, cached.data or {}) is not None):
-                        empty_keys.append(source.key)
-                    continue
-                if heading_name is None and piece.heading_name:
-                    heading_name = piece.heading_name
-                for chip in piece.chips:
-                    if chip not in chips:
-                        chips.append(chip)
-                fields.extend(piece.fields)
-                tab_label = source.label if isinstance(source, InfoPanelSource) else source.title
-                notes.extend({"text": note, "tab_key": source.key, "tab_label": tab_label} for note in piece.notes)
-                footer_link = piece.footer_link
-                if footer_link and footer_link["url"] not in seen_footer_urls:
-                    seen_footer_urls.add(footer_link["url"])
-                    footer_links.append(footer_link)
-            elif schedule_panel_fetch(source.key, pin):
-                pending_any = True
-
-        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
-
-        parcel = is_site_scope(pin)
-        for source in tabbed_panels(panel_sources().values(), PanelPlacement.PROPERTY):
-            if source.key == "property_records" or not _viewer_may_see_panel(request, source) or (parcel and source.key == "overture_building_attributes"):
-                continue
-            cached = source.cached_entry(pin)
+        for source in applicable:
+            cached = entries[source.key]
             if cached is None:
-                # Fetched now so an empty Property Records tab is found and hidden, not left until someone opens it.
                 pending_any = schedule_panel_fetch(source.key, pin) or pending_any
                 continue
-            if not (isinstance(source, InfoPanelSource) and source.render_context(pin, cached.data or {}) is not None):
-                empty_keys.append(source.key)
+            data = cached.data or {}
+            piece = source.overview_summary(pin, data)
+            if piece is None:
+                # Nothing for the Overview; the tab itself may still have something to show.
+                if not (isinstance(source, InfoPanelSource) and source.render_context(pin, data) is not None):
+                    empty.add(source.key)
+                continue
+            if heading_name is None and piece.heading_name:
+                heading_name = piece.heading_name
+            chips.extend(chip for chip in piece.chips if chip not in chips)
+            for summary_field in piece.fields:
+                field_key = (summary_field["label"], summary_field["value"])
+                if field_key not in seen_fields:
+                    seen_fields.add(field_key)
+                    fields.append(summary_field)
+            tab_label = source.label if isinstance(source, InfoPanelSource) else source.title
+            notes.extend({"text": note, "tab_key": source.key, "tab_label": tab_label} for note in piece.notes if all(note != seen["text"] for seen in notes))
+            footer_link = piece.footer_link
+            if footer_link and footer_link["url"] not in seen_footer_urls:
+                seen_footer_urls.add(footer_link["url"])
+                footer_links.append(footer_link)
 
+        empty_tabs = [key for key, members in tabs if all(member.key in empty for member in members)]
         attempt = self._poll_attempt(request)
         still_waiting = pending_any and attempt < MAX_POLL_ATTEMPTS
 
@@ -1385,7 +1450,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     request,
                     "dashboard/partials/pins/panel_pending.html",
                     {
-                        "section_id": "location-data-overview-body",
+                        "section_id": overview_id,
                         "outer_class": "pin-plugin-tab-body",
                         "outer_is_card": True,
                         "icon": "travel_explore",
@@ -1393,36 +1458,35 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                         "poll_url": request.path,
                         "next_attempt": attempt + 1,
                         "poll_interval": POLL_INTERVAL_SECONDS,
+                        "in_tab": True,
                     },
                 )
             else:
                 response = HttpResponse(status=204)
-            return self._notify_empty_location_data_tabs(response, empty_keys)
+            return self._notify_empty_tabs(response, empty_tabs)
 
-        # Render whatever's ready immediately rather than waiting on the slowest source - if something's still
-        # pending, the section keeps self-polling (outerHTML swap, same as panel_pending.html) to pick up later
-        # arrivals instead of leaving the tab stuck on a partial view.
-        context: dict = {"heading_name": heading_name, "chips": chips, "fields": fields, "notes": notes, "footer_links": footer_links}
+        # Render whatever's ready now rather than waiting on the slowest source; while anything is pending the body
+        # keeps self-polling (an outerHTML swap, as panel_pending.html does) to pick up later arrivals.
+        context: dict = {"overview_id": overview_id, "heading_name": heading_name, "chips": chips, "fields": fields, "notes": notes, "footer_links": footer_links}
         if still_waiting:
             context.update({"poll_url": request.path, "next_attempt": attempt + 1, "poll_interval": POLL_INTERVAL_SECONDS})
-        response = render(request, "dashboard/partials/pins/_pin_location_data_overview.html", context)
-        return self._notify_empty_location_data_tabs(response, empty_keys)
+        response = render(request, "dashboard/partials/pins/_pin_card_overview.html", context)
+        return self._notify_empty_tabs(response, empty_tabs)
 
     @staticmethod
-    def _notify_empty_location_data_tabs(response: HttpResponse, empty_keys: list[str]) -> HttpResponse:
-        """Attach an HX-Trigger event listing Location Data tabs confirmed to have no content.
+    def _notify_empty_tabs(response: HttpResponse, empty_keys: list[str]) -> HttpResponse:
+        """Attach an HX-Trigger event naming the tabs confirmed to have no content.
 
         Args:
             response: The response to annotate.
-            empty_keys: Panel source keys that are settled (``is_ready``) but produced no summarizable data
-            this call - safe to hide.
+            empty_keys: Keys of tabs whose sources all settled with nothing to show - safe to remove.
 
         Returns:
             The same response, for chaining.
         """
         if not empty_keys:
             return response
-        response["HX-Trigger"] = json.dumps({"pinLocationDataEmpty": {"keys": empty_keys}})
+        response["HX-Trigger"] = json.dumps({"pinTabsEmpty": {"keys": empty_keys}})
         return response
 
     def nominatim_info(self, request: HttpRequest, pin_slug: str):
@@ -1453,7 +1517,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         cached = LocationCache.get_fresh(location, "nominatim")
         if cached is None:
-            return self._pending_panel(request, pin, "nominatim")
+            return self._pending_panel(request, pin, "nominatim", in_tab=True)
         data = cached.data or None
 
         useful_fields = ("website", "phone", "email", "opening_hours", "operator", "wikipedia", "wikidata", "image", "extra_details", "kind_label")
@@ -1643,7 +1707,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns:
             The panel, its placeholder, a 204 when there is nothing to show, or a 404.
         """
-        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, get_panel_source, panel_sources, panels_shown_in
 
         panel = get_panel_source(panel_key)
         if not isinstance(panel, InfoPanelSource) or (in_building_card and not panel.building_level):
@@ -1663,13 +1727,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not location:
             return HttpResponse(status=204)
 
+        section_id = f"{panel.section_id}--{pin.slug}" if in_building_card else panel.section_id
+        in_tab = not in_building_card and panel.placement != PanelPlacement.STANDALONE
+        companions = [source for source in panels_shown_in(panel, panel_sources().values()) if (source.building_level or not in_building_card) and _viewer_may_see_panel(request, source)]
+        if companions:
+            return self._render_merged_panel(request, pin, [panel, *companions], section_id=section_id, in_tab=in_tab, nested=in_building_card or in_tab)
+
         if not panel.gate(pin):
             return HttpResponse(status=204)
 
-        section_id = f"{panel.section_id}--{pin.slug}" if in_building_card else panel.section_id
         cached = panel.cached_entry(pin)
         if cached is None:
-            return self._pending_panel(request, pin, panel_key, section_id=section_id)
+            return self._pending_panel(request, pin, panel_key, section_id=section_id, in_tab=in_tab)
         data = cached.data or {}
 
         context = panel.render_context(pin, data)
@@ -1682,7 +1751,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Decided here rather than taken from render_context: a panel cannot know whether it was rendered into a
         # tab strip (which supplies the card chrome) or standalone (which does not - the placeholder it replaces
         # via hx-swap="outerHTML" takes its card with it).
-        context["nested"] = in_building_card or panel.placement != PanelPlacement.STANDALONE
+        context["nested"] = in_building_card or in_tab
         context["debug"] = self._debug_entry(request, panel_key, cached.query_key, from_cache=True, count=panel.debug_count(data))
         # Links a panel marks with ai_extract=True get the AI extraction button.
         context["pin"] = pin
@@ -1693,6 +1762,54 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             # EpaEchoDetailPanelSource.fetch() can auto-add a compliance-report link.
             response = self._notify_panel_ready(request, response, "pinLinksChanged")
         return response
+
+    def _render_merged_panel(self, request: HttpRequest, pin: Pin, members: Sequence[InfoPanelSource], *, section_id: str, in_tab: bool, nested: bool) -> HttpResponse:
+        """Render a panel and the panels shown inside it as one, each under its own title, a repeated fact given once.
+
+        Each member keeps its own gate, fetch and failure handling: a member still fetching is scheduled and polled for
+        while the others show.
+
+        Args:
+            request: The current request; its path is polled.
+            pin: The pin being viewed.
+            members: The host panel first, then the panels it shows.
+            section_id: The panel's DOM id.
+            in_tab: Whether it fills a tab body.
+            nested: Whether its card chrome comes from the surrounding card.
+
+        Returns:
+            The merged panel, its pending placeholder, or a 204 when no member has anything to show.
+        """
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, cached_entries, gate_allows, schedule_panel_fetch, without_repeats
+
+        host = members[0]
+        attempt = self._poll_attempt(request)
+        applicable = [member for member in members if gate_allows(member, pin)]
+        entries = cached_entries(pin, applicable)
+        sections: list[dict] = []
+        pending = False
+        for member in applicable:
+            cached = entries[member.key]
+            if cached is None:
+                if attempt < MAX_POLL_ATTEMPTS:
+                    pending = schedule_panel_fetch(member.key, pin) or pending
+                continue
+            data = cached.data or {}
+            context = member.render_context(pin, data)
+            if context is not None:
+                debug = self._debug_entry(request, member.key, cached.query_key, from_cache=True, count=member.debug_count(data))
+                sections.append({**context, "source_title": member.title, "source_icon": member.icon, "debug": debug})
+
+        if not sections:
+            if pending:
+                return self._pending_placeholder(request, host, section_id=section_id, in_tab=in_tab, title=host.label)
+            return HttpResponse(status=204)
+
+        context = {"section_id": section_id, "icon": host.icon, "title": host.label, "nested": nested, "sections": without_repeats(sections), "pin": pin}
+        context.update(self._ai_extract_context(request, pin))
+        if pending:
+            context.update({"poll_url": request.path, "next_attempt": attempt + 1, "poll_interval": POLL_INTERVAL_SECONDS})
+        return render(request, "dashboard/partials/pins/_merged_info_panel.html", context)
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
         """HTMX partial: USGS Historical Topographic Map Collection maps near the pin."""

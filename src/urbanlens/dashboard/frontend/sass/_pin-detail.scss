@@ -1560,6 +1560,29 @@
             text-decoration: underline;
         }
     }
+
+    // One source's part of a merged panel (_merged_info_panel.html), headed by the source's name.
+    .simple-info-source + .simple-info-source {
+        margin-top: 1rem;
+        padding-top: .75rem;
+        border-top: 1px solid var(--ul-border);
+    }
+
+    .simple-info-source-name {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        margin: 0 0 .4rem;
+        font-size: .72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .02em;
+        color: var(--ul-grey-6);
+
+        .material-symbols-outlined {
+            font-size: .95rem;
+        }
+    }
 }
 
 // -- Plugin-panel tab strips (Regional Data, Location Data) --
@@ -1642,10 +1665,10 @@
     font-size: .85rem;
 }
 
-// -- Location Data card's "Overview" tab (_pin_location_data_overview.html) --
+// -- A tabbed card's "Overview" tab (_pin_card_overview.html) --
 // One merged summary of field:value facts from every ready source, with no
-// per-source headers or attribution - see PinController.location_data_overview.
-.location-data-overview-heading {
+// per-source headers or attribution - see PinController._card_overview.
+.card-overview-heading {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
@@ -1653,14 +1676,14 @@
     margin-bottom: .5rem;
 }
 
-.location-data-overview-place-name {
+.card-overview-place-name {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
     color: var(--ul-grey-9);
 }
 
-.location-data-overview-chip {
+.card-overview-chip {
     max-width: 100%;
     padding: .1rem .55rem;
     font-size: .68rem;
@@ -1673,7 +1696,7 @@
     overflow-wrap: anywhere;
 }
 
-.location-data-overview-note {
+.card-overview-note {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
@@ -1683,14 +1706,14 @@
     color: var(--ul-grey-8);
 }
 
-.location-data-overview-fields {
+.card-overview-fields {
     margin: 0;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: .5rem 1rem;
 }
 
-.location-data-overview-field {
+.card-overview-field {
     display: flex;
     flex-direction: column;
     gap: .05rem;
@@ -1721,7 +1744,7 @@
     }
 }
 
-.location-data-overview-links {
+.card-overview-links {
     display: flex;
     flex-wrap: wrap;
     gap: .5rem 1.25rem;
@@ -1730,7 +1753,7 @@
     border-top: 1px solid var(--ul-border);
 }
 
-.location-data-overview-link {
+.card-overview-link {
     display: inline-flex;
     align-items: center;
     gap: .3rem;

@@ -23,6 +23,9 @@ NPS_RECORD_URL = "https://npgallery.nps.gov/AssetDetail/NRIS/{reference}"
 #: NRIS reference numbers: eight digits, nine for listings since 2016.
 _REFERENCE_NUMBER = re.compile(r"\d{8,9}")
 
+#: The label a reference number takes in a summary drawing on several sources, so that one given twice is given once.
+REFERENCE_NUMBER_LABEL = "National Register number"
+
 _HISTORIC_REGISTERS_CACHE_SOURCE = "redata_historic_registers"
 _CRIS_CACHE_SOURCE = "cris_building_usn"
 _CRIS_LISTED = "listed"
@@ -42,6 +45,21 @@ def nps_record_url(reference: str | None) -> str | None:
     if not isinstance(reference, str) or not _REFERENCE_NUMBER.fullmatch(reference):
         return None
     return NPS_RECORD_URL.format(reference=reference)
+
+
+def reference_field(reference: str | None) -> dict[str, str] | None:
+    """A reference number as a summary field, linked to NPS's record.
+
+    Args:
+        reference: An NRIS reference number, or None.
+
+    Returns:
+        ``{"label", "value", "href"}``, or None for anything that is not a reference number.
+    """
+    url = nps_record_url(reference)
+    if reference is None or url is None:
+        return None
+    return {"label": REFERENCE_NUMBER_LABEL, "value": reference, "href": url}
 
 
 def reference_number(row: dict[str, Any]) -> str | None:

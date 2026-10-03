@@ -502,6 +502,8 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
         tab_order: Sort key among one card's tabs; ties keep plugin order.
         building_level: The panel describes one structure rather than the area, so a property page with the
             child-details toggle on shows it again inside each building child's card, for that child.
+        shown_in: The key of another info panel that shows this one inside it, under this panel's title, in place
+            of a tab or card of its own. Ignored while that panel is not registered or not visible to the viewer.
     """
 
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
@@ -509,6 +511,7 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
     tab_label: ClassVar[str] = ""
     tab_order: ClassVar[int] = 100
     building_level: ClassVar[bool] = False
+    shown_in: ClassVar[str] = ""
 
     @property
     def label(self) -> str:
@@ -1293,10 +1296,69 @@ def tabbed_panels(sources: Iterable[PanelSource], placement: PanelPlacement) -> 
         placement: The card whose tabs are wanted.
 
     Returns:
-        The matching sources, sorted by ``tab_order``; the sort is stable, so ties keep registry order.
+        The matching sources, sorted by ``tab_order``; the sort is stable, so ties keep registry order. A source shown
+        inside another of ``sources`` is not a tab of its own.
     """
-    placed = [source for source in sources if isinstance(source, InfoPanelSource) and source.placement == placement]
+    placed = [source for source in own_panels(sources) if source.placement == placement]
     return sorted(placed, key=lambda source: source.tab_order)
+
+
+def own_panels(sources: Iterable[PanelSource]) -> list[InfoPanelSource]:
+    """The info panels among ``sources`` that are not shown inside another of them.
+
+    Args:
+        sources: Candidate sources, in registry order.
+
+    Returns:
+        The info panels with no :attr:`~InfoPanelSource.shown_in` host among ``sources``, in the order given.
+    """
+    panels = [source for source in sources if isinstance(source, InfoPanelSource)]
+    keys = {source.key for source in panels}
+    return [source for source in panels if source.shown_in not in keys]
+
+
+def panels_shown_in(host: InfoPanelSource, sources: Iterable[PanelSource]) -> list[InfoPanelSource]:
+    """The info panels among ``sources`` that ``host`` shows inside it.
+
+    Args:
+        host: The panel whose tab or card holds them.
+        sources: Candidate sources, in registry order.
+
+    Returns:
+        The panels declaring ``host`` as their :attr:`~InfoPanelSource.shown_in`, in the order given.
+    """
+    return [source for source in sources if isinstance(source, InfoPanelSource) and source is not host and source.shown_in == host.key]
+
+
+def without_repeats(contexts: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Several panels' render contexts, each dropping what an earlier one already said.
+
+    A fact is repeated when it links somewhere an earlier panel already linked, or gives a label and value an earlier
+    panel already gave. The first panel is kept whole; a later one left with nothing to show is dropped.
+
+    Args:
+        contexts: ``render_context`` results, in display order.
+
+    Returns:
+        The contexts to show, in the same order.
+    """
+    links: set[str] = set()
+    pairs: set[tuple[str, str]] = set()
+    texts: set[str] = set()
+    kept: list[dict[str, Any]] = []
+    for index, context in enumerate(contexts):
+        meta = [entry for entry in context.get("meta") or [] if index == 0 or not (entry.get("href") in links or (str(entry.get("label")), str(entry.get("value"))) in pairs)]
+        facts = [fact for fact in context.get("facts") or [] if index == 0 or not (fact.get("href") in links or str(fact.get("text")) in texts)]
+        footer_link = context.get("footer_link")
+        if index and footer_link and footer_link.get("url") in links:
+            footer_link = None
+        trimmed = {**context, "meta": meta, "facts": facts, "footer_link": footer_link}
+        links.update(link for link in [*(entry.get("href") for entry in meta), *(fact.get("href") for fact in facts), (footer_link or {}).get("url")] if link)
+        pairs.update((str(entry.get("label")), str(entry.get("value"))) for entry in meta)
+        texts.update(str(fact.get("text")) for fact in facts)
+        if index == 0 or any(trimmed.get(key) for key in ("heading_name", "chips", "facts", "meta", "footer_link")):
+            kept.append(trimmed)
+    return kept
 
 
 def get_panel_source(source_key: str) -> PanelSource | None:

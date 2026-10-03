@@ -28,6 +28,8 @@ BUILDING_LEVEL_KEYS = (
     "redata_historic_registers",
 )
 AREA_LEVEL_KEYS = ("photon", "open_elevation", "census_tigerweb", "hazard_history", "gdelt")
+#: Building-level panels a building's card shows inside another one's (P226).
+SHOWN_INSIDE_ANOTHER = {"cris_building": "redata_historic_registers"}
 
 _CARD = 'class="child-building-detail"'
 
@@ -149,7 +151,11 @@ class BuildingCardTests(_Base):
     def test_the_card_loads_the_buildings_own_building_panels_only(self) -> None:
         content = self._card(self.building).content.decode()
         for key in BUILDING_LEVEL_KEYS:
-            self.assertIn(reverse("pin.building_panel", args=[self.building.slug, key]), content)
+            url = reverse("pin.building_panel", args=[self.building.slug, key])
+            if key in SHOWN_INSIDE_ANOTHER:
+                self.assertNotIn(url, content, f"{key} is shown inside {SHOWN_INSIDE_ANOTHER[key]}, not on its own")
+            else:
+                self.assertIn(url, content)
         for key in AREA_LEVEL_KEYS:
             self.assertNotIn(f"/{key}/", content)
 

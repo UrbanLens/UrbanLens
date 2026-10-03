@@ -12,16 +12,22 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.plugins.builtin.cris_buildings import CrisBuildingPanelSource
 from urbanlens.dashboard.plugins.registry import PluginRegistry
+from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 from urbanlens.dashboard.services.pins.external_data import (
     InfoPanelSource,
     PanelPlacement,
     panel_sources,
     tabbed_panels,
 )
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
+
+#: Covers upstate New York, so CRIS's gate needs no TIGERweb call.
+_NY_ISH = GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -73.0)])
 
 REGIONAL_KEYS = (
     "census_tigerweb",
@@ -32,7 +38,7 @@ REGIONAL_KEYS = (
     "redata_air_quality",
     "epa_echo",
 )
-LOCATION_KEYS = ("photon", "open_elevation")
+LOCATION_KEYS = ("photon", "open_elevation", "redata_site_conditions")
 PROPERTY_KEYS = ("property_records", "overture_building_attributes", "redata_historic_registers", "cris_building")
 MOVED_TO_REGIONAL = ("hazard_history", "redata_hydrology", "redata_air_quality")
 
@@ -193,7 +199,8 @@ class PinPagePlacementTests(TestCase):
         self.assertEqual(labels["hazard_history"], "Disasters")
         self.assertEqual(labels["redata_hydrology"], "Water")
         self.assertEqual(labels["redata_air_quality"], "Air Quality")
-        self.assertEqual(labels["redata_historic_registers"], "Historic Registers")
+        self.assertEqual(labels["redata_historic_registers"], "Historic Preservation")
+        self.assertEqual(labels["property_records"], "Parcel")
 
     def test_a_plugin_can_place_a_new_panel_by_declaration(self) -> None:
         original = PluginRegistry.panel_sources
@@ -390,6 +397,10 @@ class HistoricRegisterTabTests(TestCase):
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
+        LocationCache.set(self.pin.location, "cris_building_usn", {}, query_key="")
+        patcher = mock.patch.object(CrisBuildingPanelSource, "geo_boundary", _NY_ISH)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_the_tab_leads_with_the_national_register_listing(self) -> None:
         LocationCache.set(
@@ -420,20 +431,24 @@ class HistoricRegisterTabTests(TestCase):
         self.assertNotContains(response, "Old Mill", status_code=response.status_code)
 
 
-class HistoricRegisterOverviewEndpointTests(TestCase):
-    """The Location Data Overview endpoint's effect on the Historic Registers tab."""
+class HistoricRegisterOverviewEndpointTests(RedataConfiguredMixin, TestCase):
+    """Each card's Overview decides which of its own tabs to remove; Historic Preservation is Property Records'."""
 
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
-        for key in ("nominatim", "photon", "overture_building_attributes", "open_elevation"):
+        for key in ("nominatim", "photon", "open_elevation", "redata_site_conditions"):
             LocationCache.set(self.pin.location, key, {}, query_key="")
+        for key in ("property_records", "overture_building_attributes", "cris_building_usn"):
+            LocationCache.set(self.pin.location, key, {}, query_key="")
+        patcher = mock.patch.object(CrisBuildingPanelSource, "geo_boundary", _NY_ISH)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_a_tab_with_nothing_for_the_overview_is_kept_while_it_has_content(self) -> None:
         """Adding nothing to the Overview is the default, so it cannot be what hides a tab."""
-        LocationCache.set(self.pin.location, "redata_historic_registers", {"resources": []}, query_key="")
         LocationCache.set(self.pin.location, "future_location_panel", {"value": "something"}, query_key="")
         original = PluginRegistry.panel_sources
 
@@ -441,18 +456,18 @@ class HistoricRegisterOverviewEndpointTests(TestCase):
             return [*original(registry), _FutureLocationPanelSource()]
 
         with mock.patch.object(PluginRegistry, "panel_sources", with_future_panel):
-            hidden = self._hidden_tabs(self._overview())
+            hidden = self._hidden_tabs(self._overview("pin.location_data_overview"))
 
         self.assertNotIn("future_location_panel", hidden)
 
-    def _overview(self):
+    def _overview(self, name: str = "pin.property_records_overview"):
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):
-            return self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
+            return self.client.get(reverse(name, args=[self.pin.slug]))
 
     def _hidden_tabs(self, response) -> list[str]:
         if "HX-Trigger" not in response:
             return []
-        return json.loads(response["HX-Trigger"])["pinLocationDataEmpty"]["keys"]
+        return json.loads(response["HX-Trigger"])["pinTabsEmpty"]["keys"]
 
     def test_a_listing_keeps_its_tab(self) -> None:
         LocationCache.set(
@@ -493,3 +508,9 @@ class HistoricRegisterOverviewEndpointTests(TestCase):
         response = self._overview()
 
         self.assertIn("redata_historic_registers", self._hidden_tabs(response))
+
+    def test_location_datas_overview_leaves_it_alone(self) -> None:
+        LocationCache.set(self.pin.location, "redata_historic_registers", {"resources": []}, query_key="")
+        response = self._overview("pin.location_data_overview")
+
+        self.assertNotIn("redata_historic_registers", self._hidden_tabs(response))

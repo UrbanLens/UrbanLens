@@ -1,0 +1,30 @@
+{% comment %}Several info panels shown as one, each under its own source's name (PinController._render_merged_panel).{% endcomment %}
+<div id="{{ section_id }}" class="simple-info-panel {% if nested %}nested{% else %}card{% endif %}"
+     data-collapse-scope="pin" data-collapse-section="{{ section_id }}"
+     {% if poll_url %}
+     hx-get="{{ poll_url }}?attempt={{ next_attempt }}"
+     hx-trigger="load delay:{{ poll_interval }}s"
+     hx-swap="outerHTML"
+     hx-timeout="25000"
+     {% endif %}>
+    <div class="card-header">
+        <i class="material-symbols-outlined">{{ icon }}</i>
+        <h3>{{ title }}</h3>
+    </div>
+    {% for section in sections %}
+    <section class="simple-info-source">
+        {% if section.debug %}
+        <span class="debug-marker" hidden
+              data-debug-source="{{ section.debug.source }}"
+              data-debug-query="{{ section.debug.query }}"
+              data-debug-cache="{{ section.debug.from_cache|yesno:'hit,miss' }}"
+              data-debug-count="{{ section.debug.count }}"></span>
+        {% endif %}
+        <h4 class="simple-info-source-name">
+            <i class="material-symbols-outlined">{{ section.source_icon }}</i>
+            {{ section.source_title }}
+        </h4>
+        {% include "dashboard/partials/pins/_simple_info_body.html" with heading_name=section.heading_name chips=section.chips facts=section.facts meta=section.meta footer_link=section.footer_link %}
+    </section>
+    {% endfor %}
+</div>

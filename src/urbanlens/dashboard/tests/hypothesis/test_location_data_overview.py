@@ -13,18 +13,13 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, OverviewSummary, get_panel_source
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
-LOCATION_DATA_KEYS = (
-    "nominatim",
-    "photon",
-    "overture_building_attributes",
-    "open_elevation",
-    "redata_historic_registers",
-)
+LOCATION_DATA_KEYS = ("nominatim", "photon", "open_elevation", "redata_site_conditions")
 
 
 class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
@@ -105,7 +100,7 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
         self.assertIsNone(self._summary("open_elevation", {}))
 
 
-class LocationDataOverviewEndpointTests(TestCase):
+class LocationDataOverviewEndpointTests(RedataConfiguredMixin, TestCase):
     """PinController.location_data_overview() - the aggregation endpoint."""
 
     def setUp(self) -> None:
@@ -132,11 +127,7 @@ class LocationDataOverviewEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Overview")
         scheduled_keys = {call.kwargs["args"][0] for call in fetch_task.apply_async.call_args_list}
-        self.assertIn("nominatim", scheduled_keys)
-        self.assertIn("photon", scheduled_keys)
-        self.assertIn("overture_building_attributes", scheduled_keys)
-        self.assertIn("open_elevation", scheduled_keys)
-        self.assertIn("redata_historic_registers", scheduled_keys)
+        self.assertEqual(scheduled_keys, set(LOCATION_DATA_KEYS))
 
     def test_renders_ready_sources_merged(self) -> None:
         LocationCache.set(self.pin.location, "photon", {"locality": "Ready Place"}, query_key="")
@@ -174,32 +165,20 @@ class LocationDataOverviewEndpointTests(TestCase):
         self.assertContains(response, "hx-trigger")
 
     def test_all_sources_empty_and_settled_returns_204(self) -> None:
-        """Every source fetched, none had anything useful - and nothing left pending, Property Records' included."""
-        from urbanlens.dashboard.services.pins.external_data import PanelPlacement, panel_sources, tabbed_panels
-
-        property_sources = tabbed_panels(panel_sources().values(), PanelPlacement.PROPERTY)
-        for cache_source in {*LOCATION_DATA_KEYS, *(source.cache_source for source in property_sources)}:
-            LocationCache.set(self.pin.location, cache_source, {}, query_key="")
+        """Every source fetched, none had anything useful - and nothing left pending."""
+        for key in LOCATION_DATA_KEYS:
+            LocationCache.set(self.pin.location, key, {}, query_key="")
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
             response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 204)
         fetch_task.apply_async.assert_not_called()
-
-    def test_an_unfetched_property_records_tab_is_fetched_so_it_can_be_hidden_if_empty(self) -> None:
-        for key in LOCATION_DATA_KEYS:
-            LocationCache.set(self.pin.location, key, {}, query_key="")
-        with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
-            self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
-        scheduled = {call.kwargs["args"][0] for call in fetch_task.apply_async.call_args_list}
-        self.assertIn("cris_building", scheduled)
-        self.assertNotIn("property_records", scheduled, "the card's own first tab loads with the card")
 
     def test_all_sources_empty_notifies_the_client_to_hide_every_tab(self) -> None:
         for key in LOCATION_DATA_KEYS:
             LocationCache.set(self.pin.location, key, {}, query_key="")
         response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
         trigger = json.loads(response["HX-Trigger"])
-        self.assertEqual(set(trigger["pinLocationDataEmpty"]["keys"]), set(LOCATION_DATA_KEYS))
+        self.assertEqual(set(trigger["pinTabsEmpty"]["keys"]), set(LOCATION_DATA_KEYS))
 
     def test_a_settled_but_empty_source_is_flagged_even_when_others_are_ready(self) -> None:
         """Photon has real data; nominatim settled with nothing - only nominatim should be flagged."""
@@ -209,7 +188,7 @@ class LocationDataOverviewEndpointTests(TestCase):
             response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
         trigger = json.loads(response["HX-Trigger"])
-        self.assertEqual(trigger["pinLocationDataEmpty"]["keys"], ["nominatim"])
+        self.assertEqual(trigger["pinTabsEmpty"]["keys"], ["nominatim"])
 
     def test_a_settled_but_empty_source_is_flagged_while_others_are_still_pending(self) -> None:
         """Nominatim settled with nothing; photon/others not yet fetched (still pending)."""
@@ -219,7 +198,7 @@ class LocationDataOverviewEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "hx-trigger")  # still self-polling for the pending sources
         trigger = json.loads(response["HX-Trigger"])
-        self.assertEqual(trigger["pinLocationDataEmpty"]["keys"], ["nominatim"])
+        self.assertEqual(trigger["pinTabsEmpty"]["keys"], ["nominatim"])
 
     def test_nothing_settled_yet_carries_no_empty_tab_notification(self) -> None:
         """Nothing ready at all - every source just got scheduled, none confirmed empty yet."""

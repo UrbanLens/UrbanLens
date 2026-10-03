@@ -57,8 +57,9 @@ def building_panel_sources(user: AbstractBaseUser | AnonymousUser) -> list[InfoP
         user: The viewer.
 
     Returns:
-        Every ``building_level`` info panel the viewer holds the feature for, in registry order.
+        Every ``building_level`` info panel the viewer holds the feature for, in registry order, but for one shown
+        inside another of them.
     """
-    from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_sources, panel_visible_to
+    from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, own_panels, panel_sources, panel_visible_to
 
-    return [source for source in panel_sources().values() if isinstance(source, InfoPanelSource) and source.building_level and panel_visible_to(user, source)]
+    return own_panels(source for source in panel_sources().values() if isinstance(source, InfoPanelSource) and source.building_level and panel_visible_to(user, source))

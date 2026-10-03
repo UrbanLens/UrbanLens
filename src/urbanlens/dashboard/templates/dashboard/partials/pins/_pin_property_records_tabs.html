@@ -1,4 +1,4 @@
-{% comment %}Property Records card: Overview, then every panel placed here (PanelPlacement.PROPERTY).{% endcomment %}
+{% comment %}Property Records card: an Overview summary, then every panel placed here (PanelPlacement.PROPERTY).{% endcomment %}
 <div id="property-records-section" class="card card--secondary"
      data-collapse-scope="pin" data-collapse-section="property-records" data-collapse-label="Property Records">
     <div class="card-header">
@@ -7,7 +7,7 @@
     </div>
     <div class="card-tabs" role="tablist" data-card-tabs>
         <button type="button" data-card-tab class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
-                hx-get="{% url 'pin.panel' pin.slug 'property_records' %}"
+                hx-get="{% url 'pin.property_records_overview' pin.slug %}"
                 hx-target="#property-records-body" hx-swap="innerHTML"
                 hx-trigger="ul:lazy-load, click" data-ul-lazy-section="pin:property-records">
             <i class="material-symbols-outlined">home_work</i>

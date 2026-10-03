@@ -13,7 +13,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import RE
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelApiKind, PanelPlacement
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, OverviewSummary, PanelApiKind, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _CACHE_SOURCE = "property_records"
+
+#: Said in place of an official owner's name to a viewer not entitled to it.
+OWNER_WITHHELD = "Owner on record - subscribers only"
 
 
 #: Liens shown on the card. A parcel with a long enforcement history is
@@ -561,7 +564,7 @@ def _render_available(data: dict[str, Any], *, show_owner: bool, show_demographi
         # Named rather than silently dropped: "this parcel has a recorded
         # owner you can't see" is a different (and honest) statement from
         # "no owner on record", and the second would read as missing data.
-        chips.append("Owner on record - subscribers only")
+        chips.append(OWNER_WITHHELD)
 
     return {
         "heading_name": (", ".join(owner_names) or None) if show_owner else None,
@@ -590,10 +593,11 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
     cache_source = _CACHE_SOURCE
     #: A building pin stands on its site's parcel.
     site_level: ClassVar[bool] = True
-    section_id = "property-records-overview-section"
-    icon = "home_work"
+    section_id = "parcel-records-section"
+    icon = "description"
     title = "Property Records"
     placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
+    tab_label: ClassVar[str] = "Parcel"
     tab_order: ClassVar[int] = 0
     # Deliberately not exposed on the external API: this is ownership/tax record data pulled from
     # county GIS/tax sources, and redistributing it through a bearer-key API is a different (and
@@ -656,6 +660,30 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
         if data.get("reason") in (REASON_MANUAL_ONLY, REASON_BLOCKED):
             return _render_manual_only(data)
         return None
+
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """The owner, parcel number and year built, for the Property Records Overview.
+
+        The owner's name is shown only to a viewer entitled to it, as on the Parcel tab; anyone else is told one is on
+        record.
+        """
+        from urbanlens.dashboard.services.property.owner_access import can_see_official_owners, viewer_of
+
+        if not data.get("available"):
+            message = str(data.get("message") or "").strip().rstrip(".")
+            return OverviewSummary(notes=[message]) if message and data.get("reason") in (REASON_MANUAL_ONLY, REASON_BLOCKED) else None
+        chips: list[str] = []
+        fields: list[dict[str, str]] = []
+        if owners := [str(name) for name in data.get("owner_name") or [] if name]:
+            if can_see_official_owners(viewer_of(pin)):
+                fields.append({"label": "Owner", "value": ", ".join(owners)})
+            else:
+                chips.append(OWNER_WITHHELD)
+        if data.get("apn"):
+            fields.append({"label": "Parcel", "value": str(data["apn"])})
+        if data.get("year_built"):
+            fields.append({"label": "Year built", "value": str(data["year_built"])})
+        return OverviewSummary(chips=chips, fields=fields) if chips or fields else None
 
     def debug_count(self, data: dict) -> int:
         """1 when a record (or a manual-lookup pointer) was found, else 0."""

@@ -9,7 +9,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -28,6 +28,8 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "site-conditions-section"
     icon = "landscape"
     title = "Site Conditions"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    tab_order: ClassVar[int] = 150
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self, pin: Pin) -> bool:

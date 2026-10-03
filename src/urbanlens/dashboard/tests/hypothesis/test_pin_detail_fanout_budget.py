@@ -14,6 +14,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 
 #: The most load-triggered HTMX requests the Private Pin page may fire.
 #:
+#: Lowered to **42**, the measured count, on 2026-10-03, when Site Conditions became a Location Data tab
+#: (P227): 43 with it as a card of its own.
+#:
 #: Raised to **49** on 2026-09-11 for one more REData enrichment panel
 #: (`redata_historical_features`), which queues against a lane like every other
 #: one - `test_every_enrichment_panel_queues_against_a_lane` is what holds the
@@ -36,7 +39,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 #: rather than the static count. The static count is still the right thing to
 #: bound, because it is the ceiling a user with everything expanded actually
 #: reaches.
-MAX_LOAD_TRIGGERED_REQUESTS = 49
+MAX_LOAD_TRIGGERED_REQUESTS = 42
 
 #: An element that fetches as soon as the page loads. `load` may carry a filter
 #: (`load[!window.ulSectionCollapsed(...)]`) or sit alongside other triggers, so

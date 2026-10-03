@@ -1,5 +1,5 @@
-{% comment %}Location Data card's "Overview" tab.{% endcomment %}
-<div id="location-data-overview-body" class="card__body pin-plugin-tab-body location-data-overview"
+{% comment %}A tabbed card's "Overview" tab (PinController._card_overview).{% endcomment %}
+<div id="{{ overview_id }}" class="card__body pin-plugin-tab-body card-overview"
      {% if poll_url %}
      hx-get="{{ poll_url }}?attempt={{ next_attempt }}"
      hx-trigger="load delay:{{ poll_interval }}s"
@@ -7,24 +7,24 @@
      hx-timeout="25000"
      {% endif %}>
     {% if heading_name or chips %}
-    <div class="location-data-overview-heading">
-        {% if heading_name %}<p class="location-data-overview-place-name">{{ heading_name }}</p>{% endif %}
+    <div class="card-overview-heading">
+        {% if heading_name %}<p class="card-overview-place-name">{{ heading_name }}</p>{% endif %}
         {% for chip in chips %}
-        <span class="location-data-overview-chip">{{ chip }}</span>
+        <span class="card-overview-chip">{{ chip }}</span>
         {% endfor %}
     </div>
     {% endif %}
 
     {% for note in notes %}
-    <p class="location-data-overview-note">
+    <p class="card-overview-note">
         {{ note.text }}.
     </p>
     {% endfor %}
 
     {% if fields %}
-    <dl class="location-data-overview-fields">
+    <dl class="card-overview-fields">
         {% for field in fields %}
-        <div class="location-data-overview-field">
+        <div class="card-overview-field">
             <dt>{{ field.label }}</dt>
             {% if field.href %}
             <dd><a href="{{ field.href }}" target="_blank" rel="noopener noreferrer">{{ field.value }}</a></dd>
@@ -37,9 +37,9 @@
     {% endif %}
 
     {% if footer_links %}
-    <div class="location-data-overview-links">
+    <div class="card-overview-links">
         {% for link in footer_links %}
-        <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="location-data-overview-link">
+        <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="card-overview-link">
             {{ link.label }}
             <i class="material-symbols-outlined">arrow_forward</i>
         </a>

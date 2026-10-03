@@ -842,6 +842,11 @@ urlpatterns = [
                                 name="pin.location_data_overview",
                             ),
                             path(
+                                "<slug:pin_slug>/property-records-overview/",
+                                pin.PinController.as_view({"get": "property_records_overview"}),
+                                name="pin.property_records_overview",
+                            ),
+                            path(
                                 "<slug:pin_slug>/azure-maps/",
                                 pin.PinController.as_view({"get": "azure_maps_info"}),
                                 name="pin.azure_maps",

@@ -17,6 +17,9 @@ import { expect, findOrCreateSubscriberPin, locationDataTest as test, openPrivat
 skipUnlessLocationDataEnabled();
 
 const CARD_SELECTOR = "#property-records-section";
+/** The parcel's own record is the Parcel tab; the card opens on its Overview. */
+const PARCEL_TAB_SELECTOR = `${CARD_SELECTOR} .pin-plugin-tab-btn[data-panel-key="property_records"]`;
+const PARCEL_PANEL_SELECTOR = "#property-records-body .simple-info-panel";
 const OWNER_NAME_SELECTOR = `${CARD_SELECTOR} .simple-info-place-name`;
 const CHIP_SELECTOR = `${CARD_SELECTOR} .simple-info-kind-chip`;
 const META_SELECTOR = `${CARD_SELECTOR} .simple-info-meta-item`;
@@ -48,8 +51,11 @@ async function waitForPropertyRecordsCard(page: Page, pinSlug: string, tags: Met
     const ready = await waitForOrNull(
         async () => {
             await openPrivatePin(page, pinSlug, { metricPrefix: null });
+            const parcelTab = page.locator(PARCEL_TAB_SELECTOR);
+            if (!(await parcelTab.count())) return false;
+            await parcelTab.click();
             return page
-                .locator(CARD_SELECTOR)
+                .locator(PARCEL_PANEL_SELECTOR)
                 .waitFor({ state: "visible", timeout: 65_000 })
                 .then(() => true)
                 .catch(() => false);
