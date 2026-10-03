@@ -147,6 +147,66 @@ class LocationSlugRemintMigrationTests(TestCase):
         self.assertEqual(child.slug, f"{parent_slug_prefix(['Hudson River State Hospital'])}-powerhouse")
         self.assertEqual(mine.slug, str(mine.uuid))
 
+    def _legacy_batch(self, count: int) -> None:
+        """``count`` rows of each kind the migration meets: proven, unproven with a readable slug and a wiki, unnamed."""
+        for _ in range(count):
+            proven = self._legacy("Old Grain Mill")
+            name = f"Old Grain Mill {proven.pk}"
+            Location.objects.filter(pk=proven.pk).update(official_name=name, slug=f"old-grain-mill-{proven.pk}")
+            LocationCache.objects.create(location=proven, source="wikipedia", data={"title": name})
+            unproven = self._legacy("Lunch with Sam")
+            Location.objects.filter(pk=unproven.pk).update(slug=f"lunch-with-sam-{unproven.pk}")
+            wiki = Wiki.objects.create(location=unproven, name="Lunch with Sam")
+            Wiki.objects.filter(pk=wiki.pk).update(slug=f"lunch-with-sam-{wiki.pk}")
+            self._legacy(None)
+
+    def _queries_for_a_run(self) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as queries:
+            self._run()
+        return len(queries)
+
+    def test_the_query_count_does_not_grow_with_the_number_of_locations(self) -> None:
+        """Production holds ~135k cached responses; one query per Location inside one transaction does not scale."""
+        self._legacy_batch(3)
+        few = self._queries_for_a_run()
+        self._legacy_batch(30)
+        many = self._queries_for_a_run()
+
+        self.assertEqual(Location.objects.exclude(official_name_source="").count(), 33)
+        self.assertEqual(LocationSlugHistory.objects.count(), 33)
+        self.assertEqual(many, few)
+
+    def test_long_sibling_child_wiki_slugs_are_stable_across_runs(self) -> None:
+        """A child's slug may be a grown candidate or the full name with a suffix; both fit their name."""
+        name = "138 Hudson View Dr, Poughkeepsie, NY 12601, USA"
+        parent_place = GooglePlace.objects.create(
+            latitude="45.0", longitude="-76.0", cached_place_name="Hudson River State Hospital"
+        )
+        parent = Wiki.objects.create(
+            location=self._legacy("Hudson River State Hospital", google_place=parent_place), name="Campus"
+        )
+        children = []
+        for index in range(3):
+            place = GooglePlace.objects.create(latitude=f"45.1{index}", longitude="-76.1", cached_place_name=name)
+            children.append(
+                Wiki.objects.create(location=self._legacy(name, google_place=place), name="X", parent_wiki=parent)
+            )
+        self._run()
+        first = list(
+            Wiki.objects.filter(pk__in=[child.pk for child in children]).order_by("pk").values_list("slug", flat=True)
+        )
+
+        self._run()
+
+        second = list(
+            Wiki.objects.filter(pk__in=[child.pk for child in children]).order_by("pk").values_list("slug", flat=True)
+        )
+        self.assertEqual(second, first)
+        self.assertEqual(len(set(first)), 3)
+
     def test_running_twice_changes_nothing_more(self) -> None:
         location = self._legacy("Lunch with Sam", "lunch-with-sam")
         self._run()

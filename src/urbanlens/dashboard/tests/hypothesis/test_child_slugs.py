@@ -13,6 +13,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.slugs import (
     PREFERRED_CHILD_SLUG_LENGTH,
+    could_mint,
     generate_short_prefix,
     is_uuid_slug,
     parent_slug_prefix,
@@ -137,6 +138,52 @@ class UniqueSlugPropertyTests(SimpleTestCase):
         )
         self.assertTrue(slug.startswith("hrsh-"))
         self.assertLessEqual(len(slug), 40)
+
+
+class CouldMintTests(SimpleTestCase):
+    """``could_mint`` accepts exactly what ``unique_slug`` can return for a name, whichever candidates are taken."""
+
+    @given(
+        name=st.text(min_size=0, max_size=120),
+        prefix=st.sampled_from(["", "hrsh", "ford"]),
+        taken=st.integers(min_value=0, max_value=12),
+        preferred=st.sampled_from([PREFERRED_CHILD_SLUG_LENGTH, 255]),
+    )
+    @_hyp
+    def test_every_slug_unique_slug_returns_could_be_minted(
+        self, name: str, prefix: str, taken: int, preferred: int
+    ) -> None:
+        calls = iter(range(taken))
+        slug = unique_slug(
+            name,
+            is_taken=lambda _candidate: next(calls, None) is not None,
+            prefix=prefix,
+            max_length=255,
+            preferred_length=preferred,
+        )
+        self.assertTrue(
+            could_mint(slug, name, prefix=prefix, max_length=255, preferred_length=preferred),
+            slug,
+        )
+
+    def test_a_grown_child_slug_and_a_suffixed_full_name_both_fit(self) -> None:
+        name = "138 Hudson View Dr, Poughkeepsie, NY 12601, USA"
+        options = {"prefix": "hrsh", "max_length": 255, "preferred_length": PREFERRED_CHILD_SLUG_LENGTH}
+        for slug in (
+            "hrsh-138-hudson-view-dr-poughkeepsie-ny",
+            "hrsh-138-hudson-view-dr-poughkeepsie-ny-12601-usa",
+            "hrsh-138-hudson-view-dr-poughkeepsie-ny-12601-usa-78919",
+        ):
+            self.assertTrue(could_mint(slug, name, **options), slug)
+
+    def test_a_slug_from_other_text_does_not_fit(self) -> None:
+        options = {"max_length": 255}
+        self.assertFalse(could_mint("lunch-with-sam", "Old Grain Mill", **options))
+        self.assertFalse(could_mint("old-grain-mill-annex", "Old Grain Mill", **options))
+        self.assertFalse(could_mint("old-grain-mill-1", "Old Grain Mill", **options))
+        self.assertFalse(could_mint("old-grain-mill-02", "Old Grain Mill", **options))
+        self.assertFalse(could_mint("hrsh-powerhouse", "Powerhouse", **options))
+        self.assertFalse(could_mint("", "Powerhouse", **options))
 
 
 class ChildPinSlugTests(TestCase):

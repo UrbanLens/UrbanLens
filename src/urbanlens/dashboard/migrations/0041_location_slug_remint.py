@@ -7,14 +7,15 @@ activities seeded the field from the request), so its Location falls back to the
 Location gives up goes to its slug history, which keeps old links resolving.
 """
 
-import re
+from collections import defaultdict
 import unicodedata
 
 from django.db import migrations
 
-from urbanlens.dashboard.services.core.slugs import PREFERRED_CHILD_SLUG_LENGTH, is_uuid_slug, parent_slug_prefix, unique_slug
+from urbanlens.dashboard.services.core.slugs import PREFERRED_CHILD_SLUG_LENGTH, could_mint, is_uuid_slug, parent_slug_prefix, unique_slug
 
 _SLUG_MAX_LENGTH = 255
+_CHUNK_SIZE = 500
 
 
 def _strings(value):
@@ -66,47 +67,86 @@ def _normalized(name):
     return "".join(char for char in folded if char.isalnum())
 
 
-def _proven_source(location, location_cache_model):
-    """The name source that stored provider data proves ``location.official_name`` came from, else ""."""
+def _proven_source(location, cached):
+    """The name source that stored provider data proves ``location.official_name`` came from, else "".
+
+    Args:
+        location: The Location, with its GooglePlace selected.
+        cached: Its ``(cache source, data)`` rows for the sources in ``_CACHED_NAMES``, ordered by source.
+    """
     target = _normalized(location.official_name)
     if not target:
         return ""
     google_place = location.google_place
     if google_place is not None and _normalized(google_place.cached_place_name) == target:
         return "google_places"
-    for cache_source, data in location_cache_model.objects.filter(location_id=location.pk, source__in=_CACHED_NAMES).order_by("source").values_list("source", "data"):
+    for cache_source, data in cached:
         name_source, names = _CACHED_NAMES[cache_source]
         if isinstance(data, dict) and any(_normalized(name) == target for name in names(data)):
             return name_source
     return ""
 
 
+def _chunks(queryset, size):
+    chunk = []
+    for row in queryset.iterator(chunk_size=size):
+        chunk.append(row)
+        if len(chunk) == size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
 def _fits(slug, base, *, prefix="", preferred_length=_SLUG_MAX_LENGTH):
-    """Whether ``slug`` is what minting ``base`` would give, up to a uniqueness suffix."""
-    if not slug:
-        return False
-    ideal = unique_slug(base, is_taken=lambda _candidate: False, prefix=prefix, max_length=_SLUG_MAX_LENGTH, preferred_length=preferred_length)
-    return slug == ideal or re.fullmatch(re.escape(ideal) + r"-\d+", slug) is not None
+    """Whether minting ``base`` could have given ``slug``, whichever of its candidates were taken at the time."""
+    return could_mint(slug or "", base, prefix=prefix, max_length=_SLUG_MAX_LENGTH, preferred_length=preferred_length)
 
 
 def _remint_locations(Location, LocationCache, LocationSlugHistory):
-    def taken(pk):
-        return lambda candidate: Location.objects.filter(slug=candidate).exclude(pk=pk).exists() or LocationSlugHistory.objects.filter(slug=candidate).exclude(location_id=pk).exists()
+    """Decide each Location's source and slug a chunk at a time: one cache read and bulk writes per chunk.
 
-    for location in Location.objects.select_related("google_place").order_by("pk").iterator(chunk_size=500):
-        source = _proven_source(location, LocationCache)
-        if source and _fits(location.slug, location.official_name):
-            new_slug = location.slug
-        elif source:
-            new_slug = unique_slug(location.official_name, is_taken=taken(location.pk), max_length=_SLUG_MAX_LENGTH)
-        else:
-            new_slug = location.slug if is_uuid_slug(location.slug) else str(location.uuid)
-        if source != location.official_name_source or new_slug != location.slug:
-            Location.objects.filter(pk=location.pk).update(official_name_source=source, slug=new_slug)
-        if new_slug != location.slug:
-            if location.slug and location.slug != str(location.uuid):
-                LocationSlugHistory.objects.get_or_create(slug=location.slug, defaults={"location_id": location.pk})
-            LocationSlugHistory.objects.filter(location_id=location.pk, slug=new_slug).delete()
+    A slug minted earlier in the same chunk is not written yet, so ``claimed`` keeps a second Location off it.
+    """
+    for chunk in _chunks(Location.objects.select_related("google_place").order_by("pk"), _CHUNK_SIZE):
+        named = [location.pk for location in chunk if _normalized(location.official_name)]
+        cached = defaultdict(list)
+        rows = LocationCache.objects.filter(location_id__in=named, source__in=_CACHED_NAMES).order_by("location_id", "source").values_list("location_id", "source", "data")
+        for location_id, cache_source, data in rows.iterator(chunk_size=_CHUNK_SIZE):
+            cached[location_id].append((cache_source, data))
+
+        claimed = set()
+
+        def taken(pk, candidate):
+            return candidate in claimed or Location.objects.filter(slug=candidate).exclude(pk=pk).exists() or LocationSlugHistory.objects.filter(slug=candidate).exclude(location_id=pk).exists()
+
+        changed, former, reclaimed = [], [], []
+        for location in chunk:
+            source = _proven_source(location, cached.get(location.pk, ()))
+            if source and _fits(location.slug, location.official_name):
+                new_slug = location.slug
+            elif source:
+                new_slug = unique_slug(location.official_name, is_taken=lambda candidate, pk=location.pk: taken(pk, candidate), max_length=_SLUG_MAX_LENGTH)
+                claimed.add(new_slug)
+            else:
+                new_slug = location.slug if is_uuid_slug(location.slug) else str(location.uuid)
+            if new_slug != location.slug:
+                if location.slug and location.slug != str(location.uuid):
+                    former.append(LocationSlugHistory(slug=location.slug, location_id=location.pk))
+                reclaimed.append((location.pk, new_slug))
+            if source != location.official_name_source or new_slug != location.slug:
+                location.official_name_source = source
+                location.slug = new_slug
+                changed.append(location)
+
+        Location.objects.bulk_update(changed, ["official_name_source", "slug"], batch_size=_CHUNK_SIZE)
+        if reclaimed:
+            # A slug a Location takes back is no longer a former one of its own.
+            ids = [pk for pk, _slug in reclaimed]
+            mine = set(reclaimed)
+            stale = [pk for pk, location_id, slug in LocationSlugHistory.objects.filter(location_id__in=ids, slug__in=[slug for _pk, slug in reclaimed]).values_list("pk", "location_id", "slug") if (location_id, slug) in mine]
+            LocationSlugHistory.objects.filter(pk__in=stale).delete()
+        LocationSlugHistory.objects.bulk_create(former, ignore_conflicts=True, batch_size=_CHUNK_SIZE)
 
 
 def _remint_wikis(Wiki, Location):
@@ -127,8 +167,7 @@ def _remint_wikis(Wiki, Location):
 
     # Every wiki that moves first steps onto its uuid, so one wiki's old community slug never blocks another's new one.
     moving = [wiki for wiki in wikis if targets[wiki["pk"]] is not None and wiki["slug"] != targets[wiki["pk"]]]
-    for wiki in moving:
-        Wiki.objects.filter(pk=wiki["pk"]).update(slug=str(wiki["uuid"]))
+    Wiki.objects.bulk_update([Wiki(pk=wiki["pk"], slug=str(wiki["uuid"])) for wiki in moving], ["slug"], batch_size=_CHUNK_SIZE)
     for wiki in moving:
         target = targets[wiki["pk"]]
         if isinstance(target, tuple):
