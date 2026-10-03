@@ -193,6 +193,58 @@ class GalleryTests(_HrshTestCase):
         self.assertNotIn(by_alias.page_url, _page_urls(wiki.content.decode()))
 
 
+class GoogleImagesTests(_HrshTestCase):
+    """An address search is a text search like any other: HRSH's real results matched "83" and "138", not the place."""
+
+    ARTWORK = {
+        "title": "Woman in a Garden (1882\u201383) // Berthe Morisot (French, 1841\u20131895)",
+        "link": "https://artic.edu/artworks/153798",
+        "snippet": "Oil on canvas // 123 \u00d7 94 cm",
+        "thumbnail": "https://www.artic.edu/iiif/2//5edb357d-2e8f-8673-d9e8-4b1150af3895/full/843,/0/default.jpg",
+    }
+    MOVIE = {
+        "title": "The Menu (2022) - IMDb",
+        "link": "https://www.imdb.com/title/tt9764362/",
+        "snippet": "The Menu (2022) - IMDb",
+        "thumbnail": "https://m.media-amazon.com/images/M/menu.jpg",
+    }
+    ABOUT_THE_PLACE = {
+        "title": "Hudson River State Hospital, Poughkeepsie NY",
+        "link": "https://example.org/hrsh",
+        "snippet": "",
+        "thumbnail": "https://example.org/hrsh.jpg",
+    }
+
+    def setUp(self) -> None:
+        super().setUp()
+        LocationCache.set(
+            self.location,
+            "google_images",
+            {"items": [self.ARTWORK, self.MOVIE, self.ABOUT_THE_PLACE]},
+            query_key="138 Hudson View Dr, Fairview, New York",
+        )
+
+    def test_the_wiki_gallery_shows_only_the_result_about_the_place(self) -> None:
+        response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "google_images"]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(_page_urls(response.content.decode()), {self.ABOUT_THE_PLACE["link"]})
+
+    def test_the_snippet_is_read_when_the_title_does_not_name_the_place(self) -> None:
+        from urbanlens.dashboard.services.media.subject_relevance import subject_for_pin
+
+        named_in_snippet = {
+            **self.MOVIE,
+            "link": "https://example.org/listing",
+            "snippet": "Hudson River State Hospital, Poughkeepsie, NY",
+        }
+        panel = get_panel_source("google_images")
+
+        items = panel.gallery_items({"items": [self.MOVIE, named_in_snippet]}, subject_for_pin(self.pin))
+
+        self.assertEqual([item.page_url for item in items], [named_in_snippet["link"]])
+
+
 class SourcesTests(_HrshTestCase):
     def test_a_report_about_the_place_is_a_source_on_the_pin(self) -> None:
         listed = self.sources(reverse("pin.article.sources", kwargs={"pin_slug": self.pin.slug}))

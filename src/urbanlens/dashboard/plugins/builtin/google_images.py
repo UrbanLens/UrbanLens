@@ -28,6 +28,8 @@ class GoogleImagesPanelSource(GalleryMediaSource):
     # terms restrict redistributing image-search results beyond direct
     # display to the user who triggered the search.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
+    # Google matches the address's words anywhere: a house number finds artworks dated "(1882-83)".
+    judges_relevance = True
 
     def gate(self, pin: Pin) -> bool:
         """Requires REData (which holds the Google Custom Search credentials) and an address to search on."""
@@ -59,7 +61,9 @@ class GoogleImagesPanelSource(GalleryMediaSource):
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         items = (data or {}).get("items") or []
-        return [MediaItem(url=r["thumbnail"], thumb_url=r["thumbnail"], caption=r.get("title") or "", source="Google Images", page_url=r.get("link") or r["thumbnail"]) for r in items[:_MAX_IMAGES] if r.get("thumbnail")]
+        return [
+            MediaItem(url=r["thumbnail"], thumb_url=r["thumbnail"], caption=r.get("title") or "", source="Google Images", page_url=r.get("link") or r["thumbnail"], description=r.get("snippet") or "") for r in items[:_MAX_IMAGES] if r.get("thumbnail")
+        ]
 
 
 class GoogleImagesPlugin(UrbanLensPlugin):

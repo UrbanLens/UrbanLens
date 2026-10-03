@@ -261,8 +261,8 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
   (net score up − down, highest ranked first); because relevance is stored per-Location
   (`MediaRelevance`), a relevance mark made on any user's Private Pin page already counts here
-- **Media subject relevance** — every name-searched gallery source (`GalleryMediaSource.judges_relevance`:
-  the archive providers, Flickr, Web Images) keeps only items that are about the place, judged at
+- **Media subject relevance** — every text-searched gallery source (`GalleryMediaSource.judges_relevance`:
+  the archive providers, Flickr, Web Images, and Google Images, searched by address) keeps only items that are about the place, judged at
   read time on the pin Media gallery, the wiki gallery, the Photos tab and the external API: geolocated
   in the place's box, or naming it with a consistent ZIP/city/county/state, or a distinctive name with
   nothing contradicting it; a generic name ("Historic Mansion") needs a local indicator. Conflicts come
