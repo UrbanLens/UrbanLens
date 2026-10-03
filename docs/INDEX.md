@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P236` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P237` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -236,3 +236,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P233 | open | 2026-10-03 | Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P234 | open | 2026-10-03 | Article > Sources lists only three documents, even with child pin details on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P235 | open | 2026-10-03 | Article > News shows no results for HRSH | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P236 | open | 2026-10-03 | A wiki URL's response time tells whether a Location exists under that slug | [`docs/PROBLEMS.md`](PROBLEMS.md) |

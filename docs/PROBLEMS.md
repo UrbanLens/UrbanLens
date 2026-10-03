@@ -3193,3 +3193,21 @@ There should obviously be news results for this place. Check on the release bran
 - P196's relevance rule dropping news items whose text omits the name.
 Find the cause and fix it, with a test that HRSH's real query returns items through the whole path. Use a recorded
 fixture, not the network.
+
+## P236 — A wiki URL's response time tells whether a Location exists under that slug
+
+`id: P236` · `status: open` · `updated: 2026-10-03` · `found by: adversarial review of P186`
+
+A wiki URL for a slug no Location has ever used 404s after one query (`get_location_or_404`). A current slug of
+a Location the requester can't see also 404s, but only after the wiki lookup, a profile `get_or_create`, and the
+`location_visible_to` queries. Since P186, a former slug (`LocationSlugHistory`) of an invisible Location costs
+more again: `canonical_location_slug` runs the history query, the `exists()` check and a full
+`locate_visible_wiki` before the view runs its own (`services/wiki/wiki_access.py`, `canonical_location_slug`).
+
+Wiki slugs come only from official names, so a slug is guessable. Enough timed requests against a guessed slug
+tell an authenticated user whether anyone has pinned that place.
+
+Fix: make an invisible Location's 404 cost the same as a missing one's. Resolve visibility in one query whose
+plan doesn't depend on whether the row exists, or check visibility before any other per-Location work. Test it
+first: assert equal query counts for a never-used slug, an invisible current slug and an invisible former slug.
+Other slug-addressed routes (pins, trips, albums) likely share the pattern, so audit them in the same pass.
