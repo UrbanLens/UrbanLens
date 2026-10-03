@@ -216,6 +216,11 @@ _PLAIN_PARAM = re.compile(r"(?P<lead>[?&;])(?P<name>[\w.~\[\]-]+)=(?P<value>[^&;
 _ENCODED_PARAM = re.compile(r"(?P<lead>%3F|%26|%3B)(?P<name>[\w.~\[\]-]+)%3D(?P<value>(?:(?!%26|%3B|%23)[^&;#\s'\"<>])*)", re.IGNORECASE)
 _USERINFO_PASSWORD = re.compile(r"(?P<lead>(?<![a-z0-9+.-])[a-z][a-z0-9+.-]{0,31}://[^\s/:@?#]*:)(?P<value>[^\s/@?#<>]+)(?=@)", re.IGNORECASE)
 _COORDINATE_PAIR = re.compile(r"-?\d{1,3}\.\d+\s*(?:,|%2C)\s*-?\d{1,3}\.\d+", re.IGNORECASE)
+_URL = re.compile(r"(?:(?<![a-z0-9+.-])[a-z][a-z0-9+.-]{0,31}://|(?<![\w.-])www\.)[^\s'\"<>]+", re.IGNORECASE)
+#: A pair outside a URL is only taken for a place when both halves are precise enough to locate one.
+_PRECISE_COORDINATE_PAIR = re.compile(r"(?<![\w.])(?P<a>-?\d{1,3}\.\d{4,})\s*,\s*(?P<b>-?\d{1,3}\.\d{4,})(?![\d.])")
+#: One entry of a logged dict repr or JSON object: a quoted name, then a quoted or numeric value.
+_MAPPING_ENTRY = re.compile(r"(?P<q>['\"])(?P<name>[\w.~-]+)(?P=q)\s*:\s*(?:(?P<vq>['\"])(?P<value>(?:\\.|(?!(?P=vq))[^\\\n])*)(?P=vq)|(?P<number>-?\d+(?:\.\d+)?))")
 
 
 def _redact_param(match: re.Match[str]) -> str:
@@ -235,11 +240,38 @@ def _redact_password(match: re.Match[str]) -> str:
     return match["lead"] + redact_secret(match["value"])
 
 
-def redact_urls(text: str) -> str:
-    """Return ``text`` with the credentials and coordinates in every URL it contains replaced by tokens.
+def _redact_url_path(match: re.Match[str]) -> str:
+    return _COORDINATE_PAIR.sub(lambda pair: redact_coordinate(pair[0]), match[0])
 
-    Covers query parameters (plain and percent-encoded) and ``user:password@`` userinfo. Everything else in the text,
-    other parameters included, is left as it was.
+
+def _redact_precise_pair(match: re.Match[str]) -> str:
+    a, b = float(match["a"]), float(match["b"])
+    if (abs(a) <= 90 and abs(b) <= 180) or (abs(b) <= 90 and abs(a) <= 180):
+        return redact_coordinate(match[0])
+    return match[0]
+
+
+def _redact_mapping_entry(match: re.Match[str]) -> str:
+    name = match["name"]
+    value = match["value"] if match["value"] is not None else match["number"]
+    if not value:
+        return match[0]
+    if is_sensitive_param_name(name):
+        token = redact_secret(value)
+    elif name.casefold() in _COORDINATE_PARAM_NAMES:
+        token = redact_coordinate(value)
+    else:
+        return match[0]
+    quote = match["vq"] or ""
+    return match.string[match.start() : match.start("vq" if match["vq"] else "number")] + quote + token + quote
+
+
+def redact_urls(text: str) -> str:
+    """Return ``text`` with the credentials and coordinates it carries replaced by tokens.
+
+    Covers query parameters (plain and percent-encoded), coordinate pairs in a URL's path, ``user:password@``
+    userinfo, credential and coordinate entries of a logged dict or JSON object, and precise ``lat, lng`` pairs
+    anywhere. Everything else in the text, other parameters included, is left as it was.
 
     Args:
         text: A log message, exception message or traceback.
@@ -247,8 +279,12 @@ def redact_urls(text: str) -> str:
     Returns:
         The text, with each secret parameter value a :func:`redact_secret` token and each location a
         :func:`redact_coordinate` token."""
-    if "=" not in text and "%" not in text and "@" not in text:
+    if not any(mark in text for mark in "=%@,:"):
         return text
     text = _PLAIN_PARAM.sub(_redact_param, text)
     text = _ENCODED_PARAM.sub(_redact_param, text)
-    return _USERINFO_PASSWORD.sub(_redact_password, text) if "://" in text else text
+    text = _URL.sub(_redact_url_path, text)
+    if "://" in text:
+        text = _USERINFO_PASSWORD.sub(_redact_password, text)
+    text = _MAPPING_ENTRY.sub(_redact_mapping_entry, text)
+    return _PRECISE_COORDINATE_PAIR.sub(_redact_precise_pair, text)

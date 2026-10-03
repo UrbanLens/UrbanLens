@@ -343,6 +343,56 @@ class RedactUrlsTests(SimpleTestCase):
         self.assertNotIn("41.718253", redacted)
         self.assertIn("format=json", redacted)
 
+    def test_coordinates_in_a_url_path_are_withheld(self) -> None:
+        for text in (
+            "500 Server Error: None for url: https://router.project-osrm.org/route/v1/driving/-73.934017,41.718253;-73.9,41.72",
+            "Unrecognised Google Maps URL format: https://www.google.com/maps/search/42.960773,-74.250664",
+            "Failed to extract coordinates from URL https://www.google.com/maps/@37.7749,-122.4194,15z: ValueError",
+            "Unrecognised Google Maps URL format: www.google.com/maps/place/Spot/@40.7128,-74.0060,15z/data=!3m1",
+        ):
+            with self.subTest(text=text):
+                redacted = redact_urls(text)
+                for number in (
+                    "73.934017",
+                    "41.718253",
+                    "73.9,",
+                    "42.960773",
+                    "74.250664",
+                    "37.7749",
+                    "122.4194",
+                    "40.7128",
+                    "74.0060",
+                ):
+                    self.assertNotIn(number, redacted)
+
+    def test_a_precise_coordinate_pair_in_prose_is_withheld(self) -> None:
+        redacted = redact_urls("No parcel at 41.718253, -73.934017 after 3 attempts")
+
+        self.assertNotIn("41.718253", redacted)
+        self.assertIn("after 3 attempts", redacted)
+
+    def test_short_number_pairs_in_prose_are_left_alone(self) -> None:
+        for text in ("took 1.5, 2.25 s", "ratio 0.75,0.25", "versions 3.12, 3.13"):
+            with self.subTest(text=text):
+                self.assertEqual(redact_urls(text), text)
+
+    def test_a_credential_in_a_logged_mapping_is_withheld(self) -> None:
+        for text in (
+            f"params: {{'key': '{GOOGLE_KEY}', 'address': 'Main St'}}",
+            f'payload {{"api_key": "{GOOGLE_KEY}", "q": "mill"}}',
+        ):
+            with self.subTest(text=text):
+                redacted = redact_urls(text)
+                self.assertNotIn(GOOGLE_KEY, redacted)
+                self.assertTrue("Main St" in redacted or "mill" in redacted)
+
+    def test_a_coordinate_in_a_logged_mapping_is_withheld(self) -> None:
+        redacted = redact_urls("body {'lat': 41.718253, 'lng': -73.934017, 'zoom': 15}")
+
+        self.assertNotIn("41.718253", redacted)
+        self.assertNotIn("73.934017", redacted)
+        self.assertIn("'zoom': 15", redacted)
+
     def test_redacting_twice_changes_nothing_more(self) -> None:
         once = redact_urls("https://a.test/?key=abc123&center=41.7%2C-73.9 and redis://:pw@cache/0")
 
