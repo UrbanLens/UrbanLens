@@ -57,10 +57,10 @@ class StaticMapsRefusalTests(SimpleTestCase):
 
     def test_a_refused_key_is_not_in_the_log(self) -> None:
         with handler_output("urbanlens") as output:
-            image = self.gateway.get_satellite_image_bytes(LATITUDE, LONGITUDE)
+            slides = list(self.gateway._generate_satellite_slides(LATITUDE, LONGITUDE))
 
         logged = output.getvalue()
-        self.assertIsNone(image)
+        self.assertEqual(slides, [])
         self.assertIn(MAPS_LOGGER, logged, "the warning did not reach the configured handlers")
         self.assertIn("staticmap", logged)
         self.assertNotIn(GOOGLE_KEY, logged)
@@ -68,7 +68,7 @@ class StaticMapsRefusalTests(SimpleTestCase):
     def test_the_url_still_names_where_the_coordinates_were_withheld(self) -> None:
         """The gateway redacts its own coordinate arguments; the URL in the exception carried them anyway."""
         with handler_output("urbanlens") as output:
-            self.gateway.get_satellite_image_bytes(LATITUDE, LONGITUDE)
+            list(self.gateway._generate_satellite_slides(LATITUDE, LONGITUDE))
 
         logged = output.getvalue()
         self.assertIn(MAPS_LOGGER, logged)

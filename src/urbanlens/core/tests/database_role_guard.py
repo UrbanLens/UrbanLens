@@ -2,23 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Self
+from contextlib import AbstractContextManager
+from typing import Any, Protocol
 
 from django.db import DatabaseError
 
 
-class _Cursor(Protocol):
-    def __enter__(self) -> Self: ...
-
-    def __exit__(self, *exc: object) -> None: ...
-
-    def execute(self, sql: str) -> object: ...
-
-    def fetchone(self) -> tuple[str, bool] | None: ...
-
-
 class _Connection(Protocol):
-    def cursor(self) -> _Cursor: ...
+    def cursor(self) -> AbstractContextManager[Any]: ...
 
 
 def refusal_for_role(connection: _Connection) -> str | None:
