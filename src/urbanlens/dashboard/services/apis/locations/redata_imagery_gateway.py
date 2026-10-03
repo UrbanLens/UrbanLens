@@ -102,9 +102,9 @@ class RedataImageryGateway(RedataLocationContextGateway):
             self._raise_for_error_status(response, url)
         return read_capped(response, what="REData imagery")
 
-    def download_archived_copy(self, asset_uuid: str, *, width: int | None = None, height: int | None = None) -> bytes:
+    def download_archived_copy(self, asset_uuid: str, *, width: int | None = None, height: int | None = None, zoom: int | None = None) -> bytes:
         """Fetch REData's own composed, permanently archived copy of an imagery asset.
-        Rendered on first request and served from disk on every later one, so ``width``/``height`` only take effect the first time a given asset is downloaded.
+        Rendered on first request and served from disk on every later one, so ``width``/``height``/``zoom`` only take effect the first time a given asset is downloaded.
 
         Args:
             asset_uuid: The imagery result's own ``uuid`` field (not its
@@ -113,6 +113,8 @@ class RedataImageryGateway(RedataLocationContextGateway):
                 download of this asset.
             height: Composed image height in pixels, applied only on the
                 first download of this asset.
+            zoom: Slippy zoom to compose a tile-layer asset at, applied only
+                on the first download; REData picks one when omitted.
 
         Returns:
             The raw image bytes.
@@ -128,6 +130,8 @@ class RedataImageryGateway(RedataLocationContextGateway):
             params["width"] = width
         if height is not None:
             params["height"] = height
+        if zoom is not None:
+            params["zoom"] = zoom
         path = f"/api/v1/imagery/{asset_uuid}/download/"
         target = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
         try:

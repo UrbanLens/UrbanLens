@@ -3141,16 +3141,6 @@ child of the campus wiki, though the private child pin is nested under the user'
 branch, which has P186's naming rules: the URL being a uuid means no provider name reached that Location. Expected:
 the building wiki takes CRIS's name and slug and is a child of the parcel's wiki.
 
-## P232 — Sentinel-2 cloudless slides are blurry at the pin's zoom: each imagery source should be shown at a zoom its resolution supports
-
-`id: P232` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
-
-Sentinel-2 cloudless is 10 m a pixel, so at the pin's zoom (17–18) its tiles are upsampled and grainy. The other
-sources are fine. Elegant fix: each imagery provider declares its native ground resolution, from REData's catalogue
-or the source's metadata. A slide is rendered at the deepest zoom whose metres-per-pixel at that latitude is no finer
-than that resolution, and shows a wider area instead of an enlarged one. Test the zoom choice as a pure function over
-resolution and latitude.
-
 ## P233 — Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete
 
 `id: P233` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`

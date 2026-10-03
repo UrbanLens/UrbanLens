@@ -250,7 +250,7 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         self.assertEqual(len(slides), 1)
         self.assertTrue(slides[0].img_src.startswith("data:image/jpeg;base64,"))
         gateway_cls.return_value.download_archived_copy.assert_called_once_with(
-            "tile-asset-uuid", width=1024, height=1024
+            "tile-asset-uuid", width=1024, height=1024, zoom=None
         )
         gateway_cls.return_value.download_bytes.assert_not_called()
 
@@ -330,7 +330,7 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         self.assertEqual(call_args.args[0], "gibs-layer-uuid")
         self.assertEqual(call_args.args[1].isoformat(), "2026-08-06")
         gateway_cls.return_value.download_archived_copy.assert_called_once_with(
-            "materialized-uuid", width=1024, height=1024
+            "materialized-uuid", width=1024, height=1024, zoom=None
         )
 
     def test_a_time_series_result_picks_the_latest_across_multiple_intervals(self) -> None:
@@ -477,3 +477,112 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(slides, [])
+
+
+class NativeResolutionZoomTests(SimpleTestCase):
+    """P232: a coarse source is composed at the deepest zoom its own resolution supports, showing a wider area
+    rather than enlarging its pixels; a sharp one keeps REData's default framing."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.provider = RedataSatelliteProvider()
+
+    def _gateway_for(self, results: list[dict]):
+        patches = (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_CAPABILITIES_PATH, return_value=[]),
+            mock.patch(_GATEWAY_PATH),
+        )
+        for patch in patches[:2]:
+            patch.start()
+            self.addCleanup(patch.stop)
+        gateway_cls = patches[2].start()
+        self.addCleanup(patches[2].stop)
+        gateway = gateway_cls.return_value
+        gateway.get_timeline.return_value = {}
+        gateway.get_imagery.return_value = results
+        gateway.download_archived_copy.return_value = b"\xff\xd8\xff"
+        gateway.capture_time_series.return_value = {"uuid": "materialized-uuid"}
+        return gateway
+
+    @staticmethod
+    def _tiles(**fields) -> dict:
+        return {
+            "provider": "s2cloudless",
+            "uuid": "s2-asset-uuid",
+            "url": "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg",
+            "delivery": "tile_template",
+            "attributes": {},
+            **fields,
+        }
+
+    def _zoom_asked(self, result: dict) -> int | None:
+        gateway = self._gateway_for([result])
+        list(self.provider._generate_satellite_slides(41.7, -73.9))
+        return gateway.download_archived_copy.call_args.kwargs["zoom"]
+
+    def test_sentinel_2_is_composed_at_zoom_13_not_enlarged(self) -> None:
+        self.assertEqual(self._zoom_asked(self._tiles(resolution_meters=10.0)), 13)
+
+    def test_a_sub_metre_source_keeps_redatas_default_framing(self) -> None:
+        self.assertIsNone(self._zoom_asked(self._tiles(provider="open_aerial_map", resolution_meters=0.3)))
+
+    def test_a_source_with_no_published_resolution_keeps_redatas_default(self) -> None:
+        self.assertIsNone(self._zoom_asked(self._tiles()))
+
+    def test_a_resolution_that_is_not_a_positive_number_is_ignored(self) -> None:
+        for value in (0, -5, "ten", None, float("nan")):
+            with self.subTest(value=value):
+                self.assertIsNone(self._zoom_asked(self._tiles(resolution_meters=value)))
+
+    def test_the_layers_own_shallowest_zoom_wins_over_the_resolution(self) -> None:
+        self.assertEqual(self._zoom_asked(self._tiles(resolution_meters=10.0, min_zoom=14)), 14)
+
+    def test_a_ceiling_below_the_native_zoom_is_respected(self) -> None:
+        """Past a release's own max zoom every tile 404s, and REData reports a blank mosaic as no imagery."""
+        self.assertEqual(
+            self._zoom_asked(
+                self._tiles(provider="open_aerial_map", resolution_meters=1.0, attributes={"max_map_level": 15})
+            ),
+            None,
+        )
+        self.assertEqual(self._zoom_asked(self._tiles(resolution_meters=2.0, max_zoom=14)), None)
+        self.assertEqual(self._zoom_asked(self._tiles(resolution_meters=10.0, max_zoom=12)), None)
+
+    def test_a_dated_capture_from_the_timeline_is_zoomed_the_same_way(self) -> None:
+        gateway = self._gateway_for([])
+        gateway.get_timeline.return_value = {"results": []}
+        capture = self._tiles(uuid="s2-2019-uuid", resolution_meters=10.0, captured_on="2019-01-01")
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.imagery_timeline.flatten_timeline",
+            return_value=[{"kind": "capture", "asset": capture, "captured_on": "2019-01-01", "date_is_exact": True}],
+        ):
+            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+
+        self.assertEqual(len(slides), 1)
+        self.assertEqual(gateway.download_archived_copy.call_args.kwargs["zoom"], 13)
+
+    def test_a_time_series_capture_is_zoomed_by_its_resolution(self) -> None:
+        gateway = self._gateway_for(
+            [
+                {
+                    "provider": "nasa_gibs",
+                    "uuid": "gibs-layer-uuid",
+                    "url": "https://gibs.example/wms?TIME={time}",
+                    "delivery": "time_series",
+                    "resolution_meters": 250.0,
+                    "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
+                }
+            ]
+        )
+        list(self.provider._generate_satellite_slides(41.7, -73.9))
+
+        gateway.download_archived_copy.assert_called_once_with("materialized-uuid", width=1024, height=1024, zoom=8)
+
+    def test_the_raw_tile_fallback_is_no_deeper_than_the_source_supports(self) -> None:
+        gateway = self._gateway_for([self._tiles(resolution_meters=10.0)])
+        gateway.download_archived_copy.side_effect = LocationContextUnavailableError("source_error", "boom")
+
+        slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+
+        self.assertIn("/GoogleMapsCompatible/13/", slides[0].img_src)

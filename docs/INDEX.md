@@ -231,7 +231,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P229 | open | 2026-10-03 | The Ownership panel shows a subscriber only the owner's name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P230 | open | 2026-10-03 | "Buildings on this Property" shows National Register details for some buildings and not others, and not every building links its wiki | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P231 | open | 2026-10-03 | A building child pin's wiki is named after the campus, not the building, and isn't nested under the campus wiki | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P232 | open | 2026-10-03 | Sentinel-2 cloudless slides are blurry at the pin's zoom: each imagery source should be shown at a zoom its resolution supports | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P233 | open | 2026-10-03 | Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P234 | open | 2026-10-03 | Article > Sources lists only three documents, even with child pin details on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P235 | open | 2026-10-03 | Article > News shows no results for HRSH | [`docs/PROBLEMS.md`](PROBLEMS.md) |

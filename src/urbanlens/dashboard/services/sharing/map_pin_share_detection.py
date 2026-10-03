@@ -12,6 +12,7 @@ from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry, Point
 
 from urbanlens.dashboard.models.markup.meta import MarkupType
+from urbanlens.dashboard.services.geo.web_mercator import meters_per_pixel
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
@@ -20,8 +21,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Metres-per-pixel at zoom 0 on the equator - standard Web Mercator constant.
-_EARTH_CIRCUMFERENCE_M = 156_543.03392
 _METERS_PER_DEGREE_LAT = 111_320.0
 _METERS_PER_DEGREE_LNG_AT_EQUATOR = 111_320.0
 
@@ -115,7 +114,7 @@ def viewport_bounds(center_lat: float, center_lng: float, zoom: float) -> MapBou
 
     Returns:
         The approximated visible bounds."""
-    meters_per_px = _EARTH_CIRCUMFERENCE_M * math.cos(math.radians(center_lat)) / (2**zoom)
+    meters_per_px = meters_per_pixel(center_lat, zoom)
     half_width_m = (ASSUMED_VIEWPORT_WIDTH_PX / 2) * meters_per_px
     half_height_m = (ASSUMED_VIEWPORT_HEIGHT_PX / 2) * meters_per_px
     dlat = half_height_m / _METERS_PER_DEGREE_LAT

@@ -130,6 +130,14 @@ class DownloadArchivedCopyTests(SimpleTestCase):
         params = session.get.call_args.kwargs["params"]
         self.assertEqual(params, {"width": 1024, "height": 768})
 
+    def test_sends_a_zoom_when_asked(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(200, content=b"bytes")
+
+        _gateway(session).download_archived_copy("abc-123", width=1024, height=1024, zoom=13)
+
+        self.assertEqual(session.get.call_args.kwargs["params"], {"width": 1024, "height": 1024, "zoom": 13})
+
     def test_omits_width_and_height_when_not_given(self) -> None:
         session = mock.Mock()
         session.get.return_value = _response(200, content=b"bytes")

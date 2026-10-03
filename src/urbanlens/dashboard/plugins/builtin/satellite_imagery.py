@@ -14,6 +14,7 @@ from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, Sat
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.apis.locations.redata_imagery_gateway import RedataImageryGateway
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.geo.web_mercator import native_zoom
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -92,6 +93,10 @@ _TILE_TEMPLATE_ZOOM = 15
 _COMPOSED_IMAGE_WIDTH = 1024
 _COMPOSED_IMAGE_HEIGHT = 1024
 
+#: The ground span REData frames a composed image to when no zoom is asked for (its
+#: ``imagery_render_span_meters`` default).
+_REDATA_DEFAULT_SPAN_METERS = 300.0
+
 
 def _lonlat_to_tile(longitude: float, latitude: float, zoom: int) -> tuple[int, int]:
     """Web Mercator lon/lat -> slippy-map tile (x, y) at a given zoom."""
@@ -103,20 +108,64 @@ def _lonlat_to_tile(longitude: float, latitude: float, zoom: int) -> tuple[int, 
     return max(0, min(n - 1, x)), max(0, min(n - 1, y))
 
 
-def _resolve_tile_template(url: str, latitude: float, longitude: float, attributes: dict[str, Any]) -> str:
+def _resolve_tile_template(url: str, latitude: float, longitude: float, result: dict[str, Any]) -> str:
     """Substitute a specific tile's ``{z}``/``{x}``/``{y}``/``{s}`` into a slippy-map template.
 
     Args:
         url: The template URL, e.g. ``"https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"``.
         latitude: WGS-84 latitude to resolve a tile for.
         longitude: WGS-84 longitude to resolve a tile for.
-        attributes: The imagery result's ``attributes`` blob, for ``subdomains``.
+        result: The imagery result, for its resolution and ``attributes.subdomains``.
 
     Returns:
         A concrete, directly-fetchable tile URL."""
-    x, y = _lonlat_to_tile(longitude, latitude, _TILE_TEMPLATE_ZOOM)
-    subdomains = attributes.get("subdomains") or ["a"]
-    return url.format(z=_TILE_TEMPLATE_ZOOM, x=x, y=y, s=subdomains[0])
+    resolution = _resolution_meters(result)
+    zoom = _TILE_TEMPLATE_ZOOM if resolution is None else min(_TILE_TEMPLATE_ZOOM, native_zoom(resolution, latitude))
+    x, y = _lonlat_to_tile(longitude, latitude, zoom)
+    subdomains = (result.get("attributes") or {}).get("subdomains") or ["a"]
+    return url.format(z=zoom, x=x, y=y, s=subdomains[0])
+
+
+def _resolution_meters(result: dict[str, Any]) -> float | None:
+    """An imagery result's own ground resolution, or None when it publishes no usable one."""
+    value = result.get("resolution_meters")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        return None
+    return float(value)
+
+
+def _zoom_level(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _composed_zoom(result: dict[str, Any], latitude: float) -> int | None:
+    """The zoom to ask REData to compose *result* at, or None to leave REData's default framing.
+
+    REData frames a composed image to a fixed ground span, enlarging a coarse source's pixels
+    (Sentinel-2's 10 m become a blur at a street zoom). A source whose resolution can't fill that
+    span is composed at the deepest zoom it supports instead, showing a wider area. REData's own
+    zoom bounds for the layer still apply: past a release's ceiling every tile 404s.
+
+    Args:
+        result: An ``/imagery/`` row, or a capture's row.
+        latitude: WGS-84 latitude of the slide.
+
+    Returns:
+        A zoom shallower than REData's default, or None.
+    """
+    resolution = _resolution_meters(result)
+    if resolution is None:
+        return None
+    ceilings = [zoom for zoom in (_zoom_level(result.get("max_zoom")), _zoom_level((result.get("attributes") or {}).get("max_map_level"))) if zoom is not None]
+    floor = _zoom_level(result.get("min_zoom"))
+
+    def bounded(zoom: int) -> int:
+        zoom = min([zoom, *ceilings])
+        return zoom if floor is None else max(zoom, floor)
+
+    wanted = bounded(native_zoom(resolution, latitude))
+    default = bounded(native_zoom(_REDATA_DEFAULT_SPAN_METERS / _COMPOSED_IMAGE_WIDTH, latitude))
+    return wanted if wanted < default else None
 
 
 def _most_recent_interval_end(attributes: dict[str, Any]) -> datetime.date | None:
@@ -281,7 +330,7 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         if delivery == "time_series":
             # Not a picture: `url` is a template carrying a literal `{time}` and the row describes a
             # date *range*.
-            return self._time_series_slide(gateway, result, name)
+            return self._time_series_slide(gateway, result, name, latitude)
 
         if delivery == "tile_template":
             img_src = self._composed_tile_image(gateway, result, url, latitude, longitude)
@@ -314,16 +363,16 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         asset_uuid = result.get("uuid")
         if isinstance(asset_uuid, str) and asset_uuid:
             try:
-                image_bytes = gateway.download_archived_copy(asset_uuid, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT)
+                image_bytes = gateway.download_archived_copy(asset_uuid, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT, zoom=_composed_zoom(result, latitude))
             except LocationContextUnavailableError as exc:
                 logger.debug("REData composed-imagery download failed for asset %s, falling back to a raw tile: %s", asset_uuid, exc)
             else:
                 return f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('ascii')}"
         else:
             logger.debug("tile_template imagery result for provider %s carries no uuid; falling back to a raw tile.", result.get("provider"))
-        return _resolve_tile_template(url, latitude, longitude, result.get("attributes") or {})
+        return _resolve_tile_template(url, latitude, longitude, result)
 
-    def _time_series_slide(self, gateway: RedataImageryGateway, result: dict[str, Any], name: str) -> SatelliteSlide | None:
+    def _time_series_slide(self, gateway: RedataImageryGateway, result: dict[str, Any], name: str, latitude: float) -> SatelliteSlide | None:
         """Materialize and embed one date from a continuous (``time_series``) source.
         This shows exactly one: the range's most recent date (see ``_most_recent_interval_end``), so this provider gets one carousel slide framed the same "current conditions" way every other slide here is, rather than being skipped outright.
 
@@ -331,9 +380,10 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             gateway: The imagery gateway to reuse.
             result: The ``time_series`` result.
             name: The already-resolved display name for this provider.
+            latitude: WGS-84 latitude of the slide, for its composed zoom.
 
         Returns:
-            A slide for the materialized date, or None when there is no interval to pick a date from, or REData can't produce an image for it - a documented "nothing here" answer or a transient failure are both treated as an ordinary provider gap here, same...
+            A slide for the materialized date, or None when there is no interval to pick a date from, or REData can't produce an image for it. A documented "nothing here" answer and a transient failure are both an ordinary provider gap here.
         """
         asset_uuid = result.get("uuid")
         end_date = _most_recent_interval_end(result.get("attributes") or {})
@@ -354,7 +404,8 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             logger.debug("REData imagery capture for asset %s returned no uuid; skipping.", asset_uuid)
             return None
         try:
-            image_bytes = gateway.download_archived_copy(captured_uuid, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT)
+            zoom = _composed_zoom(captured if _resolution_meters(captured) is not None else result, latitude)
+            image_bytes = gateway.download_archived_copy(captured_uuid, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT, zoom=zoom)
         except LocationContextUnavailableError as exc:
             logger.debug("REData imagery download failed for materialized asset %s: %s", captured_uuid, exc)
             return None

@@ -20883,3 +20883,34 @@ Internet Archive, Chronicling America) spend through REData's reference-document
 **Tests.** `test_redata_reference_documents_plugin.py`: no panel source answers for the old key; a PLACES
 subscriber gets a 404 from its URL; the migration drops only that source's rows; the shared service key keeps
 its defaults.
+
+## RESOLVED 2026-10-03: Coarse imagery such as Sentinel-2 is composed at the deepest zoom its resolution supports, not enlarged to a street zoom
+
+`id: P232` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0). Sentinel-2 cloudless slides were grainy at the pin's zoom; the other
+sources were fine.
+
+**Cause.** UrbanLens asked REData for each tile-layer slide's composed copy without a zoom, so REData chose one
+from a fixed 300 m span: z18 at 1024 pixels near 41.7° N, or 0.45 m a pixel. Sentinel-2 cloudless is 10 m a
+pixel, which REData publishes as the row's `resolution_meters`, so each source pixel was enlarged about 22 times.
+
+**Fix.** `services/geo/web_mercator.py::native_zoom` gives the deepest zoom whose metres a pixel, at the slide's
+latitude, is no finer than the source's own resolution. The carousel's `_composed_zoom` asks REData for that zoom
+whenever it is shallower than REData's default framing. It is bounded by the row's `min_zoom`, `max_zoom` and
+Esri's `max_map_level`, because past a layer's ceiling every tile 404s and REData reports a blank mosaic as no
+imagery. A source with no published resolution, or one fine enough to fill the default span, keeps REData's
+default, so the sharp sources are unchanged. The rule applies to current slides, dated timeline captures,
+time-series captures (NASA GIBS at 250 m gets z8) and the raw-tile fallback. Sentinel-2 at HRSH is now z13, a
+wider area at full sharpness. `map_pin_share_detection` now shares `meters_per_pixel` rather than its own copy of
+the constant.
+
+**Still open, REData's side.** REData keeps the first render of each asset forever and ignores later zooms. Every
+s2cloudless year already shown at a point stays blurry until REData re-renders it.
+`docs/handoffs/redata-imagery-composed-past-native-resolution.md` asks REData to clamp its own default by
+`resolution_meters` and to re-render the copies made past their source's resolution.
+
+**Tests.** `test_web_mercator.py` covers the zoom choice as a pure function of resolution and latitude, including
+a property test that the chosen zoom is never finer than the source and the next one is.
+`test_redata_satellite_provider.py::NativeResolutionZoomTests` covers the zoom sent for each delivery and bound,
+and `test_redata_imagery_gateway.py` checks the query parameter. Before the fix, 16 of the new tests failed.
