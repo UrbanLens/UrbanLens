@@ -86,6 +86,10 @@ REVIEWED: dict[str, str] = {
         "drop_historic_registers deletes cached Historic Registers rows so they refetch with each row's reference "
         "number and position. They are a cache; the old code refetches them."
     ),
+    "0047_cris_site_rows_refetch.py": (
+        "drop_stale_cris_rows deletes CRIS cache rows chosen by the old site rule. They are a cache; the old code "
+        "refetches them."
+    ),
 }
 
 

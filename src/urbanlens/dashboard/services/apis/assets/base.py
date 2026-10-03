@@ -136,7 +136,8 @@ class MediaProvider(Gateway, ABC):
                 be given more than one candidate query to widen recall.
             address: The address of the location, if any. Some media providers
                 may use this, or quote it, differently than others.
-            limit: Maximum number of items to return.
+            limit: Maximum number of gallery items to return. Documents do not count: they are listed under Article >
+                Sources, which a gallery's size must not decide.
             audience: Whose ``LocationCache`` row the results go in; the default is the one every viewer shares.
             search_names: The names the terms were built from, kept on the row.
 
@@ -165,18 +166,19 @@ class MediaProvider(Gateway, ABC):
 
         items: list[MediaItem] = []
         seen_urls: set[str] = set()
+        gallery_items = 0
         outage: Exception | None = None
         for search_term in search_terms:
-            if not search_term or (limit > 0 and len(items) >= limit):
+            if not search_term or (limit > 0 and gallery_items >= limit):
                 continue
             try:
                 for item in self._generate_media(search_term, address):
-                    if item.url in seen_urls:
+                    if item.url in seen_urls or (not item.is_document and limit > 0 and gallery_items >= limit):
                         continue
                     seen_urls.add(item.url)
                     items.append(item)
-                    if limit > 0 and len(items) >= limit:
-                        break
+                    if not item.is_document:
+                        gallery_items += 1
             except Exception as exc:
                 # TODO: Catch specific exceptions
                 if is_source_outage(exc):

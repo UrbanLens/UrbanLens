@@ -384,7 +384,11 @@ class ContainmentIsRecordedAtFetchTests(SimpleTestCase):
             "geometry": _CAMPUS_LISTING_GEOMETRY,
         }
         self.assertTrue(site_resource_attributes([listing], _LAT, _LON)["contains_point"])
-        self.assertFalse(site_resource_attributes([listing], 41.70, -73.90)["contains_point"])
+        self.assertEqual(
+            site_resource_attributes([listing], 41.70, -73.90), {}, "a listing excluding the point is a neighbour's"
+        )
+        point_only = {**listing, "geometry": {"type": "Point", "coordinates": [-73.928, 41.733]}}
+        self.assertFalse(site_resource_attributes([point_only], _LAT, _LON)["contains_point"])
 
 
 class RegisterArrivalRenamesTests(_Fixture):

@@ -346,7 +346,11 @@
             </div>
         </div>
         {% url 'location.wiki.article.sources' location.slug as sources_url %}
+        {% if include_children %}
         {% include "dashboard/partials/articles/_article_sources_subtab.html" with sources_url=sources_url %}
+        {% else %}
+        {% include "dashboard/partials/articles/_article_sources_subtab.html" with sources_url=sources_url|add:"?children=0" %}
+        {% endif %}
     </section>
 
     {# -- Comments tab -------------------------------------------------------- #}
