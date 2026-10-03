@@ -1329,7 +1329,9 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 
 ## P110 — The app reads Overture from its public S3 copy, although REData serves the same themes from our own instance
 
-`id: P110` · `status: open, decided` · `updated: 2026-10-02`
+`id: P110` · `status: open, decided` · `updated: 2026-10-03`
+
+**Implemented 2026-10-03 on branch `p110-overture-via-redata`, not merged.** Inside the US it asks REData only, and abroad it keeps the public read behind the guards below. It waits on REData: both Overture near-point lookups timed out when probed (P240).
 
 **Jess, 2026-10-02: "We're self hosting Overture. Why are we contacting external services instead of using our self
 hosted instance?"** Because `OvertureMapsGateway` predates REData's Overture stack and was never moved onto it. It
@@ -3211,3 +3213,34 @@ Fix: make an invisible Location's 404 cost the same as a missing one's. Resolve 
 plan doesn't depend on whether the row exists, or check visibility before any other per-Location work. Test it
 first: assert equal query counts for a never-used slug, an invisible current slug and an invisible former slug.
 Other slug-addressed routes (pins, trips, albums) likely share the pattern, so audit them in the same pass.
+
+## P240 — Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out
+
+`id: P240` · `status: open` · `updated: 2026-10-03` · `follows: P110`
+
+P110's fix, held on branch `p110-overture-via-redata` (24f7ca3ce), sends every US Overture question to REData: buildings to `GET /buildings/?provider=overture`, places to
+`GET /points-of-interest/lookup/?provider=overture` (`services.apis.locations.boundaries.overture.OvertureProvider`).
+Probed once each against the deployed REData on 2026-10-03, at the US Capitol: `/buildings/` gave no response within
+60 s, and the places lookup was a 504 from REData's proxy at 90 s. `/capabilities/` answered in 0.3 s, so REData was
+up.
+
+The likely cause is on REData's side, from reading its `main` rather than a query plan: both lookups filter with
+`geometry__distance_lte` on SRID 4326 columns, which Django compiles to `ST_DistanceSphere(...) <= r`. That cannot use
+the spatial index, so each request scans the whole US table.
+
+What it costs UrbanLens until REData changes it:
+
+- Every US Building Characteristics fetch waits 30 s (`redata_context_gateway._REQUEST_TIMEOUT`), raises an outage, and
+  caches nothing, so the panel stays empty and is retried.
+- The chain's Overture step defers after the same 30 s, which schedules up to `MAX_DEFERRED_RETRIES` reruns of the
+  location's boundary generation.
+- Each of those calls probably starts one of the scans on REData's Overture database; not checked on REData's side. `redata_buildings` is limited to
+  20 calls a minute, and the places calls share `redata_points_of_interest`'s 120.
+
+Asked of REData in [`handoffs/redata-overture-near-point-lookups.md`](handoffs/redata-overture-near-point-lookups.md),
+with three smaller gaps: `roof_shape`, `roof_material` and places' `operating_status` are not ingested; the providers
+claim the generous US boxes, which reach border places no shard syncs (Hermosillo, Nassau); and `buildings:read` is
+not backfilled onto existing keys. The development key holds it, since `/buildings/` did not answer 403.
+
+The P110 branch should not merge before REData's lookups answer in a few seconds. Re-probe both requests above when
+REData says it has changed them.
