@@ -28,6 +28,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
+#: The version of the rules in this module. Bump it with any change to what they keep, so cached results already
+#: swept under the old rules are judged again (``services.media.public_media_sweep``).
+RULE_VERSION = 1
+
 #: Words that say what sort of place something is rather than which one.
 GENERIC_WORDS: frozenset[str] = frozenset(
     {

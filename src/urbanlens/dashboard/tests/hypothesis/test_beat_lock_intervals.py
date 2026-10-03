@@ -55,6 +55,7 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
     "account-deletion-hard-delete": tasks_module._HARD_DELETE_LOCK_TIMEOUT_SECONDS,
     "task-outbox-drain": tasks_module._OUTBOX_DRAIN_LOCK_SECONDS,
     "public-pin-candidate-evaluation": tasks_module.PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS,
+    "public-media-cache-sweep": tasks_module._PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS,
 }
 
 
