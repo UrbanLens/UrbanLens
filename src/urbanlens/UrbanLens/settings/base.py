@@ -143,6 +143,8 @@ MIDDLEWARE = [
     "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
     # Records the viewer the request actually acts as.
     "urbanlens.dashboard.middleware.WriteSourceMiddleware",
+    # A storage failure a view let escape is a 503 with Retry-After, not a 500.
+    "urbanlens.dashboard.middleware.StorageUnavailableMiddleware",
 ]
 
 if UL_METRICS_INSTRUMENTED:

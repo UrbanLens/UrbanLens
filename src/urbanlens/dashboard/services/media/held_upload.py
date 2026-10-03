@@ -14,13 +14,14 @@ import logging
 from typing import TYPE_CHECKING, Any
 import uuid
 
-from botocore.exceptions import ClientError, ConnectionError as BotocoreConnectionError, FlexibleChecksumError, HTTPClientError
 from django.apps import apps
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
 from PIL.Image import DecompressionBombError
-from s3transfer.exceptions import RetriesExceededError
+
+from urbanlens.dashboard.services.media.storage import storage_failures_refused
+from urbanlens.dashboard.services.media.storage_errors import STORAGE_ERRORS
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -30,11 +31,6 @@ if TYPE_CHECKING:
     from django.db.models import Model, QuerySet
 
 logger = logging.getLogger(__name__)
-
-#: What storage raises when it cannot do its job: OSError, or on the S3 backend the object store unreachable, refusing,
-#: breaking every download attempt, or sending a download that fails its checksum. The rest of botocore's errors, such as
-#: missing credentials or a bad parameter, are misconfiguration and are not caught.
-STORAGE_ERRORS: tuple[type[Exception], ...] = (OSError, BotocoreConnectionError, HTTPClientError, ClientError, RetriesExceededError, FlexibleChecksumError)
 
 #: Where held uploads are stored.
 HELD_PREFIX = "unprocessed"
@@ -146,10 +142,14 @@ def hold_upload(instance: Model, field: str, upload: File) -> str:
 
     Returns:
         The column the caller must save.
+
+    Raises:
+        StorageUnavailableError: Storage could not store the upload.
     """
     held = held_field(instance, field)
     # No extension and no uploaded name: the worker decodes by content, and a name can say as much as metadata.
-    name = held.storage.save(f"{HELD_PREFIX}/{uuid.uuid4().hex}", upload)
+    with storage_failures_refused():
+        name = held.storage.save(f"{HELD_PREFIX}/{uuid.uuid4().hex}", upload)
     discard_held_upload(instance, field)
     setattr(instance, held.upload_column, name)
     return held.upload_column

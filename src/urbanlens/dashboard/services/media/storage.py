@@ -13,6 +13,7 @@ from django.template.defaultfilters import filesizeformat
 
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import active_subscription_roles
+from urbanlens.dashboard.services.media.storage_errors import OBJECT_STORE_ERRORS, STORAGE_ERRORS, STORAGE_RETRY_AFTER_SECONDS, is_transient
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
@@ -143,6 +144,8 @@ class UploadRefusedError(Exception):
     """
 
     status: ClassVar[int] = 400
+    #: Seconds the client should wait before sending the upload again, for a refusal that is not about the upload.
+    retry_after: ClassVar[int | None] = None
 
     def __init__(self, message: str) -> None:
         """Store the user-facing message.
@@ -152,6 +155,11 @@ class UploadRefusedError(Exception):
         """
         super().__init__(message)
         self.message = message
+
+    @property
+    def headers(self) -> dict[str, str]:
+        """Response headers the refusal needs, such as ``Retry-After``."""
+        return retry_after_headers(self.retry_after)
 
 
 class StorageQuotaExceededError(UploadRefusedError):
@@ -164,6 +172,65 @@ class UploadReservationBusyError(UploadRefusedError):
     """Another upload by the same profile held the reservation for longer than the caller would wait."""
 
     status = 429
+
+
+class StorageUnavailableError(UploadRefusedError):
+    """Media storage failed to store the upload, so nothing was saved and the client should send it again."""
+
+    status = 503
+    retry_after = STORAGE_RETRY_AFTER_SECONDS
+
+    def __init__(self, message: str = "Storage is briefly unavailable, so nothing was saved. Try again in a minute.") -> None:
+        """Store the user-facing message.
+
+        Args:
+            message: Why the upload was refused.
+        """
+        super().__init__(message)
+
+
+def retry_after_headers(seconds: int | None) -> dict[str, str]:
+    """The ``Retry-After`` header for a refusal the client may send again later.
+
+    Args:
+        seconds: How long the client should wait, or None when retrying will not help.
+
+    Returns:
+        The headers to add to the response.
+    """
+    return {} if seconds is None else {"Retry-After": str(seconds)}
+
+
+@contextmanager
+def storage_failures_refused() -> Iterator[None]:
+    """Turn a storage failure inside the block into :class:`StorageUnavailableError`, for a request to answer 503.
+
+    Raises:
+        StorageUnavailableError: Storage raised one of ``STORAGE_ERRORS``.
+    """
+    try:
+        yield
+    except STORAGE_ERRORS as exc:
+        logger.log(logging.WARNING if is_transient(exc) else logging.ERROR, "Refused an upload because storage failed: %s: %s", type(exc).__name__, exc, exc_info=True)
+        raise StorageUnavailableError from exc
+
+
+def storage_refusal(exc: BaseException, context: str) -> StorageUnavailableError | None:
+    """The refusal a request should answer with when *exc* escaped it, if storage failed.
+
+    Args:
+        exc: What the request raised.
+        context: Names the request in the log line for a failure nothing translated.
+
+    Returns:
+        *exc* itself when it is already a refusal, one for an object store failure (logged here), else None.
+    """
+    if isinstance(exc, StorageUnavailableError):
+        return exc
+    if not isinstance(exc, OBJECT_STORE_ERRORS):
+        return None
+    logger.log(logging.WARNING if is_transient(exc) else logging.ERROR, "%s failed on storage: %s", context, exc, exc_info=exc)
+    return StorageUnavailableError("Storage is briefly unavailable. Try again in a minute.")
 
 
 @dataclass(slots=True)

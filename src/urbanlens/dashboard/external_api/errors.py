@@ -26,6 +26,7 @@ from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
+from urbanlens.dashboard.services.media.storage import storage_refusal
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -60,6 +61,8 @@ def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Respon
     if isinstance(exc, MessageRateLimitedError):
         logger.info("external API message send rate-limited: %s", exc)
         return Response({"error": "You're sending messages too quickly. Wait a moment and try again."}, status=429)
+    if (refusal := storage_refusal(exc, "external API request")) is not None:
+        return Response({"error": refusal.message}, status=refusal.status, headers=refusal.headers)
 
     response = drf_exception_handler(exc, context)
     if response is None:

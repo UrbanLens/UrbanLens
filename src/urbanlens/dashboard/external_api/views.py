@@ -1341,7 +1341,7 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
             image = upload_photo(profile, data["file"], caption=data.get("caption") or None, pin=pin, visit=visit)
         except PhotoUploadError as exc:
             logger.info("external API photo upload rejected for profile %s: %s", profile.pk, exc.message)
-            return Response({"error": exc.generic_message}, status=exc.status)
+            return Response({"error": exc.generic_message}, status=exc.status, headers=exc.headers)
 
         return Response(PhotoSerializer(build_photo_payload(image, profile)).data, status=201)
 

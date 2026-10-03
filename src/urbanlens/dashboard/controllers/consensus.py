@@ -468,7 +468,7 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
         from urbanlens.dashboard.services.consensus import photos as consensus_photos, points as consensus_points
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload, storage_failures_refused
         from urbanlens.dashboard.tasks import process_image_upload
 
         profile = _current_profile(request)
@@ -491,7 +491,7 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
         checksum = compute_checksum(image_file)
         try:
-            with reserve_upload(profile, None) as reservation:
+            with storage_failures_refused(), reserve_upload(profile, None) as reservation:
                 if Image.objects.filter(profile=profile, checksum=checksum).exists():
                     return JsonResponse({"error": "You already uploaded this file."}, status=409)
                 reservation.reserve(image_file.size or 0)
@@ -507,7 +507,7 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
                     **prepared.metadata,
                 )
         except UploadRefusedError as exc:
-            return JsonResponse({"error": exc.message}, status=exc.status)
+            return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
 
         safely_enqueue_task(process_image_upload, image.pk)
         consensus_photos.record_in_round_upload(round_, image, profile)

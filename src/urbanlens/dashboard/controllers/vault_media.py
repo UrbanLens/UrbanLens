@@ -169,6 +169,6 @@ class VaultMediaUploadView(LoginRequiredMixin, View):
             # Recorded, not just returned: Vault > Photos renders a "Couldn't upload" panel with a retry.
             logger.info("%s upload rejected for profile %s: %s", spec.kind, profile.pk, exc.message)
             record_photo_upload_failure(profile, upload.name or spec.kind, exc.generic_message)
-            return JsonResponse({"error": exc.generic_message}, status=exc.status)
+            return JsonResponse({"error": exc.generic_message}, status=exc.status, headers=exc.headers)
 
         return JsonResponse(image_to_gallery_json(image, request, profile), status=201)

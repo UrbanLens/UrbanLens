@@ -658,24 +658,27 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         if icon_error:
             return HttpResponse(icon_error, status=400)
 
+        from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
+
         try:
-            label = Label.objects.create_unique(
-                kind=self.kind,
-                profile=profile,
-                name=name,
-                description=request.POST.get("description", "").strip() or None,
-                icon=clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None,
-                color=clean_color(request.POST.get("color"), default=DEFAULT_LABEL_COLOR),
-                order=order,
-            )
+            # One transaction, so a label whose icon storage refused is not left behind for the retry to collide with.
+            with transaction.atomic():
+                label = Label.objects.create_unique(
+                    kind=self.kind,
+                    profile=profile,
+                    name=name,
+                    description=request.POST.get("description", "").strip() or None,
+                    icon=clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None,
+                    color=clean_color(request.POST.get("color"), default=DEFAULT_LABEL_COLOR),
+                    order=order,
+                )
+                if custom_icon:
+                    label.save(update_fields=[hold_upload(label, "custom_icon", custom_icon)])
         except LabelNameConflictError as raced:
             return self._conflict_response(raced.conflict, cfg.singular_title)
         except CapacityExceededError as exc:
             return HttpResponse(exc.user_message, status=409)
         if custom_icon:
-            from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
-
-            label.save(update_fields=[hold_upload(label, "custom_icon", custom_icon)])
             queue_held_upload(label, "custom_icon")
         if parent_ids:
             valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=label.id)

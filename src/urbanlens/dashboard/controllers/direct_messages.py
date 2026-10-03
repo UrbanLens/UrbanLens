@@ -474,7 +474,7 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
         """
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload, storage_failures_refused
 
         profile = _get_profile(request)
         image_file = request.FILES.get("image")
@@ -492,12 +492,12 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
 
         checksum = compute_checksum(image_file)
         try:
-            with reserve_upload(profile, image_file.size):
+            with storage_failures_refused(), reserve_upload(profile, image_file.size):
                 # Stored already stripped - see services.media.images.prepare_photo_upload.
                 prepared = prepare_photo_upload(image_file, profile)
                 image = Image.objects.create(image=prepared.file, profile=profile, checksum=checksum, file_size=prepared.size, **prepared.metadata)
         except UploadRefusedError as exc:
-            return JsonResponse({"error": exc.message}, status=exc.status)
+            return JsonResponse({"error": exc.message}, status=exc.status, headers=exc.headers)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

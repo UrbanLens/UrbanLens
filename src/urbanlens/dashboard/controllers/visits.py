@@ -190,7 +190,7 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-    from urbanlens.dashboard.services.media.storage import StorageQuotaExceededError, UploadReservationBusyError, reserve_upload
+    from urbanlens.dashboard.services.media.storage import StorageQuotaExceededError, StorageUnavailableError, UploadReservationBusyError, reserve_upload, storage_failures_refused
     from urbanlens.dashboard.tasks import process_image_upload
 
     owner_gallery = Image.objects.filter(pin=pin, profile=pin.profile)
@@ -212,7 +212,7 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
     if files:
         try:
             # One reservation for the batch; each new file reserves its own bytes.
-            with reserve_upload(pin.profile, None) as reservation:
+            with storage_failures_refused(), reserve_upload(pin.profile, None) as reservation:
                 for image_file, checksum in files:
                     existing = owner_gallery.filter(checksum=checksum).first()
                     if existing is not None:
@@ -241,6 +241,10 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
                     uploaded_pks.append(img.pk)
         except UploadReservationBusyError as exc:
             messages.warning(request, exc.message)
+        except StorageUnavailableError:
+            # The batch's rows went with its transaction; the visit itself is saved.
+            uploaded_pks.clear()
+            messages.warning(request, "Storage is briefly unavailable, so the new photos weren't saved. Add them again in a minute.")
     for pk in uploaded_pks:
         safely_enqueue_task(process_image_upload, pk)
 

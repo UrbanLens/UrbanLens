@@ -407,6 +407,37 @@ class WriteSourceMiddleware:
             return self.get_response(request)
 
 
+class StorageUnavailableMiddleware:
+    """Answer a request that media storage failed under with a 503 and ``Retry-After``, not a 500.
+
+    Upload paths refuse in their own shape; this covers any view that let a storage failure escape. The body is plain
+    text, which both the htmx error toast and ``fetchJson`` show as written.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        return self.get_response(request)
+
+    def process_exception(self, request: HttpRequest, exception: Exception) -> HttpResponse | None:
+        """Turn a storage failure into a 503 the client can retry.
+
+        Args:
+            request: The current request.
+            exception: What the view raised.
+
+        Returns:
+            The 503, or None for any other exception.
+        """
+        from urbanlens.dashboard.services.media.storage import storage_refusal
+
+        refusal = storage_refusal(exception, f"{request.method} {request.path}")
+        if refusal is None:
+            return None
+        return HttpResponse(refusal.message, status=refusal.status, headers=refusal.headers, content_type="text/plain; charset=utf-8")
+
+
 class RequestTelemetryMiddleware:
     """Log slow requests with wall, CPU, and SQL breakdowns."""
 

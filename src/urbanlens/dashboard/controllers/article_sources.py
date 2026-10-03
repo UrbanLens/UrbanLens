@@ -166,7 +166,7 @@ class ArticleSourcesView(LoginRequiredMixin, View):
         try:
             upload_photo(profile, document, caption=document.name or "", pin=scope.driver)
         except PhotoUploadError as exc:
-            return HttpResponse(exc.generic_message, status=exc.status)
+            return HttpResponse(exc.generic_message, status=exc.status, headers=exc.headers)
         return self.get(request, pin_slug=pin_slug, location_slug=location_slug)
 
     @staticmethod

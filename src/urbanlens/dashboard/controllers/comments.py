@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -27,6 +28,7 @@ from urbanlens.dashboard.services.map.map_snapshot import (
     materialize_markup_map,
     parse_map_data as _parse_map_data,
 )
+from urbanlens.dashboard.services.media.storage import StorageUnavailableError, storage_failures_refused
 from urbanlens.dashboard.services.notifications.comment_notifications import notify_reply
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
@@ -37,6 +39,10 @@ from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, r
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from django.core.files.uploadedfile import UploadedFile
+
     from urbanlens.dashboard.models.trips.model import TripComment
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -148,6 +154,35 @@ def attach_existing_comment_image(comment: Comment | TripComment, existing_image
     if not source or not source.image.name:
         return
     comment.image.save(os.path.basename(source.image.name), ContentFile(source.image.read()), save=True)
+
+
+def create_comment_with_image[C: (Comment, TripComment)](create: Callable[[], C], image: UploadedFile | None, existing_image_id: str, profile: Profile) -> C:
+    """Create a comment and store its photo in one transaction, so a photo storage refuses leaves no comment behind.
+
+    Args:
+        create: Inserts the comment.
+        image: A newly uploaded photo, already validated by :func:`comment_image_error`.
+        existing_image_id: The ``Image.pk`` of one of the poster's photos to copy on instead, or "".
+        profile: The poster.
+
+    Returns:
+        The comment.
+
+    Raises:
+        StorageUnavailableError: Storage could not store the photo, and nothing was saved.
+    """
+    with storage_failures_refused(), transaction.atomic():
+        comment = create()
+        if image:
+            comment.image = image
+            # In the write that stores the image, so no committed state shows the upload as sent.
+            comment.pending_scan = True
+            comment.save(update_fields=["image", "pending_scan"])
+        elif existing_image_id:
+            attach_existing_comment_image(comment, existing_image_id, profile)
+    if image:
+        start_comment_image_scan(comment)
+    return comment
 
 
 class CommentImagePickerView(LoginRequiredMixin, View):
@@ -370,13 +405,15 @@ class PinCommentsView(LoginRequiredMixin, View):
             # parent__isnull=True: replies render one level deep (visible_comment_tree never walks a reply's own
             # .replies), so a reply-to-a-reply would persist but never appear anywhere.
             parent = get_object_or_404(Comment, id=safe_int_or_none(parent_id), pin=pin, parent__isnull=True)
-        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=pin))
-        if image:
-            comment.image = image
-            comment.save(update_fields=["image"])
-            start_comment_image_scan(comment)
-        elif existing_image_id:
-            attach_existing_comment_image(comment, existing_image_id, profile)
+        try:
+            comment = create_comment_with_image(
+                lambda: Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=pin)),
+                image,
+                existing_image_id,
+                profile,
+            )
+        except StorageUnavailableError as exc:
+            return HttpResponse(exc.message, status=exc.status, headers=exc.headers)
         if parent and parent.profile != profile:
             notify_reply(profile, parent, reply=comment)
         ctx = _pin_comments_context(pin, profile, request)
@@ -538,19 +575,15 @@ class WikiCommentsView(LoginRequiredMixin, View):
                 # reply-to-a-reply would persist but never appear anywhere, so refuse it the same way an
                 # unaddressable id already is.
                 raise Http404
-        comment = Comment.objects.create(
-            wiki=wiki,
-            profile=profile,
-            text=text,
-            parent=parent,
-            markup_map=materialize_markup_map(profile, map_data, context=wiki),
-        )
-        if image:
-            comment.image = image
-            comment.save(update_fields=["image"])
-            start_comment_image_scan(comment)
-        elif existing_image_id:
-            attach_existing_comment_image(comment, existing_image_id, profile)
+        try:
+            comment = create_comment_with_image(
+                lambda: Comment.objects.create(wiki=wiki, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=wiki)),
+                image,
+                existing_image_id,
+                profile,
+            )
+        except StorageUnavailableError as exc:
+            return HttpResponse(exc.message, status=exc.status, headers=exc.headers)
         if parent and parent.profile != profile:
             notify_reply(profile, parent, reply=comment)
         include_children = request.GET.get("children") == "1"

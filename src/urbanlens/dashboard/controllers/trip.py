@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.trips.model import (
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.request_body import FORM_CONTENT_TYPES, posted_fields
+from urbanlens.dashboard.services.media.storage import StorageUnavailableError
 from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.trips.trip_access import (
     can_perform as _can_perform,
@@ -929,6 +930,8 @@ class TripCommentsView(LoginRequiredMixin, View):
             )
         except TripError as exc:
             return _trip_error_response(exc)
+        except StorageUnavailableError as exc:
+            return HttpResponse(exc.message, status=exc.status, headers=exc.headers)
 
         return _render_trip_comments(request, trip, profile)
 

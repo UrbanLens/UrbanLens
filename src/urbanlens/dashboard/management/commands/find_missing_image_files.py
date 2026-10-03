@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Any
 from django.core.management.base import BaseCommand
 
 from urbanlens.dashboard.models.images.model import Image, MediaKind
-from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
 from urbanlens.dashboard.services.media.images import THUMBNAIL_BACKFILL_BATCH
+from urbanlens.dashboard.services.media.storage_errors import STORAGE_ERRORS
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser

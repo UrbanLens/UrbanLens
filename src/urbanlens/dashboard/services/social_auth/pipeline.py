@@ -151,7 +151,13 @@ def fetch_and_save_avatar(
     if not image_bytes:
         return
 
-    profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(image_bytes))])
+    from urbanlens.dashboard.services.media.storage import StorageUnavailableError
+
+    try:
+        profile.save(update_fields=[hold_upload(profile, "avatar", ContentFile(image_bytes))])
+    except StorageUnavailableError:
+        # Signing in does not wait on storage; the next sign-in fetches the avatar again.
+        return
     queue_held_upload(profile, "avatar")
     logger.info("Saved SSO avatar for user %s from %s", user.username, backend.name)
 

@@ -23,7 +23,6 @@ from django.db import DatabaseError
 from PIL.Image import DecompressionBombError
 
 from urbanlens.dashboard.models.images.model import Image, MediaKind
-from urbanlens.dashboard.services.media.held_upload import STORAGE_ERRORS
 from urbanlens.dashboard.services.media.images import (
     discard_superseded_file,
     downscale_stored_image,
@@ -32,6 +31,7 @@ from urbanlens.dashboard.services.media.images import (
     write_image_analysis_thumbnail,
 )
 from urbanlens.dashboard.services.media.storage import get_stored_photo_policy
+from urbanlens.dashboard.services.media.storage_errors import STORAGE_ERRORS
 from urbanlens.dashboard.services.sandbox import allow_untrusted_parse
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
