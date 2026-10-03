@@ -2980,25 +2980,6 @@ settings row. A restore or re-seed brings the old row back, and with it the task
 data. Asks: let a deployment turn the task off where the row can't override it (`UL_BACKUP_ENABLED=false` winning over
 the row); and, if the task stays, write `pg_dump -Fc` or gzip, which cuts 11 GB to about 1.
 
-## P203 — A Static Maps 403 logs the full request URL, Google API key included
-
-`id: P203` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 6`
-
-The worker logs a Static Maps 403 at WARNING with the full URL, `key=` and all. That log goes to Loki. Fix: redact
-query-string secrets (at least `key=`, plus any parameter a gateway sends a credential in) everywhere a provider URL is
-logged, preferably in one logging filter or one URL formatter every gateway uses. It is a credential leak, so it needs a
-failing test reproducing the logged key first. The key's rotation is the infrastructure side's; the 403 suggests its
-restrictions don't admit the caller either.
-
-## P204 — `media-copy`'s designed 503 is logged as an ERROR a dozen times an hour
-
-`id: P204` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 7`
-
-`RemoteImageCopyView` answers 503 with `Retry-After` while a copy is being made. `django.request` logs every 5xx at
-ERROR, so production's log reads "Service Unavailable: /dashboard/map/media-copy/<digest>/" at ERROR about twelve times
-an hour. Either answer 202 for "not yet" (check every client that polls it), or filter that view's 503 out of
-`django.request`'s ERROR.
-
 ## P205 — One Overpass 504 marks every Overpass endpoint down until the next day
 
 `id: P205` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 8`
@@ -3072,6 +3053,18 @@ While on that host, three reads. None of them is a reason to add threads or to i
 - Confirm the running worker class. N26 (2026-09-21) found the image then in production was still `gunicorn -k gevent`. This tree's `package.json` `start` script is `-k gthread --threads 4`. GIL waits between threads exist on gthread. A gen-2 pause stops the whole worker on either class.
 
 Python 3.13's incremental collector is the runtime's own reduction of this pause. It is not part of this check.
+
+## P212 — A failed task's ERROR line prints its arguments, so `fetch_recorded_weather_at`'s coordinates reach the log
+
+`id: P212` · `status: open` · `updated: 2026-10-03` · `found by: P203's review of the Celery failure path`
+
+`UrbanLens/celery.py::log_task_failure` logs `args=%s kwargs=%s` for every failed task. Most tasks take primary keys,
+but `tasks.py::fetch_recorded_weather_at(latitude, longitude, iso_days)` takes coordinates, and it retries on `OSError`,
+so a provider outage ends in an ERROR line carrying a raw latitude and longitude. That breaks the `redact_coordinate`
+policy in `services/security/redact.py`. P203's `SecretRedactionFilter` does not catch it: it reads URLs, and a tuple of
+floats is not one. Not reproduced in a test yet. Either drop the arguments from that line (the task id and name already
+correlate it with Celery's own lines) or pass them through `redact_params` by the task signature's parameter names; and
+decide whether a task should take coordinates at all when a `Location` pk would do.
 ||||||| parent of ffea8d26e (docs(P206): nothing prunes the location cache, and dev's rows are 20x smaller than production's)
 fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows? Measure on
 `development_main` first. Production's `pg_stat_statements` is being loaded on the infrastructure side and will name
