@@ -3014,9 +3014,17 @@ grow on repeats. A day-long block should be reserved for a quota answer that mea
 1,915 MB of 2,361 MB: 135k rows, about 1.85 GB of it TOAST, with a 69% TOAST hit ratio against 99.9% for heap. Index
 scans fetched 972k tuples from it in a day, and one pooler pod sent 11.35 GB to clients in five hours, most likely from
 it. It also sets the nightly dump's size and its 12 minutes. Questions: which reads pull the whole `payload` where a few
-fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows? Measure on
-`development_main` first. Production's `pg_stat_statements` is being loaded on the infrastructure side and will name
-the queries.
+fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows?
+
+Measured on `development_main`, 2026-10-03:
+
+- **Nothing prunes the table.** There's no task, beat entry or command for it; the deletes in `migrations/` are one-off.
+  A row past `external_data_cache_days` is refetched on its next read, and otherwise stays forever.
+- **Dev can't reproduce production's size.** Dev has 10,174 rows in 6.6 MB, about 650 bytes a row. Production
+  averages about 14 KB a row. The largest dev sources are `hazard_history` (402 kB over 109 rows), `epa_echo` (max row
+  46 kB) and `parcel_buildings` (max row 57 kB).
+- **Next:** production's per-source row count and `sum(pg_column_size(data))` (the query this used is in this entry's
+  history), and the infrastructure side's `pg_stat_statements` output, which names the queries that read it.
 
 ## P207 — A worker's gen-2 collection still walks the startup heap, and that pause has never been timed on a real worker
 
@@ -3064,3 +3072,7 @@ While on that host, three reads. None of them is a reason to add threads or to i
 - Confirm the running worker class. N26 (2026-09-21) found the image then in production was still `gunicorn -k gevent`. This tree's `package.json` `start` script is `-k gthread --threads 4`. GIL waits between threads exist on gthread. A gen-2 pause stops the whole worker on either class.
 
 Python 3.13's incremental collector is the runtime's own reduction of this pause. It is not part of this check.
+||||||| parent of ffea8d26e (docs(P206): nothing prunes the location cache, and dev's rows are 20x smaller than production's)
+fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune expired rows? Measure on
+`development_main` first. Production's `pg_stat_statements` is being loaded on the infrastructure side and will name
+the queries.
