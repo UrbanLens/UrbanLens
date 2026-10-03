@@ -20495,3 +20495,82 @@ module alone misses) for the P29 routes that branch on it: `external_api:wikis.d
 `wikis.cover_photo`. Each write lands on the real row and leaves a stranger's writing intact, a stranger's edit or
 alias is a 404, both vote routes report only the viewer's ballot, and no response carries the stranger's text. A
 control test checks the gate is on while patched and off without it. No bug found.
+
+## RESOLVED 2026-10-03: Media galleries show only what is about the place, and the books Commons finds go to Article > Sources
+
+`id: P196` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: Jess, on the HRSH Commons fix (f0fd2741a)`
+
+**Ruled by Jess 2026-10-02.** Returning a book is fine; the HRSH bug was an irrelevant one. Keep every relevant item,
+put books and documents in Article > Sources, and keep only what explicitly matches the subject: geolocated inside its
+bounding box, or its name with a consistent geographic indicator ("HRSH Poughkeepsie", "Hudson River State Hospital
+NY", "HRPC 12601"; not "HRSH Binghamton", "Hudson River Poughkeepsie", "HRPC OH"). A distinctive name alone matches
+when nothing contradicts it; a generic one ("Historic Mansion") never does.
+
+f0fd2741a's media-type filter is gone: Commons keeps images, PDFs and DjVu again (sound and video still not), and
+`MediaProvider.admits` is removed. `services/media/subject_relevance.py` judges each item instead, at read time, so
+rows cached before the change are judged too and the rule can change without refetching. Every name-searched gallery
+source applies it (`GalleryMediaSource.judges_relevance`: the six `MediaPanelSource` archives, Flickr, Web Images): the
+pin Media gallery, the wiki gallery, the Photos tab and the external API. Sources found by location (CRIS, Google
+Places, Yelp, LoopNet, Wikipedia's matched article, aerial) are not judged. Jess's examples are the table in
+`test_media_subject_relevance.py`; the pages are covered end to end in `test_media_place_relevance.py`.
+
+### The rules as built
+
+- **Coordinates first.** Inside the place's box (its `Place` outline's extent plus 100 m, else 250 m around the point)
+  is a match whatever the text says. More than 5 km outside the box is a non-match whatever the text says: a photo
+  geolocated in Binghamton that names HRSH is of somewhere else. Between the two, the text decides. This 5 km band
+  is our interpretation, not Jess's wording; it keeps a photo of HRSH taken from across the Hudson.
+- **A name must match as whole words** (casefolded, accents, punctuation, possessives and a leading "the" ignored), in
+  the title, caption, description, or the categories, subjects and tags a provider files it under. An all-capitals
+  name of three or more letters (HRSH) matches only in capitals, or as a whole tag. Names are the place's public
+  names, plus the pin's own non-nickname names on its owner's pages; a nested pin's site names place it but are not
+  its name ("Staff House, Hudson River State Hospital" matches; "Hudson River State Hospital" alone does not).
+- **Distinctive** means an acronym, or two words outside a curated generic list (building types, denominations,
+  directions, "historic", "old", saints' names...), or one such word among three or more.
+- **Geography** is read most precise first: ZIP, city or an enclosing site; county; state; country. The most precise
+  level named decides, and a consistent indicator at that level outweighs a conflicting one ("HRSH Binghamton NY" is
+  a conflict: the city outranks the state). A distinctive name matches unless that level conflicts. A generic name
+  needs a consistent ZIP, city, county or site; a state or country is not enough ("Historic Mansion, NY" does not
+  match). This last rule is our interpretation.
+- **Conflicts** come from GeoNames (cities of 15,000+, US states and counties, countries; CC BY 4.0):
+  a named city more than 40 km from the place, a different US state or county, another country. A city within 15 km
+  is consistent. A city followed by a state ("Salem, OR") is looked up in that state. To avoid reading names as
+  places, a conflict needs capitals and must stand alone: not after "the", not inside a longer proper noun ("George
+  Washington", "Binghamton State Hospital", "Washington Street"), not an everyday word ("Union", "Mobile"); IN, OR, ME,
+  OK and HI are not states in text written all in capitals.
+- **Overrides.** An item the viewer marked relevant stays on their pin pages; one the wiki community has voted above
+  zero stays on the wiki.
+
+The GeoNames data is extracted from `geonamescache` (a development dependency) into `services/geo/data/` by `bun
+run gazetteer:build`; `test_gazetteer.py` fails when the two disagree. Read from the package itself, the cities took a
+second and a 150 MB peak to load and left 61 MB resident in every process; the extract takes 0.3 s and 18 MB, and
+keeps the package's 179 MB out of the production image.
+
+### Documents
+
+A relevant PDF or DjVu from Commons is listed under Article > Sources (`DocumentMediaPanelSource`) and is never a
+gallery tile; the Photos tab and the wiki gallery now leave documents out as the pin gallery already did. It opens on
+its Commons page rather than through the Sources proxy: a scanned book is tens of megabytes (the HRSH county history is
+42 MB), more than the proxy should hold in memory. Pin pages read the pin's own names' rows; wiki pages the shared row.
+A Sources tab opened before Commons has answered schedules the Commons search and polls, as it already did for CRIS.
+
+### Each provider now keeps what the rule reads
+
+Commons: categories, object name, description, and coordinates (`prop=coordinates`, `colimit=max`, else the GPS
+extmetadata). Flickr: description, tags and geotag (`extras`), tags from the keyless feed. REData's archives:
+description, the Library of Congress's subject headings, any coordinates. Web Images: the snippet. Wikipedia's article
+images are deduplicated only against Commons items the Commons tab shows.
+
+### Limits
+
+- The gazetteer has no place under 15,000 people. A hamlet sharing a name with a distant city ("Hyde Park" near HRSH)
+  reads as a conflict unless a state follows it.
+- Rows cached before 2026-10-03 have no description, categories or coordinates, so for up to their 7-day life fewer of
+  their items match.
+- Historic Newspapers now shows nothing: REData drops each page's text, leaving only the newspaper's dateline (P216).
+- On the two HRSH queries of 2026-10-03, Commons returned 29 distinct files and four are kept: the HRPC front view, a
+  scanned 1940 census district description naming the hospital, and two copies of a patient's memoir whose subject
+  heading is "Hudson River State Hospital (Poughkeepsie, N.Y.)", which go to Sources. The other 25 were OCR matches in
+  books about something else.
