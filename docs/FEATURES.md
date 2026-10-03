@@ -245,7 +245,8 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   (`controllers/wiki_media.py`): the same external providers (Wikimedia, Smithsonian, Library of
   Congress, Internet Archive, Web Images (SearXNG), Yelp, Google Images/Maps, LoopNet, CRIS, …)
   appear automatically
-  from the shared per-Location cache, alongside a "Photos" tab of images intentionally shared to
+  from the shared per-Location cache (the shared row only, never one cached for a pin's own names), alongside a
+  "Photos" tab of images intentionally shared to
   the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
   (net score up − down, highest ranked first); because relevance is stored per-Location
   (`MediaRelevance`), a relevance mark made on any user's Private Pin page already counts here
@@ -595,6 +596,16 @@ direct-only because REData's contract can't reproduce what they show:
   nearest the pin, newest first), so the carousel reads as a decay progression rather than an
   undated handful of recent frames
 - Debug overlay (admin-only) to inspect raw external-API responses per panel
+- **Searches built from names are cached per name set** (`services/pins/search_names.py`, P188) - web
+  search, Web Images, Flickr, News and every name-searched Media provider (`NameSearchSource`). A
+  Location's *shared* names are its official name and its wiki's name and non-nickname aliases; a
+  pin's *custom* names are its own name and non-nickname aliases that restate no shared name, plus
+  the names of the pins it is filed under. Each provider makes one search from shared names, cached
+  for every viewer (`LocationCache.audience` `""`), and one per distinct custom-name set, cached under
+  a digest of that set: two pins with the same set share it, nobody else reads it. A pin page, its
+  Photos tab and the external API read the shared row plus their own set's row, combined; wiki pages
+  read the shared row only. Custom names are searched casefolded and longest first, so a set's query
+  is the same whoever holds it. Each row keeps the names that built it under `search_names`
 
 All external integrations are cached (DB-backed, per-Location) and rate-limited per service, with
 usage tracked in `ApiCallLog`/`ApiRateLimit` and toggled at `/site-admin/api-limits/`. A per-call
