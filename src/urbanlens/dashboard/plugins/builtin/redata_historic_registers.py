@@ -240,10 +240,9 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
         """Keep only the standardized fields this card renders - see :data:`_KEPT_FIELDS`."""
         return [{key: row.get(key) for key in _KEPT_FIELDS} for row in results if isinstance(row, dict)]
 
-    def fetch(self, pin: Pin) -> None:
-        """Cache the registers' rows, then link this place's own listings - see :meth:`link_own_listings`."""
-        super().fetch(pin)
-        self.link_own_listings(pin)
+    def landed(self, pin: Pin, data: dict) -> None:
+        """Link this place's own National Register listings - see :meth:`link_own_listings`."""
+        self._link_listings(pin, data)
 
     def link_own_listings(self, pin: Pin) -> None:
         """Add NPS's record of each National Register listing that is this pin's own to its links and its wiki's.
@@ -252,12 +251,15 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
             pin: The pin whose cached rows to read.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        if (row := LocationCache.get_fresh(pin.location, self.cache_source)) is not None:
+            self._link_listings(pin, row.data)
+
+    def _link_listings(self, pin: Pin, data: dict | None) -> None:
         from urbanlens.dashboard.services.locations.national_register import containing_listings, link_listings
 
-        if (row := LocationCache.get_fresh(pin.location, self.cache_source)) is None:
-            return
         one_building = self.one_building_of_a_site(pin)
-        resources = self.own_resources(pin, row.data, one_building=one_building)
+        resources = self.own_resources(pin, data, one_building=one_building)
         link_listings(pin, resources if one_building else containing_listings(pin.location, resources))
 
     def one_building_of_a_site(self, pin: Pin) -> bool:

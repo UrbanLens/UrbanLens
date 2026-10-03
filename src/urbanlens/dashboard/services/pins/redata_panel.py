@@ -71,7 +71,17 @@ class RedataInfoPanelSource(CoordinateGatedInfoPanelSource):
             # Writing the row would record the outage as a settled "nothing here" for the whole
             # cache window; leaving it absent is what makes it retryable.
             return
-        LocationCache.set(pin.location, self.cache_source, {self.payload_key: self.transform_rows(envelope.results)}, query_key=f"{latitude:.5f},{longitude:.5f}")
+        data = {self.payload_key: self.transform_rows(envelope.results)}
+        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{latitude:.5f},{longitude:.5f}")
+        self.landed(pin, data)
+
+    def landed(self, pin: Pin, data: dict) -> None:
+        """Do whatever else a fetched answer calls for, once it is cached.
+
+        Args:
+            pin: The pin whose panel was fetched.
+            data: The payload just cached.
+        """
 
     def debug_count(self, data: dict) -> int:
         """Number of rows cached, for the admin debug overlay."""
