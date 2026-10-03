@@ -534,7 +534,8 @@ direct-only because REData's contract can't reproduce what they show:
   the pin, plus named places within 150 m. Inside the US it reads REData's Overture mirror (`/buildings/`
   and the `overture` points-of-interest provider), and an empty answer there is final; elsewhere it reads
   Overture's public release (`plugins.builtin.overture_building_attributes`, `OvertureProvider`). An
-  install without REData shows it only outside the US
+  install without REData shows it only outside the US. REData does not yet store roof fields or a
+  place's operating status, so US pins show neither (P240)
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
