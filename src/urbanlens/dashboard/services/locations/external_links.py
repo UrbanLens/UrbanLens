@@ -7,18 +7,20 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.links.model import AutoLinkSource
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-def add_pin_link(pin: Pin, url: str, name: str) -> bool:
+def add_pin_link(pin: Pin, url: str, name: str, *, source: AutoLinkSource) -> bool:
     """Add an external URL to a pin's links, unless already present or previously removed.
 
     Args:
         pin: The pin whose links should include this URL.
         url: The external URL to add.
         name: The link's display name.
+        source: The provider adding it, recorded on the link.
 
     Returns:
         True when a new ``PinLink`` row was created."""
@@ -28,27 +30,25 @@ def add_pin_link(pin: Pin, url: str, name: str) -> bool:
 
     if not is_link_url(url, max_length=MAX_LINK_URL_LENGTH) or PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
         return False
-    # The exists() check is only a fast path that avoids opening a savepoint for the common "already
-    # there" case.
-    # The unique constraint on (pin, md5(url)) is what actually decides: this runs from a
-    # LocationCache signal whose panel fetches are concurrent (their own queue, concurrency 20), so
+    # A fast path only: panel fetches run concurrently, so the (pin, md5(url)) constraint is what decides.
     if PinLink.objects.filter(pin=pin, url=url).exists():
         return False
     try:
         with transaction.atomic():
-            PinLink.objects.create(pin=pin, url=url, name=name)
+            PinLink.objects.create(pin=pin, url=url, name=name, auto_source=source)
     except IntegrityError:
         return False
     return True
 
 
-def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
+def add_wiki_link(wiki: Wiki, url: str, name: str, *, source: AutoLinkSource) -> bool:
     """Add an external URL to a wiki's links, unless already present or previously removed.
 
     Args:
         wiki: The wiki whose links should include this URL.
         url: The external URL to add.
         name: The link's display name.
+        source: The provider adding it, recorded on the link.
 
     Returns:
         True when a new ``WikiLink`` row was created."""
@@ -63,13 +63,13 @@ def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
         return False
     try:
         with transaction.atomic():
-            WikiLink.objects.create(wiki=wiki, url=url, name=name)
+            WikiLink.objects.create(wiki=wiki, url=url, name=name, auto_source=source)
     except IntegrityError:
         return False
     return True
 
 
-def add_pin_and_wiki_link(pin: Pin, location: Location, url: str, name: str) -> None:
+def add_pin_and_wiki_link(pin: Pin, location: Location, url: str, name: str, *, source: AutoLinkSource) -> None:
     """Add an external URL to a pin's links, and to its wiki's links if it has one.
 
     Args:
@@ -77,12 +77,13 @@ def add_pin_and_wiki_link(pin: Pin, location: Location, url: str, name: str) -> 
         location: The pin's location, for reaching its wiki (if any).
         url: The external URL to add.
         name: The link's display name.
+        source: The provider adding it, recorded on both links.
     """
     from django.core.exceptions import ObjectDoesNotExist
 
-    add_pin_link(pin, url, name)
+    add_pin_link(pin, url, name, source=source)
     try:
         wiki = location.wiki
     except ObjectDoesNotExist:
         return
-    add_wiki_link(wiki, url, name)
+    add_wiki_link(wiki, url, name, source=source)

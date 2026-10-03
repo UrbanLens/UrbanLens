@@ -15,7 +15,7 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
-from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+from urbanlens.dashboard.models.links.model import AutoLinkSource, PinLink, WikiLink
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -481,15 +481,15 @@ class ExternalLinksHelperTests(TestCase):
     def test_add_pin_link_creates_a_new_link(self) -> None:
         from urbanlens.dashboard.services.locations.external_links import add_pin_link
 
-        created = add_pin_link(self.pin, "https://example.test/a", "Example")
+        created = add_pin_link(self.pin, "https://example.test/a", "Example", source=AutoLinkSource.WIKIPEDIA)
         self.assertTrue(created)
         self.assertTrue(self.pin.links.filter(url="https://example.test/a", name="Example").exists())
 
     def test_add_pin_link_does_not_duplicate(self) -> None:
         from urbanlens.dashboard.services.locations.external_links import add_pin_link
 
-        add_pin_link(self.pin, "https://example.test/a", "Example")
-        created_again = add_pin_link(self.pin, "https://example.test/a", "Example")
+        add_pin_link(self.pin, "https://example.test/a", "Example", source=AutoLinkSource.WIKIPEDIA)
+        created_again = add_pin_link(self.pin, "https://example.test/a", "Example", source=AutoLinkSource.WIKIPEDIA)
         self.assertFalse(created_again)
         self.assertEqual(self.pin.links.filter(url="https://example.test/a").count(), 1)
 
@@ -497,7 +497,7 @@ class ExternalLinksHelperTests(TestCase):
         from urbanlens.dashboard.services.locations.external_links import add_pin_link
 
         PinAutoRemoval.objects.record(pin=self.pin, kind=AutoRemovalKind.LINK, value="https://example.test/a")
-        created = add_pin_link(self.pin, "https://example.test/a", "Example")
+        created = add_pin_link(self.pin, "https://example.test/a", "Example", source=AutoLinkSource.WIKIPEDIA)
         self.assertFalse(created)
         self.assertFalse(self.pin.links.filter(url="https://example.test/a").exists())
 
@@ -505,13 +505,15 @@ class ExternalLinksHelperTests(TestCase):
         from urbanlens.dashboard.services.locations.external_links import add_wiki_link
 
         WikiAutoRemoval.objects.record(wiki=self.wiki, kind=AutoRemovalKind.LINK, value="https://example.test/a")
-        created = add_wiki_link(self.wiki, "https://example.test/a", "Example")
+        created = add_wiki_link(self.wiki, "https://example.test/a", "Example", source=AutoLinkSource.WIKIPEDIA)
         self.assertFalse(created)
 
     def test_add_pin_and_wiki_link_adds_to_both(self) -> None:
         from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
 
-        add_pin_and_wiki_link(self.pin, self.location, "https://example.test/a", "Example")
+        add_pin_and_wiki_link(
+            self.pin, self.location, "https://example.test/a", "Example", source=AutoLinkSource.WIKIPEDIA
+        )
         self.assertTrue(self.pin.links.filter(url="https://example.test/a").exists())
         self.assertTrue(self.wiki.links.filter(url="https://example.test/a").exists())
 
@@ -521,6 +523,8 @@ class ExternalLinksHelperTests(TestCase):
         location_no_wiki = baker.make(Location, latitude="41.510000", longitude="-73.510000")
         pin_no_wiki = baker.make(Pin, profile=self.profile, location=location_no_wiki)
 
-        add_pin_and_wiki_link(pin_no_wiki, location_no_wiki, "https://example.test/b", "Example")
+        add_pin_and_wiki_link(
+            pin_no_wiki, location_no_wiki, "https://example.test/b", "Example", source=AutoLinkSource.WIKIPEDIA
+        )
 
         self.assertTrue(pin_no_wiki.links.filter(url="https://example.test/b").exists())

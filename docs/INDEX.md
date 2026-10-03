@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P251` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P257` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -221,9 +221,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P224 | open | 2026-10-03 | Toggling "show child pin details" reloads the whole page | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P226 | open | 2026-10-03 | Property Records: the Overview tab is blank, and the two historic tabs should be one | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P227 | open | 2026-10-03 | "Site Conditions" should be a tab of the Location Data panel, not a panel of its own | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P228 | open | 2026-10-03 | A known National Register number should link to its listing, and the link should join the pin's and wiki's links | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P229 | open | 2026-10-03 | The Ownership panel shows a subscriber only the owner's name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P230 | open | 2026-10-03 | "Buildings on this Property" shows National Register details for some buildings and not others, and not every building links its wiki | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P231 | open | 2026-10-03 | A building child pin's wiki is named after the campus, not the building, and isn't nested under the campus wiki | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P233 | open | 2026-10-03 | Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P234 | open | 2026-10-03 | Article > Sources lists only three documents, even with child pin details on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -234,3 +232,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | P245 | open | 2026-10-03 | A revoked subscription grant records when it was revoked, not who revoked it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P246 | open | 2026-10-03 | Deleting an admin's account deletes every subscription grant they made | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P250 | open | 2026-10-03 | A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P255 | open | 2026-10-03 | A building pin's CRIS card can show a neighbouring building's record | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P256 | open | 2026-10-03 | NPS's record link opens an empty page for listings NPGallery does not carry | [`docs/PROBLEMS.md`](PROBLEMS.md) |

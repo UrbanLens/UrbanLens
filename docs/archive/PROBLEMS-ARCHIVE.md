@@ -21138,3 +21138,79 @@ Found reconciling P187 with P203's tests: P187's rule (an outage caches nothing)
   flagged down.
 - `test_outage_not_cached_place_name.py`: the observer's scoping, and Google place names under refused, timed out
   and 503 at the socket, through the real session.
+
+## RESOLVED 2026-10-03: A National Register listing links to NPS's record, and the link joins the pin's and wiki's links, marked automatic
+
+`id: P228` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess: Property Records showed a National Register number with no link.
+
+**Cause.** The number shown was CRIS's `NRNum` (`94NR00622` at HRSH), which CRIS's own layer labels "NYSHPO
+National Register Number": SHPO's file number, not NPS's reference number. NPS's number (`89001166`) is the
+`external_id` of REData's `nps_nrhp` row, and the Historic Registers panel dropped that field when caching.
+
+**URLs, checked live 2026-10-03.** `https://npgallery.nps.gov/AssetDetail/NRIS/89001166` renders the listing
+("National Register Information System ID: 89001166"). `89999999`, `00000000` and `abc` also answer 200, with an empty
+page, so a status code proves nothing: only a number NPS's own layer published is linked. NPS's research page still
+sends a reference number to NPGallery (listed since 2013) or the National Archives catalogue (through 2012); there is
+no newer record URL. Some real listings render empty on NPGallery too (P256). CRIS has no public link to a record:
+every URL, `/?usn=02714.000089` included, redirects to `Login.aspx`, and a record is reached only through the guest
+session's search, so none is linked.
+
+**Fix.** `services/locations/national_register.py`:
+
+- Historic Registers caches `external_id` and the resource's own point. A National Register row shows `#89001166`
+  linked to NPS's record, and so does the "Listed on the National Register" note.
+- The CRIS card labels `NRNum` "NYSHPO National Register Number", and adds "NRHP Reference Number", linked, when a
+  cached National Register row has the same listing name.
+- Fetching the registers adds "National Register #89001166" to the pin's links and its location's wiki's links
+  through `add_pin_and_wiki_link`. A CRIS fetch runs the same step, since it can settle whether a building is listed
+  (P230). Links are de-duplicated by URL and skip a URL the owner removed. Every delete path already records that
+  removal. Only listings that are the place's own are linked: for a root or campus pin, one whose boundary holds the
+  point or whose own point stands on it; for one building of a site, P230's rule. A neighbour found inside REData's
+  250 m search is not linked.
+- `PinLink`/`WikiLink.auto_source` (migration 0045) names the provider that added a link. The OpenStreetMap, EPA ECHO,
+  Wikipedia and National Register adders all set it. The chip shows an icon titled "Added automatically from
+  <source>", and the API's link payloads carry it. Links added before this stay unattributed: nothing recorded who
+  added them, and a person can add the same URL under the same name, so provenance is not certain.
+- Migration 0046 drops cached Historic Registers rows so they refetch with the number.
+
+**Tests.** `test_national_register_links.py`: reference numbers and NYSHPO's number, caching, the panel's and the CRIS
+card's links, links added once to pin and wiki, a removed link staying removed, a neighbour's listing not linked, a
+hand-added link keeping its owner's name, each adder's source, the chip on pin and wiki. It failed to import before the
+fix.
+
+## RESOLVED 2026-10-03: A building shows National Register details only when the register lists it, and every building a child pin covers opens its card
+
+`id: P230` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0), HRSH: some rows of Buildings on this Property opened to National Register
+details and a wiki link, others did not, and several with details are not National Register buildings.
+
+**Cause, register details.** A building card's Historic Registers tab read the building's own near-point answer.
+NPS's HRSH listing ("Hudson River State Hospital, Main Building", 89001166, one contributing building) has a boundary
+covering much of the campus. Every building within 250 m got its row, and every building inside the boundary read
+"Listed on the National Register ... as 'Main Building'". Where no row held the point, the note fell back to CRIS's site
+record, the National Register listing copied into every building row inside it as `district`. So distance and the
+listing's boundary decided which rows showed details. CRIS's record of each building says which is listed: BLDG
+51/MAIN/ADMIN is "Listed" (its detail: "NR Listed" 1989-06-30), while BLDG 36/STORAGE and BLDG 169/GARAGE, both
+non-contributing, are "Eligible".
+
+**Cause, accordion.** A row opened in place only when the child covering it was stored as a building
+(`PinController.parcel_buildings`). A child stored as another type matched the row and showed its pin, but had no card,
+and so no wiki link. On the dev stack every HRSH building child is typed a building and has a wiki; production's data
+was not inspected.
+
+**Fix.** A pin standing for one building nested under a site on another location shows only its building's own
+records (`HistoricRegisterPanelSource.own_resources`, `national_register.building_register_rows`). Those are a
+structure row whose own point stands on the building (a site-level row's point picks no building), and a listing
+holding the building when CRIS's record of it calls it listed. That CRIS record must stand on the building too. The
+CRIS fallback in the note follows the same rule. Campus and root pins are unchanged. The automatic link (P228) follows
+it as well. Every row a child pin covers opens its card, whatever the child's type. Naming still takes a listing
+holding a building as a candidate (`register_listing_names`), which may bear on P231.
+
+**Tests.** `test_building_register_records.py`: a building inside the boundary isn't listed by it, the listed building
+is, CRIS's record must stand on the building, CRIS's site record alone lists nothing, a listing's own point picks its
+building and a site row's point picks none, campus and standalone pins keep the listing, the link reaches only the
+listed building, a row covered by a child of another type opens in place. Six of the first twelve failed before the
+fix; the site-row test came from review afterwards.

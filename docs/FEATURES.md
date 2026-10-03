@@ -123,7 +123,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki;
   names are unique per pin/wiki case-insensitively. Deleting an auto-added alias, link, label, or
   property owner is permanent - automatic sources (external name lookups, AI extraction,
-  keyword/AI auto-tagging) won't silently recreate something you removed. Every alias
+  keyword/AI auto-tagging) won't silently recreate something you removed. A link a provider added
+  (OpenStreetMap, EPA ECHO, Wikipedia, the National Register) records which in
+  `PinLink`/`WikiLink.auto_source`, and its chip says "Added automatically from ..."; links added
+  before that field existed are unattributed. Every alias
   get-or-create goes through `PinAlias`/`WikiAlias.objects.resolve_or_create`
   (`models/aliases/queryset.py`), which sanitizes the name the way `save()` will store it (NFKC,
   drops symbols/emoji, collapses whitespace) before the case-insensitive lookup, so a name that
@@ -470,10 +473,16 @@ direct-only because REData's contract can't reproduce what they show:
   Renders only REData's standardized fields (name, type, status, year built, style, use), so a
   register REData adds appears without a release; which registers cover the point comes from
   `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
-  (`plugins.builtin.redata_historic_registers`)
+  (`plugins.builtin.redata_historic_registers`). A National Register row shows NPS's reference
+  number linked to its NPGallery record, and fetching adds that link to the pin's and wiki's links
+  (marked automatic) for each listing that is the place's own. On one building of a larger site,
+  only that building's own records show: a structure listing whose own point stands on it, or the listing
+  holding it when CRIS's record of the building calls it listed; the campus listing whose boundary
+  merely holds a building does not (`services.locations.national_register`, P230)
 - **NY Historic Preservation (CRIS)** (New York) — the nearest surveyed building's USN record
   (eligibility, address, USN number), or the historic district/National Register listing on a
-  parcel-scope pin, plus that building's and site's survey photos and scanned forms in the Media
+  parcel-scope pin (NYSHPO's own National Register number, and NPS's reference number linked when
+  the Historic Registers rows name the same listing; CRIS has no public link to a record), plus that building's and site's survey photos and scanned forms in the Media
   gallery. A parcel-scope pin (a campus) also gathers every CRIS building inside the site record's
   footprint and any it links, each attachment tagged with the building it documents; REData is
   asked to warm the whole site with its bulk `fetch-details/`, and each pass live-fetches at most

@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from django.db.models import CASCADE, SET_NULL, F, ForeignKey, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, F, ForeignKey, TextChoices, UniqueConstraint
 from django.db.models.fields import CharField, IntegerField, URLField
 from django.db.models.functions import MD5
 
@@ -25,13 +25,27 @@ logger = logging.getLogger(__name__)
 MAX_LINK_URL_LENGTH = 2000
 
 
+class AutoLinkSource(TextChoices):
+    """The provider that added a link automatically. A link a person added has none."""
+
+    OPENSTREETMAP = "openstreetmap", "OpenStreetMap"
+    EPA_ECHO = "epa_echo", "EPA ECHO"
+    WIKIPEDIA = "wikipedia", "Wikipedia"
+    NATIONAL_REGISTER = "nrhp", "National Register of Historic Places"
+
+
 class _LinkBase(abstract.DashboardModel):
-    """Shared fields for all link types."""
+    """Shared fields for all link types.
+
+    Attributes:
+        auto_source: The :class:`AutoLinkSource` that added this link, or ``""`` when a person did.
+    """
 
     name = CharField(max_length=255, blank=True, default="")
     url = URLField(max_length=MAX_LINK_URL_LENGTH)
     wayback_url = URLField(max_length=MAX_LINK_URL_LENGTH, blank=True, default="")
     order = IntegerField(default=0)
+    auto_source = CharField(max_length=32, choices=AutoLinkSource.choices, blank=True, default="")
 
     objects = LinkManager()
 

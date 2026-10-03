@@ -3033,15 +3033,6 @@ photos, visits, notes, Article > Sources, building outlines (P222).
 Move it, keeping its lazy loading: an off-tab panel loads when its tab opens (P53). Make sure no second panel request
 is left behind.
 
-## P228 — A known National Register number should link to its listing, and the link should join the pin's and wiki's links
-
-`id: P228` · `status: open` · `updated: 2026-10-03` · `found by: Jess`
-
-Property Records shows the NRHP reference number but doesn't link it. Link it to the National Park Service's NRHP
-record and to CRIS's record for the place, after checking each URL form against the live sites. Add those links to
-the pin's links and the wiki's links automatically, de-duplicated and attributed as automatic. Stop on a link the
-user removed: record the removal so it isn't re-added.
-
 ## P229 — The Ownership panel shows a subscriber only the owner's name
 
 `id: P229` · `status: open` · `updated: 2026-10-03` · `found by: Jess, a subscriber, on production (v0.8.0) HRSH`
@@ -3050,16 +3041,6 @@ A subscriber sees "EFG/DRA Heritage LLC" and nothing else: no sale history, no c
 whether the panel asks REData for those fields, whether REData has them for this parcel, and whether the subscriber
 gate is applied. A subscriber should see everything the property-owner feature offers. Check production's entitlement
 logic on the dev stack with the e2e `subscriber` role.
-
-## P230 — "Buildings on this Property" shows National Register details for some buildings and not others, and not every building links its wiki
-
-`id: P230` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-Some rows have an accordion with NRHP listing details and a wiki link, and others don't. Several of those with NRHP
-details aren't National Register buildings at all; they only share the parcel with one. Expected: every building
-child pin links its wiki, and register details appear on exactly the buildings the register lists, not by
-parcel. Investigate what decides which rows get the accordion: CRIS USN rows per building, or the register row by
-parcel. Fix it so it reflects the source's own record.
 
 ## P231 — A building child pin's wiki is named after the campus, not the building, and isn't nested under the campus wiki
 
@@ -3224,3 +3205,27 @@ behaviour is wanted:
 
 Wiki URLs route by the Location's slug, so a wiki's own slug only shows up as `wiki_slug` in API responses, and re-minting
 it breaks no link.
+
+## P255 — A building pin's CRIS card can show a neighbouring building's record
+
+`id: P255` · `status: open` · `updated: 2026-10-03` · `found by: Claude, fixing P230`
+
+`CrisBuildingPanelSource._fetch_now` and `CrisBuildingEnrichmentSource.fetch` take `nearest_resource` from a 200 m
+lookup with no distance limit, and rows written before positions were kept carry none to check. On the dev stack's
+HRSH campus, the building pin "Building at Hudson River State Hospital" (location 98254) holds "BLDG 166/OLD POLICE
+STATION (1932)", the record another child pin on location 99719 also holds, with no position. The card then shows that
+building's name, USN number, eligibility and photos as this one's. P230's register rule already requires CRIS's record
+to stand on the building before trusting its "Listed"; the card itself does not. Expected: a building pin shows a CRIS
+record only when the record's point is on its building (footprint, else `BUILDING_MATCH_METERS`), as the site roster
+already does (`roster_building_at`).
+
+## P256 — NPS's record link opens an empty page for listings NPGallery does not carry
+
+`id: P256` · `status: open` · `updated: 2026-10-03` · `found by: Claude, fixing P228`
+
+P228 links a National Register reference number to `https://npgallery.nps.gov/AssetDetail/NRIS/<number>`. Checked
+live on 2026-10-03: 89001166 (HRSH Main Building), 98001317 and 100001066 render their listing, but 100007768 (listed
+2022) and 11000781 render the same empty page a made-up number does, as a 200. NPS's research page sends records
+through 2012 to the National Archives catalogue and later ones to NPGallery. REData's `nps_nrhp` rows carry
+`attributes.NARA_URL`, the archives' record for the listing, which UrbanLens does not cache. Decide whether to link it
+where NPGallery has nothing; whether NPGallery has a listing cannot be told from the status code.

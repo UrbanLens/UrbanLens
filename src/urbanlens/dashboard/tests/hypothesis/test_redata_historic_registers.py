@@ -132,6 +132,9 @@ class ProviderDiscoveryTests(TestCase):
                 "architectural_style",
                 "use_type",
                 "contains_point",
+                "external_id",
+                "source_latitude",
+                "source_longitude",
             },
         )
 

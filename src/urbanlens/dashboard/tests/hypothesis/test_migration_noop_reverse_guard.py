@@ -82,6 +82,10 @@ REVIEWED: dict[str, str] = {
     "0044_session_participant_departure.py": (
         "_backfill_departures fills the new departure column, which the schema reverse drops."
     ),
+    "0046_location_cache_drop_historic_registers.py": (
+        "drop_historic_registers deletes cached Historic Registers rows so they refetch with each row's reference "
+        "number and position. They are a cache; the old code refetches them."
+    ),
 }
 
 

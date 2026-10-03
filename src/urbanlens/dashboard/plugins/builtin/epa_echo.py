@@ -262,10 +262,11 @@ class EpaEchoDetailPanelSource(_EpaEchoPanelSourceBase):
             location: The pin's location, for reaching its wiki (if any).
             registry_id: The EPA FRS Registry ID of the matched facility.
         """
+        from urbanlens.dashboard.models.links.model import AutoLinkSource
         from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
 
         url = f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}"
-        add_pin_and_wiki_link(pin, location, url, "EPA Compliance Report")
+        add_pin_and_wiki_link(pin, location, url, "EPA Compliance Report", source=AutoLinkSource.EPA_ECHO)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the exact-site detail card; None (204, hidden) when no facility matched this pin's coordinates."""

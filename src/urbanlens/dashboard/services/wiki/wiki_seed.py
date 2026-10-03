@@ -106,6 +106,7 @@ def seed_pin_from_cached_wikipedia(pin: Pin) -> None:
         pin: The pin to seed.
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.links.model import AutoLinkSource
     from urbanlens.dashboard.services.locations.external_links import add_pin_link
 
     if pin.location_id is None:
@@ -115,7 +116,7 @@ def seed_pin_from_cached_wikipedia(pin: Pin) -> None:
         return
     seed_pin_article_from_wikipedia(pin)
     if url := cached.data.get("url"):
-        add_pin_link(pin, url, "Wikipedia")
+        add_pin_link(pin, url, "Wikipedia", source=AutoLinkSource.WIKIPEDIA)
 
 
 def _seed_content_for_location(location: Location) -> str | None:
