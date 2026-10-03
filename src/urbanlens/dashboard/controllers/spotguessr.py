@@ -33,6 +33,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.geo.longitude import normalize_longitude
+from urbanlens.dashboard.services.pins.search_names import owner_label_scope
 from urbanlens.dashboard.services.spotguessr import (
     chat as spotguessr_chat,
     overview as spotguessr_overview,
@@ -693,7 +694,7 @@ class SpotGuessrPinsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             {
                 "pins": [
                     {
-                        "label": pin.get_unique_search_name() or pin.name or "Unnamed pin",
+                        "label": pin.get_unique_search_name(owner_label_scope(pin)) or pin.name or "Unnamed pin",
                         "latitude": pin.effective_latitude,
                         "longitude": pin.effective_longitude,
                     }

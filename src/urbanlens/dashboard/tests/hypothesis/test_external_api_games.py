@@ -740,6 +740,15 @@ class SpotGuessrEligiblePinsTests(_SpotGuessrApiTestCase):
         self.assertAlmostEqual(row["longitude"], float(self.location.longitude), places=3)
         self.assertIn("label", row)
 
+    def test_a_pin_is_labelled_with_its_owners_name_for_it(self) -> None:
+        unnamed = self._make_location()
+        Location.objects.filter(pk=unnamed.pk).update(official_name="")
+        baker.make(Pin, profile=self.profile, location=unnamed, name="Hollow Mill")
+
+        labels = [row["label"] for row in self._get("external_api:games.spotguessr.eligible-pins").json()["results"]]
+
+        self.assertTrue(any(label.startswith("Hollow Mill") for label in labels), labels)
+
     def test_never_lists_another_profiles_pins(self) -> None:
         other_location = self._make_location()
         baker.make(Pin, profile=self.other_profile, location=other_location)

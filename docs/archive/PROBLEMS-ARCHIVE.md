@@ -20621,3 +20621,24 @@ address backfill; 16 of its 38 tests failed on the old code, none of them a cont
 **Left open.** A fallback answer cached during an outage (Overpass buildings when REData was down) holds for the full
 term, as any partial answer does. Non-`LocationCache` stores were not swept: `Boundary.generated_at`, the satellite
 and street-view slide caches, and `GooglePlaceLinkEnrichmentSource`.
+
+## RESOLVED 2026-10-03: SpotGuessr's pin picker and its external-API twin answer again: an owner's pin is labelled with the owner's names
+
+`id: P213` · `status: fixed` · `resolved: 2026-10-03`
+
+`found by: the P187 test sweep` · `introduced by: the P188 merge (404f88942)`
+
+P188 made `Pin.get_unique_search_name(scope, ...)` take a required `SearchScope`. Two callers kept calling it with no
+scope: SpotGuessr's "search my pins" picker (`controllers/spotguessr.py`) and the external API's
+`games.spotguessr.eligible-pins` (`external_api/views_games.py`). Each raised `TypeError`, so both endpoints answered
+500 from the P188 merge until this fix. Three existing tests in `test_external_api_games.py` and one in
+`test_spotguessr_controller.py` were already failing on the release branch. Nobody had run those files after the merge.
+
+Both callers list the requester's own pins, so the label may use every name its owner gave it.
+`search_names.owner_label_scope(pin)` gives the meaningful official name, then the pin's own name, as before P188. It
+reads only the pin's own fields, so the picker stays one query, rather than `search_names()`'s wiki, alias and ancestor
+reads per pin. The scope only labels and is never cached. New test:
+`SpotGuessrEligiblePinsTests::test_a_pin_is_labelled_with_its_owners_name_for_it`, which failed with the old call first.
+
+mypy over the whole tree would have flagged both calls as missing an argument. The P188 run checked only its own changed
+files.

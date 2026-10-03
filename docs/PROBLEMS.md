@@ -3048,13 +3048,3 @@ policy in `services/security/redact.py`. P203's `SecretRedactionFilter` does not
 floats is not one. Not reproduced in a test yet. Either drop the arguments from that line (the task id and name already
 correlate it with Celery's own lines) or pass them through `redact_params` by the task signature's parameter names; and
 decide whether a task should take coordinates at all when a `Location` pk would do.
-
-## P213 — SpotGuessr's pin picker returns a 500: two callers still call `get_unique_search_name()` with no scope
-
-`id: P213` · `status: open` · `updated: 2026-10-03` · `found by: the P187 test sweep`
-
-P188 made `Pin.get_unique_search_name(scope, ...)` take a required `SearchScope`. `controllers/spotguessr.py:696` and
-`external_api/views_games.py:378` still call it with none, so building a pin label raises `TypeError` and the pins
-endpoint returns a 500. `test_spotguessr_controller.py::SpotGuessrPinsViewTests::test_only_returns_the_requesting_profiles_own_pins`
-fails on `release/v_0_9_0` as it stands. The fix needs a decision on which audience's names a game label may use. The
-viewer is the pin's owner here, so the owner's scope is the likely answer.

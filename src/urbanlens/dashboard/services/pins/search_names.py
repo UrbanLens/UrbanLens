@@ -152,6 +152,18 @@ def shared_names(location: Location | None) -> tuple[str, ...]:
     return tuple(_distinct(names))
 
 
+def owner_label_scope(pin: Pin) -> SearchScope:
+    """The names to label ``pin`` with for its owner, who may see all of them; never a search to cache.
+
+    Args:
+        pin: The owner's pin.
+
+    Returns:
+        Its meaningful official name, then its own name.
+    """
+    return SearchScope(SHARED_AUDIENCE, tuple(_distinct([pin.meaningful_official_name, pin.meaningful_name])))
+
+
 def search_names(pin: Pin) -> SearchNames:
     """Split ``pin``'s names into shared and custom.
 

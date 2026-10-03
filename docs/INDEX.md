@@ -220,4 +220,3 @@ still resolves after it is fixed, and the id is never handed out again.
 | P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P211 | open | 2026-10-03 | On a wiki page, the purple "Community wiki" pill overlaps the onboarding card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P212 | open | 2026-10-03 | A failed task's ERROR line prints its arguments, so `fetch_recorded_weather_at`'s coordinates reach the log | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P213 | open | 2026-10-03 | SpotGuessr's pin picker returns a 500: two callers still call `get_unique_search_name()` with no scope | [`docs/PROBLEMS.md`](PROBLEMS.md) |
