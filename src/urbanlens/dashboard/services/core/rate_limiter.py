@@ -196,6 +196,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Map sheets covering a point via GET /maps/, and their overlay tiles via GET /maps/georeferences/{uuid}/tiles/, cached per tile by controllers.historical_map_tiles. Neither is in REData's lookup or tile pools, so its 2,000/hour all-endpoint budget per key is the ceiling. See services.apis.locations.redata_historical_maps_gateway.",
     ),
+    "redata_buildings": ServiceDefaults(
+        display_name="REData Buildings",
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="Overture building footprints near a point via GET /buildings/, from REData's own Overture mirror (US only). Read by the boundary chain and the Building Characteristics panel. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.boundaries.overture.",
+    ),
     "google_open_buildings": ServiceDefaults(
         display_name="Google Open Buildings",
         calls_per_minute=20,
@@ -217,7 +223,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # (it does not publish one).
         calls_per_minute=20,
         calls_per_day=500,
-        notes="Building/place/address/land-use GeoParquet themes via services.apis.locations.boundaries.overture_maps. Free public dataset, but its STAC index rate-limits us under load - see P110.",
+        notes="Overture's public GeoParquet release via services.apis.locations.boundaries.overture_maps, read only outside the US; REData's mirror answers inside it. Free public dataset, but its STAC index rate-limits us under load - see P110.",
         billable=False,
     ),
     "openweathermap": ServiceDefaults(

@@ -15,7 +15,7 @@ from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, B
 from urbanlens.dashboard.services.apis.locations.boundaries.google_open_buildings import GoogleOpenBuildingsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
-from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
+from urbanlens.dashboard.services.apis.locations.boundaries.overture import OvertureProvider
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 from urbanlens.dashboard.services.geo.area import area_sqm
@@ -93,7 +93,7 @@ class BoundaryProviderChain:
         default_factory=lambda: (
             RedataBoundaryProvider(),
             OverpassGateway(),
-            OvertureMapsGateway(),
+            OvertureProvider(),
             MicrosoftBuildingFootprintsGateway(),
             GoogleOpenBuildingsGateway(),
         ),

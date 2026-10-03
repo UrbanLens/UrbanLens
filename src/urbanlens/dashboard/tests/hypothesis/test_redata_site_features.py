@@ -66,7 +66,7 @@ class ProviderDiscoveryTests(TestCase):
         with (
             mock.patch(
                 f"{_GATEWAY}.applicable_provider_tags",
-                return_value=["fcc_asr", "yelp", "epa_echo", "nps_places", "osm"],
+                return_value=["fcc_asr", "yelp", "epa_echo", "nps_places", "overture", "osm"],
             ),
             mock.patch(
                 f"{_GATEWAY}.RedataPointsOfInterestGateway.near_point",

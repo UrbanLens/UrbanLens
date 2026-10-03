@@ -38,7 +38,7 @@ class OvertureBuildingAttributesBudgetTests(TestCase):
         gateway = self._gateway(attributes={"subtype": "commercial"}, places=[{"name": "Cafe"}])
         with (
             mock.patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps.OvertureMapsGateway",
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture.OvertureProvider",
                 return_value=gateway,
             ),
             mock.patch(
@@ -53,7 +53,7 @@ class OvertureBuildingAttributesBudgetTests(TestCase):
         gateway = self._gateway(attributes={"subtype": "commercial"})
         with (
             mock.patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps.OvertureMapsGateway",
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture.OvertureProvider",
                 return_value=gateway,
             ),
             mock.patch(
@@ -70,7 +70,7 @@ class OvertureBuildingAttributesBudgetTests(TestCase):
         gateway = self._gateway(attributes={"subtype": "commercial", "height_m": 12.0})
         with (
             mock.patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps.OvertureMapsGateway",
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture.OvertureProvider",
                 return_value=gateway,
             ),
             mock.patch(

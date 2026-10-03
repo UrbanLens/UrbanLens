@@ -11,8 +11,8 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, GatewayRequestError
 
-#: A bbox the size every caller here actually uses - a single building.
-SMALL_BBOX = (-71.059, 42.36, -71.058, 42.361)
+#: A bbox the size every caller here actually uses - a single building - outside the US, the only place the public release is read.
+SMALL_BBOX = (2.294, 48.858, 2.295, 48.859)
 
 _MODULE = "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps"
 _GEODATAFRAME = f"{_MODULE}._read_files"
@@ -56,7 +56,7 @@ class TheGatewayRefusesTests(SimpleTestCase):
         gateway = OvertureMapsGateway()
         with patch(_STAC_LOOKUP, return_value=[]), patch("pyarrow.dataset.dataset") as dataset:
             frame = gateway.get_buildings(SMALL_BBOX)
-            boundary = gateway.get_boundary(42.3605, -71.0585)
+            boundary = gateway.get_boundary(48.8585, 2.2945)
 
         self.assertEqual(len(frame), 0)
         self.assertIsNone(boundary)
@@ -294,7 +294,7 @@ class TheIndexIsReadByPartitionTests(SimpleTestCase):
     """The library filters the index on ``collection``, which the live index leaves null everywhere."""
 
     RELEASE = "2026-08-19.0"
-    HERE = (-71.0595, 42.3595, -71.0575, 42.3615)
+    HERE = (2.2935, 48.8575, 2.2955, 48.8595)
     ELSEWHERE = (10.0, 10.0, 11.0, 11.0)
 
     def setUp(self) -> None:

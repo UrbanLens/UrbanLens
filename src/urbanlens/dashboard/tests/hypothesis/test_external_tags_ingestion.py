@@ -15,7 +15,7 @@ from urbanlens.dashboard.models.place.model import Place
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.plugins.builtin.nominatim import NominatimEnrichmentSource, NominatimPanelSource
 from urbanlens.dashboard.plugins.builtin.overture_building_attributes import OvertureBuildingAttributesPanelSource
-from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
+from urbanlens.dashboard.services.apis.locations.boundaries.overture import OvertureProvider
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
 
 _NOMINATIM_RESULT = {
@@ -118,11 +118,11 @@ class OvertureBuildingAttributesPanelSourceIngestionTests(TestCase):
 
         with (
             mock.patch.object(
-                OvertureMapsGateway,
+                OvertureProvider,
                 "get_building_attributes",
                 return_value={"subtype": "single_family_residential", "class_": "residential"},
             ),
-            mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]),
+            mock.patch.object(OvertureProvider, "get_nearby_places", return_value=[]),
         ):
             OvertureBuildingAttributesPanelSource().fetch(pin)
 
@@ -135,10 +135,10 @@ class OvertureBuildingAttributesPanelSourceIngestionTests(TestCase):
 
         with (
             mock.patch.object(
-                OvertureMapsGateway, "get_building_attributes", return_value={"subtype": "single_family_residential"}
+                OvertureProvider, "get_building_attributes", return_value={"subtype": "single_family_residential"}
             ),
             mock.patch.object(
-                OvertureMapsGateway,
+                OvertureProvider,
                 "get_nearby_places",
                 return_value=[{"name": "Corner Bakery", "category": "bakery", "distance_m": 8.0}],
             ),
@@ -153,9 +153,9 @@ class OvertureBuildingAttributesPanelSourceIngestionTests(TestCase):
 
         with (
             mock.patch.object(
-                OvertureMapsGateway, "get_building_attributes", return_value={"subtype": "single_family_residential"}
+                OvertureProvider, "get_building_attributes", return_value={"subtype": "single_family_residential"}
             ),
-            mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]),
+            mock.patch.object(OvertureProvider, "get_nearby_places", return_value=[]),
         ):
             OvertureBuildingAttributesPanelSource().fetch(pin)  # must not raise
 
@@ -165,8 +165,8 @@ class OvertureBuildingAttributesPanelSourceIngestionTests(TestCase):
         pin = _make_pin(with_place=True)
 
         with (
-            mock.patch.object(OvertureMapsGateway, "get_building_attributes", return_value=None),
-            mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]),
+            mock.patch.object(OvertureProvider, "get_building_attributes", return_value=None),
+            mock.patch.object(OvertureProvider, "get_nearby_places", return_value=[]),
         ):
             OvertureBuildingAttributesPanelSource().fetch(pin)  # must not raise
 

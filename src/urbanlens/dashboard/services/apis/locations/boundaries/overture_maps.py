@@ -1,4 +1,7 @@
-"""Gateway for Overture Maps' cloud-hosted GeoParquet themes."""
+"""Gateway for Overture Maps' public GeoParquet release, for coordinates outside REData's mirror.
+
+Callers go through ``boundaries.overture.OvertureProvider``, which answers US coordinates from REData.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
     create_bbox,
     validate_bbox,
 )
+from urbanlens.dashboard.services.apis.locations.boundaries.overture import served_by_redata
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError
@@ -43,6 +47,7 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
 
 logger = logging.getLogger(__name__)
+
 
 #: Seconds to stop calling Overture after its STAC index refuses us.
 #: Per process, deliberately: each prefork child keeps its own, so a pool of four probes at most four
@@ -176,7 +181,9 @@ def _clean_value(value: Any) -> Any:
 
 @dataclass(slots=True, kw_only=True)
 class OvertureMapsGateway(Gateway, BoundaryProvider):
-    """Fetch Overture Maps theme data (buildings, addresses, places, ...) by bbox.
+    """Fetch Overture Maps theme data (buildings, addresses, places, ...) by bbox from the public release.
+
+    Refuses a bbox centred where :func:`~urbanlens.dashboard.services.apis.locations.boundaries.overture.served_by_redata` holds.
 
     Attributes:
         release: Leave as None to always resolve the latest release via Overture's STAC catalog.
@@ -201,6 +208,9 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
     def _fetch(self, overture_type: str, bbox: BBox | None):
         if bbox is not None:
             validate_bbox(bbox)
+            min_lon, min_lat, max_lon, max_lat = bbox
+            if served_by_redata((min_lat + max_lat) / 2, (min_lon + max_lon) / 2):
+                raise ValueError("REData's Overture mirror covers this bbox; the public release is not read for it. Use OvertureProvider.")
         if _overture_geodataframe is None:
             raise ImportError(
                 "OvertureMapsGateway requires the 'overturemaps' package: `pip install overturemaps[geopandas]`.",
@@ -372,11 +382,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         return self._fetch("infrastructure", bbox)
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
-        return best_containing_polygon(
-            _features_from_geodataframe(self.get_buildings(create_bbox(latitude, longitude, self.bbox_delta))),
-            latitude,
-            longitude,
-        )
+        return best_containing_polygon(self._building_features(latitude, longitude), latitude, longitude)
 
     def get_building_attributes(self, latitude: float, longitude: float) -> dict[str, Any] | None:
         """Return the pinned building's physical attributes from Overture's Buildings theme.
@@ -386,33 +392,9 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             longitude: WGS-84 longitude.
 
         Returns:
-            Dict with ``class_``, ``subtype``, ``height_m``, ``num_floors``, ``roof_shape``, ``roof_material``, ``primary_name`` (each ``None`` when Overture has no value), or None when no building footprint contains the point.
+            See :func:`building_attributes`.
         """
-        point = Point(float(longitude), float(latitude), srid=4326)
-        best_area: float | None = None
-        best_properties: dict[str, Any] | None = None
-        for feature in _features_from_geodataframe(self.get_buildings(create_bbox(latitude, longitude, self.bbox_delta))):
-            polygon = _polygon_from_feature(feature)
-            if polygon is None or not (polygon.contains(point) or polygon.touches(point)):
-                continue
-            if best_area is None or polygon.area < best_area:
-                best_area = polygon.area
-                best_properties = feature.get("properties") or {}
-
-        if best_properties is None:
-            return None
-
-        names = _clean_value(best_properties.get("names"))
-        primary_name = names.get("primary") if isinstance(names, dict) else None
-        return {
-            "class_": _clean_value(best_properties.get("class")),
-            "subtype": _clean_value(best_properties.get("subtype")),
-            "height_m": _clean_value(best_properties.get("height")),
-            "num_floors": _clean_value(best_properties.get("num_floors")),
-            "roof_shape": _clean_value(best_properties.get("roof_shape")),
-            "roof_material": _clean_value(best_properties.get("roof_material")),
-            "primary_name": _clean_value(primary_name),
-        }
+        return building_attributes(self._building_features(latitude, longitude), latitude, longitude)
 
     def get_nearby_places(self, latitude: float, longitude: float, *, radius_m: float = 150.0, limit: int = 5) -> list[dict[str, Any]]:
         """Return named points of interest near a coordinate from Overture's Places theme.
@@ -424,40 +406,98 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             limit: Maximum number of places to return, nearest first.
 
         Returns:
-            Dicts with ``name``, ``category``, ``confidence``, ``operating_status``, ``distance_m``, nearest first; empty when nothing named is within range.
+            See :func:`nearby_places`.
         """
-        candidates: list[dict[str, Any]] = []
-        for feature in _features_from_geodataframe(self.get_places(create_bbox(latitude, longitude, self.bbox_delta))):
-            geometry = feature.get("geometry") or {}
-            coordinates = geometry.get("coordinates") or (None, None)
-            place_lon, place_lat = coordinates[0], coordinates[1]
-            if place_lon is None or place_lat is None:
-                continue
+        features = _features_from_geodataframe(self.get_places(create_bbox(latitude, longitude, self.bbox_delta)))
+        return nearby_places(features, latitude, longitude, radius_m=radius_m, limit=limit)
 
-            properties = feature.get("properties") or {}
-            names = _clean_value(properties.get("names"))
-            primary_name = names.get("primary") if isinstance(names, dict) else None
-            if not primary_name:
-                continue  # unnamed POIs aren't useful location context
+    def _building_features(self, latitude: float, longitude: float) -> list[dict]:
+        return _features_from_geodataframe(self.get_buildings(create_bbox(latitude, longitude, self.bbox_delta)))
 
-            distance_m = _haversine_m(latitude, longitude, float(place_lat), float(place_lon))
-            if distance_m > radius_m:
-                continue
 
-            categories = _clean_value(properties.get("categories"))
-            primary_category = categories.get("primary") if isinstance(categories, dict) else None
-            candidates.append(
-                {
-                    "name": primary_name,
-                    "category": _clean_value(primary_category),
-                    "confidence": _clean_value(properties.get("confidence")),
-                    "operating_status": _clean_value(properties.get("operating_status")),
-                    "distance_m": round(distance_m, 1),
-                }
-            )
+def building_attributes(features: list[dict], latitude: float, longitude: float) -> dict[str, Any] | None:
+    """The physical attributes of the smallest Overture building containing a coordinate.
 
-        candidates.sort(key=lambda place: place["distance_m"])
-        return candidates[: max(1, limit)]
+    Args:
+        features: GeoJSON features carrying Overture's own building properties.
+        latitude: WGS-84 latitude.
+        longitude: WGS-84 longitude.
+
+    Returns:
+        Dict with ``class_``, ``subtype``, ``height_m``, ``num_floors``, ``roof_shape``, ``roof_material``, ``primary_name`` (each ``None`` when Overture has no value), or None when no building footprint contains the point.
+    """
+    point = Point(float(longitude), float(latitude), srid=4326)
+    best_area: float | None = None
+    best_properties: dict[str, Any] | None = None
+    for feature in features:
+        polygon = _polygon_from_feature(feature)
+        if polygon is None or not (polygon.contains(point) or polygon.touches(point)):
+            continue
+        if best_area is None or polygon.area < best_area:
+            best_area = polygon.area
+            best_properties = feature.get("properties") or {}
+
+    if best_properties is None:
+        return None
+
+    names = _clean_value(best_properties.get("names"))
+    primary_name = names.get("primary") if isinstance(names, dict) else None
+    return {
+        "class_": _clean_value(best_properties.get("class")),
+        "subtype": _clean_value(best_properties.get("subtype")),
+        "height_m": _clean_value(best_properties.get("height")),
+        "num_floors": _clean_value(best_properties.get("num_floors")),
+        "roof_shape": _clean_value(best_properties.get("roof_shape")),
+        "roof_material": _clean_value(best_properties.get("roof_material")),
+        "primary_name": _clean_value(primary_name),
+    }
+
+
+def nearby_places(features: list[dict], latitude: float, longitude: float, *, radius_m: float, limit: int) -> list[dict[str, Any]]:
+    """The named Overture places within ``radius_m`` of a coordinate, nearest first.
+
+    Args:
+        features: GeoJSON point features carrying Overture's own place properties.
+        latitude: WGS-84 latitude.
+        longitude: WGS-84 longitude.
+        radius_m: Search radius in meters.
+        limit: Maximum number of places to return.
+
+    Returns:
+        Dicts with ``name``, ``category``, ``confidence``, ``operating_status``, ``distance_m``; empty when nothing named is within range.
+    """
+    candidates: list[dict[str, Any]] = []
+    for feature in features:
+        geometry = feature.get("geometry") or {}
+        coordinates = geometry.get("coordinates") or (None, None)
+        place_lon, place_lat = coordinates[0], coordinates[1]
+        if place_lon is None or place_lat is None:
+            continue
+
+        properties = feature.get("properties") or {}
+        names = _clean_value(properties.get("names"))
+        primary_name = names.get("primary") if isinstance(names, dict) else None
+        if not primary_name:
+            continue  # unnamed POIs aren't useful location context
+
+        distance_m = _haversine_m(latitude, longitude, float(place_lat), float(place_lon))
+        if distance_m > radius_m:
+            continue
+
+        categories = _clean_value(properties.get("categories"))
+        primary_category = categories.get("primary") if isinstance(categories, dict) else None
+        candidates.append(
+            {
+                "name": primary_name,
+                "category": _clean_value(primary_category),
+                "confidence": _clean_value(properties.get("confidence")),
+                "operating_status": _clean_value(properties.get("operating_status")),
+                "distance_m": round(distance_m, 1),
+            }
+        )
+
+    candidates.sort(key=lambda place: place["distance_m"])
+    return candidates[: max(1, limit)]
 
 
 def _features_from_geodataframe(frame) -> list[dict]:

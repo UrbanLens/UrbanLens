@@ -19,6 +19,7 @@ _SHOWN_ELSEWHERE: frozenset[str] = frozenset(
         "epa_echo",  # plugins.builtin.epa_echo - its own exact-site card and nearby list
         "yelp",  # plugins.builtin.yelp
         "nps_places",  # plugins.builtin.nps
+        "overture",  # plugins.builtin.overture_building_attributes - its nearby places
     },
 )
 
