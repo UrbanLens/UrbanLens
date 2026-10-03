@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 
 import requests
 
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ _LAYER_FEDERAL_RESERVATION = 36
 _LAYER_STATE_RESERVATION = 40
 
 
-class TigerwebUnavailableError(RuntimeError):
+class TigerwebUnavailableError(GatewayRequestError):
     """TIGERweb did not answer: the request failed or ArcGIS reported the query as failed."""
 
 
@@ -42,7 +42,11 @@ class CensusTigerwebGateway(Gateway):
     base_url: str = _BASE_URL
 
     def _query_layer(self, layer_id: int, latitude: float, longitude: float) -> dict[str, Any] | None:
-        """Return the first feature's attributes intersecting a point, for one layer."""
+        """Return the first feature's attributes intersecting a point, for one layer.
+
+        Raises:
+            TigerwebUnavailableError: No answer, which is not the same as no feature.
+        """
         params: dict[str, str | int] = {
             "geometry": f"{longitude},{latitude}",
             "geometryType": "esriGeometryPoint",
@@ -56,9 +60,11 @@ class CensusTigerwebGateway(Gateway):
             response = self.session.get(f"{self.base_url}/{layer_id}/query", params=params, timeout=15)
             response.raise_for_status()
             body = response.json()
-        except requests.exceptions.RequestException:
-            logger.warning("TIGERweb layer %s query failed for %s, %s", layer_id, redact_coordinate(latitude), redact_coordinate(longitude), exc_info=True)
-            return None
+        except (requests.exceptions.RequestException, ValueError) as exc:
+            logger.warning("TIGERweb layer %s query failed for %s, %s", layer_id, redact_coordinate(latitude), redact_coordinate(longitude))
+            raise TigerwebUnavailableError(f"TIGERweb layer {layer_id} query failed") from exc
+        if "error" in body:
+            raise TigerwebUnavailableError(f"TIGERweb refused the layer {layer_id} query: {body['error']}")
         features = body.get("features") or []
         return features[0].get("attributes") if features else None
 
@@ -106,6 +112,9 @@ class CensusTigerwebGateway(Gateway):
 
         Returns:
             Dict with ``state``, ``county``, ``place``, ``tract``, ``zcta``, ``urban_area``, ``cbsa``, ``tribal_land`` sub-dicts (each ``{"name": ..., "geoid": ...}``, or None when the point isn't in that geography type, e.g. an unincorporated area with no...
+
+        Raises:
+            TigerwebUnavailableError: A layer did not answer.
         """
         state = self._normalize(self._query_layer(_LAYER_STATE, latitude, longitude))
         if not state:

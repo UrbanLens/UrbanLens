@@ -10,6 +10,7 @@ from unittest import mock
 from django.test import override_settings
 from model_bakery import baker
 from PIL import Image as PILImage
+import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -242,6 +243,17 @@ class StreetViewEnrichmentSourceTests(TestCase):
         marker = LocationCache.objects.get(location=location, source=self.source.marker_source)
         self.assertFalse(marker.data["found"])
 
+    def test_an_outage_writes_no_marker(self) -> None:
+        """The marker is never revisited, so writing it now would mean no Street View for this place, ever (P187)."""
+        location = _make_location()
+        with (
+            mock.patch(f"{_GATEWAY_MODULE}.get_street_view_single", side_effect=requests.ConnectionError("refused")),
+            self.assertRaises(requests.ConnectionError),
+        ):
+            self.source.enrich(location)
+
+        self.assertFalse(LocationCache.objects.filter(location=location, source=self.source.marker_source).exists())
+
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
 class SatelliteEnrichmentSourceTests(TestCase):
@@ -272,21 +284,57 @@ class SatelliteEnrichmentSourceTests(TestCase):
         marker = LocationCache.objects.get(location=location, source=self.source.marker_source)
         self.assertFalse(marker.data["found"])
 
+    def test_an_outage_writes_no_marker(self) -> None:
+        location = _make_location()
+        with (
+            mock.patch(f"{_GATEWAY_MODULE}.get_satellite_image_bytes", side_effect=requests.ConnectionError("refused")),
+            self.assertRaises(requests.ConnectionError),
+        ):
+            self.source.enrich(location)
+
+        self.assertFalse(LocationCache.objects.filter(location=location, source=self.source.marker_source).exists())
+
+    def test_a_refused_request_writes_the_marker(self) -> None:
+        location = _make_location()
+        response = requests.Response()
+        response.status_code = 403
+        with mock.patch(
+            f"{_GATEWAY_MODULE}.get_satellite_image_bytes", side_effect=requests.HTTPError(response=response)
+        ):
+            self.source.enrich(location)
+
+        marker = LocationCache.objects.get(location=location, source=self.source.marker_source)
+        self.assertFalse(marker.data["found"])
+
 
 class GetSatelliteImageBytesTests(SimpleTestCase):
-    """GoogleMapsGateway.get_satellite_image_bytes - decodes the live carousel's data: URI."""
+    """GoogleMapsGateway.get_satellite_image_bytes - the static image the carousel and the backfill both use."""
 
-    def test_decodes_the_data_uri_from_the_first_slide(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide
+    def test_returns_the_image_bytes(self) -> None:
+        response = mock.Mock(content=b"hello")
+        gateway = GoogleMapsGateway(api_key="key", session=mock.Mock(get=mock.Mock(return_value=response)))
 
-        gateway = GoogleMapsGateway(api_key="key")
-        slide = SatelliteSlide(
-            img_src="data:image/jpeg;base64,aGVsbG8=", source="Google Maps", date="Current", detail=""
+        self.assertEqual(gateway.get_satellite_image_bytes(1.0, 2.0), b"hello")
+
+    def test_returns_none_without_a_key(self) -> None:
+        session = mock.Mock()
+        gateway = GoogleMapsGateway(api_key="", session=session)
+
+        self.assertIsNone(gateway.get_satellite_image_bytes(1.0, 2.0))
+        session.get.assert_not_called()
+
+    def test_a_failed_request_raises_for_the_backfill(self) -> None:
+        """None would be written down as "no imagery here" by a marker the batch never revisits (P187)."""
+        gateway = GoogleMapsGateway(
+            api_key="key", session=mock.Mock(get=mock.Mock(side_effect=requests.ConnectionError()))
         )
-        with mock.patch.object(gateway, "_generate_satellite_slides", return_value=iter([slide])):
-            self.assertEqual(gateway.get_satellite_image_bytes(1.0, 2.0), b"hello")
 
-    def test_returns_none_when_no_slide_is_produced(self) -> None:
-        gateway = GoogleMapsGateway(api_key="key")
-        with mock.patch.object(gateway, "_generate_satellite_slides", return_value=iter([])):
-            self.assertIsNone(gateway.get_satellite_image_bytes(1.0, 2.0))
+        with self.assertRaises(requests.ConnectionError):
+            gateway.get_satellite_image_bytes(1.0, 2.0)
+
+    def test_the_carousel_still_skips_a_failed_request(self) -> None:
+        gateway = GoogleMapsGateway(
+            api_key="key", session=mock.Mock(get=mock.Mock(side_effect=requests.ConnectionError()))
+        )
+
+        self.assertEqual(list(gateway._generate_satellite_slides(1.0, 2.0)), [])

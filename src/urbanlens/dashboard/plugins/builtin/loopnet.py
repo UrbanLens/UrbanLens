@@ -55,7 +55,11 @@ class LoopnetPanelSource(GalleryMediaSource):
         return bool(self.address(pin))
 
     def fetch(self, pin: Pin) -> None:
-        """Resolve the pin's parcel and cache its LoopNet listings from REData."""
+        """Resolve the pin's parcel and cache its LoopNet listings from REData.
+
+        Raises:
+            PropertyRecordsUnavailableError: REData could not be asked, so there is no answer to cache.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
@@ -74,7 +78,9 @@ class LoopnetPanelSource(GalleryMediaSource):
                 LocationCache.set(pin.location, self.cache_source, {}, query_key=address)
                 return
             listings_body = gateway.lookup_listings(parcel_uuid)
-        except (PropertyRecordsUnavailableError, ValueError):
+        except (PropertyRecordsUnavailableError, ValueError) as exc:
+            if isinstance(exc, PropertyRecordsUnavailableError) and exc.is_outage:
+                raise
             logger.debug("LoopnetPanelSource.fetch: no listings available for pin %s (address=%r)", pin.pk, address, exc_info=True)
             LocationCache.set(pin.location, self.cache_source, {}, query_key=address)
             return

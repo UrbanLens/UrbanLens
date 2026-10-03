@@ -117,17 +117,30 @@ class FetchTests(TestCase):
         data = mock_set.call_args[0][2]
         self.assertEqual(data, {})
 
-    def test_unavailable_gracefully_persists_empty(self) -> None:
+    def test_a_settled_refusal_persists_empty(self) -> None:
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(
-                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
+                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("no_data_found", "")
             ),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             LoopnetPanelSource().fetch(self.pin)
         data = mock_set.call_args[0][2]
         self.assertEqual(data, {})
+
+    def test_an_outage_persists_nothing(self) -> None:
+        """``{}`` here is cached as "no listings" for the whole cache term (P187)."""
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(
+                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
+            ),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+            self.assertRaises(PropertyRecordsUnavailableError),
+        ):
+            LoopnetPanelSource().fetch(self.pin)
+        mock_set.assert_not_called()
 
     def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
         """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.

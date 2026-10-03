@@ -174,16 +174,46 @@ class FetchParcelBuildingsTests(TestCase):
         mock_overpass.assert_not_called()
         self.assertEqual(payload, {})
 
-    def test_redata_failure_falls_through_rather_than_raising(self) -> None:
+    def test_a_settled_redata_refusal_falls_through_to_nothing_found(self) -> None:
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(
+                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("no_data_found", "")
+            ),
+        ):
+            self.assertEqual(fetch_parcel_buildings(self.location), {})
+
+    def test_a_redata_outage_with_nothing_else_found_raises(self) -> None:
+        """``{}`` here is cached as "no buildings" for the whole cache term (P187)."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(
                 RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
             ),
+            self.assertRaises(PropertyRecordsUnavailableError),
         ):
-            self.assertEqual(fetch_parcel_buildings(self.location), {})
+            fetch_parcel_buildings(self.location)
 
-    def test_overpass_failure_is_swallowed(self) -> None:
+    def test_a_redata_outage_still_returns_what_overpass_found(self) -> None:
+        official_geometry(
+            self.location,
+            _square_around(float(self.location.latitude), float(self.location.longitude)),
+        )
+        osm = [{"name": "Powerhouse", "latitude": 41.7331, "longitude": -73.9301, "osm_id": 5, "source": "osm"}]
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(
+                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
+            ),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[]),
+            patch.object(OverpassGateway, "__post_init__", lambda _self: None),
+            patch.object(OverpassGateway, "buildings_within", return_value=osm),
+        ):
+            payload = fetch_parcel_buildings(self.location)
+
+        self.assertEqual(payload["provider"], "osm")
+
+    def test_an_overpass_outage_with_nothing_else_found_raises(self) -> None:
         official_geometry(
             self.location,
             _square_around(float(self.location.latitude), float(self.location.longitude)),
@@ -191,8 +221,24 @@ class FetchParcelBuildingsTests(TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[]),
             patch.object(OverpassGateway, "__post_init__", lambda _self: None),
             patch.object(OverpassGateway, "buildings_within", side_effect=OSError("overpass down")),
+            self.assertRaises(OSError),
+        ):
+            fetch_parcel_buildings(self.location)
+
+    def test_an_overpass_failure_that_is_not_an_outage_is_nothing_found(self) -> None:
+        official_geometry(
+            self.location,
+            _square_around(float(self.location.latitude), float(self.location.longitude)),
+        )
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[]),
+            patch.object(OverpassGateway, "__post_init__", lambda _self: None),
+            patch.object(OverpassGateway, "buildings_within", side_effect=ValueError("malformed ring")),
         ):
             self.assertEqual(fetch_parcel_buildings(self.location), {})
 

@@ -454,17 +454,21 @@ class OverpassGatewayTests(SimpleTestCase):
         followup_url = gateway.session.post.call_args_list[second_call_index].args[0]
         self.assertNotEqual(followup_url, gateway.base_url)
 
-    def test_query_returns_empty_when_every_endpoint_is_down(self) -> None:
-        """With the whole pool flagged down, the query is skipped entirely - no HTTP call."""
-        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _mark_endpoint_down
+    def test_query_raises_without_a_call_when_every_endpoint_is_down(self) -> None:
+        """With the whole pool flagged down, the query is skipped entirely - and says so, rather than answering nothing."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import (
+            OverpassGateway,
+            OverpassUnavailableError,
+            _mark_endpoint_down,
+        )
 
         gateway = OverpassGateway(session=mock.Mock())
         for url in gateway._endpoints():
             _mark_endpoint_down(url)
 
-        payload = gateway.query("[out:json];node(1);out;")
-
-        self.assertEqual(payload, {})
+        with self.assertRaises(OverpassUnavailableError):
+            gateway.query("[out:json];node(1);out;")
+        self.assertEqual(gateway.elements_for_query("[out:json];node(1);out;"), [])
         gateway.session.post.assert_not_called()
 
     def test_query_reraises_when_every_available_endpoint_is_overloaded(self) -> None:

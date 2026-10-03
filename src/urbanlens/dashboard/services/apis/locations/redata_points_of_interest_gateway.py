@@ -62,7 +62,11 @@ def applicable_provider_tags(latitude: float, longitude: float) -> list[str]:
         longitude: WGS-84 longitude.
 
     Returns:
-        The applicable provider tags, or an empty list when REData is unreachable or reports no coverage."""
+        The applicable provider tags; empty only when REData reports no coverage.
+
+    Raises:
+        LocationContextUnavailableError: REData's capability index could not be read.
+    """
     from urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway import applicable_providers
 
     return applicable_providers(_DOMAIN_TAG, latitude, longitude)

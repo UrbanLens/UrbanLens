@@ -157,19 +157,18 @@ class RedataPlaceDetailsEnrichmentSource(LocationCacheEnrichmentSource):
         return Q(google_place__cid__isnull=False) & super().missing_filter()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Read REData's cached deep-scrape record for the location's CID."""
+        """Read REData's cached deep-scrape record for the location's CID.
+
+        Raises:
+            GatewayRequestError: REData could not be asked, so there is no answer to cache.
+        """
         from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
-        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
         cid = location.cid
         if cid is None:
             return None, ""
         cid_int = int(cid)
-        try:
-            detail = RedataCidGateway().get_place_detail(cid_int)
-        except GatewayRequestError:
-            return None, str(cid_int)
-        return detail, str(cid_int)
+        return RedataCidGateway().get_place_detail(cid_int), str(cid_int)
 
 
 class RedataPlaceDetailsPlugin(UrbanLensPlugin):

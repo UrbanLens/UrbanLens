@@ -7,7 +7,7 @@ import logging
 import re
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
 from urbanlens.dashboard.services.security.redact import redact_coordinate
@@ -172,7 +172,10 @@ class NominatimGateway(Gateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            Dict with place metadata, or None if no result or an error occurred.
+            Dict with place metadata, or None if there is no result or the response could not be read.
+
+        Raises:
+            Exception: Nominatim could not be asked (see ``is_source_outage``).
         """
         try:
             params: dict[str, str | int | float] = {
@@ -190,7 +193,9 @@ class NominatimGateway(Gateway):
             )
             resp.raise_for_status()
             raw = resp.json()
-        except Exception:
+        except Exception as exc:
+            if is_source_outage(exc):
+                raise
             logger.exception("Nominatim reverse geocode failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
             return None
 

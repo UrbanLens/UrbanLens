@@ -15,7 +15,7 @@ import nh3
 import requests
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, is_source_outage
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -197,6 +197,9 @@ class WikipediaGateway(Gateway):
 
         Returns:
             A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``, ``description``, ``page_id``, ``infobox`` (ordered ``[label, value]`` pairs, possibly empty - see ``_fetch_infobox``) - or None if no matching article found.
+
+        Raises:
+            Exception: Wikipedia could not be asked for the candidates or one of their summaries (see ``is_source_outage``).
         """
         candidates = self._geo_search(latitude, longitude)
         for candidate in candidates:
@@ -217,6 +220,9 @@ class WikipediaGateway(Gateway):
 
         Returns:
             List of dicts with keys ``title`` (the Commons ``File:`` page title, useful for cross-provider dedup), ``url`` (largest available rendition), and ``thumb_url`` (smallest).
+
+        Raises:
+            Exception: Wikipedia could not be asked (see ``is_source_outage``).
         """
         url = _MEDIA_LIST_URL.format(title=title.replace(" ", "_"))
         try:
@@ -225,7 +231,9 @@ class WikipediaGateway(Gateway):
                 return []
             resp.raise_for_status()
             items = resp.json().get("items", [])
-        except Exception:
+        except Exception as exc:
+            if is_source_outage(exc):
+                raise
             logger.warning("Wikipedia media-list fetch failed for %r", title)
             return []
 
@@ -377,7 +385,9 @@ class WikipediaGateway(Gateway):
             resp = self.session.get(self.base_url, params=params, timeout=10)
             resp.raise_for_status()
             return resp.json().get("query", {}).get("geosearch", [])
-        except Exception:
+        except Exception as exc:
+            if is_source_outage(exc):
+                raise
             logger.exception("Wikipedia geo search failed for %s,%s", redact_coordinate(lat), redact_coordinate(lng))
             return []
 
@@ -390,7 +400,9 @@ class WikipediaGateway(Gateway):
                 return None
             resp.raise_for_status()
             return resp.json()
-        except Exception:
+        except Exception as exc:
+            if is_source_outage(exc):
+                raise
             logger.warning("Wikipedia summary fetch failed for %r", title)
             return None
 

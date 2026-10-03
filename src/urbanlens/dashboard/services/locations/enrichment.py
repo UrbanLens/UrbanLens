@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.db.models import Q
 
-from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
+from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, is_source_outage
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, get_limit_config, service_is_enabled
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 
@@ -91,6 +91,10 @@ class EnrichmentSource(ABC):
 
         Returns:
             True when data (or an empty "nothing found" marker) was stored.
+
+        Raises:
+            Exception: The upstream could not be asked (see ``is_source_outage``). Nothing may be stored then: the
+                marker is what keeps the batch from ever revisiting the location.
         """
 
 
@@ -125,6 +129,9 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
 
         Returns:
             Tuple of (payload dict or None when nothing was found, query key recorded on the cache row).
+
+        Raises:
+            Exception: The upstream could not be asked; returning None instead would cache the outage as "nothing found".
         """
 
 
@@ -474,9 +481,12 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                     logger.info("Enrichment source %s stopped early: %s", source.key, exc)
                     entry["skipped"] = "rate_limited"
                     break
-                except Exception:
+                except Exception as exc:
                     # TODO: Catch specific exceptions
-                    logger.exception("Enrichment source %s failed for location %s", source.key, location.pk)
+                    if is_source_outage(exc):
+                        logger.warning("Enrichment source %s could not reach its upstream for location %s: %s", source.key, location.pk, exc)
+                    else:
+                        logger.exception("Enrichment source %s failed for location %s", source.key, location.pk)
                     entry["failed"] += 1
                     continue
                 if changed:

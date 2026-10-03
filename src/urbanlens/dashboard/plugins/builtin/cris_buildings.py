@@ -584,7 +584,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
 
     @staticmethod
     def _resource_detail(gateway, resource: dict) -> dict:
-        """One resource's detail record, degrading to the search row on failure.
+        """One resource's detail record, degrading to the search row when REData has none.
 
         Args:
             gateway: The :class:`RedataGateway` to fetch through.
@@ -592,6 +592,9 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
 
         Returns:
             The detail record, or ``resource`` unchanged.
+
+        Raises:
+            PropertyRecordsUnavailableError: The detail could not be asked for, so the row would claim attachments it never saw.
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 
@@ -600,8 +603,13 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             return resource
         try:
             return gateway.fetch_cultural_resource_detail(resource_uuid)
-        except (PropertyRecordsUnavailableError, ValueError):
+        except PropertyRecordsUnavailableError as exc:
+            if exc.is_outage:
+                raise
             logger.debug("CrisBuildingPanelSource: no detail available for resource %s", resource_uuid, exc_info=True)
+            return resource
+        except ValueError:
+            logger.debug("CrisBuildingPanelSource: REData is not configured (resource %s)", resource_uuid, exc_info=True)
             return resource
 
     @staticmethod
@@ -1007,7 +1015,11 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
         query_key = f"{location.latitude},{location.longitude}"
         try:
             resources = RedataGateway().lookup_cultural_resources(float(location.latitude), float(location.longitude), radius_meters=_RADIUS_METERS, provider=_PROVIDER)
-        except (PropertyRecordsUnavailableError, ValueError):
+        except PropertyRecordsUnavailableError as exc:
+            if exc.is_outage:
+                raise
+            return None, query_key
+        except ValueError:
             return None, query_key
         district = site_resource_attributes(resources, float(location.latitude), float(location.longitude))
         building = nearest_resource(resources, _RESOURCE_TYPE, float(location.latitude), float(location.longitude))

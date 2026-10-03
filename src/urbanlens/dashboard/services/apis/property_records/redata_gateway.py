@@ -65,6 +65,11 @@ class PropertyRecordsUnavailableError(GatewayRequestError):
         self.links = links or {}
         super().__init__(message)
 
+    @property
+    def is_outage(self) -> bool:
+        """Every reason outside :data:`TRANSIENT_REASONS` is REData's settled answer about what was asked."""
+        return self.reason in TRANSIENT_REASONS
+
 
 class PropertyRecordsBusyError(PropertyRecordsUnavailableError, UpstreamBusyError):
     """REData throttled this key, or its source is down for now; a caller may retry after ``retry_after`` seconds."""

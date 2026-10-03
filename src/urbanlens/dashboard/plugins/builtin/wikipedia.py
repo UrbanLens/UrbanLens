@@ -7,6 +7,7 @@ import re
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
@@ -75,7 +76,12 @@ def match_address_components(location: Location) -> dict[str, str]:
         from urbanlens.dashboard.services.locations.addresses import ensure_location_address
 
         # Without Google this is OpenStreetMap's municipality, county and state, kept on the Location for every later lookup.
-        ensure_location_address(location)
+        try:
+            ensure_location_address(location)
+        except Exception as exc:
+            if not is_source_outage(exc):
+                raise
+            logger.info("Address lookup unavailable for location %s; matching without it: %s", location.pk, exc)
     components = {
         "locality": location.locality or "",
         "route": location.route or "",
@@ -95,7 +101,12 @@ def _backfill_street_address(location: Location) -> None:
     source = AddressEnrichmentSource()
     if self_reported_skip(source) is not None or LocationCache.objects.filter(location=location, source=source.marker_source).exists():
         return
-    source.enrich(location)
+    try:
+        source.enrich(location)
+    except Exception as exc:
+        if not is_source_outage(exc):
+            raise
+        logger.info("Street-address backfill unavailable for location %s; matching without it: %s", location.pk, exc)
 
 
 def _openstreetmap_municipality(location: Location) -> str:
@@ -302,14 +313,17 @@ class WikipediaMediaPanelSource(GatewayMediaPanelSource):
         return bool((cached.data or {}).get("title"))
 
     def fetch(self, pin: Pin) -> None:
-        """Fetch this pin's article images, deduped against the Wikimedia Commons panel."""
+        """Fetch this pin's article images, deduped against the Wikimedia Commons panel.
+
+        Nothing is cached until the article lookup has landed: the gate already declines a Location it found no article
+        for, so a missing title here means that lookup has not answered yet.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaMediaGateway
 
         gateway = self.make_gateway()
         terms = self.search_terms(pin, gateway)
         if not terms:
-            LocationCache.set(pin.location, self.cache_source, {"items": []}, query_key="")
             return
         if isinstance(gateway, WikipediaMediaGateway) and pin.location is not None:
             wikimedia_cache = LocationCache.get_fresh(pin.location, "wikimedia")
