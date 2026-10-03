@@ -1346,11 +1346,16 @@ LOGGING = {
         "health_check_access": {
             "()": "urbanlens.UrbanLens.logging_filters.HealthCheckAccessLogFilter",
         },
+        # On every handler: an HTTP error's text is its URL, and some providers take the API key in the query string.
+        "redact_secrets": {
+            "()": "urbanlens.UrbanLens.logging_filters.SecretRedactionFilter",
+        },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
+            "filters": ["redact_secrets"],
         },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
@@ -1358,6 +1363,7 @@ LOGGING = {
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 5,
             "formatter": "verbose",
+            "filters": ["redact_secrets"],
         },
     },
     "root": {

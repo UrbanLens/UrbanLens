@@ -6,7 +6,7 @@ import logging
 import os
 
 from celery import Celery
-from celery.signals import task_failure, task_prerun, task_retry
+from celery.signals import after_setup_logger, after_setup_task_logger, task_failure, task_prerun, task_retry
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "urbanlens.UrbanLens.settings")
 
@@ -17,6 +17,15 @@ app = Celery("urbanlens", task_cls="urbanlens.dashboard.services.core.task_limit
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.conf.update(task_track_started=True)
 app.autodiscover_tasks()
+
+
+@after_setup_logger.connect
+@after_setup_task_logger.connect
+def redact_worker_log_handlers(**_extra) -> None:
+    """Give the handlers Celery installs in a worker (it replaces the root logger's) the redaction ``LOGGING``'s handlers have."""
+    from urbanlens.UrbanLens.logging_filters import redact_every_handler
+
+    redact_every_handler()
 
 
 @task_failure.connect
