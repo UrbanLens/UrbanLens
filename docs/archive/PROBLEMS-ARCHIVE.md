@@ -20634,11 +20634,12 @@ Garage runs two nodes with `replication_factor = 2`. After a node stalls for abo
 Cloudflare's 100 s. `upload_photo_for_owner` caught only `UploadRefusedError`, so a refusal was a 500.
 
 **The client gives up inside the proxy's window.** `_S3_STORAGE_OPTIONS["client_config"]` (`settings/base.py`) uses
-botocore's `standard` retry mode with `UL_S3_MAX_ATTEMPTS` (2) attempts, `UL_S3_CONNECT_TIMEOUT_SECONDS` (3) and
-`UL_S3_READ_TIMEOUT_SECONDS` (15), declared in `settings/app.py`. An upload's name check (a HEAD) and write (a PUT) give
-up within about 56 s, or 76 s after the 20 s upload reservation wait. Path-style addressing and SigV4 moved into the
-`Config`, because django-storages ignores its own `addressing_style` and `signature_version` once `client_config` is
-set.
+botocore's `standard` retry mode with `UL_S3_MAX_ATTEMPTS` (2) attempts, `UL_S3_CONNECT_TIMEOUT_SECONDS` (2) and
+`UL_S3_READ_TIMEOUT_SECONDS` (14), declared in `settings/app.py`. A stalled store holds an upload's name check (a HEAD)
+and write (a PUT) for at most about 66 s, or 86 s after the 20 s upload reservation wait. The read timeout bounds
+silence, not a slow transfer, and a healthy write's latency on production's Garage was not measured against it.
+Path-style addressing and SigV4 moved into the `Config`, because django-storages ignores its own `addressing_style` and
+`signature_version` once `client_config` is set.
 
 **A refused upload is a 503 with `Retry-After: 30`, and nothing is half-written.**
 `services/media/storage.py::storage_failures_refused()` turns any storage error into `StorageUnavailableError`, an
@@ -20674,11 +20675,13 @@ undecodable photo and a scanner that is down are still rejected. `docs/MEDIA_PIP
 
 Tests. Each file failed before its fix:
 
-- `test_object_store_client_config.py` reads the real client: 7 of 10 failed before the fix.
+- `test_object_store_client_config.py` reads the real client: 7 of 10 failed before the fix. Review then counted the
+  name check's last attempt at its full timeout (94 s against 3 s and 15 s), which failed until the timeouts above.
 - `test_upload_storage_outage.py` has every path above: 28 of 30 failed before the fix. Its Garage outage is a
   `before-send` handler on the real client.
 - `test_upload_processing_storage_outage.py`: 9 of 12 failed. The three that already passed are controls (a decode
-  failure, a scanner that is down, a file that is gone).
+  failure, a scanner that is down, a file that is gone). A 13th, added in review, failed until giving up left a photo
+  published in the meantime alone.
 - `test_async_malware_scan.py`: two tests now expect an unreadable document or video to wait, unpublished, instead of
   being removed.
 

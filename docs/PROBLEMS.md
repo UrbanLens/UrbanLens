@@ -3054,7 +3054,9 @@ store each photo with `Image.objects.create(image=ContentFile(...))` inside `res
 retries). A botocore read or connect timeout is an `OSError`, so it is retried, but after about 1, 2 and 4 s, all
 inside one Garage stall. A 503 (`ClientError`) or an `EndpointConnectionError` is not an `OSError`, so the task fails
 at once. Either way the rest of the selection is not imported. Photos already stored stay, and nothing is half-written:
-the row and its file share the reservation's transaction.
+the row and its file share the reservation's transaction. The archive import stores photos and map overlay images the
+same way (`services/import_export/import_data.py`, `_import_photos` and the overlay importer), also catching only
+`UploadRefusedError`; what the import job does with the error that escapes was not traced.
 
 A likely fix: retry on `storage_errors.STORAGE_ERRORS` with a backoff that outlasts a stall (`process_image_upload`
 uses `min(60 * 2**retries, 900)`), and say in the progress message that storage was unavailable. Most tasks in

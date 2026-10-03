@@ -203,18 +203,18 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     s3_connect_timeout_seconds: float = Field(
-        default=3.0,
+        default=2.0,
         gt=0,
         description="Seconds to wait for a connection to the object store before trying again or giving up.",
     )
     s3_read_timeout_seconds: float = Field(
-        default=15.0,
+        default=14.0,
         gt=0,
         description=(
             "Seconds the object store may go silent mid-request before the attempt is abandoned. An upload request "
             "makes two storage calls (a name check and the write), so with UL_S3_MAX_ATTEMPTS this bounds how long a "
-            "stalled store can hold it: keep (2 x attempts - 1) x (connect + read) plus the 20 s upload reservation "
-            "wait under the proxy's own timeout (Cloudflare gives up at 100 s)."
+            "stalled store can hold it: keep 2 x attempts x (connect + read) plus the 20 s upload reservation wait "
+            "well under the proxy's own timeout (Cloudflare gives up at 100 s)."
         ),
     )
     s3_max_attempts: int = Field(

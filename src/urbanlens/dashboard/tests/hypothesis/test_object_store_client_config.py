@@ -126,15 +126,15 @@ class ObjectStoreClientConfigTests(SimpleTestCase):
     def test_an_upload_request_gives_up_on_a_stalled_store_inside_the_proxy_timeout(self) -> None:
         """An upload makes two calls (the name check, then the write); a call fails only after every attempt has.
 
-        The worst case is the name check stalling on every attempt but its last, then the write stalling on all of
-        them, after waiting the whole reservation for the uploader's previous upload.
+        The worst case is the name check stalling on every attempt and answering just inside its last, then the write
+        stalling on all of them, after waiting the whole reservation for the uploader's previous upload.
         """
         config = self._client_config()
         attempts = config.retries["total_max_attempts"]
         per_attempt = config.connect_timeout + config.read_timeout
         # botocore's standard backoff for a non-throttling error is at most a second per retry.
         backoff = 2 * (attempts - 1)
-        worst = UPLOAD_RESERVATION_WAIT_SECONDS + (2 * attempts - 1) * per_attempt + backoff
+        worst = UPLOAD_RESERVATION_WAIT_SECONDS + 2 * attempts * per_attempt + backoff
         self.assertLess(worst, PROXY_TIMEOUT_SECONDS - 10)
 
     def test_the_client_still_addresses_garage_by_path_and_signs_with_sigv4(self) -> None:

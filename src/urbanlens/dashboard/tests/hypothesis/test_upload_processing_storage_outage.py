@@ -137,6 +137,18 @@ class TheReencodeTests(_Case):
         self.assertTrue(Image.objects.filter(pk=image.pk, pending_scan=True).exists())
         self.assertTrue(PhotoUploadFailure.objects.filter(image=image).exists())
 
+    def test_giving_up_on_a_photo_published_meanwhile_offers_nothing_back(self) -> None:
+        image = self._pending()
+        with mock.patch(_DOWNSCALE, side_effect=_timeout()):
+            tasks.process_image_upload.apply(args=(image.pk,))
+        Image.objects.filter(pk=image.pk).update(pending_scan=False)
+
+        upload_retry.give_up(UploadRetry.objects.get(target=upload_retry.IMAGE, object_id=image.pk))
+
+        self.assertIsNone(Image.objects.get(pk=image.pk).upload_failed_at)
+        self.assertFalse(PhotoUploadFailure.objects.filter(image=image).exists())
+        self.assertFalse(UploadRetry.objects.filter(target=upload_retry.IMAGE, object_id=image.pk).exists())
+
     def test_the_stall_sweep_leaves_an_upload_waiting_for_storage_to_the_retry_sweep(self) -> None:
         image = self._pending()
         with mock.patch(_DOWNSCALE, side_effect=_timeout()):

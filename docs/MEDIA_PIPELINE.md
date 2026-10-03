@@ -489,11 +489,12 @@ Three things a deployment has to know:
   `urbanlens_garage` cannot be an endpoint host.
 - **A stalled store fails a request inside the proxy's window.** The client
   retries in botocore's `standard` mode, `UL_S3_MAX_ATTEMPTS` (2) attempts per
-  call, each giving up after `UL_S3_CONNECT_TIMEOUT_SECONDS` (3) to connect and
-  `UL_S3_READ_TIMEOUT_SECONDS` (15) of silence. An upload's name check and write
-  then give up within about 56 s, 76 s after the 20 s upload reservation wait,
+  call, each giving up after `UL_S3_CONNECT_TIMEOUT_SECONDS` (2) to connect and
+  `UL_S3_READ_TIMEOUT_SECONDS` (14) of silence. An upload's name check and write
+  then give up within about 66 s, 86 s after the 20 s upload reservation wait,
   under Cloudflare's 100 s; `test_object_store_client_config.py` holds the sum
-  to that. botocore's defaults (5 attempts, 60 s) held a request for minutes. A
+  to that. The read timeout bounds silence, not a slow transfer, and how long a
+  healthy write to production's Garage waits for its answer was not measured. A
   request whose upload storage refused answers 503 with `Retry-After: 30` in
   its endpoint's own error shape (`storage.storage_failures_refused`,
   `StorageUnavailableError`), and nothing is left behind: the row, a comment

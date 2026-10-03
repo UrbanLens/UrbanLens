@@ -209,9 +209,11 @@ def give_up(waiting: UploadRetry) -> None:
         if comment is not None:
             reject_comment_upload(comment, "That photo couldn't be processed.")
     elif waiting.target == IMAGE:
+        from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.services.media.upload_failures import record_upload_processing_failure
 
-        record_upload_processing_failure(waiting.object_id, "This upload couldn't be processed while storage was failing. Retry it, or discard it and upload again.")
+        if Image.objects.filter(pk=waiting.object_id, pending_scan=True).exists():
+            record_upload_processing_failure(waiting.object_id, "This upload couldn't be processed while storage was failing. Retry it, or discard it and upload again.")
     waiting.delete()
 
 
