@@ -1,4 +1,4 @@
-"""REData-backed archival/reference-document clients: the Media gallery's four name-searched archives (Smithsonian Open Access, Library of Congress, Internet Archive, Digital Commonwealth) and the two geosearchable providers (Wikipedia, Wikidata) behind a pin-detail info panel."""
+"""REData-backed archive clients: the Media gallery's name-searched archives (Smithsonian Open Access, Library of Congress, Digital Commonwealth, Internet Archive, Chronicling America)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
 from urbanlens.dashboard.services.geo.geo_boundary import USA, state_boundary
 
 if TYPE_CHECKING:
@@ -15,12 +15,11 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 _SEARCH_PATH = "/api/v1/reference-documents/search/"
-_NEAR_PATH = "/api/v1/reference-documents/"
 
 
 @dataclass(slots=True, kw_only=True)
 class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
-    """REST client for REData's two ``/api/v1/reference-documents/`` endpoints. :meth:`search` (``.../search/``) is not a near-a-coordinate lookup - ``lat``/``lng`` are optional region hints, there's no ``radius_meters``, and the required parameter is..."""
+    """REST client for REData's ``/api/v1/reference-documents/search/``: archival material by name. ``lat``/``lng`` are only a region hint; it is not a near-a-coordinate lookup."""
 
     service_key: ClassVar[str] = "redata_reference_documents"
 
@@ -63,35 +62,6 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
             params["force_refresh"] = "true"
         envelope = self._get_envelope(_SEARCH_PATH, params)
         return envelope.results
-
-    def get_reference_documents(
-        self,
-        latitude: float,
-        longitude: float,
-        *,
-        radius_meters: float | None = None,
-        provider: str | list[str] | None = None,
-        force_refresh: bool = False,
-    ) -> LocationContextEnvelope:
-        """Archival/encyclopaedic material about a coordinate.
-        Two providers, both with a real geosearch index (unlike :meth:`search`'s four name-only archives) - see ``../REData/docs/api-reference.md``, "GET /reference-documents/ - archival material about a coordinate":
-
-        Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            radius_meters: Search radius in meters. REData defaults to 1 km and caps at
-                10 km.
-            provider: Restrict to ``"wikipedia"``, ``"wikidata"``, or both (a list) -
-                omit to ask both.
-            force_refresh: Bypass REData's cache and re-query live.
-
-        Returns:
-            The parsed envelope.
-
-        Raises:
-            LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), a REData-side validation error, or the request itself failed outright.
-        """
-        return self.near_point(_NEAR_PATH, latitude, longitude, radius_meters=radius_meters, provider=provider, force_refresh=force_refresh)
 
 
 @dataclass(slots=True, kw_only=True)

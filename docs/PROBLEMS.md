@@ -3085,16 +3085,6 @@ The toggle should show or hide the child pins' details in place, through htmx sw
 page reload. Save the preference the same way it is saved now. Find every panel that reads the setting: map markers,
 photos, visits, notes, Article > Sources, building outlines (P222).
 
-## P225 — A "Reference Documents" panel titles HRSH's National Register entry "Marist University", the campus across the street
-
-`id: P225` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-A "Reference Documents" panel shows NRHP information under the title "Marist University". Marist is across Route 9
-from HRSH. Jess: the panel isn't needed. Find why Marist matches this place (a radius search instead of containment?
-the nearest record winning? a register row's `contains_point`?) and fix the matching, so the same error can't reach
-any other surface: Property Records, links (P228), Article > Sources. Then remove the panel. Check what else reads its
-data before deleting anything.
-
 ## P226 — Property Records: the Overview tab is blank, and the two historic tabs should be one
 
 `id: P226` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`

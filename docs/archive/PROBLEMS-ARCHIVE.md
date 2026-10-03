@@ -20854,3 +20854,32 @@ Not changed:
 - A PUT that Garage finishes after the client gave up leaves an object no row names. Nothing serves it, since every
   read goes through a row.
 - No client retries a 503 by itself. The toast asks the user to try again.
+
+## RESOLVED 2026-10-03: The "Reference Documents" panel joined Marist's Wikipedia article to HRSH's Wikidata facts; it is removed
+
+`id: P225` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0), HRSH. A "Reference Documents" panel showed HRSH's National Register facts
+under the title "Marist University", the campus across Route 9.
+
+**Cause.** The panel asked REData for Wikipedia and Wikidata records within 1 km of the pin, then took the first
+row of each provider as "the nearest". Wikidata rows carry a distance, but Wikipedia rows carry none and aren't
+distance-sorted. On dev, HRSH's cached answer lists "Marist University" first among the Wikipedia rows and "Hudson
+River State Hospital" (25 m, National Historic Landmark) first among Wikidata. The heading came from the article
+and the facts from the entity, so two unrelated records were joined into one card. Matching by radius alone was
+the root fault.
+
+**Other surfaces.** Nothing else read this panel's data or called REData's near-a-coordinate reference-documents
+endpoint. The other register surfaces already match by containment or by name: Historic Registers ranks
+`contains_point` first and drops a non-containing listing that shares no word with the place; Property Records
+checks its parcel geometry contains the pin; the Wikipedia panel matches by public name and outline; Article >
+Sources searches by name through P196's relevance filter. So no other surface could show this error.
+
+**Fix.** The panel is removed, as Jess asked, along with the gateway's unused near-a-coordinate method. Migration
+0042 drops the panel's cached rows. The plugin is now `redata_reference_documents` and keeps only the shared
+rate budget that the Media gallery's archive providers (Smithsonian, Library of Congress, Digital Commonwealth,
+Internet Archive, Chronicling America) spend through REData's reference-documents search.
+
+**Tests.** `test_redata_reference_documents_plugin.py`: no panel source answers for the old key; a PLACES
+subscriber gets a 404 from its URL; the migration drops only that source's rows; the shared service key keeps
+its defaults.

@@ -225,7 +225,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P222 | open | 2026-10-03 | Only one building's outline shows on the HRSH pin map, and it shows whether "show child pin details" is on or off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P223 | open | 2026-10-03 | When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P224 | open | 2026-10-03 | Toggling "show child pin details" reloads the whole page | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P225 | open | 2026-10-03 | A "Reference Documents" panel titles HRSH's National Register entry "Marist University", the campus across the street | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P226 | open | 2026-10-03 | Property Records: the Overview tab is blank, and the two historic tabs should be one | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P227 | open | 2026-10-03 | "Site Conditions" should be a tab of the Location Data panel, not a panel of its own | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P228 | open | 2026-10-03 | A known National Register number should link to its listing, and the link should join the pin's and wiki's links | [`docs/PROBLEMS.md`](PROBLEMS.md) |
