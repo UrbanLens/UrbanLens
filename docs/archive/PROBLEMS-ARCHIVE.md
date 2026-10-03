@@ -21214,3 +21214,40 @@ is, CRIS's record must stand on the building, CRIS's site record alone lists not
 building and a site row's point picks none, campus and standalone pins keep the listing, the link reaches only the
 listed building, a row covered by a child of another type opens in place. Six of the first twelve failed before the
 fix; the site-row test came from review afterwards.
+
+## RESOLVED 2026-10-03: The pin page's "Choose buildings to add" dialog can't scroll to its submit button, and its header stays after submitting
+
+`id: P221` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by Jess on production (v0.8.0) at HRSH, 2026-10-03.
+
+**Causes.**
+- **No scroll.** The dialog is a flex column capped at the viewport, and `.ul-dialog-body` scrolls inside it. Here the
+  body and footer sit inside two wrappers, the htmx swap target `#building-import-dialog-body` and the form, and
+  neither carried the column. The form's own flex rules didn't reach the swap target, and the layout's
+  `min-height: 22rem` overrode the cap, so a short viewport pushed the footer off screen with nothing to scroll.
+- **Header left behind.** `close-dialog` closed `el.closest("dialog")` after the request. The response swapped the
+  form out of the dialog first, so the form no longer had a dialog ancestor and nothing closed. Only the body
+  emptied.
+
+**Fixes.**
+- `.ul-dialog-frame` (`_components.scss`) carries the column through any wrapper between a dialog and its body and
+  footer. The import dialog's swap target and form use it. The layout's fixed `min-height`, and its mobile
+  `max-height` and scroll, are gone; the map keeps its own `min-height`.
+- `htmx-actions.ts` records the dialog an element's request started in, at `htmx:beforeRequest`. `close-dialog`
+  falls back to it when the element has left the dialog. A request that starts outside any dialog clears the record,
+  so a later request can't close a dialog it never started in (found by adversarial review).
+
+**Verification.**
+- `htmx-actions.test.ts`: the dialog closes though the response swapped the form out (red before the fix), and a
+  stale record doesn't close a dialog reopened later (red before the follow-up).
+- Playwright on `development_main`, with a throwaway account's pin on HRSH's campus Location:
+  - At 1280×480 and 800×380, the dialog fits the viewport, its body scrolls (299 px of 360, 215 px of 336), and
+    `elementFromPoint` at the submit button's centre hits the button.
+  - Submitting one building closed the whole dialog and toasted "Added 1 building pin."
+- Every other `data-ul-on-success="close-dialog"` user either keeps its form inside its dialog or replaces its wrapper
+  on each request.
+- A walk of every template for a dialog body or footer behind an unflexed wrapper found the same fault in "Delete your
+  account" and Site admin's "Delete this user's account" (a bare `<form>`). Both forms now carry `.ul-dialog-frame`.
+  The pin edit form already had the column in its own rules, which now come from the frame class. At 390×300 the
+  account dialog's body scrolls and its footer stays in view; at 800×320 so does the pin edit dialog's.

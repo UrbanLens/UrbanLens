@@ -215,7 +215,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P211 | open | 2026-10-03 | On a wiki page, the purple "Community wiki" pill overlaps the onboarding card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P220 | open | 2026-10-03 | A background photo import stops at the first object store refusal, and the rest of the selection is never imported | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P221 | open | 2026-10-03 | The pin page's "Choose buildings to add" dialog can't scroll to its submit button, and its header stays after submitting | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P222 | open | 2026-10-03 | Only one building's outline shows on the HRSH pin map, and it shows whether "show child pin details" is on or off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P223 | open | 2026-10-03 | When the parcel boundary fills the map, every click opens its context menu and its tooltip never leaves | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P224 | open | 2026-10-03 | Toggling "show child pin details" reloads the whole page | [`docs/PROBLEMS.md`](PROBLEMS.md) |

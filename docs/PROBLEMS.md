@@ -2968,22 +2968,6 @@ uses `min(60 * 2**retries, 900)`), and say in the progress message that storage 
 `tasks.py` declare `autoretry_for=(OSError,)`, so whether to widen all of them is a separate question. Not reproduced
 in a test.
 
-## P221 — The pin page's "Choose buildings to add" dialog can't scroll to its submit button, and its header stays after submitting
-
-`id: P221` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH, 2026-10-03`
-
-On the Private Pin page, "Choose buildings to add":
-
-- When zoomed in far enough, the dialog doesn't scroll, so its submit button can sit entirely off screen with no way
-  to reach it. The body must scroll inside a dialog capped to the viewport (`max-height` in `dvh`), with the actions
-  in a footer that stays visible.
-- After submitting, the dialog's contents disappear but its header stays on screen. Submitting must close the whole
-  dialog, then toast the outcome.
-
-Reproduce in Playwright at a narrow, tall-content viewport. Assert the submit button is reachable (`scrollIntoView`,
-then `elementFromPoint`), and that the `<dialog>` is closed (`open` false) after submit. Check the other dialogs
-built the same way for the same overflow fault.
-
 ## P222 — Only one building's outline shows on the HRSH pin map, and it shows whether "show child pin details" is on or off
 
 `id: P222` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`

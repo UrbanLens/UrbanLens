@@ -2136,12 +2136,7 @@
 .pin-edit-dialog {
     width: min(560px, 96vw);
 
-    // The form fills the dialog's flex column and relays the scroll to its body.
     .pin-edit-form {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
         overflow: hidden;
     }
 

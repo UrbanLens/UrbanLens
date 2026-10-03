@@ -39,6 +39,25 @@ describe("data-ul-on-success", () => {
         expect(dialog.open).toBe(false);
     });
 
+    test("close-dialog forgets the dialog once a later request starts outside it", () => {
+        document.body.innerHTML =
+            '<dialog id="d" open><div id="body"><form data-ul-on-success="close-dialog"><button></button></form></div></dialog>';
+        const form = document.querySelector("form")!;
+        const dialog = document.getElementById("d") as HTMLDialogElement;
+        fire(form, "htmx:beforeRequest", { successful: true });
+        form.remove();
+        fire(form, "htmx:afterRequest", { successful: true });
+        expect(dialog.open).toBe(false);
+
+        document.body.appendChild(form);
+        dialog.open = true;
+        fire(form, "htmx:beforeRequest", { successful: true });
+        form.remove();
+        fire(form, "htmx:afterRequest", { successful: true });
+
+        expect(dialog.open).toBe(true);
+    });
+
     test("runs its actions only when the request succeeded", () => {
         document.body.innerHTML = '<dialog id="d" open><form data-ul-on-success="close-dialog"><button></button></form></dialog>';
         const form = document.querySelector("form")!;

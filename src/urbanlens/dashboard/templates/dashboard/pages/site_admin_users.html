@@ -175,7 +175,7 @@
 
   <dialog id="admin-delete-user-dialog" class="ul-dialog delete-account-dialog" aria-labelledby="admin-delete-user-dialog-title">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Delete this user's account" title_id="admin-delete-user-dialog-title" %}
-    <form method="post" id="admin-delete-user-form">
+    <form method="post" id="admin-delete-user-form" class="ul-dialog-frame">
       {% csrf_token %}
       <input type="hidden" name="action" value="request_delete">
       <input type="hidden" name="user_id" id="admin-delete-user-id">
