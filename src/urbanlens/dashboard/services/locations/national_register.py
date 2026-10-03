@@ -21,7 +21,7 @@ NATIONAL_REGISTER_PROVIDER = "nps_nrhp"
 NPS_RECORD_URL = "https://npgallery.nps.gov/AssetDetail/NRIS/{reference}"
 
 #: NRIS reference numbers: eight digits, nine for listings since 2016.
-_REFERENCE_NUMBER = re.compile(r"\d{8,9}")
+_REFERENCE_NUMBER = re.compile(r"[0-9]{8,9}")
 
 _HISTORIC_REGISTERS_CACHE_SOURCE = "redata_historic_registers"
 _CRIS_CACHE_SOURCE = "cris_building_usn"
@@ -69,7 +69,7 @@ def stands_on(location: Location, latitude: Any, longitude: Any) -> bool:
 
     Returns:
         True when the location's building outline holds the point or, without an outline, the point is within
-        ``BUILDING_MATCH_METERS`` of the location.
+        ``BUILDING_MATCH_METERS`` of the location and no other building known on the parcel is nearer to it.
     """
     from django.contrib.gis.geos import Point
 
@@ -85,7 +85,19 @@ def stands_on(location: Location, latitude: Any, longitude: Any) -> bool:
     footprint = building_footprint_of(location)
     if footprint is not None:
         return bool(footprint.contains(Point(point_longitude, point_latitude, srid=4326)))
-    return meters_between(point_latitude, point_longitude, float(location.latitude), float(location.longitude)) <= BUILDING_MATCH_METERS
+    distance = meters_between(point_latitude, point_longitude, float(location.latitude), float(location.longitude))
+    return distance <= BUILDING_MATCH_METERS and not _nearer_building(location, point_latitude, point_longitude, distance)
+
+
+def _nearer_building(location: Location, latitude: float, longitude: float, distance: float) -> bool:
+    """Whether another building known on the parcel is nearer the point than ``location`` is."""
+    from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between, nearest_building, site_buildings
+
+    buildings = site_buildings(location)
+    nearest = nearest_building(buildings, latitude, longitude)
+    if nearest is None or nearest is nearest_building(buildings, float(location.latitude), float(location.longitude), within_meters=BUILDING_MATCH_METERS):
+        return False
+    return meters_between(latitude, longitude, float(nearest["latitude"]), float(nearest["longitude"])) < distance
 
 
 def cris_lists_building(location: Location) -> bool:

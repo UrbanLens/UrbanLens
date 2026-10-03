@@ -194,6 +194,52 @@ class BuildingRegisterRecordTests(_Campus):
         self.assertEqual(context["facts"][0]["text"], _LISTED_NOTE)
 
 
+#: 10 m north of the Main Building: two buildings that close have no outline to tell them apart by.
+_ANNEX = ("41.733174", "-73.928611")
+
+
+class NeighbouringBuildingTests(_Campus):
+    """Without outlines, a published point belongs to the parcel's building nearest it, not every one within reach."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.annex = self._building("BLDG 52/ANNEX", _ANNEX)
+        buildings = [{"latitude": float(lat), "longitude": float(lng)} for lat, lng in (_MAIN, _ANNEX, _STORAGE)]
+        LocationCache.set(
+            self.campus.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": buildings, "provider": "cris"}
+        )
+        self.own_point = _listing(
+            contains_point=False, source_latitude=float(_MAIN[0]), source_longitude=float(_MAIN[1])
+        )
+
+    def test_a_listings_own_point_is_the_nearest_buildings_only(self) -> None:
+        from urbanlens.dashboard.services.locations.national_register import building_register_rows
+
+        self.assertEqual(
+            [row["name"] for row in building_register_rows(self.main.location, [self.own_point])], [_LISTING_NAME]
+        )
+        self.assertEqual(building_register_rows(self.annex.location, [self.own_point]), [])
+
+    def test_a_neighbours_cris_record_does_not_list_the_building(self) -> None:
+        from urbanlens.dashboard.services.locations.national_register import cris_lists_building
+
+        LocationCache.set(
+            self.annex.location, "cris_building_usn", _cris_record("BLDG 51/MAIN/ADMIN (1871) - NHL", "Listed", _MAIN)
+        )
+
+        self.assertFalse(cris_lists_building(self.annex.location))
+        self.assertTrue(cris_lists_building(self.main.location))
+
+    def test_without_a_parcel_list_the_distance_rule_still_holds(self) -> None:
+        from urbanlens.dashboard.services.locations.national_register import building_register_rows
+
+        LocationCache.objects.filter(location=self.campus.location, source=PARCEL_BUILDINGS_CACHE_SOURCE).delete()
+
+        self.assertEqual(
+            [row["name"] for row in building_register_rows(self.main.location, [self.own_point])], [_LISTING_NAME]
+        )
+
+
 class BuildingRegisterLinkTests(_Campus):
     """The automatic link follows the same rule: the listed building's pin and wiki get it, its neighbours' do not."""
 

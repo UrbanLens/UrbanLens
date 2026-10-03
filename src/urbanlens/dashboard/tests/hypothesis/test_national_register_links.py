@@ -63,6 +63,13 @@ class ReferenceNumberTests(SimpleTestCase):
             with self.subTest(value=value):
                 self.assertIsNone(nps_record_url(value))
 
+    def test_only_ascii_digits_make_a_reference_number(self) -> None:
+        """``\\d`` also matches full-width and other scripts' digits, which are not NPS's number."""
+        for value in ("８９００１１６６", "٨٩٠٠١١٦٦", "89001¹66"):
+            with self.subTest(value=value):
+                self.assertIsNone(nps_record_url(value))
+                self.assertIsNone(reference_number(_listing(external_id=value)))
+
     def test_only_the_national_registers_rows_carry_one(self) -> None:
         self.assertEqual(reference_number(_listing()), _REFERENCE)
         self.assertIsNone(reference_number(_listing(provider="md_mihp")))
