@@ -20939,3 +20939,31 @@ purpose: visits and trips both queue it, and neither has a single `Location`.
 **Tests.** `test_task_failure_log_redaction.py`: the weather task's coordinates never reach the line, a sender-less
 failure is redacted, arguments are named by the signature, record ids pass through, an id-named value that isn't one
 is redacted, and so are arguments the signature rejects. The two log tests failed before the fix.
+
+## RESOLVED 2026-10-03: A storage refusal waiting won't fix is told as one, without Retry-After, and the admins hear of it at once
+
+`id: P241` · `status: fixed` · `resolved: 2026-10-03`
+
+Found by the adversarial review of P201.
+
+**Cause.** P201 turned every storage failure on upload into a 503 with `Retry-After: 30` and "Storage is briefly
+unavailable", and parked an accepted upload to retry later. A 4xx from the object store took the same path: a rotated
+key the app never picked up (`InvalidAccessKeyId`, `SignatureDoesNotMatch`), or a denying bucket policy
+(`AccessDenied`). Waiting doesn't fix those. `storage_errors.is_transient` already told the two kinds apart, but only
+log levels and the thumbnail sweeps read it. The only admin notice, `upload_retry._report_stuck`, fires only once
+storage has served something else since, which a total refusal never does.
+
+**Fix.** `StorageUnavailableError.for_failure(exc)` builds both `storage_failures_refused` and `storage_refusal`
+(the middleware and the external API's handler). A transient failure keeps the retryable 503. A lasting one is still
+a 503, with "Storage is refusing uploads… Try again later." and no `Retry-After`. The overlay uploader carries the
+refusal's own `retry_after` through, and `PhotoUploadError.generic_message` words a no-retry 503 the same way.
+`upload_retry.report_lasting_refusal` tells the admins on the stuck-uploads channel, naming the error code, at most
+once every six hours (a `cache.add` stamp). It's called from both the request path and `wait_for_storage`. An
+unreachable cache skips the notice rather than sending one per upload. A missing file and a transient failure tell
+no one. Accepted uploads still wait and retry, so they publish once an operator fixes storage. Rejecting them would
+discard users' photos over a server-side fault.
+
+**Tests.** `test_upload_storage_lasting_refusal.py` covers the wording and `Retry-After` for both kinds, the block
+helper, the middleware, a gallery upload and an overlay upload through a fake Garage answering 403, the admin notice
+being sent once per interval, sent from processing, not sent for transient or missing-file failures, and not sent
+when the cache is down. Before the fix, 10 of 11 failed.

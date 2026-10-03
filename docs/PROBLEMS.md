@@ -3212,3 +3212,23 @@ not backfilled onto existing keys. The development key holds it, since `/buildin
 
 The P110 branch should not merge before REData's lookups answer in a few seconds. Re-probe both requests above when
 REData says it has changed them.
+
+## P242 — Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column
+
+`id: P242` · `status: open` · `updated: 2026-10-03` · `found by: the P241 test sweep`
+
+Migration 0033 refuses to apply while any overlay still has only an `image_url`, and tells the operator to run
+`download_overlay_image_urls` first, against the 0032 schema. Since P186's 0040 added `Location.official_name_source`,
+that command fails with `UndefinedColumn` (`_store` does `select_related("parent_pin__location", …)`, and the image it
+creates loads the owner's Location). The test that pins this path,
+`test_download_overlay_image_urls.py::TheOperatorsPathTests::test_the_migration_proceeds_once_the_command_has_run`,
+fails on `release/v_0_9_0`.
+
+Who it affects: an install still below 0033 upgrading straight to 0.9.0. Production and staging ran 0033 with
+v0.8.0. Any column a later release adds to a model on the command's path breaks it the same way, because the command
+runs today's code against an old schema.
+
+Options, for the release's migration squash (see the release migration notes): require upgrades to pass through
+0.8.0 and drop the command and its test; or make the download part of an ordinary data migration's follow-up (a task
+queued by 0033 itself) so no current code ever runs on the old schema. Not Jess's call unless the first option
+changes the supported upgrade path.

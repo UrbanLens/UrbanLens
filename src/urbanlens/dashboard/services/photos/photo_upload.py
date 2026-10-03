@@ -62,6 +62,8 @@ class PhotoUploadError(Exception):
     @property
     def generic_message(self) -> str:
         """A status-keyed, catch-site-safe message that doesn't relay ``message``."""
+        if self.status == 503 and self.retry_after is None:
+            return "Storage is refusing uploads, so this upload wasn't saved. Try again later."
         return self._GENERIC_MESSAGES_BY_STATUS.get(self.status, "That upload couldn't be completed.")
 
 

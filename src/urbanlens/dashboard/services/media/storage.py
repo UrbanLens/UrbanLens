@@ -145,7 +145,7 @@ class UploadRefusedError(Exception):
 
     status: ClassVar[int] = 400
     #: Seconds the client should wait before sending the upload again, for a refusal that is not about the upload.
-    retry_after: ClassVar[int | None] = None
+    retry_after: int | None = None
 
     def __init__(self, message: str) -> None:
         """Store the user-facing message.
@@ -175,18 +175,39 @@ class UploadReservationBusyError(UploadRefusedError):
 
 
 class StorageUnavailableError(UploadRefusedError):
-    """Media storage failed to store the upload, so nothing was saved and the client should send it again."""
+    """Media storage failed to store the upload, so nothing was saved."""
 
     status = 503
-    retry_after = STORAGE_RETRY_AFTER_SECONDS
+    retry_after: int | None = STORAGE_RETRY_AFTER_SECONDS
 
-    def __init__(self, message: str = "Storage is briefly unavailable, so nothing was saved. Try again in a minute.") -> None:
+    def __init__(self, message: str = "Storage is briefly unavailable, so nothing was saved. Try again in a minute.", *, retry_after: int | None = STORAGE_RETRY_AFTER_SECONDS) -> None:
         """Store the user-facing message.
 
         Args:
             message: Why the upload was refused.
+            retry_after: Seconds the client should wait before sending it again, or None when waiting won't help.
         """
         super().__init__(message)
+        self.retry_after = retry_after
+
+    @classmethod
+    def for_failure(cls, exc: BaseException) -> StorageUnavailableError:
+        """The refusal for *exc*: retryable when storage is briefly unreachable, and not when it refuses for good.
+
+        A lasting refusal, such as a rejected key, is reported to the admins.
+
+        Args:
+            exc: What storage raised.
+
+        Returns:
+            The refusal to answer with.
+        """
+        from urbanlens.dashboard.services.media.upload_retry import report_lasting_refusal
+
+        if is_transient(exc):
+            return cls()
+        report_lasting_refusal(exc)
+        return cls("Storage is refusing uploads, so nothing was saved. Try again later.", retry_after=None)
 
 
 def retry_after_headers(seconds: int | None) -> dict[str, str]:
@@ -212,7 +233,7 @@ def storage_failures_refused() -> Iterator[None]:
         yield
     except STORAGE_ERRORS as exc:
         logger.log(logging.WARNING if is_transient(exc) else logging.ERROR, "Refused an upload because storage failed: %s: %s", type(exc).__name__, exc, exc_info=True)
-        raise StorageUnavailableError from exc
+        raise StorageUnavailableError.for_failure(exc) from exc
 
 
 def storage_refusal(exc: BaseException, context: str) -> StorageUnavailableError | None:
@@ -230,7 +251,7 @@ def storage_refusal(exc: BaseException, context: str) -> StorageUnavailableError
     if not isinstance(exc, OBJECT_STORE_ERRORS):
         return None
     logger.log(logging.WARNING if is_transient(exc) else logging.ERROR, "%s failed on storage: %s", context, exc, exc_info=exc)
-    return StorageUnavailableError("Storage is briefly unavailable. Try again in a minute.")
+    return StorageUnavailableError.for_failure(exc)
 
 
 @dataclass(slots=True)

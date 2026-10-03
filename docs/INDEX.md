@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P241` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P243` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -235,3 +235,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P235 | open | 2026-10-03 | Article > News shows no results for HRSH | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P236 | open | 2026-10-03 | A wiki URL's response time tells whether a Location exists under that slug | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |

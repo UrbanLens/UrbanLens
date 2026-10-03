@@ -240,7 +240,7 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
             # Reuse the existing row instead - the user asked to overlay this image, not to store a second copy.
             logger.info("overlay upload rejected for profile %s: %s", profile.pk, exc.message)
             if exc.status == StorageUnavailableError.status:
-                raise StorageUnavailableError(exc.generic_message) from exc
+                raise StorageUnavailableError(exc.generic_message, retry_after=exc.retry_after) from exc
             if exc.status != 409:
                 return None, exc.generic_message
             existing = Image.objects.filter(profile=profile, checksum=compute_checksum(upload)).exclude(image="")

@@ -44,6 +44,10 @@ GONE_GRACE = timedelta(days=7)
 #: How long a pending comment waits for its first scan before it is taken to have been lost.
 STALLED_SCAN_AGE = timedelta(hours=1)
 
+#: How often the admins hear that storage refuses for a reason that needs an operator, while it goes on refusing.
+REFUSAL_REPORT_INTERVAL = timedelta(hours=6)
+REFUSAL_REPORTED_KEY = "upload-storage:lasting-refusal-reported"
+
 COMMENT_IMAGE = "dashboard.Comment.image"
 TRIP_COMMENT_IMAGE = "dashboard.TripComment.image"
 IMAGE = "dashboard.Image.image"
@@ -106,7 +110,40 @@ def wait_for_storage(target: str, object_id: int, name: str, exc: BaseException)
         exc: What storage raised.
     """
     _set_stamp(_LAST_FAILURE)
+    report_lasting_refusal(exc)
     _keep_waiting(target, object_id, name, exc)
+
+
+def report_lasting_refusal(exc: BaseException) -> None:
+    """Tell the admins storage refuses for a reason waiting won't fix, such as a rejected key or a denying policy.
+
+    Sent at most once per :data:`REFUSAL_REPORT_INTERVAL`. Uploads already in storage keep waiting meanwhile, and are
+    retried once an operator fixes it.
+
+    Args:
+        exc: What storage raised.
+    """
+    from urbanlens.dashboard.services.media.storage_errors import is_transient
+
+    if is_transient(exc) or means_file_is_gone(exc):
+        return
+    try:
+        first = cache.add(REFUSAL_REPORTED_KEY, 1, timeout=int(REFUSAL_REPORT_INTERVAL.total_seconds()))
+    except RedisError:
+        logger.warning("Could not record a lasting storage refusal in the cache; not notifying, to avoid one per upload", exc_info=True)
+        return
+    if not first:
+        return
+    from urbanlens.dashboard.services.notifications.notifications import NotificationEvent, notify
+
+    reason = exc.response.get("Error", {}).get("Code") if isinstance(exc, ClientError) else None
+    notify(
+        NotificationEvent.UPLOAD_STUCK,
+        "Media storage is refusing uploads",
+        f"Storage refused with {type(exc).__name__}{f' ({reason})' if reason else ''}: {exc}\n\n"
+        "This doesn't clear on its own: check the object store's credentials, bucket and policy. New uploads are refused "
+        "until it is fixed. Uploads that already arrived wait and are retried.",
+    )
 
 
 def _keep_waiting(target: str, object_id: int, name: str, exc: BaseException) -> None:
