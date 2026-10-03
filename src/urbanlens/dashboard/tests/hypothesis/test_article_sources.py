@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
 )
 from urbanlens.dashboard.services.core.bounded_cache import set_if_small
 from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+from urbanlens.dashboard.services.pins.search_names import search_names
 
 _NY_ISH = GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -73.0)])
 _SCHEDULE = "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch"
@@ -89,9 +90,18 @@ class _SourcesTestBase(TestCase):
             pin_type_is_user_provided=True,
         )
         self.wiki = baker.make(Wiki, location=self.location, pin_type=PinType.PARCEL, pin_type_is_user_provided=True)
+        self.answer_commons()
 
     def cache_payload(self, payload: dict, location: Location | None = None) -> None:
         LocationCache.set(location or self.location, "cris_building_usn", payload, query_key="q")
+
+    def answer_commons(self) -> None:
+        """Commons has searched every name the pin reads and found nothing, so only CRIS is pending or listed."""
+        for scope in search_names(self.pin).scopes:
+            LocationCache.set(self.location, "wikimedia", {"items": []}, query_key="q", audience=scope.audience)
+
+    def forget_commons(self) -> None:
+        LocationCache.objects.filter(location=self.location, source="wikimedia").delete()
 
     def pin_panel(self, **params):
         return self.client.get(reverse("pin.article.sources", kwargs={"pin_slug": self.pin.slug}), params)
@@ -204,6 +214,15 @@ class PinSourcesPanelTests(_SourcesTestBase):
             len(_items(response.content.decode())), 2, "a building-scope record lists its own and the site's"
         )
         self.assertNotContains(response, "attempt=")
+
+    def test_a_missing_commons_row_is_fetched_too(self) -> None:
+        """Commons lists books for the Sources tab, so a pin that has not searched it yet waits for it."""
+        self.cache_payload({})
+        self.forget_commons()
+        with patch(_SCHEDULE, return_value=True) as schedule:
+            response = self.pin_panel()
+        schedule.assert_called_once_with("wikimedia", self.pin)
+        self.assertContains(response, "attempt=1")
 
     def test_the_poll_stops_once_its_budget_is_spent(self) -> None:
         with patch(_SCHEDULE, return_value=True) as schedule:
@@ -459,6 +478,14 @@ class WikiSourcesTests(_SourcesTestBase):
         with patch(_SCHEDULE, return_value=True) as schedule:
             response = self.wiki_panel()
         schedule.assert_called_once_with("cris_building", self.pin)
+        self.assertContains(response, "attempt=1")
+
+    def test_a_wiki_without_a_commons_answer_fetches_it_through_the_viewers_own_pin(self) -> None:
+        self.cache_payload({})
+        self.forget_commons()
+        with patch(_SCHEDULE, return_value=True) as schedule:
+            response = self.wiki_panel()
+        schedule.assert_called_once_with("wikimedia", self.pin)
         self.assertContains(response, "attempt=1")
 
 
