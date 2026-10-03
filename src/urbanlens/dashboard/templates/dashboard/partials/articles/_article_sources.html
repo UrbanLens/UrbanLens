@@ -35,7 +35,7 @@
                 hx-get="{{ panel_url }}?selected={{ entry.key|urlencode }}{{ children_qs }}"
                 hx-target="closest .article-sources"
                 hx-swap="innerHTML">
-            <i class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</i>
+            <i class="material-symbols-outlined" aria-hidden="true">{% if entry.type == "page" %}menu_book{% else %}picture_as_pdf{% endif %}</i>
             <span class="article-source-text">
                 <span class="article-source-title">{{ entry.title }}</span>
                 {% if entry.subject %}<span class="article-source-subject">{{ entry.subject }}</span>{% endif %}
@@ -49,7 +49,16 @@
     {% endfor %}
 </ul>
 <div class="article-source-pane">
-    {% if selected_entry %}
+    {% if selected_entry.type == "page" %}
+    <div class="ul-empty">
+        <i class="material-symbols-outlined" aria-hidden="true">menu_book</i>
+        <p>{{ selected_entry.title }} is read on its archive's own page.</p>
+        <a class="btn btn--secondary btn--sm" href="{{ selected_entry.url }}" target="_blank" rel="noopener">
+            <i class="material-symbols-outlined" aria-hidden="true">open_in_new</i>
+            Open it there
+        </a>
+    </div>
+    {% elif selected_entry %}
     <iframe id="article-source-viewer" class="article-source-viewer" src="{{ selected_entry.url }}" title="{{ selected_entry.title }}{% if selected_entry.subject %} - {{ selected_entry.subject }}{% endif %}"></iframe>
     {% endif %}
 </div>

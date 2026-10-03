@@ -224,6 +224,12 @@ class GalleryMediaApiPayloadTests(TestCase):
             "page_url": "https://example.test/a",
             "content_type": "",
             "author": "",
+            "title": "",
+            "description": "",
+            "keywords": "",
+            # At the pin, so the scan is about the place (P196).
+            "latitude": float(self.pin.location.latitude),
+            "longitude": float(self.pin.location.longitude),
         }
         LocationCache.set(self.pin.location, self.source.cache_source, {"items": [item]}, query_key="q")
         payload = self.source.api_payload(self.pin)

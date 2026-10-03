@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
+from urbanlens.dashboard.services.pins.external_data import DocumentMediaPanelSource, MediaPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.pins.external_data import PanelSource
@@ -48,10 +48,10 @@ class WikimediaPlugin(UrbanLensPlugin):
         }
 
     def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the Wikimedia Commons media-gallery provider."""
+        """Contribute the Wikimedia Commons media-gallery provider; the books and scans it finds go to Article > Sources."""
         from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
 
-        return [MediaPanelSource("wikimedia", WikimediaGateway.service_key, WikimediaGateway)]
+        return [DocumentMediaPanelSource("wikimedia", WikimediaGateway.service_key, WikimediaGateway)]
 
 
 class LibraryOfCongressPlugin(UrbanLensPlugin):

@@ -37,7 +37,7 @@ def _wikimedia_item(n: int, **overrides) -> dict:
     item = {
         "url": f"https://upload.wikimedia.org/hrsh/{n}.jpg",
         "thumb_url": f"https://upload.wikimedia.org/hrsh/thumb/{n}.jpg",
-        "caption": f"Kirkbride building {n}",
+        "caption": f"Hudson River State Hospital, Kirkbride building {n}",
         "source": "Wikimedia Commons",
         "page_url": f"https://commons.wikimedia.org/wiki/File:HRSH_{n}.jpg",
         "content_type": "",
@@ -220,7 +220,8 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
 
         self.assertEqual([entry["url"] for entry in self._all("external")], [kept["url"]])
 
-    def test_a_book_scan_commons_returned_before_is_not_listed(self) -> None:
+    def test_a_book_scan_is_not_listed_among_the_photos(self) -> None:
+        """A book about the place belongs on Article > Sources (P196)."""
         scan = _wikimedia_item(
             1,
             url="https://upload.wikimedia.org/wikipedia/commons/2/28/American_Ancestry_4.djvu",

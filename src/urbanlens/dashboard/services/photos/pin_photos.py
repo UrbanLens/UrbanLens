@@ -138,6 +138,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
     from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
     from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
     from urbanlens.dashboard.services.media.previews import gallery_urls
+    from urbanlens.dashboard.services.media.subject_relevance import subject_for_pin
 
     listing = ExternalPhotoListing()
     location = pin.location
@@ -146,6 +147,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
 
     sources = _visible_sources(pin, user)
     entries = cached_entries(pin, sources)
+    subject = subject_for_pin(pin)
     relevance: dict[tuple[str, str], bool | None] = {
         (source, key): is_relevant for source, key, is_relevant in MediaRelevance.objects.filter(profile=profile, location=location, source__in=[source.key for source in sources]).values_list("source", "item_key", "is_relevant")
     }
@@ -160,8 +162,9 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
             if gate_allows(source, pin) and schedule_panel_fetch(source.key, pin):
                 listing.pending.append(source.key)
             continue
+        kept = {key for (source_key, key), is_relevant in relevance.items() if source_key == source.key and is_relevant}
         try:
-            items = source.media_items(data)
+            items = source.gallery_items(data, subject, kept=kept)
         except Exception:
             logger.exception("Media source %s could not read its cached row for location %s", source.key, location.pk)
             continue

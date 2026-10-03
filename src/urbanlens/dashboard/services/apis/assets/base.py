@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 import logging
 from typing import TYPE_CHECKING, ClassVar
+from urllib.parse import urlsplit
 
 from urbanlens.dashboard.services.core.gateway import Gateway
 
@@ -16,6 +17,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 logger = logging.getLogger(__name__)
+
+#: Content types of paged documents.
+PAGED_DOCUMENT_CONTENT_TYPES = frozenset({"application/pdf", "image/vnd.djvu", "image/x-djvu"})
+PAGED_DOCUMENT_EXTENSIONS = (".pdf", ".djvu", ".djv")
 
 #: Mirrors ``LocationCache.query_key``'s ``max_length``. Imported lazily
 #: everywhere else in this module to avoid a model import at module scope.
@@ -33,7 +38,12 @@ class MediaItem:
         source: Human-readable provider name (e.g. ``"Smithsonian Open Access"``).
         page_url: Link to the item's page on the provider's site, if any.
         content_type: The provider-declared content type of ``url``, when it publishes one.
-        author: Who to credit for the photo itself, distinct from ``source`` (the provider/archive)."""
+        author: Who to credit for the photo itself, distinct from ``source`` (the provider/archive).
+        title: The item's own title, when the provider publishes one apart from ``caption``.
+        description: The provider's description of the item.
+        keywords: Subjects, categories or tags the provider files the item under, joined with ``|``.
+        latitude: Where the provider places the item, when it does.
+        longitude: See ``latitude``."""
 
     url: str
     thumb_url: str
@@ -42,6 +52,19 @@ class MediaItem:
     page_url: str = ""
     content_type: str = ""
     author: str = ""
+    title: str = ""
+    description: str = ""
+    keywords: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+
+    @property
+    def is_document(self) -> bool:
+        """Whether this is a paged document (a PDF or DjVu book or scan), which belongs on Article > Sources rather than in a gallery."""
+        content_type = self.content_type.lower()
+        if "pdf" in content_type or "djvu" in content_type:
+            return True
+        return urlsplit(self.url).path.lower().endswith(PAGED_DOCUMENT_EXTENSIONS)
 
 
 class MediaProvider(Gateway, ABC):
@@ -83,18 +106,6 @@ class MediaProvider(Gateway, ABC):
             Generator of ``MediaItem``s.
         """
         ...
-
-    def admits(self, item: MediaItem) -> bool:
-        """Whether ``item`` is one this provider would return today.
-        Readers apply it to cached rows as well, so tightening what a provider keeps takes effect before its cache expires.
-
-        Args:
-            item: A previously fetched item.
-
-        Returns:
-            True unless this provider now rejects it.
-        """
-        return True
 
     def get_media(
         self,

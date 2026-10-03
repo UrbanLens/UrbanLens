@@ -118,16 +118,22 @@ class ArticleSourcesView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
+        from urbanlens.dashboard.services.media.subject_relevance import subject_for_location, subject_for_pin
+
         scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
         attempt = _poll_attempt(request)
         # Child pin details off: the parcel's own documents only, not each building's.
         include_children = request.GET.get("children", "1") != "0"
+        # A pin page reads its own names' searches; a wiki page only the shared ones.
+        reader = scope.driver if scope.pin_slug else None
         listing = collect_source_documents(
             scope.location,
             viewer=request.user,
             driver=scope.driver,
             site_scope=scope.site_scope and include_children,
             may_fetch=attempt < SOURCES_MAX_POLL_ATTEMPTS,
+            subject=subject_for_pin(reader) if reader is not None else subject_for_location(scope.location),
+            reader=reader,
         )
 
         selected = request.GET.get("selected", "")
@@ -201,15 +207,15 @@ class ArticleSourcesView(LoginRequiredMixin, View):
 
     @staticmethod
     def _entry(scope: SourcesScope, listed: ListedDocument, selected: str) -> dict:
-        """One document's template row."""
+        """One document's template row: viewed through the scoped proxy, or on the provider's page when it names one."""
         document = listed.document
         key = f"{listed.source.key}:{document.document_id}"
         return {
             "key": key,
             "provider": listed.source.key,
             "provider_title": listed.source.title,
-            "type": "pdf",
-            "url": scope.document_url(listed.source.key, document.document_id),
+            "type": "page" if document.page_url else "pdf",
+            "url": document.page_url or scope.document_url(listed.source.key, document.document_id),
             "title": document.title,
             "subject": document.subject,
             "building": document.subject if document.subject_kind == "building" else "",

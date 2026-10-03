@@ -425,18 +425,28 @@ class WikiMediaProviderViewTests(TestCase):
 
         panel = get_panel_source("wikimedia")
         url_a = "https://example.com/a.jpg"
+        # Geolocated at the place, so both are about it (P196).
+        here = {"latitude": float(self.location.latitude), "longitude": float(self.location.longitude)}
         LocationCache.set(
             self.location,
             panel.cache_source,
             {
                 "items": [
-                    {"url": url_a, "thumb_url": url_a, "caption": "A", "source": "Wikimedia", "page_url": url_a},
+                    {
+                        "url": url_a,
+                        "thumb_url": url_a,
+                        "caption": "A",
+                        "source": "Wikimedia",
+                        "page_url": url_a,
+                        **here,
+                    },
                     {
                         "url": "https://example.com/b.jpg",
                         "thumb_url": "https://example.com/b.jpg",
                         "caption": "B",
                         "source": "Wikimedia",
                         "page_url": "https://example.com/b.jpg",
+                        **here,
                     },
                 ]
             },
@@ -464,10 +474,15 @@ class WikiMediaProviderViewTests(TestCase):
         if not isinstance(panel, GalleryMediaSource):
             self.fail("wikimedia is no longer a gallery source")
         url = "https://example.com/kept.jpg"
+        here = {"latitude": float(self.location.latitude), "longitude": float(self.location.longitude)}
         LocationCache.set(
             self.location,
             panel.cache_source,
-            {"items": [{"url": url, "thumb_url": url, "caption": "Kept", "source": "Wikimedia", "page_url": url}]},
+            {
+                "items": [
+                    {"url": url, "thumb_url": url, "caption": "Kept", "source": "Wikimedia", "page_url": url, **here}
+                ]
+            },
             query_key="q",
         )
         kept = Image.objects.create(

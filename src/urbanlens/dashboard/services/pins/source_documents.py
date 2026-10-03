@@ -10,7 +10,7 @@ import filetype
 
 from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_if_small
 from urbanlens.dashboard.services.media.proxied_media import INLINE_MEDIA_TYPES, looks_like_pdf
-from urbanlens.dashboard.services.pins.external_data import DocumentPanelSource, DocumentUnavailableError, SourceDocument, document_panel_sources, get_panel_source, panel_visible_to
+from urbanlens.dashboard.services.pins.external_data import DocumentPanelSource, DocumentUnavailableError, NameSearchSource, SourceDocument, document_panel_sources, get_panel_source, panel_visible_to
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.media.subject_relevance import MediaSubject
 
 logger = logging.getLogger(__name__)
 
@@ -53,15 +54,29 @@ class SourceListing:
     pending: bool
 
 
-def _cached_payload(location: Location, source: DocumentPanelSource) -> dict | None:
-    """A source's fresh cached payload for ``location``, or None when nothing fresh has landed."""
+def _cached_payload(location: Location, source: DocumentPanelSource, reader: Pin | None = None) -> dict | None:
+    """A source's fresh cached payload for ``location``, or None when nothing fresh has landed.
+
+    A name-built source's payload is the shared row's, plus the reader pin's own names' row when it has one.
+    """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
+    if reader is not None and isinstance(source, NameSearchSource):
+        return source.cached_data(reader)
     row = LocationCache.get_fresh(location, source.cache_source)
     return None if row is None else (row.data or {})
 
 
-def collect_source_documents(location: Location, *, viewer: AbstractBaseUser | AnonymousUser, driver: Pin | None, site_scope: bool, may_fetch: bool) -> SourceListing:
+def collect_source_documents(
+    location: Location,
+    *,
+    viewer: AbstractBaseUser | AnonymousUser,
+    driver: Pin | None,
+    site_scope: bool,
+    may_fetch: bool,
+    subject: MediaSubject | None = None,
+    reader: Pin | None = None,
+) -> SourceListing:
     """Gather every visible source's documents for a location, scheduling a fetch for any source not ready yet.
 
     Args:
@@ -70,6 +85,8 @@ def collect_source_documents(location: Location, *, viewer: AbstractBaseUser | A
         driver: The pin a fetch runs as (its owner's quota and ``external_apis_enabled``), or None when there is none.
         site_scope: Whether the page describes a parcel/site rather than one building.
         may_fetch: False once the caller's poll budget is spent.
+        subject: The place, which documents found by searching must be about; without it they are not listed.
+        reader: The pin whose own names' rows are read too (pin pages), or None for the shared rows alone (wiki pages).
 
     Returns:
         The listing. A source that is fetching contributes nothing yet; one that cannot fetch lists whatever it has.
@@ -81,14 +98,14 @@ def collect_source_documents(location: Location, *, viewer: AbstractBaseUser | A
     for source in document_panel_sources():
         if not panel_visible_to(viewer, source):
             continue
-        data = _cached_payload(location, source)
+        data = _cached_payload(location, source, reader)
         if data is None or not source.documents_ready(data, site_scope=site_scope):
             if may_fetch and driver is not None and source.gate(driver) and external_data.schedule_panel_fetch(source.key, driver):
                 pending = True
                 continue
             if data is None:
                 continue
-        documents.extend(ListedDocument(source, document) for document in source.source_documents(data, site_scope=site_scope))
+        documents.extend(ListedDocument(source, document) for document in source.source_documents(data, site_scope=site_scope, subject=subject))
     return SourceListing(documents=documents, pending=pending)
 
 
@@ -101,6 +118,8 @@ def warm_site_scope_documents(pin: Pin) -> None:
     from urbanlens.dashboard.services.pins import external_data
 
     for source in document_panel_sources():
+        if not source.documents_depend_on_site_scope:
+            continue
         data = _cached_payload(pin.location, source)
         if data is not None and source.documents_ready(data, site_scope=True):
             continue

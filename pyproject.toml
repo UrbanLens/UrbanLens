@@ -79,6 +79,7 @@ dependencies = [
     "pyogrio~=0.13.0",
     "ijson~=3.5.1",
     "pyarrow~=24.0",
+    "geonamescache~=3.0.2",
 ]
 
 [build-system]

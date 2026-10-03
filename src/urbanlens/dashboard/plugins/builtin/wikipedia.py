@@ -312,9 +312,15 @@ class WikipediaMediaPanelSource(GatewayMediaPanelSource):
             LocationCache.set(pin.location, self.cache_source, {"items": []}, query_key="")
             return
         if isinstance(gateway, WikipediaMediaGateway) and pin.location is not None:
+            from urbanlens.dashboard.services.apis.assets.base import MediaItem
+            from urbanlens.dashboard.services.media.subject_relevance import subject_for_location
+
             wikimedia_cache = LocationCache.get_fresh(pin.location, "wikimedia")
             if wikimedia_cache is not None:
-                gateway.known_urls = frozenset(item.get("url", "") for item in (wikimedia_cache.data or {}).get("items", []) if item.get("url"))
+                # Only what the Commons tab shows: an article image it leaves out as not about the place stays here.
+                subject = subject_for_location(pin.location)
+                shown = (MediaItem(**item) for item in (wikimedia_cache.data or {}).get("items", []))
+                gateway.known_urls = frozenset(item.url for item in shown if item.url and subject.matches(item))
         gateway.get_media(pin.location, terms)
 
 

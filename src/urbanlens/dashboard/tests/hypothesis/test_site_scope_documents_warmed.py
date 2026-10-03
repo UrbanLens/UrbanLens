@@ -50,3 +50,12 @@ class WarmSiteScopeDocumentsTests(SimpleTestCase):
         schedule = self._warm([_source("cris_building", ready=False, gate=False)])
 
         schedule.assert_not_called()
+
+    def test_a_source_whose_documents_are_the_same_at_any_scope_is_left_alone(self) -> None:
+        """Wikimedia's books are found by name: becoming a site changes nothing about them (P196)."""
+        source = _source("wikimedia", ready=False)
+        source.documents_depend_on_site_scope = False
+
+        schedule = self._warm([source])
+
+        schedule.assert_not_called()
