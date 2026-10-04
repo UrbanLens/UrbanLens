@@ -2745,18 +2745,32 @@ v0.8.0 as a step would be a new rule. That makes the first option Jess's call (a
 
 P53's fix leaves out the panels already known to be empty. That shortens a returning visit: on an ordinary place,
 49 requests became 22 and the page settled at 2.4 s instead of 4.3 s. A panel with no stored answer still has to
-load, fetch and poll, so the first visit to a place is as slow as before. P53 measured that tail on 2026-09-06 at
-45 s laned against 30 s unlaned, cold. It has not been re-measured cleanly, because dev's panel worker fails every
-first cache write (see P53's archive entry). In a process that has not yet resolved a remote geo boundary, the probe
-also cannot decide CRIS's or Digital Commonwealth's gate, so on the first page that process serves those load.
+load, fetch and poll, so the first visit to a place is as slow as before.
+
+**Measured cold, 2026-10-04,** on `development_main` with every worker synced to the release branch (P53's caveat about
+a stale panel worker no longer applies). A pin created through `/dashboard/map/add/` at Harlem Valley Psychiatric
+Center (41.6597, -73.5650, no Location within 2 km), then opened at once with `p53-measure.mjs`: 169 requests, 119 of
+them polls, a peak of 20 at once, settled at 39.1 s. The last panels to settle mostly settled as nothing (204):
+Site Features at 39.1 s, the CRIS media at 37.5 s, the Property Records Overview at 37.5 s, Satellite at 32.6 s with
+an image, Library of Congress at 29.3 s, GDELT at 25.1 s.
+
+`ApiCallLog` for the same minutes shows what they waited on. REData's points-of-interest lookup and its CRIS
+`cultural-resources/lookup/` each ran into UrbanLens's 30 s request timeout. Reference-document search answered 503
+after 20.6 s, and the parcel lookup 503 three times, at up to 2.6 s each. News search took 14.4 s, and each imagery
+composition about 5 s. So this tail is REData's latency on a point it has not seen, not the browser's lanes: six
+lanes would start the same slow requests sooner but not finish them sooner. The points-of-interest timeout is P240's.
+
+In a process that has not yet resolved a remote geo boundary, the probe also cannot decide CRIS's or Digital
+Commonwealth's gate, so on the first page that process serves those load.
 
 What is left of P53's options, both still undecided:
 
 - **More lanes.** Six panel lanes instead of four cut the tail by about a third and raised the peak by two (P53's
-  2026-09-06 measurement).
+  2026-09-06 measurement). The 2026-10-04 cold visit above was bound by upstream timeouts, which lanes do not shorten.
 - **Have the answer stored before the first visit.** Background enrichment (`LocationCacheEnrichmentSource`)
   already warms some sources per location. Warming the rest when a pin is created would turn the first visit into a
-  returning one.
+  returning one, but only for a visit 30 s or more after creation, since the slow answers above take that long
+  whoever asks. A bulk import would need to be left out, or it would spend REData's time on pins nobody opens.
 
 ## P278 — MapLibre 5.24's attribution sanitizer can be bypassed, and the fix is only in the v6 line this app pins against
 
