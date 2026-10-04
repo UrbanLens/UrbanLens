@@ -78,6 +78,10 @@ _SITE_BUILDING_KEY = "site_building"
 
 #: A site-scope payload's roster of the campus buildings it resolved, from which each building child is answered.
 _CAMPUS_BUILDINGS_KEY = "campus_buildings"
+#: The campus records a site pass left without a detail record, uuid to the subject kind each documents.
+_CAMPUS_PENDING_KEY = "campus_pending"
+#: The radius a site pass searched, so a later pass can repeat its lookup.
+_CAMPUS_RADIUS_KEY = "campus_radius"
 
 _PDF_CONTENT_TYPE = "application/pdf"
 
@@ -356,6 +360,15 @@ def campus_roster_entry(resource: dict, record: dict | None) -> dict | None:
     }
 
 
+def _with_roster_entry(roster: list[dict], entry: dict | None) -> list[dict]:
+    """``roster`` with ``entry`` in place of the one for its building, or added when there is none."""
+    if entry is None:
+        return roster
+    if any(existing.get("resource_uuid") == entry["resource_uuid"] for existing in roster):
+        return [entry if existing.get("resource_uuid") == entry["resource_uuid"] else existing for existing in roster]
+    return [*roster, entry]
+
+
 def own_roster_entry(roster: list[dict], location: Location, *, buildings: list[dict] | None = None) -> dict | None:
     """The campus building on a site's roster that is the building at ``location``.
 
@@ -423,6 +436,9 @@ _MAX_SITE_DETAIL_FETCHES = 12
 #: Campus detail fetches stop once the whole fetch has run this long, leaving the task's 110s soft limit room
 #: for one more request's timeout.
 _SITE_DETAIL_BUDGET_SECONDS = 50.0
+#: How long each later pass waits for REData's bulk queue to detail a campus; each stays under RabbitMQ's default
+#: 30-minute consumer timeout, which a broker not yet configured for P290 still applies.
+CAMPUS_FILL_DELAYS_SECONDS = (10 * 60, 20 * 60, 25 * 60)
 #: How long a caller waits on its site's fetch in flight: the panel-fetch task's soft time limit. The requests
 #: before the detail budget is checked are unbudgeted, so the limit, not the budget, is what stops a slow fetch;
 #: the shared lock (this plus 15 s) outlives it, and a waiter is stopped before it could fetch the site again.
@@ -568,6 +584,11 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             records = self._campus_records(gateway, [*reviews, *candidates], started=started)
             attachments.extend(self._campus_attachments(candidates, records))
             attachments.extend(self._campus_attachments(reviews, records, subject_kind=_SUBJECT_SITE))
+            pending = {resource["uuid"]: _SUBJECT_SITE for resource in reviews if resource["uuid"] not in records}
+            pending.update({resource["uuid"]: _SUBJECT_BUILDING for resource in candidates if resource["uuid"] not in records})
+            if pending:
+                data[_CAMPUS_PENDING_KEY] = pending
+                data[_CAMPUS_RADIUS_KEY] = radius
             roster = [campus_roster_entry(building, building_record)] if building is not None else []
             roster.extend(campus_roster_entry(candidate, records.get(candidate["uuid"])) for candidate in candidates)
             data[_CAMPUS_BUILDINGS_KEY] = [entry for entry in roster if entry is not None]
@@ -590,6 +611,8 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         self._link_register_listings(pin)
         if site_scope:
             self._seed_from_site(pin.location)
+            if data.get(_CAMPUS_PENDING_KEY):
+                self.queue_campus_fill(pin.location.pk, 0)
 
     @staticmethod
     def _request_extractions(location_id: int, unextracted: dict[str, list[int]]) -> None:
@@ -782,6 +805,77 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
                     unextracted.setdefault(resource_uuid, []).append(attachment_id)
             result.append(attachment)
         return result
+
+    @staticmethod
+    def queue_campus_fill(location_id: int, attempt: int) -> None:
+        """Queue pass ``attempt`` of :meth:`fill_campus_details` for a site, unless every pass has run."""
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import fill_cris_campus_details
+
+        if attempt < len(CAMPUS_FILL_DELAYS_SECONDS):
+            safely_enqueue_task(fill_cris_campus_details, location_id, attempt, countdown=CAMPUS_FILL_DELAYS_SECONDS[attempt])
+
+    def fill_campus_details(self, location: Location) -> tuple[int, int]:
+        """Add to a site's row the campus records its pass left undetailed, as far as REData can now give them.
+
+        One lookup finds those REData's bulk queue has detailed since; the rest are fetched live, as many as a site
+        pass would. Only the records are added: the row keeps its age and everything else in it, extractions merged
+        since included.
+
+        Args:
+            location: The site's Location.
+
+        Returns:
+            How many records were added, and how many are still undetailed.
+
+        Raises:
+            PropertyRecordsUnavailableError: The lookup failed.
+            ValueError: REData is not configured.
+        """
+        from django.db import transaction
+
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
+
+        row = self._site_row(location)
+        pending = (row.data or {}).get(_CAMPUS_PENDING_KEY) if row is not None else None
+        if row is None or not isinstance(pending, dict) or not pending:
+            return 0, 0
+        gateway = RedataGateway()
+        radius = float(row.data.get(_CAMPUS_RADIUS_KEY) or _SITE_RADIUS_METERS)
+        resources = gateway.lookup_cultural_resources(float(location.latitude), float(location.longitude), radius_meters=radius, provider=_PROVIDER)
+        found = {resource["uuid"]: resource for resource in resources if resource.get("uuid")}
+        records = self._campus_records(gateway, [found.get(uuid) or {"uuid": uuid} for uuid in pending], started=time.monotonic())
+        if not records:
+            return 0, len(pending)
+        with transaction.atomic():
+            locked = LocationCache.objects.select_for_update().filter(pk=row.pk).first()
+            if locked is None:
+                return 0, 0
+            data = dict(locked.data or {})
+            still = dict(data.get(_CAMPUS_PENDING_KEY) or {})
+            attachments = list(data.get("attachments") or [])
+            roster = list(data.get(_CAMPUS_BUILDINGS_KEY) or [])
+            filled = 0
+            for resource_uuid, record in records.items():
+                subject_kind = still.pop(resource_uuid, None)
+                if subject_kind is None:
+                    continue
+                resource = found.get(resource_uuid) or {"uuid": resource_uuid}
+                attachments.extend(self._campus_attachments([resource], {resource_uuid: record}, subject_kind=subject_kind))
+                if subject_kind == _SUBJECT_BUILDING:
+                    roster = _with_roster_entry(roster, campus_roster_entry(resource, record))
+                filled += 1
+            data["attachments"] = attachments
+            data[_CAMPUS_BUILDINGS_KEY] = roster
+            if still:
+                data[_CAMPUS_PENDING_KEY] = still
+            else:
+                data.pop(_CAMPUS_PENDING_KEY, None)
+            LocationCache.objects.filter(pk=locked.pk).update(data=data)
+        if filled:
+            self._seed_from_site(location)
+        return filled, len(still)
 
     # Building children, answered from their site
 

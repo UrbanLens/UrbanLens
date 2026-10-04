@@ -1651,6 +1651,38 @@ def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_id
     return merged
 
 
+@shared_task(soft_time_limit=110, time_limit=130, queue=Queue.MAINTENANCE)
+def fill_cris_campus_details(location_id: int, attempt: int = 0) -> int:
+    """Add to a campus's CRIS row the records its site pass left undetailed, queueing the next pass while any remain.
+
+    Args:
+        location_id: PK of the site's Location.
+        attempt: How many passes ran before this one.
+
+    Returns:
+        How many records were added.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.plugins.builtin.cris_buildings import CrisBuildingPanelSource
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+
+    location = Location.objects.filter(pk=location_id).first()
+    if location is None:
+        return 0
+    source = CrisBuildingPanelSource()
+    try:
+        filled, remaining = source.fill_campus_details(location)
+    except PropertyRecordsUnavailableError:
+        logger.info("fill_cris_campus_details: REData's lookup failed for location %s", location_id, exc_info=True)
+        filled, remaining = 0, 1
+    except ValueError:
+        logger.debug("fill_cris_campus_details: REData is not configured", exc_info=True)
+        return 0
+    if remaining:
+        source.queue_campus_fill(location_id, attempt + 1)
+    return filled
+
+
 def _merge_cris_extraction(location_id: int, resource_uuid: str, attachment_id: int, images: list) -> int:
     """Write one attachment's extracted images into the cached CRIS payload, returning 1 if it was there to update."""
     from django.db import transaction

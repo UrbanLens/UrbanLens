@@ -584,12 +584,14 @@ no request. The dev call counts were not re-measured against a live campus.
   roster when it names more than half of the site's buildings and has more than half of its own positioned buildings
   on the site, which keeps a town reconnaissance out. HRSH's 12SD00541 passes with 58 of 94. A survey that covers the
   site and as much again elsewhere still fails the second test, so its unpositioned buildings are not listed.
-- **Per-pass caps.** One pass live-fetches at most `_MAX_SITE_DETAIL_FETCHES` (12) undetailed
-  buildings, inside a 50 s budget under the task's 110 s soft limit. P234 removed the 40-building
-  cap on attachments. The bulk queue warms the rest, but the campus page's Sources only list them when the
-  cache row is next refetched, because nothing re-polls a row that is already `documents_ready`.
-  The building children no longer depend on the caps: every positioned building is on the roster,
-  and an undetailed one costs its child one detail fetch when opened.
+- **Per-pass caps, filled later since 2026-10-04.** One pass live-fetches at most `_MAX_SITE_DETAIL_FETCHES` (12)
+  undetailed buildings, inside a 50 s budget under the task's 110 s soft limit, and asks REData's bulk queue to warm
+  the rest. The row records what it left undetailed (`campus_pending`) and the radius it searched.
+  `tasks.fill_cris_campus_details` then runs up to three more passes, 10, 20 and 25 minutes apart. Each does one lookup,
+  adds every record REData has detailed since, and live-fetches up to the same cap. It changes nothing else in the row
+  and leaves its age alone (`test_cris_campus_seeding.py::UndetailedCampusRecordsAreFilledLaterTests`). A campus
+  REData has not warmed within an hour gains 36 more buildings, and the rest wait for the row's refetch. Not measured
+  against HRSH's live 94 buildings.
 - **A child the roster does not cover still fetches its own.** That is a footprint with no CRIS
   point inside it, a point more than 15 m from any, a building with no published position (a
   `linked_resources` stub), or any child of a site whose CRIS answer is empty (`{}` carries no

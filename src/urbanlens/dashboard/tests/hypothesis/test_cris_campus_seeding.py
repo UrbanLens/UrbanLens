@@ -11,9 +11,11 @@ gateway's own request sharing still applies and a count here is a count of real 
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import contextmanager
 import copy
 from datetime import timedelta
 import json
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -22,6 +24,7 @@ from django.core.cache import cache
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
@@ -36,6 +39,9 @@ from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.external_data import run_panel_fetch
 from urbanlens.dashboard.tests.hypothesis.building_fixtures import CAMPUS_LAT, CAMPUS_LNG, offset, parcel_square, rect
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _SOURCE = "cris_building"
 _CACHE = "cris_building_usn"
@@ -141,6 +147,7 @@ class CampusSeedingTestCase(TestCase):
             uuid: self.child_at(north, east) for uuid, _usn, _name, north, east in _BUILDINGS
         }
         self.enqueued: list[tuple] = []
+        self.enqueue_options: list[dict] = []
 
     def child_at(self, north_m: float, east_m: float, **location_fields) -> Pin:
         latitude, longitude = (round(value, 6) for value in offset(north_m, east_m))
@@ -160,6 +167,15 @@ class CampusSeedingTestCase(TestCase):
         )
 
     def run_fetch(self, pin: Pin) -> None:
+        with self.redata_patched():
+            run_panel_fetch(_SOURCE, Pin.objects.select_related("location", "profile").get(pk=pin.pk), None)
+
+    @contextmanager
+    def redata_patched(self) -> Iterator[None]:
+        def enqueue(*args, **kwargs) -> None:
+            self.enqueued.append(args)
+            self.enqueue_options.append(kwargs)
+
         with (
             patch.object(CrisBuildingPanelSource, "geo_boundary", _NY_ISH),
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
@@ -176,12 +192,9 @@ class CampusSeedingTestCase(TestCase):
                 autospec=True,
                 side_effect=self.redata.extract,
             ),
-            patch(
-                "urbanlens.dashboard.services.core.celery.safely_enqueue_task",
-                side_effect=lambda *args, **kwargs: self.enqueued.append(args),
-            ),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", side_effect=enqueue),
         ):
-            run_panel_fetch(_SOURCE, Pin.objects.select_related("location", "profile").get(pk=pin.pk), None)
+            yield
 
     def row(self, pin: Pin) -> LocationCache | None:
         return LocationCache.objects.filter(location_id=pin.location_id, source=_CACHE).first()
@@ -507,3 +520,107 @@ class SweepSeedsTheBuildingsItCreatesTests(CampusSeedingTestCase):
             {name for name, row in rows.items() if row is not None and row.data.get("USNName") == name},
             {name for _u, _n, name, _a, _b in _BUILDINGS},
         )
+
+
+class UndetailedCampusRecordsAreFilledLaterTests(CampusSeedingTestCase):
+    """A pass details only so many buildings live; REData's bulk queue warms the rest for a later pass to add (P24).
+
+    Before, the campus page's Sources listed the rest only when its row was next refetched, a cache window later.
+    """
+
+    def fills(self) -> list[tuple]:
+        return [args[1:] for args in self.enqueued if args and args[0] is tasks.fill_cris_campus_details]
+
+    def fill_countdowns(self) -> list[int | None]:
+        return [
+            options.get("countdown")
+            for args, options in zip(self.enqueued, self.enqueue_options, strict=True)
+            if args and args[0] is tasks.fill_cris_campus_details
+        ]
+
+    def run_fill(self, attempt: int = 0) -> int:
+        with self.redata_patched():
+            return tasks.fill_cris_campus_details(self.site_location.pk, attempt)
+
+    def warm(self) -> None:
+        """REData's bulk queue has detailed every building, so its lookup rows carry their attachments."""
+        for uuid, row in self.redata.buildings.items():
+            row["attachments"] = copy.deepcopy(self.redata.details[uuid]["attachments"])
+            row["detail_retrieved_at"] = "2026-10-04T00:00:00Z"
+
+    def campus_building_ids(self) -> set[str]:
+        attachments = self.landed(self.site).data["attachments"]
+        return {attachment["resource_uuid"] for attachment in attachments if attachment.get("site_building")}
+
+    def campus_buildings(self) -> set[str]:
+        return set(self.redata.buildings) - {self.landed(self.site).data.get("resource_uuid")}
+
+    def test_a_pass_capped_short_queues_a_later_one(self) -> None:
+        with patch.object(cris_module, "_MAX_SITE_DETAIL_FETCHES", 2):
+            self.run_fetch(self.site)
+
+        self.assertEqual(len(self.campus_building_ids()), 2)
+        self.assertEqual(self.fills(), [(self.site_location.pk, 0)])
+        self.assertTrue(all(0 < countdown < 30 * 60 for countdown in self.fill_countdowns()), self.fill_countdowns())
+
+    def test_a_pass_that_detailed_everything_queues_nothing(self) -> None:
+        self.run_fetch(self.site)
+
+        self.assertEqual(self.campus_building_ids(), self.campus_buildings())
+        self.assertEqual(self.fills(), [])
+
+    def test_the_later_pass_adds_what_redata_warmed_with_one_lookup(self) -> None:
+        with patch.object(cris_module, "_MAX_SITE_DETAIL_FETCHES", 2):
+            self.run_fetch(self.site)
+        updated = self.landed(self.site).updated
+        self.warm()
+        before = Counter(self.redata.calls)
+
+        self.run_fill()
+
+        self.assertEqual(self.redata.calls - before, Counter({"lookup": 1}))
+        self.assertEqual(self.campus_building_ids(), self.campus_buildings())
+        row = self.landed(self.site)
+        self.assertTrue(all(entry["detailed"] for entry in row.data["campus_buildings"]), row.data["campus_buildings"])
+        self.assertEqual(row.updated, updated, "the row keeps its age, so it is refetched when it would have been")
+        self.assertEqual(self.fills(), [(self.site_location.pk, 0)], "nothing is left for another pass")
+
+    def test_a_child_whose_building_was_filled_costs_no_request(self) -> None:
+        with patch.object(cris_module, "_MAX_SITE_DETAIL_FETCHES", 0):
+            self.run_fetch(self.site)
+        self.warm()
+        self.run_fill()
+        before = Counter(self.redata.calls)
+
+        self.run_fetch(self.children["b-45"])
+
+        self.assertEqual(self.redata.calls - before, Counter())
+        self.assertIn(102, [attachment["id"] for attachment in self.landed(self.children["b-45"]).data["attachments"]])
+
+    def test_without_warming_a_later_pass_fetches_up_to_the_cap_and_queues_the_next(self) -> None:
+        with patch.object(cris_module, "_MAX_SITE_DETAIL_FETCHES", 2):
+            self.run_fetch(self.site)
+            before = Counter(self.redata.calls)
+            self.run_fill()
+
+        self.assertEqual((self.redata.calls - before)["detail"], 2)
+        self.assertEqual(len(self.campus_building_ids()), 4)
+        self.assertEqual(self.fills(), [(self.site_location.pk, 0), (self.site_location.pk, 1)])
+
+    def test_the_last_pass_queues_no_other(self) -> None:
+        with patch.object(cris_module, "_MAX_SITE_DETAIL_FETCHES", 0):
+            self.run_fetch(self.site)
+            self.run_fill(attempt=len(cris_module.CAMPUS_FILL_DELAYS_SECONDS) - 1)
+
+        self.assertEqual(self.fills(), [(self.site_location.pk, 0)])
+
+    def test_a_document_extracted_meanwhile_is_kept(self) -> None:
+        with patch.object(cris_module, "_MAX_SITE_DETAIL_FETCHES", 2):
+            self.run_fetch(self.site)
+        tasks._merge_cris_extraction(self.site_location.pk, "dist-hrsh", 900, [{"url": "https://example.com/1.jpg"}])
+        self.warm()
+
+        self.run_fill()
+
+        documents = [a for a in self.landed(self.site).data["attachments"] if a.get("id") == 900]
+        self.assertEqual(documents[0]["extracted_images"], [{"url": "https://example.com/1.jpg"}])
