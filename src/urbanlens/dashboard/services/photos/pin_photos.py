@@ -124,6 +124,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
     cached rows, local copies and thumbnail conversion. Differs where a single list needs it: items the
     viewer marked not relevant and items with nothing to show are left out, a photo two providers both
     return appears once, and one the viewer already saved to their own pins is left to their own photos.
+    A photo the viewer removed from their results is left out whichever provider returns it.
     A provider with no answer yet is scheduled and reported as pending.
 
     Args:
@@ -148,9 +149,12 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
     sources = _visible_sources(pin, user)
     entries = cached_entries(pin, sources)
     subject = subject_for_pin(pin)
-    relevance: dict[tuple[str, str], bool | None] = {
-        (source, key): is_relevant for source, key, is_relevant in MediaRelevance.objects.filter(profile=profile, location=location, source__in=[source.key for source in sources]).values_list("source", "item_key", "is_relevant")
-    }
+    relevance: dict[tuple[str, str], bool | None] = {}
+    removed: set[str] = set()
+    for source_key, key, is_relevant, is_vote in MediaRelevance.objects.filter(profile=profile, location=location, source__in=[source.key for source in sources]).values_list("source", "item_key", "is_relevant", "is_vote"):
+        relevance[source_key, key] = is_relevant
+        if not is_vote:
+            removed.add(key)
 
     candidates: list[ExternalPhoto] = []
     for source in sources:
@@ -174,7 +178,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
         for item, remote in zip(items, gallery_urls(items, provider=source.key), strict=True):
             key = media_item_key(item.url)
             mark = relevance.get((source.key, key))
-            if mark is False:
+            if mark is False or key in removed:
                 continue
             local_url = local[item.url].file_url if item.url in local else ""
             thumb = (local[item.url].thumb_url if item.url in local else "") or remote.thumb

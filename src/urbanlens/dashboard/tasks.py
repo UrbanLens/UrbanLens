@@ -4085,6 +4085,40 @@ def prune_api_call_logs() -> int:
 #: See prune_api_call_logs: 12 months of cost-series history plus margin.
 _API_CALL_LOG_RETENTION_DAYS = 400
 
+_PUBLIC_MEDIA_SWEEP_LOCK_KEY = "urbanlens:public-media-sweep-lock"
+#: Under the beat interval (15 minutes), and over a run's budget plus its last batch.
+_PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS = 600
+_PUBLIC_MEDIA_SWEEP_BUDGET_SECONDS = 120
+_PUBLIC_MEDIA_SWEEP_BATCH = 100
+
+
+@shared_task(queue=Queue.MAINTENANCE, soft_time_limit=_PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS - 60, time_limit=_PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS)
+def sweep_public_media_cache() -> int:
+    """Remove cached public-source results that no one is shown (``services.media.public_media_sweep``).
+
+    Scheduled, so a ``subject_relevance.RULE_VERSION`` bump is swept on the next tick; a run out of time queues the
+    next rather than waiting for one.
+
+    Returns:
+        How many results were removed.
+    """
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.public_media_sweep import sweep_public_media
+
+    token = acquire_lock(_PUBLIC_MEDIA_SWEEP_LOCK_KEY, _PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS)
+    if token is None:
+        logger.info("sweep_public_media_cache: a previous run is still in flight; skipping")
+        return 0
+    try:
+        report = sweep_public_media(batch_size=_PUBLIC_MEDIA_SWEEP_BATCH, budget_seconds=_PUBLIC_MEDIA_SWEEP_BUDGET_SECONDS)
+    finally:
+        release_lock(_PUBLIC_MEDIA_SWEEP_LOCK_KEY, token)
+    if report.removed:
+        logger.info("Public-media sweep removed %d result(s) from %d cache row(s)", report.removed, report.rows)
+    if report.remaining:
+        safely_enqueue_task(sweep_public_media_cache, durable=False)
+    return report.removed
+
 
 @shared_task(queue=Queue.MAINTENANCE)
 def prune_expired_sessions() -> None:

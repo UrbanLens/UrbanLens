@@ -7,10 +7,13 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, Index, UniqueConstraint
+from django.db.models import CASCADE, BooleanField, CharField, CheckConstraint, ForeignKey, Index, Q, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import MediaRelevanceManager
+
+#: Length of a ``media_item_key``, and the most ``MediaRelevance.item_key`` holds.
+ITEM_KEY_LENGTH = 40
 
 
 def media_item_key(url: str) -> str:
@@ -34,13 +37,17 @@ class MediaRelevance(abstract.DashboardModel):
     ``is_relevant``: ``True`` (explicitly relevant - sorts first under
     "Relevant first"), ``False`` (not relevant - hidden by default), or the
     row simply doesn't exist (neutral/unmarked - shown, not prioritized).
+
+    ``is_vote``: whether the mark counts toward the item's community score. A "remove from my results" mark is not a
+    vote: it hides the item from this profile's pin pages only, so it is never ``is_relevant``.
     """
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="media_relevance_marks")
     location = ForeignKey("dashboard.Location", on_delete=CASCADE, related_name="media_relevance_marks")
     source = CharField(max_length=30)
-    item_key = CharField(max_length=40)
+    item_key = CharField(max_length=ITEM_KEY_LENGTH)
     is_relevant = BooleanField()
+    is_vote = BooleanField(default=True)
 
     objects = MediaRelevanceManager()
 
@@ -52,6 +59,7 @@ class MediaRelevance(abstract.DashboardModel):
         db_table = "dashboard_media_relevance"
         constraints = [
             UniqueConstraint(fields=["profile", "location", "source", "item_key"], name="db_media_relevance_unique"),
+            CheckConstraint(condition=Q(is_vote=True) | Q(is_relevant=False), name="db_media_relevance_private_hides"),
         ]
         indexes = [
             Index(fields=["profile", "location"], name="idxdb_medrel_profile_loc"),

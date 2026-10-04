@@ -282,7 +282,13 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   nothing contradicting it; a generic name ("Historic Mansion") needs a local indicator. Conflicts come
   from a GeoNames gazetteer (`services.geo.gazetteer`, CC BY 4.0), bundled from `geonamescache` by
   `bun run gazetteer:build`. An item the viewer
-  marked relevant, or the wiki voted above zero, stays (`services.media.subject_relevance`)
+  marked relevant, or the wiki voted above zero, stays (`services.media.subject_relevance`). A scheduled sweep
+  (`tasks.sweep_public_media_cache`, `services.media.public_media_sweep`) then removes from the cached rows
+  whatever no reader is shown and nobody marked or copied, once per fetch and again whenever
+  `subject_relevance.RULE_VERSION` is bumped
+- **Remove from my results** — the Private Pin page's lightbox, for Media gallery and Photos > From public
+  sources items, offers Relevant / Not relevant votes and a private hide: a `MediaRelevance` row with
+  `is_vote=False`, which hides the item from that account's pin pages and counts toward no score
 - **REData photo relevance scoring** — every new photo (upload, Google Places business photo
   backfill, or Media-gallery item materialized via "mark relevant"/"send to wiki") is submitted to
   REData's photo-scoring service with whatever signal is available (capture/location coordinates,

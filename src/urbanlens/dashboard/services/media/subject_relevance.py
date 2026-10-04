@@ -27,6 +27,11 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
+    from urbanlens.dashboard.services.pins.search_names import SearchNames
+
+#: The version of the rules in this module. Bump it with any change to what they keep, so cached results already
+#: swept under the old rules are judged again (``services.media.public_media_sweep``).
+RULE_VERSION = 1
 
 #: Words that say what sort of place something is rather than which one.
 GENERIC_WORDS: frozenset[str] = frozenset(
@@ -896,7 +901,7 @@ def _bounding_box(location: Location) -> BoundingBox:
     return BoundingBox.around(float(location.latitude), float(location.longitude), POINT_RADIUS_METERS)
 
 
-def subject_for_location(location: Location, *, names: Iterable[str | None] = (), context: Sequence[str] = ()) -> MediaSubject:
+def subject_for_location(location: Location, *, names: Iterable[str | None] = (), context: Sequence[str] = (), shared: Sequence[str] | None = None) -> MediaSubject:
     """The subject everyone who can see a place shares: its public names, outline and address.
 
     A state or country the address lacks is taken from the nearest gazetteer city within 50 km.
@@ -905,6 +910,7 @@ def subject_for_location(location: Location, *, names: Iterable[str | None] = ()
         location: The place.
         names: More names to judge by, e.g. a pin's own.
         context: Names of the places it stands in.
+        shared: ``shared_names(location)``, when the caller already has it.
 
     Returns:
         The subject.
@@ -917,7 +923,7 @@ def subject_for_location(location: Location, *, names: Iterable[str | None] = ()
         country = country or gazetteer.country_names_by_code().get(city.country_code, "")
         state = state or (city.admin1 if city.country_code == "US" else "")
     return MediaSubject(
-        names=_distinct_names([*shared_names(location), *names]),
+        names=_distinct_names([*(shared_names(location) if shared is None else shared), *names]),
         latitude=latitude,
         longitude=longitude,
         bbox=_bounding_box(location),
@@ -930,11 +936,12 @@ def subject_for_location(location: Location, *, names: Iterable[str | None] = ()
     )
 
 
-def subject_for_pin(pin: Pin) -> MediaSubject:
+def subject_for_pin(pin: Pin, *, names: SearchNames | None = None) -> MediaSubject:
     """The subject a pin's owner sees media judged against: the place's public names, the pin's own, and its site's.
 
     Args:
         pin: A pin with a location.
+        names: ``search_names(pin)``, when the caller already has it.
 
     Returns:
         The subject.
@@ -942,7 +949,8 @@ def subject_for_pin(pin: Pin) -> MediaSubject:
     from urbanlens.dashboard.models.aliases.model import AliasType
     from urbanlens.dashboard.services.pins.search_names import search_names
 
+    split = names if names is not None else search_names(pin)
     own: list[str | None] = [pin.name]
     if pin.pk:
         own.extend(pin.aliases.exclude(kind=AliasType.NICKNAME).values_list("name", flat=True))
-    return subject_for_location(pin.location, names=own, context=search_names(pin).context)
+    return subject_for_location(pin.location, names=own, context=split.context, shared=split.shared)

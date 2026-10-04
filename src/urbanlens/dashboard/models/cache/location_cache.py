@@ -23,12 +23,16 @@ class LocationCache(abstract.DashboardModel):
     ``audience`` is ``""`` for a row every viewer of the Location may read. A search built from a pin's own names is
     cached under that name set's audience key instead (``services.pins.search_names``), and read only by pins whose
     names produce the same key.
+
+    ``relevance_rule`` is the ``subject_relevance.RULE_VERSION`` the row's results were last swept under
+    (``services.media.public_media_sweep``); 0 until then, and again after every write of new results.
     """
 
     source = models.CharField(max_length=50)
     data = models.JSONField(default=dict)
     query_key = models.CharField(max_length=255, blank=True)
     audience = models.CharField(max_length=64, blank=True, default="")
+    relevance_rule = models.PositiveSmallIntegerField(default=0)
 
     location = models.ForeignKey(
         "dashboard.Location",
@@ -44,6 +48,7 @@ class LocationCache(abstract.DashboardModel):
         unique_together = [("location", "source", "audience")]
         indexes = [
             models.Index(fields=["location", "source"], name="idxdb_loccache_source"),
+            models.Index(fields=["source", "relevance_rule"], name="idxdb_loccache_relrule"),
         ]
 
     @property
@@ -114,6 +119,6 @@ class LocationCache(abstract.DashboardModel):
             location=location,
             source=source,
             audience=audience,
-            defaults={"data": data, "query_key": query_key},
+            defaults={"data": data, "query_key": query_key, "relevance_rule": 0},
         )
         return entry

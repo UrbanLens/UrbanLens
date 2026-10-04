@@ -4,13 +4,7 @@
 
 import { delegateActions } from "./delegated-actions";
 import { observeProcessingTiles, settleProcessingThumb, type ProcessingItem } from "./photo-processing";
-import type { LightboxItem } from "./photo-tile";
-
-function parseRelevant(raw: string | undefined): boolean | null {
-    if (raw === "true") return true;
-    if (raw === "false") return false;
-    return null;
-}
+import { type LightboxItem, parseRelevant } from "./photo-tile";
 
 function parseIsMine(raw: string | undefined): boolean {
     // Absent (not "true"/"false") means this tile carries no ownership data at all.

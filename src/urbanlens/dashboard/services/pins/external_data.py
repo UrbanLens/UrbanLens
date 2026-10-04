@@ -588,6 +588,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
 
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.MEDIA})
     judges_relevance: ClassVar[bool] = False
+    #: The payload key :meth:`media_items` reads its results from.
+    media_results_key: ClassVar[str] = "items"
 
     @abstractmethod
     def media_items(self, data: dict) -> list[MediaItem]:
@@ -642,6 +644,38 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
             The items, in cached order.
         """
         return [item for item in self.relevant_media_items(data, subject, kept=kept) if not item.is_document]
+
+    def without_irrelevant(self, data: dict, subjects: Sequence[MediaSubject], *, kept: Collection[str]) -> dict | None:
+        """``data`` less each cached result that :meth:`relevant_media_items` keeps for none of ``subjects``.
+
+        A result that does not read as exactly one item is never judged, so it stays.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source.
+            subjects: Every subject a reader of the row judges it against.
+            kept: Keys (``media_item_key``) of items to keep whatever the judgement.
+
+        Returns:
+            The payload without those results, or None when it would lose none.
+        """
+        results = data.get(self.media_results_key)
+        if not self.judges_relevance or not subjects or not isinstance(results, list):
+            return None
+        survivors = [result for result in results if not self._judged_irrelevant(result, subjects, kept)]
+        if len(survivors) == len(results):
+            return None
+        return {**data, self.media_results_key: survivors}
+
+    def _judged_irrelevant(self, result: object, subjects: Sequence[MediaSubject], kept: Collection[str]) -> bool:
+        if not isinstance(result, dict):
+            return False
+        single = {self.media_results_key: [result]}
+        try:
+            if len(self.media_items(single)) != 1:
+                return False
+        except (TypeError, KeyError, ValueError):
+            return False
+        return not any(self.relevant_media_items(single, subject, kept=kept) for subject in subjects)
 
     def api_media(self, data: dict) -> list[dict[str, Any]]:
         """This source's cached data as plain JSON media dicts.

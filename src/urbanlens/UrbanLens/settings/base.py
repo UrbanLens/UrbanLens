@@ -607,6 +607,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",
         "schedule": crontab(minute=57),
     },
+    # Cached public-source results no one is shown: new fetches, and every row again after a relevance rule change.
+    "public-media-cache-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_public_media_cache",
+        "schedule": crontab(minute="13,28,43,58"),
+    },
 }
 
 

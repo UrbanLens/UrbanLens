@@ -869,6 +869,7 @@
 
 .lightbox-relevance-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: .5rem;
   padding-top: .4rem;
   border-top: 1px solid rgba(255, 255, 255, .1);

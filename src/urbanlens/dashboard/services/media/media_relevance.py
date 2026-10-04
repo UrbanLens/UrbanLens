@@ -131,14 +131,14 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
     item_key = image.media_item_key
 
     if value == 0:
-        MediaRelevance.objects.for_gallery(profile, image.location_id, source).filter(item_key=item_key).delete()
+        MediaRelevance.objects.for_gallery(profile, image.location_id, source).votes().filter(item_key=item_key).delete()
     else:
         MediaRelevance.objects.update_or_create(
             profile=profile,
             location=image.location,
             source=source,
             item_key=item_key,
-            defaults={"is_relevant": value == 1},
+            defaults={"is_relevant": value == 1, "is_vote": True},
         )
         from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
         from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
@@ -233,7 +233,7 @@ def record_relevant_and_cache(
         location=location,
         source=source,
         item_key=item_key,
-        defaults={"is_relevant": True},
+        defaults={"is_relevant": True, "is_vote": True},
     )
 
     if not materialize:

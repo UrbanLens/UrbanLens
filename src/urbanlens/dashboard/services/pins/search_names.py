@@ -164,11 +164,12 @@ def owner_label_scope(pin: Pin) -> SearchScope:
     return SearchScope(SHARED_AUDIENCE, tuple(_distinct([pin.meaningful_official_name, pin.meaningful_name])))
 
 
-def search_names(pin: Pin) -> SearchNames:
+def search_names(pin: Pin, *, shared: tuple[str, ...] | None = None) -> SearchNames:
     """Split ``pin``'s names into shared and custom.
 
     Args:
         pin: The pin whose searches are being built.
+        shared: ``shared_names(pin.location)``, when the caller already has it.
 
     Returns:
         The pin's names, by who may see what a search for them finds.
@@ -181,7 +182,8 @@ def search_names(pin: Pin) -> SearchNames:
         location = pin.location
     except ObjectDoesNotExist:
         location = None
-    shared = shared_names(location)
+    if shared is None:
+        shared = shared_names(location)
     own: list[str | None] = [pin.name]
     if pin.pk:
         own.extend(pin.aliases.exclude(kind=AliasType.NICKNAME).values_list("name", flat=True))

@@ -2977,20 +2977,6 @@ whether the panel asks REData for those fields, whether REData has them for this
 gate is applied. A subscriber should see everything the property-owner feature offers. Check production's entitlement
 logic on the dev stack with the e2e `subscriber` role.
 
-## P233 — Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete
-
-`id: P233` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-- Old cached photos no longer meet the search criteria. Remove automatically any cached public-source photo that:
-  - nobody has interacted with (no vote, no relevance mark, no copy, no reference);
-  - doesn't name the subject (pin name or aliases, by P188's audience rules; the base row only by public names);
-  - and isn't geolocated inside the property.
-  Do it as a sweep that also runs when the rule changes. P196's read-time filter already hides such items on the
-  release branch; this removes them from storage too (see P206).
-- The lightbox for these photos has no relevance up/down votes. Add them, as the Media gallery's tiles have.
-- On a Private Pin page, add "remove from my results": a per-user hide that never deletes the shared row, so other
-  users are unaffected.
-
 ## P236 — A wiki URL's response time tells whether a Location exists under that slug
 
 `id: P236` · `status: open` · `updated: 2026-10-03` · `found by: adversarial review of P186`
@@ -3177,3 +3163,15 @@ the same guard after the pin's own row, so a pin there skips its wiki's drawn ou
 `test_detail_building_outlines.py`'s fixtures, not yet reproduced as a failing test. Fix: let the guard return
 early only when the place says the type does not apply, and keep the drawn row for a building place without
 geometry.
+
+## P251 — The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes
+
+`id: P251` · `status: open` · `updated: 2026-10-04` · `found by: adversarial review of P233`
+
+`test_beat_lock_intervals.py::_effective_period_seconds` returns 3600 for a crontab whose `hour` covers the whole day,
+whatever its `minute`. P233's `public-media-cache-sweep` runs at `crontab(minute="13,28,43,58")`, every 15 minutes,
+and is checked against an hour: `test_every_lock_expires_before_the_next_tick` would pass a lock of up to 3599 s on it.
+Its real lock is 600 s against 900 s, so nothing is broken today; the test just proves less than it appears to.
+
+Fix: take the shortest gap between consecutive `minute` values (wrapping the hour) when `hour` is every hour, and the
+shortest gap between `hour` values otherwise. Pin it with a minute-list case beside the existing helper tests.
