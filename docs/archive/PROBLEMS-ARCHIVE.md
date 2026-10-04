@@ -22956,9 +22956,15 @@ leaves its link to the holder. A failed lookup releases the lock, so the next ta
 index on each link table's `url`; the existing unique constraints lead with the pin or wiki, so they cannot serve a
 lookup by URL.
 
+The snapshot is stored with one `UPDATE` per table, which sends no `post_save`. A link's save used to bump its pin's
+`updated` through `resync_pin_on_link_saved`, and the external API's sync feed pages by `Pin.updated`, so the task now
+bumps each affected pin itself (found by the adversarial review). If the cache cannot take the lock, the task
+archives without it: the lock only saves a duplicate lookup.
+
 Reusing a snapshot found on another account's link discloses nothing: it is the public archive of a public URL, and
 the availability API returns it to anyone who asks.
 
 **Tests.** `test_wayback_archive.py::OneUrlIsArchivedOnceTests`: a held snapshot is reused without asking; one lookup
 serves a pin link, a wiki link and another account's pin link, and leaves another URL alone; a link whose URL is
-being looked up is left to that task; a failed lookup frees the URL. The first three failed before.
+being looked up is left to that task; a failed lookup frees the URL; each pin whose link gained the snapshot is
+marked changed, and no other; a cache outage still archives. All but the fourth failed before their fix.

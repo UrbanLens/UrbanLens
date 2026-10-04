@@ -29,6 +29,7 @@ from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
 from django.utils import timezone
+from redis.exceptions import RedisError
 
 from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's autodiscover_tasks() only imports <app>/tasks.py, so this is what registers the task on the worker
     run_assistant_turn_task,
@@ -747,6 +748,8 @@ def backfill_location_address(location_id: int) -> bool:
 
 #: How long one task may hold a URL's Wayback lookup before another may try; a save can take a minute.
 _WAYBACK_ARCHIVE_LOCK_SECONDS = 180
+#: What the cache raises when it cannot answer; ``RuntimeError`` is the test suite's network guard.
+_LOCK_CACHE_ERRORS = (RedisError, ConnectionError, OSError, RuntimeError)
 
 
 def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
@@ -776,7 +779,6 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
 
     from urbanlens.dashboard.models.links.model import PinLink, WikiLink
     from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway, is_own_site_url
-    from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
 
     model = {"PinLink": PinLink, "WikiLink": WikiLink}.get(link_model)
     if model is None:
@@ -795,7 +797,11 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
         return _give_wayback_snapshot(link_model, link_id, link.url, known)
 
     lock_key = f"wayback-archive:{hashlib.sha256(link.url.encode()).hexdigest()}"
-    token = acquire_lock(lock_key, _WAYBACK_ARCHIVE_LOCK_SECONDS)
+    try:
+        token = acquire_lock(lock_key, _WAYBACK_ARCHIVE_LOCK_SECONDS)
+    except _LOCK_CACHE_ERRORS:
+        # The lock only saves a duplicate lookup; archive without it rather than not at all.
+        token = ""
     if token is None:
         return False
     try:
@@ -819,7 +825,9 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
             return False
         return _give_wayback_snapshot(link_model, link_id, link.url, wayback_url)
     finally:
-        release_lock(lock_key, token)
+        if token:
+            with contextlib.suppress(*_LOCK_CACHE_ERRORS):
+                release_lock(lock_key, token)
 
 
 def _stored_wayback_snapshot(url: str) -> str:
@@ -836,18 +844,22 @@ def _stored_wayback_snapshot(url: str) -> str:
 def _give_wayback_snapshot(link_model: str, link_id: int, url: str, snapshot: str) -> bool:
     """Store *snapshot* on every link naming *url* that has none, returning whether link ``link_id`` was one.
 
-    *snapshot* has passed ``is_link_url``, so it is what ``save`` would have stored.
+    *snapshot* has passed ``is_link_url``, so it is what ``save`` would have stored. A bulk update sends no
+    ``post_save``, so each pin whose link changed is marked changed here, as ``resync_pin_on_link_saved`` would have
+    marked it: the external API's sync feed pages by ``Pin.updated``.
     """
-    from django.utils import timezone
-
     from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+    from urbanlens.dashboard.models.pin.model import Pin
 
     now = timezone.now()
     given = False
     for model in (PinLink, WikiLink):
         waiting = model.objects.filter(url=url, wayback_url="")
         given = given or (model.__name__ == link_model and waiting.filter(pk=link_id).exists())
+        pin_ids = list(waiting.values_list("pin_id", flat=True)) if model is PinLink else []
         waiting.update(wayback_url=snapshot, updated=now)
+        if pin_ids:
+            Pin.objects.filter(pk__in=pin_ids).update(updated=now)
     return given
 
 

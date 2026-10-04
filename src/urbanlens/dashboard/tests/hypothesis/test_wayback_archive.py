@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest import mock
 
 from django.test import override_settings
+from django.utils import timezone
 from model_bakery import baker
 import requests
 
@@ -211,3 +213,40 @@ class OneUrlIsArchivedOnceTests(TestCase):
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=[requests.RequestException("boom"), found]):
             self.assertFalse(archive_link_to_wayback("PinLink", first.pk))
             self.assertTrue(archive_link_to_wayback("WikiLink", second.pk))
+
+    def test_an_unavailable_cache_archives_without_the_lock(self) -> None:
+        """The lock only saves a duplicate lookup; a cache outage must not stop archiving, as it did not before it."""
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        link = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
+        found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
+
+        with (
+            mock.patch("urbanlens.dashboard.services.core.locks.cache.add", side_effect=RedisConnectionError("down")),
+            mock.patch(f"{_GATEWAY}.get_availability", return_value=found),
+        ):
+            self.assertTrue(archive_link_to_wayback("PinLink", link.pk))
+
+        link.refresh_from_db()
+        self.assertEqual(link.wayback_url, self._SNAPSHOT)
+
+    def test_each_pin_whose_link_gains_a_snapshot_is_marked_changed(self) -> None:
+        """The external API's sync feed pages by ``Pin.updated``; a link's ``save`` used to move it through a signal."""
+        other_pin = baker.make(Pin, profile=baker.make("auth.User").profile)
+        first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
+        baker.make(PinLink, pin=other_pin, url="https://example.com/a", wayback_url="")
+        untouched = baker.make(Pin, profile=self.pin.profile)
+        baker.make(PinLink, pin=untouched, url="https://example.com/b", wayback_url="")
+        stale = timezone.now() - timedelta(days=1)
+        Pin.objects.filter(pk__in=[self.pin.pk, other_pin.pk, untouched.pk]).update(updated=stale)
+        found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
+
+        with mock.patch(f"{_GATEWAY}.get_availability", return_value=found):
+            archive_link_to_wayback("PinLink", first.pk)
+
+        changed = dict(
+            Pin.objects.filter(pk__in=[self.pin.pk, other_pin.pk, untouched.pk]).values_list("pk", "updated")
+        )
+        self.assertGreater(changed[self.pin.pk], stale)
+        self.assertGreater(changed[other_pin.pk], stale)
+        self.assertEqual(changed[untouched.pk], stale)
