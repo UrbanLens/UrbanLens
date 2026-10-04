@@ -171,7 +171,8 @@ describe("dismissing the menu", () => {
     const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
     test("a click on the map outside an open menu only closes it", async () => {
-        document.body.innerHTML = '<div class="leaflet-container"><svg><path id="polygon"></path></svg></div>';
+        document.body.innerHTML =
+            '<div class="leaflet-container"><div class="leaflet-map-pane"><svg><path id="polygon"></path></svg></div></div>';
         let mapClicks = 0;
         document.querySelector(".leaflet-container")!.addEventListener("click", () => mapClicks++);
         open();
@@ -181,6 +182,23 @@ describe("dismissing the menu", () => {
 
         expect(document.querySelector(".map-context-menu")).toBeNull();
         expect(mapClicks).toBe(0);
+    });
+
+    test("a map control or a popup's link still gets the click that closes the menu", async () => {
+        document.body.innerHTML =
+            '<div class="leaflet-container"><div class="leaflet-map-pane"><div class="leaflet-popup-pane"><div class="leaflet-popup"><a id="popup-link"></a></div></div></div>' +
+            '<div class="leaflet-control-container"><div class="leaflet-control"><a id="zoom-in"></a></div></div></div>';
+        for (const id of ["zoom-in", "popup-link"]) {
+            let clicks = 0;
+            document.getElementById(id)!.addEventListener("click", () => clicks++);
+            open();
+            await tick();
+
+            document.getElementById(id)!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+            expect(document.querySelector(".map-context-menu")).toBeNull();
+            expect(clicks).toBe(1);
+        }
     });
 
     test("with no menu open, the map hears its clicks", () => {

@@ -2,148 +2,145 @@
  * An area's hover label shows once the pointer rests on it, never follows the pointer, and stays shut while a map menu is open.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
 import { bindAreaTooltip, unbindAreaTooltip } from "./map-tooltips";
 
-type Handler = (event?: unknown) => void;
-
-class FakeEvented {
-    handlers = new Map<string, Handler[]>();
-
-    on(types: string | Record<string, Handler>, fn?: Handler): this {
-        const entries: [string, Handler][] = typeof types === "string" ? types.split(" ").map((type) => [type, fn!]) : Object.entries(types);
-        for (const [type, handler] of entries) this.handlers.set(type, [...(this.handlers.get(type) ?? []), handler]);
-        return this;
-    }
-
-    off(types: string | Record<string, Handler>, fn?: Handler): this {
-        const entries: [string, Handler][] = typeof types === "string" ? types.split(" ").map((type) => [type, fn!]) : Object.entries(types);
-        for (const [type, handler] of entries) this.handlers.set(type, (this.handlers.get(type) ?? []).filter((h) => h !== handler));
-        return this;
-    }
-
-    fire(type: string, event?: unknown): void {
-        for (const handler of this.handlers.get(type) ?? []) handler(event);
-    }
-}
-
-class FakeLayer extends FakeEvented {
-    open = false;
-    openedAt: unknown = null;
-    boundWith: Record<string, unknown> | null = null;
-
-    bindTooltip(_content: string, options: Record<string, unknown>): this {
-        this.boundWith = options;
-        // Leaflet opens a permanent tooltip at once when the layer is already on a map.
-        if (options.permanent) this.open = true;
-        return this;
-    }
-
-    unbindTooltip(): this {
-        this.boundWith = null;
-        this.open = false;
-        return this;
-    }
-
-    openTooltip(latlng?: unknown): this {
-        this.open = true;
-        this.openedAt = latlng;
-        return this;
-    }
-
-    closeTooltip(): this {
-        this.open = false;
-        return this;
-    }
-}
+declare const L: typeof import("leaflet");
 
 const REST_MS = 15;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const realL = (globalThis as Record<string, unknown>).L;
 
-let map: FakeEvented;
-let layer: FakeLayer;
+let map: L.Map;
+let polygon: L.Polygon;
 
-function bind(): void {
-    bindAreaTooltip(map as never, layer as never, "Property boundary", { className: "boundary-tooltip" }, REST_MS);
+function labelShown(): boolean {
+    return document.querySelector(".leaflet-tooltip.area-label") !== null;
 }
 
+function hover(lat = 41.733, lng = -73.928): void {
+    polygon.fire("mousemove", { latlng: L.latLng(lat, lng) });
+}
+
+function bind(): void {
+    bindAreaTooltip(map, polygon, "Property boundary", { className: "area-label" }, REST_MS);
+}
+
+beforeAll(async () => {
+    (globalThis as Record<string, unknown>).L = (await import("leaflet")).default;
+});
+
+afterAll(() => {
+    (globalThis as Record<string, unknown>).L = realL;
+});
+
 beforeEach(() => {
-    document.body.innerHTML = "";
-    map = new FakeEvented();
-    layer = new FakeLayer();
+    document.body.innerHTML = '<div id="map" style="width: 400px; height: 300px"></div>';
+    map = L.map("map", { fadeAnimation: false, zoomAnimation: false }).setView([41.733, -73.928], 17);
+    polygon = L.polygon([
+        [41.72, -73.94],
+        [41.74, -73.94],
+        [41.74, -73.91],
+        [41.72, -73.91],
+    ]).addTo(map);
 });
 
 afterEach(() => {
-    unbindAreaTooltip(layer as never);
+    unbindAreaTooltip(polygon);
+    map.remove();
 });
 
 describe("bindAreaTooltip", () => {
     test("binds shut, and opens only once the pointer rests", async () => {
         bind();
-        expect(layer.open).toBe(false);
+        expect(labelShown()).toBe(false);
 
-        layer.fire("mousemove", { latlng: [41.73, -73.93] });
-        expect(layer.open).toBe(false);
+        hover();
+        expect(labelShown()).toBe(false);
 
         await sleep(REST_MS * 3);
-        expect(layer.open).toBe(true);
-        expect(layer.openedAt).toEqual([41.73, -73.93]);
+        expect(labelShown()).toBe(true);
     });
 
     test("does not follow the pointer: moving hides it and starts the wait again", async () => {
         bind();
-        layer.fire("mousemove", { latlng: [1, 1] });
+        hover();
         await sleep(REST_MS * 3);
-        expect(layer.open).toBe(true);
+        expect(labelShown()).toBe(true);
 
-        layer.fire("mousemove", { latlng: [2, 2] });
-        expect(layer.open).toBe(false);
+        hover(41.734, -73.929);
+        expect(labelShown()).toBe(false);
         await sleep(REST_MS * 3);
-        expect(layer.openedAt).toEqual([2, 2]);
+        expect(labelShown()).toBe(true);
     });
 
     test("never opens while a map menu is open", async () => {
         bind();
-        document.body.innerHTML = '<div class="map-context-menu"></div>';
+        document.body.insertAdjacentHTML("beforeend", '<div class="map-context-menu"></div>');
 
-        layer.fire("mousemove", { latlng: [1, 1] });
+        hover();
         await sleep(REST_MS * 3);
 
-        expect(layer.open).toBe(false);
+        expect(labelShown()).toBe(false);
     });
 
-    test("a click, a right-click, leaving the area or the map moving hides it", async () => {
-        for (const [target, type] of [["layer", "click"], ["layer", "contextmenu"], ["layer", "mouseout"], ["map", "movestart"]] as const) {
+    test("a click, a right-click, leaving the area, the map moving or the layer going hides it", async () => {
+        const hiders: [string, () => void][] = [
+            ["click", () => polygon.fire("click", { latlng: L.latLng(41.733, -73.928) })],
+            ["contextmenu", () => polygon.fire("contextmenu", { latlng: L.latLng(41.733, -73.928) })],
+            ["mouseout", () => polygon.fire("mouseout")],
+            ["movestart", () => map.fire("movestart")],
+            ["remove", () => map.removeLayer(polygon)],
+        ];
+        for (const [name, hide] of hiders) {
+            if (!map.hasLayer(polygon)) polygon.addTo(map);
             bind();
-            layer.fire("mousemove", { latlng: [1, 1] });
+            hover();
             await sleep(REST_MS * 3);
-            expect(layer.open).toBe(true);
+            expect(labelShown()).toBe(true);
 
-            (target === "layer" ? layer : map).fire(type);
+            hide();
 
-            expect(layer.open).toBe(false);
+            expect([name, labelShown()]).toEqual([name, false]);
         }
     });
 
     test("a click before the wait is up cancels it", async () => {
         bind();
-        layer.fire("mousemove", { latlng: [1, 1] });
-        layer.fire("click");
+        hover();
+        polygon.fire("click", { latlng: L.latLng(41.733, -73.928) });
         await sleep(REST_MS * 3);
 
-        expect(layer.open).toBe(false);
+        expect(labelShown()).toBe(false);
     });
 
-    test("rebinding replaces the old handlers, and unbinding removes them", async () => {
+    test("re-adding the layer mid-drag does not open it once the drag ends", () => {
         bind();
-        bind();
-        expect(layer.handlers.get("mousemove")?.length).toBe(1);
-        expect(map.handlers.get("movestart")?.length).toBe(1);
+        // Leaflet defers a bound tooltip's add-time open to moveend while the map is being dragged.
+        const dragging = map.dragging as L.Handler & { moving: () => boolean };
+        const moving = dragging.moving;
+        dragging.moving = () => true;
 
-        unbindAreaTooltip(layer as never);
-        expect(layer.handlers.get("mousemove")?.length).toBe(0);
-        expect(map.handlers.get("movestart")?.length).toBe(0);
-        expect(layer.boundWith).toBeNull();
+        map.removeLayer(polygon);
+        polygon.addTo(map);
+        dragging.moving = moving;
+        map.fire("moveend");
+
+        expect(labelShown()).toBe(false);
+    });
+
+    test("rebinding replaces the label, and unbinding removes it", async () => {
+        bind();
+        bind();
+        hover();
+        await sleep(REST_MS * 3);
+        expect(document.querySelectorAll(".leaflet-tooltip.area-label").length).toBe(1);
+
+        unbindAreaTooltip(polygon);
+        expect(labelShown()).toBe(false);
+        hover();
+        await sleep(REST_MS * 3);
+        expect(labelShown()).toBe(false);
     });
 });

@@ -266,8 +266,9 @@ export function showMapContextMenu(options: ShowMapContextMenuOptions): HTMLElem
         const target = event.target as Element | null;
         if (target && menu.contains(target)) return;
         close();
-        // On a map that click only closes the menu: under a polygon filling the view it would open another.
-        if (target?.closest?.(".leaflet-container")) {
+        // On the map itself that click only closes the menu: under a polygon filling the view it would open another.
+        // Controls and popups sit outside the map pane, or above it, and still get their click.
+        if (target?.closest?.(".leaflet-map-pane") && !target.closest(".leaflet-popup")) {
             event.stopPropagation();
             event.preventDefault();
         }
