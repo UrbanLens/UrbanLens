@@ -34,7 +34,7 @@ class Command(BaseCommand):
             *args: Unused.
             **options: ``dry_run``.
         """
-        from urbanlens.dashboard.models.article.model import Article
+        from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_IMAGES_LOCALIZED, Article
         from urbanlens.dashboard.services.wiki.articles import localize_article_images, save_article
 
         changed = 0
@@ -43,6 +43,6 @@ class Command(BaseCommand):
                 continue
             changed += 1
             if not options["dry_run"]:
-                save_article(editor=None, content=article.content, edit_summary="Images stored on this site", pin=article.pin, wiki=article.wiki)
+                save_article(editor=None, content=article.content, edit_summary=EDIT_SUMMARY_IMAGES_LOCALIZED, pin=article.pin, wiki=article.wiki)
         verb = "would change" if options["dry_run"] else "changed"
         self.stdout.write(f"{changed} article(s) {verb}.")

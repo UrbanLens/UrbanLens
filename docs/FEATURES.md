@@ -346,7 +346,10 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   confidently-matched Wikipedia article whenever one is cached for any of its place's Locations,
   and each pin's article when a match first replaces a miss (converted to Markdown, with a
   required CC BY-SA attribution footer linking back to the source) - never overwrites an existing
-  article, seeded or human-written (`services.wiki.wiki_seed`, `models.cache.signals`). The match
+  article, seeded or human-written (`services.wiki.wiki_seed`, `models.cache.signals`). A campus
+  building's wiki (nested, holding no place or one of several buildings' places) takes neither the
+  article nor its link: the match at its point is its campus's or a neighbour's; a seed it took as a root
+  goes, untouched, when it is nested (`wiki_seed.takes_wikipedia_article`, P262). The match
   is looked up from public data only - the Location's official or wiki name and its address,
   backfilled first for a coordinate-only pin - never a pin's own name
   (`plugins.builtin.wikipedia.public_name_hint`, `match_address_components`)

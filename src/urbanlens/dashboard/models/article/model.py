@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA = "Seeded from Wikipedia"
 SYSTEM_EDIT_SUMMARIES = frozenset({EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA})
+#: ``localize_article_images``'s rewrite of whatever text an article held, a person's included, so not a system summary.
+EDIT_SUMMARY_IMAGES_LOCALIZED = "Images stored on this site"
 
 logger = logging.getLogger(__name__)
 

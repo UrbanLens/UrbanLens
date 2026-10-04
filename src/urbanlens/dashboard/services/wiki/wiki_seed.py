@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 # Only ever parses markup that WikipediaGateway has already run through
@@ -10,7 +11,7 @@ from typing import TYPE_CHECKING
 # services/apis/assets/wikipedia.py) - never raw/untrusted HTML.
 import lxml.html as lxml_html  # nosec B410
 
-from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
+from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_IMAGES_LOCALIZED, EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
 from urbanlens.dashboard.services.security.url_safety import request_public_url
 
 if TYPE_CHECKING:
@@ -27,9 +28,30 @@ _WIKIPEDIA_CACHE_SOURCE = "wikipedia"
 _EDIT_SUMMARY = EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
 _COVER_MAX_BYTES = 8_000_000
 
+#: A Markdown image's address, which ``localize_article_images`` rewrites and nothing else does.
+_IMAGE_ADDRESS = re.compile(r"(!\[[^\]]*\])\([^)]*\)")
+
 #: Markdown heading prefix for each heading tag WikipediaGateway's extract
 #: allowlist permits (h2-h6 - Wikipedia extracts never carry an h1).
 _HEADING_MD_PREFIX = {"h2": "##", "h3": "###", "h4": "####", "h5": "#####", "h6": "######"}
+
+
+def takes_wikipedia_article(wiki: Wiki) -> bool:
+    """Whether a Wikipedia match at the wiki's point may describe the wiki.
+
+    Not for a campus building's wiki, nor anything else nested under another wiki without a property's place of its
+    own (``name_tiers.wiki_scope``): the article found at its point is its campus's or a neighbour's
+    (``name_tiers.describes_scope``).
+
+    Args:
+        wiki: The wiki.
+
+    Returns:
+        True when the wiki may carry the article and its link.
+    """
+    from urbanlens.dashboard.services.locations.name_tiers import NameTier, describes_scope, wiki_scope
+
+    return describes_scope(NameTier.ENCYCLOPEDIA, wiki_scope(wiki))
 
 
 def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
@@ -43,7 +65,7 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     wiki = Wiki.objects.existing_for_location(location)
-    if wiki is None:
+    if wiki is None or not takes_wikipedia_article(wiki):
         return None
 
     from urbanlens.dashboard.services.wiki.articles import get_article, save_article
@@ -59,6 +81,62 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
     apply_wikipedia_cover_if_missing(location=location)
     logger.debug("Seeded wiki %s's article from Wikipedia", wiki.pk)
     return article
+
+
+def is_untouched_wikipedia_seed(article: Article) -> bool:
+    """Whether an article is still exactly what Wikipedia seeded, so nobody's writing is lost by removing it.
+
+    Its first revision is the seed, and every later one is ``localize_article_images`` changing nothing but image
+    addresses; no revision has an editor, and the article holds the last revision's text.
+
+    Args:
+        article: The article.
+
+    Returns:
+        True for an untouched seed.
+    """
+    if article.last_edited_by_id is not None:
+        return False
+    revisions = list(article.revisions.order_by("created", "pk").values_list("editor_id", "edit_summary", "content"))
+    if not revisions or revisions[0][1] != EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA or revisions[-1][2] != article.content:
+        return False
+    if any(editor_id is not None for editor_id, _summary, _content in revisions):
+        return False
+    previous = revisions[0][2]
+    for _editor_id, summary, content in revisions[1:]:
+        if summary != EDIT_SUMMARY_IMAGES_LOCALIZED or _without_image_addresses(content) != _without_image_addresses(previous):
+            return False
+        previous = content
+    return True
+
+
+def _without_image_addresses(content: str) -> str:
+    return _IMAGE_ADDRESS.sub(r"\1()", content)
+
+
+def drop_misplaced_wikipedia_seed(wiki: Wiki) -> bool:
+    """Remove a wiki's article when Wikipedia seeded it untouched and the wiki no longer takes one (it was nested).
+
+    Args:
+        wiki: The wiki, as it stands now.
+
+    Returns:
+        True when the article was removed.
+    """
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.article.model import Article
+
+    if takes_wikipedia_article(wiki):
+        return False
+    with transaction.atomic():
+        # Locked so an edit landing meanwhile waits, rather than being deleted along with the seed.
+        article = Article.objects.select_for_update().filter(wiki_id=wiki.pk).first()
+        if article is None or not is_untouched_wikipedia_seed(article):
+            return False
+        article.delete()
+    logger.info("Removed wiki %s's Wikipedia seed: it describes the wiki it is nested under", wiki.pk)
+    return True
 
 
 def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
