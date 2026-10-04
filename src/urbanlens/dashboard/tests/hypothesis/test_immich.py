@@ -688,7 +688,7 @@ class ImportImmichPhotosTaskTests(TestCase):
 
     def test_imports_a_new_asset_and_logs_a_visit(self) -> None:
         counts = self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
-        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0, "storage_unavailable": 0})
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertEqual(image.source_url, self.account.asset_web_url("a1"))
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.PHOTO).exists())
@@ -708,7 +708,7 @@ class ImportImmichPhotosTaskTests(TestCase):
 
         counts = self._run(["dup"], {"dup": (content, "photo.jpg", "image/jpeg")})
 
-        self.assertEqual(counts, {"imported": 0, "skipped": 1, "failed": 0})
+        self.assertEqual(counts, {"imported": 0, "skipped": 1, "failed": 0, "storage_unavailable": 0})
         self.assertEqual(Image.objects.filter(pin=self.pin, profile=self.profile).count(), 1)
 
     def test_over_quota_asset_is_skipped_without_failing_the_batch(self) -> None:
@@ -720,7 +720,7 @@ class ImportImmichPhotosTaskTests(TestCase):
                 ["ok", "too_big"],
                 {"ok": (b"small", "a.jpg", "image/jpeg"), "too_big": (b"huge", "b.jpg", "image/jpeg")},
             )
-        self.assertEqual(counts, {"imported": 1, "failed": 1, "skipped": 0})
+        self.assertEqual(counts, {"imported": 1, "failed": 1, "skipped": 0, "storage_unavailable": 0})
 
     def test_upload_holds_the_profile_upload_reservation(self) -> None:
         """Regression test: this bulk-import path used to check-then-create with no locking at all."""
@@ -739,7 +739,7 @@ class ImportImmichPhotosTaskTests(TestCase):
             ["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")}, visit_id_by_asset={"a1": target_visit.pk}
         )
 
-        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0, "storage_unavailable": 0})
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertEqual(image.visit_id, target_visit.pk)
         self.assertEqual(PinVisit.objects.filter(pin=self.pin).count(), before)
@@ -748,7 +748,7 @@ class ImportImmichPhotosTaskTests(TestCase):
         counts = self._run(
             ["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")}, visit_id_by_asset={"other-asset": 999}
         )
-        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0, "storage_unavailable": 0})
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertIsNotNone(image.visit_id)
         self.assertTrue(PinVisit.objects.filter(pk=image.visit_id, source=VisitSource.PHOTO).exists())
@@ -757,14 +757,14 @@ class ImportImmichPhotosTaskTests(TestCase):
         self.account.delete()
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_immich_photos(self.pin.pk, self.profile.pk, ["a1"])
-        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0, "storage_unavailable": 0})
 
     def test_undecryptable_account_is_a_noop_not_a_crash(self) -> None:
         """Regression test for the InvalidToken crash seen in production (see tasks.py)."""
         _corrupt_api_key(self.account)
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_immich_photos(self.pin.pk, self.profile.pk, ["a1"])
-        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0, "storage_unavailable": 0})
         self.assertTrue(ImmichAccount.objects.filter(pk=self.account.pk).exists())
 
 

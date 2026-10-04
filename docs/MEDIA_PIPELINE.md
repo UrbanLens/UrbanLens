@@ -218,6 +218,15 @@ sweep. A failed derived copy is left to its hourly backfill; a backfill that mee
 transient storage failure (a timeout, a lost connection, a 5xx) stops its batch without
 setting `media_unreadable_at`, which keeps a row out of the walk for a week.
 
+A background import waits for the files it has not stored yet. The Immich, Flickr, Flickr album and
+Google Photos imports (`services/photos/library_import.py`) retry their task for the refused photo and
+the ones after it; a data import (`import_data.run_import`) sets the refused photo or overlay image
+and every later one aside, imports the rest of the archive, and runs again for just those. Both wait
+1, 2, 4, 8 and 15 minutes (`storage_errors.storage_retry_countdown`), up to `IMPORT_STORAGE_WAITS`
+refusals in a row with nothing stored between them, then report the files left as not imported. One
+write is tried per wait, not one per file. The bytes are not kept between runs: a library photo is
+downloaded again, and an archive file read again from the uploaded archive.
+
 Comment and trip comment images, custom icons (label, pin, achievement) and avatars
 from every writer go through the same encoder (`images.reencode_image_file`), under a
 random name rather than the uploaded one. A comment image is re-encoded by

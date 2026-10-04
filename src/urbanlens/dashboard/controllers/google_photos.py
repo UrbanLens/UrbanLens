@@ -43,6 +43,7 @@ from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
+from urbanlens.dashboard.services.photos.library_import import ImportCounts
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -321,9 +322,7 @@ class PinGooglePhotosImportProgressView(LoginRequiredMixin, View):
         context = {"pin": pin, "task_id": task_id, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
         response = render(request, _PROGRESS_PARTIAL, context)
         if progress.state == "SUCCESS":
-            result = progress.result or {}
-            summary = f"Imported {result.get('imported', 0)} photo(s)" + (f", skipped {result.get('skipped')} duplicate(s)" if result.get("skipped") else "") + "."
-            response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": summary}, "refreshGallery": {}})
+            response["HX-Trigger"] = json.dumps({"showToast": ImportCounts.from_dict(progress.result).toast(), "refreshGallery": {}})
         elif progress.state in {"FAILURE", "REVOKED"}:
             response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": progress.error or "Import failed."}})
         return response

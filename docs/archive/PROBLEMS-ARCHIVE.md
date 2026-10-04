@@ -21947,3 +21947,55 @@ covers only locks taken in a beat task's own body in `tasks.py`; `_run_database_
 
 **Tests.** Six new cases failed first (a minute list, a minute gap wrapping the hour, uneven hours, an hour gap
 wrapping the day, minutes within limited hours, and a 1200 s lock on the 15-minute crontab flagged); all 20 pass.
+
+## RESOLVED 2026-10-04: A background photo import stopped at the first object store refusal, and the rest of the selection was never imported
+
+`id: P220` · `status: fixed` · `resolved: 2026-10-04` · `found by: P201's audit of storage writes`
+
+`import_immich_photos`, `import_flickr_photos`, `import_flickr_album_photos` and `import_google_photos` (`tasks.py`)
+stored each photo inside `reserve_upload` and caught only `UploadRefusedError`. A botocore timeout is an `OSError`, so
+the task's `autoretry_for=(OSError,)` restarted it from the first photo after about 1, 2 and 4 s, all inside one Garage
+stall; a 503 (`ClientError`) or an `EndpointConnectionError` failed it at once. Either way the rest of the selection
+was never imported. Nothing was half-written: the row and its file share the reservation's transaction.
+
+The archive import failed worse than the entry guessed. `_import_photos` and the overlay importer also caught only
+`UploadRefusedError`, so the error escaped the step into `run_import`'s handlers: an `OSError` became "Import failed.
+Please check the file and try again", a `ClientError` "Import failed unexpectedly. Please check the file and try
+again". Both blamed the archive, and every step after the photos (overlays, trips, check-ins, saved filters, routes,
+messages, connections, settings) was skipped.
+
+**Library imports.** The four tasks share `services/photos/library_import.PhotoImport` (one subclass per source). A
+photo storage refuses (any of `storage_errors.STORAGE_ERRORS`, raised by the store step only) ends the run, and the
+task is retried with just the refused photo and those after it, carrying the counts so far (`done`) and the waits so
+far (`storage_waits`). A photo already stored is neither downloaded nor stored again; each is still deduplicated by
+checksum inside the reservation, so a redelivered retry cannot store one twice. The wait is
+`storage_retry_countdown`: 1, 2, 4, 8 and 15 minutes, the same doubling `process_image_upload` uses. A refusal after
+a photo was stored starts the wait over; after `IMPORT_STORAGE_WAITS` (5) refusals in a row with nothing stored
+between them, the photos left count as `storage_unavailable`. The retry carries a `RetryNoticeError` that
+`get_task_progress` reads back in the RETRY state, so the dialog says storage is unavailable, how far it got, and when
+it tries again; the closing toast (`ImportCounts.toast`) names any photos left, and any that failed, as a warning. The
+tasks declare `max_retries=None`, since the budget is counted per outage rather than per task; `autoretry_for=(OSError,)`
+stays for anything else, with its own three retries.
+
+**Archive import.** A refused photo or overlay image is deferred (`ImportResult.deferred`), with every file after it
+deferred without a write, and the rest of the archive is imported. The job then raises `ImportWaitingForStorageError`,
+and `run_user_data_import` retries with the tally so far, the deferred rows' positions, and the local pins and labels
+they name. The next run re-extracts and re-validates the archive and stores only those rows; a pin or label deleted
+in between is dropped from the carried map, so the row resolves as it would without it. The cleanup of the uploaded
+archive is scheduled only by the run that finishes. The status says storage is unavailable while it waits; after five
+waits with nothing stored the import finishes, and a notice lists the files left and asks for the archive again (the
+import is idempotent). An object store error that still escapes a step is reported as storage, not as a bad archive.
+
+**Costs not removed.** The bytes are not kept between runs: a refused library photo is downloaded again on each
+retry, and a Flickr album is resolved again from its URL on each run (one `get_album` call per wait). Google documents a
+picker item's `base_url` as valid for 60 minutes; a selection still waiting after that fails those items as downloads. A
+PUT Garage finishes after the client gave up still leaves an object no row names (P201); the retry stores the photo
+under another name.
+
+**Tests.** `test_background_import_storage_outage.py` runs the real S3 backend against an in-process fake Garage.
+Against the code before the fix, 24 of its first 29 test items failed (the library tasks raised or stopped, the
+archive job reported "check the file" and skipped later steps, and RETRY progress had no message); 25 tests and 8
+subtests (a 503 and a timeout for each task) pass now. A test added in review, a download failing with a plain `ConnectionError`, failed while `run()` caught every
+`STORAGE_ERRORS` and took the network error for storage; storage handling is now scoped to the store step.
+`test_immich.py`, `test_flickr.py`, `test_flickr_album_import.py` and `test_google_photos.py` assert the new
+`storage_unavailable` count.

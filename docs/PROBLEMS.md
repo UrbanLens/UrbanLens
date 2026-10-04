@@ -2863,25 +2863,6 @@ which reads as a conflict for any place elsewhere ("Pierce County" against Dutch
 alone, for example by keeping the dateline out of `title` and `caption`, or have the source tell the judge to skip them.
 Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03.
 
-## P220 — A background photo import stops at the first object store refusal, and the rest of the selection is never imported
-
-`id: P220` · `status: open` · `updated: 2026-10-03` · `found by: P201's audit of storage writes`
-
-`import_immich_photos`, `import_flickr_photos`, `import_flickr_album_photos` and `import_google_photos` (`tasks.py`)
-store each photo with `Image.objects.create(image=ContentFile(...))` inside `reserve_upload` and catch only
-`UploadRefusedError`. Each task retries as a whole on `OSError` (`autoretry_for=(OSError,)`, `retry_backoff=True`, 3
-retries). A botocore read or connect timeout is an `OSError`, so it is retried, but after about 1, 2 and 4 s, all
-inside one Garage stall. A 503 (`ClientError`) or an `EndpointConnectionError` is not an `OSError`, so the task fails
-at once. Either way the rest of the selection is not imported. Photos already stored stay, and nothing is half-written:
-the row and its file share the reservation's transaction. The archive import stores photos and map overlay images the
-same way (`services/import_export/import_data.py`, `_import_photos` and the overlay importer), also catching only
-`UploadRefusedError`; what the import job does with the error that escapes was not traced.
-
-A likely fix: retry on `storage_errors.STORAGE_ERRORS` with a backoff that outlasts a stall (`process_image_upload`
-uses `min(60 * 2**retries, 900)`), and say in the progress message that storage was unavailable. Most tasks in
-`tasks.py` declare `autoretry_for=(OSError,)`, so whether to widen all of them is a separate question. Not reproduced
-in a test.
-
 ## P236 — A wiki URL's response time tells whether a Location exists under that slug
 
 `id: P236` · `status: open` · `updated: 2026-10-03` · `found by: adversarial review of P186`

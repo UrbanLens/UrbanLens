@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 import json
 import logging
@@ -15,6 +15,7 @@ import zipfile
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
+from urbanlens.dashboard.services.media.storage_errors import IMPORT_STORAGE_WAITS, OBJECT_STORE_ERRORS, STORAGE_ERRORS, storage_retry_countdown
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +32,122 @@ def import_dir(job_id: str) -> str:
     return os.path.join(django_settings.MEDIA_ROOT, "imports", job_id)
 
 
+#: Deferred-row keys, and what to call their files in a message.
+_DEFERRED_KINDS = {"photos": "photo(s)", "map_overlays": "map overlay image(s)"}
+
+
+@dataclass
+class DeferredFiles:
+    """Archive files a run did not store because storage refused one, kept for a later run to store.
+
+    Attributes:
+        rows: Deferred-row key -> 1-based positions, in that list in the archive, of the rows whose file waits.
+        pins: Archive pin uuid -> local pk, for the pins those rows name.
+        labels: Archive label uuid -> local pk, for the labels those rows name.
+        stored: Files this run stored.
+        refused: Whether storage refused a write in this run. The rest of the run's files then wait without trying, so
+            an outage costs one failed write, not one per file.
+    """
+
+    rows: dict[str, list[int]] = field(default_factory=dict)
+    pins: dict[str, int] = field(default_factory=dict)
+    labels: dict[str, int] = field(default_factory=dict)
+    stored: int = 0
+    refused: bool = False
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> DeferredFiles:
+        """Read deferred rows back from a task's arguments.
+
+        Args:
+            data: A mapping from :meth:`to_dict`, or None.
+
+        Returns:
+            The deferred rows.
+        """
+        data = data or {}
+        return cls(
+            rows={str(key): [int(position) for position in positions] for key, positions in (data.get("rows") or {}).items()},
+            pins={str(key): int(pk) for key, pk in (data.get("pins") or {}).items()},
+            labels={str(key): int(pk) for key, pk in (data.get("labels") or {}).items()},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """The deferred rows as a JSON-safe task argument."""
+        return {"rows": self.rows, "pins": self.pins, "labels": self.labels}
+
+    def refuse(self, exc: BaseException) -> None:
+        """Note that storage refused a write, so this run's later files wait without trying.
+
+        Args:
+            exc: What storage raised.
+        """
+        from urbanlens.dashboard.services.media.upload_retry import report_lasting_refusal
+
+        if not self.refused:
+            logger.warning("Import: storage refused a file, so the rest of this run's files wait for it", exc_info=exc)
+            report_lasting_refusal(exc)
+        self.refused = True
+
+    def defer(self, key: str, position: int, row: Mapping[str, Any], *, pin_uuid_map: Mapping[str, int], label_uuid_map: Mapping[str, int]) -> None:
+        """Keep one row for a later run, with the local pins and labels it names.
+
+        Args:
+            key: Which list the row is in.
+            position: Its 1-based position there.
+            row: The archive row.
+            pin_uuid_map: Archive pin uuid -> local pk.
+            label_uuid_map: Archive label uuid -> local pk.
+        """
+        self.rows.setdefault(key, []).append(position)
+        target = _safe_uuid(row.get("target_uuid"))
+        if target and target in pin_uuid_map:
+            self.pins[target] = pin_uuid_map[target]
+        for label_uuid in row.get("label_uuids") or []:
+            if isinstance(label_uuid, str) and label_uuid in label_uuid_map:
+                self.labels[label_uuid] = label_uuid_map[label_uuid]
+
+    def describe(self) -> str:
+        """The deferred files in words, such as "2 photo(s) and 1 map overlay image(s)".
+
+        Returns:
+            The description.
+        """
+        return " and ".join(f"{len(self.rows[key])} {noun}" for key, noun in _DEFERRED_KINDS.items() if self.rows.get(key))
+
+
 @dataclass
 class ImportResult:
-    """Summary of what the import created, skipped, and errored on."""
+    """Summary of what the import created, skipped, and errored on.
+
+    Attributes:
+        created: Rows created, by step key.
+        skipped: Rows skipped, by step key.
+        warnings: Notices for the importer.
+        deferred: Files this run left for a later one because storage refused them.
+    """
 
     created: dict[str, int] = field(default_factory=dict)
     skipped: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    deferred: DeferredFiles = field(default_factory=DeferredFiles)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ImportResult:
+        """Carry an earlier run's tally into this one.
+
+        Args:
+            data: A mapping from :meth:`to_dict`, or None.
+
+        Returns:
+            The tally, with nothing deferred.
+        """
+        data = data or {}
+        return cls(
+            created={str(key): int(count) for key, count in (data.get("created") or {}).items()},
+            skipped={str(key): int(count) for key, count in (data.get("skipped") or {}).items()},
+            warnings=[str(warning) for warning in data.get("warnings") or []],
+        )
 
     def inc_created(self, key: str, n: int = 1) -> None:
         self.created[key] = self.created.get(key, 0) + n
@@ -51,6 +161,32 @@ class ImportResult:
             "skipped": self.skipped,
             "warnings": self.warnings,
         }
+
+
+class ImportWaitingForStorageError(Exception):
+    """Storage refused some of an archive's files; everything else was imported, and the job runs again for those.
+
+    Attributes:
+        resume: What the next run needs: the tally so far and the deferred rows.
+        storage_waits: Storage waits in a row, this one included.
+        countdown: Seconds until the next run.
+        message: What the import's status says meanwhile.
+    """
+
+    def __init__(self, *, resume: dict[str, Any], storage_waits: int, countdown: int, message: str) -> None:
+        """Describe the wait.
+
+        Args:
+            resume: The tally so far and the deferred rows.
+            storage_waits: Storage waits in a row, this one included.
+            countdown: Seconds until the next run.
+            message: What the import's status says meanwhile.
+        """
+        super().__init__(message)
+        self.resume = resume
+        self.storage_waits = storage_waits
+        self.countdown = countdown
+        self.message = message
 
 
 class ImportJobStatus:
@@ -138,17 +274,27 @@ def _make_step_progress_reporter(job_status: ImportJobStatus, key: str, start_pc
     return report
 
 
-def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
+def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str, Any] | None = None, storage_waits: int = 0) -> bool:
     """Parse a UrbanLens export ZIP and import data for the user.
     Idempotent: records that already exist (matched by UUID) are skipped rather than duplicated.
+
+    A photo or overlay image storage refuses waits, with the files after it, for a later run that stores just those
+    (:class:`ImportWaitingForStorageError`); the rest of the archive is imported meanwhile. A refusal with nothing stored
+    since the last one waits longer, up to ``IMPORT_STORAGE_WAITS`` waits, and the files still waiting are then
+    reported as not imported.
 
     Args:
         user_id: PK of the user to import data for.
         zip_path: Path to the uploaded export ZIP file.
         job_id: UUID string for this import job (for status tracking).
+        resume: From :class:`ImportWaitingForStorageError`, to store only the files an earlier run deferred.
+        storage_waits: Storage waits in a row so far.
 
     Returns:
-        True on success (even partial), False on unrecoverable error."""
+        True on success (even partial), False on unrecoverable error.
+
+    Raises:
+        ImportWaitingForStorageError: Storage refused some files, and the job should run again for them."""
     from django.contrib.auth import get_user_model
     from django.core.exceptions import ObjectDoesNotExist
     from django.db import DatabaseError
@@ -166,36 +312,29 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
         return False
 
     extract_dir = os.path.join(os.path.dirname(zip_path), "extracted")
-    result = ImportResult()
+    result = ImportResult.from_dict(resume.get("result")) if resume else ImportResult()
+    waiting = False
 
     try:
         job_status.write("running", 5, "Validating archive...")
         data_dir = _extract_and_validate(zip_path, extract_dir, job_id, profile=profile)
 
-        manifest = _read_json(data_dir, "manifest.json") or {}
-        contents: list[str] = manifest.get("contents", [])
+        if resume:
+            _store_deferred_files(profile, data_dir, result, DeferredFiles.from_dict(resume.get("deferred")), job_status)
+        else:
+            _run_import_steps(profile, data_dir, result, job_status)
 
-        steps = [k for k in _IMPORT_ORDER if k in contents]
-        total = len(steps) + 1
-
-        # Cache of UUID→PK mappings built as we go, needed for cross-references.
-        pin_uuid_map: dict[str, int] = {}
-        label_uuid_map: dict[str, int] = {}
-
-        for i, key in enumerate(steps):
-            step_start = 10 + int((i / total) * 80)
-            step_end = 10 + int(((i + 1) / total) * 80)
-            job_status.write("running", step_start, _STEP_MESSAGES.get(key, f"Importing {key}..."))
-
-            importer = _IMPORTERS.get(key)
-            if importer is None:
-                continue
-            report_progress = _make_step_progress_reporter(job_status, key, step_start, step_end)
-            importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map, report_progress=report_progress)
-
+        _wait_for_storage(result, storage_waits, job_status)
         job_status.write("done", 100, "Import complete!", result=result.to_dict())
         return True
 
+    except ImportWaitingForStorageError:
+        waiting = True
+        raise
+    except OBJECT_STORE_ERRORS:
+        logger.exception("Import stopped by a storage failure for user %s", user_id)
+        job_status.write("error", 0, "Storage was unavailable, so the import stopped. Try again in a few minutes.")
+        return False
     except _ImportValidationError as exc:
         logger.warning("Import validation failed for user %s: %s", user_id, exc)
         job_status.write("error", 0, "That archive couldn't be imported.")
@@ -214,7 +353,108 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
         return False
     finally:
         shutil.rmtree(extract_dir, ignore_errors=True)
-        schedule_import_cleanup(os.path.dirname(zip_path), job_status)
+        # A waiting job still needs the archive; the run that finishes it schedules the cleanup.
+        if not waiting:
+            schedule_import_cleanup(os.path.dirname(zip_path), job_status)
+
+
+def _run_import_steps(profile: Any, data_dir: str, result: ImportResult, job_status: ImportJobStatus) -> None:
+    """Run every import step the archive's manifest lists, in dependency order.
+
+    Args:
+        profile: The importing profile.
+        data_dir: The extracted archive's data directory.
+        result: The import's tally.
+        job_status: Where progress is reported.
+    """
+    manifest = _read_json(data_dir, "manifest.json") or {}
+    contents: list[str] = manifest.get("contents", [])
+
+    steps = [k for k in _IMPORT_ORDER if k in contents]
+    total = len(steps) + 1
+
+    # Cache of UUID→PK mappings built as we go, needed for cross-references.
+    pin_uuid_map: dict[str, int] = {}
+    label_uuid_map: dict[str, int] = {}
+
+    for i, key in enumerate(steps):
+        step_start = 10 + int((i / total) * 80)
+        step_end = 10 + int(((i + 1) / total) * 80)
+        job_status.write("running", step_start, _STEP_MESSAGES.get(key, f"Importing {key}..."))
+
+        importer = _IMPORTERS.get(key)
+        if importer is None:
+            continue
+        report_progress = _make_step_progress_reporter(job_status, key, step_start, step_end)
+        importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map, report_progress=report_progress)
+
+
+def _store_deferred_files(profile: Any, data_dir: str, result: ImportResult, deferred: DeferredFiles, job_status: ImportJobStatus) -> None:
+    """Store just the files an earlier run of this import deferred.
+
+    A pin or label deleted since that run is dropped from the carried maps, so its rows resolve as they would have
+    without it.
+
+    Args:
+        profile: The importing profile.
+        data_dir: The extracted archive's data directory.
+        result: The tally carried from the earlier runs.
+        deferred: The rows they deferred.
+        job_status: Where progress is reported.
+    """
+    from urbanlens.dashboard.models.labels.model import Label
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    live_pins = set(Pin.objects.filter(profile=profile, pk__in=deferred.pins.values()).values_list("pk", flat=True))
+    live_labels = set(Label.objects.filter(pk__in=deferred.labels.values()).values_list("pk", flat=True))
+    pin_uuid_map = {key: pk for key, pk in deferred.pins.items() if pk in live_pins}
+    label_uuid_map = {key: pk for key, pk in deferred.labels.items() if pk in live_labels}
+
+    if deferred.rows.get("photos"):
+        job_status.write("running", 10, _STEP_MESSAGES["photos"])
+        report = _make_step_progress_reporter(job_status, "photos", 10, 60)
+        _import_photos(profile, data_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map, report_progress=report, only=set(deferred.rows["photos"]))
+    if deferred.rows.get("map_overlays"):
+        job_status.write("running", 60, _STEP_MESSAGES[MapAnnotationsImport.key])
+        ctx = ImportContext(
+            profile=profile,
+            data_dir=data_dir,
+            result=result,
+            pin_uuid_map=pin_uuid_map,
+            label_uuid_map=label_uuid_map,
+            report_progress=_make_step_progress_reporter(job_status, MapAnnotationsImport.key, 60, 90),
+        )
+        MapAnnotationsImport().store_deferred_overlays(ctx, set(deferred.rows["map_overlays"]))
+
+
+def _wait_for_storage(result: ImportResult, storage_waits: int, job_status: ImportJobStatus) -> None:
+    """Have the files this run deferred wait for another run, or give up on them with a warning.
+
+    Args:
+        result: The import's tally, its deferred files included.
+        storage_waits: Storage waits in a row before this run.
+        job_status: Where the wait is reported.
+
+    Raises:
+        ImportWaitingForStorageError: Files wait for another run.
+    """
+    deferred = result.deferred
+    if not deferred.rows:
+        return
+    waits = 0 if deferred.stored else storage_waits
+    if waits >= IMPORT_STORAGE_WAITS:
+        logger.warning("Import: storage refused %d run(s) in a row; giving up on %s", waits + 1, deferred.describe())
+        result.warnings.append(f"Storage was unavailable, so {deferred.describe()} were not imported. Import the archive again later to add them.")
+        return
+    countdown = storage_retry_countdown(waits)
+    message = f"Storage is briefly unavailable, so {deferred.describe()} are waiting. Trying again in {countdown // 60} minute(s)..."
+    job_status.write("running", 90, message)
+    raise ImportWaitingForStorageError(
+        resume={"result": result.to_dict(), "deferred": deferred.to_dict()},
+        storage_waits=waits + 1,
+        countdown=countdown,
+        message=message,
+    )
 
 
 # -- Validation ----------------------------------------------------------------
@@ -1282,9 +1522,20 @@ def _import_photos(
     pin_uuid_map: dict[str, int],
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
+    only: Collection[int] | None = None,
 ) -> None:
     """Import the archive's ``photos/`` files back into storage.
-    Each photo re-enters storage through the same quota and max-file-size checks a fresh upload gets; ones that don't fit are skipped with a warning rather than blowing the quota."""
+    Each photo re-enters storage through the same quota and max-file-size checks a fresh upload gets; ones that don't fit are skipped with a warning rather than blowing the quota.
+    A photo storage refuses is deferred (``ImportResult.deferred``), with every photo after it.
+
+    Args:
+        profile: The importing profile.
+        data_dir: The extracted archive's data directory.
+        result: The import's tally.
+        pin_uuid_map: Archive pin uuid -> local pk.
+        label_uuid_map: Archive label uuid -> local pk.
+        report_progress: Optional throttled progress callback.
+        only: 1-based positions of the rows to import, for a run storing an earlier run's deferred photos."""
     from decimal import Decimal, InvalidOperation
 
     from django.core.files import File
@@ -1309,6 +1560,8 @@ def _import_photos(
             return None
 
     for idx, row in enumerate(rows, start=1):
+        if only is not None and idx not in only:
+            continue
         if report_progress:
             report_progress(idx, total_rows)
         uuid_str = _safe_uuid(row.get("uuid"))
@@ -1329,6 +1582,9 @@ def _import_photos(
         if file_size_error_for_upload(size):
             over_quota += 1
             result.inc_skipped("photos")
+            continue
+        if result.deferred.refused:
+            result.deferred.defer("photos", idx, row, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map)
             continue
         try:
             with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
@@ -1359,6 +1615,11 @@ def _import_photos(
             over_quota += 1
             result.inc_skipped("photos")
             continue
+        except STORAGE_ERRORS as exc:
+            result.deferred.refuse(exc)
+            result.deferred.defer("photos", idx, row, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map)
+            continue
+        result.deferred.stored += 1
         _queue_import_processing(image)
 
         label_pks = [label_uuid_map[label_uuid] for label_uuid in (row.get("label_uuids") or []) if label_uuid in label_uuid_map]
@@ -2111,9 +2372,9 @@ class MapAnnotationsImport(ImportType):
         if not isinstance(data, dict):
             return
 
-        maps = [row for row in (data.get("maps") or []) if isinstance(row, dict)]
-        markup = [row for row in (data.get("markup") or []) if isinstance(row, dict)]
-        overlays = [row for row in (data.get("overlays") or []) if isinstance(row, dict)]
+        maps = _dict_rows(data, "maps")
+        markup = _dict_rows(data, "markup")
+        overlays = _dict_rows(data, "overlays")
         total = len(maps) + len(markup) + len(overlays)
         done = 0
 
@@ -2129,12 +2390,36 @@ class MapAnnotationsImport(ImportType):
                 ctx.report_progress(done, total)
             self._import_standalone_markup(row, ctx)
 
-        for row in overlays:
+        for position, row in enumerate(overlays, start=1):
             done += 1
             if ctx.report_progress:
                 ctx.report_progress(done, total)
-            self._import_overlay(row, ctx)
+            self._import_overlay(row, ctx, position)
 
+        self._warn(ctx)
+
+    def store_deferred_overlays(self, ctx: ImportContext, positions: Collection[int]) -> None:
+        """Restore just the overlays an earlier run deferred because storage refused their image.
+
+        Args:
+            ctx: The shared import context.
+            positions: 1-based positions, in the archive's overlay list, of the overlays to restore.
+        """
+        data = self.load(ctx.data_dir)
+        overlays = _dict_rows(data, "overlays") if isinstance(data, dict) else []
+        for position, row in enumerate(overlays, start=1):
+            if position in positions:
+                if ctx.report_progress:
+                    ctx.report_progress(position, len(overlays))
+                self._import_overlay(row, ctx, position)
+        self._warn(ctx)
+
+    def _warn(self, ctx: ImportContext) -> None:
+        """Add the step's summary warnings.
+
+        Args:
+            ctx: The shared import context.
+        """
         unattachable = ctx.scratch.get("unattachable", 0)
         if unattachable:
             ctx.result.warnings.append(
@@ -2208,15 +2493,17 @@ class MapAnnotationsImport(ImportType):
         else:
             ctx.result.inc_created("map_annotation_items")
 
-    def _import_overlay(self, row: dict[str, Any], ctx: ImportContext) -> None:
+    def _import_overlay(self, row: dict[str, Any], ctx: ImportContext, position: int) -> None:
         """Restore one georeferenced image overlay onto the importer's own pin.
 
         Goes through the same service as the manage-overlays form, so the per-map cap holds and an archived
-        ``image_url`` is downloaded rather than handed to viewers' browsers.
+        ``image_url`` is downloaded rather than handed to viewers' browsers. An overlay whose image storage refuses
+        is deferred (``ImportResult.deferred``).
 
         Args:
             row: The exported overlay row.
             ctx: The shared import context.
+            position: Its 1-based position in the archive's overlay list.
         """
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
         from urbanlens.dashboard.models.pin.model import Pin
@@ -2252,13 +2539,24 @@ class MapAnnotationsImport(ImportType):
         tile_url_template = imported_tile_template(str(row.get("tile_url_template") or ""))
         image = None
         if not tile_url_template:
-            image = self._restore_overlay_image(row, ctx)
-            image_url = str(row.get("image_url") or "").strip()
-            if image is None and image_url:
-                try:
-                    image = image_from_external_url(pin, ctx.profile, image_url, caption=name)
-                except OverlayImageError:
-                    image = None
+            deferred = ctx.result.deferred
+            if deferred.refused:
+                deferred.defer("map_overlays", position, row, pin_uuid_map=ctx.pin_uuid_map, label_uuid_map=ctx.label_uuid_map)
+                return
+            try:
+                image = self._restore_overlay_image(row, ctx)
+                image_url = str(row.get("image_url") or "").strip()
+                if image is None and image_url:
+                    try:
+                        image = image_from_external_url(pin, ctx.profile, image_url, caption=name)
+                    except OverlayImageError:
+                        image = None
+            except STORAGE_ERRORS as exc:
+                deferred.refuse(exc)
+                deferred.defer("map_overlays", position, row, pin_uuid_map=ctx.pin_uuid_map, label_uuid_map=ctx.label_uuid_map)
+                return
+            if image is not None:
+                deferred.stored += 1
             if image is None:
                 ctx.bump("imageless_overlays")
                 ctx.result.inc_skipped("map_overlays")
@@ -2324,6 +2622,19 @@ class MapAnnotationsImport(ImportType):
             return None
         _queue_import_processing(image)
         return image
+
+
+def _dict_rows(data: Mapping[str, Any], key: str) -> list[dict[str, Any]]:
+    """The object rows of one list in an archive file.
+
+    Args:
+        data: The parsed file.
+        key: The list's key.
+
+    Returns:
+        Its rows that are objects.
+    """
+    return [row for row in (data.get(key) or []) if isinstance(row, dict)]
 
 
 #: Name of the archive subdirectory holding overlay image files. Mirrors
