@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.media.held_upload import discard_held_upload, held_field, hold_upload
 from urbanlens.dashboard.tests.hypothesis.test_every_stored_photo_is_reencoded import SANDBOX, _fixtures, _MetadataCase
@@ -248,10 +249,11 @@ class WhatElseHoldsAnUploadTests(_HeldCase):
 
     def test_the_owner_is_told_an_avatar_is_processing_and_nobody_else_is(self) -> None:
         profile = self._profile()
+        Profile.objects.filter(pk=profile.pk).update(profile_visibility=VisibilityChoice.ANYONE)
         self._hold(profile, "avatar")
         viewer = self._profile()
         for caller, expected in ((profile, True), (viewer, False)):
-            with self.subTest(owner=expected), mock.patch.object(Profile, "can_view_profile", return_value=True):
+            with self.subTest(owner=expected):
                 key = _key_with_scopes(caller.user, ApiKeyScope.PROFILE_READ, ApiKeyScope.SOCIAL_READ)
                 response = self.client.get(
                     reverse("external_api:profiles.detail", kwargs={"profile_slug": profile.uuid}), **_bearer(key)

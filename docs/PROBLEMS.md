@@ -1221,7 +1221,8 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
   `zipfile` reads it; the entry count in the end record is not trusted. The same ZIP is now refused at once, with no
   RSS growth. The preview's extraction and a backup restore (`import_data._extract_and_validate`, which counted
   members only after reading them) both open ZIPs this way. A TGZ is refused past `MAX_TAR_MEMBERS` (50,000) members,
-  supported or not: `tarfile` keeps each `TarInfo`, 123 MiB a million (`test_archive_directory_bounds.py`).
+  supported or not: `tarfile` keeps each `TarInfo`, about 410 MiB a million (measured with `tracemalloc` over 200,000
+  empty members, 82 MiB, in the app image; no test measures it).
 
 ---
 
