@@ -77,7 +77,8 @@ _REGISTER_SOURCES = frozenset({"redata_historic_registers", _CRIS})
 
 
 def _names_a_new_building(instance: LocationCache) -> bool:
-    """Whether a CRIS row names a building its location is not already named after."""
+    """Whether a CRIS row names a building whose own location is not already named after it."""
+    from urbanlens.dashboard.services.locations.name_tiers import NamingScope, naming_scope
     from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 
     data = instance.data if isinstance(instance.data, dict) else {}
@@ -85,7 +86,9 @@ def _names_a_new_building(instance: LocationCache) -> bool:
     if instance.source != _CRIS or not name:
         return False
     location = instance.location
-    return location.official_name_source != "cris" or normalize_name_for_comparison(location.official_name) != name
+    if location.official_name_source == "cris" and normalize_name_for_comparison(location.official_name) == name:
+        return False
+    return naming_scope(location) == NamingScope.BUILDING
 
 
 @receiver(post_save, sender=LocationCache, dispatch_uid="location_cache_refresh_names_on_register_listing")

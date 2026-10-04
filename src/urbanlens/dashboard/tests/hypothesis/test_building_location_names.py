@@ -21,12 +21,13 @@ from urbanlens.dashboard.models.cache import signals as cache_signals
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.plugins.registry import plugin_registry
 from urbanlens.dashboard.services.core.slugs import is_uuid_slug
 from urbanlens.dashboard.services.locations import name_tiers, national_register
-from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-from urbanlens.dashboard.services.locations.name_tiers import NamingScope, building_name_admissible
+from urbanlens.dashboard.services.locations.name_resolution import NameCandidate, NameProvider, default_name_resolver
+from urbanlens.dashboard.services.locations.name_tiers import NameTier, NamingScope, building_name_admissible
 from urbanlens.dashboard.services.locations.naming import (
     external_name_candidates_for_location,
     update_location_name_from_external_sources,
@@ -193,6 +194,9 @@ class CrisArrivalRefreshesNamesTests(SimpleTestCase):
         )
         self._patch("urbanlens.dashboard.services.locations.register_names.register_listing_names", return_value=[])
         self._patch("django.db.transaction.on_commit", side_effect=lambda func, *args, **kwargs: func())
+        self.scope = self._patch(
+            "urbanlens.dashboard.services.locations.name_tiers.naming_scope", return_value=NamingScope.BUILDING
+        )
 
     def _patch(self, target: str, **kwargs):
         patcher = patch(target, **kwargs)
@@ -219,9 +223,48 @@ class CrisArrivalRefreshesNamesTests(SimpleTestCase):
         self._land(_cris())
         self.refresh.assert_not_called()
 
+    def test_a_propertys_card_naming_one_of_its_buildings_refreshes_nothing(self) -> None:
+        """A campus's card holds its nearest building's record, whose name is not the campus's."""
+        self.scope.return_value = NamingScope.PARCEL
+        self._land(_cris())
+        self.refresh.assert_not_called()
+
     def test_another_source_naming_a_building_is_not_this_receivers(self) -> None:
         self._land({"name": _BLDG33, "USNName": _BLDG33}, source="redata_building_attributes")
         self.refresh.assert_not_called()
+
+
+class TheBuildingsOwnRecordOutranksREDatasNameTests(SimpleTestCase):
+    """The child pin was named from CRIS's record, so its location takes the same provider's name (P231).
+
+    On the dev stack BLDG 33's location also held REData's "POWERHOUSE & MACHINE SHOP", which won outright on any
+    child pin's location.
+    """
+
+    def _resolve(self, *candidates: NameCandidate) -> NameCandidate | None:
+        pins = SimpleNamespace(filter=lambda **_lookups: SimpleNamespace(exists=lambda: True))
+        location = SimpleNamespace(pk=7, pins=pins)
+        with (
+            patch.object(SiteSettings, "get_current", return_value=SimpleNamespace(name_source_priority_list=[])),
+            patch.object(name_tiers, "naming_scope", return_value=NamingScope.BUILDING),
+        ):
+            return default_name_resolver(location=location).resolve(list(candidates), location)
+
+    def test_cris_s_record_names_the_building_ahead_of_redata(self) -> None:
+        resolved = self._resolve(
+            NameCandidate(name="POWERHOUSE & MACHINE SHOP", source="redata_building", tier=NameTier.BUILDING),
+            NameCandidate(name=_BLDG33, source="cris", tier=NameTier.BUILDING),
+        )
+
+        self.assertEqual((resolved.name, resolved.source) if resolved else None, (_BLDG33, "cris"))
+
+    def test_without_a_cris_record_redata_still_wins_outright(self) -> None:
+        resolved = self._resolve(
+            NameCandidate(name="Courtyard Drive", source="nominatim", tier=NameTier.BUILDING),
+            NameCandidate(name="POWERHOUSE & MACHINE SHOP", source="redata_building", tier=NameTier.BUILDING),
+        )
+
+        self.assertEqual(resolved.source if resolved else None, "redata_building")
 
 
 class CrisNameReachesTheBuildingLocationTests(TestCase):
