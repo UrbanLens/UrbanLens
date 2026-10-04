@@ -291,7 +291,20 @@ class Location(abstract.PublicDashboardModel):
 
         The only name that may reach a wiki URL, a wiki's automatic name, or anyone who sees only what providers say.
         """
-        return self.official_name if self.official_name and self.official_name_source else None
+        return self.name_from_provider(self.official_name, self.official_name_source)
+
+    @staticmethod
+    def name_from_provider(official_name: str | None, official_name_source: str | None) -> str | None:
+        """What :attr:`provider_name` is for these two column values.
+
+        Args:
+            official_name: The stored name.
+            official_name_source: The provider key recorded for it.
+
+        Returns:
+            The name when a provider is recorded for it, else None.
+        """
+        return official_name if official_name and official_name_source else None
 
     def _slugify_base(self) -> str:
         # Wiki URLs are routed by this slug, so it comes from a provider's name or the uuid, never from community text.
@@ -309,34 +322,77 @@ class Location(abstract.PublicDashboardModel):
 
         return bool(self.pk and self.provider_name and (not self.slug or is_uuid_slug(self.slug)))
 
-    def _sync_slug_after_save(self, *, wrote_slug: bool) -> None:
-        """Re-mint a uuid slug from a newly known provider name, and keep the slug history current.
+    def _slug_fits_provider_name(self) -> bool:
+        """Whether minting from the provider name, or the uuid when there is none, could have given the slug."""
+        from urbanlens.dashboard.services.core.slugs import could_mint, is_uuid_slug
+
+        name = self.provider_name
+        if not name:
+            return is_uuid_slug(self.slug)
+        return could_mint(self.slug or "", name, max_length=self._slug_max_length())
+
+    def _remint_slug(self) -> None:
+        """Move the slug onto the provider name, or the uuid when there is none.
+
+        A former slug of this Location's own that the name could have given is taken back rather than a new one
+        minted, so a provider flipping between names moves between the same slugs.
+        """
+        from urbanlens.dashboard.models.location.slug_history import LocationSlugHistory
+        from urbanlens.dashboard.services.core.slugs import could_mint
+
+        name = self.provider_name
+        if not name:
+            self.slug = str(self.uuid)
+        else:
+            formers = LocationSlugHistory.objects.filter(location_id=self.pk).order_by("-pk").values_list("slug", flat=True)
+            taken_back = next((slug for slug in formers if could_mint(slug, name, max_length=self._slug_max_length()) and not self._slug_is_taken(slug)), None)
+            if taken_back is None:
+                self.regenerate_slug()
+                return
+            self.slug = taken_back
+        self.save(update_fields=["slug"])
+
+    def _sync_wiki_slugs(self) -> None:
+        """Re-mint this Location's wiki's slug, and its child wikis', where the provider name no longer gives them."""
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        # Loaded rather than assigned this instance: assigning would replace the wiki a caller already holds
+        # through ``self.wiki`` with this one.
+        wiki = Wiki.objects.filter(location_id=self.pk).select_related("location", "parent_wiki__location").first()
+        if wiki is None:
+            return
+        wiki.sync_slug_with_provider_name()
+        for child in wiki.child_wikis.select_related("location"):
+            child.sync_slug_with_provider_name()
+
+    def _sync_slug_after_save(self, *, wrote_slug: bool, wrote_name: bool) -> None:
+        """Keep the slug history current, and re-mint a slug the provider name could no longer have given.
 
         Args:
             wrote_slug: Whether the save just made wrote the slug column.
+            wrote_name: Whether it wrote ``official_name`` or ``official_name_source``.
         """
         from urbanlens.dashboard.models.location.slug_history import LocationSlugHistory
-        from urbanlens.dashboard.services.core.slugs import is_uuid_slug
 
-        if self._slug_awaits_provider_name() and not self.__dict__.get("_reminting_slug"):
-            # regenerate_slug saves again, which records the change through this method.
+        if wrote_slug:
+            persisted = self.__dict__.get("_persisted_slug")
+            if persisted is not None and persisted != self.slug:
+                LocationSlugHistory.record(self, persisted, self.slug)
+            self._persisted_slug = self.slug
+        renamed = wrote_name and self.__dict__.get("_persisted_provider_name", self.provider_name) != self.provider_name
+        self._persisted_provider_name = self.provider_name
+        if self.__dict__.get("_reminting_slug"):
+            return
+        remint = (renamed and not self._slug_fits_provider_name()) or self._slug_awaits_provider_name()
+        if remint:
+            # The re-mint saves again, which records the slug given up through this method.
             self._reminting_slug = True
             try:
-                self.regenerate_slug()
+                self._remint_slug()
             finally:
                 self._reminting_slug = False
-            from urbanlens.dashboard.models.wiki.model import Wiki
-
-            wiki = Wiki.objects.filter(location_id=self.pk).first()
-            if wiki is not None and is_uuid_slug(wiki.slug):
-                wiki.regenerate_slug()
-            return
-        if not wrote_slug:
-            return
-        persisted = self.__dict__.get("_persisted_slug")
-        if persisted is not None and persisted != self.slug:
-            LocationSlugHistory.record(self, persisted, self.slug)
-        self._persisted_slug = self.slug
+        if renamed or remint:
+            self._sync_wiki_slugs()
 
     @classmethod
     def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Location:  # noqa: ARG003
@@ -358,6 +414,8 @@ class Location(abstract.PublicDashboardModel):
         instance._immutable_originals = {name: ordered_values[ordered_names.index(name)] for name in cls.IMMUTABLE_FIELDS if name in ordered_names}  # noqa: SLF001
         if "slug" in ordered_names:
             instance._persisted_slug = ordered_values[ordered_names.index("slug")]  # noqa: SLF001
+        if "official_name" in ordered_names and "official_name_source" in ordered_names:
+            instance._persisted_provider_name = instance.provider_name  # noqa: SLF001
         return instance
 
     @staticmethod
@@ -437,9 +495,13 @@ class Location(abstract.PublicDashboardModel):
         writes_slug = update_fields is None or "slug" in update_fields or not self.slug
         if self.pk is not None and writes_slug and "_persisted_slug" not in self.__dict__:
             self._persisted_slug = type(self).objects.filter(pk=self.pk).values_list("slug", flat=True).first()
+        writes_name = update_fields is None or bool({"official_name", "official_name_source"} & set(update_fields))
+        if self.pk is not None and writes_name and "_persisted_provider_name" not in self.__dict__:
+            persisted = type(self).objects.filter(pk=self.pk).values_list("official_name", "official_name_source").first()
+            self._persisted_provider_name = self.name_from_provider(*persisted) if persisted else None
 
         super().save(*args, **kwargs)
-        self._sync_slug_after_save(wrote_slug=writes_slug)
+        self._sync_slug_after_save(wrote_slug=writes_slug, wrote_name=writes_name)
 
     def __setattr__(self, name: str, value) -> None:
         """Support lightweight GooglePlace doubles on unsaved model instances.

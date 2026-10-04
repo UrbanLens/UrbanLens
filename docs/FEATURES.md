@@ -156,9 +156,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   `official_name` when `official_name_source` records which provider supplied it. Client text, pin names
   and community wiki names never reach `official_name`, and a name of unknown origin (legacy rows the P186
   migration could not prove) mints no slug, names no new wiki, is never shown as official on the wiki or
-  to a concealed viewer, and is never a shared search name (`search_names.shared_names`). A uuid slug is re-minted when a provider's name arrives (`Location.save`); a later
-  provider rename keeps the minted slug. A slug the Location gives up goes to `LocationSlugHistory` and is
-  never minted for another Location. A wiki route reached by the uuid or a former slug answers a 301 to the
+  to a concealed viewer, and is never a shared search name (`search_names.shared_names`). The slug follows the current provider name (`Location._sync_slug_after_save`): a
+  provider name arriving or changing re-mints it unless the old slug is one the new name could also give, a
+  cleared name (or one left without a source) puts it back on the uuid, and the Location's wiki and that wiki's
+  children are re-minted to match (`Wiki.sync_slug_with_provider_name`). A slug the Location gives up goes to
+  `LocationSlugHistory` and is never minted for another Location; a re-mint takes back a former slug of the
+  Location's own that the new name could give, so a provider flipping between two names moves between the same
+  two slugs, and only the newest ten former slugs are kept (`MAX_FORMER_SLUGS`). Migration 0052 applied the same
+  rule to rows renamed before it existed (P250). A wiki route reached by the uuid or a former slug answers a 301 to the
   same route at the current slug, keeping the rest of the path and the query string; the wiki routes resolve
   both too, so a POST or an API call at an old slug lands in place. Only a GET or HEAD from
   someone the wiki itself would serve is redirected (`Cache-Control: private, no-store`); anyone else gets

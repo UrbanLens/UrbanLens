@@ -96,6 +96,11 @@ REVIEWED: dict[str, str] = {
         "misplaced CRIS cards and nests root wikis under their parcel's. A reverse keeps every value, each one the old "
         "code reads; the dropped rows are a cache it refetches, and old links resolve through the history."
     ),
+    "0052_location_slug_follows_name.py": (
+        "remint_mismatched_slugs moves Location and Wiki slugs onto their current provider name, or the uuid, recording "
+        "each readable Location slug given up in LocationSlugHistory. A reverse keeps the new slugs, each one valid to "
+        "the old code, and old links resolve through the history."
+    ),
 }
 
 

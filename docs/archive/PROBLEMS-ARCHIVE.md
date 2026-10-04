@@ -21791,3 +21791,39 @@ subtests and all four trip/markup tests failed. After: 10 passed, 602 subtests.
 row then evaluates the visibility condition on it, where a missing slug finds nothing. That is one row's filter
 inside one statement and was not timed. Profile slugs have the same shape and are open as P269. A safety
 check-in's community page also looks up first, but by uuid, which cannot be guessed.
+
+## RESOLVED 2026-10-04: A Location's slug follows its current provider name, at runtime as in 0041
+
+`id: P250` · `status: fixed` · `resolved: 2026-10-04` · `found by: rerunning 0041 against dev, P186 follow-up`
+
+**What was wrong.** At runtime a Location's slug was minted from a provider name only while it was still the uuid
+(`Location._slug_awaits_provider_name`); after that it was kept through a provider rename and through a name being
+rejected and cleared. Migration 0041 does the opposite, so the same row could be right today and re-minted by a
+later run of the same rule. On dev, Location 98249 kept `hudson-river-state-hospital-32655` after CRIS renamed it
+"BLDG 51/MAIN/ADMIN (1871) - NHL", and its wiki kept the campus's slug.
+
+**Fix.** Jess's standing ruling: re-mint mismatched slugs. `Location.save` now notes the provider name it loaded
+(`_persisted_provider_name`, from `from_db` or one lookup) and, when a save that writes `official_name` or
+`official_name_source` changes it, re-mints any slug the new name could not have given (`could_mint`, the test
+0041 uses); a name cleared, or left without a source, puts the slug on the uuid. The slug given up goes to
+`LocationSlugHistory`, so links to it 301. A re-mint first takes back a former slug of the Location's own that the
+new name could give (`_remint_slug`), so a provider flipping between two names moves between the same two slugs
+and the history does not grow; `LocationSlugHistory.record` also keeps only the newest `MAX_FORMER_SLUGS` (10) per
+Location, so a provider cycling through new names cannot grow it either. A slug dropped from the history can be
+minted for another Location again. The Location's wiki, and its child wikis (whose prefix comes from the parent's
+provider name), are re-minted the way 0049's `_remint_wikis` does (`Wiki.sync_slug_with_provider_name`); wiki slugs
+still come only from provider names. Pin slugs are untouched. Migration 0052 applies the rule once to rows renamed
+before the runtime did.
+
+**A trap found on the way.** Re-minting the wiki by assigning `wiki.location = self` also replaced the Location's
+cached reverse `wiki` with the fresh instance, so the next `update_location_name_from_external_sources` on the same
+Location read a stale wiki name and refused to rename it (`test_name_tiers.py::TitleTests::
+test_an_article_arriving_later_renames_a_wiki_named_after_its_listing`). The wiki is now loaded with its location
+`select_related` instead.
+
+**Evidence.** `tests/hypothesis/test_location_slug_follows_provider_name.py`: 11 of its 15 tests failed before the
+change (the 4 that passed guard what must not change: a new source for the same name, a numbered slug the new name
+can still give, an unrelated save, pin slugs), as did the provenance test that encoded the old rule, rewritten as
+`test_a_later_provider_rename_re_mints_the_slug`. `test_location_slug_follows_name_migration.py`: with the
+migration's forward function replaced by a no-op, 6 of 7 failed (the seventh checks that fitting slugs are left
+alone); against historical models from 0051, all pass.
