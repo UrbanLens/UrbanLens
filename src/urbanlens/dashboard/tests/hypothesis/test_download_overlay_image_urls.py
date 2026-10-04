@@ -15,9 +15,11 @@ from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command, get_commands
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
+from django.db.utils import ProgrammingError
 from django.test import TransactionTestCase
 from model_bakery import baker
 from PIL import Image as PILImage
+import pytest
 import requests
 
 from urbanlens.core.tests.testcase import TestCase
@@ -212,6 +214,11 @@ class TheOperatorsPathTests(TransactionTestCase):
                 cursor.execute(f"""DELETE FROM "{_TABLE}" WHERE "image_id" IS NULL AND "tile_url_template" = ''""")
         self._migrate(leaves)
 
+    @pytest.mark.xfail(
+        strict=True,
+        raises=ProgrammingError,
+        reason="P242: the command runs today's models on the 0032 schema, which lacks columns added since",
+    )
     def test_the_migration_proceeds_once_the_command_has_run(self) -> None:
         from urbanlens.dashboard.tasks import process_image_upload
 

@@ -2732,6 +2732,13 @@ Options, for the release's migration squash (see the release migration notes): r
 queued by 0033 itself) so no current code ever runs on the old schema. Not Jess's call unless the first option
 changes the supported upgrade path.
 
+**2026-10-04.** `test_the_migration_proceeds_once_the_command_has_run` is a strict xfail on `ProgrammingError`, so
+the suite reports the gap and the test fails once it is fixed. Rewriting the command over the 0032 historical models
+was considered and set aside: the download goes through `materialize_media_item` (quota, dedupe, storage), which a
+copy over historical models would have to keep in step with. No document states an upgrade-path policy. The squashes
+carry no `replaces`, but an install at production's v0.7 state can still migrate straight to 0.9.0, so requiring
+v0.8.0 as a step would be a new rule. That makes the first option Jess's call (asked 2026-10-04).
+
 ## P277 — A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged
 
 `id: P277` · `status: open` · `updated: 2026-10-04` · `found by: Claude, implementing P53`
