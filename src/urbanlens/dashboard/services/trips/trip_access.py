@@ -27,13 +27,25 @@ def get_trip_for_viewer(trip_slug: str, viewer: Profile) -> Trip:
         The trip.
 
     Raises:
-        TripNotFoundError: No such trip, or the viewer is neither its creator nor one of its members."""
-    trip = Trip.objects.filter(slug=trip_slug).select_related("creator__user").first()
+        TripNotFoundError: No such trip, or the viewer is neither its creator nor one of its members. One query
+            decides both, so someone else's trip costs what a missing one does."""
+    trip = Trip.objects.visible_to(viewer).filter(slug=trip_slug).select_related("creator__user").first()
     if trip is None:
         raise TripNotFoundError(TRIP_NOT_FOUND_MESSAGE)
-    if trip.creator_id == viewer.id or TripMembership.objects.for_trip_and_profile(trip, viewer).exists():
-        return trip
-    raise TripNotFoundError(TRIP_NOT_FOUND_MESSAGE)
+    return trip
+
+
+def get_joined_trip(trip_slug: str, profile: Profile) -> Trip | None:
+    """The trip *trip_slug* names, when *profile* created it or has joined it.
+
+    Args:
+        trip_slug: The trip's URL slug.
+        profile: The profile acting on it.
+
+    Returns:
+        The trip, or None for a missing trip and for one the profile has not joined alike.
+    """
+    return Trip.objects.visible_to(profile, joined_only=True).filter(slug=trip_slug).first()
 
 
 def is_organizer(profile: Profile, trip: Trip) -> bool:

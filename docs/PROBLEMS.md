@@ -2977,23 +2977,22 @@ whether the panel asks REData for those fields, whether REData has them for this
 gate is applied. A subscriber should see everything the property-owner feature offers. Check production's entitlement
 logic on the dev stack with the e2e `subscriber` role.
 
-## P236 — A wiki URL's response time tells whether a Location exists under that slug
+## P269 — A profile URL's response time tells whether an account has that username
 
-`id: P236` · `status: open` · `updated: 2026-10-03` · `found by: adversarial review of P186`
+`id: P269` · `status: open` · `updated: 2026-10-04` · `found by: the P236 route audit`
 
-A wiki URL for a slug no Location has ever used 404s after one query (`get_location_or_404`). A current slug of
-a Location the requester can't see also 404s, but only after the wiki lookup, a profile `get_or_create`, and the
-`location_visible_to` queries. Since P186, a former slug (`LocationSlugHistory`) of an invisible Location costs
-more again: `canonical_location_slug` runs the history query, the `exists()` check and a full
-`locate_visible_wiki` before the view runs its own (`services/wiki/wiki_access.py`, `canonical_location_slug`).
+`/profile/<slug>/` (`controllers/userprofile.py`, `ViewProfileView.get`), the external API's profile detail
+(`external_api/views.py`, the `profile_slug` handlers) and the direct-message partner routes
+(`controllers/direct_messages.py`, `_get_partner`) look the profile up by slug across every account, then decide
+whether the requester may see it (`Profile.can_view_profile`: blocks, the visibility setting, friendship,
+temporary access; `conversation_reachable` for messages). A slug nobody has 404s after one query; a hidden account
+404s after the permission queries too, so timed requests tell whether a username is registered. Slugs come from
+usernames, which are guessable.
 
-Wiki slugs come only from official names, so a slug is guessable. Enough timed requests against a guessed slug
-tell an authenticated user whether anyone has pinned that place.
-
-Fix: make an invisible Location's 404 cost the same as a missing one's. Resolve visibility in one query whose
-plan doesn't depend on whether the row exists, or check visibility before any other per-Location work. Test it
-first: assert equal query counts for a never-used slug, an invisible current slug and an invisible former slug.
-Other slug-addressed routes (pins, trips, albums) likely share the pattern, so audit them in the same pass.
+Same shape as P236, not fixed with it: P236's fix puts the rule in the query that finds the row, and
+`can_view_profile` is several Python-level checks that would have to become one queryset filter first. Not
+measured: how many queries the hidden path adds. Whether this matters depends on how public a username is meant
+to be; the email-enumeration policy says no surface should reveal a registered username where avoidable.
 
 ## P240 — Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out
 

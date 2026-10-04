@@ -7,7 +7,6 @@ owner sees, still come from the pin's own name.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.http import Http404
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -18,7 +17,6 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.slugs import parent_slug_prefix
 from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
-from urbanlens.dashboard.services.wiki.wiki_access import get_location_or_404
 
 
 class _Locations(TestCase):
@@ -158,12 +156,11 @@ class SlugHistoryTests(_Locations):
         location.save(update_fields=["slug", "updated"])
 
         self.assertTrue(LocationSlugHistory.objects.filter(location=location, slug="old-grain-mill").exists())
-        self.assertEqual(get_location_or_404("old-grain-mill").pk, location.pk)
-        self.assertEqual(get_location_or_404("smith-mill").pk, location.pk)
+        self.assertEqual(Location.objects.from_url_slug("old-grain-mill").pk, location.pk)
+        self.assertEqual(Location.objects.from_url_slug("smith-mill").pk, location.pk)
 
-    def test_an_unknown_slug_is_still_a_404(self) -> None:
-        with self.assertRaises(Http404):
-            get_location_or_404("never-was-a-slug")
+    def test_an_unknown_slug_finds_nothing(self) -> None:
+        self.assertIsNone(Location.objects.from_url_slug("never-was-a-slug"))
 
     def test_a_new_slug_never_takes_another_location_s_former_slug(self) -> None:
         first = self._location("Old Grain Mill", "wikipedia")
@@ -173,7 +170,7 @@ class SlugHistoryTests(_Locations):
         second = self._location("Old Grain Mill", "google_places")
 
         self.assertNotEqual(second.slug, "old-grain-mill")
-        self.assertEqual(get_location_or_404("old-grain-mill").pk, first.pk)
+        self.assertEqual(Location.objects.from_url_slug("old-grain-mill").pk, first.pk)
 
     def test_taking_back_a_former_slug_drops_its_history_row(self) -> None:
         location = self._location("Old Grain Mill", "wikipedia")
@@ -194,7 +191,7 @@ class SlugHistoryTests(_Locations):
         holder = self._location()
         Location.objects.filter(pk=holder.pk).update(slug="old-grain-mill")
 
-        self.assertEqual(get_location_or_404("old-grain-mill").pk, holder.pk)
+        self.assertEqual(Location.objects.from_url_slug("old-grain-mill").pk, holder.pk)
 
 
 class PinSlugTests(_Locations):

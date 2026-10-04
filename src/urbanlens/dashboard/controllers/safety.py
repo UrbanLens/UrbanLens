@@ -21,7 +21,6 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import MAX_AUTO_DELETE_AFTER_DAYS, SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
-from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, bounded_float_or_none, coordinate_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
@@ -29,6 +28,7 @@ from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.social.connections import get_connections
+from urbanlens.dashboard.services.trips.trip_access import get_joined_trip
 from urbanlens.dashboard.services.visits.safety import (
     MAX_CHAT_MESSAGE_LENGTH,
     ActiveCheckinExistsError,
@@ -82,6 +82,8 @@ if TYPE_CHECKING:
     from django.http import HttpRequest, QueryDict
     from django.http.response import HttpResponseBase
 
+    from urbanlens.dashboard.models.trips.model import Trip
+
 logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 12
@@ -105,9 +107,8 @@ def _resolve_checkin_trip(profile: Profile, trip_slug: str | None) -> Trip | Non
     """
     if not trip_slug:
         return None
-    trip = get_object_or_404(Trip, slug=trip_slug)
-    is_member = trip.creator_id == profile.id or TripMembership.objects.for_trip_and_profile(trip, profile).filter(status=TripMembership.STATUS_JOINED).exists()
-    if not is_member:
+    trip = get_joined_trip(trip_slug, profile)
+    if trip is None:
         raise Http404("Trip not found.")
     return trip
 

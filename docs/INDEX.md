@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P265` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P270` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -216,7 +216,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P220 | open | 2026-10-03 | A background photo import stops at the first object store refusal, and the rest of the selection is never imported | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P229 | open | 2026-10-03 | The Ownership panel shows a subscriber only the owner's name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P236 | open | 2026-10-03 | A wiki URL's response time tells whether a Location exists under that slug | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P250 | open | 2026-10-03 | A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -226,4 +225,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | P262 | open | 2026-10-04 | A building's wiki is seeded with its campus's Wikipedia article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P263 | open | 2026-10-04 | A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P264 | open | 2026-10-04 | A building outline drawn on a wiki whose building place has no footprint is saved but never shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P269 | open | 2026-10-04 | A profile URL's response time tells whether an account has that username | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P251 | open | 2026-10-04 | The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes | [`docs/PROBLEMS.md`](PROBLEMS.md) |

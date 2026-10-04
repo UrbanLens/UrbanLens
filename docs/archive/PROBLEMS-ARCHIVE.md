@@ -21754,3 +21754,40 @@ still failed (the scores and the wiki display) until they read through `votes()`
   constraint, the lightbox button, and a malformed key refused on both endpoints (a 500 before).
 - `external-photos.test.ts`, `photo-lightbox.test.ts`: the mark reaches the lightbox; a vote posts and updates the
   tile; no buttons without an endpoint; removal posts, drops the tile and moves on, or closes after the last.
+
+## RESOLVED 2026-10-04: A Location or trip the requester cannot see now 404s after the same statements as a slug nothing ever used
+
+`id: P236` · `status: fixed` · `resolved: 2026-10-04` · `found by: adversarial review of P186`
+
+**What was wrong.** Every location-slug route found the Location first, by slug, uuid or former slug, and only
+then asked whether the requester could see it (`get_location_or_404`, then `Wiki.get_for_location`, a profile
+`get_or_create` and `location_visible_to`). A slug no Location ever had stopped after the lookup; a hidden
+Location's ran the rest. The redirect wrapper made it worse for a former slug: `canonical_location_slug` ran the
+history query, an `exists()` and a whole `locate_visible_wiki` before the view ran its own. Wiki slugs come from
+official names, so a slug is guessable, and enough timed requests told an authenticated user whether anyone had
+pinned a place. Trips had the same shape (`trip_access.get_trip_for_viewer`, the check-in's trip in
+`controllers/safety.py` and in the external API's check-in create), and so did three other location lookups: a pin
+relink (`pin_edit.PinRelinkView`), the wiki map's child-wiki JSON (`detail_pins.LocationDetailPinJsonView`) and a
+markup map's title lookup (`markup._resolve_title_context`, which also matched only a current slug).
+
+**Fix.** Visibility is part of the one query that finds the row. `wiki_access.visible_locations_filter(profile)`
+is `location_visible_to`'s rule as a filter (a pin of the profile's at the Location, or the Location's place in a
+domain the profile holds); `LocationQuerySet.from_url_slug` matches slug, uuid and former slug in one statement,
+the former slug through a scalar subquery that Postgres runs once as an InitPlan, current slug ranked first.
+`visible_location_or_404`, `locate_visible_wiki` and `canonical_location_slug` all use it, the latter two sharing
+the requester's profile and domain set through the request (`_requester`), so the redirect costs no second domain
+walk. `get_location_or_404`, which found a Location without asking who wanted it, is gone. Trips use
+`TripQuerySet.visible_to(profile, joined_only=...)` and `trip_access.get_joined_trip`. A former slug the
+requester can see still answers 301.
+
+**Evidence.** `tests/hypothesis/test_slug_existence_side_channel.py` captures the SQL of each request and compares
+it, probe slug and savepoint names normalized, for a never-used slug against a hidden Location's current slug,
+former slug and uuid (the uuid against a random uuid), across every named web route carrying `location_slug`
+(GET and POST), three external API wiki routes, the pin relink, the markup lookup, a trip page, the trip lookup
+and a check-in's trip. Before the fix: 308 of the route sweep's subtests, 9 external API subtests, 3 relink
+subtests and all four trip/markup tests failed. After: 10 passed, 602 subtests.
+
+**Not covered.** The statements are the same, but executing them is not quite: an index probe that finds a hidden
+row then evaluates the visibility condition on it, where a missing slug finds nothing. That is one row's filter
+inside one statement and was not timed. Profile slugs have the same shape and are open as P269. A safety
+check-in's community page also looks up first, but by uuid, which cannot be guessed.

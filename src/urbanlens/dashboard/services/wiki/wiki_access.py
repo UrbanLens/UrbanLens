@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.http import Http404
 
 logger = logging.getLogger(__name__)
@@ -351,13 +351,30 @@ def wiki_accessible_to(wiki: Wiki, profile: Profile) -> bool:
     return location_visible_to(governing.location, profile)
 
 
-def get_location_or_404(location_slug: str, *, related: tuple[str, ...] = ()) -> Location:
-    """The Location a slug, a former slug or a uuid names, else a bare Http404.
+def visible_locations_filter(profile: Profile) -> Q:
+    """The rule :func:`location_visible_to` applies, as a filter on ``Location``.
 
-    Bare, so a missing location and a real one the viewer cannot see raise identically: get_object_or_404's
-    message would tell a DEBUG page which slugs exist.
+    Everything it reads up front is the profile's own, so applying it costs the same whatever it is applied to.
 
     Args:
+        profile: The viewing profile.
+
+    Returns:
+        A condition matching the Locations whose wiki *profile* may see.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    return Q(Exists(Pin.objects.filter(profile=profile, location=OuterRef("pk")))) | Q(place__domain_root_id__in=accessible_domain_ids(profile))
+
+
+def visible_location_or_404(profile: Profile, location_slug: str, *, related: tuple[str, ...] = ()) -> Location:
+    """The Location a slug, a former slug or a uuid names, when *profile* may see it; else a bare Http404.
+
+    Visibility is part of the one query that finds the row, so a Location the profile cannot see 404s at the same cost
+    as a slug nothing ever used. Bare, so a DEBUG page cannot tell the two apart either.
+
+    Args:
+        profile: The viewing profile.
         location_slug: Slug, former slug or uuid of the Location.
         related: Relations to ``select_related``.
 
@@ -365,14 +382,37 @@ def get_location_or_404(location_slug: str, *, related: tuple[str, ...] = ()) ->
         The Location.
 
     Raises:
-        Http404: No Location matches.
+        Http404: No Location the profile may see matches.
     """
     from urbanlens.dashboard.models.location.model import Location
 
-    location = Location.objects.from_url_slug(location_slug, related=related)
+    location = Location.objects.filter(visible_locations_filter(profile)).from_url_slug(location_slug, related=related)
     if location is None:
         raise Http404
     return location
+
+
+#: Request attribute holding the requester's profile and visibility filter, shared by the redirect and the view.
+_REQUESTER_ATTR = "_ul_wiki_requester"
+
+
+def _requester(request: HttpRequest) -> tuple[Profile, Q]:
+    """The requester's profile and :func:`visible_locations_filter`, worked out once per request."""
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    cached = getattr(request, _REQUESTER_ATTR, None)
+    if cached is None:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        cached = (profile, visible_locations_filter(profile))
+        setattr(request, _REQUESTER_ATTR, cached)
+    return cached
+
+
+def _visible_location(request: HttpRequest, location_slug: str) -> tuple[Location | None, Profile]:
+    from urbanlens.dashboard.models.location.model import Location
+
+    profile, visible = _requester(request)
+    return Location.objects.filter(visible).from_url_slug(location_slug, related=("place",)), profile
 
 
 def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
@@ -383,22 +423,18 @@ def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Locat
 
     Args:
         request: The current request (used for the requesting profile).
-        location_slug: Slug or uuid of the Location.
+        location_slug: Slug, former slug or uuid of the Location.
 
     Returns:
         Tuple of (Location, unconcealed Wiki, requester's Profile).
 
     Raises:
         Http404: The location doesn't exist, has no wiki, or the requester can't see it."""
-    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    location = get_location_or_404(location_slug, related=("place",))
-    wiki = Wiki.objects.get_for_location(location)
-    if wiki is None:
-        raise Http404
-    profile, _ = Profile.objects.get_or_create(user=request.user)
-    if not location_visible_to(location, profile):
+    location, profile = _visible_location(request, location_slug)
+    wiki = Wiki.objects.get_for_location(location) if location is not None else None
+    if location is None or wiki is None:
         raise Http404
     return location, wiki, profile
 
@@ -406,9 +442,8 @@ def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Locat
 def canonical_location_slug(request: HttpRequest, location_slug: str) -> str | None:
     """The slug a wiki route should be addressed by, when *location_slug* reaches it under another name.
 
-    A uuid or a former slug names a Location other than by its current slug.
-    A wiki the requester could not open answers None, leaving its view to raise the usual 404: a redirect
-    there would name the place.
+    A uuid or a former slug names a Location other than by its current slug. Only a Location the requester may see
+    is found at all, so a hidden one costs what a missing one does and gets no redirect naming it.
 
     Args:
         request: The current request (used for the requesting profile).
@@ -416,23 +451,14 @@ def canonical_location_slug(request: HttpRequest, location_slug: str) -> str | N
 
     Returns:
         The Location's slug, or None when the URL already uses it or the requester may not see the wiki."""
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.location.slug_history import LocationSlugHistory
-    from urbanlens.dashboard.services.core.slugs import is_uuid_slug
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
-    if is_uuid_slug(location_slug):
-        current = Location.objects.slug_or_uuid(location_slug).values_list("slug", flat=True).first()
-    else:
-        current = LocationSlugHistory.objects.filter(slug=location_slug).values_list("location__slug", flat=True).first()
-        if current and Location.objects.filter(slug=location_slug).exists():
-            return None
-    if not current or current == location_slug:
+    location, _profile = _visible_location(request, location_slug)
+    if location is None or not location.slug or location.slug == location_slug:
         return None
-    try:
-        locate_visible_wiki(request, location_slug)
-    except Http404:
+    if Wiki.objects.get_for_location(location) is None:
         return None
-    return current
+    return location.slug
 
 
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
