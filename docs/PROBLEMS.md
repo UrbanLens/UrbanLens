@@ -535,9 +535,9 @@ contributed to or is independent of the CID-resolution backlog (both endpoints s
 gunicorn workers, so one starving the other for memory is plausible) was not determined.
 
 
-## P24 — A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster
+## P24 — A campus pin's CRIS detail fetches stop at a per-pass cap, and a child the site's roster misses fetches its own
 
-`id: P24` · `status: open` · `updated: 2026-09-24`
+`id: P24` · `status: open` · `updated: 2026-10-04`
 
 Previously titled "A campus pin aggregates only the nearest CRIS building's media, not the
 survey's full USN roster" (2026-08-05), and before that "CRIS media on a multi-building campus is
@@ -580,16 +580,13 @@ no request. The dev call counts were not re-measured against a live campus.
 
 **Still outstanding:**
 
-- **The survey roster is not followed.** CRIS's own "every building on this site" list is a
-  SURVEY resource's `USNs`, reached in two hops: a building's `linked_resources` names the survey,
-  and the survey's own detail names the buildings as USN stubs with no position. REData's docs
-  cite survey `12SD00541` as covering all 124 buildings of the former Hudson River State Hospital.
-  It is left out because a survey can be a town-wide reconnaissance, and its positionless stubs
-  cannot be checked against the site footprint, so following one would put unrelated buildings on
-  the campus. It needs a way to tell a site survey from an area survey first.
+- **The survey roster.** Followed since P234 (`cris_buildings._campus_candidates`): a survey counts as the site's
+  roster when it names more than half of the site's buildings and has more than half of its own positioned buildings
+  on the site, which keeps a town reconnaissance out. HRSH's 12SD00541 passes with 58 of 94. A survey that covers the
+  site and as much again elsewhere still fails the second test, so its unpositioned buildings are not listed.
 - **Per-pass caps.** One pass live-fetches at most `_MAX_SITE_DETAIL_FETCHES` (12) undetailed
-  buildings, inside a 50 s budget under the task's 110 s soft limit, and gathers attachments for at
-  most 40. The bulk queue warms the rest, but the campus page's Sources only list them when the
+  buildings, inside a 50 s budget under the task's 110 s soft limit. P234 removed the 40-building
+  cap on attachments. The bulk queue warms the rest, but the campus page's Sources only list them when the
   cache row is next refetched, because nothing re-polls a row that is already `documents_ready`.
   The building children no longer depend on the caps: every positioned building is on the roster,
   and an undetailed one costs its child one detail fetch when opened.
