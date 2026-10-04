@@ -68,7 +68,7 @@ class _ImportCase(TestCase):
             "tile_url_template": template,
         }
         with patch("socket.getaddrinfo", return_value=_PUBLIC_DNS_RESULT):
-            import_data.MapAnnotationsImport()._import_overlay(row, self.ctx)
+            import_data.MapAnnotationsImport()._import_overlay(row, self.ctx, 1)
         return MapImageOverlay.objects.for_pin(self.pin).first()
 
 
