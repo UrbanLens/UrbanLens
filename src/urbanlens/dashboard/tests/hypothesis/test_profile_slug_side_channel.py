@@ -38,6 +38,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     conversation_reachable,
     is_thread_open,
 )
+from urbanlens.dashboard.services.social.friendship import may_send_friend_request
 
 NEVER_USED = "nobody-ever-took-this-name"
 
@@ -406,3 +407,55 @@ class ReachablePartnerQueryTests(_RelationshipGrid):
         viewer = _make_profile("lonely-viewer", direct_message_visibility=VisibilityChoice.ANYONE)
 
         self.assertIsNone(Profile.reachable_partner_by_slug(viewer.slug, viewer))
+
+
+def _known_by_the_old_rule(viewer: Profile, subject: Profile) -> bool:
+    """What the friendship controller's ``_known_profile`` decided in Python, before P281."""
+    if subject.pk == viewer.pk or subject.can_view_profile(viewer) or conversation_reachable(viewer, subject):
+        return True
+    return Friendship.objects.all().between(viewer, subject) is not None and not subject.has_blocked(viewer)
+
+
+class KnownProfileQueryTests(_RelationshipGrid):
+    """P281: the one-query lookup of a profile the actor could already know of agrees with the Python rule."""
+
+    def test_the_query_agrees_with_the_python_rule_everywhere(self) -> None:
+        for relationship in self.RELATIONSHIPS:
+            viewer, subject = self._pair(relationship)
+            for profile_setting in VisibilityChoice.values:
+                for message_setting in VisibilityChoice.values:
+                    Profile.objects.filter(pk=subject.pk).update(
+                        profile_visibility=profile_setting, direct_message_visibility=message_setting
+                    )
+                    subject.profile_visibility, subject.direct_message_visibility = profile_setting, message_setting
+                    with self.subTest(relationship=relationship, profile=profile_setting, messages=message_setting):
+                        self.assertEqual(
+                            Profile.objects.filter(Profile.known_to_q(viewer), pk=subject.pk).exists(),
+                            _known_by_the_old_rule(viewer, subject),
+                        )
+
+    def test_an_account_knows_itself(self) -> None:
+        viewer = _make_profile("self-knower", profile_visibility=VisibilityChoice.NO_ONE)
+
+        self.assertTrue(Profile.objects.filter(Profile.known_to_q(viewer), pk=viewer.pk).exists())
+
+
+class FriendRequestableQueryTests(_RelationshipGrid):
+    """P281: the one-query lookup of a profile the actor may send a friend request agrees with the Python rule."""
+
+    def test_the_query_agrees_with_may_send_friend_request_everywhere(self) -> None:
+        for relationship in self.RELATIONSHIPS:
+            viewer, subject = self._pair(relationship)
+            for setting in VisibilityChoice.values:
+                Profile.objects.filter(pk=subject.pk).update(friend_request_visibility=setting)
+                subject.friend_request_visibility = setting
+                with self.subTest(relationship=relationship, setting=setting):
+                    self.assertEqual(
+                        Profile.objects.filter(Profile.friend_requestable_q(viewer), pk=subject.pk).exists(),
+                        subject.user.is_active and may_send_friend_request(viewer, subject),
+                    )
+
+    def test_no_one_may_request_themselves(self) -> None:
+        viewer = _make_profile("self-requester", friend_request_visibility=VisibilityChoice.ANYONE)
+
+        self.assertFalse(Profile.objects.filter(Profile.friend_requestable_q(viewer), pk=viewer.pk).exists())

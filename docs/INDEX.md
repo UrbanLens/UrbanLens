@@ -209,4 +209,3 @@ still resolves after it is fixed, and the id is never handed out again.
 | P277 | open | 2026-10-04 | A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P278 | open | 2026-10-04 | MapLibre 5.24's attribution sanitizer can be bypassed, and the fix is only in the v6 line this app pins against | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P279 | open | 2026-10-04 | Legacy `BLOCKED` friendship rows may still record the wrong blocker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P281 | open | 2026-10-04 | The friendship controller's id-addressed routes decide visibility after the lookup, so a hidden account costs more than a missing one | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -972,7 +972,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   members resolve through `accepts_messages_from_q`, invite usernames through `find_profile_by_username` with
   `invitable_q`, and share recipients, game invitees, group removals and game kicks through the sender's connections,
   the group or the session. `test_request_body_profile_side_channel.py` holds 21 such routes to the same status, body and
-  statements as a name or id nobody holds
+  statements as a name or id nobody holds. The friendship controller's id-addressed routes resolve through
+  `Profile.known_to_q` and `friend_requestable_q` (P281, `test_friendship_id_side_channel.py`)
 - **Identity masking in shared spaces** — a trip or group chat member whose `profile_visibility`
   doesn't permit another member to see them shows as an anonymous "Member" (name/avatar hidden,
   distinct color/number per hidden person so several aren't indistinguishable) in the member

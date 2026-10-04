@@ -2770,16 +2770,3 @@ from `unblock_profile`/`remove_friend` and must re-block to normalise the row, a
 can lift it. `manage.py audit_inverted_friendship_blocks --before YYYY-MM-DD` reports the candidates
 read-only, with no default `--before` on purpose: the fix's deploy date for a given production
 database is something only a human knows.
-
-## P281 — The friendship controller's id-addressed routes decide visibility after the lookup, so a hidden account costs more than a missing one
-
-`id: P281` · `status: open` · `updated: 2026-10-04` · `found while finishing P280`
-
-`FriendController` takes a profile id in the URL for friend requests, accept, decline, cancel, block and unblock.
-`_known_profile` and `request_friend` load the profile by id, then decide in Python whether the actor could know of it:
-`can_view_profile`, `conversation_reachable`, a friendship row, `may_send_friend_request`. An id nobody holds stops
-after one statement. A hidden account's id runs the rest. The answers already match, so only the statement count
-differs. Because ids are sequential, walking them would show which accounts are hidden from the actor rather than
-deleted. This comes from reading the code and has not been measured. The fix is the P269/P280 one: put
-`_known_profile`'s rule into a `Q` and resolve the id through it. Then extend
-`test_request_body_profile_side_channel.py`'s id comparison to these routes, red first.

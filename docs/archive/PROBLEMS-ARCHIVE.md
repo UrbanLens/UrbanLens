@@ -22648,3 +22648,44 @@ gone; they import the service.
 
 **Not covered.** The external API's friend routes take a uuid, which cannot be walked. The friendship controller's
 id-addressed URL routes are P281.
+
+## RESOLVED 2026-10-04: The friendship controller's id-addressed routes resolve the id with their permission rule, so a hidden account costs what a missing one does
+
+`id: P281` · `status: fixed` · `resolved: 2026-10-04`
+
+**Measured before the fix.** `test_friendship_id_side_channel.py` sent a never-used id and each of three hidden
+accounts' ids to every `FriendController` route that takes one. Hidden means not visible to the actor, blocking it, or
+deactivated. Every route returned the same answer for a hidden account as for a missing one, but most ran more
+statements for the hidden account:
+
+- the eight relationship actions (accept, reject, ignore, remove, block, unblock, mute, unmute);
+- requesting a friend;
+- answering a request from the notification menu;
+- reading a friend list.
+
+The friends page widget differed too. It loaded the id and raised 404 before touching `request.user.profile`, so only
+an id that someone held paid for that statement. Ids are sequential, so walking them showed which accounts are hidden
+from the actor rather than deleted.
+
+**Fix.** Two new rules on `Profile`, each written as a `Q`:
+
+- `known_to_q(actor)` is what `_known_profile` decided in Python: the actor itself, any profile it may see
+  (`viewable_q`) or address (`reachable_partner_q`), and any profile it has a relationship row with that has not
+  blocked it.
+- `friend_requestable_q(actor)` is `may_send_friend_request` limited to active accounts.
+
+`_known_profile` and `friend_request_respond` resolve the id through `known_to_q`. `request_friend` resolves it
+through either rule in one statement, then decides 403 against proceeding as before. `friend_list` resolves through
+`viewable_q`. `friends_page` and its widget compare the id with the viewer's own before any lookup.
+
+**Tests.** `KnownProfileQueryTests` holds `known_to_q` equal to the old Python rule over the 16 relationships in
+`_RelationshipGrid`, crossed with every `profile_visibility` and `direct_message_visibility` setting.
+`FriendRequestableQueryTests` holds `friend_requestable_q` equal to `may_send_friend_request` over the 16
+relationships, crossed with every `friend_request_visibility` setting. `FriendshipIdRoutesStillWorkTests` checks
+five routes still succeed:
+
+- a request can be sent to an open account;
+- a request can be accepted from the notification menu;
+- a visible account's friend list renders;
+- a visible stranger can be blocked;
+- the owner's friends page opens.

@@ -244,18 +244,10 @@ def _known_profile(actor: Profile, profile_id: int) -> Profile | None:
         profile_id: The pk from the URL.
 
     Returns:
-        The profile, or None when nothing holds the id or the actor has no way to know it does.
+        The profile, or None when nothing holds the id or the actor has no way to know it does, after the same one
+        statement (P281).
     """
-    from urbanlens.dashboard.services.messaging.direct_messages import conversation_reachable
-
-    target = Profile.objects.select_related("user").filter(pk=profile_id).first()
-    if target is None or target.pk == actor.pk or target.can_view_profile(actor):
-        return target
-    if conversation_reachable(actor, target):
-        return target
-    if Friendship.objects.all().between(actor, target) is not None and not target.has_blocked(actor):
-        return target
-    return None
+    return Profile.objects.select_related("user").filter(Profile.known_to_q(actor), pk=profile_id).first()
 
 
 def _redirect_to_profile(profile_id: int, fallback_view_name: str = "profile.view") -> HttpResponse:
@@ -272,14 +264,14 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Authentication required.", status=401)
 
         requesting = request.user.profile
-        to_profile = Profile.objects.select_related("user").filter(pk=profile_id).first()
-        known = _known_profile(requesting, profile_id) is not None
         # friend_request_visibility is its own, often looser, gate; a profile it admits may be requested
-        # without being visible, so long as nothing below names it.
-        permitted = to_profile is not None and to_profile.user.is_active and may_send_friend_request(requesting, to_profile)
-        if to_profile is None or not (known or permitted):
+        # without being visible, so long as nothing below names it. Either rule finds the profile in the one
+        # statement, so an account it admits neither way answers as no account does (P281).
+        to_profile = Profile.objects.select_related("user").filter(Profile.known_to_q(requesting) | Profile.friend_requestable_q(requesting), pk=profile_id).first()
+        if to_profile is None:
             return HttpResponse("User not found.", status=404)
 
+        permitted = to_profile.user.is_active and may_send_friend_request(requesting, to_profile)
         if not permitted:
             return HttpResponse(FRIEND_REQUEST_REFUSED_MESSAGE, status=403)
 
@@ -462,8 +454,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
     def friend_list(self, request: HttpRequest, profile_id: int):
         """HTMX partial: friend list shown on the profile page."""
         viewer = request.user.profile if request.user.is_authenticated else None
-        profile = Profile.objects.select_related("user").filter(pk=profile_id).first()
-        if not profile or not profile.can_view_profile(viewer):
+        profile = Profile.objects.select_related("user").filter(Profile.viewable_q(viewer), pk=profile_id).first()
+        if profile is None:
             return HttpResponse("")
         ctx = _friend_list_ctx(viewer, profile)
         response = render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
@@ -476,27 +468,22 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         """Full friends list page - only accessible to the profile owner."""
         from django.http import Http404
 
-        profile = Profile.objects.filter(pk=profile_id).first()
         viewer = request.user.profile if request.user.is_authenticated else None
-        if profile is None or viewer is None or viewer.pk != profile.pk:
+        if viewer is None or viewer.pk != profile_id:
             raise Http404
-        ctx = _friend_list_ctx(viewer, profile)
+        ctx = _friend_list_ctx(viewer, viewer)
         if ctx["incoming_requests"]:
             _mark_incoming_request_notifications_read(viewer, ctx["incoming_requests"])
-        return render(request, "dashboard/pages/profile/friends.html", {**ctx, "profile": profile})
+        return render(request, "dashboard/pages/profile/friends.html", {**ctx, "profile": viewer})
 
     def friends_page_widget(self, request: HttpRequest, profile_id: int):
         """HTMX partial: just the /friends/ page's list content, for live refresh."""
         from django.http import Http404
 
-        profile = Profile.objects.filter(pk=profile_id).first()
-        if not profile:
-            raise Http404
         viewer = request.user.profile if request.user.is_authenticated else None
-        if viewer is None or viewer.pk != profile.pk:
+        if viewer is None or viewer.pk != profile_id:
             raise Http404
-        ctx = _friend_list_ctx(viewer, profile)
-        return render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
+        return render(request, "dashboard/partials/profile/friends_page_content.html", _friend_list_ctx(viewer, viewer))
 
     def friend_request_respond(self, request: HttpRequest, from_profile_id: int):
         """Accept or decline a friend request from the notification dropdown.
@@ -510,7 +497,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         action = request.POST.get("action", "accept")
         viewer_profile = request.user.profile
 
-        from_profile = Profile.objects.filter(pk=from_profile_id).first()
+        from_profile = Profile.objects.filter(Profile.known_to_q(viewer_profile), pk=from_profile_id).first()
         if from_profile is None:
             return HttpResponse("Friend request not found.", status=404)
 

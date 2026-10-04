@@ -1575,6 +1575,50 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         )
 
     @staticmethod
+    def known_to_q(actor: Profile) -> models.Q:
+        """The profiles *actor* could already have come across, as a ``Q``, so an id can be resolved through it (P281).
+
+        Itself, any profile it may see or address a conversation with, and any it has a relationship row with
+        that has not blocked it.
+
+        Args:
+            actor: The profile acting.
+
+        Returns:
+            A ``Q`` admitting exactly those profiles.
+        """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        related = models.Q(pk__in=Friendship.objects.filter(from_profile=actor).values("to_profile_id")) | models.Q(
+            pk__in=Friendship.objects.filter(to_profile=actor).exclude(status=FriendshipStatus.BLOCKED).values("from_profile_id"),
+        )
+        return Profile.viewable_q(actor) | Profile.reachable_partner_q(actor) | related
+
+    @staticmethod
+    def friend_requestable_q(actor: Profile) -> models.Q:
+        """``services.social.friendship.may_send_friend_request`` as a ``Q``, over active accounts only (P281).
+
+        Args:
+            actor: The profile that would send the request.
+
+        Returns:
+            A ``Q`` admitting every active profile *actor* may send a friend request; none when *actor* has community
+            features off.
+        """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        if not actor.community_enabled:
+            return models.Q(pk__in=[])
+        blocked = FriendshipStatus.BLOCKED
+        either_blocked = models.Q(pk__in=Friendship.objects.filter(to_profile=actor, status=blocked).values("from_profile_id")) | models.Q(
+            pk__in=Friendship.objects.filter(from_profile=actor, status=blocked).values("to_profile_id"),
+        )
+        permitted = Profile.visibility_permits_q(actor, author_path=None, visibility_field="friend_request_visibility")
+        return models.Q(community_enabled=True, user__is_active=True) & ~either_blocked & permitted & ~models.Q(pk=actor.pk)
+
+    @staticmethod
     def invitable_q(actor: Profile) -> models.Q:
         """The profiles *actor* may name in an invite: those it may see, with no block between them, itself included.
 
