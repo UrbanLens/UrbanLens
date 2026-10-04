@@ -6,6 +6,8 @@ history so links to it still resolve. A name flipping back reuses its former slu
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
@@ -196,6 +198,28 @@ class ThrashTests(_Locations):
             self.assertEqual(location.slug, second)
 
         self.assertEqual(self._former(location), [first])
+
+    def test_a_former_slug_taken_meanwhile_by_another_location_mints_a_fresh_one(self) -> None:
+        """The check that a former slug is free and the write that takes it back are two statements."""
+        location = self._location("Administration", "cris")
+        LocationSlugHistory.objects.create(location=location, slug="main-building-77")
+        rival = self._location("Laundry", "cris")
+        Location.objects.filter(pk=rival.pk).update(slug="main-building-77")
+        real = Location._slug_is_taken
+        calls: list[str] = []
+
+        def raced(instance: Location, candidate: str) -> bool:
+            calls.append(candidate)
+            return False if len(calls) == 1 else real(instance, candidate)
+
+        with mock.patch.object(Location, "_slug_is_taken", raced):
+            self._rename(location, "Main Building")
+
+        location.refresh_from_db()
+        self.assertEqual(calls[0], "main-building-77")
+        self.assertNotEqual(location.slug, "main-building-77")
+        self.assertTrue(location.slug.startswith("main-building"))
+        self.assertIn("administration", self._former(location))
 
     def test_the_history_of_one_location_is_bounded(self) -> None:
         location = self._location("Name 0", "cris")

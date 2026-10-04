@@ -9,10 +9,12 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from django.db.models import SET_NULL, ForeignKey, Index
 from django.db.models.fields import CharField, DateTimeField, DecimalField, SlugField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.model import is_slug_collision
 from urbanlens.dashboard.models.location.queryset import LocationManager
 from urbanlens.dashboard.services.locations import display
 
@@ -350,7 +352,14 @@ class Location(abstract.PublicDashboardModel):
                 self.regenerate_slug()
                 return
             self.slug = taken_back
-        self.save(update_fields=["slug"])
+        try:
+            with transaction.atomic():
+                self.save(update_fields=["slug"])
+        except IntegrityError as error:
+            # Another Location took the slug between the check and the write.
+            if not is_slug_collision(error):
+                raise
+            self.regenerate_slug()
 
     def _sync_wiki_slugs(self) -> None:
         """Re-mint this Location's wiki's slug, and its child wikis', where the provider name no longer gives them."""

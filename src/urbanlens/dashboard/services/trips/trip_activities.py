@@ -6,7 +6,7 @@ import datetime
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
-from django.db.models import CharField, F, Max
+from django.db.models import CharField, Exists, F, Max, OuterRef, Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -26,6 +26,7 @@ from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, Tr
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 from urbanlens.dashboard.services.visits.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
+from urbanlens.dashboard.services.wiki.wiki_access import visible_locations_filter
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -203,12 +204,17 @@ def parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.d
     return timezone.make_aware(datetime.datetime.combine(parsed_date, parsed_time))
 
 
-def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[Location | None, Pin | None]:
+def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: Trip | None = None) -> tuple[Location | None, Pin | None]:
     """Resolve an activity's target place from submitted location fields.
+
+    A ``location_uuid``/``location_slug`` names only a Location *profile* may see, or one already on an activity of
+    *trip* (what the edit dialog sends back); anything else is treated as not given, at the same cost as a reference
+    nothing matches, so the field cannot be used to learn which places exist.
 
     Args:
         body: Submitted fields - any of ``pin_uuid``/``pin_slug``, ``location_uuid``/``location_slug``, ``geocoded_lat``/``geocoded_lng``.
         profile: The submitting profile; pin lookups are scoped to their own pins.
+        trip: The trip the activity belongs to.
 
     Returns:
         The resolved ``(location, pin)`` pair - either or both may be None.
@@ -241,7 +247,10 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
 
     location_ref = (body.get("location_uuid") or body.get("location_slug") or "").strip()
     if location_ref:
-        location = Location.objects.from_url_slug(location_ref)
+        reachable = visible_locations_filter(profile)
+        if trip is not None:
+            reachable |= Q(Exists(TripActivity.objects.filter(trip=trip, location=OuterRef("pk"))))
+        location = Location.objects.filter(reachable).from_url_slug(location_ref)
         if location is not None:
             return location, None
 
@@ -530,7 +539,7 @@ def create_activity(
 
     _checked_schedule(scheduled_at, "The start time")
     _checked_schedule(scheduled_end, "The end time")
-    location, pin = resolve_activity_place(place or {}, actor)
+    location, pin = resolve_activity_place(place or {}, actor, trip=trip)
     if clean_title is None and pin is None:
         # The picked place's name is the activity's own, never the shared Location's.
         title_field = TripActivity._meta.get_field("title")  # noqa: SLF001 - _meta is public API
@@ -624,7 +633,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     if "scheduled_end" in changes:
         activity.scheduled_end = _checked_schedule(changes["scheduled_end"], "The end time")
     if "place" in changes:
-        activity.location, activity.pin = resolve_activity_place(changes["place"] or {}, actor)
+        activity.location, activity.pin = resolve_activity_place(changes["place"] or {}, actor, trip=trip)
     if "status" in changes:
         new_status = str(changes["status"] or "").strip()
         if new_status in SETTABLE_STATUSES:
