@@ -101,8 +101,7 @@ REVIEWED: dict[str, str] = {
         "each readable Location slug given up in LocationSlugHistory. A reverse keeps the new slugs, each one valid to "
         "the old code, and old links resolve through the history."
     ),
-
-    "0053_building_wikis_drop_wikipedia_seed.py": (
+    "0054_building_wikis_drop_wikipedia_seed.py": (
         "drop_building_wikipedia_seeds deletes untouched Wikipedia seeds (no person's revision) from building wikis. "
         "Not recoverable, and nothing to recover: the old code reads a wiki with no article, and seeds it again the "
         "next time the match is cached."
