@@ -154,7 +154,8 @@ def rank_key(tier: NameTier, scope: NamingScope) -> tuple[int, int]:
 def naming_scope(location: Location | None) -> NamingScope:
     """Whether this location's names describe a building rather than a property.
 
-    A location holding only child (building) pins, or a child wiki's own location, is a building's.
+    A location whose own wiki describes a building (:func:`wiki_scope`) is a building's, whatever pins it holds.
+    Otherwise one holding only child (building) pins, or a child wiki's own location, is a building's.
 
     Args:
         location: The location being named.
@@ -164,14 +165,15 @@ def naming_scope(location: Location | None) -> NamingScope:
     """
     if location is None or not location.pk:
         return NamingScope.PARCEL
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    own = Wiki.objects.filter(location=location).select_related("place__parent").first()
+    if own is not None and wiki_scope(own) == NamingScope.BUILDING:
+        return NamingScope.BUILDING
     pins = location.pins.all()
     if pins.root_pins().exists():
         return NamingScope.PARCEL
-    if pins.exists():
-        return NamingScope.BUILDING
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
-    if Wiki.objects.filter(location=location, parent_wiki__isnull=False).exists():
+    if pins.exists() or (own is not None and own.parent_wiki_id is not None):
         return NamingScope.BUILDING
     return NamingScope.PARCEL
 

@@ -122,10 +122,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   coordinate standing on one of its buildings (by footprint, else within 15 m and nearest) is that
   building's: it opens the building's wiki, or gets a new building wiki nested under the campus's
   (`services.wiki.building_wikis`, P261), read from places, wikis and the campus's cached building
-  list, never pins. The one creation path
-  is `Wiki.objects.get_or_create_for_location` (`models/wiki/queryset.py`), which checks both
-  one-to-ones (Location, then its Place) inside a savepoint and re-reads on a raced
-  `IntegrityError`; nothing else should create a Wiki.
+  list, never pins; its location is named as a building's (`name_tiers.naming_scope`). The one
+  creation path is `Wiki.objects.get_or_create_for_location` (`models/wiki/queryset.py`), which
+  checks both one-to-ones (Location, then its Place) inside a savepoint and re-reads on a raced
+  `IntegrityError`; a building's placeless wiki, with no unique column, is created under a lock per
+  campus instead. Nothing else should create a Wiki.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - **Photos on a map** (`shared/photo-map.ts` `createPhotoMarkerLayer`, used by the pin/wiki map and
   album maps) - thumbnails that cluster into a stacked badge, open the shared photo lightbox on click,

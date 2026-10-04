@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Self
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.tree import TreeQuerySetMixin
@@ -117,31 +117,66 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         if existing is not None:
             return existing, False
 
-        from urbanlens.dashboard.models.pin.model import PinType
-
         defaults = dict(defaults or {})
         explicit_name = defaults.pop("name", None)
-        while True:
-            # With no wiki found, a place another wiki holds is a campus's, and this location stands on one of its
-            # buildings: the building's wiki holds no place.
-            if holder is not None:
-                defaults.setdefault("pin_type", PinType.BUILDING)
+        if holder is None:
             try:
                 # Both `location` and `place` are one-to-one, so a concurrent create for this Location, or for another
                 # Location on the same place, fails here; the savepoint keeps a caller's transaction usable.
                 with transaction.atomic():
-                    wiki = self._create(location, None if holder is not None else location.place_id, explicit_name, defaults)
-                break
+                    wiki = self._create(location, location.place_id, explicit_name, defaults)
+                return self._settle(wiki, location, explicit_name=explicit_name), True
             except IntegrityError:
-                # Drops the reverse `wiki` cache, which holds either the earlier miss or the instance that failed to insert.
-                location.refresh_from_db()
-                tried_without_place = holder is not None
-                existing, holder = self._resolve(location)
+                existing, holder = self._resolve_afresh(location)
                 if existing is not None:
                     return existing, False
-                if tried_without_place or holder is None:
+                if holder is None:
                     raise
+        return self._get_or_create_building_wiki(location, holder, explicit_name, defaults)
 
+    def _get_or_create_building_wiki(self, location: Location, holder: Wiki, explicit_name: str | None, defaults: dict) -> tuple[Wiki, bool]:
+        """The wiki of the campus building ``location`` stands on, created placeless and nested when it has none.
+
+        A building's wiki holds no place, so no unique column stops two locations on one building creating one each:
+        creation is serialized per campus, and nesting happens before the lock is released so the next caller finds it.
+
+        Args:
+            location: A Location with no wiki of its own, on a place ``holder`` holds.
+            holder: The campus wiki holding the location's place.
+            explicit_name: A name chosen for the wiki, if any.
+            defaults: Field overrides for the created Wiki.
+
+        Returns:
+            Tuple of (Wiki, created).
+        """
+        from urbanlens.dashboard.models.pin.model import PinType
+
+        try:
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", [f"campus-building-wikis:{holder.pk}"])
+                existing, current = self._resolve_afresh(location)
+                if existing is not None:
+                    return existing, False
+                if current is not None and current.pk == holder.pk:
+                    wiki = self._create(location, None, explicit_name, {"pin_type": PinType.BUILDING, **defaults})
+                    return self._settle(wiki, location, explicit_name=explicit_name), True
+        except IntegrityError:
+            # This Location's own wiki, created meanwhile by a caller that found no campus.
+            existing, _holder = self._resolve_afresh(location)
+            if existing is not None:
+                return existing, False
+            raise
+        # The place's wiki changed hands meanwhile.
+        return self.get_or_create_for_location(location, {**defaults, "name": explicit_name} if explicit_name else defaults)
+
+    def _resolve_afresh(self, location: Location) -> tuple[Wiki | None, Wiki | None]:
+        """:meth:`_resolve` past the reverse ``wiki`` cache, which holds an earlier miss or an instance that failed to insert."""
+        location.refresh_from_db()
+        return self._resolve(location)
+
+    def _settle(self, wiki: Wiki, location: Location, *, explicit_name: str | None) -> Wiki:
+        """Name a new wiki after its location unless a name was chosen, and nest it where the places say."""
         from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
         from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
 
@@ -150,7 +185,7 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         # From the places already stored, so a building's wiki nests without waiting on boundary generation.
         if reconcile_wiki_nesting(wiki):
             wiki.refresh_from_db(fields=["parent_wiki"])
-        return wiki, True
+        return wiki
 
     def _create(self, location: Location, place_id: int | None, explicit_name: str | None, defaults: dict) -> Wiki:
         """Insert the wiki row, named as given or, as an automatic write, after the location."""
