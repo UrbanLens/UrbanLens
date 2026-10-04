@@ -85,6 +85,11 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.uv]
+# The app runs on CPython only. Resolving for PyPy on Windows as well held autobahn below its security fix: there,
+# webauthn needs cbor2>=6 and autobahn 26.7.1 caps it below 6.
+environments = ["platform_python_implementation == 'CPython'"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/urbanlens", "src/urbanlens_ai"]
 
