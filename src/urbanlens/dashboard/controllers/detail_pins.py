@@ -8,7 +8,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -29,7 +29,7 @@ from urbanlens.dashboard.services.pins.pin_creation import DuplicateCoordinatesE
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
-from urbanlens.dashboard.services.wiki.wiki_access import get_location_or_404, location_visible_to, resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_location_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -296,10 +296,8 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location = get_location_or_404(location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        if not location_visible_to(location, profile):
-            raise Http404
+        location = visible_location_or_404(profile, location_slug)
         try:
             wiki = location.wiki
         except ObjectDoesNotExist:

@@ -313,7 +313,7 @@ from urbanlens.dashboard.services.social.friendship import (
     request_or_accept_friendship,
     unmute_profile,
 )
-from urbanlens.dashboard.services.trips.trip_access import can_perform, get_trip_for_viewer, has_joined, is_organizer
+from urbanlens.dashboard.services.trips.trip_access import can_perform, get_joined_trip, get_trip_for_viewer, has_joined, is_organizer
 from urbanlens.dashboard.services.trips.trip_activities import (
     build_activity_rows,
     complete_activity,
@@ -3176,8 +3176,8 @@ class SafetyCheckinsView(SafetyCheckinScopedView, PaginatedListMixin):
         if data.get("trip"):
             # Same membership rule as the web create flow: a trip the caller has
             # not joined is reported as not found, not as forbidden.
-            trip = Trip.objects.filter(slug=data["trip"]).first()
-            if trip is None or not (trip.creator_id == profile.pk or TripMembership.objects.for_trip_and_profile(trip, profile).filter(status=TripMembership.STATUS_JOINED).exists()):
+            trip = get_joined_trip(data["trip"], profile)
+            if trip is None:
                 return Response({"error": "No such trip."}, status=404)
 
         submitted_contacts = data.get("contacts")

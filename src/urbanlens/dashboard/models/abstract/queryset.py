@@ -206,6 +206,23 @@ class FrontendDashboardManager(_FrontendDashboardManagerBase):
     """
 
 
+def slug_or_uuid_q(value: str) -> Q:
+    """The condition :meth:`PublicDashboardQuerySet.slug_or_uuid` filters on, for combining with others in one filter.
+
+    Args:
+        value: The slug or uuid string taken from a URL path segment.
+
+    Returns:
+        A match on ``slug``, or on ``slug`` or ``uuid`` when *value* parses as a uuid.
+    """
+    query = Q(slug=value)
+    try:
+        uuid_lib.UUID(value)
+    except (ValueError, TypeError, AttributeError):
+        return query
+    return query | Q(uuid=value)
+
+
 class PublicDashboardQuerySet(FrontendDashboardQuerySet[_ModelT]):
     """
     A custom queryset. All models below will use this for interacting with results from the db.
@@ -221,14 +238,7 @@ class PublicDashboardQuerySet(FrontendDashboardQuerySet[_ModelT]):
         Returns:
             Queryset filtered to the matching row (0 or 1 results).
         """
-        query = Q(slug=value)
-        try:
-            uuid_lib.UUID(value)
-        except (ValueError, TypeError, AttributeError):
-            pass
-        else:
-            query |= Q(uuid=value)
-        return self.filter(query)
+        return self.filter(slug_or_uuid_q(value))
 
 
 _PublicDashboardManagerBase = FrontendDashboardManager.from_queryset(PublicDashboardQuerySet)

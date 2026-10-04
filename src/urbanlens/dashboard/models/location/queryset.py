@@ -10,10 +10,11 @@ from django.contrib.gis.measure import D
 
 # Django Imports
 from django.db import IntegrityError, transaction
-from django.db.models import DecimalField
+from django.db.models import Case, DecimalField, Q, Subquery, Value, When
 
 # App Imports
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.queryset import slug_or_uuid_q
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.place.queryset import point_for_coordinates
 
@@ -61,7 +62,9 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet["Location"]):
     def from_url_slug(self, value: str, *, related: tuple[str, ...] = ()) -> Location | None:
         """The Location a URL segment names: its current slug, its uuid, else a slug it had before.
 
-        A current slug always wins, so the former-slug lookup costs a query only when nothing else matched.
+        One query whichever of the three matches, or whether any does, so a filter already on this queryset (who may
+        see the row) decides the answer at the same cost as a slug nothing ever used. A current slug wins over
+        another Location's former one.
 
         Args:
             value: The slug or uuid taken from a URL.
@@ -70,8 +73,13 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet["Location"]):
         Returns:
             The Location, or None when nothing matches.
         """
+        from urbanlens.dashboard.models.location.slug_history import LocationSlugHistory
+
         queryset = self.select_related(*related) if related else self
-        return queryset.slug_or_uuid(value).first() or queryset.filter(slug_history__slug=value).first()
+        # A scalar subquery rather than a join or IN: Postgres runs it once and ORs its index lookup with the others.
+        former = LocationSlugHistory.objects.filter(slug=value).values("location_id")[:1]
+        matched = queryset.filter(slug_or_uuid_q(value) | Q(pk=Subquery(former)))
+        return matched.order_by(Case(When(slug=value, then=Value(0)), default=Value(1)), "pk").first()
 
     def within_bounding_box(self, latitude: float, longitude: float) -> Self:
         """Locations sharing the access domain of whatever is at this coordinate.

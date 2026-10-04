@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -514,12 +515,15 @@ class PinRelinkView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.wiki.wiki_access import get_location_or_404, location_visible_to
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_locations_filter
 
-        location = get_location_or_404(location_slug)
         # Which Location a pin points at is not a neutral preference - it is what confers access, since
-        # location_visible_to grants on an exact Location match.
-        if not (location.pk == pin.location_id or location_visible_to(location, pin.profile) or Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).filter(pk=location.pk).exists()):
+        # location_visible_to grants on an exact Location match. The rule is part of the lookup, so a Location
+        # the owner may not reach costs what a missing one does.
+        at_pin = Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).values("pk")
+        reachable = Q(pk=pin.location_id) | visible_locations_filter(pin.profile) | Q(pk__in=at_pin)
+        location = Location.objects.filter(reachable).from_url_slug(location_slug)
+        if location is None:
             raise Http404
 
         # A profile can only ever have one root pin per location (db_pin_unique_location_per_profile) - if one

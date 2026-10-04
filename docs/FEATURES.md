@@ -166,10 +166,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   to a concealed viewer, and is never a shared search name (`search_names.shared_names`). A uuid slug is re-minted when a provider's name arrives (`Location.save`); a later
   provider rename keeps the minted slug. A slug the Location gives up goes to `LocationSlugHistory` and is
   never minted for another Location. A wiki route reached by the uuid or a former slug answers a 301 to the
-  same route at the current slug, keeping the rest of the path and the query string; `get_location_or_404`
-  resolves both too, so a POST or an API call at an old slug lands in place. Only a GET or HEAD from
+  same route at the current slug, keeping the rest of the path and the query string; the wiki routes resolve
+  both too, so a POST or an API call at an old slug lands in place. Only a GET or HEAD from
   someone the wiki itself would serve is redirected (`Cache-Control: private, no-store`); anyone else gets
-  the wiki's usual 404 (`redirect_to_canonical_location` in `controllers/location_wiki.py`). `Wiki.slug`,
+  the wiki's usual 404 (`redirect_to_canonical_location` in `controllers/location_wiki.py`). Who may see the
+  Location is part of the one query that finds it (`wiki_access.visible_location_or_404`,
+  `LocationQuerySet.from_url_slug`), so a Location the requester cannot see 404s after the same statements
+  as a slug nothing ever used, on every wiki route, the external API's wiki routes, a pin relink and a
+  markup map's title lookup; trip routes do the same with `TripQuerySet.visible_to` (P236). `Wiki.slug`,
   informational and not routed, follows the same rule. Pin slugs, scoped to and seen only by their owner,
   still come from `Pin.effective_name` and the parent pin's aliases
 - Private per-pin notes (`PinNote`), independent of public comments

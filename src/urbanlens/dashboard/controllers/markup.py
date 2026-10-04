@@ -30,7 +30,7 @@ from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
 from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.visits.safety import notify_contacts_of_update
-from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_locations_filter
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -437,9 +437,9 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
         return Pin.objects.filter(slug=pin_slug, profile__user=request.user).first()
     location_slug = body.get("location_slug")
     if location_slug:
-        location = Location.objects.filter(slug=location_slug).first()
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        if location is None or not location_visible_to(location, profile):
+        location = Location.objects.filter(visible_locations_filter(profile)).from_url_slug(location_slug)
+        if location is None:
             return None
         return Wiki.objects.filter(location=location).first()
     return None

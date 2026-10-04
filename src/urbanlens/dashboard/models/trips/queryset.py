@@ -111,6 +111,23 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         """
         return self.with_effective_dates().filter(_eff_start__isnull=False, _eff_start__lte=end, _eff_end__gte=start)
 
+    def visible_to(self, profile: Profile, *, joined_only: bool = False) -> TripQuerySet:
+        """Trips *profile* created or is a member of, decided in the query that finds them.
+
+        Args:
+            profile: The viewer.
+            joined_only: Count only a membership whose invitation was accepted.
+
+        Returns:
+            The trips the profile may see.
+        """
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        memberships = TripMembership.objects.filter(trip=OuterRef("pk"), profile=profile)
+        if joined_only:
+            memberships = memberships.filter(status=TripMembership.STATUS_JOINED)
+        return self.filter(Q(creator=profile) | Q(Exists(memberships)))
+
     def for_list_page(self, profile: Profile, sort: str = "updated", direction: str = "desc") -> TripQuerySet:
         """Return trips for the list page with counts and member prefetch, ordered in SQL.
 

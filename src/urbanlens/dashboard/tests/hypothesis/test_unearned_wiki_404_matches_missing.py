@@ -10,7 +10,7 @@ from django.test import RequestFactory
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.wiki.wiki_access import get_location_or_404, resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_location_or_404
 
 
 class UnearnedWikiMatchesMissingTests(TestCase):
@@ -33,7 +33,10 @@ class UnearnedWikiMatchesMissingTests(TestCase):
         self.assertEqual(self._message(bare.slug), self._message("no-such-location-anywhere"))
 
     def test_the_shared_lookup_matches_a_real_unearned_wiki(self) -> None:
-        """The helper other wiki-scoped controllers use to 404 before their own visibility check."""
-        with self.assertRaises(Http404) as raised:
-            get_location_or_404("no-such-location-anywhere")
-        self.assertEqual(str(raised.exception), self._message(self.unearned.slug))
+        """The lookup the other location-scoped controllers use."""
+        messages = []
+        for slug in (self.unearned.slug, "no-such-location-anywhere"):
+            with self.assertRaises(Http404) as raised:
+                visible_location_or_404(self.request.user.profile, slug)
+            messages.append(str(raised.exception))
+        self.assertEqual(messages, [self._message(self.unearned.slug)] * 2)
