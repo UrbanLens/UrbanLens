@@ -37,6 +37,8 @@ class ActivityLocationRefTests(TestCase):
             official_name_source="wikipedia",
         )
         self.location.ensure_slug()
+        # The picker offers only places the user can see; a pin there is the plainest way to see one.
+        baker.make("dashboard.Pin", profile=self.profile, location=self.location)
 
     def _resolve(self, **body) -> tuple:
         from urbanlens.dashboard.services.trips.trip_activities import resolve_activity_place

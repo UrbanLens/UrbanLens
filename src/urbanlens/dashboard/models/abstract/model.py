@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MAX_SLUG_LENGTH = 255
 
 
-def _is_slug_collision(error: IntegrityError) -> bool:
+def is_slug_collision(error: IntegrityError) -> bool:
     """Whether an IntegrityError is a *slug* unique-constraint violation.
     The retry loops below regenerate the slug and try again - which only helps when the slug was the colliding column.
     """
@@ -172,7 +172,7 @@ class PublicDashboardModel(FrontendDashboardModel):
                         self.save(update_fields=["slug"])
                 break
             except IntegrityError as e:
-                if _is_slug_collision(e):
+                if is_slug_collision(e):
                     continue
                 raise
         if not self.slug:
@@ -197,7 +197,7 @@ class PublicDashboardModel(FrontendDashboardModel):
                     super().save(*args, **kwargs)
                 return
             except IntegrityError as e:
-                if not _is_slug_collision(e):
+                if not is_slug_collision(e):
                     raise
                 continue
 

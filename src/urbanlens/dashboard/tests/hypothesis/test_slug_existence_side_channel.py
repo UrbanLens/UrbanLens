@@ -254,3 +254,51 @@ class TripSideChannelTests(TestCase):
 
         self.assertEqual(get_trip_for_viewer(self.trip.slug, self.profile), self.trip)
         self.assertEqual(self.client.get(reverse("trips.detail", args=[self.trip.slug])).status_code, 200)
+
+
+class TripActivityLocationSideChannelTests(_HiddenLocationFixture):
+    """An activity's ``location_slug`` must not attach - or even find - a place its author cannot see."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.trip = baker.make(Trip, creator=self.profile, name="My Weekend")
+
+    def _resolve(self, probe: str) -> tuple[object, list[str]]:
+        from urbanlens.dashboard.services.trips.trip_activities import resolve_activity_place
+
+        reset_queries()
+        with CaptureQueriesContext(connection) as queries:
+            place = resolve_activity_place({"location_slug": probe}, self.profile, trip=self.trip)
+        return place, _shape(queries.captured_queries, probe)
+
+    def test_a_hidden_location_is_not_attached_and_costs_what_none_does(self) -> None:
+        self._resolve("warm-up-slug")
+        missing = self._resolve(NEVER_USED)
+        self.assertEqual(missing[0], (None, None))
+        for probe in (CURRENT, FORMER):
+            with self.subTest(probe=probe):
+                self.assertEqual(self._resolve(probe), missing)
+        self.assertEqual(self._resolve(str(self.location.uuid)), self._resolve(str(uuid.uuid4())))
+
+    def test_the_creating_call_attaches_nothing_either(self) -> None:
+        from urbanlens.dashboard.services.trips.trip_activities import create_activity
+
+        activity = create_activity(self.trip, self.profile, title="Lunch", place={"location_slug": CURRENT})
+
+        self.assertIsNone(activity.location_id)
+
+    def test_a_place_the_author_can_see_is_attached(self) -> None:
+        own = self.own_pin.location
+
+        self.assertEqual(self._resolve(own.slug or str(own.uuid))[0], (own, None))
+
+    def test_a_place_already_on_this_trip_is_kept_when_another_member_edits(self) -> None:
+        """The edit dialog sends back the activity's location, which a co-member may not see themselves."""
+        baker.make("dashboard.TripActivity", trip=self.trip, location=self.location)
+
+        self.assertEqual(self._resolve(CURRENT)[0], (self.location, None))
+
+    def test_a_place_on_another_trip_is_not(self) -> None:
+        baker.make("dashboard.TripActivity", trip=baker.make(Trip, name="Theirs"), location=self.location)
+
+        self.assertEqual(self._resolve(CURRENT)[0], (None, None))
