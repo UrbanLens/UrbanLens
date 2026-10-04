@@ -168,6 +168,24 @@ class BuildingCluster:
         """Metres from this cluster's marker to a coordinate."""
         return site_scope.meters_between(self.latitude, self.longitude, latitude, longitude)
 
+    def holding_footprint(self, latitude: float, longitude: float) -> GEOSGeometry | None:
+        """The smallest member footprint a coordinate is on, or None.
+
+        Args:
+            latitude: The coordinate's latitude.
+            longitude: The coordinate's longitude.
+
+        Returns:
+            The footprint, or None when the coordinate is on none of them.
+        """
+        point = Point(float(longitude), float(latitude), srid=4326)
+        holding = [footprint for footprint in self._footprints if footprint.contains(point) or footprint.touches(point)]
+        return min(holding, key=lambda footprint: footprint.area) if holding else None
+
+    def nearest_meters(self, latitude: float, longitude: float) -> float:
+        """Metres from a coordinate to this cluster's marker or to the nearest member that published only a point."""
+        return min([self.distance_to(latitude, longitude), *(site_scope.meters_between(lat, lng, latitude, longitude) for lat, lng in self._points)])
+
     def covers(self, latitude: float, longitude: float) -> bool:
         """Whether a marker at this coordinate already stands for this building.
 
@@ -179,12 +197,7 @@ class BuildingCluster:
             True when the point is on any member's footprint, or within the app's building-match radius of
             this cluster's marker or of a member that published only a point.
         """
-        point = Point(float(longitude), float(latitude), srid=4326)
-        if any(footprint.contains(point) or footprint.touches(point) for footprint in self._footprints):
-            return True
-        if self.distance_to(latitude, longitude) <= site_scope.BUILDING_MATCH_METERS:
-            return True
-        return any(site_scope.meters_between(lat, lng, latitude, longitude) <= site_scope.BUILDING_MATCH_METERS for lat, lng in self._points)
+        return self.holding_footprint(latitude, longitude) is not None or self.nearest_meters(latitude, longitude) <= site_scope.BUILDING_MATCH_METERS
 
 
 def _overlap_refs(building: dict[str, Any]) -> set[str]:

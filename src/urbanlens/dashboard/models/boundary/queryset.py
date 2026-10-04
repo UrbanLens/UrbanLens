@@ -453,7 +453,9 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
 
     @staticmethod
     def _wikis_for_pins(pins: list[tuple[Pin, Location | None]]) -> dict[int, int]:
-        """Each pin's wiki id - its own, else its location's (``Wiki.objects.existing_for_location``) - in up to two queries.
+        """Each pin's wiki id - its own, else its location's (``Wiki.objects.existing_for_location``).
+
+        Up to two queries, plus two for each campus whose wiki a pin reaches only through the campus's place.
 
         Args:
             pins: Pins paired with their locations.
@@ -462,24 +464,36 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
             Pin id to wiki id, for pins that have one.
         """
         from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.wiki.building_wikis import CampusBuildings
 
         wiki_of = {pin.pk: pin.wiki_id for pin, _ in pins if pin.wiki_id}
         unlinked = [(pin, location) for pin, location in pins if not pin.wiki_id and location is not None]
         if not unlinked:
             return wiki_of
         by_location: dict[int, int] = {}
-        by_place: dict[int, int] = {}
+        by_place: dict[int, Wiki] = {}
         location_ids = {location.pk for _, location in unlinked}
         place_ids = {location.place_id for _, location in unlinked if location.place_id}
-        for wiki_id, location_id, place_id in Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place_id__in=place_ids)).order_by("pk").values_list("pk", "location_id", "place_id"):
-            if location_id in location_ids:
-                by_location.setdefault(location_id, wiki_id)
-            if place_id in place_ids:
-                by_place.setdefault(place_id, wiki_id)
+        for wiki in Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place_id__in=place_ids)).select_related("place", "location").order_by("pk"):
+            if wiki.location_id in location_ids:
+                by_location.setdefault(wiki.location_id, wiki.pk)
+            if wiki.place_id in place_ids:
+                by_place.setdefault(wiki.place_id, wiki)
+        campuses: dict[int, CampusBuildings | None] = {}
         for pin, location in unlinked:
-            linked = by_location.get(location.pk) or (by_place.get(location.place_id) if location.place_id else None)
-            if linked:
-                wiki_of[pin.pk] = linked
+            if (own := by_location.get(location.pk)) is not None:
+                wiki_of[pin.pk] = own
+                continue
+            holder = by_place.get(location.place_id) if location.place_id else None
+            if holder is None:
+                continue
+            if holder.pk not in campuses:
+                campuses[holder.pk] = CampusBuildings.of(holder)
+            campus = campuses[holder.pk]
+            building = campus.standing(float(location.latitude), float(location.longitude)) if campus is not None and location.latitude is not None and location.longitude is not None else None
+            linked = holder if building is None else building.wiki
+            if linked is not None:
+                wiki_of[pin.pk] = linked.pk
         return wiki_of
 
     def effective_polygon_for_wiki(self, wiki: Wiki, boundary_type: str) -> GEOSGeometry | None:

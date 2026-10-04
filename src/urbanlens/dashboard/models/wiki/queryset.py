@@ -44,22 +44,44 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         """The Wiki describing what this Location stands on, draft or official.
         Checks the Location's own row first, then the *place* it resolved onto.
         The second lookup is the dedup that matters: two people pinning opposite ends of one property get two Locations, and without it they would get two community pages for one real-world thing.
+        On a campus, whose buildings often have no place for a point to resolve onto, a Location standing on one of them is that building's (``building_wikis.standing_building``).
 
         Args:
             location: The shared Location to look up (None-safe).
 
         Returns:
-            The Wiki, or None.
+            The Wiki, or None - also for a Location on a campus building that has no wiki yet.
         """
+        return self._resolve(location)[0]
+
+    def _resolve(self, location: Location | None) -> tuple[Wiki | None, Wiki | None]:
+        """:meth:`existing_for_location`'s answer, with the wiki holding the Location's place when it read one."""
         if location is None:
-            return None
+            return None, None
         try:
-            return location.wiki
+            return location.wiki, None
         except ObjectDoesNotExist:
             pass
-        if location.place_id is None:
+        holder = self.holding_place_of(location)
+        if holder is None:
+            return None, None
+        from urbanlens.dashboard.services.wiki.building_wikis import standing_building
+
+        building = standing_building(location, holder)
+        return (holder if building is None else building.wiki), holder
+
+    def holding_place_of(self, location: Location | None) -> Wiki | None:
+        """The wiki holding the place a Location resolved onto, whichever part of the place the Location stands on.
+
+        Args:
+            location: The Location (None-safe).
+
+        Returns:
+            The Wiki, or None.
+        """
+        if location is None or location.place_id is None:
             return None
-        return self.filter(place_id=location.place_id).first()
+        return self.filter(place_id=location.place_id).select_related("place", "location").first()
 
     def get_for_location(self, location: Location | None) -> Wiki | None:
         """Return the Location's Wiki, or None when it has none yet.
@@ -91,29 +113,34 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         Returns:
             Tuple of (Wiki, created).
         """
-        if (existing := self.existing_for_location(location)) is not None:
+        existing, holder = self._resolve(location)
+        if existing is not None:
             return existing, False
 
-        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+        from urbanlens.dashboard.models.pin.model import PinType
 
         defaults = dict(defaults or {})
         explicit_name = defaults.pop("name", None)
-        try:
-            # Both `location` and `place` are one-to-one, so a concurrent create for this Location, or for another
-            # Location on the same place, fails here; the savepoint keeps a caller's transaction usable.
-            with transaction.atomic():
-                if explicit_name:
-                    wiki = self.create(location=location, place_id=location.place_id, name=explicit_name, **defaults)
-                else:
-                    # Nobody chose this name, even when a request triggered the creation, so a better public name may replace it.
-                    with writing_as(WriteSource.AUTOMATIC):
-                        wiki = self.create(location=location, place_id=location.place_id, name=self._placeholder_name(location), **defaults)
-        except IntegrityError:
-            # Drops the reverse `wiki` cache, which holds either the earlier miss or the instance that failed to insert.
-            location.refresh_from_db()
-            if (existing := self.existing_for_location(location)) is None:
-                raise
-            return existing, False
+        while True:
+            # With no wiki found, a place another wiki holds is a campus's, and this location stands on one of its
+            # buildings: the building's wiki holds no place.
+            if holder is not None:
+                defaults.setdefault("pin_type", PinType.BUILDING)
+            try:
+                # Both `location` and `place` are one-to-one, so a concurrent create for this Location, or for another
+                # Location on the same place, fails here; the savepoint keeps a caller's transaction usable.
+                with transaction.atomic():
+                    wiki = self._create(location, None if holder is not None else location.place_id, explicit_name, defaults)
+                break
+            except IntegrityError:
+                # Drops the reverse `wiki` cache, which holds either the earlier miss or the instance that failed to insert.
+                location.refresh_from_db()
+                tried_without_place = holder is not None
+                existing, holder = self._resolve(location)
+                if existing is not None:
+                    return existing, False
+                if tried_without_place or holder is None:
+                    raise
 
         from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
         from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
@@ -124,3 +151,13 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         if reconcile_wiki_nesting(wiki):
             wiki.refresh_from_db(fields=["parent_wiki"])
         return wiki, True
+
+    def _create(self, location: Location, place_id: int | None, explicit_name: str | None, defaults: dict) -> Wiki:
+        """Insert the wiki row, named as given or, as an automatic write, after the location."""
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+
+        if explicit_name:
+            return self.create(location=location, place_id=place_id, name=explicit_name, **defaults)
+        # Nobody chose this name, even when a request triggered the creation, so a better public name may replace it.
+        with writing_as(WriteSource.AUTOMATIC):
+            return self.create(location=location, place_id=place_id, name=self._placeholder_name(location), **defaults)

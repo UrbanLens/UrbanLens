@@ -21970,3 +21970,52 @@ A wiki created with an explicit name now also nests; it still skips the provider
 
 **Tests.** `test_building_wiki_nesting.py`: a share and an enrichment photo that create a building's wiki each nest it
 under the campus's (both failed before the fix).
+
+## RESOLVED 2026-10-04: A location standing on a campus building opened the campus's wiki, because a building with no place of its own resolves onto its parcel
+
+`id: P261` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by Claude while fixing P231. `Wiki.objects.existing_for_location` returned a location's own wiki, else the wiki
+holding the place the location resolved onto. A building with no place a point can resolve onto (60 of HRSH's 96
+building places on dev have no footprint) leaves its points on the parcel, so a building child pin whose location
+had no wiki of its own got the campus's: `Pin.community_wiki` and `places.ambiguity.linked_wiki_locations` linked
+`/dashboard/location/<the building location's slug>/wiki/`, which rendered the campus's root wiki, and
+`tasks.ensure_wiki_for_location` returned that wiki rather than creating the building's - P231's report exactly.
+Production was not read. On dev, locations 98241, 99688 and 101406 sit on HRSH's parcel with no wiki of their own;
+none stands within 15 m of a building wiki's point or on a footprint, and no cached building record is within 15 m of
+any of them, so all three still open the campus's wiki after the fix, correctly (read 2026-10-04).
+
+**Fix (the first option the entry set out; the decision was made before this work).**
+`services.wiki.building_wikis` knows a campus's buildings: the building wikis nested under the wiki holding the
+place (`building_markers` of its descendants) and the building list cached for that wiki's own location
+(`parcel_buildings`, clustered and paired with the wikis by `cluster_buildings`/`match_clusters`, as the wiki mirror
+does). A location stands on the building whose footprint holds it (the smallest, so a wing beats its envelope), else
+on the nearest building within `BUILDING_MATCH_METERS`, so a nearer building without a wiki wins over a farther one
+with one (the nearer-building rule of `national_register.BuildingPoints`). It applies only where the place is a site
+or a parcel holding several buildings (`pin_type_for_place`), so an ordinary property's second point still opens its
+one wiki. It reads places, wikis and location caches only, never a pin (a test asserts no query touches
+`dashboard_user_pins`).
+
+- `existing_for_location` returns that building's wiki, or None when the building has none yet; the grounds still
+  open the campus's wiki. `Boundary.objects._wikis_for_pins` (its batched copy) agrees, reading each campus once.
+- `get_or_create_for_location` then creates the building's wiki at the location: holding no place (the campus's
+  wiki holds it), typed a building (not user-chosen), and nested by P263's reconcile under the wiki of the building
+  enclosing it, if any, else the campus's (`wiki_merge._containing_root_wiki_by_geometry`). A race in which the
+  place's wiki appears meanwhile retries without the place rather than raising.
+- A placeless wiki standing on a place another wiki holds no longer nests other root wikis inside that place's
+  outline (`wiki_merge._nestable_child_wikis`): the parcel's outline is the campus wiki's, and a building's new wiki
+  would otherwise have taken in every root wiki on the campus.
+- `wiki_naming.wiki_named_by_location` reads the place's wiki directly (`Wiki.objects.holding_place_of`), so a root
+  pin's names on a campus building still feed the campus's wiki, never the building's.
+
+A second account's root pin dropped on a campus building now opens that building's wiki, as it already did where the
+building has a place of its own. `BuildingCluster` gained `holding_footprint` and `nearest_meters`; `covers` is built
+from them, unchanged in behaviour.
+
+**Tests.** `test_building_wiki_resolution.py`: footprint, point-only within 15 m, nearer building without a wiki,
+grounds, the reported child-pin shape, no pin read, the batched lookup, an ordinary property, the new wiki's
+place/type/parent (campus, and an envelope's for a wing), no root wiki taken in, an existing building wiki reused,
+naming, and a building with a place of its own unchanged. 8 of the 16 written first failed before the fix; all
+17 pass after, with a race in which the campus's wiki appears between the lookup and the insert added alongside.
+`test_canonical_create_helpers.py`'s wiki race tests now make the manager's `_resolve` miss once, since
+`get_or_create_for_location` no longer goes through `existing_for_location`.

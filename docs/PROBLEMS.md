@@ -3004,33 +3004,6 @@ Making them `DocumentMediaPanelSource`s fixes the listing but makes every Source
 REData searches, and the Sources tests assume CRIS and Commons are the only sources. Either accept that, or let a
 non-document source keep its documents as gallery tiles.
 
-## P261 — A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid
-
-`id: P261` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
-
-`Wiki.objects.existing_for_location` returns a location's own wiki, else the wiki holding the place the location
-resolved onto. A building with no Place of its own resolves onto its parcel, so a building child pin whose location has
-no wiki of its own gets the parcel's: `Pin.community_wiki` and `places.ambiguity.linked_wiki_locations` link
-`/dashboard/location/<the building location's slug>/wiki/`, which renders the campus's root wiki, and
-`tasks.ensure_wiki_for_location` returns that wiki rather than creating the building's. That is the exact shape of
-P231's report (a uuid URL, the campus's title, not nested), and may be what production showed; production was not
-read.
-
-On the dev stack no building child pin is in this state (0 of 638, read 2026-10-03): the auto-nest sweep stands each
-building pin on its wiki's own point. It arises when the pin and the building's wiki stand on different points: an
-import of a building that already has a wiki elsewhere (`mirror_wikis` matches it and creates none at the pin's
-point), a sweep whose wiki mirror failed, or a pin its owner moved. Locations 98241, 99688 and 101406 on dev sit on
-HRSH's parcel place with no wiki of their own, and each resolves wiki 1805, the campus's.
-
-Fixing it needs a choice:
-
-- Resolve a location standing on one of its parcel's known buildings to that building's wiki (matched by footprint or
-  `BUILDING_MATCH_METERS`, as `building_markers`/`match_clusters` do), creating a nested one when there is none. A
-  second account's root pin dropped on a building would then open the building's wiki too, as it already does where
-  the building has a Place.
-- Or decide from the pin: a child pin never links a wiki another location holds by place. That reads one account's
-  pin tree, which P231 keeps out of shared wiki structure, though only for that account's own link.
-
 ## P262 — A building's wiki is seeded with its campus's Wikipedia article
 
 `id: P262` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`

@@ -30,7 +30,7 @@ def _profile() -> Profile:
     return Profile.objects.get(user=baker.make(User))
 
 
-def _first_lookup_misses(method_owner: type, name: str):
+def _first_lookup_misses(method_owner: type, name: str, missing: object = None):
     """Patch *name* so its first call finds nothing - the state a concurrent insert leaves behind."""
     real = getattr(method_owner, name)
     calls: list[int] = []
@@ -39,7 +39,7 @@ def _first_lookup_misses(method_owner: type, name: str):
         calls.append(1)
         result = real(self, *args, **kwargs)
         if len(calls) == 1:
-            return result.none() if hasattr(result, "none") else None
+            return result.none() if hasattr(result, "none") else missing
         return result
 
     return patch.object(method_owner, name, wrapper)
@@ -366,7 +366,7 @@ class WikiCreateRaceTests(TestCase):
         existing = baker.make(Wiki, location=location)
         location = Location.objects.get(pk=location.pk)
 
-        with _first_lookup_misses(WikiManager, "existing_for_location"):
+        with _first_lookup_misses(WikiManager, "_resolve", missing=(None, None)):
             wiki, created = Wiki.objects.get_or_create_for_location(location)
 
         self.assertEqual((wiki, created), (existing, False))
@@ -377,7 +377,7 @@ class WikiCreateRaceTests(TestCase):
         second = Location.objects.create(latitude=41.001, longitude=-75.001, place=place)
         existing = baker.make(Wiki, location=first, place=place)
 
-        with _first_lookup_misses(WikiManager, "existing_for_location"):
+        with _first_lookup_misses(WikiManager, "_resolve", missing=(None, None)):
             wiki, created = Wiki.objects.get_or_create_for_location(second)
 
         self.assertEqual((wiki, created), (existing, False))
