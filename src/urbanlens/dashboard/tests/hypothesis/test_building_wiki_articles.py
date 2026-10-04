@@ -8,11 +8,16 @@ seeded the building's wiki from it: on dev, 11 of HRSH's child wikis opened with
 from __future__ import annotations
 
 import importlib
+import threading
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
+from django.db import transaction
+from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
 
+from urbanlens.core.tests.concurrency import run_concurrently
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.article.model import (
     EDIT_SUMMARY_IMAGES_LOCALIZED,
@@ -24,7 +29,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import PlaceKind, PlaceRelation
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.wiki.articles import save_article
+from urbanlens.dashboard.services.wiki.articles import save_article, save_article_checked
 from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
 from urbanlens.dashboard.services.wiki.wiki_seed import is_untouched_wikipedia_seed, seed_wiki_article_from_wikipedia
 
@@ -40,6 +45,7 @@ _CAMPUS_ARTICLE = {
     "thumbnail": "",
 }
 _SEED = "The **Hudson River State Hospital** is a former psychiatric hospital.\n\n_From Wikipedia_"
+_HOLD_SECONDS = 1.5
 
 
 def _square(latitude: float, longitude: float, half: float) -> MultiPolygon:
@@ -283,6 +289,61 @@ class MigrationTests(_ArticleRows):
         self._migrate()
 
         self.assertEqual(Article.objects.filter(pk__in=[a.pk for a in kept]).count(), 3)
+
+
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
+class MigrationRaceTests(TransactionTestCase):
+    """The migration and a person's edit at once, each in its own committed transaction."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        enqueue = patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
+        enqueue.start()
+        self.addCleanup(enqueue.stop)
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.profile = baker.make(User).profile
+        campus = Wiki.objects.create(
+            location=baker.make(Location, latitude="40.010000", longitude="-74.000000", google_place=None),
+            name="Campus",
+        )
+        self.building = Wiki.objects.create(
+            location=baker.make(Location, latitude="40.020000", longitude="-74.000000", google_place=None),
+            name="Building",
+            parent_wiki=campus,
+        )
+        self.article = Article.objects.create(wiki=self.building, content=_SEED)
+        self.seed = ArticleRevision.objects.create(
+            article=self.article, editor=None, edit_summary=EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, content=_SEED
+        )
+        self.apps = _historical_apps()
+
+    def test_an_edit_saved_while_the_migration_runs_is_kept(self) -> None:
+        """The edit's transaction stays open until the migration returns, or for 1.5 s when the migration waits on it."""
+        saved, finished = threading.Event(), threading.Event()
+
+        def edit() -> None:
+            with transaction.atomic():
+                save_article_checked(
+                    editor=self.profile,
+                    content=_SEED + " More.",
+                    edit_summary="Boiler house",
+                    base_revision_id=self.seed.pk,
+                    wiki=self.building,
+                )
+                saved.set()
+                finished.wait(_HOLD_SECONDS)
+
+        def migrate() -> None:
+            try:
+                saved.wait(10)
+                with transaction.atomic():
+                    migration.drop_building_wikipedia_seeds(self.apps, None)
+            finally:
+                finished.set()
+
+        run_concurrently([edit, migrate])
+
+        self.assertEqual(Article.objects.get(pk=self.article.pk).content, _SEED + " More.")
 
 
 class RuntimeAgreesWithTheMigrationTests(_ArticleRows):
