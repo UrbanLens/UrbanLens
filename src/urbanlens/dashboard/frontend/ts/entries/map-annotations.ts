@@ -2167,7 +2167,7 @@ function init(): void {
                     </span>
                 </div>`;
             li.querySelector(".photo-panel-place-btn")?.addEventListener("click", (event) => {
-                // The tile's own click pans to a placed photo, or opens the lightbox for one with no place.
+                // The tile's own click opens the lightbox.
                 event.stopPropagation();
                 if (pendingPlacement?.kind === "photo" && pendingPlacement.photoId === img.id) disarmPlacement();
                 else armPlacement({ kind: "photo", photoId: img.id });
@@ -2180,12 +2180,12 @@ function init(): void {
             });
             li.addEventListener("dragend", () => li.classList.remove("is-dragging"));
             li.addEventListener("click", () => {
-                if (img.lat == null || img.lng == null) {
-                    openPhoto(img.id);
-                    return;
+                // A placed photo's marker is found behind the lightbox for when it closes.
+                if (img.lat != null && img.lng != null) {
+                    map.panTo([img.lat, img.lng]);
+                    photoMarkers.flash(img.id);
                 }
-                map.panTo([img.lat, img.lng]);
-                photoMarkers.flash(img.id);
+                openPhoto(img.id);
             });
             ul.appendChild(li);
         });

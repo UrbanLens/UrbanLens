@@ -2806,17 +2806,6 @@ Settings offers both rows, but nothing in `src/` sends either `NotificationType`
 - Both honour the existing row's in-app, email and text toggles, as every other producer does
   (`notification_text_alerts.PREFERENCE_TYPE_FOR`).
 
-## P200 — A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown
-
-`id: P200` · `status: open` · `updated: 2026-10-02` · `found by: Jess's HRSH report`
-
-`entries/map-annotations.ts`: a sidebar tile for a photo with a place pans to it and flashes its marker. Only a photo
-with no place opens the lightbox. **Jess, 2026-10-02:** open the lightbox as before, and pan the map behind it. She
-adds: "The lightbox didn't open before (or if it did, it wasn't visible to the user)." So find out why, in a real
-browser, before the fix. Likely suspects are a lightbox drawn under the map's panes or the sidebar's stacking context,
-or one opened inside a container that clips it. A Playwright test must assert the lightbox is visible and on top
-(`elementFromPoint` at its centre), not merely present.
-
 ## P202 — The scheduled database backup cannot work on Kubernetes, and a restore turns it back on
 
 `id: P202` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 5`

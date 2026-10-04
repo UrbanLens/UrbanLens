@@ -21754,3 +21754,22 @@ still failed (the scores and the wiki display) until they read through `votes()`
   constraint, the lightbox button, and a malformed key refused on both endpoints (a 500 before).
 - `external-photos.test.ts`, `photo-lightbox.test.ts`: the mark reaches the lightbox; a vote posts and updates the
   tile; no buttons without an endpoint; removal posts, drops the tile and moves on, or closes after the last.
+
+## RESOLVED 2026-10-04: A placed photo chosen in the map sidebar panned the map and never opened the lightbox
+
+`id: P200` · `status: fixed` · `resolved: 2026-10-04`
+
+Why it never opened: the map's side panel lists the photo layer, and the photo layer is built from
+`gallery/json/`, which returns only photos with a place (`images.with_coords()`). Every tile was therefore a placed
+photo, and the tile's click handler opened the lightbox only for a photo with no place, so the lightbox branch never
+ran. The lightbox itself was never hidden: it is a modal dialog in the top layer, and opened over the map it is the
+topmost element at its centre (checked in Chromium at 1280 and 390 px wide).
+
+The tile now opens the lightbox for every photo and, for a placed one, pans the map to it and flashes its marker
+behind the lightbox. Verified on `development_main`: after the click the dialog is open and modal, the element at
+its image's centre is the lightbox image, and the map has moved to the photo.
+
+Tests: `map-annotations.contract.test.ts` (the handler opens the lightbox unconditionally, red before), and
+`tests/integration/specs/ui/pin-photo-map.spec.ts`, whose side-panel test asserted the old behaviour and now asserts
+the lightbox is open and on top by `elementFromPoint`. The integration spec was not run here (it needs a provisioned
+e2e environment); it typechecks.

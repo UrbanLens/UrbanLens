@@ -35,3 +35,12 @@ describe("child pin details", () => {
         }
     });
 });
+
+describe("the map's side panel", () => {
+    test("a photo chosen there opens in the lightbox whether or not it has a place", () => {
+        const handler = source.match(/li\.addEventListener\("click", \(\) => \{[\s\S]*?\n {12}\}\);/)?.[0] ?? "";
+        expect(handler, "the photo tile's click handler moved").toContain("openPhoto(img.id)");
+        expect(handler).not.toMatch(/return;\s*\}[\s\S]*panTo/);
+        expect(handler).toMatch(/openPhoto\(img\.id\);\s*\}\);$/);
+    });
+});

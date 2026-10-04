@@ -282,7 +282,7 @@ test.describe("photos on the pin map", () => {
         await expect(page.locator("#map-panel-details")).toBeHidden();
     });
 
-    test("choosing a photo in the side panel marks it on the map without covering the map", async ({ page, api }) => {
+    test("choosing a photo in the side panel opens it in the lightbox, on top, and marks it on the map behind", async ({ page, api }) => {
         const pin = await api.createPin();
         const photo = await addPhoto(page, pin.slug, { lat: pin.latitude + 0.0002, lng: pin.longitude });
         await new PinDetailPage(page).goto(pin.slug);
@@ -293,9 +293,17 @@ test.describe("photos on the pin map", () => {
         await page.locator('.map-panel-tab[data-tab="photos"]').click();
         await page.locator(`#map-panel-photos .photo-panel-item[data-id="${photo}"]`).click();
 
+        const lightbox = page.locator("#gallery-lightbox");
+        await expect(lightbox).toHaveJSProperty("open", true);
+        await expect(lightbox.locator("#lightbox-img")).toBeVisible();
+        // Present is not shown: the element at the photo's centre has to be the lightbox's own.
+        const onTop = await lightbox.locator("#lightbox-img").evaluate((img) => {
+            const box = img.getBoundingClientRect();
+            const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+            return top !== null && (img.closest("dialog")?.contains(top) ?? false);
+        });
+        expect(onTop).toBe(true);
         await expect(page.locator(".photo-marker.is-flashing")).toHaveCount(1);
-        await expect(page.locator(".photo-marker.is-flashing .photo-marker-img")).toHaveCSS("animation-name", "photo-marker-flash");
-        expect(await page.locator("#gallery-lightbox").evaluate((el) => (el as HTMLDialogElement).open)).toBe(false);
     });
 
     test("a photo chosen in the side panel comes to the top of the cluster it is in", async ({ page, api }) => {
