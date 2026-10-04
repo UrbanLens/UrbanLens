@@ -2716,50 +2716,6 @@ should need to change: `upsert_place` updates a building place by its provider k
 answer refreshes. If the merge gives Kirkbride a new key, place 483 is orphaned, with no Location on it: migration 0034
 moved them all by containment. To close: after REData deploys, refresh HRSH's buildings and re-run the location project.
 
-## P188 — Media searches send the pin owner's private name and aliases to third parties, and cache the results on the shared Location
-
-`id: P188` · `status: open, two related gaps left` · `updated: 2026-10-02` · `found by: the HRSH Commons investigation, 2026-10-02`
-
-**Ruling (Jess, 2026-10-02).** Sending a pin's names in a search is fine. Showing the cached results to other
-users is not. Cache searches so users can share them without re-running them: one search per provider from the
-names everyone knows the place by, and one per distinct set of custom names, readable only by pins holding exactly
-that set. Her example, now `test_search_audiences.py::SevenAccountsTests`: Bob and John (no aliases) share the base
-search; Mildred and Albert share {HRSH}; Dolby and Casey share {HRSH, Blueberry}; Fred's {Apple, Blueberry} is his
-alone. That is 1 + 3 searches per provider, and each account sees the base results plus its own set's.
-
-**Built (2026-10-02).**
-
-- `services/pins/search_names.py` splits a pin's names. *Shared*: the Location's meaningful `official_name`, its
-  wiki's name and non-nickname aliases (`Wiki.objects.existing_for_location`). *Custom*: the pin's `name` and
-  non-nickname aliases, less anything equal to a shared name after casefolding and collapsing whitespace, plus the
-  names of the pins it is filed under (`ancestor_search_names`), since the nesting is the owner's too. The audience
-  key is the sha256 of the sorted custom names and the ordered ancestor names; `""` when there are none.
-- `LocationCache.audience` (0039; unique on location, source, audience). 0038 deletes every row of the ten
-  name-built sources first, since any of them may hold results found by someone's own name.
-- `NameSearchSource` (`services/pins/external_data.py`) fetches the base row and the pin's own row separately, each
-  once (`coalesced`), with audience-scoped flight and skip keys, and merges them for readers (base first, deduped by
-  URL/link). Converted: every `MediaPanelSource` (Smithsonian, Wikimedia, LoC, Digital Commonwealth, Internet
-  Archive, Chronicling America), Flickr, Web Images (SearXNG) and News (GDELT). Web search goes through
-  `services/search/pin_web_search.py` from both the view and `refresh_pin_web_search`.
-- Owner-facing reads take base + own: the pin page panels and Media gallery, the Photos tab, `panel_readiness`, the
-  external API panel endpoints, web search. Wiki pages, `wiki_media` and site adoption read or copy the base row only,
-  which is what `LocationCache.get_fresh`/`set` default to.
-- A Location with no shared name makes no base search (its base row is an empty answer written without asking).
-- `BoundaryPanelSource` no longer passes the pin's name to boundary generation (no provider used it yet).
-
-**Choices worth reassessing.** Custom names are searched casefolded and longest first, so one set's query is the same
-whoever holds it; a single-name builder (Media providers, web search) therefore searches the set's longest name, not
-the pin's own `name`. News keeps register-listing names in the base search only.
-
-**Still open.**
-
-- The Wikipedia panel's campus fallback (`WikipediaPanelSource._ancestor_campus_article`) searches from the owner's
-  ancestor pins' coordinates and public names and stores the match in the shared `wikipedia` row, so one owner's
-  nesting picks the article every viewer sees. Public names only, but the choice is private.
-- A new pin alias still deletes the Location's shared `wikimedia` (and an unmatched `wikipedia`) row
-  (`models/aliases/signals.py::_drop_name_sensitive_cache`), though neither search uses pin names any more; it costs
-  everyone a refetch and leaks nothing.
-
 ## P206 — `dashboard_location_cache` is 81% of production's database
 
 `id: P206` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 9`

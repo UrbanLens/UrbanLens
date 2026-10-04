@@ -420,7 +420,9 @@ class SettingsViewWikiSyncSectionTests(TestCase):
 
 
 class MediaCacheInvalidationOnNewAliasTests(TestCase):
-    """A new pin/wiki alias may surface a name-quality-dependent match (a Wikipedia article, or images on one) that couldn't be found under the previous name set - "Wikipedia article images not reliably reaching Media section" entry. A genuinely new alias should clear the location's Wikipedia/Wikimedia LocationCache rows so the next panel view does a fresh lookup; renaming an existing alias should not."""
+    """A new wiki alias is a new name everyone knows the place by, so the shared Wikimedia search, and a Wikipedia
+    lookup that missed, run again with it. A pin's own aliases are searched only in its own audience's row (P188), so
+    they leave every shared row alone."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -436,17 +438,15 @@ class MediaCacheInvalidationOnNewAliasTests(TestCase):
     def _cached_sources(self) -> set[str]:
         return set(LocationCache.objects.filter(location=self.pin.location).values_list("source", flat=True))
 
-    def test_new_pin_alias_clears_name_sensitive_caches_but_not_others(self) -> None:
+    def test_a_new_pin_alias_leaves_the_shared_rows_alone(self) -> None:
         self._seed_cache()
         with self.captureOnCommitCallbacks(execute=True):
             PinAlias.objects.create(pin=self.pin, name="New Alias")
-        self.assertEqual(self._cached_sources(), {"nominatim"})
+        self.assertEqual(self._cached_sources(), {"wikipedia", "wikimedia", "wikipedia_media", "nominatim"})
 
     def test_renaming_an_existing_pin_alias_does_not_clear_the_cache(self) -> None:
         with self.captureOnCommitCallbacks(execute=True):
             alias = PinAlias.objects.create(pin=self.pin, name="Original")
-        # Creation above already cleared the seeded rows (tested separately) -
-        # reseed to isolate the rename itself.
         self._seed_cache()
         with self.captureOnCommitCallbacks(execute=True):
             alias.name = "Renamed"
@@ -458,6 +458,25 @@ class MediaCacheInvalidationOnNewAliasTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             WikiAlias.objects.create(wiki=self.pin.wiki, name="New Wiki Alias")
         self.assertEqual(self._cached_sources(), {"nominatim"})
+
+    def test_a_new_wiki_alias_keeps_each_name_set_s_own_wikimedia_row(self) -> None:
+        """Those rows search an owner's own names, which a new shared name does not change."""
+        self._seed_cache()
+        LocationCache.objects.create(
+            location=self.pin.location, source="wikimedia", audience="a" * 64, data={"items": []}
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            WikiAlias.objects.create(wiki=self.pin.wiki, name="New Wiki Alias")
+
+        self.assertEqual(
+            list(
+                LocationCache.objects.filter(location=self.pin.location, source="wikimedia").values_list(
+                    "audience", flat=True
+                )
+            ),
+            ["a" * 64],
+        )
 
     def test_a_new_alias_keeps_a_matched_wikipedia_article_and_its_images(self) -> None:
         """A match is not improved by another name - the lookup takes the first nearby article that fits."""

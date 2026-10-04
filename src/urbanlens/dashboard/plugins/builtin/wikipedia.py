@@ -125,6 +125,9 @@ def _openstreetmap_municipality(location: Location) -> str:
     return _MUNICIPAL_PREFIX.sub("", (admin or {}).get("city") or "").strip()
 
 
+#: How many containing places the campus fallback searches from (building, then parcel, then site).
+_CAMPUS_FALLBACK_DEPTH = 3
+
 #: Largest parcel whose outline may confirm an article by containing it; a vast lot would confirm unrelated ones.
 MAX_MATCH_PARCEL_AREA_SQM = 5_000_000.0
 
@@ -204,7 +207,7 @@ class WikipediaPanelSource(LocationCachePanelSource):
         query_key = f"{name} ({address_bits})" if name and address_bits else name or address_bits or f"{lat:.5f}, {lng:.5f}"
         article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name, within=match_outline(location))
         if article is None:
-            article = self._ancestor_campus_article(pin)
+            article = self._campus_article(location)
         store_wikipedia_match(location, article, query_key)
         if article:
             from urbanlens.dashboard.services.wiki.wiki_seed import apply_wikipedia_cover_if_missing, seed_pin_from_cached_wikipedia
@@ -214,34 +217,34 @@ class WikipediaPanelSource(LocationCachePanelSource):
                 apply_wikipedia_cover_if_missing(pin=pin)
 
     @staticmethod
-    def _ancestor_campus_article(pin: Pin) -> dict | None:
-        """Campus fallback: search again from each ancestor pin's own point and public name.
-        A child pin for an outbuilding can easily sit more than the geosearch radius away from that point, so its own coordinates find nothing even though the campus article is exactly what its panel should show.
+    def _campus_article(location: Location) -> dict | None:
+        """Campus fallback: search again from each place this one stands in, nearest first.
+
+        A building can sit beyond the geosearch radius from the point its campus's article is placed at, and that
+        article is what its panel should show. Only public places are walked: the match lands in the row every viewer
+        shares, so the owner's own pin nesting has no say in it.
 
         Args:
-            pin: The pin whose own-coordinate search came up empty.
+            location: The Location whose own search came up empty.
 
         Returns:
-            The first ancestor's matched article dict, or None.
+            The first containing place's matched article, or None.
         """
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+        from urbanlens.dashboard.services.places import lineage
+        from urbanlens.dashboard.services.places.ambiguity import representative_locations
 
-        seen: set[int] = {pin.pk}
-        ancestor = pin.parent_pin
-        # Bounded walk: hierarchies are shallow (campus -> building -> spot),
-        # and the seen-set guards against a pathological parent cycle.
-        for _depth in range(3):
-            if ancestor is None or ancestor.pk in seen:
-                return None
-            seen.add(ancestor.pk)
-            lat = float(ancestor.effective_latitude or 0)
-            lng = float(ancestor.effective_longitude or 0)
-            location = ancestor.location
-            if lat and lng and location is not None:
-                article = WikipediaGateway().get_article_for_location(lat, lng, match_address_components(location), name=public_name_hint(location), within=match_outline(location))
-                if article is not None:
-                    return article
-            ancestor = ancestor.parent_pin
+        place = location.place if location.place_id else None
+        if place is None:
+            return None
+        for ancestor in representative_locations(lineage.ancestors_of(place)[:_CAMPUS_FALLBACK_DEPTH]):
+            lat = float(ancestor.latitude or 0)
+            lng = float(ancestor.longitude or 0)
+            if not (lat and lng) or ancestor.pk == location.pk:
+                continue
+            article = WikipediaGateway().get_article_for_location(lat, lng, match_address_components(ancestor), name=public_name_hint(ancestor), within=match_outline(ancestor))
+            if article is not None:
+                return article
         return None
 
 

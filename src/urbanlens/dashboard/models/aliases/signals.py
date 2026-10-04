@@ -22,10 +22,11 @@ WIKI_SYNC_SOURCE = "wiki_sync"
 
 
 def _drop_name_sensitive_cache(location_id: int | None) -> None:
-    """Drop the location's cached lookups a new name could improve.
+    """Drop the location's shared lookups a new shared name could improve.
 
-    A Wikimedia search is by name, so it always goes. A Wikipedia match is kept: the lookup takes the
-    first nearby article that fits, so another name only helps where it missed - and article images
+    The shared Wikimedia search is by name, so it always goes; each name set's own row searches only
+    its owners' names, which a shared name does not change. A Wikipedia match is kept: the lookup takes
+    the first nearby article that fits, so another name only helps where it missed - and article images
     go with the miss, since they are read from the matched article.
 
     Args:
@@ -35,7 +36,7 @@ def _drop_name_sensitive_cache(location_id: int | None) -> None:
 
     if location_id is None:
         return
-    rows = LocationCache.objects.filter(location_id=location_id)
+    rows = LocationCache.objects.filter(location_id=location_id, audience="")
     rows.filter(source="wikimedia").delete()
     if not rows.filter(source="wikipedia", data__has_key="title").exclude(data__title="").exists():
         rows.filter(source__in=("wikipedia", "wikipedia_media")).delete()
@@ -90,36 +91,13 @@ def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, create
     transaction.on_commit(_run)
 
 
-@receiver(post_save, sender=PinAlias, dispatch_uid="pin_alias_invalidate_name_sensitive_cache")
-def invalidate_name_sensitive_cache_for_new_pin_alias(sender: type[PinAlias], instance: PinAlias, created: bool, **kwargs) -> None:
-    """Drop the location's Wikipedia/Wikimedia LocationCache rows when a new pin alias appears.
-
-    A missing row is treated as "never queried" (see LocationCache's own
-    docstring), so this just makes the next panel view do a fresh lookup with
-    the wider name set - it doesn't change any other read path's behavior.
-    """
-    if not created:
-        return
-
-    def _run() -> None:
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        try:
-            pin = Pin.objects.get(pk=instance.pin_id)
-        except Pin.DoesNotExist:
-            return
-        if pin.location_id is None:
-            return
-        _drop_name_sensitive_cache(pin.location_id)
-
-    transaction.on_commit(_run)
-
-
 @receiver(post_save, sender=WikiAlias, dispatch_uid="wiki_alias_invalidate_name_sensitive_cache")
 def invalidate_name_sensitive_cache_for_new_wiki_alias(sender: type[WikiAlias], instance: WikiAlias, created: bool, **kwargs) -> None:
-    """Drop the location's Wikipedia/Wikimedia LocationCache rows when a new wiki alias appears.
+    """Drop the location's shared Wikipedia/Wikimedia rows when a new wiki alias appears.
 
-    Same rationale as ``invalidate_name_sensitive_cache_for_new_pin_alias``.
+    A missing row reads as "never queried" (see ``LocationCache``), so the next panel view looks again
+    with the wider name set. A pin's own alias changes only its own audience's searches (P188), so it
+    drops nothing here.
     """
     if not created:
         return
