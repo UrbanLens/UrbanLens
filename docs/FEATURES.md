@@ -112,9 +112,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - **Community wikis nest themselves automatically** — when two independently-created wikis turn out
   to describe a place and something inside it (a building's wiki inside a campus's), the inner one
   becomes a child of the outer with no confirmation needed - re-parenting only, nothing else moves.
-  Nesting follows place lineage, so it agrees with access by construction, and runs when a pinned
-  location's wiki is created as well as when its boundary arrives; a wiki holding no place of its
-  own looks for its container from the place its point stands on upward (P231). See `docs/NOTES.md`.
+  Nesting follows place lineage, so it agrees with access by construction, and runs whenever
+  `get_or_create_for_location` creates a wiki (a pin, a share, an enrichment photo: P263) as well as
+  when its boundary arrives; a wiki holding no place of its own looks for its container from the
+  place its point stands on upward (P231). See `docs/NOTES.md`.
 - **One wiki per place** — creating a wiki for a coordinate that already has one, however far apart
   the two coordinates are on the same property, returns the existing page instead of a second one.
   A viewer who has earned the page reaches it from their own location's URL. The one creation path

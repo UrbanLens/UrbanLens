@@ -205,7 +205,6 @@ class WikiEnrichmentFollowsTheWikiTests(SimpleTestCase):
             # An owner who allows outbound lookups; without one there is no enrichment to route.
             mock.patch.object(Pin.objects, "filter") as pins,
             mock.patch("urbanlens.dashboard.services.wiki.wiki_seed.seed_wiki_article_from_wikipedia"),
-            mock.patch("urbanlens.dashboard.services.wiki.wiki_merge.reconcile_wiki_nesting"),
             mock.patch(ENQUEUE) as enqueue,
         ):
             locations.return_value.first.return_value = mock.Mock(pk=55)
