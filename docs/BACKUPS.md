@@ -9,9 +9,10 @@ round trip is re-runnable: `bin/verify_backup_restore.sh`.
 
 ## What is on disk
 
-`pg_dump -U <user> -h <host> -p <port> -w --no-privileges <db> -f <path>`, run in `celery-worker-bulk`, so `<user>` is
-`ul_bulk`, which holds `pg_read_all_data` for the schemas the app never touches (R29) - **plain SQL**, no `-Fc`, written to
-`<backups_dir>/backup_<YYYYMMDD>_<HHMMSS>.sql`. The dump is written to a `.tmp` path and renamed
+`pg_dump -U <user> -h <host> -p <port> -w --no-privileges --compress=gzip:6 <db> -f <path>`, run in `celery-worker-bulk`, so `<user>` is
+`ul_bulk`, which holds `pg_read_all_data` for the schemas the app never touches (R29) - **plain SQL, gzip-compressed**
+(`--compress=gzip:6`), no `-Fc`, written to `<backups_dir>/backup_<YYYYMMDD>_<HHMMSS>.sql.gz`. Dumps written before
+P202 are uncompressed `.sql`; they still count toward retention and still restore. The dump is written to a `.tmp` path and renamed
 only on success, so a dump killed mid-write leaves an obviously-partial file rather than a
 truncated one under a real backup name. Retention keeps `settings.backup_retention` files (30 in
 this environment) and reaps `.tmp` files older than a day.
@@ -25,7 +26,7 @@ matter, and they pull in opposite directions - see below.
 
 ```bash
 bin/restore_backup.sh --list                                    # what is available
-bin/restore_backup.sh backup_20260905_060200.sql my_scratch_db  # restore into a new database
+bin/restore_backup.sh backup_20261004_060200.sql.gz my_scratch_db  # restore into a new database
 ```
 
 The script creates the target itself and refuses to touch the live database. It runs `psql` in the
@@ -38,9 +39,15 @@ from the deployment's `.env`:
 export PGPASSWORD='<UL_DB_PASS from .env>'
 psql -U '<UL_DB_USER from .env>' -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d postgres \
      -c "CREATE DATABASE restored TEMPLATE template0 ENCODING 'UTF8';"
-psql -U '<UL_DB_USER from .env>' -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d restored \
-     -v ON_ERROR_STOP=1 --single-transaction -f /app/src/backups/backup_20260905_060200.sql
+gzip -t /app/src/backups/backup_20261004_060200.sql.gz   # a truncated archive must fail here, not mid-restore
+gzip -dc /app/src/backups/backup_20261004_060200.sql.gz \
+  | psql -U '<UL_DB_USER from .env>' -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d restored \
+         -v ON_ERROR_STOP=1 --single-transaction -f -
 ```
+
+Check the archive first. A truncated `.gz` decompresses to a prefix of the dump, which can end on a statement boundary;
+`--single-transaction` then commits that prefix as if it were the whole database. `bin/restore_backup.sh` runs the same
+check and also makes a read failure mid-stream end in a statement that cannot succeed.
 
 The dump carries no grants, so it restores into a cluster that has never had the tiers' roles. The
 restored tables are the owner's alone: no tier can read them until `db-setup` runs against that
@@ -54,7 +61,8 @@ directory` before doing anything. An earlier revision of this document omitted t
 
 Each was reproduced against a real dump; the exit statuses and messages are verbatim.
 
-**1. `pg_restore` cannot read these files at all.**
+**1. `pg_restore` cannot read these files at all** - neither the `.sql` dumps below nor the `.sql.gz` ones, which are
+the same text gzip-compressed.
 
 ```
 $ pg_restore -f /dev/null backup_20260905_222248.sql
@@ -153,18 +161,29 @@ migrated, which is a fact about the deployment rather than about the restore - t
 5 pending migrations and fails it identically before and after. What must hold is that the restored
 copy is in the *same* state as the source.
 
-## Why plain SQL rather than `-Fc`
+## Why gzip-compressed plain SQL rather than `-Fc`
 
 `-Fc` would compress, allow selective and parallel restore, and make `pg_restore` - the tool the
 neighbouring repo already demonstrates - the correct one. It was not adopted because the format is
 not where the danger was: every failure above is a procedure or environment mismatch, and all four
 are now either guarded by `bin/restore_backup.sh` or checked by `bin/verify_backup_restore.sh`.
-Changing the suffix would also orphan the backups currently on disk and require moving
-`BACKUP_FILENAME_RE`, `is_backup_temp_filename` and retention together.
+`-Fc` would replace that restore path rather than extend it.
 
-The one real argument for it is failure 4: a custom-format dump has no meta-commands, so the
-client-version skew that breaks `\restrict` does not arise. If that skew recurs - or if dump size
-starts to matter, at 30 retained uncompressed copies - revisit this.
+Size did start to matter (P202): the first scheduled dump on the Kubernetes platform was 11.26 GB of plain SQL in a 12 Gi
+volume, about 1 GB compressed. Gzip on the existing format cuts it without changing how a dump restores - the stream
+psql reads is byte-identical once decompressed - and the retention pattern accepts both suffixes, so the uncompressed
+dumps already on disk age out normally.
+
+The one remaining argument for `-Fc` is failure 4: a custom-format dump has no meta-commands, so the
+client-version skew that breaks `\restrict` does not arise. If that skew recurs, revisit this.
+
+## Turning scheduled backups off for a deployment
+
+`UL_BACKUP_ENABLED=false` turns the scheduled task off whatever the settings row says, and the site admin page shows the
+row's switch disabled with the reason. The row alone was not enough: where the platform backs the database up itself
+and the backups directory is an `emptyDir`, a restore or re-seed brought back a row with backups on, and a new pod's
+empty directory reads as "due now". With the environment variable unset or true, the row decides, as before. An
+on-demand backup from the site admin page is not affected.
 
 ## Restoring over a live deployment
 

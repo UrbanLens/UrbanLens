@@ -14,8 +14,8 @@ from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-# Only backup_<timestamp>.sql names count toward retention.
-BACKUP_FILENAME_RE = re.compile(r"^backup_\d{8}_\d{6}\.sql$")
+# Only backup_<timestamp>.sql.gz names count toward retention, and the plain .sql ones written before compression.
+BACKUP_FILENAME_RE = re.compile(r"^backup_\d{8}_\d{6}\.sql(?:\.gz)?$")
 
 # Only reap .tmp files old enough to not be an in-flight dump.
 STALE_TEMP_AGE_SECONDS = 24 * 60 * 60
@@ -131,7 +131,7 @@ class DatabaseBackup:
         # Also safe to call standalone, not just via the task wrapper.
         self.create_backup_dir()
 
-        backup_filename = f"backup_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.sql"
+        backup_filename = f"backup_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.sql.gz"
         final_path = os.path.join(self.backup_dir, backup_filename)
         # Write to temp first so a killed dump leaves a partial .tmp, not a truncated backup.
         temp_path = f"{final_path}.tmp"
@@ -162,6 +162,8 @@ class DatabaseBackup:
             "-w",
             # Grants are db-setup's to derive; a dumped GRANT to a role the target cluster lacks aborts the restore.
             "--no-privileges",
+            # Still plain SQL once decompressed, so psql restores it; about a tenth of the size.
+            "--compress=gzip:6",
             db_name,
             "-f",
             temp_path,

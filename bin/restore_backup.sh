@@ -2,7 +2,8 @@
 #
 # Restore one of `core/controllers/backups/db.py`'s dumps into a scratch database.
 #
-# Dumps are plain SQL; restore from the app container into an empty DB with ON_ERROR_STOP + --single-transaction.
+# Dumps are plain SQL, gzip-compressed since P202 (older ones are uncompressed); restore from the app container into
+# an empty DB with ON_ERROR_STOP + --single-transaction.
 #
 # Never writes to the live database - see docs/BACKUPS.md.
 #
@@ -12,7 +13,7 @@
 #   bin/restore_backup.sh <backup-file> <target-database> --drop-existing
 #   bin/restore_backup.sh <backup-file> <target-database> --dry-run
 #
-# <backup-file> is either a bare `backup_YYYYMMDD_HHMMSS.sql` (resolved in the
+# <backup-file> is either a bare `backup_YYYYMMDD_HHMMSS.sql.gz` or `.sql` (resolved in the
 # container's backup directory) or a path to one on this host.
 #
 # Environment:
@@ -37,7 +38,7 @@ require_container() {
 }
 
 list_backups() {
-    in_app "$CONTAINER" sh -c "ls -la $BACKUP_DIR 2>/dev/null | grep -E 'backup_[0-9]{8}_[0-9]{6}\.sql$'" \
+    in_app "$CONTAINER" sh -c "ls -la $BACKUP_DIR 2>/dev/null | grep -E 'backup_[0-9]{8}_[0-9]{6}\.sql(\.gz)?$'" \
         || die "no backups found in $BACKUP_DIR"
 }
 
@@ -107,11 +108,15 @@ SUPER=$(psql_t -d postgres -tAc "select rolsuper from pg_roles where rolname = c
 [ "$SUPER" = "t" ] \
     || die "role '$DB_USER' is not a superuser, and the dump's CREATE EXTENSION statements require one. Restore as a superuser role."
 
+# Uncompressed in the container, which has no pipefail: the reader dying of SIGPIPE at `head` is the point.
+# shellcheck disable=SC2016
+DUMP_HEAD=$(in_app "$CONTAINER" sh -c 'case "$1" in *.gz) gzip -dc "$1" ;; *) cat "$1" ;; esac | head -50' _ "$REMOTE")
+
 # Probe \restrict support as a capability: psql exits 0 on unknown meta-commands, so read output, not status.
-DUMP_PG=$(in_app "$CONTAINER" sed -n 's/^-- Dumped by pg_dump version \([0-9][0-9.]*\).*/\1/p' "$REMOTE" | head -1)
+DUMP_PG=$(printf '%s\n' "$DUMP_HEAD" | sed -n 's/^-- Dumped by pg_dump version \([0-9][0-9.]*\).*/\1/p' | head -1)
 [ -n "$DUMP_PG" ] || die "'$REMOTE' has no pg_dump version header - is it really a plain-SQL dump from this app?"
 PSQL_PG=$(in_app "$CONTAINER" psql --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
-if in_app "$CONTAINER" grep -qE '^\\restrict ' "$REMOTE"; then
+if printf '%s\n' "$DUMP_HEAD" | grep -qE '^\\restrict '; then
     PROBE=$(psql_t -d postgres -X -c '\restrict ul_probe' -c '\unrestrict ul_probe' 2>&1 || true)
     case "$PROBE" in
         *"invalid command"*)
@@ -127,6 +132,11 @@ if [ -n "$EXISTS" ]; then
     [ "$DRY_RUN" -eq 1 ] || psql_t -d postgres -c "DROP DATABASE \"$TARGET\";" >/dev/null
 fi
 
+# A truncated archive decompresses to a prefix that can end on a statement boundary, and would commit.
+case "$REMOTE" in
+    *.gz) in_app "$CONTAINER" gzip -t "$REMOTE" 2>/dev/null || die "'$REMOTE' is not an intact gzip archive (truncated or corrupt); nothing was restored." ;;
+esac
+
 echo "==> dump: $REMOTE (pg_dump $DUMP_PG, psql $PSQL_PG)"
 echo "==> target: $TARGET on $DB_HOST:$DB_PORT as $DB_USER (live database '$LIVE_DB' untouched)"
 
@@ -139,7 +149,16 @@ fi
 psql_t -d postgres -c "CREATE DATABASE \"$TARGET\" TEMPLATE template0 ENCODING 'UTF8';" >/dev/null
 
 echo "==> restoring"
-if ! psql_t -d "$TARGET" -v ON_ERROR_STOP=1 --single-transaction -f "$REMOTE" >/dev/null; then
+# psql reads the dump on stdin after the password line; dash has no pipefail, so a failed read appends a statement that
+# cannot succeed, rather than ending the transaction where it stopped.
+# shellcheck disable=SC2016
+restore_dump() {
+    docker exec "$DB_CONTAINER" printenv POSTGRES_PASSWORD \
+        | in_app -i "$CONTAINER" sh -c 'IFS= read -r PGPASSWORD; export PGPASSWORD; f=$1; shift
+            { case "$f" in *.gz) gzip -dc "$f" ;; *) cat "$f" ;; esac || printf "\n;\nSELECT 1/0 AS dump_unreadable;\n"; } | psql "$@" -f -' \
+            _ "$REMOTE" -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$@"
+}
+if ! restore_dump -d "$TARGET" -v ON_ERROR_STOP=1 --single-transaction >/dev/null; then
     # Single transaction rolled back; drop the empty DB so it reads as failed, not good.
     psql_t -d postgres -c "DROP DATABASE IF EXISTS \"$TARGET\";" >/dev/null 2>&1 || true
     die "restore failed; '$TARGET' was rolled back and dropped. Nothing was partially restored."

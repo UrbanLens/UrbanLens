@@ -24,8 +24,8 @@ KEEP=0
 
 SCRATCH_A=ul_restore_verify_a
 SCRATCH_B=ul_restore_verify_b
-DUMP_A=/tmp/ul_restore_verify_a.sql
-DUMP_B=/tmp/ul_restore_verify_b.sql
+DUMP_A=/tmp/ul_restore_verify_a.sql.gz
+DUMP_B=/tmp/ul_restore_verify_b.sql.gz
 # All host writes go here, so the trap removes them on any exit.
 WORK=$(mktemp -d)
 
@@ -63,12 +63,15 @@ cleanup() {
 trap cleanup EXIT
 
 # Same flags as backups/db.py, so this verifies the on-disk format.
-dump_to() { pg pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -w "$1" -f "$2"; }
+dump_to() { pg pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -w --no-privileges --compress=gzip:6 "$1" -f "$2"; }
 
 restore_into() {
     psql_t -d postgres -c "DROP DATABASE IF EXISTS \"$1\";" >/dev/null
     psql_t -d postgres -c "CREATE DATABASE \"$1\" TEMPLATE template0 ENCODING 'UTF8';" >/dev/null
-    psql_t -d "$1" -v ON_ERROR_STOP=1 --single-transaction -f "$2" >/dev/null
+    pg gzip -t "$2" || die "'$2' is not an intact gzip archive"
+    # shellcheck disable=SC2016
+    pg sh -c 'f=$1; shift; gzip -dc "$f" | psql "$@" -f -' _ "$2" -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" \
+        -d "$1" -v ON_ERROR_STOP=1 --single-transaction >/dev/null
 }
 
 # Hash whole rows across every carried schema; `x(r)` aliasing would hash the first column only.
@@ -143,8 +146,11 @@ fi
 
 # Compare migration plans, not `migrate --check`: restored copy must read exactly as live does.
 echo "==> checking Django reads the restored schema as it reads live"
+# As the owner: a dump carries no grants, so the app's own role cannot read a scratch copy until db-setup runs.
+# The password reaches docker through its environment, never its arguments.
 plan() {
-    docker exec -w /app/src/urbanlens -e UL_DB_NAME="$1" "$CONTAINER" \
+    UL_DB_PASS=$(docker exec "$DB_CONTAINER" printenv POSTGRES_PASSWORD) \
+        docker exec -w /app/src/urbanlens -e UL_DB_NAME="$1" -e UL_DB_USER="$DB_USER" -e UL_DB_PASS "$CONTAINER" \
         /app/.venv/bin/python manage.py showmigrations --plan 2>/dev/null | grep -E '^\[[ X]\]'
 }
 plan "$LIVE_DB"   > /tmp/.ul_plan_live.$$ || true

@@ -21872,3 +21872,23 @@ Both types now notify (`services/notifications/change_notifications.py`, tests i
   and muters hear nothing; preferences and text toggles apply as for every other type.
 
 A folded notification keeps its first change's position in the bell; only its text and count change.
+
+## RESOLVED 2026-10-04: A deployment can turn scheduled backups off where a restored settings row cannot undo it, and dumps are gzip-compressed
+
+`id: P202` · `status: fixed` · `resolved: 2026-10-04`
+
+- **Deployment switch:** `UL_BACKUP_ENABLED=false` (`app_settings.backup_enabled`) now wins over the settings row in
+  `scheduled_backup_due`, so a restored or re-seeded row cannot turn the task back on. With it unset or true the row
+  decides, as before. The site admin page shows the row's select disabled with the reason, and the stats panel says
+  "disabled by the deployment" (`BackupStats.disabled_by_deployment`). The on-demand admin backup is not gated.
+- **A latent bug the switch exposed:** saving the backups form treated an absent `backup_enabled` as "off". A disabled
+  select is never posted, so changing the frequency would have silently cleared the row. It now changes only when posted.
+- **Compression:** `pg_dump --compress=gzip:6` writes `backup_<ts>.sql.gz`, still plain SQL once decompressed, so the
+  psql restore path and its guards stand. `BACKUP_FILENAME_RE` accepts `.sql` and `.sql.gz`, so the uncompressed
+  dumps already on disk count toward retention and age out.
+- **Restore:** `bin/restore_backup.sh` reads either form. It refuses a `.gz` that fails `gzip -t`: a truncated archive
+  decompresses to a prefix that can end on a statement boundary and would commit under `--single-transaction`. A read
+  failure mid-stream appends a statement that cannot succeed. `bin/verify_backup_restore.sh` now dumps with the app's
+  own flags (it lacked `--no-privileges`, despite its comment) and restores through gzip. `docs/BACKUPS.md` covers both.
+
+The platform still has to set `UL_BACKUP_ENABLED=false` on its workers (an infrastructure change, not this repo's).

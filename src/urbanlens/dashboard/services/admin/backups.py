@@ -18,6 +18,7 @@ class BackupStats:
     count: int
     latest_backup: datetime | None
     total_size_mb: float
+    disabled_by_deployment: bool
 
 
 def backup_files(backup_dir: Path | None = None) -> list[Path]:
@@ -45,17 +46,21 @@ def collect_backup_stats(site_settings=None) -> BackupStats:
         latest = datetime.fromtimestamp(files[0].stat().st_mtime, tz=UTC)
     total_size = sum(p.stat().st_size for p in files if p.exists())
     return BackupStats(
-        enabled=site_settings.backup_enabled,
+        enabled=app_settings.backup_enabled and site_settings.backup_enabled,
         frequency_hours=site_settings.backup_frequency_hours,
         retention=site_settings.backup_retention,
         backup_dir=Path(app_settings.backups_dir),
         count=len(files),
         latest_backup=latest,
         total_size_mb=total_size / 1_048_576,
+        disabled_by_deployment=not app_settings.backup_enabled,
     )
 
 
 def scheduled_backup_due(site_settings=None, *, now: datetime | None = None) -> bool:
+    # The deployment's switch wins: a restored settings row must not turn a task back on where it cannot work.
+    if not app_settings.backup_enabled:
+        return False
     if site_settings is None:
         from urbanlens.dashboard.models.site_settings import SiteSettings
 

@@ -237,3 +237,69 @@ class DefaultSiteSettingsTests(TestCase):
         self.assertFalse(stats.enabled)
         self.assertEqual(stats.frequency_hours, 6)
         self.assertEqual(stats.retention, 3)
+
+
+class DeploymentSwitchTests(SimpleTestCase):
+    """``UL_BACKUP_ENABLED=false`` turns scheduled backups off whatever the settings row says (P202).
+
+    On Kubernetes the backups directory is an emptyDir that a new pod sees empty, so the task always reads as due, and
+    a restored settings row brought it back on after infrastructure had switched it off.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        self.assertTrue(hasattr(app_settings, "backup_enabled"))
+        self.app_settings = app_settings
+        self.enterContext(mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[]))
+
+    def test_the_deployment_switch_wins_over_the_settings_row(self) -> None:
+        with mock.patch.object(self.app_settings, "backup_enabled", False):
+            self.assertFalse(scheduled_backup_due(_SiteSettings(backup_enabled=True)))
+
+    def test_the_settings_row_decides_when_the_deployment_allows_backups(self) -> None:
+        with mock.patch.object(self.app_settings, "backup_enabled", True):
+            self.assertTrue(scheduled_backup_due(_SiteSettings(backup_enabled=True)))
+            self.assertFalse(scheduled_backup_due(_SiteSettings(backup_enabled=False)))
+
+    def test_the_stats_say_the_deployment_turned_backups_off(self) -> None:
+        with mock.patch.object(self.app_settings, "backup_enabled", False):
+            stats = collect_backup_stats(_SiteSettings(backup_enabled=True))
+
+        self.assertFalse(stats.enabled)
+        self.assertTrue(stats.disabled_by_deployment)
+
+
+class DeploymentSwitchAdminPageTests(TestCase):
+    def test_the_site_admin_page_says_the_deployment_turned_backups_off(self) -> None:
+        from django.urls import reverse
+        from model_bakery import baker
+
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        self.client.force_login(baker.make("auth.User", is_staff=True, is_superuser=True))
+        with mock.patch.object(app_settings, "backup_enabled", False):
+            response = self.client.get(reverse("site_admin"))
+
+        self.assertContains(response, "UL_BACKUP_ENABLED=false")
+        self.assertContains(response, 'name="backup_enabled" id="backup-enabled" disabled')
+
+    def test_saving_the_form_while_the_deployment_disables_backups_keeps_the_rows_choice(self) -> None:
+        """The disabled select is not posted, and its absence must not read as "off"."""
+        from django.urls import reverse
+        from model_bakery import baker
+
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        site_settings = SiteSettings.get_current()
+        site_settings.backup_enabled = True
+        site_settings.save(update_fields=["backup_enabled", "updated"])
+        self.client.force_login(baker.make("auth.User", is_staff=True, is_superuser=True))
+
+        with mock.patch.object(app_settings, "backup_enabled", False):
+            self.client.post(reverse("site_admin"), {"backup_frequency_hours": "12", "backup_retention": "4"})
+
+        site_settings.refresh_from_db()
+        self.assertTrue(site_settings.backup_enabled)
+        self.assertEqual(site_settings.backup_frequency_hours, 12)

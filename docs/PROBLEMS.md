@@ -2790,17 +2790,6 @@ the pin's own `name`. News keeps register-listing names in the base search only.
   (`models/aliases/signals.py::_drop_name_sensitive_cache`), though neither search uses pin names any more; it costs
   everyone a refetch and leaks nothing.
 
-## P202 — The scheduled database backup cannot work on Kubernetes, and a restore turns it back on
-
-`id: P202` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 5`
-
-`run_scheduled_database_backup` writes plain SQL into `settings.backups_dir`. On the platform that is an emptyDir on the
-worker pod. Its first run wrote 11.26 GB into a 12 Gi volume. The next pod's empty directory reads as "due now"
-(`scheduled_backup_due()` is True when there are no files). Infrastructure set `backup_enabled = false` in production's
-settings row. A restore or re-seed brings the old row back, and with it the task. The platform's own backups cover the
-data. Asks: let a deployment turn the task off where the row can't override it (`UL_BACKUP_ENABLED=false` winning over
-the row); and, if the task stays, write `pg_dump -Fc` or gzip, which cuts 11 GB to about 1.
-
 ## P206 — `dashboard_location_cache` is 81% of production's database
 
 `id: P206` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 9`

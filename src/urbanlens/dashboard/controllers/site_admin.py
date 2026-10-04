@@ -132,6 +132,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             {
                 "settings": settings,
                 "page_name": "site-admin",
+                "backups_allowed_by_deployment": app_settings.backup_enabled,
                 "saved": request.GET.get("saved"),
                 # What the size limit actually resolves to. An ingress cap lowers it silently otherwise, so an
                 # admin would set 250 MB and watch users be refused at 100 with nothing on this page saying why.
@@ -216,7 +217,9 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     setattr(settings, enrichment_field, min(max(low, int(request.POST.get(enrichment_field, getattr(settings, enrichment_field)))), high))
 
         if "backup_enabled" in request.POST or "backup_frequency_hours" in request.POST or "backup_retention" in request.POST:
-            settings.backup_enabled = request.POST.get("backup_enabled") in {"1", "true", "on", "True"}
+            # A select the deployment disabled is not posted; absent is not "off".
+            if "backup_enabled" in request.POST:
+                settings.backup_enabled = request.POST.get("backup_enabled") in {"1", "true", "on", "True"}
             with contextlib.suppress(ValueError, TypeError):
                 settings.backup_frequency_hours = max(1, int(request.POST.get("backup_frequency_hours", settings.backup_frequency_hours)))
             with contextlib.suppress(ValueError, TypeError):

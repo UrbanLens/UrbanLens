@@ -170,7 +170,7 @@
             <i class="material-icons stats-health-icon" style="color:#7c3aed">schedule</i>
             <div>
                 <div class="stats-health-value">Every {{ backup_stats.frequency_hours }}h</div>
-                <div class="stats-health-label">Backup Frequency ({% if backup_stats.enabled %}enabled{% else %}disabled{% endif %})</div>
+                <div class="stats-health-label">Backup Frequency ({% if backup_stats.enabled %}enabled{% elif backup_stats.disabled_by_deployment %}disabled by the deployment{% else %}disabled{% endif %})</div>
             </div>
         </div>
         <div class="stats-health-item">
