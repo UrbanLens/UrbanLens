@@ -21890,8 +21890,11 @@ a photo was stored starts the wait over; after `IMPORT_STORAGE_WAITS` (5) refusa
 between them, the photos left count as `storage_unavailable`. The retry carries a `RetryNoticeError` that
 `get_task_progress` reads back in the RETRY state, so the dialog says storage is unavailable, how far it got, and when
 it tries again; the closing toast (`ImportCounts.toast`) names any photos left, and any that failed, as a warning. The
-tasks declare `max_retries=None`, since the budget is counted per outage rather than per task; `autoretry_for=(OSError,)`
-stays for anything else, with its own three retries.
+tasks declare `max_retries=None`, since the budget is counted per outage rather than per task. `autoretry_for=(OSError,)`
+stays for anything else, but its limit of three counts every retry the task has made, the storage waits included, so
+an `OSError` after three waits fails the task. A source's network error no longer reaches it: Google's gateway let a
+raw `requests` error escape, against its own docstring, and now raises `GatewayRequestError` as Immich's and Flickr's
+do, so a Google download that cannot reach Google fails that photo, as theirs do, rather than restarting the run.
 
 **Archive import.** A refused photo or overlay image is deferred (`ImportResult.deferred`), with every file after it
 deferred without a write, and the rest of the archive is imported. The job then raises `ImportWaitingForStorageError`,
@@ -21911,10 +21914,12 @@ under another name.
 **Tests.** `test_background_import_storage_outage.py` runs the real S3 backend against an in-process fake Garage.
 Against the code before the fix, 24 of its first 29 test items failed (the library tasks raised or stopped, the
 archive job reported "check the file" and skipped later steps, and RETRY progress had no message); 25 tests and 8
-subtests (a 503 and a timeout for each task) pass now. A test added in review, a download failing with a plain `ConnectionError`, failed while `run()` caught every
-`STORAGE_ERRORS` and took the network error for storage; storage handling is now scoped to the store step.
-`test_immich.py`, `test_flickr.py`, `test_flickr_album_import.py` and `test_google_photos.py` assert the new
-`storage_unavailable` count.
+subtests (a 503 and a timeout for each task) pass now. Tests added in review: a download failing with a plain
+`ConnectionError` failed while `run()` caught every `STORAGE_ERRORS` and took the network error for storage (storage
+handling is now scoped to the store step); and a Google download that cannot reach Google after three storage waits
+failed the task, as did each Google gateway call given a `requests` connection error or timeout. `test_immich.py`,
+`test_flickr.py`, `test_flickr_album_import.py` and `test_google_photos.py` assert the new `storage_unavailable`
+count.
 
 ## RESOLVED 2026-10-04: A PDF or DjVu from REData's archives is listed under Article > Sources, read from the row its gallery cached
 
