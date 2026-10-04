@@ -22,6 +22,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 import geopandas
 from model_bakery import baker
+import pytest
 import shapely
 
 from urbanlens.core.tests.testcase import TestCase
@@ -219,6 +220,26 @@ def _osm_ways() -> bytes:
     )
 
 
+def _osm_one_way() -> bytes:
+    """An OSM extract that is one tagged way through every node it holds: a long route, or a large area's outline."""
+    count = _SIZE // 72
+    nodes = "".join(f'<node id="{1000 + i}" lat="{_lat(i)}" lon="{_lng(i)}"/>\n' for i in range(count))
+    refs = "".join(f'<nd ref="{1000 + i}"/>' for i in range(count))
+    return f'{_OSM_HEAD}{nodes}<way id="1">{refs}<tag k="highway" v="track"/></way>\n</osm>\n'.encode()
+
+
+def _wkt_one_line() -> bytes:
+    """A WKT file that is one line: a long track."""
+    return _filled("LINESTRING (", lambda i: f"{_lng(i):.6f} {_lat(i // 997):.6f}, ", f"{_lng(0):.6f} {_lat(0):.6f})\n")
+
+
+def _wkb_one_line() -> bytes:
+    """A hex WKB file that is one line: a long track."""
+    count = _SIZE // 32
+    track = shapely.LineString([(_lng(i), _lat(i // 997)) for i in range(count)])
+    return shapely.to_wkb(track, hex=True).encode() + b"\n"
+
+
 def _gpx_waypoints() -> bytes:
     return _filled(
         '<?xml version="1.0"?>\n<gpx version="1.1" creator="t" xmlns="http://www.topografix.com/GPX/1/1">\n',
@@ -375,6 +396,16 @@ class OneLargeElementTests(_MemoryCase):
 
     def test_a_geojson_outline(self) -> None:
         self.assert_held_near_its_text("outline.geojson", _geojson_one_element("Polygon"))
+
+    def test_an_osm_way(self) -> None:
+        self.assert_held_near_its_text("route.osm", _osm_one_way())
+
+    @pytest.mark.xfail(strict=True, reason="P95: GEOS's WKT reader costs about 9x the line; not yet read another way")
+    def test_a_wkt_line(self) -> None:
+        self.assert_held_near_its_text("track.wkt", _wkt_one_line())
+
+    def test_a_hex_wkb_line(self) -> None:
+        self.assert_held_near_its_text("track.wkb", _wkb_one_line())
 
 
 class HistoryFormatsAreReadInPiecesTests(_MemoryCase):

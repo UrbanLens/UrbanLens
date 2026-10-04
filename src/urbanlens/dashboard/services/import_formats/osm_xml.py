@@ -3,6 +3,7 @@ Only elements carrying at least one ``<tag>`` become pins - most nodes in an OSM
 
 from __future__ import annotations
 
+from array import array
 import logging
 from typing import IO, TYPE_CHECKING, Any
 
@@ -13,7 +14,7 @@ from urbanlens.dashboard.services.import_formats.streams import as_stream
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     # Only used for type checking
     from xml.etree.ElementTree import Element  # nosec B405
@@ -24,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 _WAY_REFS_PER_PASS = 250_000
 
-type _Way = tuple[str | None, dict[str, str], list[str | None]]
+type _Key = int | str
+type _Way = tuple[str | None, dict[str, str], list[_Key | None]]
 
 
 def _tags(element: Element) -> dict[str, str]:
@@ -101,14 +103,15 @@ def iter_osm_xml_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -
         ways, last = _tagged_ways(stream, skip=taken)
         taken += len(ways)
         stream.seek(start)
-        coords_of = _coords_of(stream, {ref for _, _, refs in ways for ref in refs if ref is not None})
+        coordinates = _Coordinates(stream, (ref for _, _, refs in ways for ref in refs if ref is not None))
         for way_id, tags, refs in ways:
-            coords = [coords_of[ref] for ref in refs if ref is not None and ref in coords_of]
-            if not refs or len(coords) != len(refs):
+            places = coordinates.places(refs)
+            if not places:
                 logger.warning("Skipping way %s: one or more referenced nodes are missing coordinates.", way_id)
                 continue
-            centroid_lat = sum(c[0] for c in coords) / len(coords)
-            centroid_lon = sum(c[1] for c in coords) / len(coords)
+            # sum() of the same floats in the same order, so the centroid is the one a list of them gave.
+            centroid_lat = sum(coordinates.lats[place] for place in places) / len(places)
+            centroid_lon = sum(coordinates.lons[place] for place in places) / len(places)
             yield _pin_from_tags(tags, centroid_lat, centroid_lon, f"OSM way {way_id}", user_profile)
         if last:
             return
@@ -120,6 +123,15 @@ def _located(node: Element) -> tuple[str, tuple[float, float]] | None:
     if node_id is None or lat is None or lon is None:
         return None
     return node_id, (float(lat), float(lon))
+
+
+def _key(node_id: str) -> _Key:
+    """A node id as an int when it is spelled as one canonically, else as itself, so two keys match when the ids do."""
+    if node_id.isascii() and node_id.lstrip("-").isdigit():
+        number = int(node_id)
+        if str(number) == node_id:
+            return number
+    return node_id
 
 
 def _tagged_ways(stream: IO[bytes], *, skip: int) -> tuple[list[_Way], bool]:
@@ -134,46 +146,107 @@ def _tagged_ways(stream: IO[bytes], *, skip: int) -> tuple[list[_Way], bool]:
     """
     ways: list[_Way] = []
     refs_taken = 0
-    for way in _top_level(stream, "way"):
-        tags = _tags(way)
+    for way_id, tags, refs in _top_level_ways(stream):
         if not tags:
             continue
         if skip:
             skip -= 1
             continue
-        refs = [nd.get("ref") for nd in way.findall("nd")]
-        ways.append((way.get("id"), tags, refs))
+        ways.append((way_id, tags, refs))
         refs_taken += len(refs)
         if refs_taken >= _WAY_REFS_PER_PASS:
             return ways, False
     return ways, True
 
 
-def _coords_of(stream: IO[bytes], wanted: set[str]) -> dict[str, tuple[float, float]]:
+class _Coordinates:
     """The coordinates of each wanted node, the last one wherever an id repeats, as a tree's index of them was."""
-    found: dict[str, tuple[float, float]] = {}
-    if not wanted:
-        return found
-    for node in _top_level(stream, "node"):
-        located = _located(node)
-        if located is not None and located[0] in wanted:
-            found[located[0]] = located[1]
-    return found
+
+    def __init__(self, stream: IO[bytes], wanted: Iterable[_Key]) -> None:
+        #: Each wanted node's place in ``lats`` and ``lons``; None until the node is found.
+        self.index: dict[_Key, int | None] = dict.fromkeys(wanted)
+        self.lats = array("d")
+        self.lons = array("d")
+        if not self.index:
+            return
+        for node in _top_level(stream, "node"):
+            located = _located(node)
+            if located is None:
+                continue
+            key = _key(located[0])
+            if key in self.index:
+                self.index[key] = len(self.lats)
+                self.lats.append(located[1][0])
+                self.lons.append(located[1][1])
+
+    def places(self, refs: list[_Key | None]) -> list[int] | None:
+        """Where each reference's node sits in ``lats`` and ``lons``, or None when any of them was not found."""
+        places = []
+        for ref in refs:
+            place = None if ref is None else self.index.get(ref)
+            if place is None:
+                return None
+            places.append(place)
+        return places
 
 
-def _top_level(stream: IO[bytes], tag: str) -> Iterator[Element]:
-    """Each child of the root element named *tag*, complete, freeing every child of the root once it closes."""
+def _top_level_ways(stream: IO[bytes]) -> Iterator[_Way]:
+    """Each way's id, tags and node references, its children read and freed as they close rather than kept to its end.
+
+    The tags and references are the way's own ``<tag>`` and ``<nd>`` children, as ``findall`` finds them.
+    """
     depth = 0
     root: Element | None = None
+    way: Element | None = None
+    tags: dict[str, str] = {}
+    refs: list[_Key | None] = []
     for event, element in iterparse(stream, events=("start", "end")):
         if event == "start":
             depth += 1
             if root is None:
                 root = element
+            elif depth == 2 and element.tag == "way":
+                way, tags, refs = element, {}, []
             continue
         depth -= 1
+        if depth == 2 and way is not None:
+            if element.tag == "nd":
+                ref = element.get("ref")
+                refs.append(None if ref is None else _key(ref))
+            elif element.tag == "tag" and element.get("k"):
+                tags[element.get("k", "")] = element.get("v", "")
+            way.remove(element)
+        elif depth == 1 and root is not None:
+            if element is way:
+                yield way.get("id"), tags, refs
+                way = None
+            root.remove(element)
+
+
+def _top_level(stream: IO[bytes], tag: str) -> Iterator[Element]:
+    """Each child of the root element named *tag*, complete, freeing every child of the root once it closes.
+
+    A child of another name is never wanted whole, so its own children are freed as they close: one way through a
+    file's every node costs a pass for nodes nothing per reference.
+    """
+    depth = 0
+    root: Element | None = None
+    unwanted: Element | None = None
+    for event, element in iterparse(stream, events=("start", "end")):
+        if event == "start":
+            depth += 1
+            if root is None:
+                root = element
+            elif depth == 2 and element.tag != tag:
+                unwanted = element
+            continue
+        depth -= 1
+        if depth == 2 and unwanted is not None:
+            unwanted.remove(element)
+            continue
         if depth != 1 or root is None:
             continue
         if element.tag == tag:
             yield element
+        unwanted = None
         root.remove(element)

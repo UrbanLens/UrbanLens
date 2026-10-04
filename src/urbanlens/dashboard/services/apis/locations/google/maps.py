@@ -54,10 +54,9 @@ from urbanlens.dashboard.services.sandbox import untrusted_parse
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
-#: Every error that means "this uploaded file is unusable, skip it and carry on".
-#: Named rather than inlined because two handlers need the same list - the KML parser's own and the
-#: bulk importer's per-file guard - and they drifted apart once already: fastkml's ``KMLParseError``
-#: (a ``FastKMLError``) and lxml's ``XMLSyntaxError`` (a ``SyntaxError``) are neither ``ValueError``
+#: Every error that means "this uploaded file is unusable, skip it and carry on", for the preview's per-file guard
+#: and the bulk importer's. Several are not ``ValueError``: fastkml's ``KMLParseError``, lxml's ``XMLSyntaxError``
+#: (a ``SyntaxError``), and ``csv.Error``, which a cell past the csv module's 128 KiB field limit raises.
 IMPORT_PARSE_ERRORS: tuple[type[Exception], ...] = (
     UnicodeDecodeError,
     ValueError,
@@ -69,6 +68,7 @@ IMPORT_PARSE_ERRORS: tuple[type[Exception], ...] = (
     KMLParseError,
     XMLSyntaxError,
     TypeError,
+    csv.Error,
 )
 
 if TYPE_CHECKING:

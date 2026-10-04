@@ -464,6 +464,23 @@ class LocationHistoryAgreesWithJsonLoadsTests(SimpleTestCase):
         self.assertEqual(parse.history.counts()["visits"], 0)
 
 
+class AnOversizedCsvCellFailsOnlyItsFileTests(SimpleTestCase):
+    """csv refuses a cell over its 128 KiB field limit with ``csv.Error``, which no per-file handler named."""
+
+    def test_the_other_files_in_the_upload_still_preview(self) -> None:
+        oversized = b'name,latitude,longitude,description\n"Mill",40.5,-74.5,"' + b"long " * 40_000 + b'"\n'
+        kml = (
+            b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+            b"<Placemark><name>Dam</name><Point><coordinates>-74.1,40.1</coordinates></Point></Placemark>"
+            b"</Document></kml>"
+        )
+
+        parse = GoogleMapsGateway(api_key="").parse_for_preview([("notes.csv", oversized), ("dam.kml", kml)], Profile())
+
+        self.assertEqual(parse.failed_formats, ["csv"])
+        self.assertEqual([pin["name"] for listed in parse.lists for pin in listed["pins"]], ["Dam"])
+
+
 _CSV_CELL = st.text(alphabet=st.sampled_from(list('ab1. ,"\n\r\u2028\ufeffé')), max_size=8)
 _CSV_QUOTED = _CSV_CELL.map(lambda cell: '"' + cell.replace('"', '""') + '"')
 _CSV_HEADER = st.sampled_from(
@@ -645,6 +662,37 @@ class OsmAgreesWithTheTreeTests(SimpleTestCase):
             return [(p["latitude"], p["longitude"], p["name"], p["description"]) for p in pins]
 
         self.assertEqual(_outcome(streamed), _outcome(lambda: _old_osm(content)))
+
+    @_hyp
+    @given(
+        node_ids=st.lists(st.sampled_from(["7", "07", "-0", "0", "+7", "x", "-7", "\u0667"]), min_size=1, max_size=5),
+        ref_ids=st.lists(
+            st.sampled_from(["7", "07", "-0", "0", "+7", "x", "-7", "\u0667", ""]), min_size=1, max_size=4
+        ),
+    )
+    def test_a_reference_finds_a_node_only_by_the_same_spelling(self, node_ids: list[str], ref_ids: list[str]) -> None:
+        """Canonical integer ids are keyed as ints; every other spelling must still match only itself."""
+        nodes = "".join(f'<node id="{node_id}" lat="{i}.5" lon="2"/>' for i, node_id in enumerate(node_ids))
+        refs = "".join(f'<nd ref="{ref}"/>' for ref in ref_ids)
+        content = f'<osm>{nodes}<way id="9">{refs}<tag k="name" v="w"/></way></osm>'.encode()
+
+        streamed = _outcome(
+            lambda: [(p["latitude"], p["longitude"]) for p in osm_xml.osm_xml_to_dict(content, None)]  # type: ignore[arg-type]
+        )
+        self.assertEqual(streamed, _outcome(lambda: [row[:2] for row in _old_osm(content)]))
+
+    def test_a_way_s_children_below_its_own_are_not_its_references(self) -> None:
+        content = (
+            b'<osm><node id="1" lat="1" lon="2"/><node id="2" lat="3" lon="4"/>'
+            b'<way id="9"><nd ref="1"/><extra><nd ref="2"/><tag k="x" v="y"/></extra><tag k="name" v="w"/></way></osm>'
+        )
+
+        pins = osm_xml.osm_xml_to_dict(content, None)  # type: ignore[arg-type]
+
+        self.assertEqual([(p["latitude"], p["longitude"], p["name"]) for p in pins], [(1.0, 2.0, "w")])
+        self.assertEqual(
+            [(p["latitude"], p["longitude"], p["name"]) for p in pins], [row[:3] for row in _old_osm(content)]
+        )
 
     def test_a_tagged_node_whose_id_repeats_keeps_its_own_coordinates(self) -> None:
         content = (

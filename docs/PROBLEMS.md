@@ -992,7 +992,7 @@ excluded (guarded; the guard cannot fire).
 `Trip.objects` as `Any` on 2026-09-29 against the same code the full run typed, so a single-file
 probe proves nothing either way.
 
-## P95 — An import preview reads each file a chunk at a time, but one oversized OSM way is still built whole at about 10x its size
+## P95 — An import preview reads each file a chunk at a time, but one huge WKT line still costs GEOS's reader about 9x its size
 
 `id: P95` · `status: open` · `updated: 2026-10-04`
 
@@ -1136,48 +1136,57 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 
 **Still open.**
 
-- **One element is built whole: OSM still is; KML and GeoJSON no longer are (2026-10-04).** A file that is one
-  element (a single placemark, feature, way, row or line) is read whole into that element and then parsed. Measured
-  after the 2026-10-02 work, RSS; a single row or line was not measured:
+- **One huge element: fixed for KML, GeoJSON and OSM; WKT still costs about 9x (2026-10-04).** A file that is one
+  element - one placemark, feature, way, row or line - used to be read whole into that element and then parsed.
+  The tracemalloc peak for a file that is one element, end to end through `parse_import_preview`
+  (`test_import_parse_memory.py::OneLargeElementTests`, each held under 3x):
 
-  | One element | 4 MiB | 8 MiB | 16 MiB |
-  |---|---|---|---|
-  | KML placemark, one LineString | 43.3 MiB (10.8x) | 87.2 (10.9x) | 175.4 (11.0x) |
-  | GeoJSON feature, one LineString | 50.3 (12.6x) | 101.3 (12.7x) | 201.2 (12.6x) |
-  | OSM way through every node (3.7 / 7.4 / 14.9 MiB) | 38.3 (10.4x) | 81.3 (11.0x) | 155.1 (10.4x) |
+  | One element | Before | After |
+  |---|---|---|
+  | KML placemark, 12.6 MB LineString | 125.9 MB | 25.3 MB (2.01x) |
+  | GeoJSON feature, 12.6 MB LineString | 145.3 MB | 10.5 MB (0.84x) |
+  | GeoJSON feature, 12.6 MB Polygon outline | 146.3 MB | 9.4 MB (0.75x) |
+  | OSM way through every node, 11.1 MB | 113.8 MB | 20.9 MB (1.88x) |
+  | hex WKB, one 12.6 MB LineString line | not measured | under 3x |
+  | WKT, one 12.6 MB LineString line | 138.4 MB | unchanged |
 
-  **KML, fixed.** The tracemalloc peak for a 12 MiB file that is one placemark fell from 125.9 MB to 25.3 MB with a
-  LineString, and from 154.4 MB to 25.3 MB with a Polygon outline. That is 2.0x, the element's own text plus one copy.
-  Two changes did it:
-  - **No substitution over the text.** `re.sub` of the whitespace around commas built a string for every piece
-    between commas before joining them, about seven times the text. `maps._kml_tuples` now walks whitespace-separated
-    tokens and joins those that meet at a comma. A hypothesis test holds it equal to substituting and then splitting.
-  - **No list of every coordinate.** A line's preview point is its first coordinate, and every coordinate is still
-    parsed so a bad one fails the file as before. A ring goes into a flat `array('d')` for its centroid, not a list
-    of tuples.
+  - **KML.** `maps._kml_tuples` joins whitespace-separated tokens that meet at a comma. That replaces a `re.sub` that
+    built about seven times the text. A line keeps its first coordinate and a ring a flat `array('d')`, though every
+    coordinate is still parsed, so a bad one still fails the file.
+  - **GeoJSON.** `json_stream.iter_geojson_features` builds each feature from ijson's events. Under a geometry's
+    `coordinates`, an array of two- or three-number positions is one `float64` array of shape `(n, 2)` or `(n, 3)`.
+    Any other array is built as `json.loads` builds it, and so is a property named `coordinates`. shapely builds the
+    same geometry from the array, so the centroid is unchanged. Three hypothesis properties in
+    `GeoJsonGeometriesReadCompactlyTests` check that:
+    - arbitrary documents build what ijson's C builder builds, once the arrays are read back as lists;
+    - arbitrary geometries do too: every type, collections, wrong nesting, booleans, 60-bit integers, mixed sizes;
+    - arbitrary geometries make the same pins.
 
-  `test_import_parse_memory.py::OneLargeElementTests` holds both under 3x.
+    The cost is speed. A 16 MiB Saved Places file of 58,416 Points reads in 0.84 s rather than 0.37 s. The preview
+    stops at 20,000 pins, so it pays about 0.15 s more. A skipped feature's warning now names its geometry type
+    rather than logging the geometry.
+  - **OSM.** `osm_xml._top_level_ways` reads a way's `<nd>` and `<tag>` children as they close, and `_top_level`
+    frees the children of any element it is not looking for. That second change matters because the node passes
+    used to build the way whole only to discard it. `_Coordinates` holds the wanted nodes in one dict filled during
+    the node pass, with coordinates in two `array('d')`. A canonical integer id is keyed as an int and any other
+    spelling as itself, so ids still match exactly when their text does. A test over `07`, `-0`, `+7`, `x` and
+    Arabic-Indic digits checks this. The centroid sums the same floats in the same order, so it is the same number.
+    The parse is 5-10% slower: 16 MiB of vertices and ways read every pin in 6.2 s rather than 5.9 s, and 48 MiB in
+    32.4 s rather than 29.2 s.
+  - **WKT, still open.** `shapely.from_wkt` grows RSS by 107.8 MiB for a 12 MiB LineString line, against 13.0 MiB for
+    the same geometry read from WKB. That is GEOS's reader, not our code. At 9x, a WKT line of about 330 MB fills
+    `media-worker`'s 3 GB. Zipped, that fits the 200 MB upload limit. `CELERY_TASK_REJECT_ON_WORKER_LOST` is off (E007),
+    so the killed task is not redelivered. The task in the worker's other slot dies with it, though.
 
-  **GeoJSON, fixed.** `json_stream.iter_geojson_features` builds each feature from ijson's events, not its C object
-  builder. Under a geometry's `coordinates`, an array whose items are all two- or three-number positions arrives as
-  one `float64` array of shape `(n, 2)` or `(n, 3)`. Any other array is built as `json.loads` builds it, and so is a
-  property that happens to be named `coordinates`. shapely builds the same geometry from the array, so the
-  centroid is unchanged. A Point whose coordinates came out as an array is read back as lists. For a 12 MiB file
-  that is one feature, the tracemalloc peak fell from 145.3 MB to under 3x, for a LineString and for a Polygon
-  outline (`OneLargeElementTests`). Three properties in `test_import_streaming_parsers.py::GeoJsonGeometriesReadCompactlyTests`
-  check the change:
-  - Arbitrary JSON documents build what ijson's builder builds, once the arrays are read back as lists.
-  - Arbitrary geometries do too. They cover every type, collections, wrong nesting, booleans, 60-bit integers and
-    mixed sizes.
-  - Arbitrary geometries make the same pins.
-
-  The cost is speed. A 16 MiB Saved Places file of 58,416 Point features read in 0.84 s instead of 0.37 s. The
-  preview stops at 20,000 pins, about 5.6 MiB of that file, so it pays about 0.15 s more. A skipped feature's
-  warning now names its geometry type rather than logging the whole geometry.
-
-  **OSM** holds an Element per `<nd>` of the way and an id-to-coordinates entry per reference across its two
-  passes. Jess ruled on 2026-10-02 that there is no per-element cap, so streaming is the only fix left. At about
-  11x, one way of roughly 270 MB still fills `media-worker`'s 3 GB.
+    The fix would be a reader for long lines that turns a strict WKT subset into WKB for `shapely.from_wkb`, falling
+    back to GEOS below a size threshold. The subset is a type, an optional `Z`/`M`/`ZM`, parentheses, and numbers
+    that Python's `float` and C's `strtod` read alike. A long line outside the subset would be skipped. That is a
+    departure from GEOS on rare dialects, and is why this was left rather than rushed.
+    `test_a_wkt_line` is a strict xfail until then.
+  - **CSV.** A cell past the csv module's 128 KiB field limit raises `csv.Error`. That was not in
+    `IMPORT_PARSE_ERRORS`, so it failed the whole preview as unreadable, every other file in the upload with it. It
+    now fails only its own file (`AnOversizedCsvCellFailsOnlyItsFileTests`). A row of very many small cells was not
+    measured.
 - **History grows with the file, by design.** Location History's visits and routes and GPX's routes
   are what the confirmed import saves, so they are kept to the end of the file: 1.26x and 5.9x RSS at
   16 MiB. What bounds them now is the 110-second soft limit rather than memory: at the measured rates
