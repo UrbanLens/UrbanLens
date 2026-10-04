@@ -1,0 +1,7 @@
+{% comment %}The Sources list, loaded the first time it is shown. Needs sources_url; oob renders it as an out-of-band swap.{% endcomment %}
+<div id="article-sources-list" class="article-sources"{% if oob %} hx-swap-oob="true"{% endif %}
+     hx-get="{{ sources_url }}"
+     hx-trigger="intersect once"
+     hx-swap="innerHTML">
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading sources...</div>
+</div>

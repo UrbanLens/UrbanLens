@@ -243,12 +243,7 @@
             </div>
 
             <div class="media-view-panel" data-media-view-panel="mine" hidden>
-                <div id="pin-gallery-panel"
-                     hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}"
-                     hx-trigger="load"
-                     hx-swap="innerHTML">
-                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-                </div>
+                {% include "dashboard/partials/pins/child_details/_gallery.html" %}
             </div>
         </div>
         {# Per-provider loaders - hidden, append their results into #media-gallery-grid above as each responds. #}
@@ -520,7 +515,7 @@
         {# Every building on the parcel - see plugins.builtin.parcel_buildings. #}
         <div id="parcel-buildings-section"
             hx-sync="#pin-panel-lane-1:queue all" class="card card--secondary" data-ext-panel-204 hidden
-            hx-get="{% url 'pin.parcel_buildings' pin.slug %}?children={% if include_children %}1{% else %}0{% endif %}"
+            hx-get="{% url 'pin.parcel_buildings' pin.slug %}"
             hx-trigger="ul:lazy-load, ul:unhide, pinDetailPinsChanged from:body" data-ul-lazy-section="pin:parcel_buildings"
             hx-swap="outerHTML"
             hx-timeout="25000"
@@ -612,33 +607,12 @@
 
 {# Visit History tab: previously crammed into Overview alongside a dozen other cards. #}
 <section class="page-tab-panel" data-tab-panel="visits" hidden>
-    <div id="visit-history-panel"
-        hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
-        hx-trigger="intersect once"
-        hx-swap="outerHTML"
-        class="visit-history card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">directions_walk</i>
-            <span>Visit History</span>
-        </div>
-        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-    </div>
+    {% include "dashboard/partials/pins/child_details/_visits.html" %}
 </section>
 
 {# -- Photos tab: albums first, then this pin's photos not in any album ---- #}
 <section class="page-tab-panel" data-tab-panel="photos" hidden>
-    {# ?album= is carried through so a deep link (or a Back navigation) loads that album directly instead of the list. #}
-    <div id="albums-panel"
-        hx-get="{% url 'pin.albums' pin.slug %}?{% if include_children %}children=1{% endif %}{% if include_children and request.GET.album %}&{% endif %}{% if request.GET.album %}album={{ request.GET.album|urlencode }}{% endif %}{% if request.GET.album_pin %}&album_pin={{ request.GET.album_pin|urlencode }}{% endif %}"
-        hx-trigger="intersect once"
-        hx-swap="outerHTML"
-        class="albums-panel card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">photo_library</i>
-            <span>Photos</span>
-        </div>
-        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-    </div>
+    {% include "dashboard/partials/pins/child_details/_albums.html" %}
 </section>
 
 {# -- Article tab: the user's private, Wikipedia-style article, plus a ------ #}
@@ -724,16 +698,7 @@
 
 {# -- Notes tab (backend: pin comments, private to the pin's owner) --------- #}
 <section class="page-tab-panel" data-tab-panel="comments" hidden>
-    <div id="comment-panel" class="card"
-         hx-get="{% url 'pin.comments' pin.slug %}{% if include_children %}?children=1{% endif %}"
-         hx-trigger="intersect once"
-         hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-symbols-outlined">sticky_note_2</i>
-            <span>Notes</span>
-        </div>
-        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-    </div>
+    {% include "dashboard/partials/pins/child_details/_comments.html" %}
 </section>
 
 {# -- Edit history tab: article revision history --------------------------- #}
@@ -757,7 +722,8 @@
 {# -- Floating actions menu (bottom-right, follows scroll) ----------------- #}
 {# Holds the uncommon pin-hierarchy actions so they never clutter the page the page-wide "child pin details" toggle, jump-to-parent,. #}
 {% if parent_pin %}{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid as pin_parent_url %}{% url 'pin.detach_parent' pin.slug as pin_detach_url %}{% endif %}
-{% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_pins include_children=include_children parent_url=pin_parent_url parent_name=parent_pin.effective_name detach_url=pin_detach_url csrf_token=csrf_token request=request show_article_actions=True only %}
+{% url 'pin.child_details' pin.slug as child_details_url %}
+{% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_pins include_children=include_children child_details_url=child_details_url parent_url=pin_parent_url parent_name=parent_pin.effective_name detach_url=pin_detach_url csrf_token=csrf_token request=request show_article_actions=True only %}
 
 {# -- Media gallery multi-select floating toolbar --------------------------- #}
 {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="media" actions=media_bulk_actions %}
@@ -899,16 +865,17 @@
      data-default-map-view="{{ default_map_view }}"
      data-profile-uuid="{{ request.user.profile.uuid }}"
      data-openweathermap-api-key="{{ openweathermap_api_key }}"
-     data-markup-json-url="{{ markup_json_url }}{% if include_children %}?children=1{% endif %}"
+     data-child-details="{{ include_children|yesno:'1,0' }}"
+     data-markup-json-url="{{ markup_json_url }}"
      data-markup-create-url="{{ markup_create_url }}"
      data-markup-edit-url-template="{{ markup_edit_url_template }}"
-     data-detail-pins-json-url="{{ detail_pins_json_url }}{% if include_children %}?children=1{% endif %}"
+     data-detail-pins-json-url="{{ detail_pins_json_url }}"
      data-detail-pin-create-url="{{ detail_pin_create_url }}"
      data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
      data-overlay-corners-url-template="{{ overlay_corners_url_template }}"
      data-detail-pins-bulk-edit-url="{% url 'pin.bulk_edit' %}"
      data-boundary-url="{{ boundary_url }}"
-     data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
+     data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
      data-nearby-pins-json-url="{{ nearby_pins_json_url }}"
      data-pin-share-dialog-url="{{ pin_share_dialog_url }}"
      data-detail-pins-send-to-wiki-url="{% url 'pin.detail_pins.send_to_wiki' pin.slug %}"

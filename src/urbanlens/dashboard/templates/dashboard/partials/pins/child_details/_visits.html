@@ -1,0 +1,11 @@
+<div id="visit-history-panel"{% if oob %} hx-swap-oob="true"{% endif %}
+    hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
+    hx-trigger="intersect once"
+    hx-swap="outerHTML"
+    class="visit-history card">
+    <div class="card-header">
+        <i class="material-symbols-outlined">directions_walk</i>
+        <span>Visit History</span>
+    </div>
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+</div>

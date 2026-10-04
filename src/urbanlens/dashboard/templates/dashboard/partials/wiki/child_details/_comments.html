@@ -1,0 +1,11 @@
+<div id="comment-panel"{% if oob %} hx-swap-oob="true"{% endif %}
+     hx-get="{% url 'location.wiki.comments' location.slug %}{% if include_children %}?children=1{% endif %}"
+     hx-trigger="intersect once"
+     hx-swap="outerHTML"
+     class="card wiki-card">
+    <div class="card-header">
+        <i class="material-symbols-outlined">chat</i>
+        <h2>Discussion</h2>
+    </div>
+    <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+</div>

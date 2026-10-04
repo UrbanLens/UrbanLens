@@ -1528,6 +1528,32 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return ai_extract_button_context(request.user, pin.profile, pin)
 
+    def child_details(self, request: HttpRequest, pin_slug: str):
+        """HTMX: turn "child pin details" on or off without reloading the page.
+
+        Responds with each panel that reads the setting as an out-of-band swap, loading afresh, and tells the map
+        through ``HX-Trigger`` (``childDetailsChanged``) so it refetches its own layers.
+        """
+        from django.urls import reverse
+
+        try:
+            pin = Pin.objects.only("pk", "slug", "uuid").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+        include_children = request.GET.get("children") == "1"
+        response = render(
+            request,
+            "dashboard/partials/pins/_child_details_regions.html",
+            {
+                "pin": pin,
+                "include_children": include_children,
+                "page_url": reverse("pin.details", kwargs={"pin_slug": pin.slug or pin.uuid}),
+                "child_details_url": reverse("pin.child_details", kwargs={"pin_slug": pin.slug or pin.uuid}),
+            },
+        )
+        response["HX-Trigger"] = json.dumps({"childDetailsChanged": {"include": include_children}})
+        return response
+
     def parcel_buildings(self, request: HttpRequest, pin_slug: str):
         """HTMX partial: every building standing on this pin's property, and every child pin it has.
 

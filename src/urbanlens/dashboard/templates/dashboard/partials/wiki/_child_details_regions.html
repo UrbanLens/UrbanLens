@@ -1,0 +1,11 @@
+{% comment %}Every panel of a wiki's page that reads "child pin details", as out-of-band swaps; see LocationWikiChildDetailsView.{% endcomment %}
+{% include "dashboard/partials/ui/_child_details_toggle.html" with oob=True %}
+{% include "dashboard/partials/wiki/child_details/_manage_gallery.html" with oob=True %}
+{% include "dashboard/partials/wiki/child_details/_albums.html" with oob=True %}
+{% url 'location.wiki.article.sources' location.slug as sources_url %}
+{% if include_children %}
+{% include "dashboard/partials/articles/_article_sources_list.html" with sources_url=sources_url oob=True %}
+{% else %}
+{% include "dashboard/partials/articles/_article_sources_list.html" with sources_url=sources_url|add:"?children=0" oob=True %}
+{% endif %}
+{% include "dashboard/partials/wiki/child_details/_comments.html" with oob=True %}

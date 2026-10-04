@@ -10,6 +10,7 @@ import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry 
 import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, setAttribution, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
 import { bindAreaTooltip } from "../shared/map-tooltips";
+import { CHILD_DETAILS_EVENT, childDetailsChange, readChildDetails, withChildDetails } from "../shared/child-details";
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick } from "../shared/map-clusters";
 import type { MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoMarkerLayer, type PhotoMapItem } from "../shared/photo-map";
@@ -133,6 +134,7 @@ function readConfig(el: HTMLElement) {
         profileUuid: d.profileUuid || "",
         openweathermapApiKey: d.openweathermapApiKey || "",
         mainMarkerOwnerUuid: d.mainMarkerOwnerUuid || "",
+        childDetails: readChildDetails(el),
         markupJsonUrl: d.markupJsonUrl || "",
         markupCreateUrl: d.markupCreateUrl || "",
         markupEditUrlTemplate: d.markupEditUrlTemplate || "",
@@ -285,6 +287,9 @@ function init(): void {
     const configEl = document.getElementById("map-annotations-config");
     if (!mapEl || !configEl) return;
     const cfg = readConfig(configEl);
+    // Whether this pin's own layers include its descendants'; null on a page with no such setting.
+    let childDetails = cfg.childDetails;
+    const childDetailsUrl = (url: string): string => withChildDetails(url, childDetails);
 
     // -- Map setup ---------------------------------------------------------
     const mapCenterLat = cfg.mapCenterLat;
@@ -1509,13 +1514,15 @@ function init(): void {
     }
 
     function loadDetailPins(): void {
-        fetchResponse(cfg.detailPinsJsonUrl)
+        const requested = childDetails;
+        fetchResponse(childDetailsUrl(cfg.detailPinsJsonUrl))
             .then((r) => {
                 // Without this, a server error whose body still parses as JSON (or one with no "detail_pins" key) fell through to the success branch.
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 return r.json();
             })
             .then((data) => {
+                if (requested !== childDetails) return;
                 detailPinLayer.clearLayers();
                 highlightedDpUuid = null;
                 detailPins = [];
@@ -1923,7 +1930,7 @@ function init(): void {
 
     // -- Markup toolbar (shared factory - see ts/shared/markup-toolbar.ts) --
     const toolbar: MarkupToolbar = window.createMarkupToolbar(map, markupLayer, {
-        markupJsonUrl: cfg.markupJsonUrl,
+        markupJsonUrl: childDetailsUrl(cfg.markupJsonUrl),
         markupCreateUrl: cfg.markupCreateUrl,
         markupEditUrlTemplate: cfg.markupEditUrlTemplate,
         markupFillOpacity: cfg.markupFillOpacity,
@@ -1939,6 +1946,16 @@ function init(): void {
     loadDetailPins();
     document.body.addEventListener("pinDetailPinsChanged", () => {
         loadDetailPins();
+        fetchBoundaries(0);
+    });
+    document.body.addEventListener(CHILD_DETAILS_EVENT, (event) => {
+        const include = childDetailsChange(event);
+        if (include === null || childDetails === null || include === childDetails) return;
+        childDetails = include;
+        toolbar.setMarkupJsonUrl(childDetailsUrl(cfg.markupJsonUrl));
+        toolbar.loadMarkup();
+        loadDetailPins();
+        loadPhotoLayer();
         fetchBoundaries(0);
     });
 
@@ -2263,9 +2280,12 @@ function init(): void {
     });
 
     function loadPhotoLayer(): void {
-        fetch(cfg.photoGalleryJsonUrl)
+        const requested = childDetails;
+        fetch(childDetailsUrl(cfg.photoGalleryJsonUrl))
             .then((r) => r.json())
-            .then(showPhotoLayer)
+            .then((data: PhotoLayerJson) => {
+                if (requested === childDetails) showPhotoLayer(data);
+            })
             .catch((err) => console.warn("Could not load gallery photos for panel:", err));
     }
 
@@ -2405,9 +2425,12 @@ function init(): void {
 
     // Boundary generation happens in a background task on first view.
     function fetchBoundaries(attempt: number): void {
-        fetch(boundaryApiUrl)
+        const requested = childDetails;
+        fetch(childDetailsUrl(boundaryApiUrl))
             .then((r) => r.json())
             .then((data) => {
+                // A poll begun before the setting changed stops; the change began its own.
+                if (requested !== childDetails) return;
                 applyBoundaryPayload(data);
                 if ((data.pending || data.refreshing) && attempt < 30) {
                     setTimeout(() => fetchBoundaries(attempt + 1), 2000);
@@ -2518,7 +2541,7 @@ function init(): void {
     }
 
     async function postBoundary(type: BoundaryType, geometry: { type: string; coordinates: unknown[] } | null): Promise<any> {
-        return sendJson(boundaryApiUrl, "POST", { boundary_type: type, polygon: geometry }, { reportsItsOwnErrors: true });
+        return sendJson(childDetailsUrl(boundaryApiUrl), "POST", { boundary_type: type, polygon: geometry }, { reportsItsOwnErrors: true });
     }
 
     function saveBoundary(options: { type?: BoundaryType; exitEdit?: boolean; quiet?: boolean } = {}): void {

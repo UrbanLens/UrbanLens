@@ -2968,25 +2968,6 @@ uses `min(60 * 2**retries, 900)`), and say in the progress message that storage 
 `tasks.py` declare `autoretry_for=(OSError,)`, so whether to widen all of them is a separate question. Not reproduced
 in a test.
 
-## P222 — Only one building's outline shows on the HRSH pin map, and it shows whether "show child pin details" is on or off
-
-`id: P222` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-The pin map draws the morgue's outline (building 45) and no other building's. The morgue's outline also ignores the
-"show child pin details" toggle. Expected: every building child pin's outline is drawn when the toggle is on, and none
-when it is off, unless an outline belongs to the pin itself. Find where building outlines come from (child pins'
-boundaries, `parcel_buildings`, `Place` outlines) and why only one resolves. Two suspects: P182 (an OSM relation
-returned as a point, so a building place has no outline) and outline-less fiat building places. Reproduce on
-`development_main` HRSH first.
-
-## P224 — Toggling "show child pin details" reloads the whole page
-
-`id: P224` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
-
-The toggle should show or hide the child pins' details in place, through htmx swaps of the affected panels, with no
-page reload. Save the preference the same way it is saved now. Find every panel that reads the setting: map markers,
-photos, visits, notes, Article > Sources, building outlines (P222).
-
 ## P226 — Property Records: the Overview tab is blank, and the two historic tabs should be one
 
 `id: P226` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`

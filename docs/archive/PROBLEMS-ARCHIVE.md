@@ -21446,3 +21446,41 @@ revoked a grant lived only in an INFO log line.
 **Tests.** `test_subscription_grant_audit.py::RevokedByTests`: the view and the model method record the revoker, a
 second revoke keeps the first, the record outlives the revoker's account, and a regrant starts clean. All were red
 before the fix.
+
+## RESOLVED 2026-10-04: Only one building's outline showed on the HRSH pin map, whatever the child pin details toggle said
+
+`id: P222` · `status: fixed` · `resolved: 2026-10-04`
+
+The pin map's detail-building layer read only the drawn `Boundary` rows of the pin's direct children, so a campus
+whose buildings carry place outlines (HRSH's come from parcel places, not drawn rows) showed whichever one building
+had a drawn row: the morgue. That layer also ignored the toggle.
+
+`_detail_building_entries` now resolves every descendant's own building outline in a fixed number of queries
+(`Boundary.objects.own_polygons_for_pins`: drawn, generated, wiki or place, never inherited from a parent). A pin
+standing inside a building resolves onto that building, so each distinct outline is drawn once, for the pin nearest
+the top, and never again for the outline the page's own pin already draws. The boundary endpoint draws none with
+`children=0`, and the map sends the setting with every boundary request (P224).
+
+Verified on `development_main` HRSH with six building children: 6 outlines on, 0 off, 6 on again, without a reload.
+Tests: `test_detail_building_outlines.py`.
+
+## RESOLVED 2026-10-04: Toggling child pin details reloaded the whole page
+
+`id: P224` · `status: fixed` · `resolved: 2026-10-04`
+
+The toggle was a plain link to `?children=0|1`. It is now an htmx request to `pin.child_details` (or
+`location.wiki.child_details`) that answers with every panel reading the setting as an out-of-band swap: photos,
+visits, albums, notes and Article > Sources on the pin page; the Manage gallery, albums, discussion and Sources on
+the wiki page. `hx-replace-url` keeps the setting in the address, which is where it was saved before; the link's
+href remains the fallback. The response's `HX-Trigger: childDetailsChanged` tells the map, which refetches markup,
+detail pins, the photo layer and outlines with `children=` set (`shared/child-details.ts`), and drops any answer
+for the old setting that arrives late.
+
+A panel that loads by replacing itself must keep its id, or a second toggle finds nothing to swap; the wiki's
+Manage gallery does not, so the regions fill its view container instead. The parcel Buildings card never read the
+setting and is left alone.
+
+Verified in Chromium on `development_main` (HRSH pin and campus wiki): same document throughout, loaded visits and
+notes replaced and reloaded with the new setting, the open Manage view kept open while its gallery reloaded.
+Tests: `test_child_details_in_place.py`, `child-details.test.ts`, `markup-toolbar.test.ts`,
+`map-annotations.contract.test.ts`.

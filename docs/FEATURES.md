@@ -82,6 +82,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   opened. The page-wide "child pin details" toggle (`?children=`, not a stored preference) starts on
   for a parcel and for any property holding exactly one building child, but not for a pin its owner
   typed as a building, whose building child is a structure inside it
+- **The "child pin details" toggle swaps in place** (`PinController.child_details`,
+  `LocationWikiChildDetailsView`, `shared/child-details.ts`) — on a pin's page and a wiki's page it
+  fetches every panel that reads the setting (photos, visits, albums, notes, Article > Sources) as
+  out-of-band swaps, replaces the address's `?children=`, and announces `childDetailsChanged` so
+  the map refetches its markup, detail pins, photo layer and outlines with `children=` set. With it
+  on, the pin map draws each descendant building's own outline once
+  (`Boundary.objects.own_polygons_for_pins`); off, none. A new panel that reads the setting needs a
+  region in `_child_details_regions.html` and an id it keeps after loading
 - **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
   matching child wiki for the selected sub pins, skipping ones the wiki already has; "Share with a
   friend" shares just the selected sub pins, not the pin's whole hierarchy. A "pull from wiki"

@@ -85,6 +85,8 @@ export interface MarkupToolbarConfig {
 
 export interface MarkupToolbar {
     loadMarkup: () => void;
+    /** Where the next load reads the items from; an answer still owed by the old URL is then dropped. */
+    setMarkupJsonUrl: (url: string) => void;
     startMarkupDraw: (type: string) => void;
     startShapeDraw: (type: string) => void;
     startTextPlacement: () => void;
@@ -353,9 +355,11 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
 
     function loadMarkup(): void {
         if (!markupJsonUrl) return; // lazy mode - nothing to load until the map is created
-        fetch(markupJsonUrl)
+        const url = markupJsonUrl;
+        fetch(url)
             .then((r) => r.json())
             .then((data) => {
+                if (url !== markupJsonUrl) return;
                 clearRenderedMarkup();
                 markupItems = [];
                 (data.markup_items || []).forEach((item: MarkupItem) => {
@@ -795,6 +799,9 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
 
     return {
         loadMarkup,
+        setMarkupJsonUrl: (url: string) => {
+            markupJsonUrl = url;
+        },
         startMarkupDraw,
         startShapeDraw,
         startTextPlacement,

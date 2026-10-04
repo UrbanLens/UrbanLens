@@ -311,6 +311,39 @@ class LocationWikiView(LoginRequiredMixin, View):
         )
 
 
+class LocationWikiChildDetailsView(LoginRequiredMixin, View):
+    """HTMX: turn "child pin details" on or off on a wiki's page without reloading it.
+
+    Responds with each panel that reads the setting as an out-of-band swap, loading afresh, and tells the map through
+    ``HX-Trigger`` (``childDetailsChanged``) so it refetches its own layers.
+    """
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        """Render the wiki page's child-details regions.
+
+        Args:
+            request: The request; ``children=1`` turns the setting on, and ``album`` keeps an open album open.
+            location_slug: The wiki's location.
+
+        Returns:
+            The regions, or 404 when the viewer cannot see the wiki.
+        """
+        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        include_children = request.GET.get("children") == "1"
+        response = render(
+            request,
+            "dashboard/partials/wiki/_child_details_regions.html",
+            {
+                "location": location,
+                "include_children": include_children,
+                "page_url": reverse("location.wiki", args=[location.slug]),
+                "child_details_url": reverse("location.wiki.child_details", args=[location.slug]),
+            },
+        )
+        response["HX-Trigger"] = json.dumps({"childDetailsChanged": {"include": include_children}})
+        return response
+
+
 class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
     """GET: the wiki's shared Building Attributes card (REData building number/name/year built).
 

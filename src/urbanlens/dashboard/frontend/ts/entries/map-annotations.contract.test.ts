@@ -16,3 +16,22 @@ describe("dragging the pin's own marker", () => {
         expect(savePosition).toMatch(/__ulReported: true/);
     });
 });
+
+describe("child pin details", () => {
+    const urls = ["cfg.markupJsonUrl", "cfg.detailPinsJsonUrl", "cfg.photoGalleryJsonUrl", "boundaryApiUrl"];
+
+    test("every layer that reads the setting asks with it", () => {
+        for (const url of urls) {
+            const bare = new RegExp(`(?<!childDetailsUrl\\()${url.replace(".", "\\.")}\\b(?!\\s*=)`, "g");
+            expect([url, source.match(bare) ?? []]).toEqual([url, []]);
+        }
+    });
+
+    test("a change reloads each of them", () => {
+        const listener = source.match(/addEventListener\(CHILD_DETAILS_EVENT,[\s\S]*?\n {4}\}\);/)?.[0] ?? "";
+        expect(listener, "the childDetailsChanged listener is gone").not.toBe("");
+        for (const reload of ["toolbar.setMarkupJsonUrl(childDetailsUrl(cfg.markupJsonUrl))", "toolbar.loadMarkup()", "loadDetailPins()", "loadPhotoLayer()", "fetchBoundaries(0)"]) {
+            expect(listener).toContain(reload);
+        }
+    });
+});

@@ -1,0 +1,12 @@
+{# ?album= is carried through so a deep link (or a Back navigation) loads that album directly. #}
+<div id="albums-panel"{% if oob %} hx-swap-oob="true"{% endif %}
+     hx-get="{% url 'location.wiki.albums' location.slug %}?{% if include_children %}children=1{% endif %}{% if include_children and request.GET.album %}&{% endif %}{% if request.GET.album %}album={{ request.GET.album|urlencode }}{% endif %}"
+     hx-trigger="intersect once"
+     hx-swap="outerHTML"
+     class="albums-panel card wiki-card">
+    <div class="card-header">
+        <i class="material-symbols-outlined">photo_library</i>
+        <h2>Photos</h2>
+    </div>
+    <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+</div>

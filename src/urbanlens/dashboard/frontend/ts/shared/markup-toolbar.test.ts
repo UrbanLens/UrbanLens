@@ -88,3 +88,45 @@ describe("drawing a new markup item", () => {
         expect(netReports).toEqual([]);
     });
 });
+
+describe("pointing the toolbar at another markup URL", () => {
+    const item = (uuid: string) => ({ uuid, markup_type: "marker", geometry: { type: "Point", coordinates: [-71.25, 42.5] }, label: uuid, color: "#e53e3e" });
+
+    function toolbarOnMap() {
+        const map = L.map("map").setView([42.5, -71.25], 16);
+        return createMarkupToolbar(map, L.layerGroup().addTo(map), { markupJsonUrl: "/markup/", markupCreateUrl: "/markup/create/", markupEditUrlTemplate: "/markup/00000000-0000-0000-0000-000000000000/" });
+    }
+
+    test("the next load reads the new URL", async () => {
+        const reads: string[] = [];
+        answer = async (url) => {
+            reads.push(url);
+            return Response.json({ markup_items: [] });
+        };
+        const toolbar = toolbarOnMap();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        toolbar.setMarkupJsonUrl("/markup/?children=1");
+        toolbar.loadMarkup();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(reads).toEqual(["/markup/", "/markup/?children=1"]);
+    });
+
+    test("an answer for the old URL that arrives late does not replace the new one's items", async () => {
+        let releaseOld: () => void = () => undefined;
+        answer = async (url) => {
+            if (url === "/markup/") await new Promise<void>((resolve) => (releaseOld = resolve));
+            return Response.json({ markup_items: [item(url === "/markup/" ? "parent-only" : "with-children")] });
+        };
+        const toolbar = toolbarOnMap();
+
+        toolbar.setMarkupJsonUrl("/markup/?children=1");
+        toolbar.loadMarkup();
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+        releaseOld();
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(toolbar.getMarkupItems().map((markup) => markup.uuid)).toEqual(["with-children"]);
+    });
+});

@@ -127,7 +127,7 @@ class BuildingCardTests(_Base):
     def test_the_toggle_starts_on(self) -> None:
         response = self._page()
         self.assertTrue(response.context["include_children"])
-        self.assertContains(response, reverse("pin.parcel_buildings", args=[self.parent.slug]) + "?children=1")
+        self.assertContains(response, 'data-child-details="1"')
 
     def test_turning_it_off_is_remembered_on_the_page(self) -> None:
         self.assertFalse(self._page("?children=0").context["include_children"])

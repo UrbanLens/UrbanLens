@@ -867,6 +867,11 @@ urlpatterns = [
                                 name="pin.parcel_buildings",
                             ),
                             path(
+                                "<slug:pin_slug>/child-details/",
+                                pin.PinController.as_view({"get": "child_details"}),
+                                name="pin.child_details",
+                            ),
+                            path(
                                 "<slug:pin_slug>/buildings/import/",
                                 pin_restructure.PinBuildingImportView.as_view(),
                                 name="pin.buildings.import",
@@ -1609,6 +1614,11 @@ urlpatterns = [
                             "<slug:location_slug>/wiki/links/<int:link_id>/delete/",
                             links.LocationLinkDeleteView.as_view(),
                             name="location.wiki.link.delete",
+                        ),
+                        path(
+                            "<slug:location_slug>/wiki/child-details/",
+                            location_wiki.LocationWikiChildDetailsView.as_view(),
+                            name="location.wiki.child_details",
                         ),
                         # Album routes: literal per-album action segments are registered before the <slug:album_slug>
                         # detail route so they can't be swallowed by the slug converter.

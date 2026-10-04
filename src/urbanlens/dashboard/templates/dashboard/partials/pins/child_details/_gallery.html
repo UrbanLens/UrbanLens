@@ -1,0 +1,6 @@
+<div id="pin-gallery-panel"{% if oob %} hx-swap-oob="true"{% endif %}
+     hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+</div>

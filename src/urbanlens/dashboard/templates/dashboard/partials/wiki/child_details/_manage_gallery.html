@@ -1,0 +1,9 @@
+{% comment %}The unchanged wiki photo gallery (upload / Flickr import / cover photo / delete), lazy-loaded when "Manage" is first opened. oob fills the Manage view afresh, loading once it is shown: it may already have been opened.{% endcomment %}
+{% if oob %}<div id="wiki-gallery-manage" hx-swap-oob="innerHTML">{% endif %}
+<div id="wiki-gallery-panel"
+     hx-get="{% url 'location.wiki.gallery' location.slug %}{% if include_children %}?children=1{% endif %}"
+     hx-trigger="{% if oob %}intersect once{% else %}ul:load-manage{% endif %}"
+     hx-swap="outerHTML">
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+</div>
+{% if oob %}</div>{% endif %}

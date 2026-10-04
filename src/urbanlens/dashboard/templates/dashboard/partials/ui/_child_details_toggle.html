@@ -1,0 +1,12 @@
+{% comment %}The page-wide "child pin details" switch. With child_details_url it swaps the panels that read the setting in place; the href is the reload it falls back to. oob renders it as an out-of-band swap.{% endcomment %}
+{% with next=include_children|yesno:"0,1" %}
+<a id="child-details-toggle" class="map-btn-icon{% if include_children %} is-active{% endif %}"{% if oob %} hx-swap-oob="true"{% endif %}
+   href="{{ page_url }}?children={{ next }}{% if request.GET.album %}&amp;album={{ request.GET.album|urlencode }}{% endif %}{% if request.GET.album_pin %}&amp;album_pin={{ request.GET.album_pin|urlencode }}{% endif %}"
+   {% if child_details_url %}hx-get="{{ child_details_url }}?children={{ next }}{% if request.GET.album %}&amp;album={{ request.GET.album|urlencode }}{% endif %}{% if request.GET.album_pin %}&amp;album_pin={{ request.GET.album_pin|urlencode }}{% endif %}"
+   hx-swap="none"
+   hx-replace-url="{{ page_url }}?children={{ next }}{% if request.GET.album %}&amp;album={{ request.GET.album|urlencode }}{% endif %}{% if request.GET.album_pin %}&amp;album_pin={{ request.GET.album_pin|urlencode }}{% endif %}"{% endif %}
+   title="Child pin details" data-tooltip="Child pin details {{ include_children|yesno:'on,off' }}" aria-label="Child pin details"
+   aria-pressed="{{ include_children|yesno:'true,false' }}">
+    <i class="material-symbols-outlined">{{ include_children|yesno:"toggle_on,toggle_off" }}</i>
+</a>
+{% endwith %}

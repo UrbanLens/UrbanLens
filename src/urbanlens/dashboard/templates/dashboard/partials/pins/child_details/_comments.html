@@ -1,0 +1,10 @@
+<div id="comment-panel" class="card"{% if oob %} hx-swap-oob="true"{% endif %}
+     hx-get="{% url 'pin.comments' pin.slug %}{% if include_children %}?children=1{% endif %}"
+     hx-trigger="intersect once"
+     hx-swap="outerHTML">
+    <div class="card-header">
+        <i class="material-symbols-outlined">sticky_note_2</i>
+        <span>Notes</span>
+    </div>
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+</div>

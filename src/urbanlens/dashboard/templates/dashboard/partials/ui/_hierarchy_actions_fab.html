@@ -20,12 +20,7 @@
         </button>
         {% endif %}
         {% if has_children %}
-        <a class="map-btn-icon{% if include_children %} is-active{% endif %}"
-           href="{{ request.path }}?children={% if include_children %}0{% else %}1{% endif %}"
-           title="Child pin details" data-tooltip="Child pin details {% if include_children %}on{% else %}off{% endif %}" aria-label="Child pin details"
-           aria-pressed="{% if include_children %}true{% else %}false{% endif %}">
-            <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
-        </a>
+        {% include "dashboard/partials/ui/_child_details_toggle.html" with page_url=request.path %}
         {% endif %}
         {% if parent_url %}
         <a class="map-btn-icon" href="{{ parent_url }}" title="{{ parent_item_label|default:'Open parent pin' }}" data-tooltip="{{ parent_item_label|default:'Open parent pin' }}" aria-label="{{ parent_item_label|default:'Open parent pin' }}">
