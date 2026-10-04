@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates, repoint_cid_to_corrected_location
 from urbanlens.dashboard.services.core.capacity import CapacityExceededError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
@@ -119,6 +120,16 @@ def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[
         if image.pin_id is None:
             image.pin = pin
             image.save(update_fields=["pin", "updated"])
+
+
+def _on_the_globe(latitude: Any, longitude: Any) -> tuple[float, float] | None:
+    """A coordinate pair as floats when both are finite numbers on the globe, else None.
+
+    JSON cannot carry infinity or NaN, and Python's parser reads them all the same.
+    """
+    lat = coordinate_or_none(latitude, bound=LATITUDE_BOUND)
+    lng = coordinate_or_none(longitude, bound=LONGITUDE_BOUND)
+    return (lat, lng) if lat is not None and lng is not None else None
 
 
 def _create_pin_from_confirmed(
@@ -876,15 +887,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         for p in raw_pins:
             if p is None:
                 continue
-            lat = p.get("latitude")
-            lng = p.get("longitude")
-            if lat is None or lng is None:
+            if p.get("latitude") is None or p.get("longitude") is None:
                 continue
-            lat, lng = float(lat), float(lng)
-            # Also refuses infinity and NaN, which JSON cannot carry into the preview's result.
-            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-                logger.debug("Leaving out a place off the globe: (%s, %s)", lat, lng)
+            coordinates = _on_the_globe(p["latitude"], p["longitude"])
+            if coordinates is None:
+                logger.debug("Leaving out a place off the globe: (%s, %s)", p["latitude"], p["longitude"])
                 continue
+            lat, lng = coordinates
             name = (p.get("name") or "")[:255]
             cid = p.get("cid")
             pin: dict[str, Any] = {
@@ -1029,19 +1038,21 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         }
                         continue
 
-                    latitude = cached_coords[0] if cached_coords else pin_dict.get("lat")
-                    longitude = cached_coords[1] if cached_coords else pin_dict.get("lng")
-
-                    pin, created = _create_pin_from_confirmed(
-                        pin_dict,
-                        location=location,
-                        latitude=latitude,
-                        longitude=longitude,
-                        user_profile=user_profile,
-                        list_labels=list_labels,
-                        category_label=category_label,
-                        auto_tag=auto_tag,
-                    )
+                    # The client posts these back, so they are checked as the preview checked them (P282).
+                    coordinates = _on_the_globe(*cached_coords) if cached_coords else _on_the_globe(pin_dict.get("lat"), pin_dict.get("lng"))
+                    if location is None and coordinates is None:
+                        pin, created = None, False
+                    else:
+                        pin, created = _create_pin_from_confirmed(
+                            pin_dict,
+                            location=location,
+                            latitude=coordinates[0] if coordinates else None,
+                            longitude=coordinates[1] if coordinates else None,
+                            user_profile=user_profile,
+                            list_labels=list_labels,
+                            category_label=category_label,
+                            auto_tag=auto_tag,
+                        )
 
                     if pin:
                         if created:

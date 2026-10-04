@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 
 logger = logging.getLogger(__name__)
@@ -95,20 +96,26 @@ def _get_failure(request: HttpRequest, failure_id: int) -> tuple[PinImportFailur
     return failure, profile
 
 
-def _parse_optional_float(raw: str) -> float | None:
-    """Parse a POST field as a float, treating a blank string as unset.
+def _parse_optional_coordinate(raw: str, *, bound: float) -> float | None:
+    """Parse a POST field as a coordinate within ``±bound``, treating a blank string as unset.
 
     Args:
         raw: Raw field value from the request.
+        bound: :data:`LATITUDE_BOUND` or :data:`LONGITUDE_BOUND`.
 
     Returns:
-        The parsed float, or None if ``raw`` was blank.
+        The coordinate, or None if ``raw`` was blank.
 
     Raises:
-        ValueError: ``raw`` was non-blank but not a valid float.
+        ValueError: ``raw`` was non-blank but not a finite number within ``±bound``.
     """
     stripped = raw.strip()
-    return float(stripped) if stripped else None
+    if not stripped:
+        return None
+    coordinate = coordinate_or_none(stripped, bound=bound)
+    if coordinate is None:
+        raise ValueError(f"{stripped!r} is not a coordinate within ±{bound}.")
+    return coordinate
 
 
 class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
@@ -206,8 +213,8 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
 
         address = request.POST.get("address", "").strip() or None
         try:
-            latitude = _parse_optional_float(request.POST.get("latitude", ""))
-            longitude = _parse_optional_float(request.POST.get("longitude", ""))
+            latitude = _parse_optional_coordinate(request.POST.get("latitude", ""), bound=LATITUDE_BOUND)
+            longitude = _parse_optional_coordinate(request.POST.get("longitude", ""), bound=LONGITUDE_BOUND)
         except ValueError:
             response = render(request, _CARD_PARTIAL, {"failure": failure})
             response["HX-Trigger"] = json.dumps({"showToast": {"message": "Enter a valid latitude and longitude.", "level": "error"}})

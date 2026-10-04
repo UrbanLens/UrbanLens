@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_fields, posted_json_object
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json
@@ -41,16 +42,6 @@ _ATTENTION_LIMIT = 60
 
 #: Most uploads one processing-status poll may ask about.
 _PROCESSING_STATUS_MAX_IDS = 100
-
-
-def _parse_float(value: str | None) -> float | None:
-    """Parse a POSTed coordinate string to float, or None if missing/malformed."""
-    if value is None or not value.strip():
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _attention_cards(profile: Profile) -> list[dict]:
@@ -360,8 +351,11 @@ class PhotoActionView(LoginRequiredMixin, View):
             # the client hasn't refreshed yet (see create_pin_and_log_visit's resuggestion pass) - avoid logging
             # a redundant second visit for a stale click.
             return _toast("This photo has already been filed.", "info", refresh_queue=True)
-        lat = _parse_float(request.POST.get("latitude"))
-        lng = _parse_float(request.POST.get("longitude"))
+        raw_lat, raw_lng = request.POST.get("latitude", "").strip(), request.POST.get("longitude", "").strip()
+        lat = coordinate_or_none(raw_lat, bound=LATITUDE_BOUND)
+        lng = coordinate_or_none(raw_lng, bound=LONGITUDE_BOUND)
+        if (raw_lat or raw_lng) and (lat is None or lng is None):
+            return _render_card(request, image, toast="That isn't a place on the map.", level="error")
         if lat is None or lng is None:
             lat = float(image.effective_latitude) if image.effective_latitude is not None else None
             lng = float(image.effective_longitude) if image.effective_longitude is not None else None

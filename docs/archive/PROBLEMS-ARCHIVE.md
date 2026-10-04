@@ -22725,3 +22725,21 @@ OSM, GPX, Location History and My Activity.
 - Both assert that nothing escapes the guard and that every previewed pin is finite and on the globe.
 - One case per format checks that the off-globe place is dropped and the rest kept.
 - Anti-vacuity: every seed previews unchanged.
+
+**The same check where a client posts coordinates back.** An audit of every route that stores a posted coordinate
+found three with no range or finiteness check. The others use DRF `FloatField` bounds or
+`services/core/numbers.coordinate_or_none`. All three now go through `coordinate_or_none`:
+
+- **The import's confirm step** (`iter_confirmed_import_events`) took each pin's `lat`/`lng` from the client's JSON,
+  which Python's parser reads with `Infinity` and `NaN`. A latitude of 95 became a Location there. A pin without
+  usable coordinates and no matched Location is now skipped and counted. `maps._on_the_globe` is the one check, and
+  `_iter_preview_pins` uses it as well.
+- **Filing a photo as a new pin** (`vault_photos.PhotoActionView.create_pin`) used a bare `float()`. Posted
+  coordinates that are present but not on the globe now answer "That isn't a place on the map." instead of falling
+  back to the photo's own place.
+- **Placing an import failure by hand** (`pin_import_failures.PinImportFailureResolveView`) answers its existing "Enter
+  a valid latitude and longitude." for an off-globe or non-finite coordinate.
+
+Tests: `test_import_confirm_coordinates.py` (9 refused, 4 accepted, ±90/±180 included) and
+`test_coordinate_inputs_on_the_globe.py`, which posts 6 bad pairs to each form route. Before the fix, a latitude of 95
+created a pin through each of the three routes.
