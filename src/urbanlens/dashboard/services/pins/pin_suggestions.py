@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.media.images import compute_checksum, delete_stored_file
 from urbanlens.dashboard.services.media.media_materialize import fetch_with_revalidated_redirects
 from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload, storage_failures_refused
@@ -562,10 +563,7 @@ _PHOTO_DOWNLOAD_TIMEOUT = 15
 _MAX_PHOTO_DOWNLOAD_BYTES = 20 * 1024 * 1024
 _MAX_PHOTO_REDIRECTS = 5
 _DEFAULT_PHOTO_FILENAME = "photo.jpg"
-# Same descriptive UA as media_materialize - Wikimedia 403s the default
-# python-requests User-Agent (see https://w.wiki/4wJS).
-_PHOTO_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
-_PHOTO_DOWNLOAD_HEADERS = {"User-Agent": _PHOTO_USER_AGENT}
+_PHOTO_DOWNLOAD_HEADERS = {"User-Agent": USER_AGENT}
 
 
 class SuggestionPhotoError(RuntimeError):

@@ -23088,3 +23088,21 @@ default from the moment the column exists. The models match, so `makemigrations 
   read back the defaults.
 
 Both failed before the fix.
+
+## RESOLVED 2026-10-04: A Wikipedia cover or Wikimedia thumbnail fetched through `request_public_url` got 403, sent with no User-Agent of ours
+
+`id: P292` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, reading dev's worker logs`
+
+**What was wrong.** `url_safety.request_public_url` sent whatever User-Agent its session had, which for most callers
+was python-requests' own. Wikimedia refuses that one. Dev's worker logged
+`403 Client Error: Forbidden for url: https://thumb.wikimedia.org/.../330px-Hudson_River_State_Hospital.jpeg` from
+`wiki_seed._store_cover_from_url`, so a seeded wiki got no cover. Five modules each kept a copy of the project's
+User-Agent string; the avatar download sent none.
+
+**Fix.** `services/core/user_agent.USER_AGENT` is the one copy. `request_public_url` sends it unless the caller's
+headers name a User-Agent or the session already carries one other than python-requests' default. The five modules
+and the avatar download import it. Run on dev, the same thumbnail comes back 200 (29,574 bytes of JPEG); with
+python-requests' User-Agent it is still 403.
+
+**Tests.** `test_request_public_url.py::UserAgentTests`: the default is sent, a caller's header wins, a session's own
+User-Agent wins, and python-requests' default on a session is replaced. The first and last failed before the fix.

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import requests
 
 from urbanlens.dashboard.models.colors import MaterialColor
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, request_public_url
 
 if TYPE_CHECKING:
@@ -242,7 +243,7 @@ class AvatarService:
             response = request_public_url(
                 "GET",
                 url,
-                headers={"User-Agent": "UrbanLens/1.0"},
+                headers={"User-Agent": USER_AGENT},
                 timeout=timeout,
                 total_deadline=timeout * 2,
                 max_bytes=PROVIDER_AVATAR_MAX_BYTES,

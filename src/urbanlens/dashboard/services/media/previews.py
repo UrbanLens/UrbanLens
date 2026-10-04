@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.media.images import pixels_only
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
@@ -111,7 +112,6 @@ def needs_server_side_preview(url: str, content_type: str = "") -> bool:
 
 _FETCH_TIMEOUT = 20
 _MAX_REDIRECTS = 5
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
 class RemoteSourceTimeoutError(Exception):
@@ -138,7 +138,7 @@ def fetch_remote_source(url: str, *, max_bytes: int, timeout: float = _FETCH_TIM
     from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
     try:
-        response = fetch_public_url(url, headers={"User-Agent": _USER_AGENT}, timeout=timeout, max_redirects=_MAX_REDIRECTS)
+        response = fetch_public_url(url, headers={"User-Agent": USER_AGENT}, timeout=timeout, max_redirects=_MAX_REDIRECTS)
     except UnsafeUrlError:
         logger.info("Remote source rejected as unsafe: %s", redact_text(url))
         return None

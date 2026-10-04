@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import PAGED_DOCUMENT_CONTENT_TYPES, MediaItem, MediaProvider
 from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -25,7 +26,6 @@ _MAX_RESULTS = 60
 _TITLES_BATCH_SIZE = 50
 _EXTMETADATA = "ImageDescription|ObjectName|Categories|GPSLatitude|GPSLongitude"
 _FILE_EXTENSION = re.compile(r"\.[A-Za-z0-9]{2,4}$")
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
 @dataclass(slots=True, kw_only=True)
@@ -49,7 +49,7 @@ class WikimediaGateway(MediaProvider):
 
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
-        self.session.headers.update({"User-Agent": _USER_AGENT})
+        self.session.headers.update({"User-Agent": USER_AGENT})
 
     def search_images(self, query: str) -> list[dict[str, Any]]:
         """Search Commons for images matching *query* and return thumbnail info.

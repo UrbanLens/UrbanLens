@@ -16,6 +16,7 @@ import requests
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, is_source_outage
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -28,7 +29,6 @@ _SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 _MEDIA_LIST_URL = "https://en.wikipedia.org/api/rest_v1/page/media-list/{title}"
 _RADIUS_METERS = 500
 _MAX_CANDIDATES = 5
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 # The REST summary endpoint (`_fetch_summary`) only ever returns the lead section, which is
 # frequently a couple hundred words even for articles with several more sections of real body
@@ -110,7 +110,7 @@ class WikipediaGateway(Gateway):
 
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
-        self.session.headers.update({"User-Agent": _USER_AGENT})
+        self.session.headers.update({"User-Agent": USER_AGENT})
 
     def get_nearby_articles(
         self,

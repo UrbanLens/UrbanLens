@@ -39,6 +39,7 @@ import requests
 from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExemption
 from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.core.text_limits import column_max_length
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.media.images import compute_checksum
 from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 from urbanlens.dashboard.services.security.content_sniffing import photo_is_not_an_image_error
@@ -67,8 +68,7 @@ _DEFAULT_FILENAME = "photo.jpg"
 _MAX_REDIRECTS = 5
 # Wikimedia (and several other public CDNs) 403 the default python-requests UA;
 # match the descriptive string the Wikimedia/Wikipedia gateways already send.
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
-_DOWNLOAD_HEADERS = {"User-Agent": _USER_AGENT}
+_DOWNLOAD_HEADERS = {"User-Agent": USER_AGENT}
 
 # The Media gallery's per-provider panel key (GalleryMediaSource.key, what's actually sent as
 # `source` here) doesn't always match the ImageSource value with the same real-world meaning -

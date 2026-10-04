@@ -15,6 +15,7 @@ import urllib3.util.connection
 
 from urbanlens.core.tests.slow_servers import start_drip_server
 from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.security.url_safety import (
     _PINS,
     DeadlineExceededError,
@@ -362,3 +363,45 @@ class ByteCapTests(SimpleTestCase):
         """So every existing ``except requests.RequestException`` (and ``except OSError``) keeps catching them."""
         self.assertTrue(issubclass(ResponseTooLargeError, requests.RequestException))
         self.assertTrue(issubclass(DeadlineExceededError, requests.RequestException))
+
+
+class UserAgentTests(SimpleTestCase):
+    """Wikimedia answers 403 to the default ``python-requests`` User-Agent, so a Wikipedia cover never landed."""
+
+    def tearDown(self) -> None:
+        _PINS.map = None
+        super().tearDown()
+
+    def _sent_user_agent(self, **options) -> str | None:
+        with (
+            mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")),
+            mock.patch("requests.get", return_value=_response()) as get,
+        ):
+            request_public_url("GET", "https://upload.test/a.jpg", **options)
+        return {key.lower(): value for key, value in get.call_args.kwargs["headers"].items()}.get("user-agent")
+
+    def test_a_request_that_names_none_sends_the_sites_own(self) -> None:
+        self.assertEqual(self._sent_user_agent(), USER_AGENT)
+        self.assertNotIn("python-requests/2.", USER_AGENT.split(")")[0], "it names the site, not the library alone")
+
+    def test_a_callers_own_user_agent_is_kept(self) -> None:
+        self.assertEqual(self._sent_user_agent(headers={"user-agent": "Special/2"}), "Special/2")
+
+    def test_a_sessions_own_user_agent_is_kept(self) -> None:
+        session = mock.MagicMock()
+        session.headers = {"User-Agent": "Gateway/3"}
+        session.get.return_value = _response()
+        with mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
+            request_public_url("GET", "https://upload.test/a.jpg", session=session)
+
+        self.assertNotIn("User-Agent", session.get.call_args.kwargs["headers"])
+
+    def test_a_session_with_requests_default_gets_the_sites_own(self) -> None:
+        session = requests.Session()
+        with (
+            mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")),
+            mock.patch.object(session, "get", return_value=_response()) as get,
+        ):
+            request_public_url("GET", "https://upload.test/a.jpg", session=session)
+
+        self.assertEqual(get.call_args.kwargs["headers"]["User-Agent"], USER_AGENT)

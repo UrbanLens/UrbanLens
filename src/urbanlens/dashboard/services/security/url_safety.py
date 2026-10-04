@@ -14,6 +14,8 @@ import idna
 import requests
 import urllib3.util.connection
 
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
+
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterator, Mapping
 
@@ -365,6 +367,14 @@ def _retire(response: requests.Response, deadline: _Deadline | None) -> None:
     response.close()
 
 
+def _sends_own_user_agent(session: requests.Session | None) -> bool:
+    """Whether *session* names a User-Agent of its own, rather than ``requests``' default."""
+    if session is None:
+        return False
+    agent = (getattr(session, "headers", None) or {}).get("User-Agent")
+    return bool(agent) and agent != requests.utils.default_user_agent()
+
+
 def _send(
     method: str,
     url: str,
@@ -400,6 +410,8 @@ def _send(
     sender: Any = session if session is not None else requests
     stripped = _ALWAYS_CREDENTIAL_HEADERS | {name.lower() for name in credential_headers}
     send_headers = dict(headers or {})
+    if not any(name.lower() == "user-agent" for name in send_headers) and not _sends_own_user_agent(session):
+        send_headers["User-Agent"] = USER_AGENT
     body = {key: value for key, value in (("json", json), ("data", data)) if value is not None}
     query = params
     fetch_url = url
