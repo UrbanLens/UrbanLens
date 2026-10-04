@@ -209,7 +209,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P261 | open | 2026-10-04 | A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P262 | open | 2026-10-04 | A building's wiki is seeded with its campus's Wikipedia article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P263 | open | 2026-10-04 | A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P264 | open | 2026-10-04 | A building outline drawn on a wiki whose building place has no footprint is saved but never shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P265 | open | 2026-10-04 | A pinned location on a campus building with no wiki shows no wiki until something creates the building's | [`docs/PROBLEMS.md`](PROBLEMS.md) |

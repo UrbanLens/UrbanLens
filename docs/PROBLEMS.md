@@ -2870,67 +2870,22 @@ Options, for the release's migration squash (see the release migration notes): r
 queued by 0033 itself) so no current code ever runs on the old schema. Not Jess's call unless the first option
 changes the supported upgrade path.
 
-## P261 — A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid
+## P265 — A pinned location on a campus building with no wiki shows no wiki until something creates the building's
 
-`id: P261` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
+`id: P265` · `status: open` · `updated: 2026-10-04` · `found by: Claude, reviewing the P261 fix`
 
-`Wiki.objects.existing_for_location` returns a location's own wiki, else the wiki holding the place the location
-resolved onto. A building with no Place of its own resolves onto its parcel, so a building child pin whose location has
-no wiki of its own gets the parcel's: `Pin.community_wiki` and `places.ambiguity.linked_wiki_locations` link
-`/dashboard/location/<the building location's slug>/wiki/`, which renders the campus's root wiki, and
-`tasks.ensure_wiki_for_location` returns that wiki rather than creating the building's. That is the exact shape of
-P231's report (a uuid URL, the campus's title, not nested), and may be what production showed; production was not
-read.
+Since P261, `Wiki.objects.existing_for_location` returns None for a location standing on a campus building that has
+no wiki yet, where it used to return the campus's wiki. The building's wiki is created only when something calls
+`get_or_create_for_location` for that location: a pin saved there (`tasks.ensure_wiki_for_location`), a share
+(`WikiShareService`), an enrichment photo. A location pinned before the campus's building list was cached, or before
+the fix was deployed, has had its call already and was answered with the campus's wiki: it now links none.
 
-On the dev stack no building child pin is in this state (0 of 638, read 2026-10-03): the auto-nest sweep stands each
-building pin on its wiki's own point. It arises when the pin and the building's wiki stand on different points: an
-import of a building that already has a wiki elsewhere (`mirror_wikis` matches it and creates none at the pin's
-point), a sweep whose wiki mirror failed, or a pin its owner moved. Locations 98241, 99688 and 101406 on dev sit on
-HRSH's parcel place with no wiki of their own, and each resolves wiki 1805, the campus's.
+On dev, 3 pinned locations sit on a campus place with no wiki of their own, and none stands on or within 15 m of a
+building record or a building wiki (read 2026-10-04), so none is affected. Production was not read.
 
-Fixing it needs a choice:
-
-- Resolve a location standing on one of its parcel's known buildings to that building's wiki (matched by footprint or
-  `BUILDING_MATCH_METERS`, as `building_markers`/`match_clusters` do), creating a nested one when there is none. A
-  second account's root pin dropped on a building would then open the building's wiki too, as it already does where
-  the building has a Place.
-- Or decide from the pin: a child pin never links a wiki another location holds by place. That reads one account's
-  pin tree, which P231 keeps out of shared wiki structure, though only for that account's own link.
-
-## P262 — A building's wiki is seeded with its campus's Wikipedia article
-
-`id: P262` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
-
-On the dev stack, 11 of the 55 child wikis under HRSH's campus wiki (1805) open with the campus's Wikipedia article,
-attribution link to `Hudson_River_State_Hospital` included (wikis 1807, 1808 and 1812 among them, read 2026-10-04).
-The Wikipedia panel stores the campus's article on a child pin's location when the pin's own point finds none
-(`WikipediaPanelSource._ancestor_campus_article`), and `models.cache.signals.seed_articles_on_wikipedia_cache_write`
-starts the location's wiki article from whatever is cached there (`wiki_seed.seed_wiki_article_from_wikipedia`).
-P231 stopped that article naming a building's location (`name_tiers.describes_scope`); the article seeding was not
-changed. Open: whether a building's wiki carries no article from it, or the campus's with a note that the building is
-part of it.
-
-## P263 — A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated
-
-`id: P263` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
-
-P231 made `tasks.ensure_wiki_for_location` reconcile nesting as soon as it creates a wiki. `WikiShareService`
-(`services/wiki/wiki_share.py`) also creates one when a share races ahead of that task. A wiki it creates stays a root
-until boundary generation, which runs only for an owner who allows enrichment, and the task that follows finds the
-wiki and does not reconcile. `photo_enrichment._save_enriched_image` creates one too, but only during enrichment.
-Found by reading, not seen on dev. Either reconcile on those paths as well, or have `ensure_wiki_for_location`
-reconcile any root wiki it returns, at a few queries per pin.
-
-## P264 — A building outline drawn on a wiki whose building place has no footprint is saved but never shown
-
-`id: P264` · `status: open` · `updated: 2026-10-04` · `found by: Claude, reviewing P222`
-
-`BoundaryManager.resolve_for_wiki` returns nothing when the wiki's place has no polygon of the requested type, before
-it looks at the wiki's own drawn row. `place_polygon(place, "building")` is None both for a place that is not a
-building (a campus: no single building outline applies, which the guard means) and for a building place with no
-footprint (P182's point-only OSM relations, fiat building places), where a drawn outline is exactly what is missing.
-So a member who draws the building outline on such a wiki sees it until the page reloads. `resolve_for_pin` has
-the same guard after the pin's own row, so a pin there skips its wiki's drawn outline too. Read from the code and
-`test_detail_building_outlines.py`'s fixtures, not yet reproduced as a failing test. Fix: let the guard return
-early only when the place says the type does not apply, and keep the drawn row for a building place without
-geometry.
+Options: a `parcel_buildings` cache write for a location holding a campus's wiki enqueues
+`ensure_wikis_for_locations` for the pinned locations on that place with no wiki of their own, which also covers the
+backlog as caches refresh; a one-off command run at deploy; or accepting it, since a campus pin's automatic sweep
+(`auto_nest.auto_nest_pin`) mirrors every building of the campus into a wiki when its owner has community features on.
+Creating at view time is ruled out: `get_or_create_for_location` says a wiki appearing as a side effect of viewing is a
+bug.

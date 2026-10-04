@@ -22230,3 +22230,164 @@ the pin's own `name`. News keeps register-listing names in the base search only.
   names. A new wiki alias still drops the shared `wikimedia` row and an unmatched `wikipedia` one. It now leaves each
   name set's own `wikimedia` row alone, since those rows search their owners' names only
   (`models/aliases/signals.py`; `test_wiki_sync.py::MediaCacheInvalidationOnNewAliasTests`).
+
+## RESOLVED 2026-10-04: A building outline drawn on a wiki whose building place has no footprint was saved but never shown
+
+`id: P264` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by reading, while reviewing P222. `services.places.scope.place_polygon(place, type)` is None both when the type
+does not apply to the place (a campus parcel asked for one building's outline, a building on a multi-building parcel
+asked for the property) and when it applies but no geometry is known (a building place with no footprint: P182's
+point-only OSM relations, fiat and record-only building places, 60 of HRSH's 96 on dev). `BoundaryManager` read any
+None as "does not apply": `_resolve_wiki_chain` returned before the wiki's own drawn row, and `_resolve_pin_head`
+before the pin's wiki. So a member who drew the building outline on such a wiki saw it until the page reloaded, a pin
+there skipped it, and `own_polygons_for_wikis` (a campus wiki's child outlines) left it off the map.
+`test_detail_building_outlines.py`'s drawn-outline test had moved its wiki off the parcel to get past the guard.
+
+**Fix.** `scope.outline_applies(place, type)` says whether the type applies, and `place_polygon` is built on it.
+Both chains return early only when it does not; a building place with no footprint falls through to the drawn row.
+A placed pin still never inherits its parent's outline, so a child pin on such a building takes its wiki's outline,
+not its parent pin's. `official_polygons_by_location_id` leaves out a location whose place has no geometry for a type
+that applies, so `map_pin_share_detection._boundaries_for_pins` (its own copy of the chain) agrees with
+`resolve_for_pin`. One knock-on, not asked for: a lone building place with no parcel (a property outline applies but
+is unknown) now falls back to the wiki's drawn property row and then the circle, as an unplaced location does,
+instead of drawing nothing.
+
+**Tests.** `test_boundary.py::FootprintlessBuildingTests` (the wiki chain, its batched form, a pin, a child pin with a
+parent outline, nothing drawn, a parcel asked for a building outline, share detection) and
+`test_detail_building_outlines.py` (a footprintless child wiki's and child pin's drawn outlines on the campus maps):
+6 failed before the fix, all 68 in both files pass after.
+
+## RESOLVED 2026-10-04: A wiki created outside `ensure_wiki_for_location` nested only when its boundary was generated
+
+`id: P263` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by reading while fixing P231, not seen on dev. P231 made `tasks.ensure_wiki_for_location` reconcile nesting
+as soon as it created a wiki. The other callers of `Wiki.objects.get_or_create_for_location` did not:
+`WikiShareService.share_from_pin` (when a share races ahead of that task), `photo_enrichment._save_enriched_image`
+(during enrichment) and `BuildingNester.campus_wiki`. A wiki one of them created stayed a root until boundary
+generation, which runs only for an owner who allows enrichment, and the task that followed found the wiki and did
+not reconcile it.
+
+**Fix.** `get_or_create_for_location`, the one creation path, now reconciles nesting for every wiki it creates
+(`wiki_merge.reconcile_wiki_nesting`, from the places already stored), so every caller nests the same way and
+`ensure_wiki_for_location` no longer does it separately. The returned wiki carries its new parent. Reconciling on
+creation only, rather than on every root wiki the task returns, keeps the task's cost for existing wikis at zero.
+A wiki created with an explicit name now also nests; it still skips the provider-name adoption, as before.
+
+**Tests.** `test_building_wiki_nesting.py`: a share and an enrichment photo that create a building's wiki each nest it
+under the campus's (both failed before the fix).
+
+## RESOLVED 2026-10-04: A location standing on a campus building opened the campus's wiki, because a building with no place of its own resolves onto its parcel
+
+`id: P261` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by Claude while fixing P231. `Wiki.objects.existing_for_location` returned a location's own wiki, else the wiki
+holding the place the location resolved onto. A building with no place a point can resolve onto (60 of HRSH's 96
+building places on dev have no footprint) leaves its points on the parcel, so a building child pin whose location
+had no wiki of its own got the campus's: `Pin.community_wiki` and `places.ambiguity.linked_wiki_locations` linked
+`/dashboard/location/<the building location's slug>/wiki/`, which rendered the campus's root wiki, and
+`tasks.ensure_wiki_for_location` returned that wiki rather than creating the building's - P231's report exactly.
+Production was not read. On dev, locations 98241, 99688 and 101406 sit on HRSH's parcel with no wiki of their own;
+none stands within 15 m of a building wiki's point or on a footprint, and no cached building record is within 15 m of
+any of them, so all three still open the campus's wiki after the fix, correctly (read 2026-10-04).
+
+**Fix (the first option the entry set out; the decision was made before this work).**
+`services.wiki.building_wikis` knows a campus's buildings: the building wikis nested under the wiki holding the
+place (`building_markers` of its descendants) and the building list cached for that wiki's own location
+(`parcel_buildings`, clustered and paired with the wikis by `cluster_buildings`/`match_clusters`, as the wiki mirror
+does). A location stands on the building whose footprint holds it (the smallest, so a wing beats its envelope), else
+on the nearest building within `BUILDING_MATCH_METERS`, so a nearer building without a wiki wins over a farther one
+with one (the nearer-building rule of `national_register.BuildingPoints`). It applies only where the place is a site
+or a parcel holding several buildings (`pin_type_for_place`), so an ordinary property's second point still opens its
+one wiki. It reads places, wikis and location caches only, never a pin (a test asserts no query touches
+`dashboard_user_pins`).
+
+- `existing_for_location` returns that building's wiki, or None when the building has none yet; the grounds still
+  open the campus's wiki. `Boundary.objects._wikis_for_pins` (its batched copy) agrees, reading each campus once.
+- `get_or_create_for_location` then creates the building's wiki at the location: holding no place (the campus's
+  wiki holds it), typed a building (not user-chosen), and nested by P263's reconcile under the wiki of the building
+  enclosing it, if any, else the campus's (`wiki_merge._containing_root_wiki_by_geometry`). A race in which the
+  place's wiki appears meanwhile retries without the place rather than raising.
+- A placeless wiki has no unique column to collide on, so two locations on one building whose wikis were created at
+  once each got one, as did a location racing the building mirror. The building path re-resolves and creates holding
+  the campus wiki's row, the lock the mirror takes (`BuildingNester.campus_wiki`), and nests before releasing it, so
+  the second caller finds the first's wiki.
+- A placeless wiki standing on a place another wiki holds no longer nests other root wikis inside that place's
+  outline (`wiki_merge._nestable_child_wikis`): the parcel's outline is the campus wiki's, and a building's new wiki
+  would otherwise have taken in every root wiki on the campus.
+- `wiki_naming.wiki_named_by_location` reads the place's wiki directly (`Wiki.objects.holding_place_of`), so the
+  names of a root pin's location with no wiki of its own still feed the campus's wiki, never a building's.
+- `name_tiers.naming_scope` reads the location's own wiki first: one whose wiki describes a building (`wiki_scope`)
+  is named as a building's whatever pins it holds. A root pin on a building with no wiki otherwise got a building
+  wiki named, in a property's scope, after the campus's Wikipedia article. As for any building's location, its
+  Wikipedia lookup is then no longer confirmed by the parcel's outline (`wikipedia.match_outline`). On dev one of
+  203 child wikis' locations holds a root pin and changes scope: wiki 1244, placeless under a placeless parent, with
+  no official name (read 2026-10-04).
+
+A second account's root pin dropped on a campus building now opens that building's wiki, as it already did where the
+building has a place of its own. `BuildingCluster` gained `holding_footprint` and `nearest_meters`; `covers` is built
+from them, unchanged in behaviour.
+
+**Tests.** `test_building_wiki_resolution.py`: footprint, point-only within 15 m, nearer building without a wiki,
+grounds, the reported child-pin shape, no pin read, the batched lookup, an ordinary property, the new wiki's
+place/type/parent (campus, and an envelope's for a wing), no root wiki taken in, an existing building wiki reused,
+naming, and a building with a place of its own unchanged. 8 of the 16 written first failed before the fix; all
+17 pass after, with a race in which the campus's wiki appears between the lookup and the insert added alongside.
+Self-review then added four, all failing first: a building's wiki appearing between the lookup and the insert is
+reused, two threads creating wikis for one building at once get one (`TransactionTestCase`, the first insert held
+until the other returns), a location's wiki created while the mirror holds the campus waits for the mirror's, and a
+root pin's own building wiki is not renamed by a Wikipedia candidate. All 21 pass.
+`test_canonical_create_helpers.py`'s wiki race tests now make the manager's `_resolve` miss once, since
+`get_or_create_for_location` no longer goes through `existing_for_location`.
+
+## RESOLVED 2026-10-04: A building's wiki was seeded with its campus's Wikipedia article
+
+`id: P262` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by Claude while fixing P231. On the dev stack, 11 of the 55 child wikis under HRSH's campus wiki (1805) opened
+with the campus's Wikipedia article, attribution link to `Hudson_River_State_Hospital` included: 1315, 1806-1812,
+2063, 3211 and 3227, each placeless or holding a building place (read 2026-10-04). Each also carries a link to that
+article, with no `auto_source` (added before the column existed), so it cannot be told from one a person added.
+The Wikipedia panel stores the campus's article on a child pin's location when the pin's own point finds none
+(`WikipediaPanelSource._ancestor_campus_article`), any match at a building's point is the campus's or a neighbour's
+(the premise of `name_tiers.describes_scope`), and `models.cache.signals.seed_articles_on_wikipedia_cache_write`
+started the location's wiki article from whatever was cached there (`wiki_seed.seed_wiki_article_from_wikipedia`),
+and added the article's link. P231 had stopped the article naming a building's location, not seeding its wiki.
+
+**Decision (Jess):** wiki content comes only from official sources describing that place, so a building's wiki
+carries no article that describes its campus.
+
+**Fix.**
+
+- `name_tiers.wiki_scope(wiki)`: a wiki nested under another describes part of it when it holds no place of its own
+  or holds one of a multi-building parcel's buildings (`pin_type_for_place`). One holding a property's place - a
+  parcel under its site, or the one building of an ordinary property nested under its parcel's wiki - still
+  describes a property. Read from the wiki and its place, never pins. `wiki_seed.takes_wikipedia_article` applies
+  `describes_scope(ENCYCLOPEDIA, ...)` to it, and both the seeding and the signal's Wikipedia link skip a wiki that
+  does not take one. Root wikis are seeded as before.
+- A root wiki seeded from its own point and later nested as a building (`wiki_merge.absorb_wiki`) loses the seed
+  while it is untouched (`drop_misplaced_wikipedia_seed`, under a row lock so an edit landing meanwhile waits).
+- Migration `0055_building_wikis_drop_wikipedia_seed` removes the seed already on such wikis, only while untouched:
+  the first revision is the seed, every later one is `localize_article_images` (`EDIT_SUMMARY_IMAGES_LOCALIZED`,
+  now a constant) changing nothing but image addresses, no revision has an editor, `last_edited_by` is empty and
+  the article holds the last revision's text. A revision with no editor and any other summary is a person whose
+  account was deleted, and keeps the article. Each chunk of candidates is locked before its revisions are read, as the
+  article editor locks it, so an edit saved while the migration runs is read or waits rather than failing the
+  migration on a dangling revision. Dev's 11 each hold the seed plus the localising command's revision; a
+  read-only SQL transcription of the rule, run against dev's data (2026-10-04), selects exactly those 11 and nothing
+  else. The migration itself was not run there. The localising summary stays out of `SYSTEM_EDIT_SUMMARIES`:
+  it can rewrite a person's text, which concealment must not show as system content.
+- `_ancestor_campus_article` is unchanged: the campus's article is what a child pin's own Wikipedia panel shows, and
+  with the gate it no longer reaches the building's wiki.
+
+**Not done.** The 11 existing Wikipedia links on dev's building wikis stay: with no `auto_source` they cannot be told
+from a person's. New ones are no longer added.
+
+**Tests.** `test_building_wiki_articles.py`: a building wiki (placeless, and holding a building) is neither seeded nor
+linked, the campus's and a parcel under its site still are, nesting drops an untouched seed and keeps an edited one,
+the migration removes untouched seeds (dev's shape included) and keeps every human-touched or possibly-own article,
+and the runtime and migration judges agree case by case. An ordinary property's one building is still seeded. With
+the three call sites put back as they were, 4 of the 9 seeding and nesting tests failed; all 15 in the file pass with the fix.
+Self-review added an edit saved while the migration runs (`TransactionTestCase`): without the lock the migration
+failed on the edit's revision; with it the edit is kept. All 16 pass.

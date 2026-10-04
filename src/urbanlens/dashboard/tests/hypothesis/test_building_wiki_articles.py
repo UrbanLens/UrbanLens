@@ -35,7 +35,7 @@ from urbanlens.dashboard.services.wiki.wiki_seed import is_untouched_wikipedia_s
 
 from .place_helpers import make_place
 
-migration = importlib.import_module("urbanlens.dashboard.migrations.0054_building_wikis_drop_wikipedia_seed")
+migration = importlib.import_module("urbanlens.dashboard.migrations.0055_building_wikis_drop_wikipedia_seed")
 
 _LAT, _LNG = 41.7333, -73.9281
 _CAMPUS_ARTICLE = {
