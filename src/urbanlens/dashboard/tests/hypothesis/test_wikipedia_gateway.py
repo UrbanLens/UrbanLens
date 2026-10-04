@@ -240,11 +240,12 @@ class GetArticleMediaTests(SimpleTestCase):
 
 
 class WikipediaCampusFallbackTests(TestCase):
-    """UL-354: a child pin whose own coordinates find no article retries from each ancestor pin's coordinates and name (campus-aware search).
+    """UL-354: a building whose own coordinates find no article retries from the places it stands in (campus-aware search).
 
-    A large campus has one article geotagged at a single point (usually the main building); an outbuilding pin
-    can sit outside the geosearch radius, so its own search legitimately finds nothing - the parent's point and
-    name are the right second query, without widening the global radius."""
+    A large campus has one article geotagged at a single point (usually the main building); an outbuilding
+    can sit outside the geosearch radius, so its own search legitimately finds nothing - the campus's point and
+    name are the right second query, without widening the global radius. The places are public, never the owner's
+    own pin nesting, since the match is shared (P188); ``test_wikipedia_campus_fallback.py`` holds that."""
 
     _CAMPUS_ARTICLE = {
         "title": "Hudson River State Hospital",
@@ -263,13 +264,18 @@ class WikipediaCampusFallbackTests(TestCase):
 
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation
 
         self.profile = baker.make(User).profile
-        self.campus_location = baker.make(Location, latitude=41.6, longitude=-73.8)
+        campus_place = Place.objects.create(kind=PlaceKind.PARCEL, name="Hudson River State Hospital")
+        building_place = Place.objects.create(
+            kind=PlaceKind.BUILDING, parent=campus_place, parent_relation=PlaceRelation.PART_OF
+        )
+        self.campus_location = baker.make(Location, latitude=41.6, longitude=-73.8, place=campus_place)
         self.campus = baker.make(
             Pin, profile=self.profile, location=self.campus_location, name="Hudson River State Hospital"
         )
-        self.child_location = baker.make(Location, latitude=41.61, longitude=-73.81)
+        self.child_location = baker.make(Location, latitude=41.61, longitude=-73.81, place=building_place)
         self.child = baker.make(
             Pin, profile=self.profile, location=self.child_location, name="Boiler House", parent_pin=self.campus
         )
@@ -286,7 +292,7 @@ class WikipediaCampusFallbackTests(TestCase):
     def _article_only_at_campus(self, lat, lng, components, name="", within=None):
         return self._CAMPUS_ARTICLE if abs(lat - 41.6) < 1e-6 else None
 
-    def test_child_pin_falls_back_to_parent_coordinates(self) -> None:
+    def test_a_building_falls_back_to_its_campus_s_point(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaPanelSource
 
