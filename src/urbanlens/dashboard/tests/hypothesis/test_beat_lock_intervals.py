@@ -59,16 +59,22 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
 }
 
 
-def _effective_period_seconds(schedule) -> int:
-    """The seconds between firings for an interval or crontab schedule.
+def _effective_period_seconds(schedule: crontab | float) -> int:
+    """The shortest gap, in seconds, between two firings of an interval or crontab schedule.
 
-    Interval entries stay plain seconds."""
-    from celery.schedules import crontab
+    A crontab's firings over one day are compared, wrapping midnight, so a crontab firing every hour gets the
+    shortest gap between its minutes (wrapping the hour) and one limited to some hours the shortest gap between
+    them. Day-of-week and day-of-month limits only lengthen a gap, so they are ignored.
 
+    Args:
+        schedule: A ``crontab``, or an interval in seconds.
+
+    Returns:
+        The shortest gap in seconds."""
     if isinstance(schedule, crontab):
-        if len(schedule.hour) == 24:
-            return 60 * 60
-        return (24 * 60 * 60) // max(len(schedule.hour), 1)
+        firings = sorted(hour * 60 + minute for hour in schedule.hour for minute in schedule.minute)
+        wrapped = [*firings[1:], firings[0] + 24 * 60]
+        return min(later - earlier for earlier, later in zip(firings, wrapped, strict=True)) * 60
     return int(schedule)
 
 
@@ -179,3 +185,24 @@ class BeatLockIntervalTests(SimpleTestCase):
 
     def test_effective_period_seconds_multi_hour_crontab_divides_the_day(self) -> None:
         self.assertEqual(_effective_period_seconds(crontab(minute=32, hour="*/6")), 6 * 60 * 60)
+
+    def test_effective_period_seconds_minute_list_is_the_shortest_gap(self) -> None:
+        self.assertEqual(_effective_period_seconds(crontab(minute="13,28,43,58")), 15 * 60)
+
+    def test_effective_period_seconds_minute_gap_wraps_the_hour(self) -> None:
+        """50 then 5 past: the shortest gap is the 15 minutes across the hour, not the 45 inside it."""
+        self.assertEqual(_effective_period_seconds(crontab(minute="5,50")), 15 * 60)
+
+    def test_effective_period_seconds_uneven_hours_take_the_shortest_gap(self) -> None:
+        self.assertEqual(_effective_period_seconds(crontab(minute=0, hour="0,6,8")), 2 * 60 * 60)
+
+    def test_effective_period_seconds_hour_gap_wraps_the_day(self) -> None:
+        self.assertEqual(_effective_period_seconds(crontab(minute=0, hour="2,23")), 3 * 60 * 60)
+
+    def test_effective_period_seconds_minute_list_within_limited_hours(self) -> None:
+        self.assertEqual(_effective_period_seconds(crontab(minute="0,30", hour="3,9")), 30 * 60)
+
+    def test_a_lock_longer_than_a_sub_hourly_crontab_is_flagged(self) -> None:
+        too_long = _too_long_locks({"fake-task": 1200}, {"fake-task": {"schedule": crontab(minute="13,28,43,58")}})
+
+        self.assertEqual(set(too_long), {"fake-task"})
