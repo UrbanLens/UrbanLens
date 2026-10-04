@@ -2,8 +2,8 @@
 
 The Private Pin page renders a placeholder only for the panels that may have something, so a panel that would answer
 204 costs no request (P53). Each decision is the panel's own - its gate, :func:`~external_data.fetch_blocked`, and
-whether its landed payload shows anything - so the page and the panel cannot disagree. A panel whose answer is not
-stored yet, or whose check raised, counts as possibly having content and loads as it always did.
+whether its landed payload shows anything - so the page never leaves out a panel that would show something. A panel
+whose answer is not stored yet, or whose check raised, counts as possibly having content and loads as it always did.
 
 Nothing here fetches: every decision runs with gateway requests refused and remote geo boundaries left unresolved, so
 a check that would need either counts as "may have content" too.
