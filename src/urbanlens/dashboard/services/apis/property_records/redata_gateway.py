@@ -644,7 +644,8 @@ class RedataGateway(Gateway):
         Args:
             resource_uuid: The resource's REData uuid.
             attachment_id: The attachment's id.
-            timeout: Seconds to wait for REData; a caller finding the extraction in flight waits as long.
+            timeout: Seconds to wait for REData's answer to one extraction. A caller finding the extraction in flight
+                waits out two of them and a download, which is what an undownloaded document costs.
 
         Returns:
             See :meth:`_extract_cultural_resource_attachment_now`.
@@ -656,7 +657,7 @@ class RedataGateway(Gateway):
             f"redata:cris-extract:{resource_uuid}:{attachment_id}",
             lambda: self._extract_cultural_resource_attachment_now(resource_uuid, attachment_id, timeout=timeout),
             ttl=_CULTURAL_RESOURCE_SHARE_SECONDS,
-            wait_seconds=timeout,
+            wait_seconds=2 * timeout + _REQUEST_TIMEOUT,
         )
 
     def _extract_cultural_resource_attachment_now(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:

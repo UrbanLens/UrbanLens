@@ -23096,13 +23096,14 @@ Both failed before the fix.
 **What was wrong.** `url_safety.request_public_url` sent whatever User-Agent its session had, which for most callers
 was python-requests' own. Wikimedia refuses that one. Dev's worker logged
 `403 Client Error: Forbidden for url: https://thumb.wikimedia.org/.../330px-Hudson_River_State_Hospital.jpeg` from
-`wiki_seed._store_cover_from_url`, so a seeded wiki got no cover. Five modules each kept a copy of the project's
-User-Agent string; the avatar download sent none.
+`wiki_seed._store_cover_from_url`, so a seeded wiki got no cover. Six modules each kept a copy of the project's
+User-Agent string, the remote-tile fetch's without a contact; the avatar download sent none.
 
 **Fix.** `services/core/user_agent.USER_AGENT` is the one copy. `request_public_url` sends it unless the caller's
-headers name a User-Agent or the session already carries one other than python-requests' default. The five modules
-and the avatar download import it. Run on dev, the same thumbnail comes back 200 (29,574 bytes of JPEG); with
-python-requests' User-Agent it is still 403.
+headers name a User-Agent or the session already carries one other than python-requests' default. The six modules
+and the avatar download import it. The gateways that send hello@urbanlens.org (Nominatim, Overpass, GitHub, HIBP) and
+the basemap tile proxy's own string are unchanged. Run on dev, the same thumbnail comes back 200 (29,574 bytes of
+JPEG); with python-requests' User-Agent it is still 403.
 
 **Tests.** `test_request_public_url.py::UserAgentTests`: the default is sent, a caller's header wins, a session's own
 User-Agent wins, and python-requests' default on a session is replaced. The first and last failed before the fix.
@@ -23119,7 +23120,8 @@ The task logs that at DEBUG and moves on. Of 330 documents in dev's CRIS cache, 
 (2026-09-23), and none since.
 
 **Fix.** `RedataGateway._extract_cultural_resource_attachment_now` answers `not_extractable` by downloading the
-attachment and asking once more. A download that fails, or a second refusal, raises as before. On dev, the two
+attachment and asking once more. A download that fails, or a second refusal, raises as before. A caller that finds the same extraction in flight waits
+out two extractions and a download, so it does not start a second paid one. On dev, the two
 documents that had been refused were downloaded and extracted. REData found nothing in either (`503
 extraction_unavailable`, about 40 s each). A form REData had extracted before returned four fields when extracted again.
 
@@ -23131,7 +23133,7 @@ extraction. The document stays unextracted and is asked for again on the panel's
 - a document still refused once downloaded is not asked a third time;
 - a failed download is raised without a second extraction.
 
-All three failed before the fix.
+All three failed before the fix. `test_coalesced_upstream_calls.py` checks the wait covers that worst case.
 
 ## RESOLVED 2026-10-04: The analysis-copy sweep retried a photo it could not read every two hours, forever
 

@@ -199,3 +199,15 @@ class CulturalResourceTests(SimpleTestCase):
         gateway.extract_cultural_resource_attachment("r1", 8)
 
         self.assertEqual(session.post.call_count, 2)
+
+    def test_a_caller_finding_an_extraction_in_flight_waits_out_its_download_and_second_attempt(self) -> None:
+        """An undownloaded document costs an extraction, a download and a second extraction; a shorter wait asks again."""
+        from urbanlens.dashboard.services.apis.property_records import redata_gateway
+
+        gateway, _session = self._gateway({})
+        with mock.patch.object(
+            redata_gateway, "coalesced", side_effect=lambda _key, compute, **_kw: compute()
+        ) as shared:
+            gateway.extract_cultural_resource_attachment("r1", 9, timeout=180)
+
+        self.assertGreaterEqual(shared.call_args.kwargs["wait_seconds"], 2 * 180 + redata_gateway._REQUEST_TIMEOUT)

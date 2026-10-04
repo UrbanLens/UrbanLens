@@ -19,6 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from urbanlens.dashboard.models.remote_tiles.model import RemoteTile, RemoteTileSource
+from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 
 #: Deepest zoom an overlay asks its source for (``maxNativeZoom`` in ``map-image-overlays.ts``).
 MAX_TILE_ZOOM = 19
@@ -40,7 +41,6 @@ _PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
 _REQUIRED = ("z", "x", "y")
 _OPTIONAL = {"s": "a", "r": ""}
 _TIMEOUT = 15
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens) python-requests/2.x"
 
 
 def template_digest(template: str) -> str:
@@ -226,7 +226,7 @@ def download_tile(url: str) -> TileDownload | None:
     from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url, read_limited
 
     try:
-        response = fetch_public_url(url, headers={"User-Agent": _USER_AGENT, "Accept": "image/*"}, timeout=_TIMEOUT)
+        response = fetch_public_url(url, headers={"User-Agent": USER_AGENT, "Accept": "image/*"}, timeout=_TIMEOUT)
     except (UnsafeUrlError, requests.RequestException):
         return None
     with response:
