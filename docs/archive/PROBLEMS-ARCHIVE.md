@@ -21273,7 +21273,7 @@ card. `external-panel-fallbacks.test.ts` and `collapsible-sections.test.ts` for 
 tests and 5 of the 7 new TypeScript tests failed before the fix; the rest are guards that held before it (a pending
 card stays hidden, a strip loaded before it was collapsed is not reloaded).
 
-## RESOLVED 2026-10-03: Site Conditions is a tab of the Location Data card, requested only when its tab opens
+## RESOLVED 2026-10-03: Site Conditions is a tab of the Location Data card, its panel requested when the tab opens
 
 `id: P227` · `status: fixed` · `resolved: 2026-10-03`
 

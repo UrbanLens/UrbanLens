@@ -614,7 +614,8 @@ direct-only because REData's contract can't reproduce what they show:
   `SiteFeature.NEARBY_RESEARCH`)
 - **Water & Hydrology** (USA, a Regional Data tab) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
   the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
-- **Site Conditions** (USA, a Location Data tab, requested only when opened) — NLCD land cover, EPA
+- **Site Conditions** (USA, a Location Data tab; its panel is requested when the tab opens, and the card's Overview
+  fetches its data in the background, as for the card's other tabs) — NLCD land cover, EPA
   walkability index (incl. transit distance), and USDA SSURGO soil composition (dominant-first, no
   invented averages) folded into one panel, via REData (`plugins.builtin.redata_site_conditions`)
 - **Air Quality** (a Regional Data tab) — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
