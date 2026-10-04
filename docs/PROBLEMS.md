@@ -778,6 +778,9 @@ four failed with `Application.DoesNotExist`, and the file alone passed. They now
 `create_first_party_client` over its historical models in `setUp`. Rows made at database setup are the third shape to
 check for.
 
+**Probed again 2026-10-04, did not reproduce.** Three shuffled runs (`-p randomly`, seeds 101, 202 and 303) of
+both named files with 60 others picked at random: 1,020 tests each, no failure. Not a full-suite shuffle.
+
 **A fifth, found and fixed 2026-10-04: not order but chance.** `test_export_import_completeness.py`'s
 `ImportCustomFieldsTests::test_definition_and_pin_value_round_trip` lost its imported "Gatehouse" (`Pin.DoesNotExist`)
 in one 22-file run and passed alone. Baker fills `Location.latitude`, a `DecimalField(max_digits=9,
