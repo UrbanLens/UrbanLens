@@ -218,7 +218,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P229 | open | 2026-10-03 | The Ownership panel shows a subscriber only the owner's name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P256 | open | 2026-10-03 | NPS's record link opens an empty page for listings NPGallery does not carry | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P260 | open | 2026-10-03 | A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P261 | open | 2026-10-04 | A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P262 | open | 2026-10-04 | A building's wiki is seeded with its campus's Wikipedia article | [`docs/PROBLEMS.md`](PROBLEMS.md) |

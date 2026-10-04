@@ -21768,7 +21768,10 @@ official names, so a slug is guessable, and enough timed requests told an authen
 pinned a place. Trips had the same shape (`trip_access.get_trip_for_viewer`, the check-in's trip in
 `controllers/safety.py` and in the external API's check-in create), and so did three other location lookups: a pin
 relink (`pin_edit.PinRelinkView`), the wiki map's child-wiki JSON (`detail_pins.LocationDetailPinJsonView`) and a
-markup map's title lookup (`markup._resolve_title_context`, which also matched only a current slug).
+markup map's title lookup (`markup._resolve_title_context`, which also matched only a current slug). Worse than
+timing, a trip activity's `location_slug`/`location_uuid` (`trip_activities.resolve_activity_place`) attached any
+Location at all, so an activity on one's own trip showed whether a guessed slug existed, and the place's name and
+position with it.
 
 **Fix.** Visibility is part of the one query that finds the row. `wiki_access.visible_locations_filter(profile)`
 is `location_visible_to`'s rule as a filter (a pin of the profile's at the Location, or the Location's place in a
@@ -21777,15 +21780,18 @@ the former slug through a scalar subquery that Postgres runs once as an InitPlan
 `visible_location_or_404`, `locate_visible_wiki` and `canonical_location_slug` all use it, the latter two sharing
 the requester's profile and domain set through the request (`_requester`), so the redirect costs no second domain
 walk. `get_location_or_404`, which found a Location without asking who wanted it, is gone. Trips use
-`TripQuerySet.visible_to(profile, joined_only=...)` and `trip_access.get_joined_trip`. A former slug the
+`TripQuerySet.visible_to(profile, joined_only=...)` and `trip_access.get_joined_trip`. A trip activity's location
+reference finds only a Location the author may see, or one already on an activity of the same trip (what the edit
+dialog sends back for a co-member's activity); anything else is treated as not given. A former slug the
 requester can see still answers 301.
 
 **Evidence.** `tests/hypothesis/test_slug_existence_side_channel.py` captures the SQL of each request and compares
 it, probe slug and savepoint names normalized, for a never-used slug against a hidden Location's current slug,
 former slug and uuid (the uuid against a random uuid), across every named web route carrying `location_slug`
-(GET and POST), three external API wiki routes, the pin relink, the markup lookup, a trip page, the trip lookup
-and a check-in's trip. Before the fix: 308 of the route sweep's subtests, 9 external API subtests, 3 relink
-subtests and all four trip/markup tests failed. After: 10 passed, 602 subtests.
+(GET and POST), three external API wiki routes, the pin relink, the markup lookup, a trip page, the trip lookup,
+a check-in's trip and a trip activity's location. Before the fix: 308 of the route sweep's subtests, 9 external API
+subtests, 3 relink subtests and all four trip/markup tests failed; the trip activity tests were added after and
+failed on the unscoped lookup (an activity attached the hidden Location).
 
 **Not covered.** The statements are the same, but executing them is not quite: an index probe that finds a hidden
 row then evaluates the visibility condition on it, where a missing slug finds nothing. That is one row's filter
@@ -21808,7 +21814,8 @@ later run of the same rule. On dev, Location 98249 kept `hudson-river-state-hosp
 0041 uses); a name cleared, or left without a source, puts the slug on the uuid. The slug given up goes to
 `LocationSlugHistory`, so links to it 301. A re-mint first takes back a former slug of the Location's own that the
 new name could give (`_remint_slug`), so a provider flipping between two names moves between the same two slugs
-and the history does not grow; `LocationSlugHistory.record` also keeps only the newest `MAX_FORMER_SLUGS` (10) per
+and the history does not grow (if another Location takes that slug between the check and the write, the re-mint
+falls back to a fresh one rather than raising); `LocationSlugHistory.record` also keeps only the newest `MAX_FORMER_SLUGS` (10) per
 Location, so a provider cycling through new names cannot grow it either. A slug dropped from the history can be
 minted for another Location again. The Location's wiki, and its child wikis (whose prefix comes from the parent's
 provider name), are re-minted the way 0049's `_remint_wikis` does (`Wiki.sync_slug_with_provider_name`); wiki slugs
@@ -21826,4 +21833,39 @@ change (the 4 that passed guard what must not change: a new source for the same 
 can still give, an unrelated save, pin slugs), as did the provenance test that encoded the old rule, rewritten as
 `test_a_later_provider_rename_re_mints_the_slug`. `test_location_slug_follows_name_migration.py`: with the
 migration's forward function replaced by a no-op, 6 of 7 failed (the seventh checks that fitting slugs are left
-alone); against historical models from 0051, all pass.
+alone); against historical models from 0051, all pass. A self-review found the taken-back write had no collision
+handling; `test_a_former_slug_taken_meanwhile_by_another_location_mints_a_fresh_one` raised `IntegrityError` before
+the guard and passes after.
+
+## RESOLVED 2026-10-04: A National Register listing links its National Archives record beside NPS's, where REData's row gives one
+
+`id: P256` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, fixing P228`
+
+**What was wrong.** P228 linked a National Register reference number to
+`https://npgallery.nps.gov/AssetDetail/NRIS/<number>`. Checked live on 2026-10-03: 89001166, 98001317 and 100001066
+render their listing, but 100007768 (listed 2022) and 11000781 render the same empty page a made-up number does,
+as a 200, so whether NPGallery has a listing cannot be told from the status code. REData's `nps_nrhp` rows carry
+`attributes.NARA_URL`, the National Archives catalogue record of the listing, which UrbanLens dropped when it cached
+the rows (`_KEPT_FIELDS`).
+
+**Fix.** Decided: keep NPGallery for every listing and link the archives' record beside it where REData gives one.
+`HistoricRegisterPanelSource.transform_rows` keeps a National Register row's `NARA_URL` as `nara_url`, and every
+surface that shows NPS's record now shows a "National Archives record" link after it: the Historic Registers card's
+row and its note, the Property Records Overview, the CRIS card's NRHP reference and its Overview field, and the
+automatic pin and wiki links. The URL comes from a third party through REData, so
+`national_register.nara_record_url` accepts only `http(s)://catalog.archives.gov/id/<digits>` with no credentials,
+port, query, fragment, whitespace or control characters, and rebuilds `https://catalog.archives.gov/id/<digits>`
+from the number; it runs when the row is cached and again where it is shown, so a tampered cache row renders
+nothing. An `http` value is upgraded rather than dropped, since the host is the same; no `http` value has been seen,
+and REData's captured live feature is `https`. Rows cached before show NPGallery alone until they are refetched.
+
+**Not checked.** No request was made to NPS or the National Archives from this change or its tests; that
+`catalog.archives.gov/id/<naid>` opens the listing's file was taken from REData's captured live feature
+(`nrhp.gateway`, PROPERTY_ID 82003808 -> `/id/71997138`), not re-fetched. How many `nps_nrhp` rows carry a
+`NARA_URL` was not counted.
+
+**Evidence.** `tests/hypothesis/test_national_register_archives_link.py`: with `nara_record_url` stubbed to return
+nothing, 11 of its 15 tests failed (the 4 that passed check that hostile or missing values render nothing, which a
+stub satisfies). After: 15 passed, with a hypothesis property that whatever text arrives, only a catalogue record
+URL comes out, and a render of the card's template for 17 hostile values (`javascript:`, look-alike hosts,
+credentials, ports, quotes) that finds none of them in the HTML.

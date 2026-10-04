@@ -3045,17 +3045,6 @@ Options, for the release's migration squash (see the release migration notes): r
 queued by 0033 itself) so no current code ever runs on the old schema. Not Jess's call unless the first option
 changes the supported upgrade path.
 
-## P256 — NPS's record link opens an empty page for listings NPGallery does not carry
-
-`id: P256` · `status: open` · `updated: 2026-10-03` · `found by: Claude, fixing P228`
-
-P228 links a National Register reference number to `https://npgallery.nps.gov/AssetDetail/NRIS/<number>`. Checked
-live on 2026-10-03: 89001166 (HRSH Main Building), 98001317 and 100001066 render their listing, but 100007768 (listed
-2022) and 11000781 render the same empty page a made-up number does, as a 200. NPS's research page sends records
-through 2012 to the National Archives catalogue and later ones to NPGallery. REData's `nps_nrhp` rows carry
-`attributes.NARA_URL`, the archives' record for the listing, which UrbanLens does not cache. Decide whether to link it
-where NPGallery has nothing; whether NPGallery has a listing cannot be told from the status code.
-
 ## P260 — A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources
 
 `id: P260` · `status: open` · `updated: 2026-10-03` · `found by: the P234 investigation`

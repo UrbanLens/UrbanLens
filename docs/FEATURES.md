@@ -171,7 +171,8 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Location is part of the one query that finds it (`wiki_access.visible_location_or_404`,
   `LocationQuerySet.from_url_slug`), so a Location the requester cannot see 404s after the same statements
   as a slug nothing ever used, on every wiki route, the external API's wiki routes, a pin relink and a
-  markup map's title lookup; trip routes do the same with `TripQuerySet.visible_to` (P236). `Wiki.slug`,
+  markup map's title lookup; trip routes do the same with `TripQuerySet.visible_to`, and a trip activity's
+  location reference finds only a Location its author may see or one already on that trip (P236). `Wiki.slug`,
   informational and not routed, follows the same rule. Pin slugs, scoped to and seen only by their owner,
   still come from `Pin.effective_name` and the parent pin's aliases
 - Private per-pin notes (`PinNote`), independent of public comments
@@ -506,7 +507,11 @@ direct-only because REData's contract can't reproduce what they show:
   register REData adds appears without a release; which registers cover the point comes from
   `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
   (`plugins.builtin.redata_historic_registers`). A National Register row shows NPS's reference
-  number linked to its NPGallery record, and fetching adds that link to the pin's and wiki's links
+  number linked to its NPGallery record and, where REData's row carries `attributes.NARA_URL`, a
+  "National Archives record" link beside it (NPGallery shows an empty page, as a 200, for most listings
+  after 2012; P256). Only `catalog.archives.gov/id/<number>` is accepted, rebuilt from the number, when the
+  row is cached and again where it is shown (`national_register.nara_record_url`); a row cached before
+  shows NPGallery alone until it is refetched. Fetching adds both links to the pin's and wiki's links
   (marked automatic) for each listing that is the place's own. On one building of a larger site,
   only that building's own records show: a structure listing whose own point stands on it, or the listing
   holding it when CRIS's record of the building calls it listed; the campus listing whose boundary

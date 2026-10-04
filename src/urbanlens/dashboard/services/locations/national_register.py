@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -22,6 +23,12 @@ NPS_RECORD_URL = "https://npgallery.nps.gov/AssetDetail/NRIS/{reference}"
 
 #: NRIS reference numbers: eight digits, nine for listings since 2016.
 _REFERENCE_NUMBER = re.compile(r"[0-9]{8,9}")
+
+#: The National Archives' catalogue record of a listing's file, the only link REData's ``NARA_URL`` may become.
+NARA_RECORD_URL = "https://catalog.archives.gov/id/{naid}"
+NARA_RECORD_LABEL = "National Archives record"
+_NARA_HOST = "catalog.archives.gov"
+_NARA_PATH = re.compile(r"/id/([0-9]{1,15})/?")
 
 #: The label a reference number takes in a summary drawing on several sources, so that one given twice is given once.
 REFERENCE_NUMBER_LABEL = "National Register number"
@@ -45,6 +52,48 @@ def nps_record_url(reference: str | None) -> str | None:
     if not isinstance(reference, str) or not _REFERENCE_NUMBER.fullmatch(reference):
         return None
     return NPS_RECORD_URL.format(reference=reference)
+
+
+def nara_record_url(value: object) -> str | None:
+    """The National Archives catalogue record a ``NARA_URL`` names, rebuilt from its id.
+
+    The value comes from NPS's layer through REData, so nothing of it reaches a page but the record's number: only
+    ``http(s)://catalog.archives.gov/id/<digits>``, with no credentials, port, query or fragment, is accepted.
+
+    Args:
+        value: ``attributes.NARA_URL`` from REData, or the value cached from it.
+
+    Returns:
+        ``https://catalog.archives.gov/id/<naid>``, or None for anything else.
+    """
+    # urlsplit drops tabs and newlines and strips leading spaces; a value that needed that is not one to trust.
+    if not isinstance(value, str) or any(char.isspace() or not char.isprintable() for char in value):
+        return None
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return None
+    if parts.scheme.lower() not in {"https", "http"} or parts.netloc.lower() != _NARA_HOST or parts.query or parts.fragment:
+        return None
+    match = _NARA_PATH.fullmatch(parts.path)
+    if match is None:
+        return None
+    return NARA_RECORD_URL.format(naid=match.group(1))
+
+
+def nara_record_field(row: dict[str, Any]) -> dict[str, str] | None:
+    """A National Register row's archives record as a summary field, when its cached ``nara_url`` is one.
+
+    Args:
+        row: A cached Historic Registers row.
+
+    Returns:
+        ``{"label", "value", "href"}``, or None.
+    """
+    url = nara_record_url(row.get("nara_url")) if row.get("provider") == NATIONAL_REGISTER_PROVIDER else None
+    if url is None:
+        return None
+    return {"label": NARA_RECORD_LABEL, "value": f"Catalog ID {url.rsplit('/', 1)[-1]}", "href": url}
 
 
 def reference_field(reference: str | None) -> dict[str, str] | None:
@@ -234,24 +283,25 @@ def _comparable(name: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", name.casefold()))
 
 
-def reference_named(location: Location, name: str) -> str | None:
-    """The reference number of the National Register listing cached at ``location`` under exactly this name.
+def listing_named(location: Location, name: str) -> dict[str, Any] | None:
+    """The National Register row with a reference number cached at ``location`` under exactly this name.
 
     Args:
         location: Where the Historic Registers rows are cached.
         name: A listing's name, as another register (CRIS) records it.
 
     Returns:
-        The NRIS reference number, or None when no National Register row there has that name.
+        The row, or None when no National Register row there has that name.
     """
     wanted = _comparable(name)
     if not wanted:
         return None
-    return next((reference for row in cached_register_rows(location) if (reference := reference_number(row)) and _comparable(str(row.get("name") or "")) == wanted), None)
+    return next((row for row in cached_register_rows(location) if reference_number(row) and _comparable(str(row.get("name") or "")) == wanted), None)
 
 
 def link_listings(pin: Pin, rows: list[dict[str, Any]]) -> None:
-    """Add NPS's record of each National Register listing in ``rows`` to the pin's links and its wiki's.
+    """Add NPS's record of each National Register listing in ``rows``, and the National Archives' where REData gave
+    one, to the pin's links and its wiki's.
 
     Args:
         pin: The pin the listings describe.
@@ -263,5 +313,9 @@ def link_listings(pin: Pin, rows: list[dict[str, Any]]) -> None:
     for row in rows:
         reference = reference_number(row)
         url = nps_record_url(reference)
-        if url is not None:
-            add_pin_and_wiki_link(pin, pin.location, url, f"National Register #{reference}", source=AutoLinkSource.NATIONAL_REGISTER)
+        if url is None:
+            continue
+        add_pin_and_wiki_link(pin, pin.location, url, f"National Register #{reference}", source=AutoLinkSource.NATIONAL_REGISTER)
+        archives = nara_record_url(row.get("nara_url"))
+        if archives is not None:
+            add_pin_and_wiki_link(pin, pin.location, archives, f"National Archives record of National Register #{reference}", source=AutoLinkSource.NATIONAL_REGISTER)

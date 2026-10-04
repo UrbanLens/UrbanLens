@@ -983,8 +983,8 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             value = data.get(key)
             if value:
                 meta.append({"label": label, "value": value})
-            if key == "NRNum" and value and (nrhp := self._nrhp_reference(pin, str(usn_name))):
-                meta.append(nrhp)
+            if key == "NRNum" and value:
+                meta.extend(self._nrhp_reference(pin, str(usn_name)))
 
         return {"heading_name": usn_name, "meta": meta}
 
@@ -994,7 +994,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         Only CRIS's own record of the place counts: on a site, the site record whose boundary holds it; otherwise a
         building record whose point stands on the building, since the nearest record within 200 m can be a neighbour's.
         """
-        from urbanlens.dashboard.services.locations.national_register import reference_field, reference_named, stands_on
+        from urbanlens.dashboard.services.locations.national_register import listing_named, nara_record_field, reference_field, reference_number, stands_on
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
         location = pin.location
@@ -1014,23 +1014,29 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             return None
         status = str(record.get("EligibilityDesc") or "").strip()
         fields = [{"label": "NY SHPO status", "value": status}] if status else []
-        if number := reference_field(reference_named(location, name)):
+        listing = listing_named(location, name)
+        if listing is not None and (number := reference_field(reference_number(listing))):
             fields.append(number)
+            if archives := nara_record_field(listing):
+                fields.append(archives)
         elif record.get("NRNum") and (status.lower() == "listed" or record.get("resource_type") == "national_register_listing"):
             fields.append({"label": "NYSHPO National Register number", "value": str(record["NRNum"])})
         return OverviewSummary(fields=fields) if fields else None
 
     @staticmethod
-    def _nrhp_reference(pin: Pin, listing_name: str) -> dict[str, str] | None:
-        """NPS's reference number for the National Register listing CRIS names, linked, when the registers cached one."""
-        from urbanlens.dashboard.services.locations.national_register import nps_record_url, reference_named
+    def _nrhp_reference(pin: Pin, listing_name: str) -> list[dict[str, str]]:
+        """NPS's reference number for the National Register listing CRIS names, linked, when the registers cached one,
+        then the listing's National Archives record when REData gave one."""
+        from urbanlens.dashboard.services.locations.national_register import listing_named, nara_record_field, nps_record_url, reference_number
 
         location = pin.location
-        reference = reference_named(location, listing_name) if location is not None else None
+        listing = listing_named(location, listing_name) if location is not None else None
+        reference = reference_number(listing) if listing is not None else None
         url = nps_record_url(reference)
-        if reference is None or url is None:
-            return None
-        return {"label": "NRHP Reference Number", "value": reference, "href": url}
+        if listing is None or reference is None or url is None:
+            return []
+        archives = nara_record_field(listing)
+        return [{"label": "NRHP Reference Number", "value": reference, "href": url}, *([archives] if archives else [])]
 
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn cached CRIS attachments (photos, documents, and extracted images) into gallery items.
