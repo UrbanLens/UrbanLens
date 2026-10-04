@@ -245,6 +245,47 @@ def nearest_resource(resources: list[dict], resource_type: str, latitude: float,
     return best if best is not None else matches[0]
 
 
+def own_building_resource(resources: list[dict], location: Location) -> dict | None:
+    """The CRIS building record that is the building at ``location``, never a neighbour's.
+
+    Args:
+        resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
+        location: A building's location.
+
+    Returns:
+        The nearest building record whose own point stands on the location's building (see
+        :func:`~urbanlens.dashboard.services.locations.national_register.stands_on`), else None; a record with no
+        published position cannot be told apart from a neighbour's.
+    """
+    entries = [
+        {"resource": r, "source_latitude": r["source_latitude"], "source_longitude": r["source_longitude"]}
+        for r in cris_only(resources)
+        if r.get("resource_type") == _RESOURCE_TYPE and r.get("source_latitude") is not None and r.get("source_longitude") is not None
+    ]
+    entry = own_roster_entry(entries, location)
+    return entry["resource"] if entry is not None else None
+
+
+def building_resource_for(resources: list[dict], location: Location, *, site_scope: bool = False) -> dict | None:
+    """The building record a fetch at ``location`` caches.
+
+    Args:
+        resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
+        location: The location fetched for.
+        site_scope: Whether the fetch is a site's, which keeps the record nearest its point.
+
+    Returns:
+        For one building's location, :func:`own_building_resource`; otherwise the nearest building record.
+    """
+    from urbanlens.dashboard.services.locations.name_tiers import NamingScope, naming_scope
+
+    if not any(r.get("resource_type") == _RESOURCE_TYPE for r in cris_only(resources)):
+        return None
+    if not site_scope and naming_scope(location) == NamingScope.BUILDING:
+        return own_building_resource(resources, location)
+    return nearest_resource(resources, _RESOURCE_TYPE, float(location.latitude), float(location.longitude))
+
+
 def resource_name(resource: dict) -> str:
     """A resource's display name: REData's ``name``, else CRIS's own ``USNName``."""
     return str(resource.get("name") or (resource.get("attributes") or {}).get("USNName") or "")
@@ -315,29 +356,35 @@ def campus_roster_entry(resource: dict, record: dict | None) -> dict | None:
     }
 
 
-def roster_building_at(roster: list[dict], latitude: float, longitude: float, footprint: GEOSGeometry | None = None) -> dict | None:
-    """The campus building a marker at a point stands for.
+def own_roster_entry(roster: list[dict], location: Location, *, buildings: list[dict] | None = None) -> dict | None:
+    """The campus building on a site's roster that is the building at ``location``.
 
     Args:
-        roster: Entries from :func:`campus_roster_entry`.
-        latitude: The marker's latitude.
-        longitude: The marker's longitude.
-        footprint: The marker's own building outline, when its location is attached to one.
+        roster: Entries carrying ``source_latitude``/``source_longitude``, as :func:`campus_roster_entry` makes them.
+        location: A building child's location.
+        buildings: The buildings known on the site's parcel, when a caller answering many children already has them.
 
     Returns:
-        With a footprint, the nearest entry whose CRIS point lies inside it; without one, the nearest within ``BUILDING_MATCH_METERS``; else None.
+        The nearest entry whose CRIS point stands on the location's building (see
+        :func:`~urbanlens.dashboard.services.locations.national_register.stands_on`), else None.
     """
-    from django.contrib.gis.geos import Point
+    from urbanlens.dashboard.services.locations.national_register import stands_on
+    from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between, site_buildings
 
-    from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between
-
+    latitude, longitude = float(location.latitude), float(location.longitude)
+    has_footprint = building_footprint_of(location) is not None
     ranked = sorted(
         ((meters_between(float(entry["source_latitude"]), float(entry["source_longitude"]), latitude, longitude), index, entry) for index, entry in enumerate(roster)),
         key=lambda ranking: (ranking[0], ranking[1]),
     )
-    if footprint is not None:
-        return next((entry for _distance, _index, entry in ranked if footprint.contains(Point(float(entry["source_longitude"]), float(entry["source_latitude"]), srid=4326))), None)
-    return next((entry for distance, _index, entry in ranked if distance <= BUILDING_MATCH_METERS), None)
+    for distance, _index, entry in ranked:
+        if not has_footprint and distance > BUILDING_MATCH_METERS:
+            return None
+        if not has_footprint and buildings is None:
+            buildings = site_buildings(location)
+        if stands_on(location, entry["source_latitude"], entry["source_longitude"], buildings=buildings):
+            return entry
+    return None
 
 
 def building_footprint_of(location: Location) -> GEOSGeometry | None:
@@ -478,7 +525,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             return
 
         district = {**(site.get("attributes") or {}), "resource_type": site.get("resource_type"), "contains_point": site_contains(site, lat, lng)} if site else {}
-        building = nearest_resource(resources, _RESOURCE_TYPE, lat, lng)
+        building = building_resource_for(resources, location, site_scope=site_scope)
         if building is None and site is None:
             # CRIS genuinely has nothing here (or only an archaeological
             # buffer, which describes no property) - a real answer, cached as
@@ -745,7 +792,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         row = LocationCache.get_fresh(location, self.cache_source)
         return row if row is not None and isinstance((row.data or {}).get(_CAMPUS_BUILDINGS_KEY), list) else None
 
-    def _answer_from_site(self, site_data: dict, location: Location, *, unextracted: dict[str, list[int]] | None = None) -> dict | None:
+    def _answer_from_site(self, site_data: dict, location: Location, *, unextracted: dict[str, list[int]] | None = None, buildings: list[dict] | None = None) -> dict | None:
         """What ``location``'s own fetch would cache, taken from its site's site-scope payload.
 
         Args:
@@ -754,6 +801,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             unextracted: Given, the answer is a full one: it claims the media half, fetches the detail of a building the
                 site pass did not detail, and notes here the documents REData has not extracted. Omitted, the answer
                 fills the card only and asks REData nothing.
+            buildings: The buildings known on the site's parcel, when the caller already has them.
 
         Returns:
             The payload, or None when no building on the roster is the one at ``location``.
@@ -763,7 +811,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         """
         latitude, longitude = float(location.latitude), float(location.longitude)
         roster = [entry for entry in site_data.get(_CAMPUS_BUILDINGS_KEY) or [] if isinstance(entry, dict)]
-        entry = roster_building_at(roster, latitude, longitude, building_footprint_of(location))
+        entry = own_roster_entry(roster, location, buildings=buildings)
         if entry is None:
             return None
         noted: dict[str, list[int]] = unextracted if unextracted is not None else {}
@@ -834,14 +882,15 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
 
     def _seed_from_site(self, location: Location) -> int:
         """Fill the card of every building child nested under markers at ``location`` from its site-scope row."""
-        from urbanlens.dashboard.services.locations.site_scope import nested_locations
+        from urbanlens.dashboard.services.locations.site_scope import nested_locations, site_buildings
 
         row = self._site_row(location)
         if row is None:
             return 0
         written = 0
+        buildings = site_buildings(location)
         for nested in nested_locations(location):
-            answer = self._answer_from_site(row.data, nested)
+            answer = self._answer_from_site(row.data, nested, buildings=buildings)
             if answer is not None and self._write_answer(nested, answer, row.updated, keep_media_ready=True):
                 written += 1
         return written
@@ -1162,7 +1211,7 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
         except ValueError:
             return None, query_key
         district = site_resource_attributes(resources, float(location.latitude), float(location.longitude))
-        building = nearest_resource(resources, _RESOURCE_TYPE, float(location.latitude), float(location.longitude))
+        building = building_resource_for(resources, location)
         if building is None:
             return ({"district": district} if district else None), query_key
         data = dict(building.get("attributes") or {})

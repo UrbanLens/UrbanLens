@@ -2977,18 +2977,6 @@ whether the panel asks REData for those fields, whether REData has them for this
 gate is applied. A subscriber should see everything the property-owner feature offers. Check production's entitlement
 logic on the dev stack with the e2e `subscriber` role.
 
-## P231 — A building child pin's wiki is named after the campus, not the building, and isn't nested under the campus wiki
-
-`id: P231` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0)`
-
-From `/dashboard/map/pin/hrpc-bldg-33powerhouse-machine-shop-1929/`, the wiki link goes to
-`/dashboard/location/<uuid>/wiki/`. That wiki is titled "Hudson River State Hospital", not CRIS's building name. CRIS
-already names the private pin "BLDG 33/POWERHOUSE & MACHINE SHOP (1929)", and the wiki should get the same name from
-the same provider name: CRIS is a provider, so this fits P186's ruling. The building's wiki is also not nested as a
-child of the campus wiki, though the private child pin is nested under the user's campus pin. Check on the release
-branch, which has P186's naming rules: the URL being a uuid means no provider name reached that Location. Expected:
-the building wiki takes CRIS's name and slug and is a child of the parcel's wiki.
-
 ## P233 — Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete
 
 `id: P233` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
@@ -3097,19 +3085,6 @@ behaviour is wanted:
 Wiki URLs route by the Location's slug, so a wiki's own slug only shows up as `wiki_slug` in API responses, and re-minting
 it breaks no link.
 
-## P255 — A building pin's CRIS card can show a neighbouring building's record
-
-`id: P255` · `status: open` · `updated: 2026-10-03` · `found by: Claude, fixing P230`
-
-`CrisBuildingPanelSource._fetch_now` and `CrisBuildingEnrichmentSource.fetch` take `nearest_resource` from a 200 m
-lookup with no distance limit, and rows written before positions were kept carry none to check. On the dev stack's
-HRSH campus, the building pin "Building at Hudson River State Hospital" (location 98254) holds "BLDG 166/OLD POLICE
-STATION (1932)", the record another child pin on location 99719 also holds, with no position. The card then shows that
-building's name, USN number, eligibility and photos as this one's. P230's register rule already requires CRIS's record
-to stand on the building before trusting its "Listed"; the card itself does not. Expected: a building pin shows a CRIS
-record only when the record's point is on its building (footprint, else `BUILDING_MATCH_METERS`), as the site roster
-already does (`roster_building_at`).
-
 ## P256 — NPS's record link opens an empty page for listings NPGallery does not carry
 
 `id: P256` · `status: open` · `updated: 2026-10-03` · `found by: Claude, fixing P228`
@@ -3137,3 +3112,54 @@ Smithsonian's `url` falls back to the media `content` link, which can be a file.
 Making them `DocumentMediaPanelSource`s fixes the listing but makes every Sources tab schedule and poll for five more
 REData searches, and the Sources tests assume CRIS and Commons are the only sources. Either accept that, or let a
 non-document source keep its documents as gallery tiles.
+
+## P261 — A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid
+
+`id: P261` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
+
+`Wiki.objects.existing_for_location` returns a location's own wiki, else the wiki holding the place the location
+resolved onto. A building with no Place of its own resolves onto its parcel, so a building child pin whose location has
+no wiki of its own gets the parcel's: `Pin.community_wiki` and `places.ambiguity.linked_wiki_locations` link
+`/dashboard/location/<the building location's slug>/wiki/`, which renders the campus's root wiki, and
+`tasks.ensure_wiki_for_location` returns that wiki rather than creating the building's. That is the exact shape of
+P231's report (a uuid URL, the campus's title, not nested), and may be what production showed; production was not
+read.
+
+On the dev stack no building child pin is in this state (0 of 638, read 2026-10-03): the auto-nest sweep stands each
+building pin on its wiki's own point. It arises when the pin and the building's wiki stand on different points: an
+import of a building that already has a wiki elsewhere (`mirror_wikis` matches it and creates none at the pin's
+point), a sweep whose wiki mirror failed, or a pin its owner moved. Locations 98241, 99688 and 101406 on dev sit on
+HRSH's parcel place with no wiki of their own, and each resolves wiki 1805, the campus's.
+
+Fixing it needs a choice:
+
+- Resolve a location standing on one of its parcel's known buildings to that building's wiki (matched by footprint or
+  `BUILDING_MATCH_METERS`, as `building_markers`/`match_clusters` do), creating a nested one when there is none. A
+  second account's root pin dropped on a building would then open the building's wiki too, as it already does where
+  the building has a Place.
+- Or decide from the pin: a child pin never links a wiki another location holds by place. That reads one account's
+  pin tree, which P231 keeps out of shared wiki structure, though only for that account's own link.
+
+## P262 — A building's wiki is seeded with its campus's Wikipedia article
+
+`id: P262` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
+
+On the dev stack, 11 of the 55 child wikis under HRSH's campus wiki (1805) open with the campus's Wikipedia article,
+attribution link to `Hudson_River_State_Hospital` included (wikis 1807, 1808 and 1812 among them, read 2026-10-04).
+The Wikipedia panel stores the campus's article on a child pin's location when the pin's own point finds none
+(`WikipediaPanelSource._ancestor_campus_article`), and `models.cache.signals.seed_articles_on_wikipedia_cache_write`
+starts the location's wiki article from whatever is cached there (`wiki_seed.seed_wiki_article_from_wikipedia`).
+P231 stopped that article naming a building's location (`name_tiers.describes_scope`); the article seeding was not
+changed. Open: whether a building's wiki carries no article from it, or the campus's with a note that the building is
+part of it.
+
+## P263 — A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated
+
+`id: P263` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
+
+P231 made `tasks.ensure_wiki_for_location` reconcile nesting as soon as it creates a wiki. `WikiShareService`
+(`services/wiki/wiki_share.py`) also creates one when a share races ahead of that task. A wiki it creates stays a root
+until boundary generation, which runs only for an owner who allows enrichment, and the task that follows finds the
+wiki and does not reconcile. `photo_enrichment._save_enriched_image` creates one too, but only during enrichment.
+Found by reading, not seen on dev. Either reconcile on those paths as well, or have `ensure_wiki_for_location`
+reconcile any root wiki it returns, at a few queries per pin.

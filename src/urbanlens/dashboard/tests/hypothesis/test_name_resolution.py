@@ -231,7 +231,7 @@ class RuleBasedNameResolverTests(SimpleTestCase):
 
 
 class RuleBasedNameResolverOverrideSourceTests(SimpleTestCase):
-    """override_source wins outright, even against a two-source agreement."""
+    """An override source wins outright, even against a two-source agreement."""
 
     def test_override_source_wins_against_agreement(self) -> None:
         candidates = [
@@ -239,7 +239,7 @@ class RuleBasedNameResolverOverrideSourceTests(SimpleTestCase):
             NameCandidate(name="AGREED-name!", source="nps"),
             NameCandidate(name="REData Name", source="redata_building"),
         ]
-        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_source="redata_building")
+        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_sources=("redata_building",))
         self.assertEqual(resolver.resolve(candidates, _location()).name, "REData Name")
 
     def test_override_source_absent_falls_back_to_normal_ranking(self) -> None:
@@ -247,7 +247,7 @@ class RuleBasedNameResolverOverrideSourceTests(SimpleTestCase):
             NameCandidate(name="Agreed Name", source="wikipedia"),
             NameCandidate(name="AGREED-name!", source="nps"),
         ]
-        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_source="redata_building")
+        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_sources=("redata_building",))
         self.assertEqual(resolver.resolve(candidates, _location()).name, "Agreed Name")
 
     def test_no_override_source_configured_is_a_no_op(self) -> None:
@@ -300,7 +300,7 @@ class DefaultNameResolverChildPinOverrideTests(TestCase):
     def test_unsaved_location_is_a_no_op(self) -> None:
         resolver = default_name_resolver(location=_location())
         candidates = [NameCandidate(name="Only", source="redata_building")]
-        # An unsaved (no pk) location can't have any pins - override_source
+        # An unsaved (no pk) location can't have any pins - override_sources
         # stays unset, so this still resolves via the normal ranking, not a
         # crash from querying an unsaved instance's `.pins`.
         self.assertEqual(resolver.resolve(candidates, _location()).name, "Only")

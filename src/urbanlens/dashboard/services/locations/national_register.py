@@ -85,14 +85,16 @@ _SAME_RECORD_METERS = 3.0
 class BuildingPoints:
     """Decides which published points are on one building, reading its outline and its parcel's buildings once."""
 
-    def __init__(self, location: Location) -> None:
+    def __init__(self, location: Location, *, buildings: list[dict] | None = None) -> None:
         """Args:
         location: A building's location.
+        buildings: ``site_scope.site_buildings(location)``, when the caller already has it.
         """
         from urbanlens.dashboard.plugins.builtin.cris_buildings import building_footprint_of
 
         self.location = location
         self.footprint = building_footprint_of(location)
+        self._buildings = buildings
         self._rivals: list[tuple[float, float]] | None = None
 
     def holds(self, latitude: Any, longitude: Any) -> bool:
@@ -135,7 +137,7 @@ class BuildingPoints:
 
         latitude, longitude = float(self.location.latitude), float(self.location.longitude)
         records = []
-        for building in site_buildings(self.location):
+        for building in self._buildings if self._buildings is not None else site_buildings(self.location):
             try:
                 records.append((float(building["latitude"]), float(building["longitude"])))
             except (KeyError, TypeError, ValueError):
@@ -148,9 +150,19 @@ class BuildingPoints:
         return records
 
 
-def stands_on(location: Location, latitude: Any, longitude: Any) -> bool:
-    """Whether a published point is on the building at ``location``; see ``BuildingPoints.holds``."""
-    return BuildingPoints(location).holds(latitude, longitude)
+def stands_on(location: Location, latitude: Any, longitude: Any, *, buildings: list[dict] | None = None) -> bool:
+    """Whether a published point is on the building at ``location``; see ``BuildingPoints.holds``.
+
+    Args:
+        location: A building's location.
+        latitude: The point's latitude.
+        longitude: The point's longitude.
+        buildings: ``site_scope.site_buildings(location)``, when the caller already has it.
+
+    Returns:
+        Whether the point is on the building.
+    """
+    return BuildingPoints(location, buildings=buildings).holds(latitude, longitude)
 
 
 def cris_lists_building(location: Location) -> bool:

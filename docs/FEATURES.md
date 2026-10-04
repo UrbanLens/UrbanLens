@@ -104,7 +104,9 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - **Community wikis nest themselves automatically** — when two independently-created wikis turn out
   to describe a place and something inside it (a building's wiki inside a campus's), the inner one
   becomes a child of the outer with no confirmation needed - re-parenting only, nothing else moves.
-  Nesting follows place lineage, so it agrees with access by construction. See `docs/NOTES.md`.
+  Nesting follows place lineage, so it agrees with access by construction, and runs when a pinned
+  location's wiki is created as well as when its boundary arrives; a wiki holding no place of its
+  own looks for its container from the place its point stands on upward (P231). See `docs/NOTES.md`.
 - **One wiki per place** — creating a wiki for a coordinate that already has one, however far apart
   the two coordinates are on the same property, returns the existing page instead of a second one.
   A viewer who has earned the page reaches it from their own location's URL. The one creation path
@@ -316,7 +318,13 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   names (Wikipedia, REData/CRIS, OSM, official name, Google last) only while its name is
   provisional: a placeholder, or an automatic Google/official-name stand-in. A name a person wrote
   is never replaced, a pin's own name is never a candidate, and each adopted name is kept as an
-  official alias credited to its source (`services.wiki.wiki_naming.adopt_public_name`)
+  official alias credited to its source (`services.wiki.wiki_naming.adopt_public_name`). A
+  building's own location (only child pins or a child wiki stand on it) is named by its own records:
+  CRIS's record when its point stands on the building (ahead of REData's building name, as the
+  child pin was named from it), a listing that is the building's own (P230's rule); never the
+  Wikipedia article found at its point or a listing that merely holds it, which are the campus's.
+  A CRIS card landing refreshes the names (`name_tiers`, `register_names`, `name_resolution`,
+  `models.cache.signals`, P231)
 - Wiki access is gated by one reusable check, `services.wiki.wiki_access.wiki_accessible_to` (a
   child wiki resolves through its parent); every access-sensitive read or write path, including
   undo/redo, is expected to call it rather than re-deriving visibility
@@ -490,7 +498,8 @@ direct-only because REData's contract can't reproduce what they show:
   merely holds a building does not (`services.locations.national_register`, P230)
 - **NY Historic Preservation (CRIS)** (New York, in the Historic Preservation tab after the
   registers, under its own heading) — the nearest surveyed building's USN record
-  (eligibility, address, USN number), or the historic district/National Register listing on a
+  (eligibility, address, USN number); on one building's own location, only a record whose point
+  stands on that building (`national_register.stands_on`, P255); or the historic district/National Register listing on a
   parcel-scope pin (NYSHPO's own National Register number, and NPS's reference number linked when
   the Historic Registers rows name the same listing, unless those rows already show it in the same
   tab; CRIS has no public link to a record), plus that building's and site's survey photos and scanned forms in the Media
@@ -501,7 +510,7 @@ direct-only because REData's contract can't reproduce what they show:
   fetch also answers the campus's building children, so a campus costs one site fetch rather than
   a REData round trip per building: the payload keeps a `campus_buildings` roster, and each pin or
   wiki nested under the site whose footprint holds a roster building's CRIS point (or, with no
-  footprint, that stands within 15 m of one) gets its `cris_building_usn` card written,
+  footprint, that stands within 15 m of one no other building on the parcel is nearer to) gets its `cris_building_usn` card written,
   dated as the site's row so it goes stale with it. Its media half is filled when the child is
   opened, from the same payload, with no REData call unless the site pass left that building
   undetailed (one detail fetch then), and that is when its documents are queued for extraction.

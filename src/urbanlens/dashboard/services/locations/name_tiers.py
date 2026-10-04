@@ -180,26 +180,54 @@ def _parcel(location: Location) -> Place | None:
     return place.parcel if place is not None else None
 
 
-def building_name_admissible(source: str, location: Location) -> bool:
+def describes_scope(tier: NameTier, scope: NamingScope) -> bool:
+    """Whether a name of this tier can name a location of this scope.
+
+    An article found at a building's point is the campus's or a neighbour's: the match confirms it by the town its
+    text mentions, or the Wikipedia panel takes the campus's article for a child pin.
+
+    Args:
+        tier: The candidate's tier.
+        scope: The scope of the location being named.
+
+    Returns:
+        False for an encyclopedia article on a building's own page.
+    """
+    return scope != NamingScope.BUILDING or tier != NameTier.ENCYCLOPEDIA
+
+
+def building_name_admissible(source: str, location: Location, scope: NamingScope | None = None) -> bool:
     """Whether a building's name may name, or alias, this location.
 
-    On a building's own page, always. On a property's, only when the property is known to hold exactly
-    one building and the named building is on it: without a parcel a building found within a search
-    radius says nothing about this property, and on a campus one building's name is not the campus's.
+    On a building's own page, when the name is the building's own: a CRIS record must stand on it. On a property's,
+    only when the property is known to hold exactly one building and the named building is on it: without a parcel
+    a building found within a search radius says nothing about this property, and on a campus one building's name
+    is not the campus's.
 
     Args:
         source: The building-tier source slug.
         location: The location being named.
+        scope: :func:`naming_scope` for the location, when the caller already has it.
 
     Returns:
         True when the name may be used.
     """
-    if naming_scope(location) == NamingScope.BUILDING:
-        return True
+    if (scope or naming_scope(location)) == NamingScope.BUILDING:
+        return source != "cris" or _cris_record_stands_on(location)
     parcel = _parcel(location)
     if parcel is None or parcel.building_child_count != 1:
         return False
     return _building_on_parcel(source, location, parcel)
+
+
+def _cris_record_stands_on(location: Location) -> bool:
+    """Whether the location's cached CRIS building record is the building's own, not a neighbour's."""
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.services.locations.national_register import stands_on
+
+    cached = LocationCache.get_fresh(location, "cris_building_usn")
+    data = cached.data if cached is not None and isinstance(cached.data, dict) else {}
+    return stands_on(location, data.get("source_latitude"), data.get("source_longitude"))
 
 
 def _building_on_parcel(source: str, location: Location, parcel: Place) -> bool:

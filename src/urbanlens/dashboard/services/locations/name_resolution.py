@@ -117,19 +117,18 @@ class RuleBasedNameResolver(NameResolver):
     """Default resolver: the better tier wins, then source agreement, then priority, then arrival order.
     Candidates are grouped by :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison` so trivially different spellings of the same name count as agreement."""
 
-    def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None, scope: NamingScope = NamingScope.PARCEL) -> None:
+    def __init__(self, priority: Sequence[str] = (), *, override_sources: Sequence[str] = (), scope: NamingScope = NamingScope.PARCEL) -> None:
         """Initialize the resolver.
 
         Args:
             priority: Source slugs in descending priority. Unknown slugs are
                 ignored; sources missing from the list rank after listed ones.
-            override_source: When set and at least one candidate comes from
-                this source, that candidate wins outright, bypassing the
-                agreement/priority ranking entirely.
+            override_sources: Sources whose candidate wins outright, bypassing the agreement/priority ranking
+                entirely: the first of them that has a candidate.
             scope: Whether the location names a property or one building, which orders the tiers.
         """
         self._priority_rank: dict[str, int] = {slug: rank for rank, slug in enumerate(priority)}
-        self._override_source = override_source
+        self._override_sources = tuple(override_sources)
         self._scope = scope
 
     def _rank(self, source: str, arrival_index: int) -> tuple[int, int]:
@@ -149,8 +148,8 @@ class RuleBasedNameResolver(NameResolver):
         Returns:
             The winning candidate, or None when ``candidates`` is empty.
         """
-        if self._override_source is not None:
-            override = next((candidate for candidate in candidates if candidate.source == self._override_source), None)
+        for source in self._override_sources:
+            override = next((candidate for candidate in candidates if candidate.source == source), None)
             if override is not None:
                 return override
 
@@ -180,11 +179,11 @@ class RuleBasedNameResolver(NameResolver):
         return min(groups[best_key], key=lambda item: (rank_key(item[1].tier, self._scope), self._rank(item[1].source, item[0])))[1]
 
 
-#: Name-provider source whose candidate wins outright when naming a detail (child) pin's location -
-#: see the ``location`` handling below.
-#: Hardcodes a specific plugin's source slug into this core module, the same kind of named-source
+#: Name-provider sources whose candidate wins outright when naming a detail (child) pin's location, in preference
+#: order. CRIS leads because a building child pin is named from its CRIS record.
+#: Hardcodes specific plugins' source slugs into this core module, the same kind of named-source
 #: special-case as ``naming.FALLBACK_ONLY_NAME_SOURCES``.
-_CHILD_PIN_PREFERRED_SOURCE = "redata_building"
+_CHILD_PIN_PREFERRED_SOURCES = ("cris", "redata_building")
 
 
 def default_name_resolver(profile: Profile | None = None, *, location: Location | None = None) -> NameResolver:
@@ -199,8 +198,8 @@ def default_name_resolver(profile: Profile | None = None, *, location: Location 
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
     from urbanlens.dashboard.services.locations.name_tiers import naming_scope
 
-    override_source = None
+    override_sources: tuple[str, ...] = ()
     if location is not None and location.pk and location.pins.filter(parent_pin__isnull=False).exists():
-        override_source = _CHILD_PIN_PREFERRED_SOURCE
+        override_sources = _CHILD_PIN_PREFERRED_SOURCES
 
-    return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list, override_source=override_source, scope=naming_scope(location))
+    return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list, override_sources=override_sources, scope=naming_scope(location))

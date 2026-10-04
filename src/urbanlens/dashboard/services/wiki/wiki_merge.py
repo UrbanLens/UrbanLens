@@ -79,23 +79,29 @@ def _containing_root_wiki(wiki: Wiki) -> Wiki | None:
 
 
 def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
-    """Lineage-free fallback for wikis on coordinates no provider knows.
-    A placeless wiki has no lineage to walk, so containment against other wikis' *place* outlines is the only signal left.
+    """The nearest wiki on the place a placeless wiki's point stands on, or on a place containing that one.
+
+    A building's wiki is placeless when its point resolves onto its parcel, which the parcel's wiki already holds,
+    and a building place with no wiki of its own still sits ``PART_OF`` its parcel.
 
     Args:
         wiki: The placeless wiki looking for a container.
 
     Returns:
-        The smallest containing root wiki, or None."""
+        The container, or None."""
     from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.places.lineage import ancestors_of
 
-    if wiki.location_id is None or wiki.location.point is None:
+    location = wiki.location if wiki.location_id else None
+    if location is None or location.point is None:
         return None
-    container = Place.objects.resolve_for_point(wiki.location.latitude, wiki.location.longitude)
-    if container is None:
+    place = location.place if location.place_id else Place.objects.resolve_for_point(location.latitude, location.longitude)
+    if place is None:
         return None
-    return Wiki.objects.filter(place=container, parent_wiki__isnull=True).exclude(pk=wiki.pk).select_related("location", "place").first()
+    chain = [place, *ancestors_of(place)]
+    by_place = {candidate.place_id: candidate for candidate in Wiki.objects.filter(place_id__in=[link.pk for link in chain]).exclude(pk=wiki.pk).select_related("location", "place")}
+    return next((by_place[link.pk] for link in chain if link.pk in by_place), None)
 
 
 def absorb_wiki(parent: Wiki, child: Wiki) -> None:
