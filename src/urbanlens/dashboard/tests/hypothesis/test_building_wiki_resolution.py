@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from django.db import connection
+from django.db import connection, transaction
 from django.test import TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
@@ -325,6 +325,36 @@ class ConcurrentCreationTests(TransactionTestCase):
         self.assertEqual(len(set(results)), 1, "one building got two wikis")
         wiki = Wiki.objects.get(pk=results[0])
         self.assertEqual((wiki.place_id, wiki.parent_wiki_id), (None, self.campus_wiki.pk))
+
+    def test_a_building_wiki_the_mirror_is_creating_is_waited_for(self) -> None:
+        """The building mirror creates under a row lock on the campus wiki (``pin_restructure.BuildingNester.campus_wiki``)."""
+        location = _location_at(_C[0] + 0.00003, _C[1])
+        locked, finished = threading.Event(), threading.Event()
+
+        def mirror() -> int:
+            with transaction.atomic():
+                Wiki.objects.select_for_update(of=("self",)).select_related("location").get(pk=self.campus_wiki.pk)
+                locked.set()
+                finished.wait(_HOLD_SECONDS)
+                building = _location_at(*_C)
+                return Wiki.objects.create(
+                    location=building,
+                    place=None,
+                    name="Building C",
+                    parent_wiki=self.campus_wiki,
+                    pin_type=PinType.BUILDING,
+                ).pk
+
+        def get_or_create() -> int:
+            try:
+                locked.wait(10)
+                return Wiki.objects.get_or_create_for_location(location)[0].pk
+            finally:
+                finished.set()
+
+        mirrored, resolved = run_concurrently([mirror, get_or_create])
+
+        self.assertEqual(resolved, mirrored, "the building got a second wiki beside the mirror's")
 
 
 class NamingTests(_Campus):
