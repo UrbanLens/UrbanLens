@@ -23239,3 +23239,19 @@ call that passes its own `shared` names is neither answered from nor stored in t
 **Tests.** `test_pin_page_reads_names_once.py`: the page reads the pin's alias names once (twice before the fix in
 the test's smaller setup, eleven times on dev), and names are remembered inside the block and read afresh after it.
 Both failed before the fix.
+
+## RESOLVED 2026-10-04: The external API's notification list checked each sender's visibility on its own
+
+`id: P299` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, profiling the external API's list endpoints`
+
+**What was wrong.** `GET /api/external/v1/notifications/` shaped each notification's `source_profile` with
+`_friend_identity`, which asked `can_view_profile` per sender (about eleven queries each), and a visible sender's
+username then read its `User` row. A page of `e2e-primary`'s notifications on dev took 258 queries. The friends list
+already resolved a page's visibility at once through `Profile.visible_profile_pks`.
+
+**Fix.** The view resolves every sender on the page with one `Profile.visible_profile_pks` call, and
+`notification_center.list_notifications` selects `source_profile__user`. The same page now takes 19 queries.
+
+**Tests.** `test_external_api_notifications.py::NotificationSourcesAreResolvedTogetherTests`: the query count does
+not grow with the number of senders, hidden or visible (147 against 42, then 25 against 16, before each half of the
+fix), a hidden sender is still masked and a visible one named.

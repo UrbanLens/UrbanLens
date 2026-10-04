@@ -82,8 +82,8 @@ class NotificationPreferenceCoverageTests(TestCase):
         self.assertIn("safety_ci_partner_invite", all_types)
 
 
-class NotificationInboxTests(TestCase):
-    """Reading, counting and acknowledging the caller's own notifications."""
+class _InboxCase(TestCase):
+    """A caller holding a notifications key, and another profile."""
 
     def setUp(self) -> None:
         baker.make(User)
@@ -111,6 +111,10 @@ class NotificationInboxTests(TestCase):
             title="Hello",
             message="Body",
         )
+
+
+class NotificationInboxTests(_InboxCase):
+    """Reading, counting and acknowledging the caller's own notifications."""
 
     def test_list_returns_only_the_callers_notifications(self) -> None:
         mine = self._notify(self.profile)
@@ -256,6 +260,62 @@ class NotificationInboxTests(TestCase):
             reverse("external_api:notifications"), {"cursor": "not-a-cursor"}, **_bearer(self.raw_key)
         )
         self.assertEqual(response.status_code, 400)
+
+
+class NotificationSourcesAreResolvedTogetherTests(_InboxCase):
+    """Each notification's sender was checked for visibility on its own: 258 queries for e2e-primary's page on dev."""
+
+    def _from_strangers(self, count: int, *, public: bool = False) -> None:
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+        for _ in range(count):
+            sender = Profile.objects.get(user=baker.make(User))
+            if public:
+                Profile.objects.filter(pk=sender.pk).update(profile_visibility=VisibilityChoice.ANYONE)
+            NotificationLog.objects.create(
+                profile=self.profile,
+                source_profile=sender,
+                importance=Importance.MEDIUM,
+                notification_type=NotificationType.INFO,
+                title="Hello",
+                message="Body",
+            )
+
+    def _queries(self) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(reverse("external_api:notifications"), **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 200)
+        return len(captured)
+
+    def test_the_query_count_does_not_grow_with_the_senders(self) -> None:
+        for public in (False, True):
+            with self.subTest(public=public):
+                self._from_strangers(3, public=public)
+                self._queries()  # the key's first use records itself
+                few = self._queries()
+                self._from_strangers(9, public=public)
+
+                self.assertEqual(self._queries(), few)
+
+    def test_a_sender_the_caller_may_see_is_named(self) -> None:
+        self._from_strangers(1, public=True)
+
+        (row,) = self.client.get(reverse("external_api:notifications"), **_bearer(self.raw_key)).json()["results"]
+
+        self.assertFalse(row["source_profile"]["is_masked"])
+        sender = NotificationLog.objects.get(profile=self.profile).source_profile
+        self.assertEqual(row["source_profile"]["username"], sender.username)
+
+    def test_a_sender_the_caller_may_not_see_is_still_masked(self) -> None:
+        self._from_strangers(1)
+
+        (row,) = self.client.get(reverse("external_api:notifications"), **_bearer(self.raw_key)).json()["results"]
+
+        self.assertTrue(row["source_profile"]["is_masked"])
+        self.assertIsNone(row["source_profile"]["slug"])
 
 
 class NotificationPreferenceRoundTripTests(TestCase):

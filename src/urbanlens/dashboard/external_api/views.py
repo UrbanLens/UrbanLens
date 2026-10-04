@@ -4206,6 +4206,8 @@ class NotificationsView(ExternalApiView):
             logger.info("notification list for %s rejected: %s", profile.pk, exc)
             return Response({"error": "That cursor is invalid or expired."}, status=400)
 
+        senders = [row.source_profile for row in page.notifications if row.source_profile]
+        visible_pks = Profile.visible_profile_pks(profile, senders) if senders else set()
         results = [
             {
                 "uuid": row.uuid,
@@ -4216,7 +4218,7 @@ class NotificationsView(ExternalApiView):
                 "message": row.message,
                 "url": row.url,
                 "created": row.created,
-                "source_profile": _friend_identity(profile, row.source_profile) if row.source_profile else None,
+                "source_profile": _friend_identity(profile, row.source_profile, visible_pks=visible_pks) if row.source_profile else None,
             }
             for row in page.notifications
         ]

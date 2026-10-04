@@ -60,7 +60,7 @@ def list_notifications(
         InvalidNotificationCursorError: ``cursor`` is malformed or was never ours."""
     limit = min(max(int(limit or DEFAULT_NOTIFICATION_PAGE_SIZE), 1), MAX_NOTIFICATION_PAGE_SIZE)
 
-    query = NotificationLog.objects.for_profile(profile).select_related("source_profile")
+    query = NotificationLog.objects.for_profile(profile).select_related("source_profile__user")
     if unread_only:
         query = query.unread()
     if cursor:
