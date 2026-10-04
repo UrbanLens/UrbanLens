@@ -778,10 +778,14 @@ four failed with `Application.DoesNotExist`, and the file alone passed. They now
 `create_first_party_client` over its historical models in `setUp`. Rows made at database setup are the third shape to
 check for.
 
-**Seen once 2026-10-04, not yet explained.** In `test_export_import_completeness.py`,
-`ImportCustomFieldsTests::test_definition_and_pin_value_round_trip` failed in a 22-file run (`Pin.DoesNotExist` for
-the imported "Gatehouse") and passed alone. It exports and imports through a plain directory, so nothing about
-archives is involved.
+**A fifth, found and fixed 2026-10-04: not order but chance.** `test_export_import_completeness.py`'s
+`ImportCustomFieldsTests::test_definition_and_pin_value_round_trip` lost its imported "Gatehouse" (`Pin.DoesNotExist`)
+in one 22-file run and passed alone. Baker fills `Location.latitude`, a `DecimalField(max_digits=9,
+decimal_places=6)`, with up to 99.999999: 96.46 in one sample of twelve. Since P282/P285 the pin import refuses an
+off-globe coordinate, so about one run in ten dropped the pin. `core/tests/baker.py::SignalSafeBaker` now bakes a
+latitude between 0 and 90 for every model (`core/tests/test_baker_coordinates.py`); longitude, 0 to 99.999999, is
+already real and unchanged. Any other test that baked a location and checked its coordinate failed the same way at
+random. Random data that a validator can refuse is the fourth shape to check for.
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
