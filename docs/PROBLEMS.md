@@ -42,7 +42,7 @@ retitle - `see UrbanLens#286 ("articles name provider images")`.
 | P170 | [#288](https://github.com/UrbanLens/UrbanLens/issues/288) | Nothing deletes article revisions, and each one is a full copy of the article |
 | P182 | [#289](https://github.com/UrbanLens/UrbanLens/issues/289) | A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it |
 | P206 | [#290](https://github.com/UrbanLens/UrbanLens/issues/290) | `dashboard_location_cache` is 81% of production's database |
-| P210 | [#291](https://github.com/UrbanLens/UrbanLens/issues/291) | Pin-share notifications stored before 2026-10-02 still name the sender's own pin |
+| P210 | [#291](https://github.com/UrbanLens/UrbanLens/issues/291) | Pin-share notifications stored before 2026-10-02 still name the sender's own pin; fixed on `release/v_0_9_0` by migration 0075, live until 0.9.0 deploys |
 | P240 | [#292](https://github.com/UrbanLens/UrbanLens/issues/292) | Inside the US, Overture data needs REData's index-backed lookups, which production now runs (v0.3.4); only the buildings route has been seen answering |
 | P242 | [#293](https://github.com/UrbanLens/UrbanLens/issues/293) | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column |
 | P277 | [#294](https://github.com/UrbanLens/UrbanLens/issues/294) | A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged |
