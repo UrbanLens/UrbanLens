@@ -65,7 +65,7 @@ class AnImportedOverlayUrlTests(_ImportCase):
             patch(_MATERIALIZE, return_value=materialized) as materialize,
         ):
             import_data.MapAnnotationsImport()._import_overlay(
-                self._row(image_url="https://tracker.example/beacon.jpg"), self.ctx
+                self._row(image_url="https://tracker.example/beacon.jpg"), self.ctx, 1
             )
 
         materialize.assert_called_once()
@@ -77,7 +77,7 @@ class AnImportedOverlayUrlTests(_ImportCase):
     def test_an_internal_url_is_never_fetched(self) -> None:
         with patch(_MATERIALIZE) as materialize:
             import_data.MapAnnotationsImport()._import_overlay(
-                self._row(image_url="http://127.0.0.1/secret.jpg"), self.ctx
+                self._row(image_url="http://127.0.0.1/secret.jpg"), self.ctx, 1
             )
 
         materialize.assert_not_called()
@@ -91,7 +91,7 @@ class AnImportedOverlayUrlTests(_ImportCase):
             patch(_MATERIALIZE, side_effect=MaterializeError("gone")),
         ):
             import_data.MapAnnotationsImport()._import_overlay(
-                self._row(image_url="https://example.test/sheet.jpg"), self.ctx
+                self._row(image_url="https://example.test/sheet.jpg"), self.ctx, 1
             )
 
         self.assertFalse(MapImageOverlay.objects.for_pin(self.pin).exists())
@@ -103,7 +103,9 @@ class AnImportedTileOverlayTests(_ImportCase):
         from urbanlens.dashboard.services.map.image_overlays import historical_tile_template
 
         template = historical_tile_template("5b0e8a4c-2d1f-4a57-9c3e-1f2a3b4c5d6e")
-        import_data.MapAnnotationsImport()._import_overlay(self._row(tile_url_template=template, locked=True), self.ctx)
+        import_data.MapAnnotationsImport()._import_overlay(
+            self._row(tile_url_template=template, locked=True), self.ctx, 1
+        )
 
         overlay = MapImageOverlay.objects.for_pin(self.pin).get()
         self.assertEqual(overlay.tile_url_template, template)
@@ -130,7 +132,7 @@ class TheOverlayCapTests(_ImportCase):
             patch(_MATERIALIZE, return_value=materialized) as materialize,
         ):
             import_data.MapAnnotationsImport()._import_overlay(
-                self._row(image_url="https://example.test/13.jpg"), self.ctx
+                self._row(image_url="https://example.test/13.jpg"), self.ctx, 1
             )
 
         self.assertEqual(MapImageOverlay.objects.for_pin(self.pin).count(), MAX_OVERLAYS_PER_MAP)
