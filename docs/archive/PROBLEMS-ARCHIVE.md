@@ -23155,3 +23155,19 @@ the other two sweeps do.
 - the readable, old-mark and fresh-mark cases now cover all three sweeps.
 
 The marking, skipping, clearing and fresh-mark cases failed before the fix.
+
+## RESOLVED 2026-10-04: An Overpass instance answering 200 with no JSON failed the whole query instead of the next mirror being asked
+
+`id: P295` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, reading dev's worker log`
+
+**What was wrong.** `OverpassGateway.query` fails over to the next instance on a timeout, a refused connection or a
+429/502/503/504, and marks the failing one down. A 200 whose body was empty or not JSON raised out of the loop
+instead, after marking the instance as answering. The boundary pass deferred Overpass for that location without asking
+a mirror. Dev logged `Expecting value: line 1 column 1 (char 0)` four times in one evening; all three instances
+answered JSON when probed afterwards.
+
+**Fix.** An unparseable answer is treated like a 504: that instance is marked down and the next is asked. If every
+instance answers that way, the query raises an `HTTPError`, which the boundary pass defers as before.
+
+**Test.** `test_location_background_services.py::OverpassGatewayTests::test_an_unparseable_answer_fails_over_to_the_next_endpoint_and_downs_it`
+failed before the fix.

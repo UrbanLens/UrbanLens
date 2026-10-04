@@ -429,6 +429,23 @@ class OverpassGatewayTests(SimpleTestCase):
         self.assertEqual(gateway.session.post.call_args_list[0].args[0], gateway.base_url)
         self.assertEqual(gateway.session.post.call_args_list[1].args[0], gateway.mirrors[0])
 
+    def test_an_unparseable_answer_fails_over_to_the_next_endpoint_and_downs_it(self) -> None:
+        """An instance answering 200 with an empty or HTML body is unhealthy, like a 504; dev logged four in a day."""
+        import json
+
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _endpoint_is_down
+
+        empty = self._fake_response(200)
+        empty.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = [empty, self._fake_response(200, {"elements": [{"id": 1}]})]
+
+        with self._no_shuffle(), self._no_sleep():
+            payload = gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(payload, {"elements": [{"id": 1}]})
+        self.assertTrue(_endpoint_is_down(gateway.base_url))
+
     def test_failing_endpoint_is_dropped_from_rotation_on_the_next_query(self) -> None:
         """An endpoint that 504s is flagged down and skipped by the following query."""
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _endpoint_is_down

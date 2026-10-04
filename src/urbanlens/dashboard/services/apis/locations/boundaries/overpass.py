@@ -289,8 +289,14 @@ class OverpassGateway(Gateway, BoundaryProvider):
             # Any remaining non-2xx (e.g. 400) is a query-level error identical
             # across every mirror - surface it without downing this endpoint.
             response.raise_for_status()
+            try:
+                payload = response.json()
+            except ValueError:
+                last_error = requests.HTTPError(f"Unparseable answer from {url}", response=response)
+                _mark_endpoint_down(url)
+                logger.debug("Overpass endpoint %s answered %d with no JSON; marked down, trying next", url, response.status_code)
+                continue
             _mark_endpoint_answering(url)
-            payload = response.json()
             payload = payload if isinstance(payload, dict) else {}
             if suspect_empty is None and url != self.base_url and payload.get("elements") == []:
                 # First empty answer, from a fallback: hold it and cross-check
