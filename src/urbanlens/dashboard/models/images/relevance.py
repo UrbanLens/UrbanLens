@@ -12,6 +12,9 @@ from django.db.models import CASCADE, BooleanField, CharField, CheckConstraint, 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import MediaRelevanceManager
 
+#: Length of a ``media_item_key``, and the most ``MediaRelevance.item_key`` holds.
+ITEM_KEY_LENGTH = 40
+
 
 def media_item_key(url: str) -> str:
     """Stable, short identifier for a transient Media gallery item.
@@ -42,7 +45,7 @@ class MediaRelevance(abstract.DashboardModel):
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="media_relevance_marks")
     location = ForeignKey("dashboard.Location", on_delete=CASCADE, related_name="media_relevance_marks")
     source = CharField(max_length=30)
-    item_key = CharField(max_length=40)
+    item_key = CharField(max_length=ITEM_KEY_LENGTH)
     is_relevant = BooleanField()
     is_vote = BooleanField(default=True)
 

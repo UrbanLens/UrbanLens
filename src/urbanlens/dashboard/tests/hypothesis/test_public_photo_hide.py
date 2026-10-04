@@ -80,6 +80,33 @@ class HideTests(_HideCase):
         self.assertEqual(self.listed(), [HIDDEN["url"], SHOWN["url"]])
 
 
+class MalformedKeyTests(_HideCase):
+    def test_a_key_that_is_not_a_media_key_is_refused_not_a_server_error(self) -> None:
+        url = reverse("pin.media.relevance", args=[self.pin.slug])
+        for body in ({"hidden": True, "item_key": "f" * 41}, {"is_relevant": False, "item_key": ["f" * 40]}):
+            with self.subTest(body=body):
+                response = self.client.post(
+                    url,
+                    data=json.dumps({"source": "wikimedia", "url": HIDDEN["url"], **body}),
+                    content_type="application/json",
+                )
+
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(MediaRelevance.objects.exists())
+
+    def test_the_wiki_refuses_one_too(self) -> None:
+        baker.make(Wiki, location=self.pin.location, name="Hudson River State Hospital")
+
+        response = self.client.post(
+            reverse("location.wiki.media.vote", args=[self.pin.location.slug]),
+            data=json.dumps({"source": "wikimedia", "url": HIDDEN["url"], "item_key": "f" * 41, "is_relevant": False}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(MediaRelevance.objects.exists())
+
+
 class NotAVoteTests(_HideCase):
     def test_a_hide_counts_toward_no_score(self) -> None:
         self.post({"hidden": True})

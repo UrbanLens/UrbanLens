@@ -589,7 +589,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         A ``hidden`` flag instead of ``is_relevant`` removes the item from this user's results, or restores it: a
         private mark that is no vote, so no one else's gallery or score changes.
         """
-        from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+        from urbanlens.dashboard.models.images.relevance import ITEM_KEY_LENGTH, MediaRelevance, media_item_key
         from urbanlens.dashboard.services.media.images import coerce_coordinates
         from urbanlens.dashboard.services.media.media_materialize import find_materialized_image
         from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
@@ -627,6 +627,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 return JsonResponse({"error": "Invalid request data."}, status=400)
 
         item_key = data.get("item_key") or media_item_key(url)
+        if not isinstance(item_key, str) or len(item_key) > ITEM_KEY_LENGTH:
+            return JsonResponse({"error": "Invalid request data."}, status=400)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if "hidden" in data:

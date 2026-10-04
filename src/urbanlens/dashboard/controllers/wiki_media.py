@@ -200,7 +200,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         from urbanlens.dashboard.models.images.model import Image
-        from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+        from urbanlens.dashboard.models.images.relevance import ITEM_KEY_LENGTH, MediaRelevance, media_item_key
         from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
         from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
         from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
@@ -221,6 +221,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
         item_key = data.get("item_key") or media_item_key(url)
         if not item_key:
             return JsonResponse({"error": "Missing item identity."}, status=400)
+        if not isinstance(item_key, str) or len(item_key) > ITEM_KEY_LENGTH:
+            return JsonResponse({"error": "Invalid request data."}, status=400)
 
         response: dict = {}
         if is_relevant is None:
