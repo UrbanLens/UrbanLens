@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P265` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P266` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -216,3 +216,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P256 | open | 2026-10-03 | NPS's record link opens an empty page for listings NPGallery does not carry | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P260 | open | 2026-10-03 | A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P251 | open | 2026-10-04 | The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P265 | open | 2026-10-04 | A pinned location on a campus building with no wiki shows no wiki until something creates the building's | [`docs/PROBLEMS.md`](PROBLEMS.md) |
