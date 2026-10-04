@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Self
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.tree import TreeQuerySetMixin
@@ -138,7 +138,8 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         """The wiki of the campus building ``location`` stands on, created placeless and nested when it has none.
 
         A building's wiki holds no place, so no unique column stops two locations on one building creating one each:
-        creation is serialized per campus, and nesting happens before the lock is released so the next caller finds it.
+        creation holds the campus wiki's row, as the building mirror does (``pin_restructure.BuildingNester.campus_wiki``),
+        and nests before releasing it, so the next caller finds the wiki.
 
         Args:
             location: A Location with no wiki of its own, on a place ``holder`` holds.
@@ -153,8 +154,7 @@ class WikiManager(_WikiManagerBase["Wiki"]):
 
         try:
             with transaction.atomic():
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", [f"campus-building-wikis:{holder.pk}"])
+                list(self.select_for_update().filter(pk=holder.pk).values_list("pk", flat=True))
                 existing, current = self._resolve_afresh(location)
                 if existing is not None:
                     return existing, False
