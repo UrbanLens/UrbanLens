@@ -21999,3 +21999,39 @@ subtests (a 503 and a timeout for each task) pass now. A test added in review, a
 `STORAGE_ERRORS` and took the network error for storage; storage handling is now scoped to the store step.
 `test_immich.py`, `test_flickr.py`, `test_flickr_album_import.py` and `test_google_photos.py` assert the new
 `storage_unavailable` count.
+
+## RESOLVED 2026-10-04: A PDF or DjVu from REData's archives is listed under Article > Sources, read from the row its gallery cached
+
+`id: P260` · `status: fixed` · `resolved: 2026-10-04` · `found by: the P234 investigation`
+
+`GalleryMediaSource.gallery_items` drops every document from a gallery, since documents belong under Article >
+Sources (P196). Only Commons (`DocumentMediaPanelSource`) and CRIS were document sources, so a document among the
+Library of Congress, Internet Archive, Smithsonian, Digital Commonwealth or Chronicling America results
+(`plugins/builtin/media_archives.py`) was shown nowhere.
+
+**Ruled.** Show them under Sources by reading the archives' existing cached rows, the ones their Media gallery
+search fills, so the Sources tab issues no REData searches of its own.
+
+**Fix.** The five archives are `DocumentMediaPanelSource`s built with `fetched_for_sources=False`, a
+`DocumentPanelSource` attribute: the Sources tab (`source_documents.collect_source_documents`) lists what such a
+source has cached and never schedules it or waits for it, and `warm_site_scope_documents` leaves it alone. Commons
+and CRIS are still fetched by the tab. Everything else is the path Commons already took: a document is listed only
+when P196's rule says it is about the place, opens on the archive's own page (the document proxy serves an archive's
+id nothing and fetches nothing), and is never a gallery tile. A pin page reads the shared row plus the row of that
+pin's own names; a wiki page and another account's pin read the shared row only, so a document found by one pin's
+private names stays on that pin's page. A nested marker's shared row is listed on its site's page, as for Commons (not tested separately for the
+archives). The tab now reads its sources' cache rows in two queries (one for the reader's name-built sources, one for
+shared rows) rather than one or more per source, so the five extra sources add no cache queries per poll.
+
+**Not measured.** How many archive results are documents. P260's entry found none among the 82 archive items cached
+for HRSH-named locations on dev; REData returns these archives' record pages (`archive.org/details/...`,
+`loc.gov/item/...`) rather than files, so `MediaItem.is_document` is true only for a result whose content type or URL
+names a PDF or DjVu, such as a Smithsonian result whose `url` is its media file. A document an archive's gallery has
+not searched for yet appears once the gallery has been opened, and not before.
+
+**Tests.** `test_archive_documents_in_sources.py`: against the code before the fix, 10 of its 15 test items failed
+(each archive's documents on the pin and wiki, relevance, the archive page link, and a document found by a pin's own
+name); the five that passed are the guards (no archive is ever scheduled or polled for, on the pin or the wiki, the
+proxy fetches nothing, documents are not tiles). `test_site_scope_documents_warmed.py` gained a case that failed
+until warming skipped such a source. `test_article_sources.py` now states the rule: with seven document sources,
+only CRIS and Commons are fetched.

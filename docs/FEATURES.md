@@ -183,13 +183,16 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   show as protected source, editable in Source mode (`frontend/ts/shared/article-source.ts`)
 - **Article > Sources** — a sub-tab on both the private pin page and the wiki page listing the
   documents cached for the place (the CRIS inventory forms and nomination PDFs, each naming
-  its building on a campus, and the PDF and DjVu books and reports Wikimedia Commons finds that
-  pass the media relevance rule), viewable in a same-origin iframe or a new tab. Any cache-backed panel
+  its building on a campus, and the PDF and DjVu books and reports Wikimedia Commons and the
+  REData archives find that pass the media relevance rule), viewable in a same-origin iframe or a new tab. Any cache-backed panel
   becomes a source by subclassing `DocumentPanelSource`; the PDFs are served by a proxy scoped to
   what that pin's or wiki's own list names, and only bytes that really are a PDF
   (`controllers.article_sources`, `services.pins.source_documents`). A source whose document has
   its own archive page sets `SourceDocument.page_url` and links there instead of proxying
-  (`DocumentMediaPanelSource`, used by Commons, whose scans run to tens of megabytes)
+  (`DocumentMediaPanelSource`, used by Commons, whose scans run to tens of megabytes, and the five
+  REData archives). The tab fetches CRIS and Commons itself; a source built with
+  `fetched_for_sources=False` (the archives) lists only what its Media gallery already cached, so
+  opening Sources costs no archive searches
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
   records a provenance chain (`LocationExposure`) of how a location reached each user.
   `services.sharing.pin_sharing.create_pin_share` (gated by `require_pin_owner`) is the single
@@ -537,7 +540,8 @@ direct-only because REData's contract can't reproduce what they show:
   card from its site before looking it up. A child the roster does not cover fetches its own.
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider);
   scanned books and reports (PDF, DjVu) go to Article > Sources rather than the gallery
-- **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
+- **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData;
+  a PDF or DjVu among the results is listed under Article > Sources rather than the gallery, as for every REData archive
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
   place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`). Empty since P196:
   no page reaches UrbanLens with text that could name the place (P216)

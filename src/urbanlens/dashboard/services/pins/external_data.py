@@ -734,10 +734,13 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         documents_depend_on_site_scope: Whether a site-scope page lists different documents from a building's, so a
             pin that becomes a site has its documents fetched again.
         documents_judged: Whether :meth:`source_documents` lists a document only when it is about the subject it is given.
+        fetched_for_sources: Whether the Sources tab fetches this source when nothing ready is cached. When False the
+            tab lists only what another reader, such as the source's Media gallery, has already cached.
     """
 
     documents_depend_on_site_scope: ClassVar[bool] = True
     documents_judged: ClassVar[bool] = False
+    fetched_for_sources: bool = True
 
     def may_list_documents(self, data: dict) -> bool:
         """Whether a cached payload holds any document at all, before any is judged against a subject.
@@ -1003,13 +1006,26 @@ class MediaPanelSource(NameSearchSource, GatewayMediaPanelSource):
 
 
 class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
-    """A Media gallery provider whose results include books and scans, which are listed under Article > Sources.
+    """A Media gallery provider whose results may include books and scans, which are listed under Article > Sources.
 
     A document opens on the provider's own page: a scanned book runs to tens of megabytes, more than the Sources proxy holds.
     """
 
     documents_depend_on_site_scope: ClassVar[bool] = False
     documents_judged: ClassVar[bool] = True
+
+    def __init__(self, key: str, cache_source: str, gateway_factory, *, fetched_for_sources: bool = True) -> None:
+        """Bind this source to one media provider.
+
+        Args:
+            key: Registry key, matching the URL's ``source`` segment.
+            cache_source: The provider gateway's ``service_key`` (its LocationCache source).
+            gateway_factory: Zero-argument callable building the gateway.
+            fetched_for_sources: False to list only the documents the Media gallery's own search has cached, so the
+                Sources tab never searches the provider itself.
+        """
+        super().__init__(key, cache_source, gateway_factory)
+        self.fetched_for_sources = fetched_for_sources
 
     def may_list_documents(self, data: dict) -> bool:
         """Whether any of this provider's cached results is a document."""

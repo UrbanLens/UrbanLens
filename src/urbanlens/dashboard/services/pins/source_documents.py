@@ -56,6 +56,34 @@ class SourceListing:
     pending: bool
 
 
+def _cached_payloads(location: Location, sources: Sequence[DocumentPanelSource], reader: Pin | None) -> dict[str, dict | None]:
+    """Each source's fresh cached payload for ``location``, as :func:`_cached_payload` reads it, in two queries at most.
+
+    Args:
+        location: The location whose cache rows are read.
+        sources: The document sources.
+        reader: The pin whose own names' rows a name-built source reads too, or None for the shared rows alone.
+
+    Returns:
+        Source key to its payload, or to None when nothing fresh has landed.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.services.pins.external_data import cached_entries
+    from urbanlens.dashboard.services.pins.search_names import SHARED_AUDIENCE
+
+    payloads: dict[str, dict | None] = {}
+    named = [source for source in sources if isinstance(source, NameSearchSource)] if reader is not None else []
+    if named and reader is not None:
+        payloads.update({key: None if entry is None else entry.data for key, entry in cached_entries(reader, named).items()})
+    shared = [source for source in sources if source.key not in payloads]
+    if shared and location.pk is not None:
+        rows = LocationCache.fresh_rows(location.pk, {source.cache_source for source in shared}, [SHARED_AUDIENCE])
+        for source in shared:
+            row = rows.get((source.cache_source, SHARED_AUDIENCE))
+            payloads[source.key] = None if row is None else (row.data or {})
+    return payloads
+
+
 def _cached_payload(location: Location, source: DocumentPanelSource, reader: Pin | None = None) -> dict | None:
     """A source's fresh cached payload for ``location``, or None when nothing fresh has landed.
 
@@ -82,6 +110,9 @@ def collect_source_documents(
 ) -> SourceListing:
     """Gather every visible source's documents for a location, scheduling a fetch for any source not ready yet.
 
+    A source that is not fetched for Sources (``DocumentPanelSource.fetched_for_sources``) lists what is cached and is
+    never scheduled.
+
     Args:
         location: The location whose cache rows are read.
         viewer: The requesting user; feature-gated sources are skipped for a viewer without the feature.
@@ -100,10 +131,11 @@ def collect_source_documents(
     documents: list[ListedDocument] = []
     pending = False
     sources = [source for source in document_panel_sources() if panel_visible_to(viewer, source)]
+    payloads = _cached_payloads(location, sources, reader)
     for source in sources:
-        data = _cached_payload(location, source, reader)
+        data = payloads.get(source.key)
         if data is None or not source.documents_ready(data, site_scope=site_scope):
-            if may_fetch and driver is not None and source.gate(driver) and external_data.schedule_panel_fetch(source.key, driver):
+            if source.fetched_for_sources and may_fetch and driver is not None and source.gate(driver) and external_data.schedule_panel_fetch(source.key, driver):
                 pending = True
                 continue
             if data is None:
@@ -175,7 +207,7 @@ def warm_site_scope_documents(pin: Pin) -> None:
     from urbanlens.dashboard.services.pins import external_data
 
     for source in document_panel_sources():
-        if not source.documents_depend_on_site_scope:
+        if not source.documents_depend_on_site_scope or not source.fetched_for_sources:
             continue
         data = _cached_payload(pin.location, source)
         if data is not None and source.documents_ready(data, site_scope=True):

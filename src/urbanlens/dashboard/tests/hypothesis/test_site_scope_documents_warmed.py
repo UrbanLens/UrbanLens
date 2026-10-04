@@ -59,3 +59,12 @@ class WarmSiteScopeDocumentsTests(SimpleTestCase):
         schedule = self._warm([source])
 
         schedule.assert_not_called()
+
+    def test_a_source_listed_only_from_its_gallerys_cache_is_left_alone(self) -> None:
+        """An archive's documents are read from what its gallery cached; nothing searches it for Sources (P260)."""
+        source = _source("loc", ready=False)
+        source.fetched_for_sources = False
+
+        schedule = self._warm([source])
+
+        schedule.assert_not_called()
