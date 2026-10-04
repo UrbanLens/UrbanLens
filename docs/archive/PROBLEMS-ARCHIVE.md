@@ -22013,7 +22013,10 @@ one wiki. It reads places, wikis and location caches only, never a pin (a test a
   names of a root pin's location with no wiki of its own still feed the campus's wiki, never a building's.
 - `name_tiers.naming_scope` reads the location's own wiki first: one whose wiki describes a building (`wiki_scope`)
   is named as a building's whatever pins it holds. A root pin on a building with no wiki otherwise got a building
-  wiki named, in a property's scope, after the campus's Wikipedia article.
+  wiki named, in a property's scope, after the campus's Wikipedia article. As for any building's location, its
+  Wikipedia lookup is then no longer confirmed by the parcel's outline (`wikipedia.match_outline`). On dev one of
+  203 child wikis' locations holds a root pin and changes scope: wiki 1244, placeless under a placeless parent, with
+  no official name (read 2026-10-04).
 
 A second account's root pin dropped on a campus building now opens that building's wiki, as it already did where the
 building has a place of its own. `BuildingCluster` gained `holding_footprint` and `nearest_meters`; `covers` is built
