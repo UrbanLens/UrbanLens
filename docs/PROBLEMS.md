@@ -2830,7 +2830,7 @@ the row); and, if the task stays, write `pg_dump -Fc` or gzip, which cuts 11 GB 
 
 ## P206 — `dashboard_location_cache` is 81% of production's database
 
-`id: P206` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 9`
+`id: P206` · `status: open` · `updated: 2026-10-04` · `found by: infrastructure's 0.8.0 deploy findings, item 9`
 
 1,915 MB of 2,361 MB: 135k rows, about 1.85 GB of it TOAST, with a 69% TOAST hit ratio against 99.9% for heap. Index
 scans fetched 972k tuples from it in a day, and one pooler pod sent 11.35 GB to clients in five hours, most likely from
@@ -2839,8 +2839,12 @@ fields would do (`.only()`/`defer()`, or a JSON path), and does anything prune e
 
 Measured on `development_main`, 2026-10-03:
 
-- **Nothing prunes the table.** There's no task, beat entry or command for it; the deletes in `migrations/` are one-off.
-  A row past `external_data_cache_days` is refetched on its next read, and otherwise stays forever.
+- **Nothing deletes rows.** There's no task, beat entry or command for it; the deletes in `migrations/` are one-off.
+  A row past `external_data_cache_days` is refetched on its next read, and otherwise stays forever. Since P233,
+  `tasks.sweep_public_media_cache` removes results no one is shown from the rows of sources that judge relevance (the
+  media archives, Flickr, Web Images, Google Images). It deletes no row, and touches no other source. A row cached for a
+  custom-name set that no pin holds any more is never read and never pruned. The rewrite frees space for Postgres to
+  reuse, but the files shrink only with `VACUUM FULL` or `pg_repack`. How much it frees on production is not measured.
 - **Dev can't reproduce production's size.** Dev has 10,174 rows in 6.6 MB, about 650 bytes a row. Production
   averages about 14 KB a row. The largest dev sources are `hazard_history` (402 kB over 109 rows), `epa_echo` (max row
   46 kB) and `parcel_buildings` (max row 57 kB).
@@ -3005,20 +3009,6 @@ child of the campus wiki, though the private child pin is nested under the user'
 branch, which has P186's naming rules: the URL being a uuid means no provider name reached that Location. Expected:
 the building wiki takes CRIS's name and slug and is a child of the parcel's wiki.
 
-## P233 — Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete
-
-`id: P233` · `status: open` · `updated: 2026-10-03` · `found by: Jess, on production (v0.8.0) HRSH`
-
-- Old cached photos no longer meet the search criteria. Remove automatically any cached public-source photo that:
-  - nobody has interacted with (no vote, no relevance mark, no copy, no reference);
-  - doesn't name the subject (pin name or aliases, by P188's audience rules; the base row only by public names);
-  - and isn't geolocated inside the property.
-  Do it as a sweep that also runs when the rule changes. P196's read-time filter already hides such items on the
-  release branch; this removes them from storage too (see P206).
-- The lightbox for these photos has no relevance up/down votes. Add them, as the Media gallery's tiles have.
-- On a Private Pin page, add "remove from my results": a per-user hide that never deletes the shared row, so other
-  users are unaffected.
-
 ## P236 — A wiki URL's response time tells whether a Location exists under that slug
 
 `id: P236` · `status: open` · `updated: 2026-10-03` · `found by: adversarial review of P186`
@@ -3112,6 +3102,18 @@ behaviour is wanted:
 
 Wiki URLs route by the Location's slug, so a wiki's own slug only shows up as `wiki_slug` in API responses, and re-minting
 it breaks no link.
+
+## P251 — The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes
+
+`id: P251` · `status: open` · `updated: 2026-10-04` · `found by: adversarial review of P233`
+
+`test_beat_lock_intervals.py::_effective_period_seconds` returns 3600 for a crontab whose `hour` covers the whole day,
+whatever its `minute`. P233's `public-media-cache-sweep` runs at `crontab(minute="13,28,43,58")`, every 15 minutes,
+and is checked against an hour: `test_every_lock_expires_before_the_next_tick` would pass a lock of up to 3599 s on it.
+Its real lock is 600 s against 900 s, so nothing is broken today; the test just proves less than it appears to.
+
+Fix: take the shortest gap between consecutive `minute` values (wrapping the hour) when `hour` is every hour, and the
+shortest gap between `hour` values otherwise. Pin it with a minute-list case beside the existing helper tests.
 
 ## P255 — A building pin's CRIS card can show a neighbouring building's record
 

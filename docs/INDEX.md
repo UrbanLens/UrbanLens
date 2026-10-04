@@ -206,7 +206,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P197 | open | 2026-10-02 | "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P200 | open | 2026-10-02 | A placed photo chosen in the map sidebar pans the map instead of opening the lightbox, and the lightbox it used to open may never have shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P202 | open | 2026-10-02 | The scheduled database backup cannot work on Kubernetes, and a restore turns it back on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P206 | open | 2026-10-02 | `dashboard_location_cache` is 81% of production's database | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P206 | open | 2026-10-04 | `dashboard_location_cache` is 81% of production's database | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |
 | N33 | current | 2026-10-02 | Ask: run `localize_article_images` and `sweep_unnamed_pin_images --delete` on staging and production now, per Jess; restore tooling is infrastructure's | [`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`](handoffs/infrastructure-jess-decisions-2026-10-02.md) |
 | P207 | open | 2026-10-02 | A worker's gen-2 collection still walks the startup heap, and that pause has never been timed on a real worker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -219,11 +219,11 @@ still resolves after it is fixed, and the id is never handed out again.
 | P227 | open | 2026-10-03 | "Site Conditions" should be a tab of the Location Data panel, not a panel of its own | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P229 | open | 2026-10-03 | The Ownership panel shows a subscriber only the owner's name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P231 | open | 2026-10-03 | A building child pin's wiki is named after the campus, not the building, and isn't nested under the campus wiki | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P233 | open | 2026-10-03 | Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P236 | open | 2026-10-03 | A wiki URL's response time tells whether a Location exists under that slug | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P250 | open | 2026-10-03 | A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P251 | open | 2026-10-04 | The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P255 | open | 2026-10-03 | A building pin's CRIS card can show a neighbouring building's record | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P256 | open | 2026-10-03 | NPS's record link opens an empty page for listings NPGallery does not carry | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P260 | open | 2026-10-03 | A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources | [`docs/PROBLEMS.md`](PROBLEMS.md) |

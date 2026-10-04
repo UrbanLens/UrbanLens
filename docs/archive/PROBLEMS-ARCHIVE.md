@@ -21484,3 +21484,86 @@ Verified in Chromium on `development_main` (HRSH pin and campus wiki): same docu
 notes replaced and reloaded with the new setting, the open Manage view kept open while its gallery reloaded.
 Tests: `test_child_details_in_place.py`, `child-details.test.ts`, `markup-toolbar.test.ts`,
 `map-annotations.contract.test.ts`.
+
+## RESOLVED 2026-10-04: Cached public-source photos no one is shown are swept from storage, and the public-source lightbox votes and hides
+
+`id: P233` · `status: fixed` · `resolved: 2026-10-04`
+
+`found by: Jess, on production (v0.8.0) HRSH`
+
+**Cause.** P196 judges every name-searched result when a gallery is read (`services/media/subject_relevance.py`), so a
+result about somewhere else is hidden, but it stays in its `LocationCache` row, and nothing prunes that table (P206).
+The Photos tab's public-source tiles opened the shared lightbox with `canRelevance: false`
+(`shared/photo-tile.ts::lightboxItemFromExternalTile`), so they had no votes, and nothing let a user drop an item from
+their own results.
+
+**The sweep.** `services/media/public_media_sweep.py`, run by `tasks.sweep_public_media_cache` every 15 minutes under a
+lock (`public-media-cache-sweep`). It removes a cached result when all of these hold:
+
+- nobody has a `MediaRelevance` mark on it at that location (a vote either way, a wiki vote, or a private hide), under
+  any source;
+- nobody has a copy of it (`Image.media_item_key` at that location, under any source);
+- `GalleryMediaSource.relevant_media_items`, P196's read-time function, keeps it for none of the row's readers.
+
+Nothing else refers to a cached result: albums, covers, games and articles refer to an `Image`, which is a copy.
+
+Readers follow P188. The shared row (audience `""`) is judged by `subject_for_location`, the place's public names
+only. A row cached for a set of custom names is judged by `subject_for_pin` of every pin at the location whose
+`search_names(pin).audience` is that row's, and kept when any of them matches. It is not judged by the names stored in
+the row: those are casefolded, and "hrsh" is not the acronym "HRSH". A row no pin holds any more is left as it is.
+
+P196's rule is the test, not a narrower "does not name the place". A photo that names HRSH but is geolocated in
+Binghamton fails it and is removed: no reader is shown it.
+
+Only cache content changes. The sweep writes nothing but `LocationCache.data` and its own `relevance_rule` column. It
+deletes no row, and leaves user rows alone: marks, copies, uploads, pins. Each write is
+`filter(pk=…, updated=<as read>).update(…)`, so the row keeps its age (a refetch comes when it would have) and a fetch
+that lands mid-sweep is not overwritten. That row stays unjudged and is taken on the next run, as is a row the sweep
+could not judge for an error (building its readers, or reading its results). Only sources with
+`judges_relevance` are read: the six archive providers, Flickr, Web Images and Google Images. A result that does not
+read as one media item is kept. A document about the place stays, so Article > Sources is unchanged.
+
+**Versioning.** `subject_relevance.RULE_VERSION` (1) is recorded on each row it judges (`LocationCache.relevance_rule`,
+migration 0049, indexed with `source`). `LocationCache.set` resets it to 0, so a row is judged once per fetch, and
+bumping `RULE_VERSION` makes every row unjudged; the next tick re-sweeps them. A run stops after 120 s and queues its
+successor. Nothing reminds a developer to bump the version when the rule changes; the constant's comment says to.
+
+**Votes.** A public-source tile now carries the viewer's mark (`data-relevant`, from the `?external=1` payload's
+`relevant`) and opens the lightbox with its Relevant / Not relevant buttons, which post to `pin.media.relevance` as the
+Media gallery does and update the tile. The buttons are hidden on a page whose lightbox has no relevance URL.
+
+**Remove from my results.** The existing per-user mark is reused: `MediaRelevance.is_vote` (migration 0050, default
+true). A hide is `is_relevant=False, is_vote=False`; a check constraint stops a private mark from saying relevant. It is
+no vote: `vote_scores`, the wiki's own-vote display and vote withdrawal go through `MediaRelevanceQuerySet.votes()`,
+so no one else's gallery, wiki score or SpotGuessr eligibility moves. The lightbox's "Remove from my results" posts
+`hidden: true` to the same endpoint, then drops the tile and moves to the next photo. The Photos tab leaves the photo
+out under every provider that returns it. The Media gallery files it under Not Relevant, where clearing the mark
+(`is_relevant: null`) restores it; any later vote replaces the hide. A hide also keeps the item out of the sweep.
+
+**Found on the way.** Both relevance endpoints, the pin's and the wiki's, answered an `item_key` that was not a
+string of at most 40 characters with a 500 (`DataError`). They now refuse it with a 400
+(`models/images/relevance.py::ITEM_KEY_LENGTH`).
+
+**Consequence worth knowing.** A pin whose own names match a result in the shared row saw it before, through
+`subject_for_pin`. The shared row is now judged by public names only, so that result goes, unless the pin's own row
+found it too. A private alias no longer decides what the shared row keeps.
+
+**Not measured.** How much this frees on production. The rows are rewritten in place, so Postgres reuses the space but
+does not return it to the filesystem without `VACUUM FULL` or `pg_repack`. Sources that do not judge relevance, rows
+past `external_data_cache_days`, and rows no pin reads are still never pruned (P206).
+
+**Tests.** Each part failed first. Against a no-op sweep, 15 of `test_public_media_sweep.py`'s 23 tests failed; the
+rest check what must not change. Four TypeScript tests failed against the old tiles, and two against a lightbox with
+no removal. Six of `test_public_photo_hide.py`'s tests failed before the endpoint took `hidden`. Once it did, three
+still failed (the scores and the wiki display) until they read through `votes()`.
+
+- `test_public_media_sweep.py`: what is removed and kept on HRSH's real row; marks, votes and copies under any source;
+  only the cache changes; non-judging sources untouched; Google Images; unreadable results kept; a hypothesis property
+  that a public-names reader is shown the same before and after; audience rows judged by their holders' names
+  (including an acronym), the shared row by public names, an unheld row left alone; the version, a refetch, a fetch
+  landing mid-sweep, a row that errors retried on the next run, the budget, query counts that do not grow with a
+  row's results, the place's public names read once however many pins hold its row, and the task.
+- `test_public_photo_hide.py`: the hide, another account unaffected, every provider, unhide, not a vote, the wiki, the
+  constraint, the lightbox button, and a malformed key refused on both endpoints (a 500 before).
+- `external-photos.test.ts`, `photo-lightbox.test.ts`: the mark reaches the lightbox; a vote posts and updates the
+  tile; no buttons without an endpoint; removal posts, drops the tile and moves on, or closes after the last.
