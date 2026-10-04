@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 import logging
 import time
@@ -10,7 +12,7 @@ from typing import TYPE_CHECKING
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Iterator, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +31,37 @@ _STATE_BOUNDARY_CACHE_SECONDS = 30 * 86400
 _FAILED_LOAD_RETRY_SECONDS = 300.0
 
 
+_REMOTE_LOADING_DEFERRED: ContextVar[bool] = ContextVar("geo_boundary_remote_loading_deferred", default=False)
+
+
+class BoundaryNotLoadedError(LookupError):
+    """A remote boundary was asked about before it was resolved, while resolving it was deferred."""
+
+
+@contextmanager
+def remote_loading_deferred() -> Iterator[None]:
+    """Make an unresolved remote boundary raise :class:`BoundaryNotLoadedError` instead of fetching itself.
+
+    For a caller that must answer from what is already known, such as the Private Pin page's panel probe.
+    """
+    token = _REMOTE_LOADING_DEFERRED.set(True)
+    try:
+        yield
+    finally:
+        _REMOTE_LOADING_DEFERRED.reset(token)
+
+
 @dataclass(slots=True)
 class GeoBoundary:
     """A geographic region, lazily resolved to a GEOS polygon and memoized.
 
     Attributes:
-        _loader: Zero-argument callable returning the boundary's geometry (or None when it couldn't be resolved)."""
+        _loader: Zero-argument callable returning the boundary's geometry (or None when it couldn't be resolved).
+        remote: Whether resolving it may make a network request.
+    """
 
     _loader: Callable[[], Polygon | MultiPolygon | None]
+    remote: bool = False
     _cached: Polygon | MultiPolygon | None = field(default=None, init=False, repr=False)
     _loaded: bool = field(default=False, init=False, repr=False)
     #: When a failed load may be retried (``time.monotonic()`` scale), or None.
@@ -47,11 +72,17 @@ class GeoBoundary:
         A loader that *raises* has not answered, and is only honoured for :data:`_FAILED_LOAD_RETRY_SECONDS`, because the two are otherwise indistinguishable to every caller and the second one heals on its own.
 
         Returns:
-            The boundary geometry, or None when it is unresolved or unavailable."""
+            The boundary geometry, or None when it is unresolved or unavailable.
+
+        Raises:
+            BoundaryNotLoadedError: It is remote, unresolved, and inside :func:`remote_loading_deferred`.
+        """
         if self._loaded:
             return self._cached
         if self._retry_after is not None and time.monotonic() < self._retry_after:
             return None
+        if self.remote and _REMOTE_LOADING_DEFERRED.get():
+            raise BoundaryNotLoadedError
         try:
             self._cached = self._loader()
         except Exception:
@@ -193,4 +224,4 @@ def state_boundary(state_abbr: str) -> GeoBoundary:
             cache.set(cache_key, rings_payload, _STATE_BOUNDARY_CACHE_SECONDS)
         return esri_rings_to_polygon(rings_payload)
 
-    return GeoBoundary(_load)
+    return GeoBoundary(_load, remote=True)

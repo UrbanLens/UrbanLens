@@ -1,4 +1,4 @@
-"""Shared helper for tests whose subject sits behind a REData-configured gate."""
+"""Shared helpers for tests whose subject sits behind a REData-configured gate."""
 
 from __future__ import annotations
 
@@ -19,3 +19,16 @@ class RedataConfiguredMixin:
             patcher = mock.patch.object(app_settings, attribute, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+
+
+class EveryPanelGateConfiguredMixin(RedataConfiguredMixin):
+    """Also sets the Azure Maps key, so no Private Pin panel's gate refuses a pin for want of configuration.
+
+    The page leaves out a panel whose gate refuses the pin (P53); a test about every panel's markup needs them all.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.object(app_settings, "azure_maps_subscription_key", "test-azure-key")
+        patcher.start()
+        self.addCleanup(patcher.stop)

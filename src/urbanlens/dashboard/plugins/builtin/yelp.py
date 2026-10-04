@@ -62,6 +62,10 @@ class YelpPanelSource(GalleryMediaSource):
         lat, lng = pin.effective_latitude, pin.effective_longitude
         return bool(lat and lng)
 
+    def has_content(self, data: dict | None) -> bool:
+        """Whether a business was found; the details panel shows nothing without one."""
+        return bool(data and data.get("business"))
+
     def fetch(self, pin: Pin) -> None:
         """Search REData's points-of-interest lookup for the nearest Yelp business, then cache it."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache

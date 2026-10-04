@@ -427,6 +427,32 @@ class LocationCachePanelSource(PanelSource, ABC):
         """
         return bool(data)
 
+    def shows(self, pin: Pin, data: dict) -> bool:
+        """Whether the panel's card has anything to show ``pin`` from a payload that has landed.
+
+        Its view answers 204 when this is False, and the Private Pin page leaves out a card it already knows would
+        (``services.pins.panel_probe``).
+
+        Args:
+            pin: The pin being viewed.
+            data: The cached payload; ``{}`` when the fetch found nothing.
+
+        Returns:
+            :meth:`has_content`, by default.
+        """
+        return self.has_content(data)
+
+    def always_shows(self, pin: Pin) -> bool:
+        """Whether the card has something to show ``pin`` whatever this source's fetch finds, or whether it applies.
+
+        Args:
+            pin: The pin being viewed.
+
+        Returns:
+            False by default.
+        """
+        return False
+
     def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
         """This source's cached data, summarized for the Overview tab of the card it is a tab in.
 
@@ -530,6 +556,10 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
         Returns:
             A context dict (may include ``heading_name``, ``chips``, ``meta``, ``header_link``, ``footer_link``), or None when there's nothing worth showing (renders a 204).
         """
+
+    def shows(self, pin: Pin, data: dict) -> bool:
+        """Whether :meth:`render_context` has anything for ``pin``, which is what the panel's view renders or 204s on."""
+        return self.render_context(pin, data) is not None
 
     def debug_count(self, data: dict) -> int:
         """Item count reported in the debug overlay.
@@ -1606,6 +1636,24 @@ def seed_site_descendants(site: Pin) -> int:
     return written
 
 
+def fetch_blocked(source: PanelSource, pin: Pin) -> bool:
+    """Whether :func:`schedule_panel_fetch` would refuse to fetch ``source`` for ``pin``.
+
+    Args:
+        source: The panel source.
+        pin: The pin whose panel would be fetched.
+
+    Returns:
+        True when the pin's owner turned external services off, or the source is suppressed after a failed fetch.
+    """
+    if not pin.profile.external_apis_enabled:
+        return True
+    if cache.get(source.skip_key(pin)):
+        logger.debug("%s for pin %s is suppressed", source.key, pin.pk)
+        return True
+    return False
+
+
 def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     """Ensure a background fetch is in flight for this panel, single-flight.
 
@@ -1619,10 +1667,7 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     if source is None:
         logger.warning("schedule_panel_fetch: unknown source '%s' for pin %s", source_key, getattr(pin, "pk", None))
         return False
-    if not pin.profile.external_apis_enabled:
-        return False
-    if cache.get(source.skip_key(pin)):
-        logger.debug("schedule_panel_fetch: %s for pin %s is suppressed, skipping", source_key, pin.pk)
+    if fetch_blocked(source, pin):
         return False
     # The marker's TTL covers queue wait *and* execution, so on a backed-up panel_fetch queue it can
     # lapse before the task even starts.

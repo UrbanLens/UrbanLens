@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -26,6 +27,27 @@ from urbanlens.dashboard.services.core.outages import is_unanswered_status, reco
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 logger = logging.getLogger(__name__)
+
+_EXTERNAL_CALLS_FORBIDDEN: ContextVar[bool] = ContextVar("external_calls_forbidden", default=False)
+
+
+class ExternalCallForbiddenError(RuntimeError):
+    """A gateway request was attempted inside :func:`external_calls_forbidden`.
+
+    Not a :class:`GatewayRequestError`, so a caller that degrades quietly on an upstream failure does not mistake it
+    for one.
+    """
+
+
+@contextmanager
+def external_calls_forbidden() -> Iterator[None]:
+    """Refuse every gateway request made for the duration, raising :class:`ExternalCallForbiddenError` before it goes out."""
+    token = _EXTERNAL_CALLS_FORBIDDEN.set(True)
+    try:
+        yield
+    finally:
+        _EXTERNAL_CALLS_FORBIDDEN.reset(token)
+
 
 # Service registry - default config for external API services that have not yet been converted to
 # plugins.
@@ -777,6 +799,8 @@ class _RateLimitedSession:
         from urbanlens.dashboard.services.core.task_limits import check_task_deadline, within_task_deadline
         from urbanlens.dashboard.services.core.upstream_breaker import breaker_for
 
+        if _EXTERNAL_CALLS_FORBIDDEN.get():
+            raise ExternalCallForbiddenError(f"{self._service_key}: {method}")
         check_task_deadline()
         endpoint = self._endpoint_for_log(str(url))
         breaker = breaker_for(self._service_key)

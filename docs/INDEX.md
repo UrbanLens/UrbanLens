@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P265` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P278` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -48,7 +48,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P24 | open | 2026-09-24 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-10-03 | 43 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-29 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P53 | open | 2026-10-02 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-10-02 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | T1 | done | 2026-08-27 | The mobile team's 2026-07-27 ask list is spent: its P0 was already false and its P2 remainder moved on | [`docs/notes/mobile_app_requirements.md`](notes/mobile_app_requirements.md) |
 | T2 | open | 2026-08-27 | HIGH 0-ref findings are all triaged; the MEDIUM tier and Jess's caching requests are still open | [`docs/reports/code_audit_status.txt`](reports/code_audit_status.txt) |
@@ -219,4 +218,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | P262 | open | 2026-10-04 | A building's wiki is seeded with its campus's Wikipedia article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P263 | open | 2026-10-04 | A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P264 | open | 2026-10-04 | A building outline drawn on a wiki whose building place has no footprint is saved but never shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P277 | open | 2026-10-04 | A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P251 | open | 2026-10-04 | The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -28,10 +28,14 @@ class AzureMapsPanelSource(LocationCachePanelSource):
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
     def gate(self, pin: Pin) -> bool:
-        """Requires a subscription key, without which every call is refused before it is made."""
+        """Requires coordinates and a subscription key, without which every call is refused before it is made."""
         from urbanlens.UrbanLens.settings.app import settings
 
-        return super().gate(pin) and bool(settings.azure_maps_subscription_key)
+        return bool(pin.effective_latitude and pin.effective_longitude) and bool(settings.azure_maps_subscription_key)
+
+    def has_content(self, data: dict | None) -> bool:
+        """A formatted address or a nearby POI; with neither, the payload is the coordinates echoed back."""
+        return bool(data and (data.get("formatted_address") or data.get("poi")))
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the nearest POI, if any.
@@ -51,7 +55,7 @@ class AzureMapsPanelSource(LocationCachePanelSource):
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The reverse-geocoded address and nearest POI as an information card, or None.
-        Applies ``PinController.azure_maps_info``'s own emptiness rule: with neither a formatted address nor a POI the payload is coordinates echoed back, which the client already has - suppressed on both surfaces rather than rendered as an empty card.
+        Applies the web panel's emptiness rule, :meth:`has_content`.
 
         Args:
             pin: The pin whose panel is being read.
@@ -60,7 +64,7 @@ class AzureMapsPanelSource(LocationCachePanelSource):
             ``{"info": {...}}``, or None when nothing has landed yet or neither Azure call found anything.
         """
         data = self.cached_data(pin)
-        if not data or not (data.get("formatted_address") or data.get("poi")):
+        if data is None or not self.has_content(data):
             return None
 
         poi = data.get("poi") or {}

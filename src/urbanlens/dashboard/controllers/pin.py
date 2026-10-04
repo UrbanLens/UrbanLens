@@ -52,6 +52,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, StreetViewSlide
     from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, LocationCachePanelSource, PanelSource, ProviderFetchResult
+    from urbanlens.dashboard.services.pins.panel_probe import PanelProbe
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,36 @@ def _property_tab_sources(sources: Iterable[PanelSource], pin: Pin) -> list[Info
     return [source for source in tabbed_panels(sources, PanelPlacement.PROPERTY) if not (site_scope and source.key == "overture_building_attributes")]
 
 
+#: Cards of the Private Pin page with views of their own, each placed by its own section of the template.
+_BESPOKE_CARD_KEYS = ("azure_maps", "parcel_buildings", "yelp", "nps", "loopnet", "usgs_topo", "wikipedia")
+
+
+def _probe_page_panels(request: HttpRequest, pin: Pin, info_panels: Sequence[InfoPanelSource], visible: Sequence[PanelSource]) -> tuple[PanelProbe, list[str]]:
+    """Which of the Private Pin page's enrichment panels to leave out, because they are known to have nothing (P53).
+
+    Args:
+        request: The current request, for its viewer.
+        pin: The pin being viewed.
+        info_panels: The info panels the page may request as it opens: its standalone cards and Regional Data tabs.
+        visible: Every panel source the viewer may see.
+
+    Returns:
+        The probe, and the Media gallery providers to load, in loader order. A debug-overlay viewer loads every
+        provider, since an empty one still reports what it searched for.
+    """
+    from urbanlens.dashboard.services.admin.debug_overlay import can_view_debug_overlay
+    from urbanlens.dashboard.services.photos.pin_photos import PIN_MEDIA_GALLERY_SOURCES
+    from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, LocationCachePanelSource, panels_shown_in
+    from urbanlens.dashboard.services.pins.panel_probe import probe_panels
+
+    by_key = {source.key: source for source in visible}
+    cards: dict[str, list[LocationCachePanelSource]] = {source.key: [source, *panels_shown_in(source, visible)] for source in info_panels}
+    cards.update({key: [source] for key in _BESPOKE_CARD_KEYS if isinstance(source := by_key.get(key), LocationCachePanelSource)})
+    galleries = [source for key in PIN_MEDIA_GALLERY_SOURCES if isinstance(source := by_key.get(key), GalleryMediaSource)]
+    probe = probe_panels(pin, cards=cards, galleries=[] if can_view_debug_overlay(request.user) else galleries)
+    return probe, [source.key for source in galleries if source.key not in probe.empty_galleries]
+
+
 class PinController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the pin page
@@ -232,17 +263,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.services.pins.external_data import PanelPlacement, own_panels, panel_readiness, tabbed_panels
 
         # Filter gated sources once so all surfaces stay consistent.
-        all_info_panels = own_panels(_visible_panel_sources(request))
+        visible_sources = _visible_panel_sources(request)
+        all_info_panels = own_panels(visible_sources)
         regional_sources = tabbed_panels(all_info_panels, PanelPlacement.REGIONAL)
         panel_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in regional_sources]
         location_data_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in tabbed_panels(all_info_panels, PanelPlacement.LOCATION)]
         property_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in _property_tab_sources(all_info_panels, pin)]
         simple_info_panels = [source for source in all_info_panels if source.placement == PanelPlacement.STANDALONE and not (site_scope and source.key == "redata_building_attributes")]
+        panel_probe, media_loaders = _probe_page_panels(request, pin, [*simple_info_panels, *regional_sources], visible_sources)
 
-        # Show first tab with fresh cached data.
+        # Show the first tab with fresh cached data that has something to show.
         # Bulk readiness check to avoid per-tab queries.
         tab_readiness = panel_readiness(pin, regional_sources)
-        default_panel_tab_key = next((tab["key"] for tab in panel_tabs if tab_readiness[tab["key"]]), None)
+        default_panel_tab_key = next((tab["key"] for tab in panel_tabs if tab_readiness[tab["key"]] and tab["key"] not in panel_probe.empty_cards), None)
 
         # True once aliases used on any pin, to dismiss onboarding.
         has_ever_used_aliases = PinAlias.objects.filter(pin__profile=profile).exists()
@@ -294,6 +327,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_lists": pin_lists,
                 "pin_cover_candidates": pin.cover_candidates(),
                 "simple_info_panels": simple_info_panels,
+                "empty_panels": panel_probe.empty_cards,
+                "media_loaders": media_loaders,
                 "panel_tabs": panel_tabs,
                 "default_panel_tab_key": default_panel_tab_key,
                 "location_data_tabs": location_data_tabs,
@@ -1168,31 +1203,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns an empty 204 when no matching article is found; the client-side
         htmx:afterOnLoad handler removes the loading placeholder on 204.
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaPanelSource
 
+        panel = WikipediaPanelSource()
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        location = pin.location
-        if not location:
-            logger.debug("wikipedia_info: pin %s has no location, skipping", pin_slug)
+        if not pin.location or not panel.gate(pin):
             return HttpResponse(status=204)
 
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        if not lat and not lng:
-            logger.debug("wikipedia_info: pin %s has no coordinates, skipping", pin_slug)
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(location, "wikipedia")
+        cached = panel.cached_entry(pin)
         if cached is None:
             return self._pending_panel(request, pin, "wikipedia", hide_tab_id="article-subtab-btn-wikipedia")
-        data = cached.data or None
-
-        if not data:
-            logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, redact_coordinate(lat), redact_coordinate(lng))
+        data = cached.data or {}
+        if not panel.shows(pin, data):
+            logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, redact_coordinate(pin.effective_latitude), redact_coordinate(pin.effective_longitude))
             return HttpResponse(status=204)
 
         from urbanlens.dashboard.services.media.remote_copies import copy_url
@@ -1217,31 +1244,24 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Requires a full street address; returns 204 when none is available or
         when the search/scrape produces no results.
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.plugins.builtin.loopnet import LoopnetPanelSource
 
+        panel = LoopnetPanelSource()
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        location = pin.location
-        if not location:
-            logger.debug("loopnet_info: pin %s has no location, skipping", pin_slug)
-            return HttpResponse(status=204)
-
         # Requires at least street + city precision to search against.
-        address = LoopnetPanelSource.address(pin)
-        if not address:
-            logger.debug("loopnet_info: pin %s has insufficient address data (route=%r), skipping", pin_slug, location.route)
+        if not pin.location or not panel.gate(pin):
             return HttpResponse(status=204)
+        address = panel.address(pin)
 
-        cached = LocationCache.get_fresh(location, "loopnet")
+        cached = panel.cached_entry(pin)
         if cached is None:
             return self._pending_panel(request, pin, "loopnet")
-        data = cached.data or None
-
-        if not data or not data.get("listings"):
+        data = cached.data or {}
+        if not panel.shows(pin, data):
             logger.debug("loopnet_info: no listings found for pin %s (address=%r)", pin_slug, address)
             return HttpResponse(status=204)
 
@@ -1272,23 +1292,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        location = pin.location
-        if not location:
-            return HttpResponse(status=204)
-        if not panel.gate(pin):
+        if not pin.location or not panel.gate(pin):
             return HttpResponse(status=204)
 
         cached = panel.cached_entry(pin)
         if cached is None:
             return self._pending_panel(request, pin, "yelp")
-        data = cached.data or None
-        business = (data or {}).get("business")
-        if not business:
+        data = cached.data or {}
+        if not panel.shows(pin, data):
             return HttpResponse(status=204)
 
-        reviews = (data or {}).get("reviews") or []
+        reviews = data.get("reviews") or []
         context = {
-            "business": business,
+            "business": data["business"],
             "latest_review": reviews[0] if reviews else None,
             "debug": self._debug_entry(request, "yelp", cached.query_key, from_cache=True, count=1),
         }
@@ -1303,35 +1319,22 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         containment - see ``plugins.builtin.nps``). Requires REData to be
         configured.
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+        from urbanlens.dashboard.plugins.builtin.nps import NpsPanelSource
 
-        if not redata_configured():
-            logger.debug("nps_info: REData not configured, skipping pin %s", pin_slug)
-            return HttpResponse(status=204)
-
+        panel = NpsPanelSource()
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        location = pin.location
-        if not location:
-            logger.debug("nps_info: pin %s has no location, skipping", pin_slug)
+        if not pin.location or not panel.gate(pin):
             return HttpResponse(status=204)
 
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if not lat or not lng:
-            logger.debug("nps_info: pin %s missing lat/lng, skipping", pin_slug)
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(location, "nps")
+        cached = panel.cached_entry(pin)
         if cached is None:
             return self._pending_panel(request, pin, "nps")
-        data = cached.data or None
-
-        if not data:
+        data = cached.data or {}
+        if not panel.shows(pin, data):
             logger.debug("nps_info: pin %s is not within any NPS unit", pin_slug)
             return HttpResponse(status=204)
 
@@ -1554,35 +1557,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Only renders when the payload carries a formatted address or a nearby POI - a
         coordinate-only result (nothing geocoded, nothing nearby) returns 204.
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.azure_maps import AzureMapsPanelSource
 
-        if not settings.azure_maps_subscription_key:
-            logger.debug("azure_maps_info: Azure Maps subscription key not configured, skipping pin %s", pin_slug)
-            return HttpResponse(status=204)
-
+        panel = AzureMapsPanelSource()
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        location = pin.location
-        if not location:
-            logger.debug("azure_maps_info: pin %s has no location, skipping", pin_slug)
+        if not pin.location or not panel.gate(pin):
             return HttpResponse(status=204)
 
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if not lat or not lng:
-            logger.debug("azure_maps_info: pin %s has no coordinates, skipping", pin_slug)
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(location, "azure_maps")
+        cached = panel.cached_entry(pin)
         if cached is None:
             return self._pending_panel(request, pin, "azure_maps")
-        data = cached.data or None
-
-        if not data or not (data.get("formatted_address") or data.get("poi")):
-            logger.debug("azure_maps_info: no enrichment data for pin %s at (%s, %s)", pin_slug, redact_coordinate(lat), redact_coordinate(lng))
+        data = cached.data or {}
+        if not panel.shows(pin, data):
+            logger.debug("azure_maps_info: no enrichment data for pin %s at (%s, %s)", pin_slug, redact_coordinate(pin.effective_latitude), redact_coordinate(pin.effective_longitude))
             return HttpResponse(status=204)
 
         context = {"place": data, "debug": self._debug_entry(request, "azure_maps", cached.query_key, from_cache=True, count=1)}
@@ -1854,30 +1845,25 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
         """HTMX partial: USGS Historical Topographic Map Collection maps near the pin."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.usgs import UsgsTopoPanelSource
 
+        panel = UsgsTopoPanelSource()
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        location = pin.location
-        if not location:
+        if not pin.location or not panel.gate(pin):
             return HttpResponse(status=204)
 
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if not lat or not lng:
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(location, "usgs_topo")
+        cached = panel.cached_entry(pin)
         if cached is None:
             return self._pending_panel(request, pin, "usgs_topo")
-
-        maps_list = (cached.data or {}).get("items") or []
-        if not maps_list:
+        data = cached.data or {}
+        if not panel.shows(pin, data):
             logger.debug("usgs_topo_info: no topo maps found for pin %s", pin_slug)
             return HttpResponse(status=204)
+        maps_list = data["items"]
 
         context = {
             "maps": maps_list[:20],

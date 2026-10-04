@@ -342,9 +342,7 @@ class NpsInfoViewTests(TestCase):
         )
         self.client.force_login(self.pin.profile.user)
 
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
-        ):
+        with mock.patch(_CONFIGURED_PATH, return_value=True):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -358,9 +356,7 @@ class NpsInfoViewTests(TestCase):
         )
         self.client.force_login(self.pin.profile.user)
 
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
-        ):
+        with mock.patch(_CONFIGURED_PATH, return_value=True):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -378,9 +374,7 @@ class NpsInfoViewTests(TestCase):
         )
         self.client.force_login(self.pin.profile.user)
 
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
-        ):
+        with mock.patch(_CONFIGURED_PATH, return_value=True):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -391,9 +385,7 @@ class NpsInfoViewTests(TestCase):
         self._seed_cache(park={"park_code": "yell", "full_name": "Yellowstone National Park"}, alerts=[])
         self.client.force_login(self.pin.profile.user)
 
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
-        ):
+        with mock.patch(_CONFIGURED_PATH, return_value=True):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)

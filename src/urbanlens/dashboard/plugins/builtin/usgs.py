@@ -43,6 +43,14 @@ class UsgsTopoPanelSource(LocationCachePanelSource):
     # with a gallery gets the scans themselves.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO, PanelApiKind.MEDIA})
 
+    def gate(self, pin: Pin) -> bool:
+        """Requires coordinates to search around."""
+        return bool(pin.effective_latitude and pin.effective_longitude)
+
+    def has_content(self, data: dict | None) -> bool:
+        """Whether the search area holds any scanned map."""
+        return bool(data and data.get("items"))
+
     def fetch(self, pin: Pin) -> None:
         """Query the TNM API for historical topo maps and cache the result."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache

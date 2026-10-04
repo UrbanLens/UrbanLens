@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: The Media panel's external providers, in its loader order (``pages/location/index.html``).
+#: The Media panel's external providers, in loader order; the Private Pin page renders its loaders from this.
 PIN_MEDIA_GALLERY_SOURCES: tuple[str, ...] = (
     "smithsonian",
     "wikimedia",

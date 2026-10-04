@@ -595,10 +595,24 @@ direct-only because REData's contract can't reproduce what they show:
   "No data available." or "This data is temporarily unavailable." rather than going blank
   (`shared/external-panel-fallbacks.ts`). A card collapsed when the page opened loads its open tab
   when it is restored (`shared/collapsible-sections.ts`)
+- **Panels known to be empty are never requested** — while it renders, the Private Pin page works out
+  which of its standalone info cards, bespoke cards (Azure Maps, Buildings, Yelp, NPS, LoopNet, USGS
+  Topo, Wikipedia) and Media providers already have nothing for this pin, and renders no placeholder
+  for those (`services.pins.panel_probe`, P53). "Nothing" means what the panel's own request would
+  have answered 204 or an empty gallery on: its gate refuses the pin, the owner turned external
+  services off, its fetch is suppressed after a failure (`external_data.fetch_blocked`), or the
+  cached answer shows nothing (`LocationCachePanelSource.shows`, which is `render_context` for an
+  info panel; `media_items` for a provider). A panel with no stored answer still loads and fetches.
+  The decision reads one batch of cache rows, refuses every gateway request, and leaves a remote geo
+  boundary (a state outline from TIGERweb) unresolved, counting such a panel as possibly having
+  content. It covers only sources the viewer may see. A debug-overlay viewer still loads every Media
+  provider, since an empty one reports what it searched for. Decided in the page's own request
+  rather than in a separate one: no extra round trip before the panels start, no out-of-band swaps
+  into the panels' scattered slots, and a probe that fails loads every panel as before
 - **Regional Data** — data about the area rather than the site: US Census, Wildlife (iNaturalist),
   Seismic (USGS earthquakes), Disasters (Fire & Disaster History), Water (Water & Hydrology), Air
-  Quality and EPA, each loaded when its tab is opened; the first tab with data opens by default,
-  and a tab with nothing to show says "No data available."
+  Quality and EPA, each loaded when its tab is opened; the first tab with something to show opens by
+  default (a cached empty answer is passed over), and a tab with nothing to show says "No data available."
 - **Location Data** — data about this place: an Overview merging every tab's
   `overview_summary()` into one unattributed list, then Nominatim, Photon, Elevation and Site
   Conditions. Tabs that settle with nothing to show are removed, and so is a tab whose panel's gate

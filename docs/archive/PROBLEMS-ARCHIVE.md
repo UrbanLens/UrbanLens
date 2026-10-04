@@ -21923,3 +21923,72 @@ removes and restores them; adding an alias keeps them.
 
 The two identical child chips (`.comment-child-chip`, `.visit-child-chip`) became one `.child-chip` component in
 `_components.scss`, which this listing reuses.
+
+## RESOLVED 2026-10-04: The Private Pin page no longer requests the panels it already knows are empty
+
+`id: P53` · `status: fixed` · `resolved: 2026-10-04`
+
+Jess ruled on 2026-10-02: ask once which panels have content, and skip the rest. The page now does that in its own
+request. `services/pins/panel_probe.py` reads the pin's cache rows in one batch and, for each standalone info card,
+each bespoke card (Azure Maps, Buildings, Yelp, NPS, LoopNet, USGS Topo, Wikipedia), each Regional Data tab and each
+Media provider, decides whether the panel's own request would answer 204 or an empty gallery. The template renders no
+placeholder for those. A panel with no stored answer still loads and fetches. The hx-sync lanes are unchanged, and
+every placeholder that still renders keeps its lane.
+
+**Each decision is the panel's own, so the page and the panel cannot disagree.** The bespoke views (Azure Maps, NPS,
+LoopNet, Yelp, USGS Topo, Wikipedia) now go through their source's `gate()`, `cached_entry()` and `shows()`.
+Their inline 204 rules moved into `has_content`, and the coordinate and key checks moved into `gate`.
+`schedule_panel_fetch`'s refusal became `external_data.fetch_blocked`. An info panel's `shows` is
+`render_context(...) is not None`, which is exactly what its view 204s on. `ProbeAgreesWithThePanelsTests` asks
+both the page and the view about the same payloads.
+
+**Why the page's own request and not a lazily loaded fragment.** A fragment would add a round trip before any panel
+could start. It would also need out-of-band swaps into the slots the panels occupy across four parts of the page,
+plus a fallback for when it failed. In the page's request the probe costs one cache-row query plus the gates'
+own lookups. If anything in it raises, that panel loads as before.
+
+**Nothing in the probe can reach the network.** It runs inside `rate_limiter.external_calls_forbidden()`, which
+refuses every gateway request. It also runs inside `geo_boundary.remote_loading_deferred()`. A gate that would need
+either counts as "may have content". This was found while measuring, not designed in. CRIS's and Digital
+Commonwealth's gates resolve a state outline from Census TIGERweb in a cold process, so the first version made
+that request from inside the page render (captured as an `ApiCallLog` insert). Its "no external call" test passed
+only because an earlier test in the same process had already failed that load, so the boundary was backing off.
+
+**Correction to the entry's own count.** "Twelve of the 27 are plugin panels" undercounted. The probe can leave out
+15 cards and 13 Media providers. On an ordinary place, 27 of the 49 requests made as the page opened were known
+empty.
+
+**Measured 2026-10-04 in Chromium on the `development_main` stack**, which runs `release/v_0_9_0`'s pin controller
+and template (checksums match). A throwaway account pinned two existing warm locations. The change could not be
+deployed to the shared stack, so "after" is a replay: the same page from the same server, with the placeholders the
+probe leaves out removed as the document parses. Those placeholders were chosen from the first responses of a
+"before" visit made moments earlier: an immediate 204, or an empty gallery whose cached rows hold no items.
+Providers whose rows held items the gallery then filtered out were kept, as the probe keeps them. Script:
+`~/pw-verify-a536ded/p53-measure.mjs`.
+
+| Returning visit | Requests | In first 2 s | Peak | Settled |
+|---|---|---|---|---|
+| 3 Locke Rd, West Sand Lake (ordinary), before | 49 | 27 | 20 | 4.3 s |
+| same, after | 22 | 22 | 17 | 2.4 s |
+| Hudson River State Hospital (rich), before (two runs) | 48 | 27-29 | 20 | 4.2-4.3 s |
+| same, after | 27 | 24-25 | 20 | 3.5-3.6 s |
+
+The peak barely moves. The page reaches it in its first second with its own unlaned requests (overview, gallery,
+boundary, markup and detail-pin JSON, the carousels, labels, custom fields), and the lanes already held the panels
+to seven at a time. What shrinks is the request count and the tail.
+
+A cold visit is not helped. On Locke after the five-minute fetch suppression expired: 81 requests, settled at 34.7 s.
+The probe would remove 18 of those requests, but not the polling for the panels with no stored answer. That is
+P277.
+
+**Cost.** In the test container, the probe makes 16-17 queries and takes 20-28 ms (`_probe_page_panels`, median of
+15). Seven of those queries are the same alias lookup, because every name-searched provider's gate recomputes
+`search_names`. Three more are `SiteSettings` reads, which a real request memoizes.
+
+**Dev caveat, not a code defect.** Dev's `celery_worker_panels` was running code older than the app: its
+`LocationCache.set` has no `relevance_rule`. Every fetch that creates a cache row there therefore fails with
+`NotNullViolation`, and dev's cold panels are retried every five minutes indefinitely. This inflates any cold-visit
+figure taken on dev until that worker is synced and restarted.
+
+Tests: `tests/hypothesis/test_pin_panel_probe.py`. `test_pin_detail_fanout_budget.py` is now measured on a pin where
+no panel is known empty (every gate passes, nothing cached), and is still 42 there.
