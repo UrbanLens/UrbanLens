@@ -23106,3 +23106,29 @@ python-requests' User-Agent it is still 403.
 
 **Tests.** `test_request_public_url.py::UserAgentTests`: the default is sent, a caller's header wins, a session's own
 User-Agent wins, and python-requests' default on a session is replaced. The first and last failed before the fix.
+
+## RESOLVED 2026-10-04: CRIS documents were never extracted, because UrbanLens asked REData to extract files it had not downloaded
+
+`id: P293` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, reading dev's bulk worker log`
+
+**What was wrong.** A CRIS lookup lists each resource's documents. `tasks.extract_cris_attachments` asks REData to
+extract the ones not yet extracted. REData extracts only a document whose file it holds, and fetches the file from
+CRIS only when a client downloads it (`../REData/docs/api-reference.md`, the `extract/` endpoint). UrbanLens never
+downloaded first, so REData answered `400 not_extractable` ("download it first") to every document nobody had opened.
+The task logs that at DEBUG and moves on. Of 330 documents in dev's CRIS cache, 43 were extracted, all on one day
+(2026-09-23), and none since.
+
+**Fix.** `RedataGateway._extract_cultural_resource_attachment_now` answers `not_extractable` by downloading the
+attachment and asking once more. A download that fails, or a second refusal, raises as before. On dev, the two
+documents that had been refused were downloaded and extracted. REData found nothing in either (`503
+extraction_unavailable`, about 40 s each). A form REData had extracted before returned four fields when extracted again.
+
+**Not fixed here.** Dev also logged five `504`s on extraction. That is REData's proxy giving up on a synchronous
+extraction. The document stays unextracted and is asked for again on the panel's next refetch.
+
+**Tests.** `test_redata_gateway.py::ExtractCulturalResourceAttachmentTests`:
+- an undownloaded document is downloaded, then extracted;
+- a document still refused once downloaded is not asked a third time;
+- a failed download is raised without a second extraction.
+
+All three failed before the fix.

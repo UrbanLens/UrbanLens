@@ -45,6 +45,8 @@ REASON_SOURCE_RATE_LIMITED = "source_rate_limited"
 REASON_RATE_LIMITED = "rate_limited"
 #: The key lacks the scope an endpoint needs - settled until the key changes, so not transient.
 REASON_FORBIDDEN = "forbidden"
+#: An attachment REData cannot extract: not a document, a provider with no extraction, or a file it does not hold yet.
+REASON_NOT_EXTRACTABLE = "not_extractable"
 
 #: Reasons that mean "we could not ask", never "there is nothing here".
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
@@ -658,8 +660,10 @@ class RedataGateway(Gateway):
         )
 
     def _extract_cultural_resource_attachment_now(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
-        """OCR/AI-extract a downloaded document attachment's fields and any embedded photos.
-        Only meaningful for a ``document``-kind attachment (typically a scanned Building-Structure Inventory Form) that's already been downloaded at least once (see :meth:`download_cultural_resource_attachment`).
+        """OCR/AI-extract a ``document``-kind attachment's fields and any embedded photos.
+
+        REData extracts only a document whose file it holds, and fetches the file from CRIS only when it is downloaded,
+        so a refusal is answered by downloading it and asking once more.
 
         Args:
             resource_uuid: The resource's REData uuid.
@@ -670,8 +674,19 @@ class RedataGateway(Gateway):
             The attachment dict with ``extracted_data``/``extracted_at``/ ``extracted_images`` populated - see REData's own ``../REData/docs/api-reference.md`` for the shape.
 
         Raises:
-            PropertyRecordsUnavailableError: The attachment isn't a downloaded document yet (``"not_extractable"``), neither the text nor image extraction found anything at all (``"extraction_unavailable"``), or the request to REData failed outright.
+            PropertyRecordsUnavailableError: The attachment isn't an extractable document (``"not_extractable"``), its file
+                could not be downloaded, neither the text nor image extraction found anything at all
+                (``"extraction_unavailable"``), or the request to REData failed outright.
         """
+        try:
+            return self._post_extraction(resource_uuid, attachment_id, timeout=timeout)
+        except PropertyRecordsUnavailableError as refused:
+            if refused.reason != REASON_NOT_EXTRACTABLE:
+                raise
+        self.download_cultural_resource_attachment(resource_uuid, attachment_id)
+        return self._post_extraction(resource_uuid, attachment_id, timeout=timeout)
+
+    def _post_extraction(self, resource_uuid: str, attachment_id: int, *, timeout: float) -> dict[str, Any]:
         base_url = self.base_url
         if base_url is None:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")

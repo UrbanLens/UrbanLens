@@ -525,13 +525,42 @@ class ExtractCulturalResourceAttachmentTests(SimpleTestCase):
         args, _kwargs = session.post.call_args
         self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/r1/attachments/12/extract/")
 
-    def test_400_not_extractable_raises_unavailable(self) -> None:
+    def test_a_document_not_downloaded_yet_is_downloaded_then_extracted(self) -> None:
+        """REData extracts only a document it holds the file for, and fetches the file only when it is downloaded."""
+        session = MagicMock()
+        session.post.side_effect = [
+            _response(400, json_body={"error": "not_extractable", "message": "download it first"}),
+            _response(200, json_body={"id": 21, "extracted_images": [{"id": 3}]}),
+        ]
+        session.get.return_value = _response(200, content=b"%PDF", headers={"Content-Type": "application/pdf"})
+        gateway = _gateway(session)
+
+        result = gateway.extract_cultural_resource_attachment("r1", 21)
+
+        self.assertEqual(result["extracted_images"], [{"id": 3}])
+        args, _kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/r1/attachments/21/download/")
+        self.assertEqual(session.post.call_count, 2)
+
+    def test_a_document_still_refused_once_downloaded_is_not_asked_again(self) -> None:
         session = MagicMock()
         session.post.return_value = _response(400, json_body={"error": "not_extractable"})
+        session.get.return_value = _response(200, content=b"%PDF")
         gateway = _gateway(session)
         with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
-            gateway.extract_cultural_resource_attachment("r1", 12)
+            gateway.extract_cultural_resource_attachment("r1", 22)
         self.assertEqual(ctx.exception.reason, "not_extractable")
+        self.assertEqual((session.post.call_count, session.get.call_count), (2, 1))
+
+    def test_a_document_that_cannot_be_downloaded_is_not_extracted(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(400, json_body={"error": "not_extractable"})
+        session.get.return_value = _response(404, json_body={"error": "attachment_unavailable"})
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+            gateway.extract_cultural_resource_attachment("r1", 23)
+        self.assertEqual(ctx.exception.reason, "attachment_unavailable")
+        self.assertEqual(session.post.call_count, 1)
 
     def test_503_extraction_unavailable_raises_unavailable(self) -> None:
         session = MagicMock()
