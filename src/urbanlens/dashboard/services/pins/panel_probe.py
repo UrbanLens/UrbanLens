@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.services.core.rate_limiter import ExternalCallForbiddenError, external_calls_forbidden
 from urbanlens.dashboard.services.geo.geo_boundary import BoundaryNotLoadedError, remote_loading_deferred
 from urbanlens.dashboard.services.pins.external_data import cached_entries, fetch_blocked
+from urbanlens.dashboard.services.pins.search_names import names_remembered
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -102,7 +103,7 @@ def probe_panels(pin: Pin, *, cards: Mapping[str, Sequence[LocationCachePanelSou
     Returns:
         The keys known to be empty; every other card and provider may have something.
     """
-    with external_calls_forbidden(), remote_loading_deferred():
+    with external_calls_forbidden(), remote_loading_deferred(), names_remembered():
         return _probe(pin, cards, galleries)
 
 

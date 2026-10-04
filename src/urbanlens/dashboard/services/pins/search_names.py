@@ -9,13 +9,15 @@ is cached under a digest of that set, so it is read only by pins whose names pro
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 import hashlib
 import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
@@ -167,6 +169,19 @@ def owner_label_scope(pin: Pin) -> SearchScope:
     return SearchScope(SHARED_AUDIENCE, tuple(_distinct([pin.meaningful_official_name, pin.meaningful_name])))
 
 
+_remembered: ContextVar[dict[int, SearchNames] | None] = ContextVar("remembered_search_names", default=None)
+
+
+@contextmanager
+def names_remembered() -> Iterator[None]:
+    """Read each pin's search names once inside this block, for a caller asking every panel source about one pin."""
+    token = _remembered.set({})
+    try:
+        yield
+    finally:
+        _remembered.reset(token)
+
+
 def search_names(pin: Pin, *, shared: tuple[str, ...] | None = None) -> SearchNames:
     """Split ``pin``'s names into shared and custom.
 
@@ -181,6 +196,9 @@ def search_names(pin: Pin, *, shared: tuple[str, ...] | None = None) -> SearchNa
 
     from urbanlens.dashboard.models.aliases.model import AliasType
 
+    remembered = _remembered.get() if shared is None and pin.pk else None
+    if remembered is not None and pin.pk in remembered:
+        return remembered[pin.pk]
     try:
         location = pin.location
     except ObjectDoesNotExist:
@@ -193,4 +211,7 @@ def search_names(pin: Pin, *, shared: tuple[str, ...] | None = None) -> SearchNa
     taken = {normalize_search_name(name) for name in shared}
     custom = tuple(name for name in _canonical(name for name in own if name) if name not in taken)
     context = tuple(_distinct(pin.ancestor_search_names())) if pin.pk and pin.parent_pin_id else ()
-    return SearchNames(shared=shared, custom=custom, context=context)
+    names = SearchNames(shared=shared, custom=custom, context=context)
+    if remembered is not None:
+        remembered[pin.pk] = names
+    return names

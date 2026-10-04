@@ -23221,3 +23221,21 @@ by the next two passed both reuses, in 3.2 s and 2.5 s; before the fix the first
 
 **Tests.** `core/tests/test_database_role_guard.py` still passes. The reuse itself was checked by running, not by a test:
 it needs two pytest processes against one database.
+
+## RESOLVED 2026-10-04: The pin page read the pin's search names once per Media gallery source
+
+`id: P298` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, counting the pin page's repeated queries`
+
+**What was wrong.** Before rendering, the pin page asks every panel and gallery source whether it applies and what it
+has cached (`panel_probe.probe_panels`). Each gallery source's answer starts from `search_names(pin)`, which reads the
+pin's aliases and its wiki's aliases. On dev's 359-child campus pin the page ran 60 queries, 22 of them those two reads
+repeated, eleven times each.
+
+**Fix.** `search_names.names_remembered()` remembers each pin's names for the length of a block, and `probe_panels`
+runs inside one. Outside such a block nothing is remembered, so a later change to a pin's aliases is always seen. A
+call that passes its own `shared` names is neither answered from nor stored in the memo. On dev the same page now runs
+38 queries.
+
+**Tests.** `test_pin_page_reads_names_once.py`: the page reads the pin's alias names once (twice before the fix in
+the test's smaller setup, eleven times on dev), and names are remembered inside the block and read afresh after it.
+Both failed before the fix.
