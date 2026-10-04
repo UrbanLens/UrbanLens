@@ -152,7 +152,7 @@ def is_profile_online(profile: Profile) -> bool:
 
 
 def broadcast_typing_indicator(sender_id: int, recipient_slug: str) -> None:
-    """Relay a "typing" event to `recipient_slug`, honoring the sender's privacy setting.
+    """Relay a "typing" event to `recipient_slug` if the sender may write to them, honoring the sender's privacy setting.
 
     Args:
         sender_id: PK of the profile that is typing.
@@ -162,10 +162,10 @@ def broadcast_typing_indicator(sender_id: int, recipient_slug: str) -> None:
 
     try:
         sender = Profile.objects.get(pk=sender_id)
-        recipient = Profile.objects.get(slug=recipient_slug)
     except Profile.DoesNotExist:
         return
-    if not Profile.visibility_permits(sender.typing_indicator_visibility, sender, recipient):
+    recipient = Profile.reachable_partner_by_slug(recipient_slug, sender)
+    if recipient is None or not Profile.visibility_permits(sender.typing_indicator_visibility, sender, recipient):
         return
 
     payload = {"type": "typing", "sender_slug": sender.slug or ""}

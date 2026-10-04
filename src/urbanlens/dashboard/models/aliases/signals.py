@@ -24,8 +24,8 @@ WIKI_SYNC_SOURCE = "wiki_sync"
 def _drop_name_sensitive_cache(location_id: int | None) -> None:
     """Drop the location's shared lookups a new shared name could improve.
 
-    The shared Wikimedia search is by name, so it always goes; each name set's own row searches only
-    its owners' names, which a shared name does not change. A Wikipedia match is kept: the lookup takes
+    The shared Wikimedia search is by name, so it always goes. An owner's own row is keyed by the names it
+    searched, so one built from the old shared names is simply no longer read. A Wikipedia match is kept: the lookup takes
     the first nearby article that fits, so another name only helps where it missed - and article images
     go with the miss, since they are read from the matched article.
 

@@ -108,13 +108,16 @@ class SearchNames:
 
     @property
     def own(self) -> SearchScope | None:
-        """The search for the owner's own names, or None when they have none worth a search of their own."""
+        """The search for the owner's own names, or None when they have none worth a search of their own.
+
+        Keyed by the names it searches, so a nested pin searching the shared names reads a new row when they change.
+        """
         custom = _canonical(self.custom)
         context = tuple(normalize_search_name(name) for name in _distinct(self.context))
         names = custom or (self.shared if context else ())
         if not names:
             return None
-        key = json.dumps({"names": sorted(custom), "context": list(context)}, separators=(",", ":"), ensure_ascii=False)
+        key = json.dumps({"names": sorted(_canonical(names)), "context": list(context)}, separators=(",", ":"), ensure_ascii=False)
         return SearchScope(hashlib.sha256(key.encode()).hexdigest(), names, context)
 
     @property

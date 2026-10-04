@@ -6,8 +6,11 @@ than a missing one told anyone timing the two that the username is registered.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import timedelta
 import re
+from types import SimpleNamespace
+from unittest import mock
 import uuid
 
 from django.contrib.auth.models import User
@@ -18,6 +21,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.consumers import DirectMessageConsumer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
@@ -29,7 +33,11 @@ from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
-from urbanlens.dashboard.services.messaging.direct_messages import conversation_reachable
+from urbanlens.dashboard.services.messaging.direct_messages import (
+    broadcast_typing_indicator,
+    conversation_reachable,
+    is_thread_open,
+)
 
 NEVER_USED = "nobody-ever-took-this-name"
 
@@ -200,6 +208,74 @@ class ExternalApiProfileSideChannelTests(_HiddenAccountFixture):
     def _detail_route(self) -> str:
         [name] = [name for name, _argument, _extra in self._api_routes() if name.endswith("profiles.detail")]
         return name
+
+
+class DirectMessageSocketSideChannelTests(_HiddenAccountFixture):
+    """The direct-message socket names its partner by slug too, so each frame must cost the same for a hidden account."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.socket = SimpleNamespace(profile_id=self.profile.pk)
+        self.friend = _make_profile("friendly-explorer")
+        Friendship.objects.create(from_profile=self.profile, to_profile=self.friend, status=FriendshipStatus.ACCEPTED)
+
+    def _send(self, slug: str) -> None:
+        DirectMessageConsumer.__dict__["_create_message"].func(self.socket, slug, "hi", "", "", 0, [], None, None)
+
+    def _open(self, slug: str) -> None:
+        DirectMessageConsumer.__dict__["_mark_thread_open"].func(self.socket, slug)
+
+    def _type(self, slug: str) -> None:
+        broadcast_typing_indicator(self.profile.pk, slug)
+
+    def _frame_shape(self, frame, probe: str) -> list[str]:
+        reset_queries()
+        with CaptureQueriesContext(connection) as queries, contextlib.suppress(ValueError, PermissionError):
+            frame(probe)
+        return _shape(queries.captured_queries, probe)
+
+    def _assert_frame_indistinguishable(self, frame) -> None:
+        self._frame_shape(frame, "warm-up-name")
+        missing = self._frame_shape(frame, NEVER_USED)
+        for label, hidden in (
+            ("setting", self.by_setting),
+            ("block", self.by_block),
+            ("deactivated", self.deactivated),
+        ):
+            with self.subTest(hidden_by=label):
+                self.assertEqual(self._frame_shape(frame, hidden.slug), missing)
+
+    def test_sending_to_a_hidden_account_costs_the_same_as_sending_to_none(self) -> None:
+        self._assert_frame_indistinguishable(self._send)
+
+    def test_typing_to_a_hidden_account_costs_the_same_as_typing_to_none(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.messaging.direct_messages.send_group_message"):
+            self._assert_frame_indistinguishable(self._type)
+
+    def test_opening_a_hidden_account_s_thread_costs_the_same_as_opening_none(self) -> None:
+        self._assert_frame_indistinguishable(self._open)
+
+    def test_a_hidden_account_s_thread_is_never_marked_open(self) -> None:
+        for hidden in (self.by_setting, self.by_block, self.deactivated):
+            self._open(hidden.slug)
+            self.assertFalse(is_thread_open(self.profile.pk, hidden.pk))
+
+    def test_a_friend_s_thread_is_marked_open(self) -> None:
+        self._open(self.friend.slug)
+
+        self.assertTrue(is_thread_open(self.profile.pk, self.friend.pk))
+
+    def test_a_friend_sees_the_typing_indicator(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.messaging.direct_messages.send_group_message") as relay:
+            self._type(self.friend.slug)
+
+        relay.assert_called_once()
+
+    def test_a_friend_receives_a_message(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.messaging.direct_messages.send_group_message"):
+            self._send(self.friend.slug)
+
+        self.assertTrue(DirectMessage.objects.filter(sender=self.profile, recipient=self.friend).exists())
 
 
 class _RelationshipGrid(TestCase):

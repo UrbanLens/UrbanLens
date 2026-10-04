@@ -22185,6 +22185,12 @@ deactivation. Two grids create a pair of accounts in each of 16 relationships un
 settings, and hold `visible_by_slug` equal to `can_view_profile` and `reachable_partner_by_slug` equal to
 `conversation_reachable` in every case.
 
+**Review follow-up (2026-10-04).** The direct-message socket names its partner by slug in frames no URL pattern
+describes, so the route walk never reached it. Sending found the account and then ran `conversation_reachable`.
+Typing found it and then the typing-visibility check. Opening a thread marked a hidden account's thread open. All three
+now go through `reachable_partner_by_slug`. `DirectMessageSocketSideChannelTests` failed 7 ways before (3 subtests
+each for sending and typing, plus the open thread) and passes now.
+
 ## RESOLVED 2026-10-04: Media searches keep the owner's own names to their own audience, and no owner's nesting picks a shared Wikipedia article
 
 `id: P188` · `status: fixed` · `resolved: 2026-10-04`
@@ -22230,6 +22236,13 @@ the pin's own `name`. News keeps register-listing names in the base search only.
   names. A new wiki alias still drops the shared `wikimedia` row and an unmatched `wikipedia` one. It now leaves each
   name set's own `wikimedia` row alone, since those rows search their owners' names only
   (`models/aliases/signals.py`; `test_wiki_sync.py::MediaCacheInvalidationOnNewAliasTests`).
+
+**Review follow-up (2026-10-04).** A pin with no names of its own, filed under a named pin, searches the shared names
+with its owner's context. That row's audience was keyed by the custom names and context only, so a new wiki alias
+left the row built from the old names fresh. Since the alias signal now drops only shared rows, it stayed fresh until
+it expired. The audience key now covers the names searched. Custom-name keys are unchanged, so their cached rows stay
+valid. `test_search_names.py` has two new tests, one at the key level and one through a real `WikiAlias` save, and
+both failed before the change.
 
 ## RESOLVED 2026-10-04: A building outline drawn on a wiki whose building place has no footprint was saved but never shown
 

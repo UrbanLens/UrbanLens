@@ -7,6 +7,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
+from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -51,6 +52,19 @@ class AudienceKeyTests(SimpleTestCase):
 
         self.assertNotEqual(nested.audience, "")
         self.assertEqual(nested.own.names if nested.own else None, (OFFICIAL,))
+
+    def test_a_nested_search_of_the_shared_names_follows_them(self) -> None:
+        """Its row is built from the shared names, so a new shared name must not find the old row fresh."""
+        before = SearchNames(shared=(OFFICIAL,), custom=(), context=("Campus",))
+        after = SearchNames(shared=(OFFICIAL, "Kirkbride"), custom=(), context=("Campus",))
+
+        self.assertNotEqual(before.audience, after.audience)
+
+    def test_an_owner_s_own_names_keep_their_search_whatever_the_shared_names(self) -> None:
+        before = SearchNames(shared=(OFFICIAL,), custom=("Secret Ward",), context=("Campus",))
+        after = SearchNames(shared=(OFFICIAL, "Kirkbride"), custom=("Secret Ward",), context=("Campus",))
+
+        self.assertEqual(before.audience, after.audience)
 
     def test_a_set_is_searched_in_the_same_order_whoever_holds_it(self) -> None:
         one = SearchNames(shared=(), custom=("HRSH", "Blueberry"), context=())
@@ -118,3 +132,13 @@ class SearchNamesForPinTests(TestCase):
         self.assertEqual(names.context, ("West Campus",))
         self.assertEqual(names.base.context, ())
         self.assertNotEqual(names.audience, "")
+
+    def test_a_new_wiki_alias_leaves_no_nested_search_of_the_old_names_fresh(self) -> None:
+        parent = baker.make(Pin, profile=self.profile, location=baker.make(Location), name="West Campus")
+        child = self.pin(parent_pin=parent, name=OFFICIAL)
+        LocationCache.set(self.location, "wikimedia", {"items": []}, audience=search_names(child).audience)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            WikiAlias.objects.create(wiki=self.wiki, name="Ward Building Annex")
+
+        self.assertIsNone(LocationCache.get_fresh(self.location, "wikimedia", search_names(child).audience))

@@ -957,11 +957,13 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Public/friends-scoped profile pages with visibility controls per field (9 controls, each with 7 granularity levels from "Anyone" to "No one"), "view my profile as..." preview mode
 - **A hidden account answers as a missing one.** Every route addressed by a profile's slug (the profile page and its
   panels, achievements, direct messages and their shares, e2ee partner keys, and the external API's profile, notes,
-  social and messaging routes) asks who may see the account in the query that finds it: `Profile.viewable_q`
+  social and messaging routes, and the direct-message socket's send, typing and open-thread frames) asks who may see
+  the account in the query that finds it: `Profile.viewable_q`
   (`can_view_profile`) through `Profile.visible_by_slug`/`visible_by_identifier`, and `Profile.reachable_partner_q`
   (`conversation_reachable`) through `reachable_partner_by_slug`. A username nobody has and an account the requester
-  may not see 404 after the same statements (P269). `test_profile_slug_side_channel.py` walks every such route and
-  holds both queries equal to their Python rules across each visibility setting and relationship
+  may not see 404 after the same statements (P269). `test_profile_slug_side_channel.py` walks every such route (the
+  socket's frames by hand, since no URL pattern names them) and holds both queries equal to their Python rules across
+  each visibility setting and relationship
 - **Identity masking in shared spaces** — a trip or group chat member whose `profile_visibility`
   doesn't permit another member to see them shows as an anonymous "Member" (name/avatar hidden,
   distinct color/number per hidden person so several aren't indistinguishable) in the member

@@ -809,11 +809,9 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.services.messaging.direct_messages import mark_thread_open
 
-        try:
-            partner = Profile.objects.get(slug=recipient_slug)
-        except Profile.DoesNotExist:
-            return
-        mark_thread_open(self.profile_id, partner.pk)
+        partner = Profile.reachable_partner_by_slug(recipient_slug, Profile.objects.get(pk=self.profile_id))
+        if partner is not None:
+            mark_thread_open(self.profile_id, partner.pk)
 
     @database_sync_to_async
     def _get_profile_id(self):
@@ -846,11 +844,11 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
             PermissionError: The recipient's privacy settings reject a sender who already shares a conversation with them.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.messaging.direct_messages import conversation_reachable, create_direct_message
+        from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
 
         sender = Profile.objects.select_related("user").get(pk=self.profile_id)
-        recipient = Profile.objects.select_related("user").filter(slug=recipient_slug).first()
-        if recipient is None or not conversation_reachable(sender, recipient):
+        recipient = Profile.reachable_partner_by_slug(recipient_slug, sender)
+        if recipient is None:
             raise ValueError("That user could not be found.")
         create_direct_message(
             sender,
