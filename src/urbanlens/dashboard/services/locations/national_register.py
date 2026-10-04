@@ -59,13 +59,14 @@ def reference_number(row: dict[str, Any]) -> str | None:
     return value if _REFERENCE_NUMBER.fullmatch(value) else None
 
 
-def stands_on(location: Location, latitude: Any, longitude: Any) -> bool:
+def stands_on(location: Location, latitude: Any, longitude: Any, *, buildings: list[dict] | None = None) -> bool:
     """Whether a published point is on the building at ``location``.
 
     Args:
         location: A building's location.
         latitude: The point's latitude.
         longitude: The point's longitude.
+        buildings: ``site_scope.site_buildings(location)``, when a caller testing many points already has it.
 
     Returns:
         True when the location's building outline holds the point or, without an outline, the point is within
@@ -86,14 +87,15 @@ def stands_on(location: Location, latitude: Any, longitude: Any) -> bool:
     if footprint is not None:
         return bool(footprint.contains(Point(point_longitude, point_latitude, srid=4326)))
     distance = meters_between(point_latitude, point_longitude, float(location.latitude), float(location.longitude))
-    return distance <= BUILDING_MATCH_METERS and not _nearer_building(location, point_latitude, point_longitude, distance)
+    return distance <= BUILDING_MATCH_METERS and not _nearer_building(location, point_latitude, point_longitude, distance, buildings)
 
 
-def _nearer_building(location: Location, latitude: float, longitude: float, distance: float) -> bool:
+def _nearer_building(location: Location, latitude: float, longitude: float, distance: float, buildings: list[dict] | None = None) -> bool:
     """Whether another building known on the parcel is nearer the point than ``location`` is."""
     from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between, nearest_building, site_buildings
 
-    buildings = site_buildings(location)
+    if buildings is None:
+        buildings = site_buildings(location)
     nearest = nearest_building(buildings, latitude, longitude)
     if nearest is None or nearest is nearest_building(buildings, float(location.latitude), float(location.longitude), within_meters=BUILDING_MATCH_METERS):
         return False
