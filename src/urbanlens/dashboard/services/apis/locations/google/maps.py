@@ -880,12 +880,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             lng = p.get("longitude")
             if lat is None or lng is None:
                 continue
+            lat, lng = float(lat), float(lng)
+            # Also refuses infinity and NaN, which JSON cannot carry into the preview's result.
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                logger.debug("Leaving out a place off the globe: (%s, %s)", lat, lng)
+                continue
             name = (p.get("name") or "")[:255]
             cid = p.get("cid")
             pin: dict[str, Any] = {
                 "name": name,
-                "lat": float(lat),
-                "lng": float(lng),
+                "lat": lat,
+                "lng": lng,
                 # The preview UI never displays this - it's only carried through so the confirm step
                 # (which re-uses this exact dict, not a fresh parse of the file) has the real
                 # description to save.
@@ -1286,6 +1291,8 @@ def _iter_kml_coordinates(element: Element) -> Iterator[tuple[float, float]]:
         if _kml_local_name(child.tag) == "coordinates":
             for token in _kml_tuples(child.text or ""):
                 parts = token.split(",", 2)
+                if len(parts) < 2:
+                    raise ValueError(f"A KML coordinate needs a longitude and a latitude: {token[:40]!r}")
                 yield float(parts[0]), float(parts[1])
             return
 

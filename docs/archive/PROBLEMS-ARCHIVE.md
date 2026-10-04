@@ -22689,3 +22689,39 @@ five routes still succeed:
 - a visible account's friend list renders;
 - a visible stranger can be blocked;
 - the owner's friends page opens.
+
+## RESOLVED 2026-10-04: One malformed file failed a whole import preview, and a place off the globe became a pin
+
+`id: P282` · `status: fixed` · `resolved: 2026-10-04` · `found by: P95's one-element tests and batch review 4`
+
+**What was wrong.** `parse_for_preview` reads each uploaded file inside a guard that catches `IMPORT_PARSE_ERRORS`, so
+an unusable file is reported and the rest are still read. Two parser errors fell outside that tuple and failed the whole
+preview as unreadable, taking every other file in the upload with them:
+
+- a CSV cell past the csv module's 128 KiB field limit raised `csv.Error` (fixed under P95);
+- a KML coordinate with no latitude (`<coordinates>5</coordinates>`) raised `IndexError` from `parts[1]`.
+
+A coordinate off the globe also became a pin, in every format: a latitude past ±90 or a longitude past ±180, or one
+that was infinite (`1e999`) or not a number (`nan`). JSON cannot carry the last two, so the preview's result held
+`Infinity` or `NaN`.
+
+**Fix.**
+
+- `_iter_preview_pins`, which every format's pins pass through (the deferred CSV lookups too), leaves out a place
+  outside -90..90 / -180..180. The comparison also refuses infinity and NaN. The rest of the file is kept.
+- `_iter_kml_coordinates` raises `ValueError` for a coordinate tuple without a latitude, so the file fails on its own.
+
+A geometry with one bad vertex whose centroid still lands on the globe (an OSM way through a node at latitude 95)
+keeps its pin. The guarantee is that no pin is off the globe, not that every vertex is checked.
+
+**Tests.** `test_import_preview_file_isolation.py` starts from nine small valid files: KML, GeoJSON, CSV, WKT, hex WKB,
+OSM, GPX, Location History and My Activity.
+
+- An exhaustive pass rewrites every structural byte of every seed with each of ten replacements, including `1e999` and
+  `nan`. It found the KML `IndexError` at once.
+- A hypothesis property applies up to four random edits from a fragment list, 600 examples. Before structural
+  rewrites were weighted it missed the known KML bug at about 1 in 1,300 examples, which is why the exhaustive pass
+  exists.
+- Both assert that nothing escapes the guard and that every previewed pin is finite and on the globe.
+- One case per format checks that the off-globe place is dropped and the rest kept.
+- Anti-vacuity: every seed previews unchanged.
