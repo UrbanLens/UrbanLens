@@ -40,7 +40,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P9 | open | 2026-09-15 | REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-10-02 | Frontend TS audit: its correctness bullets are fixed, the structural debt it found is not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P14 | open | 2026-10-02 | Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P14 | open | 2026-10-04 | Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-10-02 | Audit residue: group chats lack direct messages' features, and the hypothesis strategies are barely shared | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -373,11 +373,14 @@ reporter considers too slow to refresh.
 
 ## P14 — Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment
 
-`id: P14` · `status: open, handed to infrastructure` · `updated: 2026-10-02`
+`id: P14` · `status: open, handed to infrastructure` · `updated: 2026-10-04`
 
 **Jess, 2026-10-02: report and delete in one go.** The runs are the infrastructure repo's (N33,
 `docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`): `sweep_unnamed_pin_images`, then `--delete`, on staging
 then production. Close this when their counts and sizes come back.
+
+On `development_main` (2026-10-04) the report found 90 unnamed files under `pin_images/`, under 0.1 MiB in all. The
+`--delete` run there was not made: it was refused as an irreversible deletion pending Jess's go-ahead.
 
 Previously titled "Media gate residue: replaced or deleted pin and label icons strand their files,
 and historical orphans remain", before that "Media gate residue: icons are owner-scoped now;
