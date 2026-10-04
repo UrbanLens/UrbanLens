@@ -201,7 +201,19 @@ class BuildingAdmissionTests(_Fixture):
     def test_a_building_scoped_location_keeps_its_building_name(self) -> None:
         self._parcel(buildings=42)
         Pin.objects.filter(pk=self.pin.pk).update(parent_pin=baker.make(Pin, profile=self.profile))
+        LocationCache.set(
+            self.location,
+            "cris_building_usn",
+            {"USNName": _BLDG45, "source_latitude": _LAT, "source_longitude": _LON},
+            query_key="q",
+        )
         self.assertIn(_BLDG45, self._names())
+
+    def test_a_building_scoped_location_takes_no_name_from_a_record_off_the_building(self) -> None:
+        """P255: the fixture's record stands about 90 m from the point."""
+        self._parcel(buildings=42)
+        Pin.objects.filter(pk=self.pin.pk).update(parent_pin=baker.make(Pin, profile=self.profile))
+        self.assertNotIn(_BLDG45, self._names())
 
 
 class RegisterNameTests(_Fixture):

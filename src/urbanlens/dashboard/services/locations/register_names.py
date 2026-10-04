@@ -48,6 +48,10 @@ def geometry_contains_point(geometry: Any, latitude: float, longitude: float) ->
 def register_listing_names(location: Location) -> list[str]:
     """Names of the register listings whose boundary contains this location, site-level first.
 
+    On a building's own page only the building's own listings count, by the rule its Historic Registers tab uses
+    (:func:`~urbanlens.dashboard.services.locations.national_register.building_register_rows`): a campus listing's
+    boundary holds most of the campus's buildings without listing them.
+
     Args:
         location: The location being named.
 
@@ -55,14 +59,20 @@ def register_listing_names(location: Location) -> list[str]:
         Listing names from REData's registers, then CRIS's National Register listing or district.
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.services.locations.name_tiers import NamingScope, naming_scope
+    from urbanlens.dashboard.services.locations.national_register import building_register_rows, cris_lists_building
 
     names: list[str] = []
     cached = LocationCache.get_fresh(location, "redata_historic_registers")
     rows = (cached.data or {}).get("resources") if cached is not None and isinstance(cached.data, dict) else None
-    listed = [row for row in rows or [] if isinstance(row, dict) and row.get(CONTAINS_POINT_KEY) is True and str(row.get("resource_type") or "") not in _NOT_A_PROPERTY and str(row.get("name") or "").strip()]
+    rows = [row for row in rows or [] if isinstance(row, dict)]
+    one_building = naming_scope(location) == NamingScope.BUILDING
+    if one_building:
+        rows = building_register_rows(location, rows)
+    listed = [row for row in rows if row.get(CONTAINS_POINT_KEY) is True and str(row.get("resource_type") or "") not in _NOT_A_PROPERTY and str(row.get("name") or "").strip()]
     names.extend(str(row["name"]).strip() for row in sorted(listed, key=lambda row: row.get("scope") != "site"))
 
-    if name := cris_register_listing(location):
+    if (name := cris_register_listing(location)) and (not one_building or cris_lists_building(location)):
         names.append(name)
     return names
 

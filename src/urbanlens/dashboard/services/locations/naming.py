@@ -449,7 +449,7 @@ def _gather_candidates(
     location: Location,
     extra_candidates: list[tuple[str, Any]] | None = None,
 ) -> tuple[list[NameCandidate], list[NameCandidate]]:
-    """Candidates that may name the location, and those that may not: inadmissible buildings, and every road or address name.
+    """Candidates that may name the location, and those that may not: inadmissible buildings, an article on a building's own page, and every road or address name.
 
     Args:
         location: The location to gather candidates for.
@@ -460,7 +460,7 @@ def _gather_candidates(
     """
     from urbanlens.dashboard.plugins.registry import plugin_registry
     from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
-    from urbanlens.dashboard.services.locations.name_tiers import NameTier, building_name_admissible, tier_for
+    from urbanlens.dashboard.services.locations.name_tiers import NameTier, NamingScope, building_name_admissible, describes_scope, naming_scope, tier_for
 
     raw: list[tuple[str, Any]] = list(extra_candidates or [])
     for provider in plugin_registry.name_providers():
@@ -478,6 +478,7 @@ def _gather_candidates(
     seen: set[tuple[str, str]] = set()
     tiers: dict[str, NameTier] = {}
     admissible: dict[str, bool] = {}
+    scope: NamingScope | None = None
     for source, value in raw:
         name = _clean_candidate(value)
         if not name or is_address_derived_name(name, location):
@@ -493,9 +494,14 @@ def _gather_candidates(
             # A road through a place is not its name, and the official name is what every search uses.
             rejected.append(candidate)
             continue
+        if candidate.tier in (NameTier.BUILDING, NameTier.ENCYCLOPEDIA) and scope is None:
+            scope = naming_scope(location)
+        if scope is not None and not describes_scope(candidate.tier, scope):
+            rejected.append(candidate)
+            continue
         if candidate.tier == NameTier.BUILDING:
             if source not in admissible:
-                admissible[source] = building_name_admissible(source, location)
+                admissible[source] = building_name_admissible(source, location, scope)
             if not admissible[source]:
                 rejected.append(candidate)
                 continue
