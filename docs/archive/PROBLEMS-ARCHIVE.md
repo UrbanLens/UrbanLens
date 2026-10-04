@@ -22567,11 +22567,17 @@ Both boot lines now end "N objects frozen", so a boot that froze nothing shows i
 (`"pytest" in sys.modules`) it freezes nothing, because `test_asgi_disconnect_does_not_wedge_the_loop.py` imports
 `asgi.py` in-process. Celery workers are not frozen.
 
-**This entry's warning about freezing was wrong.** It said a frozen container that later stores a new cyclic object
-could have that object freed while still pointing at it. That cannot happen: a reference from a frozen object counts
-as an external reference, the same as one from a C global, so it keeps its target alive. What a freeze does cost is
-any cycle made only of frozen objects, which is never collected. The collection that runs just before the freeze
-clears the boot garbage, and what survives it lives as long as the process.
+**This entry's warning about freezing was wrong, and so was its first correction.** The warning said a frozen
+container that later stores a new cyclic object could have that object freed while still pointing at it. That cannot
+happen: a reference from a frozen object counts as an external reference, the same as one from a C global, so it keeps
+its target alive. The correction then said a freeze costs only cycles made entirely of frozen objects. Batch review 4
+showed that is too narrow. A cycle that runs through a frozen object which later becomes garbage is never collected,
+along with every unfrozen object in it and everything it holds. A cycle made after the freeze that only points at
+frozen objects is still collected, as it was before. The cost is therefore bounded: each frozen object dies at most
+once, and the freeze runs once. But one dying object can take a large structure with it, such as a warm-up cache that
+is later replaced. gunicorn recycles its workers (`--max-requests`), but daphne does not.
+`FreezingTheWarmHeapTests::test_what_a_freeze_still_collects_and_what_it_never_will` checks both halves in a fresh
+interpreter.
 
 Tests:
 - `test_urlconf_warmup.py::FreezingTheWarmHeapTests`, in a fresh interpreter: more than 100,000 objects frozen, and

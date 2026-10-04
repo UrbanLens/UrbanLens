@@ -46,9 +46,10 @@ def freeze_warm_heap() -> int:
 
     A full collection walks every tracked object, and a warmed worker holds about 400,000 that live as long as the
     process: 175-207 ms of CPU per collection on chiron, holding the GIL for every thread (P207). Frozen, a collection
-    walks only what requests left behind. A reference from a frozen object still keeps its target alive; what is lost
-    is collecting a cycle made only of frozen objects. Call it once per process, after a successful warm-up. A pytest
-    process imports ``asgi.py`` in-process, so there it freezes nothing.
+    walks only what requests left behind. A reference from a frozen object still keeps its target alive, and a cycle
+    made after the freeze is still collected. What is lost is a cycle running through a frozen object that later
+    becomes garbage: it is never collected, with everything it holds. Call it once per process, after a successful
+    warm-up. A pytest process imports ``asgi.py`` in-process, so there it freezes nothing.
 
     Returns:
         How many objects were frozen, for the boot log.

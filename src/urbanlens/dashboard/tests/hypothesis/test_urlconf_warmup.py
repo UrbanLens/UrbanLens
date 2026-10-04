@@ -131,6 +131,30 @@ class FreezingTheWarmHeapTests(SimpleTestCase):
         self.assertEqual(frozen, counted)
         self.assertLess(left, before // 100)
 
+    def test_what_a_freeze_still_collects_and_what_it_never_will(self) -> None:
+        """The docstring's safety claim: requests' cycles are still collected; one through a dead frozen object is not."""
+        body = (
+            "import gc, weakref\n"
+            "class Node: pass\n"
+            "kept, dropped = Node(), Node()\n"
+            "gc.collect()\n"
+            "gc.freeze()\n"
+            "a, b = Node(), Node()\n"
+            "a.other, b.other, a.frozen = b, a, kept\n"
+            "fresh = weakref.ref(a)\n"
+            "del a, b\n"
+            "held = Node()\n"
+            "held.back, dropped.held = dropped, held\n"
+            "through = weakref.ref(held)\n"
+            "del held, dropped\n"
+            "gc.collect()\n"
+            "print(fresh() is None, through() is None)\n"
+        )
+        result = subprocess.run([sys.executable, "-c", body], capture_output=True, text=True, timeout=60, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr[-2500:])
+
+        self.assertEqual(result.stdout.split(), ["True", "False"])
+
     def test_a_pytest_process_freezes_nothing(self) -> None:
         import gc
 
