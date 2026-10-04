@@ -96,7 +96,11 @@ class _SourcesTestBase(TestCase):
         LocationCache.set(location or self.location, "cris_building_usn", payload, query_key="q")
 
     def answer_commons(self) -> None:
-        """Commons has searched every name the pin reads and found nothing, so only CRIS is pending or listed."""
+        """Commons has searched every name the pin reads and found nothing, so only CRIS is pending or listed.
+
+        CRIS and Commons are the document sources Sources fetches itself. The REData archives are document sources too,
+        but list only what their gallery cached, so with no archive row here nothing waits for them (P260).
+        """
         for scope in search_names(self.pin).scopes:
             LocationCache.set(self.location, "wikimedia", {"items": []}, query_key="q", audience=scope.audience)
 
@@ -188,6 +192,7 @@ class PinSourcesPanelTests(_SourcesTestBase):
         self.assertEqual(response.status_code, 404)
 
     def test_a_missing_cache_row_schedules_a_fetch_and_polls(self) -> None:
+        """Only CRIS: the archives have no row either, and are never fetched for Sources."""
         with patch(_SCHEDULE, return_value=True) as schedule:
             response = self.pin_panel()
         schedule.assert_called_once_with("cris_building", self.pin)

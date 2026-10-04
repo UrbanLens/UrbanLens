@@ -3025,23 +3025,6 @@ through 2012 to the National Archives catalogue and later ones to NPGallery. RED
 `attributes.NARA_URL`, the archives' record for the listing, which UrbanLens does not cache. Decide whether to link it
 where NPGallery has nothing; whether NPGallery has a listing cannot be told from the status code.
 
-## P260 — A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources
-
-`id: P260` · `status: open` · `updated: 2026-10-03` · `found by: the P234 investigation`
-
-`GalleryMediaSource.gallery_items` drops every document from a gallery, on the grounds that documents belong under
-Article > Sources (P196). Only Commons (`DocumentMediaPanelSource`) and CRIS are document sources, so a document among
-the Library of Congress, Internet Archive, Smithsonian, Digital Commonwealth or Chronicling America results
-(`plugins/builtin/media_archives.py`) is shown nowhere.
-
-Not seen yet: REData returns these archives' record pages rather than files (`archive.org/details/...`,
-`loc.gov/item/...`), and none of the 82 archive items cached for HRSH-named locations on dev was a document.
-Smithsonian's `url` falls back to the media `content` link, which can be a file.
-
-Making them `DocumentMediaPanelSource`s fixes the listing but makes every Sources tab schedule and poll for five more
-REData searches, and the Sources tests assume CRIS and Commons are the only sources. Either accept that, or let a
-non-document source keep its documents as gallery tiles.
-
 ## P261 — A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid
 
 `id: P261` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`

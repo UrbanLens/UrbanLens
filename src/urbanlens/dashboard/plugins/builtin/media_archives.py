@@ -1,5 +1,6 @@
 """Media archive plugins: providers for the Private Pin page's combined Media gallery.
-Each plugin contributes one :class:`~urbanlens.dashboard.services.pins.external_data.MediaPanelSource`, which the gallery fetches independently so a slow provider never blocks the others."""
+Each plugin contributes one :class:`~urbanlens.dashboard.services.pins.external_data.DocumentMediaPanelSource`, which the gallery fetches independently so a slow provider never blocks the others.
+The books and scans a provider finds are listed under Article > Sources; a REData archive's only from what its gallery search cached (``fetched_for_sources=False``)."""
 
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.pins.external_data import DocumentMediaPanelSource, MediaPanelSource
+from urbanlens.dashboard.services.pins.external_data import DocumentMediaPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.pins.external_data import PanelSource
@@ -25,7 +26,7 @@ class SmithsonianPlugin(UrbanLensPlugin):
         """Contribute the Smithsonian media-gallery provider."""
         from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import SmithsonianMediaProvider
 
-        return [MediaPanelSource("smithsonian", SmithsonianMediaProvider.service_key, SmithsonianMediaProvider)]
+        return [DocumentMediaPanelSource("smithsonian", SmithsonianMediaProvider.service_key, SmithsonianMediaProvider, fetched_for_sources=False)]
 
 
 class WikimediaPlugin(UrbanLensPlugin):
@@ -66,7 +67,7 @@ class LibraryOfCongressPlugin(UrbanLensPlugin):
         """Contribute the Library of Congress media-gallery provider."""
         from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import LibraryOfCongressMediaProvider
 
-        return [MediaPanelSource("loc", LibraryOfCongressMediaProvider.service_key, LibraryOfCongressMediaProvider)]
+        return [DocumentMediaPanelSource("loc", LibraryOfCongressMediaProvider.service_key, LibraryOfCongressMediaProvider, fetched_for_sources=False)]
 
 
 class DigitalCommonwealthPlugin(UrbanLensPlugin):
@@ -81,7 +82,7 @@ class DigitalCommonwealthPlugin(UrbanLensPlugin):
         """Contribute the Digital Commonwealth media-gallery provider."""
         from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import DigitalCommonwealthMediaProvider
 
-        return [MediaPanelSource("digital_commonwealth", DigitalCommonwealthMediaProvider.service_key, DigitalCommonwealthMediaProvider)]
+        return [DocumentMediaPanelSource("digital_commonwealth", DigitalCommonwealthMediaProvider.service_key, DigitalCommonwealthMediaProvider, fetched_for_sources=False)]
 
 
 class InternetArchivePlugin(UrbanLensPlugin):
@@ -96,7 +97,7 @@ class InternetArchivePlugin(UrbanLensPlugin):
         """Contribute the Internet Archive media-gallery provider."""
         from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import InternetArchiveMediaProvider
 
-        return [MediaPanelSource("internet_archive", InternetArchiveMediaProvider.service_key, InternetArchiveMediaProvider)]
+        return [DocumentMediaPanelSource("internet_archive", InternetArchiveMediaProvider.service_key, InternetArchiveMediaProvider, fetched_for_sources=False)]
 
 
 class ChroniclingAmericaPlugin(UrbanLensPlugin):
@@ -111,4 +112,4 @@ class ChroniclingAmericaPlugin(UrbanLensPlugin):
         """Contribute the Chronicling America media-gallery provider."""
         from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import ChroniclingAmericaMediaProvider
 
-        return [MediaPanelSource("chronicling_america", ChroniclingAmericaMediaProvider.service_key, ChroniclingAmericaMediaProvider)]
+        return [DocumentMediaPanelSource("chronicling_america", ChroniclingAmericaMediaProvider.service_key, ChroniclingAmericaMediaProvider, fetched_for_sources=False)]
