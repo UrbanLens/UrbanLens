@@ -32,6 +32,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`redata-imagery-composed-past-native-resolution.md`](redata-imagery-composed-past-native-resolution.md) — Sentinel-2 cloudless is composed at z18 from 10 m data, and the first render is kept forever; clamp by `resolution_meters` and re-render (P232) | outbound, `../REData` | OPEN 2026-10-03 |
 | [`redata-overture-near-point-lookups.md`](redata-overture-near-point-lookups.md) — `/buildings/` and the `overture` points-of-interest provider time out on the deployed REData, which UrbanLens now depends on inside the US (P110, P240); plus unsynced roof fields and `operating_status`, and applicability wider than the synced shards | outbound, `../REData` | OPEN 2026-10-03 |
 | [`redata-gdelt-months-cap.md`](redata-gdelt-months-cap.md) — `/search/news/` accepts `months` up to 120, but GDELT refuses a window reaching before 2017, so anything over 117 fails today | outbound, `../REData` | OPEN 2026-10-03 |
+| [`redata-cultural-resource-cache-keyed-by-last-search.md`](redata-cultural-resource-cache-keyed-by-last-search.md) — a point's cached cultural-resource answer is the rows last found from it, so a neighbouring search takes HRSH's National Register listing away from its campus pin (P286) | outbound, `../REData` | OPEN 2026-10-04 |
 
 ## The convention
 

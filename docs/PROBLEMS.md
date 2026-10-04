@@ -2801,3 +2801,25 @@ from `unblock_profile`/`remove_friend` and must re-block to normalise the row, a
 can lift it. `manage.py audit_inverted_friendship_blocks --before YYYY-MM-DD` reports the candidates
 read-only, with no default `--before` on purpose: the fix's deploy date for a given production
 database is something only a human knows.
+
+## P286 — A campus pin can lose its own National Register listing, because REData answers a point with the rows last found from it
+
+`id: P286` · `status: open` · `updated: 2026-10-04` · `follows: P228`
+
+P228's link to NPS's record appears only when REData's `nps_nrhp` answer for the pin's point holds the listing. On
+2026-10-04, HRSH's campus pin (location 97736) had none: REData's cached answer from that point was Isaac Roosevelt
+House alone, while a `force_refresh=true` search from the same point found HRSH's own listing (89001166), its boundary
+holding the pin.
+
+REData keys a resource to the last point that found it, and answers a point with the rows keyed to it
+([handoff](handoffs/redata-cultural-resource-cache-keyed-by-last-search.md)). A search from a neighbouring point, such
+as one of the campus's building pins, moves the shared listing away. The campus point keeps a fresh but partial answer
+for as long as any of its other rows stays put. It also works in reverse: a row the last live search did not find,
+like Isaac Roosevelt House at about 540 m, keeps answering. The same read serves 59 of REData's providers.
+
+UrbanLens's side is correct given a correct answer. After one forced refresh on development, the pin and its wiki
+gained `National Register #89001166` and its National Archives record. The Property Records Overview named the
+listing with its number, and Isaac Roosevelt House, whose boundary does not hold the pin, was not linked.
+
+Closes when REData answers a point with what its last search there found, and HRSH's campus pin keeps its listing
+after a lookup from one of its building pins.
