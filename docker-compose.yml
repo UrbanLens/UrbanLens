@@ -1088,6 +1088,9 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
+    # Docker's 64 MB default runs out once several suites build their databases at once: parallel queries
+    # cannot size their shared memory, and a backend has segfaulted after that, restarting the server.
+    shm_size: ${UL_TEST_DB_SHM_SIZE:-512mb}
     cpus: ${CPU_LIMIT__TEST_DB:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__TEST_DB:-${MEM_LIMIT:-2g}}
 
