@@ -282,8 +282,8 @@ class NpsPanelSource(LocationCachePanelSource):
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
     def gate(self, pin: Pin) -> bool:
-        """Requires REData to be configured."""
-        return redata_configured()
+        """Requires REData to be configured and coordinates to search near."""
+        return redata_configured() and bool(pin.effective_latitude and pin.effective_longitude)
 
     def fetch(self, pin: Pin) -> None:
         """Cache the nearest NPS park unit to the pin, if any is within REData's search radius."""

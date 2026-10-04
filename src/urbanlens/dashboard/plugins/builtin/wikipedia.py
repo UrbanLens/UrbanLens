@@ -185,6 +185,10 @@ class WikipediaPanelSource(LocationCachePanelSource):
     icon = "menu_book"
     title = "Wikipedia"
 
+    def gate(self, pin: Pin) -> bool:
+        """Requires coordinates to search near."""
+        return bool(pin.effective_latitude or pin.effective_longitude)
+
     def fetch(self, pin: Pin) -> None:
         """Find and cache the best-matching Wikipedia article, matching on public data only."""
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway

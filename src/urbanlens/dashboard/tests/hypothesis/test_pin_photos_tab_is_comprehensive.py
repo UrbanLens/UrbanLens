@@ -7,9 +7,8 @@ import re
 from unittest.mock import patch
 from urllib.parse import urlencode
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.template.loader import get_template
 from django.urls import reverse
 from model_bakery import baker
 
@@ -280,8 +279,12 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
         self.assertIn("wikimedia", body["pending"])
 
     def test_the_source_list_matches_the_media_panels_loaders(self) -> None:
-        source = get_template("dashboard/pages/location/index.html").template.source
-        loaders = set(re.findall(r'id="media-loader-([a-z_]+)"', source)) - {"photos"}
+        """A debug-overlay viewer loads every provider, empty or not, so their page has a loader for each."""
+        user = self.profile.user
+        user.user_permissions.add(*Permission.objects.filter(codename="view_site_admin"))
+        self.client.force_login(User.objects.get(pk=user.pk))
+        html = self.client.get(reverse("pin.details", args=[self.pin.slug])).content.decode()
+        loaders = set(re.findall(r'id="media-loader-([a-z_]+)"', html)) - {"photos"}
 
         self.assertEqual(loaders, set(PIN_MEDIA_GALLERY_SOURCES))
 

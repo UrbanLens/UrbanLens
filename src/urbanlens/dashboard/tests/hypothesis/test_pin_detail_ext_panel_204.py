@@ -10,12 +10,26 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import EveryPanelGateConfiguredMixin
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
 
 
-class ExtPanel204MarkerTests(TestCase):
+def _pin_every_card_applies_to(profile) -> Pin:
+    """A cold pin no card's gate refuses, so every card renders its placeholder (P53 leaves out the ones that do)."""
+    location = baker.make_recipe(
+        "dashboard.location",
+        street_number="1",
+        route="Mill Street",
+        locality="Newburgh",
+        administrative_area_level_1="NY",
+    )
+    location.cid = 4242
+    return baker.make_recipe("dashboard.pin", profile=profile, location=location)
+
+
+class ExtPanel204MarkerTests(EveryPanelGateConfiguredMixin, TestCase):
     """Every auto-loading external-data card must carry data-ext-panel-204."""
 
     def setUp(self) -> None:
@@ -23,7 +37,7 @@ class ExtPanel204MarkerTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        self.pin: Pin = _pin_every_card_applies_to(self.profile)
 
     def _content(self) -> str:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
@@ -116,7 +130,7 @@ class ExtPanel204MarkerTests(TestCase):
         self.assertIn("dashboard/js/pin-detail.js", self._content())
 
 
-class ExtPanel204StartsHiddenTests(TestCase):
+class ExtPanel204StartsHiddenTests(EveryPanelGateConfiguredMixin, TestCase):
     """Optional cards must not flash a header+spinner before their fetch resolves.
 
     Each such card's initial server-rendered markup must now also carry `hidden`, so it never paints until its
@@ -127,7 +141,7 @@ class ExtPanel204StartsHiddenTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        self.pin: Pin = _pin_every_card_applies_to(self.profile)
 
     def _content(self) -> str:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))

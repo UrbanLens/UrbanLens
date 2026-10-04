@@ -54,6 +54,10 @@ class LoopnetPanelSource(GalleryMediaSource):
         """Skip scheduling a fetch for a pin with no usable address."""
         return bool(self.address(pin))
 
+    def has_content(self, data: dict | None) -> bool:
+        """Whether REData found any listing for the parcel."""
+        return bool(data and data.get("listings"))
+
     def fetch(self, pin: Pin) -> None:
         """Resolve the pin's parcel and cache its LoopNet listings from REData.
 

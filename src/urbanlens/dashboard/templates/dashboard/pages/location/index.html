@@ -245,7 +245,7 @@
                 {% include "dashboard/partials/pins/child_details/_gallery.html" %}
             </div>
         </div>
-        {# Per-provider loaders - hidden, append their results into #media-gallery-grid above as each responds. #}
+        {# Per-provider loaders - hidden, append their results into #media-gallery-grid above as each responds. Providers known to have nothing get none. #}
         <div class="media-provider-loader" id="media-loader-photos"
             hx-sync="#pin-media-lane-0:queue all"
             hx-get="{% url 'pin.media' pin.slug 'photos' %}"
@@ -254,113 +254,16 @@
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
-        <div class="media-provider-loader" id="media-loader-smithsonian"
-            hx-sync="#pin-media-lane-1:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
+        {% for source in media_loaders %}
+        <div class="media-provider-loader" id="media-loader-{{ source }}"
+            hx-sync="#pin-media-lane-{% cycle '1' '2' '0' %}:queue all"
+            hx-get="{% url 'pin.media' pin.slug source %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
-        <div class="media-provider-loader" id="media-loader-wikimedia"
-            hx-sync="#pin-media-lane-2:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'wikimedia' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        {# Images from the pin's own matched Wikipedia article page, distinct from the Wikimedia Commons text search above. #}
-        <div class="media-provider-loader" id="media-loader-wikipedia_media"
-            hx-sync="#pin-media-lane-0:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'wikipedia_media' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-loc"
-            hx-sync="#pin-media-lane-1:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'loc' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-internet_archive"
-            hx-sync="#pin-media-lane-2:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'internet_archive' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-digital_commonwealth"
-            hx-sync="#pin-media-lane-0:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'digital_commonwealth' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-yelp"
-            hx-sync="#pin-media-lane-1:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'yelp' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-google_images"
-            hx-sync="#pin-media-lane-2:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'google_images' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        {# Broad web-image search via SearXNG's image engines - see plugins.builtin.searxng_images. #}
-        <div class="media-provider-loader" id="media-loader-searxng_images"
-            hx-sync="#pin-media-lane-0:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'searxng_images' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-google_maps"
-            hx-sync="#pin-media-lane-1:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'google_maps' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        {# LoopNet listing photos and CRIS attachment photos/documents, via REData - see plugins.builtin.loopnet/cris_buildings. #}
-        <div class="media-provider-loader" id="media-loader-loopnet"
-            hx-sync="#pin-media-lane-2:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'loopnet' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-cris_building"
-            hx-sync="#pin-media-lane-0:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'cris_building' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-historical_maps"
-            hx-sync="#pin-media-lane-1:queue all"
-            hx-get="{% url 'pin.media' pin.slug 'historical_maps' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
+        {% endfor %}
     </div>
 
     {# -- Categories / aliases: same fill-the-gap behavior as above -- #}
@@ -480,6 +383,7 @@
         {% include "dashboard/partials/pins/_pin_location_data_tabs.html" with pin=pin location_data_tabs=location_data_tabs %}
         {% include "dashboard/partials/pins/_pin_property_records_tabs.html" with pin=pin property_tabs=property_tabs %}
 
+        {% if "azure_maps" not in empty_panels %}
         <div id="azure-maps-section"
             hx-sync="#pin-panel-lane-0:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.azure_maps' pin.slug %}"
@@ -493,8 +397,10 @@
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
+        {% endif %}
 
         {# Every building on the parcel - see plugins.builtin.parcel_buildings. #}
+        {% if "parcel_buildings" not in empty_panels %}
         <div id="parcel-buildings-section"
             hx-sync="#pin-panel-lane-1:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.parcel_buildings' pin.slug %}"
@@ -508,8 +414,9 @@
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
+        {% endif %}
 
-        {% for panel in simple_info_panels %}
+        {% for panel in simple_info_panels %}{% if panel.key not in empty_panels %}
         <div id="{{ panel.section_id }}"
             hx-sync="#pin-panel-lane-{% cycle '0' '1' '2' '3' %}:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.panel' pin.slug panel.key %}"
@@ -523,12 +430,13 @@
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
-        {% endfor %}
+        {% endif %}{% endfor %}
 
         {% if panel_tabs %}
         {% include "dashboard/partials/pins/_pin_plugin_tabs.html" with tabs=panel_tabs default_tab_key=default_panel_tab_key section_id="pin-plugin-tabs-section" body_id="pin-plugin-tab-body" heading="Regional Data" heading_icon="layers" collapse_section="plugin_tabs" collapse_label="Regional Data" %}
         {% endif %}
 
+        {% if "yelp" not in empty_panels %}
         <div id="yelp-section"
             hx-sync="#pin-panel-lane-3:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.yelp' pin.slug %}"
@@ -541,7 +449,9 @@
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
+        {% endif %}
 
+        {% if "nps" not in empty_panels %}
         <div id="nps-section"
             hx-sync="#pin-panel-lane-0:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.nps' pin.slug %}"
@@ -554,7 +464,9 @@
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
+        {% endif %}
 
+        {% if "loopnet" not in empty_panels %}
         <div id="loopnet-section"
             hx-sync="#pin-panel-lane-1:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.loopnet' pin.slug %}"
@@ -567,7 +479,9 @@
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
+        {% endif %}
 
+        {% if "usgs_topo" not in empty_panels %}
         <div id="usgs-topo-section"
             hx-sync="#pin-panel-lane-2:queue all" data-ext-panel-204 hidden
             hx-get="{% url 'pin.usgs_topo' pin.slug %}"
@@ -582,6 +496,7 @@
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
+        {% endif %}
     </div>
 
 </div>
@@ -606,7 +521,7 @@
             <i class="material-symbols-outlined">article</i><span>Article</span>
         </button>
         <button type="button" id="article-subtab-btn-wikipedia" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
-                data-article-subtab="wikipedia">
+                data-article-subtab="wikipedia"{% if "wikipedia" in empty_panels %} hidden{% endif %}>
             <i class="material-symbols-outlined">menu_book</i><span>Wikipedia</span>
         </button>
         {% include "dashboard/partials/articles/_article_sources_tab.html" %}
@@ -631,6 +546,7 @@
     </div>
     <div data-article-subtab="wikipedia" hidden>
         {# data-ext-panel-204-hide-tab: no Wikipedia article means nothing to show on this sub-tab at all. #}
+        {% if "wikipedia" not in empty_panels %}
         <div id="wikipedia-section"
             hx-sync="#pin-panel-lane-3:queue all" class="card card--secondary" data-ext-panel-204 hidden
             data-ext-panel-204-hide-tab="article-subtab-btn-wikipedia"
@@ -641,6 +557,7 @@
             data-collapse-scope="pin" data-collapse-section="wikipedia">
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
+        {% endif %}
     </div>
     {% url 'pin.article.sources' pin.slug as sources_url %}
     {% if include_children %}

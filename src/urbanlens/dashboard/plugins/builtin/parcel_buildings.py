@@ -596,6 +596,14 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
             return False
         return bool(pin.effective_latitude and pin.effective_longitude)
 
+    def has_content(self, data: dict | None) -> bool:
+        """Whether the parcel lookup found any building."""
+        return bool(data and data.get("buildings"))
+
+    def always_shows(self, pin: Pin) -> bool:
+        """A pin with child pins lists them here whatever the parcel lookup found."""
+        return pin.detail_pins.exists()
+
     def fetch(self, pin: Pin) -> None:
         """Enumerate the parcel's buildings and cache them against the pin's location."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache

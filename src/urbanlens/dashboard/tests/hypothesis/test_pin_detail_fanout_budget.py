@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 import re
 
 from django.contrib.auth.models import User
@@ -11,8 +12,12 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import EveryPanelGateConfiguredMixin
 
 #: The most load-triggered HTMX requests the Private Pin page may fire.
+#:
+#: Since 2026-10-04 the page leaves out panels already known to be empty (P53), so this is measured on a pin where
+#: none is: every gate passes and nothing is cached. Still 42 there.
 #:
 #: Lowered to **42**, the measured count, on 2026-10-03, when Site Conditions became a Location Data tab
 #: (P227): 43 with it as a card of its own.
@@ -60,15 +65,29 @@ _LANE = re.compile(r'hx-sync="#pin-(?:panel|media)-lane-[^"]*:queue all"')
 _OPEN_TAG = re.compile(r"<div [^>]*>", re.DOTALL)
 
 
-class PinDetailFanoutBudgetTests(TestCase):
-    """The page's opening burst has a ceiling."""
+class PinDetailFanoutBudgetTests(EveryPanelGateConfiguredMixin, TestCase):
+    """The page's opening burst has a ceiling.
+
+    Measured on the worst case: a pin no panel's gate refuses and nothing is cached for, so no panel is known to be
+    empty and the page leaves none out (P53).
+    """
 
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.pin = baker.make(Pin, profile=self.profile, location=baker.make(Location), parent_pin=None)
+        location = baker.make(
+            Location,
+            latitude=Decimal("41.5034"),
+            longitude=Decimal("-74.0104"),
+            official_name="Old Mill Works",
+            street_number="1",
+            route="Mill Street",
+            locality="Newburgh",
+            administrative_area_level_1="NY",
+        )
+        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name="Old Mill Works")
         self.client.force_login(self.user)
 
     def _rendered(self) -> str:
