@@ -663,8 +663,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         query = (
             Pin.objects.filter(profile=profile)
             .detail_pins()
-            .select_related("location", "parent_pin", "parent_pin__location")
-            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name")))
+            .select_related("location__wiki", "parent_pin__location__wiki")
+            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind=KIND_USER).with_customizations_for(profile).order_by("-order", "name")))
             .annotate(child_count=Count("detail_pins", distinct=True))
         )
 

@@ -91,3 +91,41 @@ class DetailPinsJsonQueryTests(TestCase):
         }
 
         self.assertEqual((payload[detail.pk]["icon"], payload[detail.pk]["color"]), ("castle", "#abcdef"))
+
+
+class MapChildPinsQueryTests(DetailPinsJsonQueryTests):
+    """The main map's Child pins layer: 201 queries for e2e-primary's 196 child pins on dev, and the same label colours."""
+
+    def _queries(self, *, children: bool = True) -> int:
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(reverse("map.pins.children"))
+        self.assertEqual(response.status_code, 200)
+        return len(captured)
+
+    def _payload(self) -> dict[int, dict]:
+        return {row["id"]: row for row in self.client.get(reverse("map.pins.children")).json()["pins"]}
+
+    def test_an_unnamed_detail_pin_is_named_by_its_wiki_and_drawn_with_its_label(self) -> None:
+        self._add_detail_pins(1, self.root)
+        detail = Pin.objects.get(parent_pin=self.root, name="")
+
+        row = self._payload()[detail.pk]
+
+        self.assertEqual(row["name"], f"zz-detail-wiki-{detail.pk}")
+        self.assertEqual((row["icon"], row["color"]), ("tower", "#111111"))
+
+    def test_the_viewers_own_label_colour_and_icon_are_used(self) -> None:
+        self._add_detail_pins(1, self.root)
+        detail = Pin.objects.get(parent_pin=self.root, name="")
+        LabelCustomization.objects.create(profile=self.profile, label=self.label, icon="castle", color="#abcdef")
+
+        row = self._payload()[detail.pk]
+
+        self.assertEqual((row["icon"], row["color"]), ("castle", "#abcdef"))
+
+    def test_an_unnamed_parent_is_named_by_its_wiki(self) -> None:
+        parent = self._pin("", parent_pin=self.root)
+        baker.make(Wiki, location=parent.location, name="zz-parent-wiki")
+        child = self._pin("Door", parent_pin=parent)
+
+        self.assertEqual(self._payload()[child.pk]["parent_name"], "zz-parent-wiki")
