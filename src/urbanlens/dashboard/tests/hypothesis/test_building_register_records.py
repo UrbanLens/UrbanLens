@@ -9,6 +9,8 @@ from __future__ import annotations
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
 
@@ -229,6 +231,48 @@ class NeighbouringBuildingTests(_Campus):
 
         self.assertFalse(cris_lists_building(self.annex.location))
         self.assertTrue(cris_lists_building(self.main.location))
+
+    def test_a_building_missing_from_the_parcel_list_does_not_take_a_listed_neighbours_point(self) -> None:
+        from urbanlens.dashboard.services.locations.national_register import building_register_rows
+
+        buildings = [{"latitude": float(lat), "longitude": float(lng)} for lat, lng in (_MAIN, _STORAGE)]
+        LocationCache.set(
+            self.campus.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": buildings, "provider": "cris"}
+        )
+
+        self.assertEqual(building_register_rows(self.annex.location, [self.own_point]), [])
+
+    def test_the_parcel_list_is_read_once_however_many_rows_are_near(self) -> None:
+        from urbanlens.dashboard.services.locations.national_register import building_register_rows
+
+        rows = [
+            _listing(
+                contains_point=False,
+                name=f"Row {index}",
+                source_latitude=float(_ANNEX[0]),
+                source_longitude=float(_ANNEX[1]),
+            )
+            for index in range(2)
+        ]
+        building_register_rows(self.annex.location, rows)
+        with CaptureQueriesContext(connection) as two:
+            building_register_rows(self.annex.location, rows)
+        rows = [
+            *rows,
+            *(
+                _listing(
+                    contains_point=False,
+                    name=f"Row {index}",
+                    source_latitude=float(_ANNEX[0]),
+                    source_longitude=float(_ANNEX[1]),
+                )
+                for index in range(2, 8)
+            ),
+        ]
+        with CaptureQueriesContext(connection) as eight:
+            building_register_rows(self.annex.location, rows)
+
+        self.assertEqual(len(eight), len(two))
 
     def test_without_a_parcel_list_the_distance_rule_still_holds(self) -> None:
         from urbanlens.dashboard.services.locations.national_register import building_register_rows

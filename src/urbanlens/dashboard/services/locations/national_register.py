@@ -59,45 +59,80 @@ def reference_number(row: dict[str, Any]) -> str | None:
     return value if _REFERENCE_NUMBER.fullmatch(value) else None
 
 
-def stands_on(location: Location, latitude: Any, longitude: Any) -> bool:
-    """Whether a published point is on the building at ``location``.
+#: How close a parcel-list record has to be to a building's location to be that building's own record. Buildings
+#: imported from the list sit exactly on their record; a record farther off is a neighbour's.
+_SAME_RECORD_METERS = 3.0
 
-    Args:
+
+class BuildingPoints:
+    """Decides which published points are on one building, reading its outline and its parcel's buildings once."""
+
+    def __init__(self, location: Location) -> None:
+        """Args:
         location: A building's location.
-        latitude: The point's latitude.
-        longitude: The point's longitude.
+        """
+        from urbanlens.dashboard.plugins.builtin.cris_buildings import building_footprint_of
 
-    Returns:
-        True when the location's building outline holds the point or, without an outline, the point is within
-        ``BUILDING_MATCH_METERS`` of the location and no other building known on the parcel is nearer to it.
-    """
-    from django.contrib.gis.geos import Point
+        self.location = location
+        self.footprint = building_footprint_of(location)
+        self._rivals: list[tuple[float, float]] | None = None
 
-    from urbanlens.dashboard.plugins.builtin.cris_buildings import building_footprint_of
-    from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between
+    def holds(self, latitude: Any, longitude: Any) -> bool:
+        """Whether a published point is on the building.
 
-    if latitude is None or longitude is None or location.latitude is None or location.longitude is None:
-        return False
-    try:
-        point_latitude, point_longitude = float(latitude), float(longitude)
-    except (TypeError, ValueError):
-        return False
-    footprint = building_footprint_of(location)
-    if footprint is not None:
-        return bool(footprint.contains(Point(point_longitude, point_latitude, srid=4326)))
-    distance = meters_between(point_latitude, point_longitude, float(location.latitude), float(location.longitude))
-    return distance <= BUILDING_MATCH_METERS and not _nearer_building(location, point_latitude, point_longitude, distance)
+        Args:
+            latitude: The point's latitude.
+            longitude: The point's longitude.
+
+        Returns:
+            True when the building's outline holds the point or, without an outline, the point is within
+            ``BUILDING_MATCH_METERS`` of the location and no other building known on the parcel is nearer to it.
+        """
+        from django.contrib.gis.geos import Point
+
+        from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between
+
+        if latitude is None or longitude is None or self.location.latitude is None or self.location.longitude is None:
+            return False
+        try:
+            point_latitude, point_longitude = float(latitude), float(longitude)
+        except (TypeError, ValueError):
+            return False
+        if self.footprint is not None:
+            return bool(self.footprint.contains(Point(point_longitude, point_latitude, srid=4326)))
+        distance = meters_between(point_latitude, point_longitude, float(self.location.latitude), float(self.location.longitude))
+        if distance > BUILDING_MATCH_METERS:
+            return False
+        return not any(meters_between(point_latitude, point_longitude, lat, lng) < distance for lat, lng in self.rivals)
+
+    @property
+    def rivals(self) -> list[tuple[float, float]]:
+        """The points of every other building known on the parcel: all its records but the building's own."""
+        if self._rivals is None:
+            self._rivals = self._other_records()
+        return self._rivals
+
+    def _other_records(self) -> list[tuple[float, float]]:
+        from urbanlens.dashboard.services.locations.site_scope import meters_between, site_buildings
+
+        latitude, longitude = float(self.location.latitude), float(self.location.longitude)
+        records = []
+        for building in site_buildings(self.location):
+            try:
+                records.append((float(building["latitude"]), float(building["longitude"])))
+            except (KeyError, TypeError, ValueError):
+                continue
+        if not records:
+            return []
+        own = min(records, key=lambda record: meters_between(latitude, longitude, *record))
+        if meters_between(latitude, longitude, *own) <= _SAME_RECORD_METERS:
+            records.remove(own)
+        return records
 
 
-def _nearer_building(location: Location, latitude: float, longitude: float, distance: float) -> bool:
-    """Whether another building known on the parcel is nearer the point than ``location`` is."""
-    from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between, nearest_building, site_buildings
-
-    buildings = site_buildings(location)
-    nearest = nearest_building(buildings, latitude, longitude)
-    if nearest is None or nearest is nearest_building(buildings, float(location.latitude), float(location.longitude), within_meters=BUILDING_MATCH_METERS):
-        return False
-    return meters_between(latitude, longitude, float(nearest["latitude"]), float(nearest["longitude"])) < distance
+def stands_on(location: Location, latitude: Any, longitude: Any) -> bool:
+    """Whether a published point is on the building at ``location``; see ``BuildingPoints.holds``."""
+    return BuildingPoints(location).holds(latitude, longitude)
 
 
 def cris_lists_building(location: Location) -> bool:
@@ -131,9 +166,10 @@ def building_register_rows(location: Location, rows: list[dict[str, Any]]) -> li
         whole site, so it never picks one building.
     """
     listed = None
+    building = BuildingPoints(location)
     own: list[dict[str, Any]] = []
     for row in rows:
-        if row.get("scope") != _SITE_SCOPE and stands_on(location, row.get("source_latitude"), row.get("source_longitude")):
+        if row.get("scope") != _SITE_SCOPE and building.holds(row.get("source_latitude"), row.get("source_longitude")):
             own.append({**row, _CONTAINS_POINT_KEY: True})
             continue
         if row.get(_CONTAINS_POINT_KEY) is not True:
@@ -155,7 +191,8 @@ def containing_listings(location: Location, rows: list[dict[str, Any]]) -> list[
     Returns:
         Rows whose boundary holds the location or whose own point stands on it.
     """
-    return [row for row in rows if row.get(_CONTAINS_POINT_KEY) is True or stands_on(location, row.get("source_latitude"), row.get("source_longitude"))]
+    building = BuildingPoints(location)
+    return [row for row in rows if row.get(_CONTAINS_POINT_KEY) is True or building.holds(row.get("source_latitude"), row.get("source_longitude"))]
 
 
 def cached_register_rows(location: Location) -> list[dict[str, Any]]:
