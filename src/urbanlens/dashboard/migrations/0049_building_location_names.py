@@ -11,9 +11,12 @@ A building's location is one that only child pins, or a child wiki, stand on (``
   fetched again under the stand-on rule.
 - A root wiki nests under the wiki of the nearest place its own place, or its location's place, sits in.
 
-"Stands on" here is the building's footprint, else within 15 m; the runtime rule also rejects a point another
-parcel building is nearer to, which reads a site's building list this migration does not.
+"Stands on" is the runtime rule (``national_register.BuildingPoints``) as it stood: the building's footprint, else
+within 15 m with no other building on the parcel nearer the point. The parcel's buildings are the location's own
+list, else its parent pin's or parent wiki's location's.
 """
+
+from dataclasses import dataclass
 
 from django.contrib.gis.geos import Point
 from django.db import migrations
@@ -29,6 +32,8 @@ _MAX_LINEAGE_DEPTH = 16
 _CRIS = "cris_building_usn"
 _REGISTERS = "redata_historic_registers"
 _REDATA_BUILDING = "redata_building_attributes"
+_PARCEL_BUILDINGS = "parcel_buildings"
+_SAME_RECORD_METERS = 3.0
 
 
 def _building_locations(Location, Pin, Wiki):
@@ -56,7 +61,19 @@ def _footprint(location):
     return place.geometry
 
 
-def _stands_on(location, latitude, longitude):
+def _rivals(location, buildings):
+    """The parcel's other buildings' points: every record but those within reach of the building's own."""
+    latitude, longitude = float(location.latitude), float(location.longitude)
+    points = []
+    for building in buildings or []:
+        try:
+            points.append((float(building["latitude"]), float(building["longitude"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return [point for point in points if meters_between(latitude, longitude, *point) > _SAME_RECORD_METERS]
+
+
+def _stands_on(location, latitude, longitude, rivals=()):
     if latitude is None or longitude is None:
         return False
     try:
@@ -66,19 +83,42 @@ def _stands_on(location, latitude, longitude):
     footprint = _footprint(location)
     if footprint is not None:
         return bool(footprint.contains(Point(longitude, latitude, srid=4326)))
-    return meters_between(latitude, longitude, float(location.latitude), float(location.longitude)) <= BUILDING_MATCH_METERS
+    distance = meters_between(latitude, longitude, float(location.latitude), float(location.longitude))
+    return distance <= BUILDING_MATCH_METERS and not any(meters_between(latitude, longitude, *rival) < distance for rival in rivals)
 
 
-def _own_listing(location, registers, name):
+def _parcel_lists(LocationCache, Pin, Wiki, location_ids):
+    """Each location's parcel building list: its own, else its parent pin's or parent wiki's location's."""
+    parents = {}
+    for location_id, parent_location_id in Pin.objects.filter(location_id__in=location_ids, parent_pin__isnull=False).values_list("location_id", "parent_pin__location_id"):
+        parents.setdefault(location_id, set()).add(parent_location_id)
+    for location_id, parent_location_id in Wiki.objects.filter(location_id__in=location_ids, parent_wiki__isnull=False).values_list("location_id", "parent_wiki__location_id"):
+        parents.setdefault(location_id, set()).add(parent_location_id)
+    wanted = set(location_ids) | {parent for found in parents.values() for parent in found if parent is not None}
+    lists = {}
+    for location_id, data in LocationCache.objects.filter(location_id__in=wanted, source=_PARCEL_BUILDINGS, audience="").values_list("location_id", "data"):
+        buildings = data.get("buildings") if isinstance(data, dict) else None
+        if buildings:
+            lists[location_id] = buildings
+    return {
+        location_id: lists.get(location_id) or next((lists[parent] for parent in sorted(parents.get(location_id, ()), key=str) if parent in lists), [])
+        for location_id in location_ids
+    }
+
+
+def _own_listing(location, registers, name, rivals=()):
     target = normalize_name_for_comparison(name)
     rows = (registers or {}).get("resources") if isinstance(registers, dict) else None
     return any(
-        isinstance(row, dict) and row.get("scope") != "site" and normalize_name_for_comparison(str(row.get("name") or "")) == target and _stands_on(location, row.get("source_latitude"), row.get("source_longitude"))
+        isinstance(row, dict)
+        and row.get("scope") != "site"
+        and normalize_name_for_comparison(str(row.get("name") or "")) == target
+        and _stands_on(location, row.get("source_latitude"), row.get("source_longitude"), rivals)
         for row in rows or []
     )
 
 
-def _new_name(location, cris, registers, redata_building):
+def _new_name(location, cris, registers, redata_building, rivals=()):
     """The ``(name, source)`` a building's location should have now, or None to leave it as it is.
 
     As on a child pin's location at runtime (``name_resolution.default_name_resolver``), the building's own CRIS
@@ -87,8 +127,8 @@ def _new_name(location, cris, registers, redata_building):
     """
     name, source = location.official_name or "", location.official_name_source or ""
     usn = str(cris.get("USNName") or "").strip() if isinstance(cris, dict) else ""
-    stands = bool(usn) and cris.get("site_scope") is not True and _stands_on(location, cris.get("source_latitude"), cris.get("source_longitude"))
-    rejected = source == "wikipedia" or (source == "historic_register" and not _own_listing(location, registers, name)) or (source == "cris" and not stands)
+    stands = bool(usn) and cris.get("site_scope") is not True and _stands_on(location, cris.get("source_latitude"), cris.get("source_longitude"), rivals)
+    rejected = source == "wikipedia" or (source == "historic_register" and not _own_listing(location, registers, name, rivals)) or (source == "cris" and not stands)
     if name and not rejected:
         return None
     if stands and is_meaningful_name(usn):
@@ -96,15 +136,42 @@ def _new_name(location, cris, registers, redata_building):
     if not rejected:
         return None
     redata = str(redata_building.get("name") or "").strip() if isinstance(redata_building, dict) else ""
-    if is_meaningful_name(redata) and not is_address_derived_name(redata, location):
+    if is_meaningful_name(redata) and not is_address_derived_name(redata, _AddressView.of(location)):
         return sanitize_name(redata), "redata_building"
     return "", ""
 
 
-def _misplaced_cris_row(location, cris):
+@dataclass(frozen=True)
+class _AddressView:
+    """The address a historical Location stands for, as ``is_address_derived_name`` reads it: the properties
+    ``Location`` derives from its fields exist only on the live model."""
+
+    street_number: str | None
+    route: str | None
+    city: str | None
+    state: str | None
+    zipcode: str | None
+
+    @classmethod
+    def of(cls, location):
+        return cls(location.street_number, location.route, location.locality, location.administrative_area_level_1, location.zipcode)
+
+    @property
+    def address(self) -> str | None:
+        # As Location.address joins it when this migration was written.
+        parts = [self.street_number] if self.street_number else []
+        if self.route:
+            parts.append(f"{self.route}," if (self.city or self.state or self.zipcode) else self.route)
+        if self.city:
+            parts.append(f"{self.city}," if (self.state or self.zipcode) else self.city)
+        parts.extend(part for part in (self.state, self.zipcode) if part)
+        return " ".join(parts) or None
+
+
+def _misplaced_cris_row(location, cris, rivals=()):
     if not isinstance(cris, dict) or cris.get("site_scope") is True or not (cris.get("USNName") or cris.get("resource_uuid")):
         return False
-    return not _stands_on(location, cris.get("source_latitude"), cris.get("source_longitude"))
+    return not _stands_on(location, cris.get("source_latitude"), cris.get("source_longitude"), rivals)
 
 
 def _rename_locations(Location, Pin, Wiki, LocationCache, LocationSlugHistory):
@@ -121,13 +188,15 @@ def _rename_locations(Location, Pin, Wiki, LocationCache, LocationSlugHistory):
         for pk, location_id, source, data in rows:
             cached[(location_id, source)] = data
             row_ids[(location_id, source)] = pk
+        parcel_lists = _parcel_lists(LocationCache, Pin, Wiki, [location.pk for location in chunk])
 
         dropped = []
         for location in chunk:
+            rivals = _rivals(location, parcel_lists.get(location.pk))
             cris = cached.get((location.pk, _CRIS))
-            if _misplaced_cris_row(location, cris):
+            if _misplaced_cris_row(location, cris, rivals):
                 dropped.append(row_ids[(location.pk, _CRIS)])
-            decided = _new_name(location, cris, cached.get((location.pk, _REGISTERS)), cached.get((location.pk, _REDATA_BUILDING)))
+            decided = _new_name(location, cris, cached.get((location.pk, _REGISTERS)), cached.get((location.pk, _REDATA_BUILDING)), rivals)
             if decided is None or decided == (location.official_name or "", location.official_name_source or ""):
                 continue
             name, source = decided

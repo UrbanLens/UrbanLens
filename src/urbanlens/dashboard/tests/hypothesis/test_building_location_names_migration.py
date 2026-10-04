@@ -9,7 +9,6 @@ from __future__ import annotations
 import importlib
 from types import SimpleNamespace
 
-from django.apps import apps as django_apps
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from model_bakery import baker
@@ -42,6 +41,21 @@ def _square(latitude: float, longitude: float, half: float) -> MultiPolygon:
         (longitude - half, latitude - half),
     )
     return MultiPolygon(Polygon(ring), srid=4326)
+
+
+_HISTORICAL_APPS = None
+
+
+def _historical_apps():
+    """The models as the migration sees them under ``migrate``: no properties, no custom managers."""
+    global _HISTORICAL_APPS  # noqa: PLW0603 - rendering the state takes seconds; one per test run
+    if _HISTORICAL_APPS is None:
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+
+        node = ("dashboard", migration.Migration.dependencies[0][1])
+        _HISTORICAL_APPS = MigrationExecutor(connection).loader.project_state(node).apps
+    return _HISTORICAL_APPS
 
 
 class BuildingLocationNamesMigrationTests(TestCase):
@@ -80,7 +94,47 @@ class BuildingLocationNamesMigrationTests(TestCase):
         LocationCache.objects.create(location=location, source="cris_building_usn", data=data)
 
     def _run(self) -> None:
-        migration.fix_building_locations(django_apps, None)
+        migration.fix_building_locations(_historical_apps(), None)
+
+    def test_a_campus_article_name_gives_way_to_redata_s_building_name(self) -> None:
+        """Reaches the address-fragment check, which reads properties a migration's models do not have."""
+        location = self._building(name=_CAMPUS, source="wikipedia", slug="hudson-river-state-hospital-32656")
+        LocationCache.objects.create(location=location, source="redata_building_attributes", data={"name": "Kirkbride"})
+
+        self._run()
+
+        location.refresh_from_db()
+        self.assertEqual((location.official_name, location.official_name_source), ("Kirkbride", "redata_building"))
+
+    def test_a_neighbours_record_ten_metres_off_names_nothing(self) -> None:
+        """Within reach of both, a record belongs to the building nearer it, as the runtime rule has it."""
+        own = self._building()
+        neighbour = baker.make(
+            Location, latitude=float(own.latitude) + 10 * _METRE, longitude=float(own.longitude), google_place=None
+        )
+        baker.make(Pin, profile=self.profile, location=neighbour, parent_pin=self.campus, pin_type=PinType.BUILDING)
+        buildings = [
+            {"latitude": float(spot.latitude), "longitude": float(spot.longitude)} for spot in (own, neighbour)
+        ]
+        LocationCache.objects.create(
+            location=self.campus_location, source="parcel_buildings", data={"buildings": buildings}
+        )
+        LocationCache.objects.create(
+            location=own,
+            source="cris_building_usn",
+            data={
+                "USNName": _BLDG33,
+                "resource_uuid": "b-33",
+                "source_latitude": float(neighbour.latitude),
+                "source_longitude": float(neighbour.longitude),
+            },
+        )
+
+        self._run()
+
+        own.refresh_from_db()
+        self.assertEqual(own.official_name or "", "")
+        self.assertFalse(LocationCache.objects.filter(location=own, source="cris_building_usn").exists())
 
     def test_a_building_named_after_the_campus_article_takes_its_cris_name_and_slug(self) -> None:
         location = self._building(name=_CAMPUS, source="wikipedia", slug="hudson-river-state-hospital-32655")
@@ -189,9 +243,10 @@ class NameChoiceTests(SimpleTestCase):
             place=None,
             latitude=_LAT,
             longitude=_LNG,
-            city="Poughkeepsie",
-            state="NY",
-            address="",
+            # A migration's models carry fields only, never Location's city/state/address properties.
+            locality="Poughkeepsie",
+            administrative_area_level_1="NY",
+            zipcode="",
             street_number="",
             route="",
         )
