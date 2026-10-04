@@ -112,11 +112,10 @@ class TimeLimitCheckTests(SimpleTestCase):
         errors = self._check_with(queue=Queue.BULK, soft_time_limit=100, time_limit=90)
         self.assertEqual(len(errors), 1)
 
-    def test_a_batch_task_is_capped_by_the_visibility_timeout(self) -> None:
-        from django.conf import settings
+    def test_a_batch_task_is_capped(self) -> None:
+        from urbanlens.dashboard.services.core.task_limits import BATCH_CEILING_SECONDS
 
-        visibility = settings.CELERY_BROKER_TRANSPORT_OPTIONS["visibility_timeout"]
-        errors = self._check_with(queue=Queue.BULK, soft_time_limit=visibility, time_limit=visibility + 1)
+        errors = self._check_with(queue=Queue.BULK, soft_time_limit=100, time_limit=BATCH_CEILING_SECONDS + 1)
         self.assertEqual(len(errors), 1)
 
 

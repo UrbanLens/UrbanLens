@@ -475,7 +475,7 @@ def check_every_task_has_a_time_limit(app_configs: Sequence[AppConfig] | None = 
 
     Limits come from the decorator or, failing that, the queue default ``QueueTimeLimits`` annotates. The
     ceiling keeps an interactive task from holding a slot the safety escalations share for as long as a bulk
-    job may, and every task under the broker's visibility timeout, past which it would be delivered twice.
+    job may, and every task within the hold the broker's timeouts are sized for, past which it would be delivered twice.
 
     Args:
         app_configs: The app configs being checked, or None for all of them.

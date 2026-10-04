@@ -26,10 +26,11 @@ deferred pin resolution after up to six, and import and export cleanup after one
 - `services/core/celery.py::LONGEST_COUNTDOWN_SECONDS` (6 h) bounds every countdown; `safely_enqueue_task` shortens a
   longer one.
 - `docker-compose.yml`'s `rabbitmq` service sets
-  `RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit consumer_timeout 28800000"` (8 h: the longest countdown plus the
-  one-hour task time limit, with room). Verified on dev: `rabbitmqctl eval 'application:get_env(rabbit, consumer_timeout).'`
-  answers `{ok,28800000}`, and every worker reconnected without a restart.
-- The Redis fallback's `visibility_timeout` is 8 h for the same reason.
+  `RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit consumer_timeout 43200000"` (12 h). That covers the longest countdown
+  (6 h), the longest run a task may declare (6,600 s, `task_limits.BATCH_CEILING_SECONDS`) and about four hours'
+  wait for a free worker slot. Verified on dev: `rabbitmqctl eval 'application:get_env(rabbit, consumer_timeout).'`
+  answers `{ok,43200000}`, and every worker reconnected without a restart.
+- The Redis fallback's `visibility_timeout` is 12 h for the same reason.
 
 ## What this repo needs
 
@@ -38,10 +39,12 @@ site-a and site-b keep the 30-minute default. Add the same variable to the conta
 
 ```yaml
             - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
-              value: "-rabbit consumer_timeout 28800000"
+              value: "-rabbit consumer_timeout 43200000"
 ```
 
-It takes effect when the pod restarts. Check it with the `rabbitmqctl eval` line above. If a site raises
-`UL_CELERY_TASK_TIME_LIMIT` above an hour, the timeout must grow with it: it must exceed six hours plus that limit.
+It takes effect when the pod restarts. Check it with the `rabbitmqctl eval` line above. The app's system check E013
+flags any task whose hard limit exceeds 6,600 s, including one raised through `UL_CELERY_TASK_TIME_LIMIT`, wherever
+Django's checks run (`migrate` runs them). Keep that variable at or under 6,600 on the workers, or the timeout
+needs to grow with it.
 
 If damballa's compose stacks pin their own copy of the compose file rather than this repo's, they need the same line.

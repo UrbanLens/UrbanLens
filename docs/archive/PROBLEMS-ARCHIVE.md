@@ -23027,21 +23027,29 @@ twice more on 2026-10-04. Production's compose RabbitMQ has the same default.
 **Fix.**
 - `services/core/celery.py::LONGEST_COUNTDOWN_SECONDS` (six hours) bounds a countdown. `safely_enqueue_task` shortens a
   longer one and logs it, including in the outbox it falls back to.
-- `docker-compose.yml` sets RabbitMQ's `consumer_timeout` to eight hours, through
-  `RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS`: the longest countdown plus the one-hour task time limit, with room.
-- The Redis fallback's `visibility_timeout` went from two hours to eight. It was already shorter than its own
+- `docker-compose.yml` sets RabbitMQ's `consumer_timeout` to twelve hours, through
+  `RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS`. A delivery is held through its countdown (at most six hours), its wait for a
+  free pool slot, and its run, which E013 caps at `task_limits.BATCH_CEILING_SECONDS` (6,600 s) on any queue without a
+  lower ceiling. That leaves about four hours for the pool wait, which nothing bounds; the bulk worker has two slots.
+- The Redis fallback's `visibility_timeout` went from two hours to twelve. It was already shorter than its own
   comment's rule.
+- E013's ceiling used to be the visibility timeout less ten minutes. Raising the timeout would have let a batch task
+  declare a limit of nearly twelve hours, so the ceiling is now its own constant, at the 6,600 s it was.
+- The outbox replays an entry's countdown within the bound too.
 
-On dev, the recreated broker answers `{ok,28800000}`, and every worker reconnected without a restart. The Kubernetes
+The adversarial review found the ceiling coupling, and found that the first sizing (eight hours, with the global
+one-hour limit) left no room for the pool wait.
+
+On dev, the recreated broker answers `{ok,43200000}`, and every worker reconnected without a restart. The Kubernetes
 RabbitMQ is the infrastructure repo's, and it is asked for the same line in
 [`handoffs/infrastructure-rabbitmq-consumer-timeout.md`](../handoffs/infrastructure-rabbitmq-consumer-timeout.md).
 
 **Tests.** `test_broker_consumer_timeout.py`:
-- compose's consumer timeout and the Redis visibility timeout each exceed the longest countdown plus the task time
-  limit;
+- compose's consumer timeout and the Redis visibility timeout each exceed the longest countdown, plus every queue's
+  ceiling, plus a three-hour pool-wait allowance;
 - every scheduled countdown (deferred resolution, boundary retries, cleanup, check-in archive, storage waits) is
   within the bound;
-- an over-long countdown is shortened, including on the outbox path, and a provider asking for a day is asked again
-  within the bound.
+- an over-long countdown is shortened, on the outbox's write and its replay, and a provider asking for a day is asked
+  again within the bound.
 
 All but the bound and the within-bound case failed before the fix.

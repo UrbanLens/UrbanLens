@@ -26,8 +26,9 @@ PROGRESS_STATE = "PROGRESS"
 #: What ``apply_async`` raises when the broker cannot take a message.
 BROKER_ERRORS: tuple[type[Exception], ...] = (KombuError, ConnectionError, OSError, RuntimeError)
 
-#: The longest a task may wait to run. The broker holds its delivery unacknowledged for the wait and then the run, so
-#: RabbitMQ's ``consumer_timeout`` and Redis's ``visibility_timeout`` must exceed this plus the longest time limit.
+#: The longest a task may wait to run. The broker holds its delivery unacknowledged for the wait, for a free pool slot
+#: and for the run, so RabbitMQ's ``consumer_timeout`` and Redis's ``visibility_timeout`` are sized from this and
+#: ``task_limits.BATCH_CEILING_SECONDS``.
 LONGEST_COUNTDOWN_SECONDS = 6 * 60 * 60
 
 #: Queues whose jobs are sized by what one account owns.

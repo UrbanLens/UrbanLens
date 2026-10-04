@@ -60,11 +60,16 @@ def queue_defaults() -> dict[str, TimeLimits]:
     }
 
 
+#: The longest hard limit a task on any other queue may declare. A delivery is held through its countdown, its wait for
+#: a pool slot and its run, so the broker's timeouts are sized from this, not this from them.
+BATCH_CEILING_SECONDS = 6600
+
+
 def queue_ceilings() -> dict[str, int]:
     """The longest hard limit a task on each queue may declare.
 
     Returns:
-        Ceilings keyed by queue name. Every other queue is capped by the broker's visibility timeout.
+        Ceilings keyed by queue name. Every other queue is capped at :data:`BATCH_CEILING_SECONDS`.
     """
     return {
         Queue.INTERACTIVE: 300,
@@ -89,13 +94,9 @@ def ceiling_for(queue: str) -> int:
         queue: A queue name.
 
     Returns:
-        The queue's ceiling, or the broker visibility timeout less ten minutes, past which the broker would
-        redeliver a task that is still running.
+        The queue's ceiling, or :data:`BATCH_CEILING_SECONDS`.
     """
-    from django.conf import settings
-
-    visibility = int(settings.CELERY_BROKER_TRANSPORT_OPTIONS["visibility_timeout"])
-    return queue_ceilings().get(str(queue), visibility - 600)
+    return queue_ceilings().get(str(queue), BATCH_CEILING_SECONDS)
 
 
 class QueueTimeLimits:

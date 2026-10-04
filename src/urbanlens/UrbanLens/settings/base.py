@@ -364,8 +364,8 @@ CELERY_BROKER_URL = require_deployment_setting(
 CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or DRAGONFLY_URL or CELERY_BROKER_URL
 # Bound result-backend recovery retries to fail fast when the broker is down.
 CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_policy": {"timeout": 5.0}}
-# Above services.core.celery.LONGEST_COUNTDOWN_SECONDS plus the longest time limit, or a held task is delivered twice.
-CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 8 * 60 * 60}
+# A held task's countdown (at most 6 h), its wait for a pool slot and its run (at most 6600 s); past it, it is delivered twice.
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 12 * 60 * 60}
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

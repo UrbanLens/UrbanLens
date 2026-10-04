@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 from django.utils import timezone
 
-from urbanlens.dashboard.services.core.celery import BROKER_ERRORS
+from urbanlens.dashboard.services.core.celery import BROKER_ERRORS, LONGEST_COUNTDOWN_SECONDS
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -104,7 +104,7 @@ def drain_outbox(*, batch: int = DRAIN_BATCH) -> int:
             continue
         options: dict[str, Any] = {}
         if entry.not_before is not None and entry.not_before > now:
-            options["countdown"] = math.ceil((entry.not_before - now).total_seconds())
+            options["countdown"] = min(math.ceil((entry.not_before - now).total_seconds()), LONGEST_COUNTDOWN_SECONDS)
         if entry.expires_at is not None:
             options["expires"] = entry.expires_at
         if entry.queue:
