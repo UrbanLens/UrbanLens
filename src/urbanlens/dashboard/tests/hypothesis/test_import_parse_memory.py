@@ -71,6 +71,22 @@ def _kml() -> bytes:
     return _filled(_KML_HEAD, _kml_placemark, "</Document></kml>\n")
 
 
+def _kml_one_element(geometry: str) -> bytes:
+    """A KML holding one placemark, whose geometry is the whole file: a long track, or a large area's outline."""
+    open_tag, close_tag = {
+        "LineString": ("<LineString><coordinates>\n", "\n</coordinates></LineString>"),
+        "Polygon": (
+            "<Polygon><outerBoundaryIs><LinearRing><coordinates>\n",
+            "\n</coordinates></LinearRing></outerBoundaryIs></Polygon>",
+        ),
+    }[geometry]
+    return _filled(
+        _KML_HEAD + "<Placemark><name>The long walk</name>" + open_tag,
+        lambda i: f"{_lng(i):.6f},{_lat(i // 997):.6f},0 ",
+        close_tag + "</Placemark></Document></kml>\n",
+    )
+
+
 def _kml_styles_first() -> bytes:
     """A KML whose placemarks follow a file's worth of shared styles, as a My Maps export's do."""
     return _filled(
@@ -324,6 +340,23 @@ class PinFormatsAreReadInPiecesTests(_MemoryCase):
     def test_shapefile(self) -> None:
         upload, size = _shapefile()
         self.assert_read_in_pieces("places.zip", upload, size=size)
+
+
+class OneLargeElementTests(_MemoryCase):
+    """P95: a file that is one element is read with no per-coordinate objects, only the element's own text."""
+
+    def assert_held_near_its_text(self, name: str, upload: bytes) -> None:
+        peak, state = self._peak(name, upload)
+
+        self.assertEqual(state.get("status"), "done", state)
+        self.assertEqual(state["result"]["total"], 1, state)
+        self.assertLess(peak, 3 * len(upload), f"reading a {len(upload):,}-byte {name} peaked at {peak:,} bytes")
+
+    def test_a_kml_track(self) -> None:
+        self.assert_held_near_its_text("track.kml", _kml_one_element("LineString"))
+
+    def test_a_kml_outline(self) -> None:
+        self.assert_held_near_its_text("outline.kml", _kml_one_element("Polygon"))
 
 
 class HistoryFormatsAreReadInPiecesTests(_MemoryCase):

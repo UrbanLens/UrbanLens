@@ -994,7 +994,7 @@ probe proves nothing either way.
 
 ## P95 — An import preview reads each file a chunk at a time, but one oversized element is still built whole at 10-13x its size
 
-`id: P95` · `status: open` · `updated: 2026-10-02`
+`id: P95` · `status: open` · `updated: 2026-10-04`
 
 Previously titled "One import preview entry is still read whole at up to 1 GB, and what parsing it
 costs is unmeasured", before that "An import preview can hold 2 GB of extracted bytes in a sandbox
@@ -1136,9 +1136,9 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 
 **Still open.**
 
-- **One element is built whole.** A file that is one element - a single placemark, feature, way, row
-  or line - is read whole into that element and then parsed, at a ratio that does not fall with size
-  (after, RSS; a single row or line was not measured):
+- **One element is built whole: GeoJSON and OSM still are, KML no longer is (2026-10-04).** A file that is one
+  element (a single placemark, feature, way, row or line) is read whole into that element and then parsed. Measured
+  after the 2026-10-02 work, RSS; a single row or line was not measured:
 
   | One element | 4 MiB | 8 MiB | 16 MiB |
   |---|---|---|---|
@@ -1146,11 +1146,23 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
   | GeoJSON feature, one LineString | 50.3 (12.6x) | 101.3 (12.7x) | 201.2 (12.6x) |
   | OSM way through every node (3.7 / 7.4 / 14.9 MiB) | 38.3 (10.4x) | 81.3 (11.0x) | 155.1 (10.4x) |
 
-  At about 11x, one element of roughly 270 MB fills `media-worker`'s 3 GB, and the KML case read
-  16 MiB in 1.8 s, so the time limit does not stop it first. The fix would be a counting wrapper on the
-  stream that each parser resets at an element boundary, refusing the file once one element passes a
-  cap. The cap is the product call: it is the largest single track, polygon or way a preview accepts,
-  and at 11x a 32 MiB cap still allows about 350 MB for one parse.
+  **KML, fixed.** The tracemalloc peak for a 12 MiB file that is one placemark fell from 125.9 MB to 25.3 MB with a
+  LineString, and from 154.4 MB to 25.3 MB with a Polygon outline. That is 2.0x, the element's own text plus one copy.
+  Two changes did it:
+  - **No substitution over the text.** `re.sub` of the whitespace around commas built a string for every piece
+    between commas before joining them, about seven times the text. `maps._kml_tuples` now walks whitespace-separated
+    tokens and joins those that meet at a comma. A hypothesis test holds it equal to substituting and then splitting.
+  - **No list of every coordinate.** A line's preview point is its first coordinate, and every coordinate is still
+    parsed so a bad one fails the file as before. A ring goes into a flat `array('d')` for its centroid, not a list
+    of tuples.
+
+  `test_import_parse_memory.py::OneLargeElementTests` holds both under 3x.
+
+  **GeoJSON** builds the feature in ijson's C object builder, so compact coordinates would mean building features
+  from events in Python, slowing every GeoJSON import. **OSM** holds an Element per `<nd>` of the way and an
+  id-to-coordinates entry per reference across its two passes. Jess ruled on 2026-10-02 that there is no
+  per-element cap, so streaming is the only fix left for either. At about 11x, one element of roughly 270 MB still
+  fills `media-worker`'s 3 GB.
 - **History grows with the file, by design.** Location History's visits and routes and GPX's routes
   are what the confirmed import saves, so they are kept to the end of the file: 1.26x and 5.9x RSS at
   16 MiB. What bounds them now is the 110-second soft limit rather than memory: at the measured rates

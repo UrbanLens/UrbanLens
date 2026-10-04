@@ -14,7 +14,7 @@ from fastkml import kml
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway, _kml_tuples
 
 _NAMESPACE_RE = re.compile(rb"https://((?:www\.)?(?:opengis\.net|google\.com/kml|w3\.org)/)")
 
@@ -182,3 +182,13 @@ class StreamingKmlMemoryTests(SimpleTestCase):
             len(content) // 2,
             f"parsing a {len(content):,}-byte file needed {overhead:,} bytes beyond the pins it returned",
         )
+
+
+class CoordinateTuplesTests(SimpleTestCase):
+    """P95: the tuples of a ``coordinates`` text are found without a substitution over the whole text."""
+
+    @given(st.lists(st.sampled_from(["1", "2.5", "-3", ",", ",,", " ", "  ", "\n", "\t", "\xa0", " ", "x"])))
+    def test_the_tuples_are_those_of_collapsing_the_spaces_around_each_comma(self, pieces: list[str]) -> None:
+        text = "".join(pieces)
+
+        self.assertEqual(list(_kml_tuples(text)), re.sub(r"\s*,\s*", ",", text).split())

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from array import array
 import base64
 import csv
 from dataclasses import dataclass, field
@@ -16,6 +17,7 @@ from django.db import DatabaseError
 from fastkml.exceptions import KMLParseError
 from gpxpy.gpx import GPXException
 from lxml.etree import XMLSyntaxError
+import numpy as np
 from pyogrio.errors import DataSourceError as ShapefileDataSourceError
 import requests
 from shapely.errors import ShapelyError
@@ -1229,7 +1231,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             }
 
 
-_KML_COMMA_SPACING = re.compile(r"\s*,\s*")
+_KML_TOKEN = re.compile(r"\S+")
 
 
 def _without_leading_boms(lines: Iterable[str]) -> Iterator[str]:
@@ -1273,27 +1275,70 @@ def _kml_child_text(element: Element, name: str) -> str | None:
     return None
 
 
-def _kml_coordinates(element: Element) -> list[tuple[float, float]]:
-    text = _KML_COMMA_SPACING.sub(",", _kml_child_text(element, "coordinates") or "")
-    return [(float(parts[0]), float(parts[1])) for parts in (token.split(",") for token in text.split())]
+def _iter_kml_coordinates(element: Element) -> Iterator[tuple[float, float]]:
+    """Each ``(longitude, latitude)`` of an element's ``coordinates``, parsed as it is reached.
+
+    One placemark's geometry may be the whole file, so neither its tokens nor its pairs are listed (P95).
+    """
+    for child in element:
+        if _kml_local_name(child.tag) == "coordinates":
+            for token in _kml_tuples(child.text or ""):
+                parts = token.split(",", 2)
+                yield float(parts[0]), float(parts[1])
+            return
+
+
+def _kml_tuples(text: str) -> Iterator[str]:
+    """Each whitespace-separated tuple of a ``coordinates`` text, whitespace beside a comma taken as part of it.
+
+    The same tuples as removing the whitespace around every comma and then splitting, without a substitution: one
+    builds a string for every piece between commas before joining them, about seven times the text (P95).
+    """
+    pieces: list[str] = []
+    for match in _KML_TOKEN.finditer(text):
+        token = match.group()
+        if pieces and not pieces[-1].endswith(",") and not token.startswith(","):
+            yield "".join(pieces)
+            pieces.clear()
+        pieces.append(token)
+    if pieces:
+        yield "".join(pieces)
+
+
+def _kml_first_coordinate(element: Element) -> tuple[float, float] | None:
+    """An element's first ``(longitude, latitude)``, once every one of them has parsed."""
+    first = None
+    for coordinate in _iter_kml_coordinates(element):
+        if first is None:
+            first = coordinate
+    return first
+
+
+def _kml_coordinate_array(element: Element) -> np.ndarray:
+    """An element's coordinates as an ``(n, 2)`` array, at 16 bytes a pair rather than a tuple's hundred."""
+    flat = array("d")
+    for longitude, latitude in _iter_kml_coordinates(element):
+        flat.append(longitude)
+        flat.append(latitude)
+    return np.frombuffer(flat, dtype=np.float64).reshape(-1, 2)
 
 
 def _kml_shape(element: Element) -> BaseGeometry | None:
     name = _kml_local_name(element.tag)
     if name == "Point":
-        coordinates = _kml_coordinates(element)
-        return ShapelyPoint(coordinates[0]) if coordinates else None
+        first = _kml_first_coordinate(element)
+        return ShapelyPoint(first) if first is not None else None
     if name in {"LineString", "LinearRing"}:
-        coordinates = _kml_coordinates(element)
-        return ShapelyLineString(coordinates) if len(coordinates) > 1 else (ShapelyPoint(coordinates[0]) if coordinates else None)
+        coordinates = _kml_coordinate_array(element)
+        return ShapelyLineString(coordinates) if len(coordinates) > 1 else (ShapelyPoint(coordinates[0]) if len(coordinates) else None)
     if name == "Polygon":
-        rings: dict[str, list[list[tuple[float, float]]]] = {"outerBoundaryIs": [], "innerBoundaryIs": []}
+        rings: dict[str, list[np.ndarray]] = {"outerBoundaryIs": [], "innerBoundaryIs": []}
         for boundary in element:
             kind = _kml_local_name(boundary.tag)
             if kind in rings:
-                rings[kind].extend(_kml_coordinates(ring) for ring in boundary if _kml_local_name(ring.tag) == "LinearRing")
-        outer = rings["outerBoundaryIs"][0] if rings["outerBoundaryIs"] else []
-        return ShapelyPolygon(outer, rings["innerBoundaryIs"]) if len(outer) >= 3 else None
+                rings[kind].extend(_kml_coordinate_array(ring) for ring in boundary if _kml_local_name(ring.tag) == "LinearRing")
+        outer = rings["outerBoundaryIs"][0] if rings["outerBoundaryIs"] else None
+        return ShapelyPolygon(outer, rings["innerBoundaryIs"]) if outer is not None and len(outer) >= 3 else None
     if name == "MultiGeometry":
         parts = [shape for shape in (_kml_shape(child) for child in element) if shape is not None and not shape.is_empty]
         return ShapelyGeometryCollection(parts) if parts else None
@@ -1305,10 +1350,10 @@ def _kml_placemark_point(placemark: Element) -> tuple[float, float] | None:
     for child in placemark:
         name = _kml_local_name(child.tag)
         if name in {"Point", "LineString", "LinearRing"}:
-            coordinates = _kml_coordinates(child)
-            if not coordinates:
+            first = _kml_first_coordinate(child)
+            if first is None:
                 raise ValueError(f"KML {name} has no coordinates")
-            return coordinates[0]
+            return first
         if name in {"Polygon", "MultiGeometry"}:
             shape = _kml_shape(child)
             if shape is None or shape.is_empty:
