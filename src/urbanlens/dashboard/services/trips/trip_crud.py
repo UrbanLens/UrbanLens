@@ -39,24 +39,28 @@ TRIP_PERMISSION_FIELDS: tuple[str, ...] = (
 
 
 def _trip_name(value: object) -> str:
-    """A submitted trip name, stripped: ``""`` for anything but text.
+    """A submitted trip name, stripped: ``""`` for none.
 
     Raises:
-        TripValidationError: The name is longer than its column.
+        TripValidationError: The name is not text, or is longer than its column.
     """
-    name = value.strip() if isinstance(value, str) else ""
+    if value is not None and not isinstance(value, str):
+        raise TripValidationError("The trip name must be text.")
+    name = (value or "").strip()
     if length_error := column_length_error(Trip, "name", name, "Trip name"):
         raise TripValidationError(length_error)
     return name
 
 
 def _trip_description(value: object) -> str | None:
-    """A submitted description: None for a blank one, or anything but text.
+    """A submitted description: None for a blank one.
 
     Raises:
-        TripValidationError: The description exceeds the shared text limit.
+        TripValidationError: The description is not text, or exceeds the shared text limit.
     """
-    description = (value if isinstance(value, str) else "") or None
+    if value is not None and not isinstance(value, str):
+        raise TripValidationError("The description must be text.")
+    description = value or None
     if length_error := text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description"):
         raise TripValidationError(length_error)
     return description

@@ -25,7 +25,7 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.capacity import PIN_LISTS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.core.request_body import posted_fields, text_field
+from urbanlens.dashboard.services.core.request_body import posted_fields, text_field, text_type_error
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.core.uuids import uuid_or_none
 from urbanlens.dashboard.services.geo.sampling import select_spread
@@ -319,6 +319,8 @@ class PinListEditView(LoginRequiredMixin, View):
         # separate implementations editing the same row) changed in between.
         changed_fields: set[str] = set()
 
+        if type_error := text_type_error(body, "name", "description", "saved_filter_uuid"):
+            return HttpResponse(type_error, status=400)
         name = text_field(body, "name")
         if name and name != pin_list.name:
             name_error = column_length_error(PinList, "name", name, "List name")

@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.numbers import clamp_int
-from urbanlens.dashboard.services.core.request_body import posted_fields, text_field
+from urbanlens.dashboard.services.core.request_body import posted_fields, text_field, text_type_error
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
 from urbanlens.dashboard.services.core.uuids import uuid_or_none
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
@@ -830,6 +830,8 @@ class MarkupEditView(LoginRequiredMixin, View):
         snapshot = FieldSnapshot(item)
         body = posted_fields(request)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        if type_error := text_type_error(body, "label", "security_indicator"):
+            return JsonResponse({"ok": False, "error": type_error}, status=400)
 
         if "geometry" in body and isinstance(body["geometry"], dict):
             geometry = body["geometry"]

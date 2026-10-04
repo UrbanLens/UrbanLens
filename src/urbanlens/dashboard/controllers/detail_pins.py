@@ -21,7 +21,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, clamp_int, coordinate_or_none
-from urbanlens.dashboard.services.core.request_body import posted_fields, text_field
+from urbanlens.dashboard.services.core.request_body import posted_fields, text_field, text_type_error
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.media.quota_rewards import revoke_community_bonuses_on_wiki_delete
@@ -196,6 +196,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
                 logger.info("detail pin move rejected: %s", exc)
                 return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
+        if type_error := text_type_error(body, "name", "description"):
+            return JsonResponse({"ok": False, "error": type_error}, status=400)
         name = text_field(body, "name") or None
         if name_error := column_length_error(Pin, "name", name, "Name"):
             return JsonResponse({"ok": False, "error": name_error}, status=400)
@@ -453,6 +455,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         # Style/content fields update silently (no WikiEdit) - same reasoning as personal detail pins: these
         # autosave on every panel change, and a granular audit entry per keystroke would flood the wiki's edit
         # history.
+        if type_error := text_type_error(body, "name", "description"):
+            return JsonResponse({"ok": False, "error": type_error}, status=400)
         child_name = text_field(body, "name") or child_wiki.name
         if name_error := column_length_error(Wiki, "name", child_name, "Name"):
             return JsonResponse({"ok": False, "error": name_error}, status=400)

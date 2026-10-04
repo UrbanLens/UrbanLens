@@ -29,9 +29,10 @@ from urbanlens.dashboard.models.trips.model import Trip
 from urbanlens.dashboard.services.billing.pricing import STRIPE_MAXIMUM_CHARGE_CENTS, typed_dollars_to_cents
 from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX, typed_decimal_for_column
 from urbanlens.dashboard.services.core.pagination import offset_window
-from urbanlens.dashboard.services.core.request_body import json_body, list_field, text_field
+from urbanlens.dashboard.services.core.request_body import json_body, list_field, text_field, text_type_error
 from urbanlens.dashboard.services.core.uuids import uuid_or_none, valid_uuids
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.trips.trip_crud import create_trip
 
 _OFF_THE_GLOBE = ("inf", "-inf", "nan", "1e999", "95", "-90.0001")
 
@@ -161,11 +162,43 @@ class JsonFieldTypeTests(_SignedIn):
                 self.assertEqual(response.status_code, 400)
         self.assertFalse(PinList.objects.exists())
 
+    def test_an_update_refuses_a_text_field_of_another_type_rather_than_clearing_it(self) -> None:
+        pin = create_pin_for_profile(self.profile, name="Mill", latitude=42.5, longitude=-73.5).pin
+        Pin.objects.filter(pk=pin.pk).update(description="Kept")
+        trip, _ = create_trip(self.profile, name="Walk", description="Kept")
+        routes = (reverse("pin.edit", args=[pin.slug]), reverse("trips.edit", args=[trip.slug]))
+        for url in routes:
+            for value in (5, True, [], {}):
+                with self.subTest(url=url, value=value):
+                    response = self.client.post(
+                        url, data=json.dumps({"description": value}), content_type="application/json"
+                    )
+
+                    self.assertEqual(response.status_code, 400)
+        pin.refresh_from_db()
+        trip.refresh_from_db()
+        self.assertEqual((pin.description, trip.description), ("Kept", "Kept"))
+
+    def test_an_update_still_clears_a_text_field_posted_as_null(self) -> None:
+        """Anti-vacuity: null is how a JSON client clears one."""
+        trip, _ = create_trip(self.profile, name="Walk", description="Gone")
+
+        self.client.post(
+            reverse("trips.edit", args=[trip.slug]),
+            data=json.dumps({"description": None}),
+            content_type="application/json",
+        )
+
+        trip.refresh_from_db()
+        self.assertIsNone(trip.description)
+
     def test_the_accessors(self) -> None:
         fields = {"text": "  a  ", "number": 1.5, "items": [1], "map": {}}
 
         self.assertEqual([text_field(fields, key) for key in ("text", "number", "items", "absent")], ["a", "", "", ""])
         self.assertEqual([list_field(fields, key) for key in ("items", "text", "map", "absent")], [[1], [], [], []])
+        self.assertEqual(text_type_error({"a": "x", "b": None, "c": 1}, "a", "b", "absent"), None)
+        self.assertEqual(text_type_error({"a": "x", "c": 1}, "a", "c"), "c must be text.")
 
     def test_a_form_posted_where_json_is_read_is_a_bad_request(self) -> None:
         pin = create_pin_for_profile(self.profile, name="Mill", latitude=42.5, longitude=-73.5).pin

@@ -152,6 +152,24 @@ def text_field(fields: Mapping[str, Any], name: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def text_type_error(fields: Mapping[str, Any], *names: str) -> str | None:
+    """A refusal for the first of *names* a JSON body posted as neither a string nor null.
+
+    An update that read it with :func:`text_field` would clear the field; refusing the request keeps it.
+
+    Args:
+        fields: What :func:`posted_fields` or :func:`posted_json_object` returned.
+        names: The fields the view reads as text.
+
+    Returns:
+        The refusal, or None.
+    """
+    for name in names:
+        if fields.get(name) is not None and not isinstance(fields[name], str):
+            return f"{name} must be text."
+    return None
+
+
 def list_field(fields: Mapping[str, Any], name: str) -> list[Any]:
     """A JSON body's list field: ``[]`` when it is absent or posted as anything but a list.
 

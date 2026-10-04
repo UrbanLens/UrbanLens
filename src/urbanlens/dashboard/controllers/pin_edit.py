@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.core.capacity import CapacityExceededError
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
-from urbanlens.dashboard.services.core.request_body import posted_fields, text_field
+from urbanlens.dashboard.services.core.request_body import posted_fields, text_field, text_type_error
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.pins.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
 from urbanlens.dashboard.services.pins.pin_subresources import create_pin_note, delete_pin_note
@@ -231,11 +231,13 @@ class PinEditView(LoginRequiredMixin, View):
         # absent from the body must be left alone rather than rewritten with its current value.
         edits: dict[str, object] = {}
 
+        if type_error := text_type_error(body, "name", "description", "last_visited", "categories", "date_built", "date_abandoned", "date_last_active"):
+            return HttpResponse(type_error, status=400)
         if "name" in body:
             name = body.get("name")
             if isinstance(name, str) and (length_error := column_length_error(Pin, "name", name, "Name")):
                 return HttpResponse(length_error, status=400)
-            edits["name"] = name if isinstance(name, str) else None
+            edits["name"] = name
         if "description" in body:
             description = text_field(body, "description") or None
             length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
