@@ -48,6 +48,41 @@ def _parse_boundary_type(value) -> str | None:
     return value if value in BoundaryType.values else None
 
 
+def _depth(node_id: int, parents: dict[int, int | None]) -> int:
+    """How many steps below the tree's top a node is, given each node's parent (cycle-safe)."""
+    steps, parent = 0, parents.get(node_id)
+    while parent is not None and steps <= len(parents):
+        steps += 1
+        parent = parents.get(parent)
+    return steps
+
+
+def _outline_key(polygon: GEOSGeometry) -> bytes:
+    """The same outline traced from another vertex, or wound the other way, gives the same key."""
+    return bytes(polygon.normalize(clone=True).wkb)
+
+
+def _distinct_outline_entries(candidates: list[tuple[int, GEOSGeometry | None]], drawn: GEOSGeometry | None, id_key: str) -> list[dict]:
+    """One entry per distinct outline, first come first served, never repeating the one already on the map.
+
+    Args:
+        candidates: ``(id, outline)`` pairs, the one to keep for a shared outline first.
+        drawn: The page's own building outline, already on the map.
+        id_key: The entry key the id goes under.
+
+    Returns:
+        List of ``{id_key, "polygon"}`` dicts.
+    """
+    seen = {_outline_key(drawn)} if drawn is not None else set()
+    entries = []
+    for object_id, polygon in candidates:
+        if polygon is None or (key := _outline_key(polygon)) in seen:
+            continue
+        seen.add(key)
+        entries.append({id_key: object_id, "polygon": _geojson(polygon)})
+    return entries
+
+
 def _detail_building_entries(pin: Pin, drawn: GEOSGeometry | None) -> list[dict]:
     """The building outline of each of this pin's descendants that has one of its own (display-only).
 
@@ -64,23 +99,28 @@ def _detail_building_entries(pin: Pin, drawn: GEOSGeometry | None) -> list[dict]
     descendants = list(pin.descendants())
     polygons = Boundary.objects.own_polygons_for_pins(descendants, BoundaryType.BUILDING)
     parents: dict[int, int | None] = {descendant.pk: descendant.parent_pin_id for descendant in descendants}
+    ordered = sorted(descendants, key=lambda descendant: (_depth(descendant.pk, parents), descendant.pk))
+    return _distinct_outline_entries([(descendant.pk, polygons.get(descendant.pk)) for descendant in ordered], drawn, "pin_id")
 
-    def depth(pin_id: int) -> int:
-        steps, parent = 0, parents.get(pin_id)
-        while parent is not None and steps <= len(parents):
-            steps += 1
-            parent = parents.get(parent)
-        return steps
 
-    seen = {bytes(drawn.wkb)} if drawn is not None else set()
-    entries = []
-    for descendant in sorted(descendants, key=lambda candidate: (depth(candidate.pk), candidate.pk)):
-        polygon = polygons.get(descendant.pk)
-        if polygon is None or (key := bytes(polygon.wkb)) in seen:
-            continue
-        seen.add(key)
-        entries.append({"pin_id": descendant.pk, "polygon": _geojson(polygon)})
-    return entries
+def _wiki_detail_building_entries(wiki: Wiki, viewer: Profile, drawn: GEOSGeometry | None) -> list[dict]:
+    """The building outline of each of this wiki's descendant wikis that has one of its own, as ``viewer`` sees it.
+
+    Args:
+        wiki: The parent wiki.
+        viewer: Who is looking.
+        drawn: The parent's own building outline, already on the map.
+
+    Returns:
+        List of ``{"wiki_id", "polygon"}`` dicts.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+    descendants = list(visible_rows(wiki.descendants(), wiki, viewer))
+    polygons = Boundary.objects.own_polygons_for_wikis(descendants, BoundaryType.BUILDING, viewer)
+    parents: dict[int, int | None] = {descendant.pk: descendant.parent_wiki_id for descendant in descendants}
+    ordered = sorted(descendants, key=lambda descendant: (_depth(descendant.pk, parents), descendant.pk))
+    return _distinct_outline_entries([(descendant.pk, polygons.get(descendant.pk)) for descendant in ordered], drawn, "wiki_id")
 
 
 def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False, include_children: bool = True) -> dict:
@@ -112,7 +152,7 @@ def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False, 
     }
 
 
-def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = False, just_drawn: tuple[str, Any] | None = None) -> dict:
+def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = False, just_drawn: tuple[str, Any] | None = None, viewer: Profile | None = None, include_children: bool = False) -> dict:
     """Full boundary payload for a wiki page map.
 
     Args:
@@ -121,17 +161,22 @@ def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = Fals
         refreshing: Whether a stale generated boundary is being refreshed.
         just_drawn: ``(boundary_type_value, polygon)`` for a boundary this same request just saved, or
         None.
+        viewer: Who is looking; needed with ``include_children``.
+        include_children: Whether its descendant wikis' building outlines are drawn ("child pin details").
 
     Returns:
         The payload dict.
     """
     boundaries = {}
+    polygons = {}
     for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
         key = str(boundary_type.value)
         if just_drawn is not None and just_drawn[0] == key:
+            polygons[boundary_type] = just_drawn[1]
             boundaries[key] = {"polygon": _geojson(just_drawn[1]), "source": "wiki"}
             continue
         polygon, source = Boundary.objects.resolve_for_wiki(wiki, boundary_type)
+        polygons[boundary_type] = polygon
         boundaries[key] = {"polygon": _geojson(polygon), "source": source}
     location = wiki.location
     return {
@@ -141,7 +186,7 @@ def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = Fals
         "pending": pending,
         "refreshing": refreshing,
         "boundaries": boundaries,
-        "detail_buildings": [],
+        "detail_buildings": _wiki_detail_building_entries(wiki, viewer, polygons[BoundaryType.BUILDING]) if include_children and viewer is not None else [],
     }
 
 
@@ -254,7 +299,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         already_ran = boundary_generation_ran(location)
         in_flight = schedule_location_boundary_generation(location, profile)
-        return JsonResponse(_wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran))
+        include_children = request.GET.get("children") == "1"
+        return JsonResponse(_wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, viewer=profile, include_children=include_children))
 
     def post(self, request, location_slug):
         """Save or clear the community-drawn boundary of one type, with audit."""
@@ -301,6 +347,6 @@ class WikiBoundaryView(LoginRequiredMixin, View):
         # A clear needs no override: with the row gone, resolve_for_wiki correctly falls through to place/circle
         # for every viewer alike, concealed or not.
         just_drawn = (boundary_type, geom) if geom is not None else None
-        payload = _wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, just_drawn=just_drawn)
+        payload = _wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, just_drawn=just_drawn, viewer=profile, include_children=request.GET.get("children") == "1")
         payload["ok"] = True
         return JsonResponse(payload)

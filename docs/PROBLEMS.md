@@ -3163,3 +3163,17 @@ until boundary generation, which runs only for an owner who allows enrichment, a
 wiki and does not reconcile. `photo_enrichment._save_enriched_image` creates one too, but only during enrichment.
 Found by reading, not seen on dev. Either reconcile on those paths as well, or have `ensure_wiki_for_location`
 reconcile any root wiki it returns, at a few queries per pin.
+
+## P264 — A building outline drawn on a wiki whose building place has no footprint is saved but never shown
+
+`id: P264` · `status: open` · `updated: 2026-10-04` · `found by: Claude, reviewing P222`
+
+`BoundaryManager.resolve_for_wiki` returns nothing when the wiki's place has no polygon of the requested type, before
+it looks at the wiki's own drawn row. `place_polygon(place, "building")` is None both for a place that is not a
+building (a campus: no single building outline applies, which the guard means) and for a building place with no
+footprint (P182's point-only OSM relations, fiat building places), where a drawn outline is exactly what is missing.
+So a member who draws the building outline on such a wiki sees it until the page reloads. `resolve_for_pin` has
+the same guard after the pin's own row, so a pin there skips its wiki's drawn outline too. Read from the code and
+`test_detail_building_outlines.py`'s fixtures, not yet reproduced as a failing test. Fix: let the guard return
+early only when the place says the type does not apply, and keep the drawn row for a building place without
+geometry.

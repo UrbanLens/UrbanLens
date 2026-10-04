@@ -142,12 +142,8 @@ class BuildingPoints:
                 records.append((float(building["latitude"]), float(building["longitude"])))
             except (KeyError, TypeError, ValueError):
                 continue
-        if not records:
-            return []
-        own = min(records, key=lambda record: meters_between(latitude, longitude, *record))
-        if meters_between(latitude, longitude, *own) <= _SAME_RECORD_METERS:
-            records.remove(own)
-        return records
+        # Every record that close is the building's own: merged survey layers can list one building twice.
+        return [record for record in records if meters_between(latitude, longitude, *record) > _SAME_RECORD_METERS]
 
 
 def stands_on(location: Location, latitude: Any, longitude: Any, *, buildings: list[dict] | None = None) -> bool:

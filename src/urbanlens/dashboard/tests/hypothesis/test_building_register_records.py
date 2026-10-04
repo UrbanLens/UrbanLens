@@ -242,6 +242,23 @@ class NeighbouringBuildingTests(_Campus):
 
         self.assertEqual(building_register_rows(self.annex.location, [self.own_point]), [])
 
+    def test_a_building_listed_twice_on_the_parcel_keeps_its_own_listing(self) -> None:
+        """Merged survey layers can carry one building twice; neither copy is a rival to the building."""
+        from urbanlens.dashboard.services.locations.national_register import building_register_rows
+
+        duplicate = (41.733091, float(_MAIN[1]))
+        buildings = [
+            {"latitude": float(lat), "longitude": float(lng)} for lat, lng in (_MAIN, duplicate, _ANNEX, _STORAGE)
+        ]
+        LocationCache.set(
+            self.campus.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": buildings, "provider": "cris"}
+        )
+        between = _listing(contains_point=False, source_latitude=41.733088, source_longitude=float(_MAIN[1]))
+
+        self.assertEqual(
+            [row["name"] for row in building_register_rows(self.main.location, [between])], [_LISTING_NAME]
+        )
+
     def test_the_parcel_list_is_read_once_however_many_rows_are_near(self) -> None:
         from urbanlens.dashboard.services.locations.national_register import building_register_rows
 

@@ -12,7 +12,7 @@ from django.db.models import Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
     from django.contrib.gis.geos import GEOSGeometry
 
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.place.model import Place
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
@@ -215,9 +216,43 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
             Tuple of (polygon, source) where source is one of "wiki",
             "place", "circle", or (None, None) when nothing applies.
         """
+        from urbanlens.dashboard.services.wiki.concealment import is_concealed
+
+        return self._resolve_wiki_chain(wiki, boundary_type, row=lambda: self.row_for_wiki(wiki, boundary_type), concealed=is_concealed(wiki))
+
+    def own_polygons_for_wikis(self, wikis: Iterable[Wiki], boundary_type: str, viewer: Profile | None) -> dict[int, GEOSGeometry | None]:
+        """:meth:`resolve_for_wiki`'s polygon for many wikis, as ``viewer`` sees them, in a fixed number of queries.
+
+        Args:
+            wikis: The wikis.
+            boundary_type: A :class:`BoundaryType` value.
+            viewer: Who is looking: a wiki concealed from them shows no outline drawn on it.
+
+        Returns:
+            Wiki id to polygon, or None where nothing applies.
+        """
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        loaded = list(Wiki.objects.filter(pk__in=[wiki.pk for wiki in wikis]).select_related("place", "location__place"))
+        rows = {row.wiki_id: row for row in self.filter(wiki_id__in=[wiki.pk for wiki in loaded], pin__isnull=True, boundary_type=boundary_type)}
+        return {wiki.pk: self._resolve_wiki_chain(wiki, boundary_type, row=lambda wiki=wiki: rows.get(wiki.pk), concealed=concealment_active(wiki, viewer))[0] for wiki in loaded}
+
+    @staticmethod
+    def _resolve_wiki_chain(wiki: Wiki, boundary_type: str, *, row: Callable[[], Boundary | None], concealed: bool) -> tuple[GEOSGeometry | None, str | None]:
+        """The :meth:`resolve_for_wiki` chain, given how to find the wiki's own row and whether the viewer may see it.
+
+        Args:
+            wiki: The wiki, its place and location loaded.
+            boundary_type: A :class:`BoundaryType` value.
+            row: Finds the wiki's own boundary row of this type; called only when it can be shown.
+            concealed: Whether the wiki is concealed from the viewer, which hides an outline drawn on it.
+
+        Returns:
+            The polygon and its source.
+        """
         from urbanlens.dashboard.models.boundary.model import BoundaryType
         from urbanlens.dashboard.services.places.scope import place_polygon
-        from urbanlens.dashboard.services.wiki.concealment import is_concealed
 
         # A wiki with no place anchor of its own still displays at a location,
         # and that location knows what it stands on - so fall back to it rather
@@ -227,8 +262,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         if place is not None and scoped is None:
             return None, None
 
-        if not is_concealed(wiki) and (row := self.row_for_wiki(wiki, boundary_type)) and row.drawn_or_generated_polygon:
-            return row.drawn_or_generated_polygon, "wiki"
+        if not concealed and (own := row()) and own.drawn_or_generated_polygon:
+            return own.drawn_or_generated_polygon, "wiki"
         if scoped is not None:
             return scoped, "place"
         if wiki.location_id and boundary_type == BoundaryType.PROPERTY:

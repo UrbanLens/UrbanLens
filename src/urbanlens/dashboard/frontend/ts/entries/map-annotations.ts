@@ -2407,7 +2407,7 @@ function init(): void {
         // Buildings drawn on detail pins keep the building layer meaningful even when this pin has no building boundary of its own.
         detailBuildingItems.clearLayers();
         (data.detail_buildings || []).forEach((entry: any) => {
-            if (entry.polygon) addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a child pin)");
+            if (entry.polygon) addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, entry.wiki_id === undefined ? "Building boundary (from a child pin)" : "Building boundary (from a child wiki)");
         });
         // The center marker stays visible unless a real (non-circle) property
         // polygon marks the place's extent.

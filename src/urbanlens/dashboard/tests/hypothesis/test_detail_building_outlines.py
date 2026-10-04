@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.place.model import PlaceKind
+from urbanlens.dashboard.models.wiki.model import Wiki
 
 from .test_places_campus import make_place
 
@@ -127,6 +128,30 @@ class BuildingChildOutlineTests(_Campus):
 
         self.assertEqual(self.outlines("1"), [first.pk])
 
+    def test_one_outline_drawn_from_another_vertex_is_drawn_once(self) -> None:
+        first = self.building_child(0, outline=False)
+        second = self.building_child(1, outline=False)
+        lng, lat, d = -73.9297, 41.7325, 0.0001
+        rotated = ((lng + d, lat + d), (lng - d, lat + d), (lng - d, lat - d), (lng + d, lat - d), (lng + d, lat + d))
+        baker.make(
+            Boundary,
+            pin=first,
+            profile=self.profile,
+            location=first.location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_square(lng, lat, d),
+        )
+        baker.make(
+            Boundary,
+            pin=second,
+            profile=self.profile,
+            location=second.location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=MultiPolygon(Polygon(rotated, srid=4326), srid=4326),
+        )
+
+        self.assertEqual(self.outlines("1"), [first.pk])
+
     def test_without_the_parameter_the_children_are_drawn(self) -> None:
         """Callers that predate the toggle keep the old answer."""
         child = self.building_child(0)
@@ -143,6 +168,84 @@ class BuildingChildOutlineTests(_Campus):
             self.client.get(url)
         for index in range(2, 8):
             self.building_child(index)
+        with CaptureQueriesContext(connection) as many:
+            self.client.get(url)
+
+        self.assertEqual(len(many), len(few))
+
+
+class WikiChildOutlineTests(_Campus):
+    """A campus wiki's map draws its child wikis' building outlines while child details are on, as a pin's map does."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=self.campus.location, name="Campus")
+
+    def child_wiki(self, index: int, *, outline: bool = True, parent: Wiki | None = None) -> Wiki:
+        lng, lat = -73.930 + index * 0.0006, 41.7325
+        place = make_place(PlaceKind.BUILDING, _square(lng, lat, 0.0001) if outline else None, parent=self.parcel)
+        location = baker.make(Location, latitude=f"{lat:.6f}", longitude=f"{lng:.6f}", place=place)
+        return baker.make(Wiki, location=location, name=f"Building {index}", parent_wiki=parent or self.wiki)
+
+    def wiki_outlines(self, children: str | None) -> list[int]:
+        url = reverse("location.wiki.boundary", args=[self.campus.location.slug])
+        response = self.client.get(url if children is None else f"{url}?children={children}")
+        self.assertEqual(response.status_code, 200)
+        return sorted(entry["wiki_id"] for entry in json.loads(response.content)["detail_buildings"])
+
+    def test_every_child_wiki_with_an_outline_is_drawn(self) -> None:
+        children = [self.child_wiki(index) for index in range(3)]
+        self.child_wiki(3, outline=False)
+
+        self.assertEqual(self.wiki_outlines("1"), sorted(child.pk for child in children))
+
+    def test_none_while_child_details_are_off(self) -> None:
+        self.child_wiki(0)
+
+        self.assertEqual(self.wiki_outlines("0"), [])
+
+    def test_without_the_parameter_none_are_drawn(self) -> None:
+        """A wiki's map never drew them before the toggle reached it."""
+        self.child_wiki(0)
+
+        self.assertEqual(self.wiki_outlines(None), [])
+
+    def test_grandchild_wikis_are_drawn_too(self) -> None:
+        child = self.child_wiki(0)
+        grandchild = self.child_wiki(1, parent=child)
+
+        self.assertEqual(self.wiki_outlines("1"), sorted([child.pk, grandchild.pk]))
+
+    def test_a_child_wikis_drawn_outline_counts(self) -> None:
+        # Off the parcel, so its location stands on no place whose own outline would decide instead.
+        drawn = baker.make(
+            Wiki,
+            location=baker.make(Location, latitude="41.745000", longitude="-73.930000"),
+            name="Drawn",
+            parent_wiki=self.wiki,
+        )
+        baker.make(
+            Boundary,
+            wiki=drawn,
+            pin=None,
+            profile=None,
+            location=drawn.location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_square(-73.930, 41.745, 0.0001),
+        )
+
+        self.assertEqual(self.wiki_outlines("1"), [drawn.pk])
+
+    def test_the_query_count_does_not_grow_with_the_children(self) -> None:
+        for index in range(2):
+            self.child_wiki(index)
+        url = reverse("location.wiki.boundary", args=[self.campus.location.slug]) + "?children=1"
+        self.client.get(url)
+
+        with CaptureQueriesContext(connection) as few:
+            self.client.get(url)
+        for index in range(2, 8):
+            self.child_wiki(index)
         with CaptureQueriesContext(connection) as many:
             self.client.get(url)
 
