@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.trips.model import (
 from urbanlens.dashboard.models.trips.signals import queue_calendar_push
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.core.text_limits import MAX_TRIP_ACTIVITY_NOTES_LENGTH, text_length_error
+from urbanlens.dashboard.services.notifications.change_notifications import announce_trip_change
 from urbanlens.dashboard.services.trips.trip_access import has_joined, is_organizer, require_joined, require_perform
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripPermissionError, TripQuotaError, TripValidationError
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
@@ -570,6 +571,7 @@ def create_activity(
     # extends past it.
     if activity.status == TripActivity.STATUS_CONFIRMED and activity.scheduled_at:
         expand_trip_dates(trip, activity.scheduled_at.date())
+    announce_trip_change(trip, actor, "added an activity")
     return activity
 
 
@@ -637,6 +639,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
 
     if activity.status == TripActivity.STATUS_CONFIRMED and activity.scheduled_at:
         expand_trip_dates(trip, activity.scheduled_at.date())
+    announce_trip_change(trip, actor, "edited an activity")
     return activity
 
 
@@ -653,6 +656,7 @@ def delete_activity(trip: Trip, actor: Profile, activity_id: int) -> None:
         TripNotFoundError: No such activity on this trip."""
     require_perform(actor, trip, trip.allow_edit_activities, DELETE_ACTIVITY_DENIED)
     get_activity(trip, activity_id).delete()
+    announce_trip_change(trip, actor, "removed an activity")
 
 
 def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: float, lng: float) -> tuple[float, float]:
@@ -687,6 +691,7 @@ def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: 
     activity.lat_override = lat_value
     activity.lng_override = lng_value
     activity.save(update_fields=["lat_override", "lng_override", "updated"])
+    announce_trip_change(trip, actor, "moved an activity on the map")
     return lat_value, lng_value
 
 
@@ -719,6 +724,7 @@ def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetim
 
     if activity.status == TripActivity.STATUS_CONFIRMED:
         expand_trip_dates(trip, date)
+    announce_trip_change(trip, actor, "rescheduled an activity")
     return activity
 
 
@@ -781,11 +787,14 @@ def set_activity_status(trip: Trip, actor: Profile, activity_id: int, *, status:
     else:
         raise TripValidationError("Status must be proposed or confirmed.")
 
+    changed = activity.status != new_status
     activity.status = new_status
     activity.save(update_fields=["status", "updated"])
 
     if new_status == TripActivity.STATUS_CONFIRMED and activity.scheduled_at:
         expand_trip_dates(trip, activity.scheduled_at.date())
+    if changed:
+        announce_trip_change(trip, actor, f"marked an activity {new_status}")
     return activity
 
 
@@ -869,6 +878,7 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
     expand_trip_dates(trip, effective_date)
     if not already_completed:
         create_visit_entries_for_completed_activity(trip, activity, actor)
+        announce_trip_change(trip, actor, "completed an activity")
     return activity
 
 
@@ -910,3 +920,4 @@ def reorder_activities(trip: Trip, actor: Profile, order: Sequence[int]) -> None
     # sync_trip_on_activity_save never runs and an auto-synced calendar would keep the
     # old order. Queued once per reorder, not once per row - the trip is the unit.
     queue_calendar_push(trip.pk)
+    announce_trip_change(trip, actor, "reordered the itinerary")

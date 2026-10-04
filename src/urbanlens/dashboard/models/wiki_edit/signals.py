@@ -66,3 +66,22 @@ def record_fact_evidence_on_wiki_edit(sender: type[WikiEdit], instance: WikiEdit
     from urbanlens.dashboard.services.facts.evidence import record_wiki_edit_evidence
 
     record_wiki_edit_evidence(instance)
+
+
+@receiver(post_save, sender=WikiEdit, dispatch_uid="announce_wiki_edit")
+def announce_wiki_edit(sender: type[WikiEdit], instance: WikiEdit, created: bool, raw: bool = False, **kwargs) -> None:
+    """Tell the people who pinned the wiki's place of a person's edit to it.
+
+    Args:
+        sender: The model class.
+        instance: The WikiEdit that was just saved.
+        created: True if a new record was created.
+        raw: True during a fixture load.
+        **kwargs: Additional keyword arguments.
+    """
+    if raw or not created or instance.editor_id is None:
+        return
+
+    from urbanlens.dashboard.services.notifications.change_notifications import announce_wiki_edit as announce
+
+    announce(instance)

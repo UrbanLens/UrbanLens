@@ -10,6 +10,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.text_limits import MAX_TRIP_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.notifications.change_notifications import announce_trip_change
 from urbanlens.dashboard.services.trips.trip_access import require_joined
 from urbanlens.dashboard.services.trips.trip_errors import TripPermissionError, TripQuotaError, TripValidationError
 
@@ -177,6 +178,7 @@ def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Tr
         TripValidationError: The description exceeds the shared text limit."""
     require_joined(actor, trip, EDIT_TRIP_DENIED)
 
+    before = (trip.name, trip.description, trip.start_date, trip.end_date)
     if "name" in changes:
         new_name = (changes["name"] or "").strip()
         if new_name:
@@ -192,6 +194,8 @@ def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Tr
     if "end_date" in changes:
         trip.end_date = changes["end_date"] or None
     trip.save()
+    if (trip.name, trip.description, trip.start_date, trip.end_date) != before:
+        announce_trip_change(trip, actor, "changed the trip's details")
     return trip
 
 
@@ -241,9 +245,11 @@ def set_trip_permissions(trip: Trip, actor: Profile, *, changes: Mapping[str, An
         value = str(changes[field] or "").strip()
         if value not in valid_levels:
             raise TripValidationError(f"{field.replace('_', ' ')} must be one of: {', '.join(sorted(valid_levels))}.")
-        setattr(trip, field, value)
-        updated.append(field)
+        if getattr(trip, field) != value:
+            setattr(trip, field, value)
+            updated.append(field)
 
     if updated:
         trip.save(update_fields=[*updated, "updated"])
+        announce_trip_change(trip, actor, "changed the trip's settings")
     return trip

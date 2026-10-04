@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.property_owner.meta import OwnerSource
 from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale, WikiOwner, WikiPropertySale
+from urbanlens.dashboard.services.notifications.change_notifications import announce_wiki_change
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -364,6 +365,7 @@ class WikiOwnershipPanelView(LoginRequiredMixin, View):
         owner = visible_rows(WikiOwner.objects.for_location(location), wiki, profile).filter(name__iexact=fields["name"]).first()
         if owner is None:
             owner = WikiOwner.objects.create(created_by=profile, **fields)
+            announce_wiki_change(wiki, profile, "added an owner")
         owner.locations.add(location)
         return _render_wiki_ownership_panel(request, location, wiki, profile)
 
@@ -381,9 +383,12 @@ class WikiOwnerUpdateView(LoginRequiredMixin, View):
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
             return _render_wiki_ownership_panel(request, location, wiki, profile, error="Owner name is required.")
-        for attr, value in fields.items():
-            setattr(owner, attr, value)
-        owner.save(update_fields=[*fields.keys(), "updated"])
+        changed = [attr for attr, value in fields.items() if getattr(owner, attr) != value]
+        for attr in changed:
+            setattr(owner, attr, fields[attr])
+        if changed:
+            owner.save(update_fields=[*changed, "updated"])
+            announce_wiki_change(wiki, profile, "edited an owner")
         return _render_wiki_ownership_panel(request, location, wiki, profile)
 
 
@@ -402,6 +407,7 @@ class WikiOwnerRemoveView(LoginRequiredMixin, View):
             return _show_toast(response, "Official data can't be removed directly.", level="error")
         owner_name = owner.name
         owner.locations.remove(location)
+        announce_wiki_change(wiki, profile, "removed an owner")
         response = _render_wiki_ownership_panel(request, location, wiki, profile)
         return _show_toast(response, f"Removed “{owner_name}” from this property.")
 
@@ -473,6 +479,7 @@ class WikiPropertySaleTabView(LoginRequiredMixin, View):
         sale = WikiPropertySale.objects.create(location=location, created_by=profile, sale_price=sale_price, sale_date=sale_date, notes=(request.POST.get("notes") or "").strip())
         sale.previous_owners.set(previous_owners)
         sale.new_owners.set(new_owners)
+        announce_wiki_change(wiki, profile, "recorded a sale")
         return _render_wiki_sale_tab(request, location, wiki, profile)
 
 
@@ -488,4 +495,5 @@ class WikiPropertySaleDeleteView(LoginRequiredMixin, View):
             response = _render_wiki_sale_tab(request, location, wiki, profile)
             return _show_toast(response, "Official data can't be removed directly.", level="error")
         sale.delete()
+        announce_wiki_change(wiki, profile, "removed a sale")
         return _render_wiki_sale_tab(request, location, wiki, profile)

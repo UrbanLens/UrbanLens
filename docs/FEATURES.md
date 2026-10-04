@@ -1024,6 +1024,15 @@ parent/child relationship, so there's nothing yet to curate it from.
   `deliver_notification(recipient, preference, title=, message=, url=, **log_fields)` writes the in-app row through
   `NotificationLog.objects.notify` (so mute applies) for SITE/BOTH and queues `send_notification_email` for
   EMAIL/BOTH, returning the row. New notification producers use these instead of branching on the preference.
+- **Trip Updated / Community Wiki Updated** (`services/notifications/change_notifications.py`): a trip's joined
+  members hear when another member changes its details, settings or activities; the people with a root pin at a
+  wiki's place hear when someone changes it - any `WikiEdit` with an editor (fields, names, links, map drawings,
+  markers, outlines, floor plans, reverts; `models/wiki_edit/signals.py`), an article save, an owner or sale. Fan-out
+  runs on the bulk queue after the change commits. A burst folds: while a recipient's notification of one actor's
+  changes to one trip or wiki is unread and was last added to within 30 minutes, the next change raises its
+  `fold_count` ("made 3 changes") instead of writing a row, so the toast, push, text and email fire once. The actor,
+  blocked pairs and muters hear nothing; wiki concealment decides per recipient whether they hear of a change at
+  all. Automated writes (no editor) and photo, album and comment activity announce nothing.
 - **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notifications/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
 - **Native-app push** (`models/push_device`, `services/notifications/push.py`): a backgrounded app
   holds no WebSocket, so it registers a push destination instead. **UnifiedPush** — an app-chosen,

@@ -8,7 +8,7 @@ import re
 from typing import TYPE_CHECKING
 
 from django.db import models
-from django.db.models import Field, Index
+from django.db.models import Field, Index, Q
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.notifications.meta import (
@@ -39,6 +39,10 @@ class NotificationLog(abstract.FrontendDashboardModel):
     title = models.CharField(max_length=255, blank=True)
     message = models.CharField(max_length=50000, blank=True)
     url = models.CharField(max_length=500, blank=True)
+    # What a burst of changes folds on, e.g. "trip:12": an unread row with the same key, recipient,
+    # source and type takes the next change as a count instead of a new notification.
+    fold_key = models.CharField(max_length=64, blank=True, default="")
+    fold_count = models.PositiveIntegerField(default=1)
 
     profile = models.ForeignKey(
         "dashboard.Profile",
@@ -151,6 +155,7 @@ class NotificationLog(abstract.FrontendDashboardModel):
             Index(fields=["status"], name="idxdb_notif_status"),
             Index(fields=["importance"], name="idxdb_notif_import"),
             Index(fields=["notification_type"], name="idxdb_notif_type"),
+            Index(fields=["fold_key", "source_profile"], condition=~Q(fold_key=""), name="idxdb_notif_fold"),
         ]
 
 

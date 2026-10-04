@@ -559,6 +559,10 @@ def save_article(
             edit_summary=(edit_summary or "").strip()[:255],
             restored_from=restored_from,
         )
+        if wiki is not None and editor is not None:
+            from urbanlens.dashboard.services.notifications.change_notifications import announce_wiki_change
+
+            announce_wiki_change(wiki, editor, "restored an earlier version of the article" if restored_from is not None else "edited the article")
     return article, revision
 
 

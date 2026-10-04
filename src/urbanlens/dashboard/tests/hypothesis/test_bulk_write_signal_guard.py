@@ -20,6 +20,14 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 #: which would churn on every edit above the call and train people to update it blindly.
 REVIEWED: dict[tuple[str, str, str], str] = {
     (
+        "dashboard/services/notifications/change_notifications.py",
+        "NotificationLog",
+        "bulk_update",
+    ): (
+        "Folding a change into an unread burst. Every NotificationLog receiver acts on created rows only, and a "
+        "fold is meant to be silent: the burst's first row already sent the toast, push and text."
+    ),
+    (
         "dashboard/models/labels/signals.py",
         "Label",
         "bulk_create",

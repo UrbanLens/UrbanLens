@@ -21841,3 +21841,34 @@ viewer sees the withheld chip and the locked line, and no owner details.
 
 Not built: listing an owner's other parcels by name. REData's owner rows carry numeric parcel ids,
 and REData offers no owner-to-parcels lookup, so only the count is shown.
+
+## RESOLVED 2026-10-04: "Trip Updated" and "Community Wiki Updated" notify, folding a burst of changes into one notification
+
+`id: P197` · `status: fixed` · `resolved: 2026-10-04`
+
+Both types now notify (`services/notifications/change_notifications.py`, tests in
+`tests/hypothesis/test_change_notifications.py`).
+
+- **Trip Updated:** a trip's joined members (not invitees) hear when another member changes its details or
+  settings, or adds, edits, removes, moves, reschedules, reorders, confirms or completes an activity. The hooks are
+  in `services/trips/trip_crud.py` and `trip_activities.py`, so the web, the API and calendar sync all announce. A
+  save that changes nothing announces nothing. Messages never name an activity or its place, since an activity's
+  location can be hidden from some members.
+- **Community Wiki Updated:** the people with a root pin at the wiki's place hear of any `WikiEdit` with an editor
+  (a receiver in `models/wiki_edit/signals.py`: fields, names, links, map drawings, markers, outlines, floor plans,
+  reverts), of an article save by a person (`save_article`), and of an owner or sale added, edited or removed.
+  Child pins don't count, because most are nested automatically: following a campus would otherwise follow every
+  building wiki under it. Automated writes record no editor and announce nothing. Photos, albums and comments are
+  not announced: comments have their own notifications, and a photo is still being scanned when it is uploaded.
+- **Concealment:** the fan-out asks per recipient. A recipient under concealment hears only of a change by
+  someone whose contributions concealment shows them, and of a field edit only when it touched a field outside
+  `ALWAYS_UNSET`. The wiki is named as they would see it. `concealment_active` returns False today, so the tests
+  patch it on.
+- **Batching:** `NotificationLog.fold_key`/`fold_count` (migration 0053). While a recipient's notification of one
+  actor's changes to one trip or wiki is unread and was last added to within 30 minutes, the next change raises its
+  count ("Alice made 3 changes.") instead of writing a row. Toast, push, text and email therefore fire once per
+  burst. An advisory lock per actor and target keeps two concurrent changes from starting two bursts.
+- Fan-out runs on the bulk queue after the change commits, so a rolled-back change announces nothing. Blocked pairs
+  and muters hear nothing; preferences and text toggles apply as for every other type.
+
+A folded notification keeps its first change's position in the bell; only its text and count change.

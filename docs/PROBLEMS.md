@@ -2790,22 +2790,6 @@ the pin's own `name`. News keeps register-listing names in the base search only.
   (`models/aliases/signals.py::_drop_name_sensitive_cache`), though neither search uses pin names any more; it costs
   everyone a refetch and leaks nothing.
 
-## P197 — "Trip Updated" and "Community Wiki Updated" are settings with no notification behind them
-
-`id: P197` · `status: open` · `updated: 2026-10-02` · `found by: the audit re-check (P19 unit 14)`
-
-Settings offers both rows, but nothing in `src/` sends either `NotificationType`, so switching them changes nothing.
-**Jess, 2026-10-02: build both.**
-
-- **Trip Updated**: a trip's members hear when its details or activities change, except the member who changed them.
-- **Community Wiki Updated**: people with a pin at the place hear when its wiki changes, except the editor. The
-  wiki's concealment rules decide what the notification may say (`docs/notes/wiki-concealment-architecture.md` and
-  the memory of the same name): it must not reveal a field the recipient cannot see.
-- **Batching**: a burst of edits must not become a burst of notifications. Fold edits by the same actor to the same
-  trip or wiki within a window into one notification, counted ("3 changes").
-- Both honour the existing row's in-app, email and text toggles, as every other producer does
-  (`notification_text_alerts.PREFERENCE_TYPE_FOR`).
-
 ## P202 — The scheduled database backup cannot work on Kubernetes, and a restore turns it back on
 
 `id: P202` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 5`

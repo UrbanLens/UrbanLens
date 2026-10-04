@@ -5491,3 +5491,50 @@ def deliver_email_claim(claim_id: int) -> None:
     claim = ProfileEmail.objects.select_related("profile__user").filter(pk=claim_id, is_verified=False).first()
     if claim is not None:
         send_confirmation(claim)
+
+
+@shared_task(queue=Queue.BULK)
+def announce_trip_change_task(trip_id: int, actor_id: int, change: str) -> int:
+    """Tell a trip's members of a change queued by ``change_notifications.announce_trip_change``.
+
+    Args:
+        trip_id: PK of the changed trip.
+        actor_id: PK of the profile that changed it.
+        change: What changed.
+
+    Returns:
+        How many members were told; 0 when the trip or the actor is gone.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.trips.model import Trip
+    from urbanlens.dashboard.services.notifications.change_notifications import notify_trip_change
+
+    trip = Trip.objects.filter(pk=trip_id).first()
+    actor = Profile.objects.select_related("user").filter(pk=actor_id).first()
+    if trip is None or actor is None:
+        return 0
+    return notify_trip_change(trip, actor, change)
+
+
+@shared_task(queue=Queue.BULK)
+def announce_wiki_change_task(wiki_id: int, actor_id: int, change: str, fields: list[str]) -> int:
+    """Tell a wiki's audience of a change queued by ``change_notifications.announce_wiki_change``.
+
+    Args:
+        wiki_id: PK of the changed wiki.
+        actor_id: PK of the profile that changed it.
+        change: What changed.
+        fields: The wiki fields a field edit wrote, else empty.
+
+    Returns:
+        How many people were told; 0 when the wiki or the actor is gone.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.notifications.change_notifications import notify_wiki_change
+
+    wiki = Wiki.objects.select_related("location").filter(pk=wiki_id).first()
+    actor = Profile.objects.select_related("user").filter(pk=actor_id).first()
+    if wiki is None or actor is None:
+        return 0
+    return notify_wiki_change(wiki, actor, change, fields)
