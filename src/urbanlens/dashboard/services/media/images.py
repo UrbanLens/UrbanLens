@@ -1175,7 +1175,7 @@ def photos_missing_analysis_thumbnails(*, after_pk: int = 0, limit: int = THUMBN
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
 
-    qs = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(analysis_thumbnail="") | Q(analysis_thumbnail__isnull=True)).order_by("pk")
+    qs = _readable_recently_enough(Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(analysis_thumbnail="") | Q(analysis_thumbnail__isnull=True))).order_by("pk")
     if after_pk:
         qs = qs.filter(pk__gt=after_pk)
     return list(qs.values_list("pk", flat=True)[:limit])

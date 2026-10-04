@@ -2275,9 +2275,15 @@ def generate_image_analysis_thumbnails(image_ids: list[int]) -> int:
             if is_transient(exc):
                 logger.warning("Analysis thumbnail generation stopped at image %s: storage failed: %s", image.pk, exc, exc_info=True)
                 break
+            # Recorded for the same reason as in generate_image_thumbnails: the sweep comes round again.
+            Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
             logger.warning("Analysis thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
             continue
-        image.save(update_fields=["analysis_thumbnail", "updated"])
+        fields = ["analysis_thumbnail", "updated"]
+        if image.media_unreadable_at is not None:
+            image.media_unreadable_at = None
+            fields.append("media_unreadable_at")
+        image.save(update_fields=fields)
         written += 1
         # Same gate process_image_upload applies - a profile-less row has no uploader who opted in, and
         # keywording it would spend a billed call nobody asked for.

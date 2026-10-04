@@ -30,6 +30,7 @@ import io
 from pathlib import Path
 import shutil
 import tempfile
+from unittest import mock
 
 from django.core.files.base import ContentFile
 from django.test import override_settings
@@ -41,10 +42,17 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.services.media.images import (
     THUMBNAIL_RETRY_AFTER_UNREADABLE,
+    photos_missing_analysis_thumbnails,
     photos_missing_marker_thumbnails,
     photos_missing_thumbnails,
 )
-from urbanlens.dashboard.tasks import generate_image_marker_thumbnails, generate_image_thumbnails
+from urbanlens.dashboard.tasks import (
+    generate_image_analysis_thumbnails,
+    generate_image_marker_thumbnails,
+    generate_image_thumbnails,
+)
+
+_SWEEPS = (photos_missing_thumbnails, photos_missing_marker_thumbnails, photos_missing_analysis_thumbnails)
 
 
 def _jpeg() -> bytes:
@@ -73,6 +81,12 @@ class _MediaCase(TestCase):
         """A row pointing at a path that does not exist - staging's whole library."""
         image = self._photo()
         Path(self._media_root, image.image.name).unlink()
+        return image
+
+    def _photo_that_is_not_an_image(self) -> Image:
+        """A row whose file is there and cannot be decoded - dev's image 1, retried by every analysis sweep."""
+        image = self._photo()
+        Path(self._media_root, image.image.name).write_bytes(b"not an image at all")
         return image
 
 
@@ -106,13 +120,24 @@ class TheSweepStopsRetryingWhatItCannotReadTests(_MediaCase):
         image.refresh_from_db()
         self.assertIsNotNone(image.media_unreadable_at)
 
+    def test_the_analysis_sweep_skips_it_and_records_it(self) -> None:
+        for make in (self._photo_with_no_file, self._photo_that_is_not_an_image):
+            with self.subTest(make.__name__):
+                image = make()
+
+                generate_image_analysis_thumbnails([image.pk])
+
+                image.refresh_from_db()
+                self.assertIsNotNone(image.media_unreadable_at)
+                self.assertNotIn(image.pk, photos_missing_analysis_thumbnails())
+
     def test_a_readable_photo_is_still_swept(self) -> None:
         """Anti-vacuity: a sweep that returned nothing would pass every test
         above while backfilling nothing, forever."""
         healthy = self._photo()
 
-        self.assertIn(healthy.pk, photos_missing_thumbnails())
-        self.assertIn(healthy.pk, photos_missing_marker_thumbnails())
+        for sweep in _SWEEPS:
+            self.assertIn(healthy.pk, sweep(), sweep.__name__)
 
 
 class TheMarkIsABackoffNotAVerdictTests(_MediaCase):
@@ -125,8 +150,8 @@ class TheMarkIsABackoffNotAVerdictTests(_MediaCase):
             media_unreadable_at=timezone.now() - THUMBNAIL_RETRY_AFTER_UNREADABLE - timedelta(hours=1)
         )
 
-        self.assertIn(image.pk, photos_missing_thumbnails())
-        self.assertIn(image.pk, photos_missing_marker_thumbnails())
+        for sweep in _SWEEPS:
+            self.assertIn(image.pk, sweep(), sweep.__name__)
 
     def test_a_fresh_mark_is_not(self) -> None:
         """Paired with the test above: together they say the window is real,
@@ -134,8 +159,8 @@ class TheMarkIsABackoffNotAVerdictTests(_MediaCase):
         image = self._photo()
         Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
 
-        self.assertNotIn(image.pk, photos_missing_thumbnails())
-        self.assertNotIn(image.pk, photos_missing_marker_thumbnails())
+        for sweep in _SWEEPS:
+            self.assertNotIn(image.pk, sweep(), sweep.__name__)
 
     def test_a_restored_file_clears_its_mark(self) -> None:
         """The file came back. Nothing should carry a scar that outlives it."""
@@ -149,6 +174,19 @@ class TheMarkIsABackoffNotAVerdictTests(_MediaCase):
         image.refresh_from_db()
         self.assertIsNone(image.media_unreadable_at)
         self.assertTrue(image.thumbnail)
+
+    def test_a_restored_file_clears_its_mark_through_the_analysis_sweep_too(self) -> None:
+        image = self._photo()
+        Image.objects.filter(pk=image.pk).update(
+            media_unreadable_at=timezone.now() - THUMBNAIL_RETRY_AFTER_UNREADABLE - timedelta(hours=1)
+        )
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
+            generate_image_analysis_thumbnails([image.pk])
+
+        image.refresh_from_db()
+        self.assertIsNone(image.media_unreadable_at)
+        self.assertTrue(image.analysis_thumbnail)
 
     def test_the_window_is_long_enough_to_matter(self) -> None:
         """The whole point is fewer retries than hourly. A window under an hour

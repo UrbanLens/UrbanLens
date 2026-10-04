@@ -23132,3 +23132,24 @@ extraction. The document stays unextracted and is asked for again on the panel's
 - a failed download is raised without a second extraction.
 
 All three failed before the fix.
+
+## RESOLVED 2026-10-04: The analysis-copy sweep retried a photo it could not read every two hours, forever
+
+`id: P294` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, reading dev's media worker log`
+
+**What was wrong.** `backfill_image_analysis_thumbnails` walks photos without an analysis copy and starts over when
+it reaches the end. A photo whose file cannot be read never gets one, so each pass asked for it again. Dev's media
+worker logged `cannot identify image file <ImageFieldFile: pin_images/74/.../ee7ad....jpg>` for image 1, with a
+traceback, every two hours. The grid and marker thumbnail sweeps already record `Image.media_unreadable_at` and skip
+the row for `THUMBNAIL_RETRY_AFTER_UNREADABLE` (seven days); the analysis sweep did neither.
+
+**Fix.** `generate_image_analysis_thumbnails` records the mark on a failure that is not a storage outage, and clears
+it when a copy is written. `photos_missing_analysis_thumbnails` skips a row marked within the window, the same way
+the other two sweeps do.
+
+**Tests.** `test_unreadable_media_backs_off.py`:
+- the analysis sweep marks, then skips, both a missing file and one that is not an image;
+- a restored file clears its mark through the analysis sweep;
+- the readable, old-mark and fresh-mark cases now cover all three sweeps.
+
+The marking, skipping, clearing and fresh-mark cases failed before the fix.
