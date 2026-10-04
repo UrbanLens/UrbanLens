@@ -309,6 +309,7 @@ class _MemoryCase(TestCase):
         would count only against whichever test reached that format first.
         """
         self._parse(name, upload, measured=False)
+        import_preview.single_flight.release(import_preview.guard_key(self.profile.pk))
         return self._parse(name, upload, measured=True)
 
     def _parse(self, name: str, upload: bytes, *, measured: bool) -> tuple[int, dict[str, Any]]:
