@@ -561,7 +561,10 @@ class UndetailedCampusRecordsAreFilledLaterTests(CampusSeedingTestCase):
 
         self.assertEqual(len(self.campus_building_ids()), 2)
         self.assertEqual(self.fills(), [(self.site_location.pk, 0)])
-        self.assertTrue(all(0 < countdown < 30 * 60 for countdown in self.fill_countdowns()), self.fill_countdowns())
+        self.assertEqual(self.fill_countdowns(), [cris_module.CAMPUS_FILL_DELAYS_SECONDS[0]])
+        self.assertTrue(
+            all(delay < 30 * 60 for delay in cris_module.CAMPUS_FILL_DELAYS_SECONDS), "under P290's default"
+        )
 
     def test_a_pass_that_detailed_everything_queues_nothing(self) -> None:
         self.run_fetch(self.site)
@@ -606,6 +609,7 @@ class UndetailedCampusRecordsAreFilledLaterTests(CampusSeedingTestCase):
         self.assertEqual((self.redata.calls - before)["detail"], 2)
         self.assertEqual(len(self.campus_building_ids()), 4)
         self.assertEqual(self.fills(), [(self.site_location.pk, 0), (self.site_location.pk, 1)])
+        self.assertEqual(self.fill_countdowns(), list(cris_module.CAMPUS_FILL_DELAYS_SECONDS[:2]))
 
     def test_the_last_pass_queues_no_other(self) -> None:
         with patch.object(cris_module, "_MAX_SITE_DETAIL_FETCHES", 0):

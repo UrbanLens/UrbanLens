@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from io import StringIO
 
+from django.apps import apps as django_apps
 from django.core.management import call_command
 from oauth2_provider.models import get_application_model
 
@@ -75,10 +77,17 @@ class ProvisionMobileOauthClientTests(TestCase):
 
 
 class FirstPartyClientMigrationTests(TestCase):
-    """The 0013 data migration provisions the same registration at migrate time.
+    """The 0010 data migration provisions the same registration at migrate time.
 
-    The row these assertions read was created by the migration during test database setup, not by any code in
-    this test - so a regression in the migration surfaces here even though the management command still works."""
+    The row these assertions read is made by the migration's own function in ``setUp``, not by any code in this test,
+    so a regression in the migration surfaces here even though the management command still works. The row the
+    migration made when the test database was built is not used: a mixed run deleted it before these ran. The function
+    gets today's models, since its own historical state lacks columns later migrations added NOT NULL."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        Application.objects.filter(client_id=FIRST_PARTY_CLIENT_ID).delete()
+        import_module("urbanlens.dashboard.migrations.0010_v0_6_0").create_first_party_client(django_apps, None)
 
     def test_migration_created_the_first_party_client(self) -> None:
         """A fresh database has the registration the shipped app expects."""

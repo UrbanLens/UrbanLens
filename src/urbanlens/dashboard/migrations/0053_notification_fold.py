@@ -12,12 +12,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="notificationlog",
             name="fold_key",
-            field=models.CharField(blank=True, default="", max_length=64),
+            field=models.CharField(blank=True, default="", db_default="", max_length=64),
         ),
         migrations.AddField(
             model_name="notificationlog",
             name="fold_count",
-            field=models.PositiveIntegerField(default=1),
+            field=models.PositiveIntegerField(default=1, db_default=1),
         ),
         migrations.AddIndex(
             model_name="notificationlog",

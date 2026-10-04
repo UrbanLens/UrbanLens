@@ -34,12 +34,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='gamesessionparticipant',
             name='departure',
-            field=models.CharField(blank=True, choices=_DEPARTURE_CHOICES, default='', max_length=10),
+            field=models.CharField(blank=True, choices=_DEPARTURE_CHOICES, default='', db_default='', max_length=10),
         ),
         migrations.AddField(
             model_name='triviasessionparticipant',
             name='departure',
-            field=models.CharField(blank=True, choices=_DEPARTURE_CHOICES, default='', max_length=10),
+            field=models.CharField(blank=True, choices=_DEPARTURE_CHOICES, default='', db_default='', max_length=10),
         ),
         migrations.RunPython(_backfill_departures, migrations.RunPython.noop, elidable=True),
     ]

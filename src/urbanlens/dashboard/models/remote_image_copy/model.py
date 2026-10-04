@@ -28,7 +28,7 @@ class RemoteImageCopy(abstract.DashboardModel):
     provider = CharField(max_length=64, blank=True, default="", help_text="Which feature or provider the image came from.")
     page_url = TextField(blank=True, default="", help_text="The provider's page for the image, when known.")
     file = FileField(upload_to=remote_image_copy_path, max_length=255, blank=True, default="")
-    thumb_file = FileField(upload_to=remote_image_copy_path, max_length=255, blank=True, default="", help_text="A gallery tile's size, made from the same download when the copy is larger.")
+    thumb_file = FileField(upload_to=remote_image_copy_path, max_length=255, blank=True, default="", db_default="", help_text="A gallery tile's size, made from the same download when the copy is larger.")
     content_type = CharField(max_length=50, blank=True, default="")
     file_size = PositiveIntegerField(null=True, blank=True)
     checksum = CharField(max_length=64, blank=True, default="", help_text="SHA-256 of the stored file.")

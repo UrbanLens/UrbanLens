@@ -17,11 +17,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="pinlink",
             name="auto_source",
-            field=models.CharField(blank=True, choices=_AUTO_SOURCES, default="", max_length=32),
+            field=models.CharField(blank=True, choices=_AUTO_SOURCES, default="", db_default="", max_length=32),
         ),
         migrations.AddField(
             model_name="wikilink",
             name="auto_source",
-            field=models.CharField(blank=True, choices=_AUTO_SOURCES, default="", max_length=32),
+            field=models.CharField(blank=True, choices=_AUTO_SOURCES, default="", db_default="", max_length=32),
         ),
     ]

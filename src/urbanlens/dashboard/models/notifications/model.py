@@ -41,8 +41,8 @@ class NotificationLog(abstract.FrontendDashboardModel):
     url = models.CharField(max_length=500, blank=True)
     # What a burst of changes folds on, e.g. "trip:12": an unread row with the same key, recipient,
     # source and type takes the next change as a count instead of a new notification.
-    fold_key = models.CharField(max_length=64, blank=True, default="")
-    fold_count = models.PositiveIntegerField(default=1)
+    fold_key = models.CharField(max_length=64, blank=True, default="", db_default="")
+    fold_count = models.PositiveIntegerField(default=1, db_default=1)
 
     profile = models.ForeignKey(
         "dashboard.Profile",

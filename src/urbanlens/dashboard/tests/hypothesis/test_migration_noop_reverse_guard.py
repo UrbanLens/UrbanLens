@@ -106,6 +106,10 @@ REVIEWED: dict[str, str] = {
         "Not recoverable, and nothing to recover: the old code reads a wiki with no article, and seeds it again the "
         "next time the match is cached."
     ),
+    "0057_added_columns_database_defaults.py": (
+        "Sets database defaults on columns 0036-0053 added. A reverse leaves them; no release reads a column's default, "
+        "and reversing those migrations drops the columns with their defaults."
+    ),
 }
 
 

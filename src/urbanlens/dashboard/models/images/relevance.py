@@ -47,7 +47,7 @@ class MediaRelevance(abstract.DashboardModel):
     source = CharField(max_length=30)
     item_key = CharField(max_length=ITEM_KEY_LENGTH)
     is_relevant = BooleanField()
-    is_vote = BooleanField(default=True)
+    is_vote = BooleanField(default=True, db_default=True)
 
     objects = MediaRelevanceManager()
 

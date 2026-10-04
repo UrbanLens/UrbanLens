@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='location',
             name='official_name_source',
-            field=models.CharField(blank=True, default='', max_length=50),
+            field=models.CharField(blank=True, default='', db_default='', max_length=50),
         ),
         migrations.CreateModel(
             name='LocationSlugHistory',

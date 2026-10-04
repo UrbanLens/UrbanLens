@@ -23053,3 +23053,38 @@ RabbitMQ is the infrastructure repo's, and it is asked for the same line in
   again within the bound.
 
 All but the bound and the within-bound case failed before the fix.
+
+## RESOLVED 2026-10-04: The previous release could not write while 0.9.0 migrated, because its new columns had no database default
+
+`id: P291` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, reading dev's interactive worker log for P290`
+
+**What was wrong.** A deploy migrates while the previous release's processes still run. Their inserts name every
+column they know and no other. Since v0.8.0, thirteen columns were added NOT NULL with only a Python default, which
+Django does not put in the database:
+- `LocationCache.audience` and `relevance_rule`
+- `NotificationLog.fold_key` and `fold_count`
+- `PinLink`/`WikiLink.auto_source`
+- `PinOwner`/`WikiOwner.care_of`
+- `Location.official_name_source`
+- both game participants' `departure`
+- `MediaRelevance.is_vote`
+- `RemoteImageCopy.thumb_file`
+
+Every v0.8.0 insert into those tables fails once its column exists, until the new release replaces the process:
+panel caches, notifications, links, owners and media votes. Dev logged it during a sync:
+`null value in column "relevance_rule" of relation "dashboard_location_cache" violates not-null constraint`.
+Production has applied none of these migrations yet, so its upgrade to 0.9.0 would have hit all thirteen for the
+length of the migration run.
+
+**Fix.** Each `AddField` carries `db_default` beside its `default`, so an install upgrading from v0.8.0 has the
+default from the moment the column exists. The models match, so `makemigrations --check` finds nothing. Migration
+0057 sets the same defaults on a database that applied the columns before that; on dev it did, and
+`information_schema` shows them.
+
+**Tests.** `test_added_columns_have_database_defaults.py`:
+- every NOT NULL column a migration adds with `AddField`, and the models still have, has a default in the migrated
+  test database, so a later migration that forgets one fails here;
+- v0.8.0's own inserts into the panel cache and the notification log, naming only the columns it knew, succeed and
+  read back the defaults.
+
+Both failed before the fix.

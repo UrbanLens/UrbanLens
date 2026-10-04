@@ -12,11 +12,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="pinowner",
             name="care_of",
-            field=models.CharField(blank=True, default="", max_length=200),
+            field=models.CharField(blank=True, default="", db_default="", max_length=200),
         ),
         migrations.AddField(
             model_name="wikiowner",
             name="care_of",
-            field=models.CharField(blank=True, default="", max_length=200),
+            field=models.CharField(blank=True, default="", db_default="", max_length=200),
         ),
     ]

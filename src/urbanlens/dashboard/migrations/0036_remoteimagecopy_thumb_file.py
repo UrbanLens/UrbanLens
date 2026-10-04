@@ -14,6 +14,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='remoteimagecopy',
             name='thumb_file',
-            field=models.FileField(blank=True, default='', help_text="A gallery tile's size, made from the same download when the copy is larger.", max_length=255, upload_to=urbanlens.dashboard.models.remote_image_copy.model.remote_image_copy_path),
+            field=models.FileField(blank=True, default='', db_default='', help_text="A gallery tile's size, made from the same download when the copy is larger.", max_length=255, upload_to=urbanlens.dashboard.models.remote_image_copy.model.remote_image_copy_path),
         ),
     ]

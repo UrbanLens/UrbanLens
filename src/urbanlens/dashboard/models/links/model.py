@@ -46,7 +46,7 @@ class _LinkBase(abstract.DashboardModel):
     url = URLField(max_length=MAX_LINK_URL_LENGTH)
     wayback_url = URLField(max_length=MAX_LINK_URL_LENGTH, blank=True, default="")
     order = IntegerField(default=0)
-    auto_source = CharField(max_length=32, choices=AutoLinkSource.choices, blank=True, default="")
+    auto_source = CharField(max_length=32, choices=AutoLinkSource.choices, blank=True, default="", db_default="")
 
     objects = LinkManager()
 

@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="locationcache",
             name="relevance_rule",
-            field=models.PositiveSmallIntegerField(default=0),
+            field=models.PositiveSmallIntegerField(default=0, db_default=0),
         ),
         migrations.AddIndex(
             model_name="locationcache",

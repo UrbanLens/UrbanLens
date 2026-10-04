@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="mediarelevance",
             name="is_vote",
-            field=models.BooleanField(default=True),
+            field=models.BooleanField(default=True, db_default=True),
         ),
         migrations.AddConstraint(
             model_name="mediarelevance",

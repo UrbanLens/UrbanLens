@@ -31,8 +31,8 @@ class LocationCache(abstract.DashboardModel):
     source = models.CharField(max_length=50)
     data = models.JSONField(default=dict)
     query_key = models.CharField(max_length=255, blank=True)
-    audience = models.CharField(max_length=64, blank=True, default="")
-    relevance_rule = models.PositiveSmallIntegerField(default=0)
+    audience = models.CharField(max_length=64, blank=True, default="", db_default="")
+    relevance_rule = models.PositiveSmallIntegerField(default=0, db_default=0)
 
     location = models.ForeignKey(
         "dashboard.Location",

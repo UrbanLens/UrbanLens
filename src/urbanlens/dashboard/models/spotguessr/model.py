@@ -219,7 +219,7 @@ class GameSessionParticipant(abstract.DashboardModel):
     """
 
     status = CharField(max_length=10, choices=GameSessionParticipantStatus.choices, default=GameSessionParticipantStatus.JOINED)
-    departure = CharField(max_length=10, choices=SessionDeparture.choices, blank=True, default="")
+    departure = CharField(max_length=10, choices=SessionDeparture.choices, blank=True, default="", db_default="")
     total_points = PositiveIntegerField(default=0)
     rating_delta = FloatField(default=0.0)
     joined_at = DateTimeField(auto_now_add=True)

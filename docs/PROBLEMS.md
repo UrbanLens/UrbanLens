@@ -727,7 +727,7 @@ the list drifts as other work adds or removes entries.
 
 ## P50 — `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order
 
-`id: P50` · `status: open` · `updated: 2026-09-29`
+`id: P50` · `status: open` · `updated: 2026-10-04`
 
 Previously titled "Two tests fail only under a randomized full-suite run (2026-08-18)".
 
@@ -771,6 +771,12 @@ production code: demo seeding `mock.patch`ed `celery.safely_enqueue_task`, which
 name, so the outcome depended on which test imported that module first. Seeding now uses
 `suppressed_enqueues()` (a `ContextVar`). Worth checking first for the two above: process-global state set by
 one test and read through a name another module imported earlier.
+
+**A fourth, found and fixed 2026-10-04.** `test_oauth_client_provisioning.py::FirstPartyClientMigrationTests` read
+the OAuth row migration 0010 made when the test database was built. In a mixed run with the migration tests, all
+four failed with `Application.DoesNotExist`, and the file alone passed. They now run 0010's own
+`create_first_party_client` over its historical models in `setUp`. Rows made at database setup are the third shape to
+check for.
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 

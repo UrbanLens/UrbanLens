@@ -43,7 +43,7 @@ class Location(abstract.PublicDashboardModel):
     official_name = CharField(max_length=255, null=True, blank=True)
     # The provider key ``official_name`` came from (a name source such as ``google_places`` or ``wikipedia``).
     # Empty when unknown: such a name is never treated as a provider's, so it mints no slug and names no wiki.
-    official_name_source = CharField(max_length=50, blank=True, default="")
+    official_name_source = CharField(max_length=50, blank=True, default="", db_default="")
 
     latitude = DecimalField(max_digits=9, decimal_places=6)
     longitude = DecimalField(max_digits=9, decimal_places=6)
