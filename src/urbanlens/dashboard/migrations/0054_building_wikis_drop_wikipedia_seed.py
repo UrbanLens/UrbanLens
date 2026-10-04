@@ -61,7 +61,7 @@ def drop_building_wikipedia_seeds(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0052_owner_care_of"),
+        ("dashboard", "0053_notification_fold"),
     ]
 
     operations = [

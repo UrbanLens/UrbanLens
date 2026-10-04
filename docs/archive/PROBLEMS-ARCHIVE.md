@@ -22061,7 +22061,7 @@ carries no article that describes its campus.
   does not take one. Root wikis are seeded as before.
 - A root wiki seeded from its own point and later nested as a building (`wiki_merge.absorb_wiki`) loses the seed
   while it is untouched (`drop_misplaced_wikipedia_seed`, under a row lock so an edit landing meanwhile waits).
-- Migration `0053_building_wikis_drop_wikipedia_seed` removes the seed already on such wikis, only while untouched:
+- Migration `0054_building_wikis_drop_wikipedia_seed` removes the seed already on such wikis, only while untouched:
   the first revision is the seed, every later one is `localize_article_images` (`EDIT_SUMMARY_IMAGES_LOCALIZED`,
   now a constant) changing nothing but image addresses, no revision has an editor, `last_edited_by` is empty and
   the article holds the last revision's text. A revision with no editor and any other summary is a person whose
