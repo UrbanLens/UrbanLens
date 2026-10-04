@@ -214,4 +214,3 @@ still resolves after it is fixed, and the id is never handed out again.
 | P262 | open | 2026-10-04 | A building's wiki is seeded with its campus's Wikipedia article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P263 | open | 2026-10-04 | A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P264 | open | 2026-10-04 | A building outline drawn on a wiki whose building place has no footprint is saved but never shown | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P269 | open | 2026-10-04 | A profile URL's response time tells whether an account has that username | [`docs/PROBLEMS.md`](PROBLEMS.md) |

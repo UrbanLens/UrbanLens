@@ -68,7 +68,6 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     NotDirectMessageSenderError,
     RecipientNotAcceptingMessagesError,
     clear_email_debounce,
-    conversation_reachable,
     delete_message_for_everyone,
     delete_message_for_self,
     is_conversation_muted,
@@ -182,10 +181,7 @@ def _resolve_peer(peer_slug: str, profile: Profile) -> Profile | None:
     """
     if peer_slug in RESERVED_PEER_SLUGS:
         return None
-    partner = Profile.objects.select_related("user").filter(slug=peer_slug).first()
-    if partner is None or not conversation_reachable(profile, partner):
-        return None
-    return partner
+    return Profile.reachable_partner_by_slug(peer_slug, profile)
 
 
 def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat, GroupChatMembership] | None:

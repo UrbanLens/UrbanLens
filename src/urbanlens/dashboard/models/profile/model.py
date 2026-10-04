@@ -1397,7 +1397,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     def visibility_permits_q(
         viewer: Profile,
         *,
-        author_path: str,
+        author_path: str | None,
         visibility_field: str,
         allow_pending_request: bool = True,
         permit_null_author: bool = False,
@@ -1427,7 +1427,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         Args:
             viewer: The profile doing the looking.
             author_path: Name of the row's author relation, e.g. ``"profile"``
-                on ``Comment`` or ``"author"`` on ``TripComment``.
+                on ``Comment`` or ``"author"`` on ``TripComment``; None when the
+                rows are profiles themselves.
             visibility_field: The ``VisibilityChoice`` field on the author that
                 governs this content, e.g. ``"comment_visibility"``.
             allow_pending_request: Whether an unanswered request from the
@@ -1446,8 +1447,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         from urbanlens.dashboard.models.trips.model import TripMembership
         from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
 
-        author_id = f"{author_path}_id"
-        setting = f"{author_path}__{visibility_field}"
+        author_id = f"{author_path}_id" if author_path else "pk"
+        setting = f"{author_path}__{visibility_field}" if author_path else visibility_field
         accepted = FriendshipStatus.ACCEPTED
 
         friends_out = Friendship.objects.filter(from_profile=viewer, status=accepted).values("to_profile_id")
@@ -1478,9 +1479,64 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             | (models.Q(**{f"{setting}__in": (VisibilityChoice.COMMON_FRIEND, anything)}) & common_friend)
             | (models.Q(**{f"{setting}__in": (VisibilityChoice.COMMON_TRIP, anything)}) & common_trip)
         )
-        if permit_null_author:
+        if permit_null_author and author_path:
             permitted |= models.Q(**{f"{author_path}__isnull": True})
         return permitted
+
+    @staticmethod
+    def viewable_q(viewer: Profile | None) -> models.Q:
+        """:meth:`can_view_profile` as a ``Q`` over profiles, so a lookup by slug can ask it in the same statement.
+
+        A hidden account found first and refused afterwards costs more queries than no account at all, which tells
+        anyone timing the two that the username is registered (P269).
+
+        Args:
+            viewer: The profile looking, or None for an anonymous visitor.
+
+        Returns:
+            A ``Q`` admitting exactly the profiles :meth:`can_view_profile` would show *viewer*.
+        """
+        from django.utils import timezone
+
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        active = models.Q(user__is_active=True)
+        if viewer is None:
+            return active & models.Q(profile_visibility=VisibilityChoice.ANYONE)
+        blocked = FriendshipStatus.BLOCKED
+        blocked_viewer = models.Q(pk__in=Friendship.objects.filter(to_profile=viewer, status=blocked).values("from_profile_id"))
+        blocked_by_viewer = models.Q(pk__in=Friendship.objects.filter(from_profile=viewer, status=blocked).values("to_profile_id"))
+        granted = models.Q(pk__in=DirectMessageTemporaryAccess.objects.filter(granted_to=viewer, expires_at__gt=timezone.now()).values("profile_id")) & ~blocked_by_viewer
+        permitted = Profile.visibility_permits_q(viewer, author_path=None, visibility_field="profile_visibility")
+        return models.Q(pk=viewer.pk) | (active & ~blocked_viewer & (permitted | granted))
+
+    @staticmethod
+    def reachable_partner_q(profile: Profile) -> models.Q:
+        """``services.messaging.direct_messages.conversation_reachable`` as a ``Q`` over the partners *profile* may address.
+
+        Args:
+            profile: The profile opening or writing to a conversation.
+
+        Returns:
+            A ``Q`` admitting every other profile *profile* has exchanged a message with, or may message now.
+        """
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        wrote_to_profile = DirectMessage.objects.filter(recipient=profile).values("sender_id")
+        exchanged = models.Q(pk__in=wrote_to_profile) | models.Q(pk__in=DirectMessage.objects.filter(sender=profile).values("recipient_id"))
+        if not profile.community_enabled:
+            return exchanged & ~models.Q(pk=profile.pk)
+        blocked = FriendshipStatus.BLOCKED
+        either_blocked = models.Q(pk__in=Friendship.objects.filter(to_profile=profile, status=blocked).values("from_profile_id")) | models.Q(
+            pk__in=Friendship.objects.filter(from_profile=profile, status=blocked).values("to_profile_id"),
+        )
+        accepts = models.Q(community_enabled=True, user__is_active=True) & ~either_blocked
+        accepts &= Profile.visibility_permits_q(profile, author_path=None, visibility_field="direct_message_visibility") | models.Q(pk__in=wrote_to_profile)
+        return (exchanged | accepts) & ~models.Q(pk=profile.pk)
 
     @staticmethod
     def related_profile_ids(viewer: Profile) -> set[int]:
@@ -1655,12 +1711,47 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             viewer: The profile asking, or None for an anonymous viewer.
 
         Returns:
-            The profile, or None both when nothing holds the slug and when :meth:`can_view_profile` refuses.
+            The profile, or None both when nothing holds the slug and when :meth:`can_view_profile` refuses, after the
+            same single statement either way.
         """
-        profile = cls.objects.select_related("user").filter(slug=slug).first()
-        if profile is None or not profile.can_view_profile(viewer):
-            return None
-        return profile
+        return cls.objects.select_related("user").filter(cls.viewable_q(viewer), slug=slug).first()
+
+    @classmethod
+    def visible_by_identifier(cls, identifier: str, viewer: Profile | None) -> Profile | None:
+        """The profile a slug or uuid names, if ``viewer`` may see it; a slug match wins over a uuid match.
+
+        A sync client may have cached a uuid, which must keep working when the owner renames themselves.
+
+        Args:
+            identifier: A profile slug, or a uuid string.
+            viewer: The profile asking, or None for an anonymous viewer.
+
+        Returns:
+            The profile, or None when neither form names one ``viewer`` may see.
+        """
+        from uuid import UUID
+
+        try:
+            as_uuid = UUID(identifier)
+        except (ValueError, AttributeError, TypeError):
+            return cls.visible_by_slug(identifier, viewer)
+        named = models.Q(slug=identifier) | models.Q(uuid=as_uuid)
+        slug_first = models.Case(models.When(slug=identifier, then=0), default=1, output_field=models.IntegerField())
+        return cls.objects.select_related("user").filter(cls.viewable_q(viewer), named).order_by(slug_first).first()
+
+    @classmethod
+    def reachable_partner_by_slug(cls, slug: str, profile: Profile) -> Profile | None:
+        """The conversation partner ``slug`` names, if ``profile`` may address one with them.
+
+        Args:
+            slug: A profile slug from a URL.
+            profile: The profile asking.
+
+        Returns:
+            The partner, or None both when nothing holds the slug and when the pair is unreachable, after the same
+            single statement either way.
+        """
+        return cls.objects.select_related("user").filter(cls.reachable_partner_q(profile), slug=slug).first()
 
     def can_view_profile(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's identity (name, etc).

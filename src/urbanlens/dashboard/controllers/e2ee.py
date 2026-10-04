@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -30,7 +30,6 @@ from urbanlens.dashboard.models.e2ee.key_bundle import DEFAULT_KDF_MEMLIMIT, DEF
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.credential_revocation import PasswordChangeKind, revoke_credentials_on_password_change
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
-from urbanlens.dashboard.services.messaging.direct_messages import conversation_reachable
 from urbanlens.dashboard.services.security.e2ee import (
     MAX_PUBLIC_KEY_LENGTH,
     MAX_SALT_LENGTH,
@@ -323,10 +322,10 @@ class E2EEPartnerKeyView(DualAuthJsonView):
             conversation and the partner would refuse a message from the caller.
         """
         profile = _get_profile(request)
-        partner = get_object_or_404(Profile.objects.select_related("user"), slug=profile_slug)
-        if partner.pk == profile.pk:
+        if profile_slug == profile.slug:
             return Response({"error": "Use the own-keys endpoint for your own bundle"}, status=400)
-        if not conversation_reachable(profile, partner):
+        partner = Profile.reachable_partner_by_slug(profile_slug, profile)
+        if partner is None:
             return Response({"error": "Not found."}, status=404)
         bundle = MessagingKeyBundle.objects.for_profile(partner).first()
         if bundle is None:
@@ -358,12 +357,16 @@ class E2EEConversationKeyView(DualAuthJsonView):
             must stay able to decrypt their history even...
         """
         profile = _get_profile(request)
-        partner = get_object_or_404(Profile, slug=profile_slug)
-        if partner.pk == profile.pk:
+        if profile_slug == profile.slug:
             return Response({"error": "No self-conversations"}, status=400)
-        rows = list(ConversationKey.objects.between(profile, partner))
-        if not rows and not conversation_reachable(profile, partner):
+        # A participant keeps their keys after the pair stops being reachable, to decrypt the history.
+        keyed = models.Q(pk__in=ConversationKey.objects.filter(profile_low=profile).values("profile_high_id")) | models.Q(
+            pk__in=ConversationKey.objects.filter(profile_high=profile).values("profile_low_id"),
+        )
+        partner = Profile.objects.filter(Profile.reachable_partner_q(profile) | keyed, slug=profile_slug).first()
+        if partner is None:
             raise Http404
+        rows = list(ConversationKey.objects.between(profile, partner))
         keys = [{"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)} for row in rows]
         return Response({"keys": keys, "latest": rows[-1].version if rows else 0})
 
@@ -384,10 +387,10 @@ class E2EEConversationKeyView(DualAuthJsonView):
             400/403/409 on invalid input.
         """
         profile = _get_profile(request)
-        partner = get_object_or_404(Profile, slug=profile_slug)
-        if partner.pk == profile.pk:
+        if profile_slug == profile.slug:
             return Response({"error": "No self-conversations"}, status=400)
-        if not conversation_reachable(profile, partner):
+        partner = Profile.reachable_partner_by_slug(profile_slug, profile)
+        if partner is None:
             return Response({"error": "Not found."}, status=404)
         data = _json_body(request)
         if data is None:

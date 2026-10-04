@@ -15,7 +15,7 @@ from uuid import UUID
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Model
+from django.db.models import Count, Model, Q
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
@@ -3968,25 +3968,17 @@ class FriendInvitesView(ExternalApiView):
         return Response({"result": "sent"})
 
 
-def _resolve_profile(profile_slug: str) -> Profile | None:
-    """Look up a profile by slug, falling back to uuid.
-
-    Profiles are slug-addressed on the web, but a sync client that cached a uuid should not break when
-    the owner renames themselves.
+def _resolve_profile(profile_slug: str, viewer: Profile) -> Profile | None:
+    """Look up a profile *viewer* may see by slug, or by uuid for a sync client that cached one before a rename.
 
     Args:
         profile_slug: A profile slug or a uuid string.
+        viewer: The caller's profile.
 
     Returns:
-        The profile, or None when neither form matches.
+        The profile, or None when neither form names one *viewer* may see, after the same statement either way.
     """
-    profile = Profile.objects.filter(slug=profile_slug).select_related("user").first()
-    if profile is not None:
-        return profile
-    try:
-        return Profile.objects.filter(uuid=UUID(profile_slug)).select_related("user").first()
-    except (ValueError, AttributeError, TypeError):
-        return None
+    return Profile.visible_by_identifier(profile_slug, viewer)
 
 
 class ProfileDetailView(ExternalApiView):
@@ -4009,8 +4001,8 @@ class ProfileDetailView(ExternalApiView):
     def get(self, request: Request, profile_slug: str) -> Response:
         """Return the profile as this caller is permitted to see it."""
         viewer = request.user.profile
-        target = _resolve_profile(profile_slug)
-        if target is None or not target.can_view_profile(viewer):
+        target = _resolve_profile(profile_slug, viewer)
+        if target is None:
             return Response({"error": "No such profile."}, status=404)
 
         is_self = target.pk == viewer.pk
@@ -4077,7 +4069,7 @@ class ProfileDetailView(ExternalApiView):
     def patch(self, request: Request, profile_slug: str) -> Response:
         """Apply a partial update to the caller's own profile."""
         viewer = request.user.profile
-        target = _resolve_profile(profile_slug)
+        target = _resolve_profile(profile_slug, viewer)
         # Not 403: a caller who may not edit this profile must not learn it exists.
         if target is None or target.pk != viewer.pk:
             return Response({"error": "No such profile."}, status=404)
@@ -4115,8 +4107,8 @@ class ProfileNotesView(ExternalApiView):
     def get(self, request: Request, profile_slug: str) -> Response:
         """List the caller's notes about the named profile."""
         viewer = request.user.profile
-        subject = _resolve_profile(profile_slug)
-        if subject is None or not subject.can_view_profile(viewer):
+        subject = _resolve_profile(profile_slug, viewer)
+        if subject is None:
             return Response({"error": "No such profile."}, status=404)
         notes = ProfileNote.objects.for_pair(viewer, subject)
         return Response(ProfileNoteSerializer(notes, many=True).data)
@@ -4125,8 +4117,8 @@ class ProfileNotesView(ExternalApiView):
     def post(self, request: Request, profile_slug: str) -> Response:
         """Add one note about the named profile."""
         viewer = request.user.profile
-        subject = _resolve_profile(profile_slug)
-        if subject is None or not subject.can_view_profile(viewer):
+        subject = _resolve_profile(profile_slug, viewer)
+        if subject is None:
             return Response({"error": "No such profile."}, status=404)
 
         serializer = ProfileNoteWriteSerializer(data=request.data)
@@ -4157,10 +4149,13 @@ class ProfileNoteDetailView(ExternalApiView):
         Returns:
             The note, or None when nothing matches.
         """
-        subject = _resolve_profile(profile_slug)
-        if subject is None:
-            return None
-        return ProfileNote.objects.for_pair(viewer, subject).filter(uuid=note_uuid).first()
+        # One statement, so a note about an account the caller can no longer see stays theirs to edit, and a
+        # missing account costs what a hidden one does.
+        try:
+            named = Q(subject__slug=profile_slug) | Q(subject__uuid=UUID(profile_slug))
+        except (ValueError, AttributeError, TypeError):
+            named = Q(subject__slug=profile_slug)
+        return ProfileNote.objects.filter(named, author=viewer, uuid=note_uuid).first()
 
     @extend_schema(request=ProfileNoteWriteSerializer, responses={200: ProfileNoteSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, profile_slug: str, note_uuid: UUID) -> Response:

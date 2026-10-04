@@ -121,7 +121,7 @@ class _OwnProfileApiView(ExternalApiView):
             does not exist.
         """
         viewer = request.user.profile
-        target = _resolve_profile(profile_slug)
+        target = _resolve_profile(profile_slug, viewer)
         if target is None or target.pk != viewer.pk:
             return None
         return target
@@ -285,11 +285,7 @@ class _AnnotationApiView(ExternalApiView):
             The subject profile, or None when it does not resolve or its visibility settings exclude the
             caller.
         """
-        viewer = request.user.profile
-        target = _resolve_profile(profile_slug)
-        if target is None or not target.can_view_profile(viewer):
-            return None
-        return target
+        return _resolve_profile(profile_slug, request.user.profile)
 
     def annotations_response(self, viewer: Profile, subject: Profile) -> Response:
         """Build the shared annotations payload.
@@ -507,9 +503,8 @@ class ProfileSocialLinksView(_OwnProfileApiView):
             200 with the link list (empty when none are set); 404 when the profile does not resolve or its
             visibility excludes the caller.
         """
-        viewer = request.user.profile
-        target = _resolve_profile(profile_slug)
-        if target is None or not target.can_view_profile(viewer):
+        target = _resolve_profile(profile_slug, request.user.profile)
+        if target is None:
             return Response({"error": _NO_SUCH_PROFILE}, status=404)
         return self._links_response(target)
 

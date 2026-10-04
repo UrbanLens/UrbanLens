@@ -40,7 +40,6 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     build_thread_timeline,
     can_direct_message,
     clear_email_debounce,
-    conversation_reachable,
     create_direct_message,
     delete_message_for_everyone,
     delete_message_for_self,
@@ -129,8 +128,8 @@ def _get_partner(profile: Profile, profile_slug: str) -> Profile:
         Http404: When no such profile exists, it is the requester's own, or the pair share no conversation
             and the partner would refuse a message.
     """
-    partner = get_object_or_404(Profile.objects.select_related("user"), slug=profile_slug)
-    if partner.pk == profile.pk or not conversation_reachable(profile, partner):
+    partner = Profile.reachable_partner_by_slug(profile_slug, profile)
+    if partner is None:
         raise Http404
     return partner
 

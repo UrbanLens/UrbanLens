@@ -51,15 +51,12 @@ def _viewer_profile(request: HttpRequest) -> Profile | None:
 def _visible_profile_or_404(request: HttpRequest, profile_slug: str) -> tuple[Profile, Profile | None]:
     """Return (subject, viewer), raising 404 when the viewer may not see the subject.
 
-    Achievements are shown to exactly the audience that can see the profile itself, so this reuses
-    ``Profile.can_view_profile`` rather than inventing a second visibility rule that could drift from
-    it.
+    Achievements are shown to exactly the audience that can see the profile itself, so this reuses the
+    profile page's own lookup, :meth:`Profile.visible_by_slug`.
     """
-    profile = get_object_or_404(Profile, slug=profile_slug)
     viewer = _viewer_profile(request)
-    if viewer is not None and viewer.pk == profile.pk:
-        return profile, viewer
-    if not profile.can_view_profile(viewer):
+    profile = Profile.visible_by_slug(profile_slug, viewer)
+    if profile is None:
         raise Http404
     return profile, viewer
 

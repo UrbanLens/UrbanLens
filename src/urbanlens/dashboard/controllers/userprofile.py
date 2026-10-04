@@ -49,9 +49,10 @@ logger = logging.getLogger(__name__)
 class ViewProfileView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, profile_slug: str | None = None) -> HttpResponse:
         if profile_slug is not None:
-            profile = get_object_or_404(Profile, slug=profile_slug)
-            if not self._can_view_profile(request, profile):
+            visible = Profile.visible_by_slug(profile_slug, Profile.objects.filter(user=request.user).first())
+            if visible is None:
                 raise Http404
+            profile = visible
         else:
             profile, _ = Profile.objects.get_or_create(user=request.user)
 
@@ -141,20 +142,6 @@ class ViewProfileView(LoginRequiredMixin, View):
                 logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
                 messages.error(request, "That avatar couldn't be uploaded.")
         return redirect("profile.view")
-
-    def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
-        """Return True if the requesting user is allowed to view this profile.
-
-        Delegates to :meth:`Profile.can_view_profile` so all relationship checks (friends, common
-        pin/friend/trip, anything-in-common) live in one place.
-        """
-        if request.user == profile.user:
-            return True
-
-        viewer = None
-        if request.user.is_authenticated:
-            viewer = Profile.objects.filter(user=request.user).first()
-        return profile.can_view_profile(viewer)
 
     def _add_common_context(self, request: HttpRequest, profile: Profile, context: dict) -> None:
         """Populate cross-user stats and friendship context when viewing another user's profile."""

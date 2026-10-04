@@ -22155,3 +22155,32 @@ nothing, 11 of its 15 tests failed (the 4 that passed check that hostile or miss
 stub satisfies). After: 15 passed, with a hypothesis property that whatever text arrives, only a catalogue record
 URL comes out, and a render of the card's template for 17 hostile values (`javascript:`, look-alike hosts,
 credentials, ports, quotes) that finds none of them in the HTML.
+
+## RESOLVED 2026-10-04: A hidden account answers every profile-addressed URL after the same statements as a missing one
+
+`id: P269` · `status: fixed` · `resolved: 2026-10-04`
+
+Every route addressed by a profile's slug now asks who may see the account in the query that finds it, so a username
+nobody has and an account the requester may not see 404 after the same statements. Before, the account was found
+first and refused afterwards: deactivated, blocking the requester, or hidden by its settings. The permission queries
+then ran on top, telling a timed request that the username is registered.
+
+- **Profiles** (`can_view_profile`): `Profile.viewable_q`, built on `visibility_permits_q`, which now also describes
+  profile rows themselves (`author_path=None`). `visible_by_slug` is one statement. `visible_by_identifier` is its
+  slug-or-uuid form for the external API, where a slug match wins. Used by the profile page and every panel already
+  on `visible_by_slug`, achievements, and the external API's profile, notes, annotations, nickname, trust, avatar and
+  social-link routes.
+- **Conversation partners** (`conversation_reachable`): `Profile.reachable_partner_q` and `reachable_partner_by_slug`,
+  used by every direct-message route and share (`_get_partner`), the external API's messaging routes
+  (`_resolve_peer`), and the e2ee partner-key and conversation-key routes. The conversation-key GET also admits a
+  partner the caller already holds keys with, so the history stays decryptable. An own slug still answers those e2ee
+  routes 400, decided without a query.
+- **A note about a profile** (external API note detail) is one statement over the note, the author and the slug or
+  uuid, so a note about an account the caller can no longer see stays theirs to edit.
+
+Tests (`tests/hypothesis/test_profile_slug_side_channel.py`): the exploit test walks every named route with a
+`profile_slug` or `peer_slug` (web, then API with a key), GET and POST (and PATCH on the API). For each one it compares
+the SQL for a never-used slug with the SQL for three hidden accounts: hidden by setting, by their block, and by
+deactivation. Two grids create a pair of accounts in each of 16 relationships under each of the 7 visibility
+settings, and hold `visible_by_slug` equal to `can_view_profile` and `reachable_partner_by_slug` equal to
+`conversation_reachable` in every case.

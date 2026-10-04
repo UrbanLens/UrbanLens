@@ -2978,19 +2978,3 @@ the same guard after the pin's own row, so a pin there skips its wiki's drawn ou
 `test_detail_building_outlines.py`'s fixtures, not yet reproduced as a failing test. Fix: let the guard return
 early only when the place says the type does not apply, and keep the drawn row for a building place without
 geometry.
-## P269 — A profile URL's response time tells whether an account has that username
-
-`id: P269` · `status: open` · `updated: 2026-10-04` · `found by: the P236 route audit`
-
-`/profile/<slug>/` (`controllers/userprofile.py`, `ViewProfileView.get`), the external API's profile detail
-(`external_api/views.py`, the `profile_slug` handlers) and the direct-message partner routes
-(`controllers/direct_messages.py`, `_get_partner`) look the profile up by slug across every account, then decide
-whether the requester may see it (`Profile.can_view_profile`: blocks, the visibility setting, friendship,
-temporary access; `conversation_reachable` for messages). A slug nobody has 404s after one query; a hidden account
-404s after the permission queries too, so timed requests tell whether a username is registered. Slugs come from
-usernames, which are guessable.
-
-Same shape as P236, not fixed with it: P236's fix puts the rule in the query that finds the row, and
-`can_view_profile` is several Python-level checks that would have to become one queryset filter first. Not
-measured: how many queries the hidden path adds. Whether this matters depends on how public a username is meant
-to be; the email-enumeration policy says no surface should reveal a registered username where avoidable.
