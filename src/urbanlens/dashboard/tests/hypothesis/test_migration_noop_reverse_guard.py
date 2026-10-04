@@ -90,6 +90,12 @@ REVIEWED: dict[str, str] = {
         "drop_stale_cris_rows deletes CRIS cache rows chosen by the old site rule. They are a cache; the old code "
         "refetches them."
     ),
+    "0049_building_location_names.py": (
+        "fix_building_locations clears names a building's location may not carry, names unnamed ones from their own "
+        "CRIS record, re-mints their slugs (recording each readable one given up in LocationSlugHistory), drops "
+        "misplaced CRIS cards and nests root wikis under their parcel's. A reverse keeps every value, each one the old "
+        "code reads; the dropped rows are a cache it refetches, and old links resolve through the history."
+    ),
 }
 
 
