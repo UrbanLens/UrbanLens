@@ -21446,3 +21446,113 @@ revoked a grant lived only in an INFO log line.
 **Tests.** `test_subscription_grant_audit.py::RevokedByTests`: the view and the model method record the revoker, a
 second revoke keeps the first, the record outlives the revoker's account, and a regrant starts clean. All were red
 before the fix.
+
+## RESOLVED 2026-10-04: A building's location is named by its own CRIS record, never by its campus's article or listing, and a building's new wiki nests under its parcel's from the places alone
+
+`id: P231` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by Jess on production (v0.8.0): from `/dashboard/map/pin/hrpc-bldg-33powerhouse-machine-shop-1929/` the wiki
+link went to `/dashboard/location/<uuid>/wiki/`, titled "Hudson River State Hospital", not nested under the campus
+wiki, though CRIS names the pin "BLDG 33/POWERHOUSE & MACHINE SHOP (1929)".
+
+**Reproduced on the dev stack, read 2026-10-03.** Of 1,061 building locations (only child pins or a child wiki stand
+there), 1,018 had no provider name, so their slugs were uuids; ten were named "Hudson River State Hospital" from
+Wikipedia, with slugs `hudson-river-state-hospital-<n>` (99689, 99705, 98250-98256 among them); eight had CRIS's name.
+Every HRSH building wiki on dev is nested (0 of 638 building child pins lack a wiki of their own), so the nesting half
+did not reproduce there. Production was not read.
+
+**Causes.**
+
+- **CRIS's name was never asked for.** A `cris_building_usn` row refreshed a location's names only when a register
+  listing held its point (`models.cache.signals.refresh_names_on_register_listing`). HRSH's listing holds nine of the
+  campus's buildings, so a building card seeded from the site named only those (dev: 99719 took "BLDG 166/OLD POLICE
+  STATION (1932)"; 99705's card named "BLDG 110/STORAGE (1922)" and the location kept the campus's name).
+- **The campus's names named the building.** On a building's own location D20 ranks a building's name first, but any
+  other tier still named it when no building name was fresh. Wikipedia's was the campus's article: the Wikipedia panel
+  stores the campus's article on a child pin's location when the pin's own point finds none
+  (`WikipediaPanelSource._ancestor_campus_article`), and a match at a building's point is confirmed by the town its
+  text mentions. And `register_listing_names` offered a listing whose boundary merely holds the building, the lead
+  P230 left.
+- **A neighbour's CRIS record could name a building** (P255).
+- **REData's building name won outright on a child pin's location** (`name_resolution.default_name_resolver`), so
+  where REData had one, CRIS's never named the location: BLDG 33's held "POWERHOUSE & MACHINE SHOP" on dev.
+- **A child pin's new wiki stayed a root.** `tasks.ensure_wiki_for_location` creates it as a root, and only boundary
+  generation nested it, which runs for an owner who allows enrichment. A wiki holding no place (its point's place is
+  held by another wiki, or was resolved later) looked for its container only on the most specific place under its
+  point, which for a building place with no wiki of its own ended the search.
+
+**Fix.**
+
+- A building's own location rejects Wikipedia's article (`name_tiers.describes_scope`), takes a CRIS name only when
+  the record's point stands on the building (`building_name_admissible`, `national_register.stands_on`), and takes a
+  listing's name only when the listing is the building's own by P230's rule (`register_listing_names` through
+  `building_register_rows` and `cris_lists_building`). A property's names are unchanged.
+- On a child pin's location CRIS's record now wins outright ahead of REData's building name, as the pin was named
+  from it (`_CHILD_PIN_PREFERRED_SOURCES`); REData's still wins where CRIS has no record standing on the building.
+- A CRIS row naming a building that a building's own location is not already named after refreshes that location's
+  names. A property's CRIS card, holding its nearest building's record, refreshes nothing, and the property's other
+  root-pin locations are still refreshed only for a listing.
+- `ensure_wiki_for_location` reconciles nesting as soon as it creates a wiki, from the places already stored, so a
+  building's wiki nests whether or not anyone allows enrichment. A wiki holding no place looks for its container on
+  its location's place and every place containing that one (`wiki_merge._containing_root_wiki_by_geometry`). Neither
+  reads a pin.
+- Migration `0049_building_location_names` (P255's half below): on each building location, a Wikipedia name, a
+  listing name that is not a structure listing standing on the building, and a CRIS name whose record does not stand
+  on it are rejected. A location without a name that counts takes its cached CRIS record's name when the record
+  stands on it; a rejected name otherwise gives way to REData's building name (not an address fragment), else is
+  cleared. A changed name re-mints the location's slug (the readable one given up goes to `LocationSlugHistory`) and
+  its wiki's; root wikis on building locations nest under the nearest wiki their place lineage holds. Its stand-on
+  test is the footprint, else 15 m; it skips the runtime rule's nearer-building check, which reads a site's building
+  list. Run read-only against dev's data (2026-10-04), of 1,061 building locations: 5 Wikipedia names cleared (98243,
+  98251, 98252, 98253, 99689); 4 replaced by REData's building name (98250 "POWERHOUSE & MACHINE SHOP", 98254
+  "Kirkbride (Admin Building)", 98255 "GARAGE", 98256 "STAFF HOUSE #13"); 99705 renamed "BLDG 110/STORAGE (1922)"
+  and 99693 named "BLDG 11/MARRIED EMPLOYEES BLDG (1932)" from CRIS; 7 CRIS rows dropped; 1,050 unchanged. BLDG 33's,
+  38's and 73's CRIS rows (98250, 98252, 98253) were cached on 2026-09-23 without a position, so they are dropped and
+  fetched again; a record that then stands on the building renames it from CRIS. Most HRSH buildings have no CRIS
+  card on dev; P234's site pass seeds them, and each card now names its building.
+- **Slugs after a later rename are P250's.** A location the migration names from REData and CRIS renames later keeps
+  its REData slug, as any provider rename does today.
+
+**Not fixed: P261.** A building child pin whose location has no wiki of its own, on a parcel place whose wiki another
+location holds, still resolves the parcel's wiki by place: a uuid URL rendering the campus's root wiki, which is the
+exact shape of the report. No HRSH pin on dev is in that state. Fixing it is a choice, set out in P261. The campus's
+article still seeds a building wiki's article (P262). P250 (whether a provider rename re-mints a slug) was not decided:
+a slug minted from the right name is kept.
+
+**Tests.** `test_building_location_names.py`: the campus's article and a listing merely holding the building name
+nothing, CRIS's record must stand on the building, a listed building keeps its listing, a property keeps its article
+and listing, a CRIS card landing refreshes a building's names, costs nothing when it already names the location and
+refreshes nothing on a property, and CRIS's record outranks REData's building name on a child pin's location.
+`test_building_wiki_nesting.py`: a child pin's new wiki nests with enrichment off; a placeless wiki on a building place
+with no wiki finds the parcel's. `test_building_location_names_migration.py`, whose `NameChoiceTests` cover the
+migration's choice without a database. `test_name_tiers.py`: the building-scoped CRIS fixture now stands on its
+building, and a record 90 m off names nothing. Red before the fix: 7 of the 15 DB-free tests in the first file, then
+3 of 6 for the CRIS-over-REData order and 1 of 5 for the property's card. The DB-backed tests
+(`CrisNameReachesTheBuildingLocationTests`, the nesting and migration files, the `test_name_tiers.py` change) were
+written but not run: the test-runner sync was refused in this worktree, so only DB-free tests ran, on the host.
+
+## RESOLVED 2026-10-04: A building's CRIS card holds only a record whose own point is on the building
+
+`id: P255` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by Claude, fixing P230: on the dev stack, HRSH's "Building at Hudson River State Hospital" (location 98254) held
+"BLDG 166/OLD POLICE STATION (1932)", the record location 99719 also holds, with no position.
+
+**Cause.** `CrisBuildingPanelSource._fetch_now` and `CrisBuildingEnrichmentSource.fetch` took `nearest_resource` from
+a 200 m lookup with no distance limit, and the first record when none published a position. A child answered from its
+site's roster took the nearest entry within 15 m, even one another building on the parcel is nearer to.
+
+**Fix.** On one building's location (only child pins or a child wiki stand there; not a site's fetch), both fetch
+paths keep only a building record whose own point stands on the building, nearest first (`own_building_resource`,
+`building_resource_for`), and a site's roster answers a child only with an entry standing on it
+(`own_roster_entry`). All use `national_register.stands_on`: the building's footprint, else `BUILDING_MATCH_METERS`
+and no other parcel building nearer. A site pass reads the parcel's building list once for all its children
+(`stands_on(buildings=...)`) rather than once per child. A record with no position stands on nothing. Campus and standalone pins keep the
+nearest record. A CRIS record names a building only by the same rule (P231). Migration
+`0049_building_location_names` drops cached building records that do not stand on their location, or carry no
+position, so they are fetched again under the rule.
+
+**Tests.** `test_cris_own_building_record.py`: the enrichment and panel fetches pass over a nearer neighbour's
+record for the building's own, take none of a neighbour's or an unpositioned one, a property still takes the nearest,
+and a site's roster answers only with an entry on the building. 7 of its 8 failed before the fix. With
+`test_building_location_names.py::CrisRecordMustStandOnTheBuildingTests` and the migration test.

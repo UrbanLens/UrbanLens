@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P261` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P263` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -220,12 +220,12 @@ still resolves after it is fixed, and the id is never handed out again.
 | P226 | open | 2026-10-03 | Property Records: the Overview tab is blank, and the two historic tabs should be one | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P227 | open | 2026-10-03 | "Site Conditions" should be a tab of the Location Data panel, not a panel of its own | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P229 | open | 2026-10-03 | The Ownership panel shows a subscriber only the owner's name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P231 | open | 2026-10-03 | A building child pin's wiki is named after the campus, not the building, and isn't nested under the campus wiki | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P233 | open | 2026-10-03 | Photos > From Public Sources keeps stale cached photos that fail today's relevance rule, and its lightbox has no relevance votes or per-user delete | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P236 | open | 2026-10-03 | A wiki URL's response time tells whether a Location exists under that slug | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P250 | open | 2026-10-03 | A provider rename keeps a Location's slug, though 0041 re-mints any slug that no longer fits its name | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P255 | open | 2026-10-03 | A building pin's CRIS card can show a neighbouring building's record | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P256 | open | 2026-10-03 | NPS's record link opens an empty page for listings NPGallery does not carry | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P260 | open | 2026-10-03 | A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P261 | open | 2026-10-04 | A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P262 | open | 2026-10-04 | A building's wiki is seeded with its campus's Wikipedia article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
