@@ -217,7 +217,7 @@ than guessing at it.
 
 ## P11 — Frontend TS audit: its correctness bullets are fixed, the structural debt it found is not
 
-`id: P11` · `status: open` · `updated: 2026-10-02`
+`id: P11` · `status: open` · `updated: 2026-10-04`
 
 Previously titled "Frontend TS audit: a few correctness bullets and structural debt found but not
 fixed", before that "84 raw `fetch()` calls bypass `fetch-json.ts`, and 'all the wrappers are gone'
@@ -289,11 +289,11 @@ the pin map had no pending state (`shared/media-map-drop.ts`). What's left is st
     through the Edit Pin dialog left the page heading stale; the chip and parent/child label pickers had no
     keyboard navigation (`shared/suggestion-keys.ts`).
 
-  **Still open:** three Python controllers still build a toast with an HTML link -
-  `controllers/pin_suggestions.py:83`, `pin_merge_suggestions.py:112`, `pin_import_failures.py:69` append
-  `<a ... class="toast-undo-btn">View pin</a>` to the message, which toastr now shows as text. The client
-  takes `showToast.link = {label, href}` (`showTriggeredToast` in `shared/site-runtime.ts`); each `_toast`
-  should send that instead, and `test_pin_suggestions.py:814` assert the link's `href`.
+  The last of them, fixed 2026-10-04: the three review queues (location suggestions, merge suggestions, import
+  failures) appended `<a ... class="toast-undo-btn">View pin</a>` to a toast's message, which toastr showed as
+  text. Their three copies of `_toast` are now `services/core/htmx_toasts.queue_toast`, which sends the link as
+  `showToast.link`. Each queue's test asserts the link and a message with no markup. Checked in a browser on dev:
+  accepting a location suggestion shows a "View pin" button that opens the new pin.
 
 - The three games triplicate ~1,500 lines of session/lobby/chat/invite/fetch plumbing (19 blocks
   differing only by an `sg-`/`cs-`/`trivia-` prefix). Extracting `game-net` / `game-session` /

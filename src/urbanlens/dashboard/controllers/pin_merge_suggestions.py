@@ -22,6 +22,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.htmx_toasts import queue_toast
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.pins.pin_merge import PinMergeCollisionError, UnresolvedMergeConflictError, plan_merge_conflicts, plan_merge_conflicts_bulk
 from urbanlens.dashboard.services.pins.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
@@ -96,28 +97,6 @@ def _pair(suggestion: PinMergeSuggestion) -> tuple[Pin, Pin]:
     return suggestion.pin_a, suggestion.pin_b
 
 
-def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:
-    """Return an empty HTMX response that removes the swapped card and fires a toast.
-
-    Mirrors ``controllers.pin_suggestions._toast``.
-
-    Args:
-        message: Toast body text (HTML-escaped by the caller if it embeds any dynamic value).
-        level: toastr level ("success", "info", "warning", "error").
-        status: HTTP status code for the (otherwise empty) response.
-        refresh_queue: Whether to also fire the ``refreshQueue`` htmx event.
-        view_pin_url: If set, appends a "View pin" link to the toast.
-    """
-    if view_pin_url:
-        message += f' <a href="{view_pin_url}" class="toast-undo-btn">View pin</a>'
-    triggers: dict[str, Any] = {"showToast": {"message": message, "level": level}}
-    if refresh_queue:
-        triggers["refreshQueue"] = True
-    response = HttpResponse("", status=status)
-    response["HX-Trigger"] = json.dumps(triggers)
-    return response
-
-
 class PinMergeSuggestionQueuePartialView(LoginRequiredMixin, View):
     """Just the merge-suggestion queue partial, re-fetched via the ``refreshQueue`` event.
 
@@ -158,11 +137,11 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
             raise Http404
         suggestion, profile = self._get_suggestion(request, suggestion_id)
         if not suggestion.is_actionable:
-            return _toast("That suggestion has already been handled.", "info", refresh_queue=True)
+            return queue_toast("That suggestion has already been handled.", "info", refresh_queue=True)
 
         if action == "reject":
             reject_pin_merge_suggestion(suggestion)
-            return _toast("Merge suggestion dismissed.", "info", refresh_queue=True)
+            return queue_toast("Merge suggestion dismissed.", "info", refresh_queue=True)
 
         raw_survivor = request.POST.get("survivor_pk", "")
         survivor_pk = int(raw_survivor) if raw_survivor.isdigit() else None
@@ -199,4 +178,4 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
             return response
 
         view_pin_url = reverse("pin.details", args=[merged.slug or merged.uuid])
-        return _toast(f"Pins merged into {merged.effective_name}.", refresh_queue=True, view_pin_url=view_pin_url)
+        return queue_toast(f"Pins merged into {merged.effective_name}.", refresh_queue=True, view_pin_url=view_pin_url)

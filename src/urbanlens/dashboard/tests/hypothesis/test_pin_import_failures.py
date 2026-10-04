@@ -586,6 +586,8 @@ class PinImportFailureResolveViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         trigger = json.loads(response.headers["HX-Trigger"])
         self.assertIn("Pin placed for", trigger["showToast"]["message"])
+        self.assertNotIn("<", trigger["showToast"]["message"], "the toast shows its message as text")
+        self.assertEqual(trigger["showToast"]["link"]["label"], "View pin")
         self.assertEqual(trigger["showToast"]["level"], "success")
         self.assertTrue(trigger["refreshQueue"])
 

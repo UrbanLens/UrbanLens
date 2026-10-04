@@ -810,14 +810,17 @@ class PinSuggestionActionViewTests(TestCase):
             )
         self.assertEqual(response.status_code, 200)
         new_pin = Pin.objects.get(profile=self.profile, name="Old Mill")
-        trigger = json.loads(response.headers["HX-Trigger"])
-        self.assertIn(f"/{new_pin.slug}/", trigger["showToast"]["message"])
+        toast = json.loads(response.headers["HX-Trigger"])["showToast"]
+        self.assertEqual(toast["link"]["label"], "View pin")
+        self.assertIn(f"/{new_pin.slug}/", toast["link"]["href"])
+        self.assertNotIn("<", toast["message"], "the toast shows its message as text")
 
     def test_accept_existing_pin_toast_has_no_view_pin_link(self) -> None:
         suggestion = self._suggestion()
         response = self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]))
-        trigger = json.loads(response.headers["HX-Trigger"])
-        self.assertNotIn("View pin", trigger["showToast"]["message"])
+        toast = json.loads(response.headers["HX-Trigger"])["showToast"]
+        self.assertNotIn("View pin", toast["message"])
+        self.assertNotIn("link", toast)
 
     def test_accept_new_pin_applies_submitted_labels(self) -> None:
         from urbanlens.dashboard.models.labels.meta import KIND_TAG

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
+from urbanlens.dashboard.services.core.htmx_toasts import queue_toast
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 
@@ -48,32 +49,6 @@ def pending_pin_import_failures(profile: Profile) -> QuerySet[PinImportFailure]:
         Newest-first queryset of pending rows.
     """
     return PinImportFailure.objects.for_profile(profile).pending().order_by("-created")
-
-
-def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:
-    """Return an empty HTMX response that removes the swapped card and fires a toast.
-
-    Mirrors ``controllers.pin_merge_suggestions._toast``.
-
-    Args:
-        message: Toast body text (HTML-escaped by the caller if it embeds any dynamic value).
-        level: toastr level ("success", "info", "warning", "error").
-        status: HTTP status code for the (otherwise empty) response.
-        refresh_queue: Whether to also fire the ``refreshQueue`` htmx event.
-        view_pin_url: If set, appends a "View pin" link to the toast.
-
-    Returns:
-        An empty 200 (or ``status``) response carrying the toast/refresh triggers in its ``HX-Trigger``
-        header.
-    """
-    if view_pin_url:
-        message += f' <a href="{view_pin_url}" class="toast-undo-btn">View pin</a>'
-    triggers: dict[str, Any] = {"showToast": {"message": message, "level": level}}
-    if refresh_queue:
-        triggers["refreshQueue"] = True
-    response = HttpResponse("", status=status)
-    response["HX-Trigger"] = json.dumps(triggers)
-    return response
 
 
 def _get_failure(request: HttpRequest, failure_id: int) -> tuple[PinImportFailure, Profile]:
@@ -209,7 +184,7 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
         """
         failure, profile = _get_failure(request, failure_id)
         if not failure.is_actionable:
-            return _toast("That entry has already been handled.", "info", refresh_queue=True)
+            return queue_toast("That entry has already been handled.", "info", refresh_queue=True)
 
         address = request.POST.get("address", "").strip() or None
         try:
@@ -236,7 +211,7 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
             message = "That pin couldn't be placed."
         else:
             view_pin_url = reverse("pin.details", args=[pin.slug or pin.uuid])
-            return _toast(f"Pin placed for {pin.effective_name}.", refresh_queue=True, view_pin_url=view_pin_url)
+            return queue_toast(f"Pin placed for {pin.effective_name}.", refresh_queue=True, view_pin_url=view_pin_url)
 
         response = render(request, _CARD_PARTIAL, {"failure": failure})
         response["HX-Trigger"] = json.dumps({"showToast": {"message": message, "level": "error"}})
@@ -261,7 +236,7 @@ class PinImportFailureDismissView(LoginRequiredMixin, View):
         """
         failure, _profile = _get_failure(request, failure_id)
         if not failure.is_actionable:
-            return _toast("That entry has already been handled.", "info", refresh_queue=True)
+            return queue_toast("That entry has already been handled.", "info", refresh_queue=True)
 
         dismiss_pin_import_failure(failure)
-        return _toast("Removed from the list.", "info", refresh_queue=True)
+        return queue_toast("Removed from the list.", "info", refresh_queue=True)

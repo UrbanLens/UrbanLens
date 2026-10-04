@@ -739,6 +739,11 @@ class PinMergeSuggestionActionViewTests(TestCase):
         suggestion.refresh_from_db()
         self.assertEqual(suggestion.status, PinMergeSuggestionStatus.ACCEPTED)
         self.assertFalse(Pin.objects.filter(pk=self.pin_b.pk).exists())
+        toast = json.loads(response.headers["HX-Trigger"])["showToast"]
+        self.assertNotIn("<", toast["message"], "the toast shows its message as text")
+        self.assertEqual(toast["link"]["label"], "View pin")
+        self.pin_a.refresh_from_db()
+        self.assertIn(f"/{self.pin_a.slug}/", toast["link"]["href"])
 
     def test_reject_dismisses_without_merging(self) -> None:
         suggestion = self._suggestion()

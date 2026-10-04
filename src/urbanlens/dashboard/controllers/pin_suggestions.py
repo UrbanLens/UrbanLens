@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinS
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.bulk_outcome import run_each
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.htmx_toasts import queue_toast
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
@@ -66,28 +67,6 @@ def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
     ``services.pins.pin_suggestions.pending_suggestions_for_profile``.
     """
     return pending_suggestions_for_profile(profile).select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
-
-
-def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:
-    """Return an empty HTMX response that removes the swapped card and fires a toast.
-
-    Mirrors ``controllers.vault_photos._toast``.
-
-    Args:
-        message: Toast body text (HTML-escaped by the caller if it embeds any dynamic value).
-        level: toastr level ("success", "info", "warning", "error").
-        status: HTTP status code for the (otherwise empty) response.
-        refresh_queue: Whether to also fire the ``refreshQueue`` htmx event.
-        view_pin_url: If set, appends a "View pin" link to the toast.
-    """
-    if view_pin_url:
-        message += f' <a href="{view_pin_url}" class="toast-undo-btn">View pin</a>'
-    triggers: dict[str, Any] = {"showToast": {"message": message, "level": level}}
-    if refresh_queue:
-        triggers["refreshQueue"] = True
-    response = HttpResponse("", status=status)
-    response["HX-Trigger"] = json.dumps(triggers)
-    return response
 
 
 class PinSuggestionQueueView(LoginRequiredMixin, View):
@@ -319,12 +298,12 @@ class PinSuggestionActionView(LoginRequiredMixin, View):
             raise Http404
         suggestion, profile = self._get_suggestion(request, suggestion_id)
         if not suggestion.is_actionable:
-            return _toast("That suggestion has already been handled.", "info", refresh_queue=True)
+            return queue_toast("That suggestion has already been handled.", "info", refresh_queue=True)
 
         try:
             if action == "reject":
                 reject_pin_suggestion(suggestion)
-                return _toast("Suggestion dismissed.", "info", refresh_queue=True)
+                return queue_toast("Suggestion dismissed.", "info", refresh_queue=True)
 
             image_ids = [int(raw_id) for raw_id in request.POST.getlist("image_ids") if raw_id.isdigit()]
             asset_ids = request.POST.getlist("asset_ids")
@@ -345,11 +324,11 @@ class PinSuggestionActionView(LoginRequiredMixin, View):
             view_pin_url = reverse("pin.details", args=[result.pin.slug or result.pin.uuid]) if was_new_pin else None
             if not result.visits:
                 message = f"{'Pin created' if was_new_pin else 'Saved'}. Visit logging is turned off, so no visit was recorded."
-                return _toast(message, "info", refresh_queue=True, view_pin_url=view_pin_url)
+                return queue_toast(message, "info", refresh_queue=True, view_pin_url=view_pin_url)
             plural = "s" if len(result.visits) != 1 else ""
             verb = "Pin created and" if was_new_pin else ""
             message = f"{verb} {len(result.visits)} visit{plural} logged for {result.pin.effective_name}.".strip()
-            return _toast(message, refresh_queue=True, view_pin_url=view_pin_url)
+            return queue_toast(message, refresh_queue=True, view_pin_url=view_pin_url)
         except Exception:
             logger.exception("Pin suggestion action '%s' failed for suggestion %s", action, suggestion_id)
             response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "available_labels": _available_labels(profile)})
