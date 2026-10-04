@@ -8,13 +8,13 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.memories import _SHARE_GROUPS_PER_PAGE
-from urbanlens.dashboard.controllers.pin_sharing import _create_pin_from_share
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
+from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
 
 def _befriend(a, b) -> None:
@@ -51,11 +51,11 @@ class ChainShareCountTests(_ShareChainTestCase):
     def test_spec_example_counts_five(self):
         # A shares with B.
         share_ab = self._share(self.pin_a, "a", "b")
-        pin_b = _create_pin_from_share(share_ab)
+        pin_b = create_pin_from_share(share_ab)
         # B shares with C and D.
         self._share(pin_b, "b", "c")
         share_bd = self._share(pin_b, "b", "d")
-        pin_d = _create_pin_from_share(share_bd)
+        pin_d = create_pin_from_share(share_bd)
         # D shares with E and F.
         self._share(pin_d, "d", "e")
         self._share(pin_d, "d", "f")
@@ -64,9 +64,9 @@ class ChainShareCountTests(_ShareChainTestCase):
 
     def test_mid_chain_share_counts_its_own_subtree(self):
         share_ab = self._share(self.pin_a, "a", "b")
-        pin_b = _create_pin_from_share(share_ab)
+        pin_b = create_pin_from_share(share_ab)
         share_bd = self._share(pin_b, "b", "d")
-        pin_d = _create_pin_from_share(share_bd)
+        pin_d = create_pin_from_share(share_bd)
         self._share(pin_d, "d", "e")
         self._share(pin_d, "d", "f")
 
@@ -82,12 +82,12 @@ class SourceShareTests(_ShareChainTestCase):
 
     def test_created_pin_records_source_share(self):
         share = self._share(self.pin_a, "a", "b")
-        new_pin = _create_pin_from_share(share)
+        new_pin = create_pin_from_share(share)
         self.assertEqual(new_pin.source_share_id, share.pk)
 
     def test_reshare_view_links_parent_share(self):
         share_ab = self._share(self.pin_a, "a", "b")
-        pin_b = _create_pin_from_share(share_ab)
+        pin_b = create_pin_from_share(share_ab)
         _befriend(self.profiles["b"], self.profiles["c"])
         self.client.force_login(self.users["b"])
 
@@ -119,7 +119,7 @@ class MemoriesSharingPageTests(_ShareChainTestCase):
 
     def test_page_renders_with_chain_counts(self):
         share_ab = self._share(self.pin_a, "a", "b")
-        pin_b = _create_pin_from_share(share_ab)
+        pin_b = create_pin_from_share(share_ab)
         self._share(pin_b, "b", "c")
         self.client.force_login(self.users["a"])
 

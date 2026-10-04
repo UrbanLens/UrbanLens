@@ -13,6 +13,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
@@ -121,9 +123,7 @@ class MapShareDedupeTests(TestCase):
         self.recipient = _profile()
         self.map = baker.make("dashboard.MarkupMap", profile=self.sender)
         self.client.force_login(self.sender.user)
-        connected = mock.patch("urbanlens.dashboard.services.social.connections.are_connections", return_value=True)
-        connected.start()
-        self.addCleanup(connected.stop)
+        Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.ACCEPTED)
 
     def _send(self, message: str = "") -> int:
         url = reverse("markup_map.share.send", kwargs={"map_uuid": self.map.uuid})

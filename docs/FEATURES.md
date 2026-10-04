@@ -968,7 +968,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   (`conversation_reachable`) through `reachable_partner_by_slug`. A username nobody has and an account the requester
   may not see 404 after the same statements (P269). `test_profile_slug_side_channel.py` walks every such route (the
   socket's frames by hand, since no URL pattern names them) and holds both queries equal to their Python rules across
-  each visibility setting and relationship
+  each visibility setting and relationship. A profile named in a request body is resolved the same way (P280). Group
+  members resolve through `accepts_messages_from_q`, invite usernames through `find_profile_by_username` with
+  `invitable_q`, and share recipients, game invitees, group removals and game kicks through the sender's connections,
+  the group or the session. `test_request_body_profile_side_channel.py` holds 21 such routes to the same status, body and
+  statements as a name or id nobody holds
 - **Identity masking in shared spaces** — a trip or group chat member whose `profile_visibility`
   doesn't permit another member to see them shows as an anonymous "Member" (name/avatar hidden,
   distinct color/number per hidden person so several aren't indistinguishable) in the member

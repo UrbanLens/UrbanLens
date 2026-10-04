@@ -19,7 +19,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, posted_invitee, posted_invitees, rating_stats, refuse_unless_joined
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, posted_invitee, posted_invitees, posted_player, rating_stats, refuse_unless_joined
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -319,7 +319,7 @@ class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         except (TypeError, ValueError):
             total_rounds = spotguessr_session.DEFAULT_ROUNDS_PER_SESSION
 
-        invitees = posted_invitees(request)
+        invitees = posted_invitees(request, profile)
         if invitees is None:
             return JsonResponse({"error": "You can only invite friends."}, status=400)
 
@@ -375,8 +375,10 @@ class SpotGuessrInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
+        if game_session.host_profile_id != profile.pk:
+            return JsonResponse({"error": "Only the host can invite players."}, status=400)
 
-        invitee = posted_invitee(request)
+        invitee = posted_invitee(request, profile)
         if isinstance(invitee, JsonResponse):
             return invitee
 
@@ -509,10 +511,9 @@ class SpotGuessrKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixi
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
 
-        try:
-            target = Profile.objects.get(pk=request.POST.get("profile_id"))
-        except (Profile.DoesNotExist, ValueError, TypeError):
-            return JsonResponse({"error": "profile_id is required."}, status=400)
+        target = posted_player(request, GameSessionParticipant.objects.filter(session=game_session))
+        if isinstance(target, JsonResponse):
+            return target
 
         try:
             spotguessr_session.kick_participant(game_session, profile, target)

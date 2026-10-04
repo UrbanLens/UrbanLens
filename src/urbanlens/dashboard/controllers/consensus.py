@@ -142,7 +142,7 @@ class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         except (TypeError, ValueError):
             total_rounds = consensus_session.DEFAULT_ROUNDS_PER_SESSION
 
-        invitees = posted_invitees(request)
+        invitees = posted_invitees(request, profile)
         if invitees is None:
             return JsonResponse({"error": "You can only invite friends to a session."}, status=400)
 
@@ -195,8 +195,10 @@ class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
+        if game_session.host_profile_id != profile.pk:
+            return JsonResponse({"error": "Only the host can invite players."}, status=400)
 
-        invitee = posted_invitee(request)
+        invitee = posted_invitee(request, profile)
         if isinstance(invitee, JsonResponse):
             return invitee
 

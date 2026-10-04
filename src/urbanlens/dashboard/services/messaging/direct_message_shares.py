@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.direct_messages.meta import DirectMessageShareKind
@@ -166,7 +167,7 @@ def send_message_with_share(
     if shared_profile_slug:
         from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
-        recommended = ProfileModel.objects.filter(slug=shared_profile_slug).first()
+        recommended = ProfileModel.objects.filter(ProfileModel.connections_q(sender) | Q(pk=sender.pk), slug=shared_profile_slug).first()
         if recommended is None:
             raise RecommendedProfileNotConnectedError(f"Profile {sender.pk} tried to recommend a slug nobody holds.")
         return recommend_friend_in_message(

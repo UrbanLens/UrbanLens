@@ -12,6 +12,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
@@ -306,10 +308,13 @@ class TripMemberTests(_TripApiTestCase):
 
         404, identical to an unknown username - a 403 would confirm the account exists and is blocking the
         caller, which is itself an enumeration leak."""
-        with mock.patch.object(Profile, "are_blocked", return_value=True):
-            response = self._add("invitee")
+        Friendship.objects.create(from_profile=self.invitee, to_profile=self.profile, status=FriendshipStatus.BLOCKED)
+
+        response = self._add("invitee")
+
         self.assertEqual(response.status_code, 404)
         self.assertIn("No user found", response.json()["error"])
+        self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=self.invitee).exists())
 
     def test_member_cap_is_enforced(self) -> None:
         """Hitting max_trip_members answers 400 rather than over-filling the trip."""

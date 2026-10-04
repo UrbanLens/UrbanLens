@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.social.connections import get_connections
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
+    from django.db.models import QuerySet
     from django.http import HttpRequest, HttpResponse
     from django.http.response import HttpResponseBase
 
@@ -78,31 +79,44 @@ def _is_id(raw: str) -> bool:
     return raw.isascii() and raw.isdigit() and len(raw) <= 18
 
 
-def posted_invitees(request: HttpRequest) -> list[Profile] | None:
-    """The profiles a game's start request invites, from its repeated ``invite_profile_ids`` field.
+def posted_invitees(request: HttpRequest, host: Profile) -> list[Profile] | None:
+    """The friends of *host* a game's start request invites, from its repeated ``invite_profile_ids`` field.
 
     Returns:
-        The profiles, empty for a solo start; None when any id is malformed or names no profile, which callers
-        answer as they answer a non-friend, so the reply does not say which ids exist.
+        The profiles, empty for a solo start; None when any id is malformed or names no friend of *host*. An id
+        nobody holds and one held by a stranger are refused after the same statement (P280).
     """
     raw_ids = [raw for raw in request.POST.getlist("invite_profile_ids") if raw]
     if not all(_is_id(raw) for raw in raw_ids):
         return None
     ids = {int(raw) for raw in raw_ids}
-    invitees = list(Profile.objects.filter(pk__in=ids))
+    invitees = list(Profile.objects.filter(Profile.connections_q(host), pk__in=ids))
     return invitees if len(invitees) == len(ids) else None
 
 
-def posted_invitee(request: HttpRequest) -> Profile | JsonResponse:
-    """The profile an invite request names in ``profile_id``, or the 400 to answer with.
+def posted_invitee(request: HttpRequest, host: Profile) -> Profile | JsonResponse:
+    """The friend of *host* an invite request names in ``profile_id``, or the 400 to answer with.
 
-    An id that names no profile is refused as a non-friend is, so the reply does not say which ids exist.
+    Call it only once the requester is known to be the host, or the answer tells a player who the host's friends
+    are. An id nobody holds and one held by a stranger are refused after the same statement (P280).
     """
     invitee_id = safe_int_or_none(request.POST.get("profile_id"))
     if invitee_id is None:
         return JsonResponse({"error": "profile_id is required."}, status=400)
-    invitee = Profile.objects.filter(pk=invitee_id).first()
+    invitee = Profile.objects.filter(Profile.connections_q(host), pk=invitee_id).first()
     return invitee if invitee is not None else JsonResponse({"error": "You can only invite friends."}, status=400)
+
+
+def posted_player(request: HttpRequest, players: QuerySet[Any]) -> Profile | JsonResponse:
+    """The player a kick request names in ``profile_id``, among a session's participant rows, or the 400 to answer with.
+
+    An id nobody holds and one held by someone outside the session are refused after the same statement (P280).
+    """
+    player_id = safe_int_or_none(request.POST.get("profile_id"))
+    if player_id is None:
+        return JsonResponse({"error": "profile_id is required."}, status=400)
+    player = Profile.objects.filter(pk=player_id, pk__in=players.values("profile_id")).first()
+    return player if player is not None else JsonResponse({"error": "That profile is not part of this session."}, status=400)
 
 
 def deep_link_session_id(access: SessionAccess[Any], profile: Profile, raw_session_id: str | None) -> int | None:

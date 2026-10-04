@@ -450,7 +450,7 @@ class PhotoActionView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.photos.uploads import attach_deduped_copy
 
         friend_slug = (request.POST.get("friend_slug") or "").strip()
-        friend = Profile.objects.filter(slug=friend_slug).first()
+        friend = Profile.reachable_partner_by_slug(friend_slug, profile)
         if friend is None:
             return _toast("That friend could not be found.", "error")
         with transaction.atomic():

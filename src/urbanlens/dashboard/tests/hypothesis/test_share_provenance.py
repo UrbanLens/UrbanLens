@@ -11,11 +11,11 @@ from model_bakery import baker
 
 from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.pin_sharing import _create_pin_from_share
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import ExposureSource, LocationExposure, PinShare, PinShareStatus
+from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 from urbanlens.dashboard.services.sharing.share_provenance import (
     record_share_exposure,
     resolve_origin_share,
@@ -179,7 +179,7 @@ class ExposureResolutionTests(_ProvenanceTestCase):
         # John accepts, moves his pin far away, then drops a brand-new pin at
         # the original location and shares that one.
         share = self._share(self.sarah_pin, "sarah", "john")
-        john_pin = _create_pin_from_share(share)
+        john_pin = create_pin_from_share(share)
         john_pin.location = self.far_location
         john_pin.save()
         fresh_pin = Pin.objects.create(profile=self.profiles["john"], location=self.location)
@@ -189,7 +189,7 @@ class ExposureResolutionTests(_ProvenanceTestCase):
     def test_gaming_move_pin_then_share_from_new_location(self):
         # John accepts, moves the pin to a new location, and shares from there.
         share = self._share(self.sarah_pin, "sarah", "john")
-        john_pin = _create_pin_from_share(share)
+        john_pin = create_pin_from_share(share)
         john_pin.location = self.far_location
         john_pin.save()
         onward = self._share(john_pin, "john", "kim")
@@ -199,7 +199,7 @@ class ExposureResolutionTests(_ProvenanceTestCase):
         # After the move, even a *fresh* pin at the new location (the moved
         # pin deleted first) still chains back.
         share = self._share(self.sarah_pin, "sarah", "john")
-        john_pin = _create_pin_from_share(share)
+        john_pin = create_pin_from_share(share)
         john_pin.location = self.far_location
         john_pin.save()
         john_pin.delete()
@@ -243,7 +243,7 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         # brand-new pin ~100 m away - a genuinely different Location row,
         # not the same one reused - and shares that.
         share = self._share(self.sarah_pin, "sarah", "john")
-        john_pin = _create_pin_from_share(share)
+        john_pin = create_pin_from_share(share)
         john_pin.delete()
         nearby_location = baker.make(Location, latitude="42.100900", longitude="-73.900000")
         self.assertNotEqual(nearby_location.pk, self.location.pk)
@@ -295,7 +295,7 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         # The mirror image of the test above, using the identical ~200 m distance: this pin IS the one accepted
         # from Sarah's share, so it carries source_share_id directly.
         share = self._share(self.sarah_pin, "sarah", "john")
-        john_pin = _create_pin_from_share(share)
+        john_pin = create_pin_from_share(share)
         beyond_radius = baker.make(Location, latitude="42.101800", longitude="-73.900000")
 
         john_pin.location = beyond_radius
@@ -346,7 +346,7 @@ class AdditionalGamingScenarioTests(_ProvenanceTestCase):
         share_a = self._share(self.sarah_pin, "sarah", "john")
         kim_original_pin = Pin.objects.create(profile=self.profiles["kim"], location=self.far_location)
         share_b = self._share(kim_original_pin, "kim", "john")
-        john_pin_b = _create_pin_from_share(share_b)
+        john_pin_b = create_pin_from_share(share_b)
 
         john_pin_b.location = self.location  # into share_a's exposed radius
         john_pin_b.save()
@@ -545,14 +545,14 @@ class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
     """Property-based generalization of the fixed 2-3-hop chains exercised throughout this module: the provenance invariant - every share, however deep the reshare chain, must be traceable back to a single true origin share (``parent_share`` eventually ``None``), with no cycle and no lost link - must hold for an arbitrary generated chain length/branching factor, not just the hand-picked examples above.
 
     Each accepted pin in the chain carries its own ``source_share`` lineage (set directly by
-    ``_create_pin_from_share``), so ``parent_share`` forms a genuine linked chain back to the origin one hop at
+    ``create_pin_from_share``), so ``parent_share`` forms a genuine linked chain back to the origin one hop at
     a time - not a single jump straight to the origin past the first hop."""
 
     @given(chain_length=st.integers(min_value=2, max_value=6))
     @_db_settings
     def test_arbitrary_length_reshare_chain_always_walks_back_to_the_true_origin(self, chain_length: int) -> None:
         origin_share = self._share(self.sarah_pin, "sarah", "john")
-        current_pin = _create_pin_from_share(origin_share)
+        current_pin = create_pin_from_share(origin_share)
         current_from = "john"
         shares_in_chain = [origin_share]
 
@@ -561,7 +561,7 @@ class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
             self.profiles[next_name] = baker.make(User, username=f"chaindepth_{i}").profile
             onward = self._share(current_pin, current_from, next_name)
             shares_in_chain.append(onward)
-            current_pin = _create_pin_from_share(onward)
+            current_pin = create_pin_from_share(onward)
             current_from = next_name
 
         # Every share in the chain, walked via parent_share, reaches the true
@@ -582,7 +582,7 @@ class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
     @_db_settings
     def test_every_profile_in_an_arbitrary_length_chain_gets_exactly_one_exposure(self, chain_length: int) -> None:
         origin_share = self._share(self.sarah_pin, "sarah", "john")
-        current_pin = _create_pin_from_share(origin_share)
+        current_pin = create_pin_from_share(origin_share)
         current_from = "john"
         chain_profiles = [self.profiles["john"]]
 
@@ -591,7 +591,7 @@ class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
             self.profiles[next_name] = baker.make(User, username=f"expochain_{i}").profile
             onward = self._share(current_pin, current_from, next_name)
             chain_profiles.append(self.profiles[next_name])
-            current_pin = _create_pin_from_share(onward)
+            current_pin = create_pin_from_share(onward)
             current_from = next_name
 
         # Regardless of how many hops preceded it, each recipient's exposure
@@ -610,7 +610,7 @@ class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
         chain) - every branch must chain back to the same origin share,
         however many branches there are."""
         origin_share = self._share(self.sarah_pin, "sarah", "john")
-        john_pin = _create_pin_from_share(origin_share)
+        john_pin = create_pin_from_share(origin_share)
 
         for i in range(num_branches):
             branch_name = f"branch_{i}"

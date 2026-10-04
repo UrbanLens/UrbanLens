@@ -123,6 +123,7 @@ class TripSeatRaceTests(TransactionTestCase):
         from urbanlens.dashboard.services.trips.trip_membership import add_member_by_username
 
         invitees = [baker.make(User, username="invitee-a"), baker.make(User, username="invitee-b")]
+        Profile.objects.filter(user__in=invitees).update(profile_visibility=VisibilityChoice.ANYONE)
         barrier = threading.Barrier(2, timeout=3)
 
         def invite(name: str) -> str:
@@ -133,7 +134,9 @@ class TripSeatRaceTests(TransactionTestCase):
             return "added"
 
         with mock.patch.object(
-            username_service, "find_user_by_username", _barrier_after(username_service.find_user_by_username, barrier)
+            username_service,
+            "find_profile_by_username",
+            _barrier_after(username_service.find_profile_by_username, barrier),
         ):
             outcomes = run_concurrently([lambda name=user.username: invite(name) for user in invitees])
 

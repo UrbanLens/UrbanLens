@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -173,7 +174,8 @@ class GroupCreateView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         name = request.POST.get("name", "")
         slugs = [slug for slug in request.POST.getlist("member_slugs") if slug]
-        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        # Only those who would take a message from the caller, so a hidden account is refused as no one is (P280).
+        members = list(Profile.objects.select_related("user").filter(Profile.accepts_messages_from_q(profile) | Q(pk=profile.pk), slug__in=slugs))
         if len(members) != len(set(slugs)):
             return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         try:
@@ -477,7 +479,10 @@ class GroupAddMembersView(LoginRequiredMixin, View):
         slugs = [slug for slug in request.POST.getlist("member_slugs") if slug]
         if not slugs:
             return HttpResponseBadRequest("Pick at least one person to add.")
-        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        # Permission before resolution, so a non-manager learns nothing about the names it sends.
+        if not group.is_manager(profile):
+            return HttpResponseForbidden("Only the group's creator can add members.")
+        members = list(Profile.objects.select_related("user").filter(Profile.accepts_messages_from_q(profile) | Q(pk=profile.pk), slug__in=slugs))
         if len(members) != len(set(slugs)):
             return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         try:
@@ -526,7 +531,10 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         profile_id_raw = request.POST.get("profile_id", "")
         if not profile_id_raw.isdigit():
             return HttpResponseBadRequest("A valid profile_id is required.")
-        target = get_object_or_404(Profile.objects.select_related("user"), pk=profile_id_raw)
+        # Among the group's members, so an id nobody holds and an outsider's are refused alike (P280).
+        target = Profile.objects.select_related("user").filter(pk=profile_id_raw, pk__in=group.active_memberships().values("profile_id")).first()
+        if target is None:
+            return HttpResponseBadRequest("They aren't a member of this group.")
         try:
             remove_group_member(group, profile, target)
         except TargetNotAMemberError as exc:

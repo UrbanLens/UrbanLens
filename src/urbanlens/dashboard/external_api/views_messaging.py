@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from django.db.models import Q
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 
@@ -592,7 +593,8 @@ class GroupsView(ExternalApiView):
         profile = request.user.profile
 
         slugs = serializer.validated_data["member_slugs"]
-        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        # Only those who would take a message from the caller, so a hidden account is refused as no one is (P280).
+        members = list(Profile.objects.select_related("user").filter(Profile.accepts_messages_from_q(profile) | Q(pk=profile.pk), slug__in=slugs))
         if set(slugs) - {member.slug for member in members}:
             return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
 
@@ -857,7 +859,7 @@ class GroupMembersView(ExternalApiView):
         if not group.is_manager(profile):
             return Response({"error": "Only the group's creator can add members."}, status=403)
 
-        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        members = list(Profile.objects.select_related("user").filter(Profile.accepts_messages_from_q(profile) | Q(pk=profile.pk), slug__in=slugs))
         if set(slugs) - {member.slug for member in members}:
             return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
 
@@ -900,10 +902,10 @@ class GroupMembersView(ExternalApiView):
         serializer = GroupMembersSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         slugs = serializer.validated_data["member_slugs"]
-        targets = list(Profile.objects.select_related("user").filter(slug__in=slugs))
-        missing = set(slugs) - {member.slug for member in targets}
-        if missing:
-            return Response({"error": f"Unknown profile slug(s): {', '.join(sorted(missing))}."}, status=400)
+        # Only this group's members, so a name nobody holds and an account outside the group answer alike (P280).
+        targets = list(Profile.objects.select_related("user").filter(slug__in=slugs, pk__in=group.active_memberships().values("profile_id")))
+        if set(slugs) - {member.slug for member in targets}:
+            return Response({"error": "They aren't a member of this group."}, status=400)
 
         # Validate the whole batch before removing anybody. Both rules are re-checked by remove_group_member
         # itself; this only moves the *decision* ahead of the first side effect.

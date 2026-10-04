@@ -112,7 +112,7 @@ class PinShare(abstract.DashboardModel):
     shared_name = models.CharField(max_length=255, null=True, blank=True)
     # Photos the sharer opted to include - a subset of pin.images. Kept as a
     # reference to the sharer's own Image rows; accepting the share copies
-    # these onto the recipient's new pin (see _create_pin_from_share).
+    # these onto the recipient's new pin (see ``services.sharing.pin_sharing.create_pin_from_share``).
     images = ManyToManyField("dashboard.Image", blank=True, related_name="pin_shares")
 
     objects = PinShareManager()

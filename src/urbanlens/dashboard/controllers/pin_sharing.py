@@ -14,11 +14,10 @@ from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
-from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError, apply_pin_share_response, create_pin_from_share, create_pin_share
+from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError, apply_pin_share_response, create_pin_share
 from urbanlens.dashboard.services.social.connections import get_connections
 
-#: Compatibility alias for the name this helper had while it lived here.
-_create_pin_from_share = create_pin_from_share
+NOT_CONNECTED_MESSAGE = "Pins can only be shared with connected friends."
 
 
 class PinShareDialogView(LoginRequiredMixin, View):
@@ -67,7 +66,10 @@ class PinShareCreateView(LoginRequiredMixin, View):
     def post(self, request, pin_slug):
         sender = request.user.profile
         pin = get_object_or_404(Pin, slug=pin_slug, profile=sender)
-        recipient = get_object_or_404(Profile, pk=safe_int_or_none(request.POST.get("profile_id")))
+        # Among the sender's connections, so an id nobody holds and a stranger's are refused alike (P280).
+        recipient = Profile.objects.filter(Profile.connections_q(sender), pk=safe_int_or_none(request.POST.get("profile_id"))).first()
+        if recipient is None:
+            return HttpResponse(NOT_CONNECTED_MESSAGE, status=403)
 
         message = (request.POST.get("message") or "").strip() or None
         length_error = text_length_error(message, MAX_PIN_SHARE_MESSAGE_LENGTH, "Message")
@@ -105,7 +107,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
                 children=children,
             )
         except PinSharePermissionError:
-            return HttpResponse("Pins can only be shared with connected friends.", status=403)
+            return HttpResponse(NOT_CONNECTED_MESSAGE, status=403)
         return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": get_connections(sender), "shared_to": recipient})
 
 

@@ -22592,3 +22592,59 @@ Django timing, the running worker class) are production reads and were not made.
 **Verified on the dev stack.** Synced to `development_main`'s app and app_ws and restarted. The boot logs read "URLconf
 warmed: 35 root patterns, 1500 reversible names; 444739 objects frozen" (app) and "...; 406632 objects frozen"
 (daphne). Both containers report healthy, and the login page answers 200.
+
+## RESOLVED 2026-10-04: A profile named in a request body is resolved with its permission rule, so a hidden account answers as a missing one
+
+`id: P280` · `status: fixed` · `resolved: 2026-10-04`
+
+**What was wrong.** P269 fixed the routes that name a profile in their URL. A slug, username or id sent in a request
+body was still looked up first and refused afterwards. On these routes, an account hidden from the sender answered
+differently from a name or id nobody holds. Hidden here means not visible to the sender, blocking the sender, or
+deactivated. The difference showed in the status, the message, or the statements run:
+
+- **Slugs.** Group create and add-members, on the web and the external API. The API's group remove answered
+  "Unknown profile slug(s)" for an unknown name and "They aren't a member" for anyone else. Also vault photo share,
+  and recommending a friend in a conversation (web `recommended_slug`, API `shared_profile_slug`). A group create
+  naming a hidden account that had reached its group limit answered 400 "already in as many groups", where an
+  unknown name answered 403.
+- **Usernames.** Safety partner invites and trip member invites, web and API. The message matched; the statements
+  did not.
+- **Ids.** Pin share and map share answered 404 for an unknown id and 403 for a hidden account. Web group remove
+  answered 404 and 400. The SpotGuessr and Trivia kicks answered "profile_id is required" for an unknown id and
+  "not part of this session" for a hidden account. The three in-session game invites and the game starts ran extra
+  statements. Ids are sequential, so walking them showed which accounts are hidden from the sender.
+
+**Fix.** Each body reference is resolved in the same statement that checks it against its rule:
+
+- `Profile.accepts_messages_from_q(sender)`, which `reachable_partner_q` now uses too, for group create and
+  add-members. The sender's own slug still resolves.
+- `reachable_partner_by_slug` for vault share.
+- `Profile.connections_q(profile)` for recommending a friend, pin and map share, and game invites and starts.
+  `Friendship` holds one row per pair, so this matches `are_connections`.
+- `Profile.invitable_q(actor)` with `services.auth.username.find_profile_by_username(username, allowed)` for safety
+  and trip invites. One statement decides the exact match, the sole key holder, and the permission. A second fetch
+  runs only on success.
+- The group's active memberships for group remove (web and API). The session's participant rows for the kicks
+  (`controllers.games.posted_player`).
+
+Two routes now check permission before resolving any name:
+
+- Web add-members checks that the sender manages the group.
+- The in-session game invites check that the sender is the host. Resolving among the host's friends first would tell
+  any other player who those friends are.
+
+**Tests.** `test_request_body_profile_side_channel.py` covers 21 routes. Each one compares the status, the body
+(including an HTMX toast's header) and normalised statement shapes. It runs a never-used name or id against each of
+three hidden accounts. Ids are compared with every SQL integer made alike. 59 subtests failed before the fix:
+
+- 35 on slugs and usernames;
+- 24 on ids.
+
+Anti-vacuity tests cover three successes (a group takes a member, a trip takes one by username, a friend is
+recommended). Another checks that a non-host player's invite answer does not depend on whether the id is one of the
+host's friends. Four existing tests had mocked `are_blocked` or `can_view_profile`, which these paths no longer call.
+They now use a real block and real visibility. The `_create_pin_from_share` alias, kept only for two test files, is
+gone; they import the service.
+
+**Not covered.** The external API's friend routes take a uuid, which cannot be walked. The friendship controller's
+id-addressed URL routes are P281.

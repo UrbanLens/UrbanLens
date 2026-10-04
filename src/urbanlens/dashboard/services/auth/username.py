@@ -6,10 +6,14 @@ from datetime import UTC, datetime
 import logging
 import re
 import secrets
+from typing import TYPE_CHECKING
 import unicodedata
 
 from django.contrib.auth.models import User
 from django.db.models import Q
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +105,42 @@ def username_is_available(username: str, *, exclude_user_id: int | None = None) 
     Returns:
         True only when the name matches :data:`USERNAME_RE` and :func:`username_is_taken` is False."""
     return bool(USERNAME_RE.match(username)) and not username_is_taken(username, exclude_user_id=exclude_user_id)
+
+
+def find_profile_by_username(username: str, allowed: Q) -> Profile | None:
+    """The profile a typed username names, if *allowed* admits it.
+
+    Matches as :func:`find_user_by_username` does, active accounts only: an exact username, else the one account
+    holding its key. A match *allowed* refuses answers as no match, after the same one statement, so a caller cannot
+    tell a hidden account from a username nobody has (P280).
+
+    Args:
+        username: Any spelling of a username.
+        allowed: The profiles the caller may name.
+
+    Returns:
+        The profile, or None.
+    """
+    from django.db.models import BooleanField, ExpressionWrapper
+
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    username = username.strip()
+    if not username:
+        return None
+    key = normalize_username_key(username)
+    exact = Q(user__username=username)
+    named = exact | Q(username_key=key) if key else exact
+    rows = list(
+        Profile.objects.filter(named, user__is_active=True)
+        .annotate(is_exact=ExpressionWrapper(exact, output_field=BooleanField()), is_allowed=ExpressionWrapper(allowed, output_field=BooleanField()))
+        .order_by("-is_exact", "pk")
+        .values_list("pk", "is_exact", "is_allowed")[:3],
+    )
+    # The first row is the exact match if there is one; otherwise it counts only as the sole key holder.
+    if not rows or not (rows[0][1] or len(rows) == 1) or not rows[0][2]:
+        return None
+    return Profile.objects.select_related("user").get(pk=rows[0][0])
 
 
 def find_user_by_username(username: str, *, active_only: bool = True) -> User | None:

@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, posted_invitee, posted_invitees, rating_stats, refuse_unless_joined
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, posted_invitee, posted_invitees, posted_player, rating_stats, refuse_unless_joined
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
     PlayerTriviaRating,
@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaPreference,
     TriviaQuestion,
     TriviaRound,
+    TriviaSessionParticipant,
 )
 from urbanlens.dashboard.services.trivia import chat as trivia_chat, eligibility, serializers, session as trivia_session, social, submission, voting
 from urbanlens.dashboard.services.trivia.access import session_access
@@ -129,7 +130,7 @@ class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             total_rounds = trivia_session.DEFAULT_ROUNDS_PER_SESSION
 
         config = trivia_session.TriviaConfig(difficulty=difficulty)
-        invitees = posted_invitees(request)
+        invitees = posted_invitees(request, profile)
         if invitees is None:
             return JsonResponse({"error": "You can only invite friends to a Trivia game."}, status=400)
 
@@ -198,8 +199,10 @@ class TriviaInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
+        if game_session.host_profile_id != profile.pk:
+            return JsonResponse({"error": "Only the host can invite players to this session."}, status=400)
 
-        invitee = posted_invitee(request)
+        invitee = posted_invitee(request, profile)
         if isinstance(invitee, JsonResponse):
             return invitee
 
@@ -337,10 +340,9 @@ class TriviaKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, V
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
 
-        try:
-            target = Profile.objects.get(pk=request.POST.get("profile_id"))
-        except (Profile.DoesNotExist, ValueError, TypeError):
-            return JsonResponse({"error": "profile_id is required."}, status=400)
+        target = posted_player(request, TriviaSessionParticipant.objects.filter(session=game_session))
+        if isinstance(target, JsonResponse):
+            return target
 
         try:
             trivia_session.kick_participant(game_session, profile, target)

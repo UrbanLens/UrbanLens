@@ -20,6 +20,8 @@ from urbanlens.dashboard.services.social.connections import get_connections
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
+NOT_CONNECTED_MESSAGE = "Maps can only be shared with connected friends."
+
 
 class MarkupMapShareDialogView(LoginRequiredMixin, View):
     """GET /markup-maps/<uuid:map_uuid>/share/ - friend-picker dialog."""
@@ -58,7 +60,10 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
         """
         sender, _ = Profile.objects.get_or_create(user=request.user)
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile=sender)
-        recipient = get_object_or_404(Profile, pk=safe_int_or_none(request.POST.get("profile_id")))
+        # Among the sender's connections, so an id nobody holds and a stranger's are refused alike (P280).
+        recipient = Profile.objects.filter(Profile.connections_q(sender), pk=safe_int_or_none(request.POST.get("profile_id"))).first()
+        if recipient is None:
+            return HttpResponse(NOT_CONNECTED_MESSAGE, status=403)
 
         message = (request.POST.get("message") or "").strip() or None
         length_error = text_length_error(message, MAX_PIN_SHARE_MESSAGE_LENGTH, "Message")
@@ -68,7 +73,7 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
         try:
             share_markup_map(sender, recipient, markup_map, message=message)
         except MapSharePermissionError:
-            return HttpResponse("Maps can only be shared with connected friends.", status=403)
+            return HttpResponse(NOT_CONNECTED_MESSAGE, status=403)
 
         return render(
             request,

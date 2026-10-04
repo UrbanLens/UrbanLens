@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P280` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P282` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -209,3 +209,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P277 | open | 2026-10-04 | A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P278 | open | 2026-10-04 | MapLibre 5.24's attribution sanitizer can be bypassed, and the fix is only in the v6 line this app pins against | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P279 | open | 2026-10-04 | Legacy `BLOCKED` friendship rows may still record the wrong blocker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P281 | open | 2026-10-04 | The friendship controller's id-addressed routes decide visibility after the lookup, so a hidden account costs more than a missing one | [`docs/PROBLEMS.md`](PROBLEMS.md) |

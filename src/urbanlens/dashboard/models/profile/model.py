@@ -1523,20 +1523,72 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             A ``Q`` admitting every other profile *profile* has exchanged a message with, or may message now.
         """
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+
+        exchanged = models.Q(pk__in=DirectMessage.objects.filter(recipient=profile).values("sender_id")) | models.Q(
+            pk__in=DirectMessage.objects.filter(sender=profile).values("recipient_id"),
+        )
+        if not profile.community_enabled:
+            return exchanged & ~models.Q(pk=profile.pk)
+        return (exchanged | Profile.accepts_messages_from_q(profile)) & ~models.Q(pk=profile.pk)
+
+    @staticmethod
+    def accepts_messages_from_q(sender: Profile) -> models.Q:
+        """``services.messaging.direct_messages.can_direct_message`` as a ``Q`` over the profiles *sender* may message.
+
+        Args:
+            sender: The profile that would send.
+
+        Returns:
+            A ``Q`` admitting every other profile that would accept a new message from *sender*; none when *sender*
+            has community features off.
+        """
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
         from urbanlens.dashboard.models.friendship.model import Friendship
 
-        wrote_to_profile = DirectMessage.objects.filter(recipient=profile).values("sender_id")
-        exchanged = models.Q(pk__in=wrote_to_profile) | models.Q(pk__in=DirectMessage.objects.filter(sender=profile).values("recipient_id"))
-        if not profile.community_enabled:
-            return exchanged & ~models.Q(pk=profile.pk)
+        if not sender.community_enabled:
+            return models.Q(pk__in=[])
         blocked = FriendshipStatus.BLOCKED
-        either_blocked = models.Q(pk__in=Friendship.objects.filter(to_profile=profile, status=blocked).values("from_profile_id")) | models.Q(
-            pk__in=Friendship.objects.filter(from_profile=profile, status=blocked).values("to_profile_id"),
+        either_blocked = models.Q(pk__in=Friendship.objects.filter(to_profile=sender, status=blocked).values("from_profile_id")) | models.Q(
+            pk__in=Friendship.objects.filter(from_profile=sender, status=blocked).values("to_profile_id"),
         )
-        accepts = models.Q(community_enabled=True, user__is_active=True) & ~either_blocked
-        accepts &= Profile.visibility_permits_q(profile, author_path=None, visibility_field="direct_message_visibility") | models.Q(pk__in=wrote_to_profile)
-        return (exchanged | accepts) & ~models.Q(pk=profile.pk)
+        wrote_to_sender = models.Q(pk__in=DirectMessage.objects.filter(recipient=sender).values("sender_id"))
+        permitted = Profile.visibility_permits_q(sender, author_path=None, visibility_field="direct_message_visibility") | wrote_to_sender
+        return models.Q(community_enabled=True, user__is_active=True) & ~either_blocked & permitted & ~models.Q(pk=sender.pk)
+
+    @staticmethod
+    def connections_q(profile: Profile) -> models.Q:
+        """``services.social.connections.are_connections`` as a ``Q`` over *profile*'s accepted friends.
+
+        Args:
+            profile: Whose connections.
+
+        Returns:
+            A ``Q`` admitting every profile with an accepted friendship with *profile*, in either direction.
+        """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        accepted = FriendshipStatus.ACCEPTED
+        return models.Q(pk__in=Friendship.objects.filter(from_profile=profile, status=accepted).values("to_profile_id")) | models.Q(
+            pk__in=Friendship.objects.filter(to_profile=profile, status=accepted).values("from_profile_id"),
+        )
+
+    @staticmethod
+    def invitable_q(actor: Profile) -> models.Q:
+        """The profiles *actor* may name in an invite: those it may see, with no block between them, itself included.
+
+        Args:
+            actor: The profile inviting.
+
+        Returns:
+            :meth:`viewable_q` less the profiles *actor* has blocked.
+        """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        blocked_by_actor = models.Q(pk__in=Friendship.objects.filter(from_profile=actor, status=FriendshipStatus.BLOCKED).values("to_profile_id"))
+        return Profile.viewable_q(actor) & ~blocked_by_actor
 
     @staticmethod
     def related_profile_ids(viewer: Profile) -> set[int]:

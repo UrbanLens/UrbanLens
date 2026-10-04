@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -12,6 +11,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.safety.model import (
     SafetyCheckin,
@@ -420,14 +421,16 @@ class SafetyPartnerTests(_SafetyApiTestCase):
 
         A block existing between the two profiles must not be distinguishable from the invitee not existing at
         all - confirming one confirms the other's account is real."""
-        invitee = baker.make(User, username="apartner")
-        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
-        Profile.objects.get_or_create(user=invitee)
+        invitee = Profile.objects.get(user=baker.make(User, username="apartner"))
+        Profile.objects.filter(pk=invitee.pk).update(profile_visibility=VisibilityChoice.ANYONE)
+        Friendship.objects.create(from_profile=invitee, to_profile=self.profile, status=FriendshipStatus.BLOCKED)
 
-        with mock.patch.object(Profile, "are_blocked", return_value=True):
-            response = self._invite("apartner")
+        response = self._invite("apartner")
+
         self.assertEqual(response.status_code, 400)
-        self.assertIn("No user found", response.json()["error"])
+        self.assertEqual(
+            response.json()["error"], self._invite("nobody-here").json()["error"].replace("nobody-here", "apartner")
+        )
 
     def test_self_invite_is_400(self) -> None:
         response = self._invite(self.user.username)
