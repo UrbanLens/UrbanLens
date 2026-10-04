@@ -344,7 +344,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         # Same filter as the JSON endpoint above: a concealed viewer keeps their own detail pins and their
         # friends', and the ones mirrored from building data, and loses strangers'.
-        child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).order_by("pin_type", "name")
+        child_wikis = visible_rows(wiki.child_wikis.select_related("location"), wiki, profile).order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/location_detail_pins_panel.html",

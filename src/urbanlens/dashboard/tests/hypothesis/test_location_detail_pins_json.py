@@ -90,3 +90,35 @@ class LocationDetailPinJsonChildWikiTests(TestCase):
         self.assertNotIn("owner_name", by_name["North Entrance"])
         self.assertEqual(by_name["Attic Hatch"]["owner_name"], "North Entrance")
         self.assertEqual(by_name["Attic Hatch"]["uuid"], str(grandchild.uuid))
+
+
+class LocationDetailPinPanelQueryTests(TestCase):
+    """The wiki's detail-pin panel read each child wiki's location to link it; 55 of its 67 queries on dev's campus."""
+
+    def setUp(self) -> None:
+        self.location = _make_location()
+        self.wiki = _wiki_for(self.location)
+        self.viewer = baker.make(User)
+        baker.make(Pin, profile=self.viewer.profile, location=self.location)
+        self.client.force_login(self.viewer)
+
+    def _queries(self) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from django.urls import reverse
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(
+                reverse("location.wiki.detail_pins.panel", kwargs={"location_slug": self.location.slug})
+            )
+        self.assertEqual(response.status_code, 200)
+        return len(captured)
+
+    def test_the_query_count_does_not_grow_with_the_child_wikis(self) -> None:
+        for index in range(3):
+            _make_child_wiki(self.wiki, name=f"Wing {index}")
+        few = self._queries()
+        for index in range(3, 12):
+            _make_child_wiki(self.wiki, name=f"Wing {index}")
+
+        self.assertEqual(self._queries(), few)

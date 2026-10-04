@@ -23185,16 +23185,18 @@ dev's campus pin with 517 detail pins, and a pin with 42 children:
 | `pin.detail_pins.json` (the detail-pin map overlay) | 596 | 4 |
 | `pin.parcel_buildings` (the Buildings card) | 99 | 17 |
 | `pin.custom_fields` (a card with a pin reference field) | 318 | 8 |
+| `location.wiki.detail_pins.panel` (a wiki's child-wiki panel; 11 vs 20 queries in the test) | 67 | - |
 
 The overlay also read the labels without the viewer's label customizations, so a label recoloured or re-iconed for the
 map kept its original colour and icon on the pin page's map.
 
 **Fix.** The overlay selects each pin's location wiki and prefetches its labels with
 `Label.objects.with_customizations_for`, as the main map's payload does. The Buildings card and a pin reference
-field's choices select `location__wiki`.
+field's choices select `location__wiki`; the wiki panel selects each child wiki's location.
 
 **Tests.** `test_detail_pins_json_queries.py`, `test_parcel_buildings_queries.py` and
-`test_custom_field_reference_choice_queries.py` each count the queries for a few pins and for many, and check an unnamed
+`test_custom_field_reference_choice_queries.py`, and `test_location_detail_pins_json.py::LocationDetailPinPanelQueryTests`,
+each count the queries for a few pins and for many, and check an unnamed
 pin still shows its wiki's name. The overlay's customized label is checked too. The count tests failed before the fix,
 as did the customization test. The Buildings API payload's count test passed before; it names only the children
 matched to a building, and stays as a guard.
