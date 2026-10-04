@@ -22891,3 +22891,44 @@ off the globe do not block the migration.
 
 117 affected test files pass.
 
+## RESOLVED 2026-10-04: A WKT or WKB import nested tens of thousands deep crashed the worker that parsed it
+
+`id: P287` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, while fixing P95's WKT reader`
+
+**What was wrong.** GEOS reads WKT and WKB recursively. A WKT line of 30,000 nested `GEOMETRYCOLLECTION`s, 600 KB,
+overflowed its stack, and so did 100,000 nested collections in WKB, 900 KB. The process died with SIGSEGV: no
+exception, nothing the import could catch. The `.wkt` and `.wkb` import formats handed every line, and a binary
+`.wkb` file whole, to `shapely.wkt.loads` and `shapely.wkb.loads`. A preview parses in `media-worker`, so one upload
+killed the worker and the task in its other slot, and nothing stopped the same upload being sent again. Measured in
+the test runner, GEOS 3.13.1: WKT read 10,000 levels and crashed at 30,000; WKB read 10,000 and crashed at 100,000.
+
+The other places that parse a geometry from user input reach GEOS through `json.loads` first. That refuses nesting
+past about a thousand levels, which GEOS reads safely, and `decode_json` already answers it with a 400. KML builds its
+collections with Python recursion, which raises `RecursionError` long before GEOS's limit.
+
+**Fix.** `services/import_formats/geometry_readers.py`:
+
+- `read_wkt` refuses a line whose parentheses nest deeper than `MAX_NESTING` (100). A line with no more than 100
+  opening parentheses is not scanned, and a longer one is scanned with numpy, not a Python loop.
+- `read_wkb` walks the WKB's headers first. It handles both byte orders, EWKB's flags and SRID, and ISO's dimension
+  codes. It refuses collections nested deeper than 100, counts longer than the data, and a type GEOS has no reader
+  for. A point list is skipped by arithmetic, so the walk costs one step per geometry, not per point.
+- A refused line is skipped with the same warning as any invalid line. A refused binary file fails only itself:
+  `UnreadableGeometryError` is a `ValueError`, which is in `IMPORT_PARSE_ERRORS`.
+- **Found on the way: a curve failed the whole upload.** GEOS 3.13 reads `CIRCULARSTRING` and the other curve types,
+  but shapely 2.1 has no geometry to hold one and raises `NotImplementedError`, which is not a `ValueError`. One such
+  line in a `.wkt` or `.wkb` file escaped the per-line handling and failed every file in the upload. Both readers now
+  refuse a curve, so the line is skipped and a binary file fails only itself.
+
+The same module now reads a WKT line over 1 MiB without GEOS's WKT reader (P95).
+
+**Tests.**
+
+- `test_import_geometry_nesting.py` parses in a child process, so a crash fails the test rather than the test run.
+  It covers a WKT line under and over 1 MiB, a hex WKB line, and a binary WKB file, nested 60,000 deep (240,000 for
+  the long line), and checks that the next line is still read. All four died with SIGSEGV before the fix; shallow nesting read both
+  before and after.
+- `test_geometry_readers.py::NestingTests` checks the limit's edges for both readers and both byte orders. A
+  hypothesis property holds the WKB walk to every collection, line and polygon GEOS writes, ISO and EWKB, 2D and 3D,
+  with an SRID. `test_import_wkt_wkb.py` checks a curve line is skipped, in WKT and hex WKB, and a curve file refused;
+  both failed with `NotImplementedError` before.

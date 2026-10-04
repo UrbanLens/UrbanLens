@@ -6,9 +6,8 @@ import logging
 from typing import IO, TYPE_CHECKING, Any
 
 import shapely.errors
-import shapely.wkb
-import shapely.wkt
 
+from urbanlens.dashboard.services.import_formats.geometry_readers import read_wkb, read_wkt
 from urbanlens.dashboard.services.import_formats.streams import as_stream, is_valid_text, iter_decoded, iter_lines
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
@@ -76,7 +75,7 @@ def iter_wkt_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> It
         if not line or line.startswith("#"):
             continue
         try:
-            geometry = shapely.wkt.loads(line)
+            geometry = read_wkt(line)
         except _GEOMETRY_ERRORS as exc:
             logger.warning("Skipping invalid WKT on line %s: %s", line_number, exc)
             continue
@@ -122,7 +121,7 @@ def iter_wkb_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> It
         # Not hex text - treat the whole file as one raw binary WKB geometry.
         stream.seek(start)
         try:
-            geometry = shapely.wkb.loads(stream.read())
+            geometry = read_wkb(stream.read())
         except _GEOMETRY_ERRORS as exc:
             logger.exception("Failed to import pins from binary WKB: %s", exc)
             raise
@@ -137,7 +136,7 @@ def iter_wkb_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> It
         if not line or line.startswith("#"):
             continue
         try:
-            geometry = shapely.wkb.loads(bytes.fromhex(line))
+            geometry = read_wkb(bytes.fromhex(line))
         except _GEOMETRY_ERRORS as exc:
             logger.warning("Skipping invalid hex WKB on line %s: %s", line_number, exc)
             continue

@@ -989,11 +989,12 @@ excluded (guarded; the guard cannot fire).
 `Trip.objects` as `Any` on 2026-09-29 against the same code the full run typed, so a single-file
 probe proves nothing either way.
 
-## P95 — An import preview reads each file a chunk at a time, but one huge WKT line still costs GEOS's reader about 9x its size
+## P95 — An import preview reads every format a piece at a time; a history file's visits and routes still grow to its end, and an archive's directory is held whole
 
 `id: P95` · `status: open` · `updated: 2026-10-04`
 
-Previously titled "One import preview entry is still read whole at up to 1 GB, and what parsing it
+Previously titled "An import preview reads each file a chunk at a time, but one huge WKT line still costs GEOS's
+reader about 9x its size", before that "One import preview entry is still read whole at up to 1 GB, and what parsing it
 costs is unmeasured", before that "An import preview can hold 2 GB of extracted bytes in a sandbox
 worker that has 3 GB for two jobs", and before that "`ExtractionBudget` cannot bound a single file's
 decompression, and nothing prices what parsing one costs". The 2026-09-18 measurement of the
@@ -1133,7 +1134,7 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 
 **Still open.**
 
-- **One huge element: fixed for KML, GeoJSON and OSM; WKT still costs about 9x (2026-10-04).** A file that is one
+- **One huge element: fixed for KML, GeoJSON, OSM and WKT (2026-10-04).** A file that is one
   element - one placemark, feature, way, row or line - used to be read whole into that element and then parsed.
   The tracemalloc peak for a file that is one element, end to end through `parse_import_preview`
   (`test_import_parse_memory.py::OneLargeElementTests`, each held under 3x):
@@ -1145,7 +1146,7 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
   | GeoJSON feature, 12.6 MB Polygon outline | 146.3 MB | 9.4 MB (0.75x) |
   | OSM way through every node, 11.1 MB | 113.8 MB | 20.9 MB (1.88x) |
   | hex WKB, one 12.6 MB LineString line | not measured | under 3x |
-  | WKT, one 12.6 MB LineString line | 138.4 MB | unchanged |
+  | WKT, one 12.6 MB LineString line | 138.4 MB | under 3x |
 
   - **KML.** `maps._kml_tuples` joins whitespace-separated tokens that meet at a comma. That replaces a `re.sub` that
     built about seven times the text. A line keeps its first coordinate and a ring a flat `array('d')`, though every
@@ -1170,16 +1171,18 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
     Arabic-Indic digits checks this. The centroid sums the same floats in the same order, so it is the same number.
     The parse is 5-10% slower: 16 MiB of vertices and ways read every pin in 6.2 s rather than 5.9 s, and 48 MiB in
     32.4 s rather than 29.2 s.
-  - **WKT, still open.** `shapely.from_wkt` grows RSS by 107.8 MiB for a 12 MiB LineString line, against 13.0 MiB for
-    the same geometry read from WKB. That is GEOS's reader, not our code. At 9x, a WKT line of about 330 MB fills
-    `media-worker`'s 3 GB. Zipped, that fits the 200 MB upload limit. `CELERY_TASK_REJECT_ON_WORKER_LOST` is off (E007),
-    so the killed task is not redelivered. The task in the worker's other slot dies with it, though.
-
-    The fix would be a reader for long lines that turns a strict WKT subset into WKB for `shapely.from_wkb`, falling
-    back to GEOS below a size threshold. The subset is a type, an optional `Z`/`M`/`ZM`, parentheses, and numbers
-    that Python's `float` and C's `strtod` read alike. A long line outside the subset would be skipped. That is a
-    departure from GEOS on rare dialects, and is why this was left rather than rushed.
-    `test_a_wkt_line` is a strict xfail until then.
+  - **WKT.** A line over 1 MiB is read by `geometry_readers._WktToWkb` into WKB, which GEOS reads at about its own
+    size, rather than by GEOS's WKT reader. RSS growth for a 12 MiB LineString line fell from 107.6 MiB to 27.4 MiB
+    (2.3x), and the read from 0.73 s to 0.60 s. Counting the line itself, a WKT line now fills `media-worker`'s 3 GB
+    at about 900 MB, rather than 330 MB; the 1 GB entry cap is just above that. The reader takes a strict subset of
+    WKT and refuses a long line outside it, where GEOS might have read it: `inf` or `nan`, hexadecimal or digit
+    separators, a tag joined to its type (`POINTZ`), an SRID prefix, a geometry mixing coordinate sizes, and an
+    untagged multipoint of bare four-number points, which GEOS cuts to three. Two hypothesis properties in
+    `test_geometry_readers.py` hold it to GEOS: every geometry the subset can write reads the same through both, and
+    anything it accepts from arbitrary WKT-like text, GEOS accepts as the same geometry. Each passed 5,000 examples
+    twice; they found where GEOS's dimensions and multipoint forms differed from the first draft. Dimensions follow
+    GEOS: each collection member has its own, a tagged collection's must match, and an untagged collection is 2D.
+    Shorter lines still go to GEOS, after P287's nesting check.
   - **CSV.** A cell past the csv module's 128 KiB field limit raises `csv.Error`. That was not in
     `IMPORT_PARSE_ERRORS`, so it failed the whole preview as unreadable, every other file in the upload with it. It
     now fails only its own file (`AnOversizedCsvCellFailsOnlyItsFileTests`). A row of very many small cells was not

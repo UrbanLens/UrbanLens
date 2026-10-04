@@ -22,7 +22,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 import geopandas
 from model_bakery import baker
-import pytest
 import shapely
 
 from urbanlens.core.tests.testcase import TestCase
@@ -400,7 +399,6 @@ class OneLargeElementTests(_MemoryCase):
     def test_an_osm_way(self) -> None:
         self.assert_held_near_its_text("route.osm", _osm_one_way())
 
-    @pytest.mark.xfail(strict=True, reason="P95: GEOS's WKT reader costs about 9x the line; not yet read another way")
     def test_a_wkt_line(self) -> None:
         self.assert_held_near_its_text("track.wkt", _wkt_one_line())
 

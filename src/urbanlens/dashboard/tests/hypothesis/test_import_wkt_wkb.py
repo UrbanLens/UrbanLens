@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import struct
 
 import shapely.geometry
 import shapely.wkb
@@ -49,6 +50,12 @@ class WktToDictTests(SimpleTestCase):
         pins = wkt_to_dict(data, self.profile)
 
         self.assertEqual(len(pins), 2)
+
+    def test_a_curve_line_is_skipped_without_aborting_file(self):
+        """Shapely holds no curve, and its reader raises NotImplementedError, which nothing above this caught."""
+        pins = wkt_to_dict(b"CIRCULARSTRING (0 0, 1 1, 2 0)\nPOINT (3 4)\n", self.profile)
+
+        self.assertEqual([(pin["longitude"], pin["latitude"]) for pin in pins], [(3.0, 4.0)])
 
     def test_blank_and_comment_lines_ignored(self):
         data = b"\n# a comment\nPOINT (5 5)\n\n"
@@ -113,6 +120,16 @@ class WkbToDictTests(SimpleTestCase):
         pins = wkb_to_dict(data, self.profile)
 
         self.assertEqual(len(pins), 3)
+
+    def test_a_curve_is_skipped_as_a_line_and_refused_as_a_file(self):
+        curve = b"\x01" + struct.pack("<II6d", 8, 3, 0, 0, 1, 1, 2, 0)
+        point = struct.pack("<BIdd", 1, 1, 3, 4)
+
+        pins = wkb_to_dict(f"{curve.hex()}\n{point.hex()}\n".encode(), self.profile)
+
+        self.assertEqual([(pin["longitude"], pin["latitude"]) for pin in pins], [(3.0, 4.0)])
+        with self.assertRaises(ValueError):
+            wkb_to_dict(curve, self.profile)
 
     def test_invalid_hex_line_skipped(self):
         good = shapely.wkb.dumps(shapely.geometry.Point(1.0, 1.0)).hex()
