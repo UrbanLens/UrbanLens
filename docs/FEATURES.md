@@ -30,7 +30,8 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   building-level cards (CRIS Building USN Point, Building Attributes, Building Characteristics) in
   favour of a "Buildings on this Property" list, and draws only the parcel; a building-scoped
   marker draws only its own footprint, and its wiki is created with that footprint as its boundary.
-  On an ordinary single-building property neither distinction exists, so markers stay neutral and
+  A building with no known footprint draws the outline drawn on its wiki (`scope.outline_applies`,
+  P264). On an ordinary single-building property neither distinction exists, so markers stay neutral and
   both outlines are drawn. Scope is derived from the place and applies to *every* user's marker on
   it; an explicitly chosen type always wins. A badge in the page header names the scope whenever it
   isn't the neutral default. See `docs/NOTES.md`.

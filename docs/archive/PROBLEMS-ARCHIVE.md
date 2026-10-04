@@ -21923,3 +21923,30 @@ removes and restores them; adding an alias keeps them.
 
 The two identical child chips (`.comment-child-chip`, `.visit-child-chip`) became one `.child-chip` component in
 `_components.scss`, which this listing reuses.
+
+## RESOLVED 2026-10-04: A building outline drawn on a wiki whose building place has no footprint was saved but never shown
+
+`id: P264` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by reading, while reviewing P222. `services.places.scope.place_polygon(place, type)` is None both when the type
+does not apply to the place (a campus parcel asked for one building's outline, a building on a multi-building parcel
+asked for the property) and when it applies but no geometry is known (a building place with no footprint: P182's
+point-only OSM relations, fiat and record-only building places, 60 of HRSH's 96 on dev). `BoundaryManager` read any
+None as "does not apply": `_resolve_wiki_chain` returned before the wiki's own drawn row, and `_resolve_pin_head`
+before the pin's wiki. So a member who drew the building outline on such a wiki saw it until the page reloaded, a pin
+there skipped it, and `own_polygons_for_wikis` (a campus wiki's child outlines) left it off the map.
+`test_detail_building_outlines.py`'s drawn-outline test had moved its wiki off the parcel to get past the guard.
+
+**Fix.** `scope.outline_applies(place, type)` says whether the type applies, and `place_polygon` is built on it.
+Both chains return early only when it does not; a building place with no footprint falls through to the drawn row.
+A placed pin still never inherits its parent's outline, so a child pin on such a building takes its wiki's outline,
+not its parent pin's. `official_polygons_by_location_id` leaves out a location whose place has no geometry for a type
+that applies, so `map_pin_share_detection._boundaries_for_pins` (its own copy of the chain) agrees with
+`resolve_for_pin`. One knock-on, not asked for: a lone building place with no parcel (a property outline applies but
+is unknown) now falls back to the wiki's drawn property row and then the circle, as an unplaced location does,
+instead of drawing nothing.
+
+**Tests.** `test_boundary.py::FootprintlessBuildingTests` (the wiki chain, its batched form, a pin, a child pin with a
+parent outline, nothing drawn, a parcel asked for a building outline, share detection) and
+`test_detail_building_outlines.py` (a footprintless child wiki's and child pin's drawn outlines on the campus maps):
+6 failed before the fix, all 68 in both files pass after.
