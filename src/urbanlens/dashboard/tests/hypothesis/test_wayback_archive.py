@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from io import StringIO
 from unittest import mock
 
+from django.core.management import call_command
 from django.test import override_settings
 from django.utils import timezone
 from model_bakery import baker
@@ -17,6 +19,7 @@ from urbanlens.dashboard.services.apis.locations.wayback_machine import is_own_s
 from urbanlens.dashboard.tasks import archive_link_to_wayback
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.wayback_machine.WaybackMachineGateway"
+_SAVED = "https://web.archive.org/web/20240101000000/https://example.com/"
 
 
 class IsOwnSiteUrlTests(SimpleTestCase):
@@ -250,3 +253,82 @@ class OneUrlIsArchivedOnceTests(TestCase):
         self.assertGreater(changed[self.pin.pk], stale)
         self.assertGreater(changed[other_pin.pk], stale)
         self.assertEqual(changed[untouched.pk], stale)
+
+
+class ShareLinksAreNotSentToTheArchiveTests(TestCase):
+    """Save Page Now publishes what it captures, so a URL that works as a password would be published with it."""
+
+    _SHARE_LINKS = (
+        "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz?usp=sharing",
+        "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit",
+        "https://www.google.com/maps/d/viewer?mid=1AbCdEfGhIjKlMnOpQ",
+        "https://maps.app.goo.gl/AbCdEfGhIjKlMn",
+        "https://photos.app.goo.gl/AbCdEfGhIjKlMn",
+        "https://www.dropbox.com/scl/fi/abcdef123456/plans.pdf?rlkey=abc123&dl=0",
+        "https://1drv.ms/f/s!AbCdEfGhIjKlMn",
+        "https://www.icloud.com/sharedalbum/#B0AbCdEfGhIjKlMn",
+        "https://bucket.s3.amazonaws.com/plan.pdf?X-Amz-Credential=AKIA&X-Amz-Signature=abc123",
+        "https://example.com/files/plan.pdf?token=abc123",
+        "https://photos.example.com/share/AbCdEfGhIjKlMnOpQrStUv",
+        "https://example.com/callback#access_token=abc123",
+    )
+
+    def setUp(self) -> None:
+        self.pin = baker.make(Pin, profile=baker.make("auth.User").profile)
+        self.wiki = baker.make("dashboard.Wiki")
+
+    def test_a_share_link_is_not_sent_to_the_archive(self) -> None:
+        for url in self._SHARE_LINKS:
+            for model, owner in ((PinLink, {"pin": self.pin}), (WikiLink, {"wiki": self.wiki})):
+                link = baker.make(model, url=url, wayback_url="", **owner)
+                with (
+                    self.subTest(url=url, model=model.__name__),
+                    mock.patch(f"{_GATEWAY}.get_availability", return_value={"archived_snapshots": {}}) as asked,
+                    mock.patch(f"{_GATEWAY}.save_url", return_value={"archived_url": _SAVED}) as saved,
+                ):
+                    self.assertFalse(archive_link_to_wayback(model.__name__, link.pk))
+                    asked.assert_not_called()
+                    saved.assert_not_called()
+                    link.refresh_from_db()
+                    self.assertEqual(link.wayback_url, "")
+
+    def test_a_link_without_a_secret_is_still_archived(self) -> None:
+        """Anti-vacuity: the refusal is for the secret, not for a query string or a file host's neighbour."""
+        for url in (
+            "https://example.com/article?id=3&page=2",
+            "https://www.google.com/maps/place/Hudson+River+State+Hospital/@41.73,-73.92,17z",
+            "https://notdropbox.com/plans.pdf?dl=0",
+        ):
+            link = baker.make(PinLink, pin=self.pin, url=url, wayback_url="")
+            with (
+                self.subTest(url=url),
+                mock.patch(f"{_GATEWAY}.get_availability", return_value={"archived_snapshots": {}}),
+                mock.patch(f"{_GATEWAY}.save_url", return_value={"archived_url": _SAVED}) as saved,
+            ):
+                self.assertTrue(archive_link_to_wayback("PinLink", link.pk))
+                saved.assert_called_once_with(url)
+
+
+class ListSharedLinkSnapshotsTests(TestCase):
+    """The snapshots already published from share links, for removal requests to the Internet Archive."""
+
+    def test_it_lists_share_link_snapshots_and_nothing_else(self) -> None:
+        pin = baker.make(Pin, profile=baker.make("auth.User").profile)
+        wiki = baker.make("dashboard.Wiki")
+        shared = baker.make(
+            PinLink, pin=pin, url="https://drive.google.com/file/d/1AbC/view", wayback_url=f"{_SAVED}drive"
+        )
+        shared_wiki = baker.make(
+            WikiLink, wiki=wiki, url="https://example.com/plan.pdf?token=abc", wayback_url=f"{_SAVED}token"
+        )
+        baker.make(PinLink, pin=pin, url="https://example.com/article", wayback_url=f"{_SAVED}article")
+        baker.make(PinLink, pin=pin, url="https://www.dropbox.com/s/AbCdEf/plan.pdf", wayback_url="")
+        out = StringIO()
+
+        call_command("list_shared_link_snapshots", stdout=out)
+
+        listed = out.getvalue()
+        self.assertIn(f"PinLink #{shared.pk}\t{_SAVED}drive", listed)
+        self.assertIn(f"WikiLink #{shared_wiki.pk}\t{_SAVED}token", listed)
+        self.assertNotIn("article", listed)
+        self.assertIn("2 snapshot(s)", listed)

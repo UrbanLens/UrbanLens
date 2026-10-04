@@ -22968,3 +22968,37 @@ the availability API returns it to anyone who asks.
 serves a pin link, a wiki link and another account's pin link, and leaves another URL alone; a link whose URL is
 being looked up is left to that task; a failed lookup frees the URL; each pin whose link gained the snapshot is
 marked changed, and no other; a cache outage still archives. All but the fourth failed before their fix.
+
+## RESOLVED 2026-10-04: A share link added to a pin or wiki was handed to Save Page Now, which publishes its capture
+
+`id: P289` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, while fixing P288`
+
+**What was wrong.** Every new `PinLink` and `WikiLink` queues a Wayback archive task. The task excluded only this
+site's own pages. It asked the availability API about any other URL and, finding no snapshot, asked Save Page Now
+to capture it. A capture is public: anyone can find it in the Wayback Machine. A URL that works as a password was
+captured like any other: a Drive or Dropbox share, a Google My Maps map or saved list, an iCloud album, a presigned
+S3 URL, or a URL carrying a token. What its owner shared with a few people, from a private pin, became public. Even
+the availability lookup handed the secret to a third party.
+
+**Fix.** `services/security/capability_urls.is_capability_url` names such a URL. It matches:
+- a share host (Drive, Docs, Photos, Dropbox, OneDrive, SharePoint, iCloud, Box, MEGA, WeTransfer, Discord, goo.gl);
+- a My Maps or saved-list path on any Google domain;
+- a share path on any host (`/s/`, `/share/`, `/invite/`, `/gp/` and the like, followed by a key);
+- a user part;
+- a query or fragment parameter named for a credential, using the same names log redaction uses, plus `pass`,
+  `passcode`, `invite`, `jwt` and `otp`.
+
+The archive task refuses such a URL before either request, beside the own-site check. The rules lean wide: a false
+positive loses only an archive copy of a public page.
+
+Snapshots taken before the fix are already public. `manage.py list_shared_link_snapshots` lists them read-only. A
+removal is requested from the Internet Archive, by snapshot URL. Whether a link on a private pin should be submitted at
+all is a question for Jess: a page only its author knows of, such as an unlisted video, is still captured.
+
+**Tests.**
+- `test_wayback_archive.py::ShareLinksAreNotSentToTheArchiveTests`: twelve kinds of share link, on a pin and on a
+  wiki, never reach either request. All 24 cases failed before the fix. A plain article, a Google Maps place and a
+  look-alike host are still archived.
+- `test_capability_urls.py`: property tests over credential names, in a query and in a fragment, and over share hosts
+  and their subdomains; look-alike hosts are not matched.
+- `ListSharedLinkSnapshotsTests`: the command lists share-link snapshots, and nothing else.

@@ -779,6 +779,7 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
 
     from urbanlens.dashboard.models.links.model import PinLink, WikiLink
     from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway, is_own_site_url
+    from urbanlens.dashboard.services.security.capability_urls import is_capability_url
 
     model = {"PinLink": PinLink, "WikiLink": WikiLink}.get(link_model)
     if model is None:
@@ -789,7 +790,7 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     if link is None or link.wayback_url:
         return False
 
-    if is_own_site_url(link.url):
+    if is_own_site_url(link.url) or is_capability_url(link.url):
         return False
 
     known = _stored_wayback_snapshot(link.url)
