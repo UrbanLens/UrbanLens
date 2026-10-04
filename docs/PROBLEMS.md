@@ -2883,16 +2883,6 @@ While on that host, three reads. None of them is a reason to add threads or to i
 
 Python 3.13's incremental collector is the runtime's own reduction of this pause. It is not part of this check.
 
-## P209 — Opening a group chat's own URL shows "Select a conversation" until its row is clicked
-
-`id: P209` · `status: open` · `updated: 2026-10-03` · `found by: the P36 screenshot pass`
-
-Loading `/dashboard/messages/g/<uuid>/` directly, from a notification link, a bookmark or a reload, shows the messages
-page's empty "Select a conversation" state, not that group's thread. Clicking the group's row in the list opens it. A
-direct-message URL should be checked for the same fault. Reproduce in Playwright: load the URL cold and assert the
-thread is showing.
-
-
 ## P210 — Pin-share notifications stored before 2026-10-02 still name the sender's own pin
 
 `id: P210` · `status: open` · `updated: 2026-10-02` · `found by: P193's share-consent tests, 2026-10-02`

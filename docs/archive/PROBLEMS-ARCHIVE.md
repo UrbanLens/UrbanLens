@@ -21773,3 +21773,20 @@ Tests: `map-annotations.contract.test.ts` (the handler opens the lightbox uncond
 `tests/integration/specs/ui/pin-photo-map.spec.ts`, whose side-panel test asserted the old behaviour and now asserts
 the lightbox is open and on top by `elementFromPoint`. The integration spec was not run here (it needs a provisioned
 e2e environment); it typechecks.
+
+## RESOLVED 2026-10-04: Opening a group chat's own URL showed "Select a conversation"
+
+`id: P209` · `status: fixed` · `resolved: 2026-10-04`
+
+`GroupConversationView` rendered the whole messages page with the group's thread context and
+`active_group_uuid`, but the page's thread pane included a thread only for `active_partner`, a direct message's.
+A group's URL loaded whole (a notification link, a bookmark, a reload) therefore showed "Select a conversation".
+Clicking the row worked because that swaps in `_group_thread.html` over htmx.
+
+The pane now includes `_group_thread.html` for `active_group_uuid`, and the page opens in its thread-open state for a
+group as for a direct message. The messages script initialises whichever thread is on the page, so nothing else
+changed. A direct message's URL was checked and never had the fault.
+
+Verified in Chromium on `development_main`: `/dashboard/messages/g/<uuid>/` loaded cold shows the group's thread
+with its message and the row highlighted, no placeholder, no script errors.
+Test: `test_group_chats.py::GroupEndpointTests::test_the_groups_own_url_opens_its_thread`, red before.

@@ -15,7 +15,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="dm-page page-content{% if active_partner %} dm-page--thread-open{% endif %}" id="dm-page"
+<div class="dm-page page-content{% if active_partner or active_group_uuid %} dm-page--thread-open{% endif %}" id="dm-page"
      data-my-slug="{{ profile.slug }}"
      data-list-url="{% url 'messages.list' %}"
      data-login-identifier="{{ request.user.username }}"
@@ -125,6 +125,8 @@
         <section class="dm-thread-pane" id="dm-thread-pane" aria-live="polite">
             {% if active_partner %}
             {% include "dashboard/partials/messages/_thread.html" %}
+            {% elif active_group_uuid %}
+            {% include "dashboard/partials/messages/_group_thread.html" %}
             {% else %}
             <div class="dm-thread-placeholder">
                 <i class="material-symbols-outlined" aria-hidden="true">chat_bubble</i>

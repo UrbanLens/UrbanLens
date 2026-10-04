@@ -669,6 +669,19 @@ class GroupEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "hi there")
 
+    def test_the_groups_own_url_opens_its_thread(self) -> None:
+        """A notification link, a bookmark or a reload loads the page whole, not as an HTMX swap."""
+        create_group_message(self.member, self.group, "hi there")
+
+        response = self.client.get(self._url("messages.group"))
+
+        self.assertEqual(response.status_code, 200)
+        # The sidebar lists the group and its last message too, so the thread is told apart by its own markup.
+        self.assertContains(response, 'class="dm-thread dm-thread--group" id="dm-thread"')
+        self.assertContains(response, f'data-view-url="{self._url("messages.group")}"')
+        self.assertContains(response, "dm-page--thread-open")
+        self.assertNotContains(response, "Select a conversation")
+
     def test_thread_view_404_for_non_member(self) -> None:
         self.client.force_login(self.outsider.user)
         response = self.client.get(self._url("messages.group"))
