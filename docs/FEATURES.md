@@ -118,7 +118,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   place its point stands on upward (P231). See `docs/NOTES.md`.
 - **One wiki per place** — creating a wiki for a coordinate that already has one, however far apart
   the two coordinates are on the same property, returns the existing page instead of a second one.
-  A viewer who has earned the page reaches it from their own location's URL. The one creation path
+  A viewer who has earned the page reaches it from their own location's URL. On a campus, a
+  coordinate standing on one of its buildings (by footprint, else within 15 m and nearest) is that
+  building's: it opens the building's wiki, or gets a new building wiki nested under the campus's
+  (`services.wiki.building_wikis`, P261), read from places, wikis and the campus's cached building
+  list, never pins. The one creation path
   is `Wiki.objects.get_or_create_for_location` (`models/wiki/queryset.py`), which checks both
   one-to-ones (Location, then its Place) inside a savepoint and re-reads on a raced
   `IntegrityError`; nothing else should create a Wiki.

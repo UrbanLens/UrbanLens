@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.photos import photo_enrichment
 from urbanlens.dashboard.services.places import lineage
-from urbanlens.dashboard.services.wiki import wiki_merge
+from urbanlens.dashboard.services.wiki import building_wikis, wiki_merge
 from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
 from urbanlens.dashboard.services.wiki.wiki_share import WikiShareService
 from urbanlens.dashboard.tasks import ensure_wiki_for_location
@@ -158,6 +158,8 @@ class ContainerFromThePlacesTests(SimpleTestCase):
             patch.object(Wiki, "objects", _Wikis([parcel_wiki, wiki])),
             patch.object(Place.objects, "resolve_for_point", return_value=building),
             patch.object(lineage, "ancestors_of", side_effect=lambda place: [parcel] if place is building else []),
+            # Not a campus: no building of the parcel's decides instead.
+            patch.object(building_wikis, "standing_building", return_value=None),
         ):
             container = wiki_merge._containing_root_wiki_by_geometry(wiki)
 

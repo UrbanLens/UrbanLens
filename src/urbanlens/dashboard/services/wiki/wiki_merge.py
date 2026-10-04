@@ -46,6 +46,11 @@ def _nestable_child_wikis(wiki: Wiki):
     if wiki.place_id is not None:
         return list(Wiki.objects.filter(parent_wiki__isnull=True, place__parent_id=wiki.place_id).exclude(pk=wiki.pk).select_related("location", "place"))
 
+    location_place_id = wiki.location.place_id if wiki.location_id else None
+    if location_place_id is not None and Wiki.objects.filter(place_id=location_place_id).exclude(pk=wiki.pk).exists():
+        # A campus building's wiki stands on the campus's place, whose outline is the campus wiki's to nest by.
+        return []
+
     polygon = wiki_property_polygon(wiki)
     if polygon is None:
         return []
@@ -82,7 +87,9 @@ def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
     """The nearest wiki on the place a placeless wiki's point stands on, or on a place containing that one.
 
     A building's wiki is placeless when its point resolves onto its parcel, which the parcel's wiki already holds,
-    and a building place with no wiki of its own still sits ``PART_OF`` its parcel.
+    and a building place with no wiki of its own still sits ``PART_OF`` its parcel. On a campus, a wiki standing on
+    one of its buildings that has no other wiki is that building's, and nests under the building enclosing it, if
+    that has a wiki, before the campus's (``building_wikis.standing_building``).
 
     Args:
         wiki: The placeless wiki looking for a container.
@@ -92,6 +99,7 @@ def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
     from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.places.lineage import ancestors_of
+    from urbanlens.dashboard.services.wiki.building_wikis import standing_building
 
     location = wiki.location if wiki.location_id else None
     if location is None or location.point is None:
@@ -101,7 +109,11 @@ def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
         return None
     chain = [place, *ancestors_of(place)]
     by_place = {candidate.place_id: candidate for candidate in Wiki.objects.filter(place_id__in=[link.pk for link in chain]).exclude(pk=wiki.pk).select_related("location", "place")}
-    return next((by_place[link.pk] for link in chain if link.pk in by_place), None)
+    container = next((by_place[link.pk] for link in chain if link.pk in by_place), None)
+    if container is None:
+        return None
+    building = standing_building(location, container)
+    return building.parent if building is not None and building.wiki is None else container
 
 
 def absorb_wiki(parent: Wiki, child: Wiki) -> None:

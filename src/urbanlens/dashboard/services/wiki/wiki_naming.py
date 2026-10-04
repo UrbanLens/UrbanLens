@@ -85,8 +85,9 @@ def is_provisional_name(wiki: Wiki, *, outranked_by: NameTier | None = None) -> 
 def wiki_named_by_location(location: Location) -> Wiki | None:
     """The wiki whose name and aliases this Location's public names may feed.
 
-    The place's wiki, when the Location is the wiki's own or carries a root pin. A Location holding
-    only child (building) pins describes one building, so its names stay off the parcel's page.
+    The Location's own wiki, else the place's wiki when the Location carries a root pin. A Location holding
+    only child (building) pins describes one building, so its names stay off the parcel's page, and a campus
+    building's wiki standing elsewhere is named from its own location only.
 
     Args:
         location: The Location whose cached names are being resolved.
@@ -94,12 +95,16 @@ def wiki_named_by_location(location: Location) -> Wiki | None:
     Returns:
         The wiki, or None.
     """
+    from django.core.exceptions import ObjectDoesNotExist
+
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    wiki = Wiki.objects.existing_for_location(location)
-    if wiki is None or wiki.location_id == location.pk:
-        return wiki
-    if location.pins.root_pins().exists():
+    try:
+        return location.wiki
+    except ObjectDoesNotExist:
+        pass
+    wiki = Wiki.objects.holding_place_of(location)
+    if wiki is not None and location.pins.root_pins().exists():
         return wiki
     return None
 
