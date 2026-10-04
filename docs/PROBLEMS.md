@@ -778,6 +778,11 @@ four failed with `Application.DoesNotExist`, and the file alone passed. They now
 `create_first_party_client` over its historical models in `setUp`. Rows made at database setup are the third shape to
 check for.
 
+**Seen once 2026-10-04, not yet explained.** In `test_export_import_completeness.py`,
+`ImportCustomFieldsTests::test_definition_and_pin_value_round_trip` failed in a 22-file run (`Pin.DoesNotExist` for
+the imported "Gatehouse") and passed alone. It exports and imports through a plain directory, so nothing about
+archives is involved.
+
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
 `id: P56` · `status: open` · `updated: 2026-10-02` · `corrects a "zero violation reports" claim measured with the wrong browser API; also corrects its own "overlays are the blocker" claim now that P159 downloads pasted overlay URLs instead of referencing them live - the blocker is P165 (third-party thumbnails) now`
@@ -997,7 +1002,7 @@ excluded (guarded; the guard cannot fire).
 `Trip.objects` as `Any` on 2026-09-29 against the same code the full run typed, so a single-file
 probe proves nothing either way.
 
-## P95 — An import preview reads every format a piece at a time; a history file's visits and routes still grow to its end, and an archive's directory is held whole
+## P95 — An import preview reads every format a piece at a time; a history file's visits and routes still grow to its end
 
 `id: P95` · `status: open` · `updated: 2026-10-04`
 
@@ -1208,9 +1213,15 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
   (20 MB) unzipped is refused. A `.docx` costs 5.2x-5.6x RSS of its unzipped size, the same before and
   after: 27.4 MiB at 5.0 MiB, 55.9 at 10.0, 113.7 at 19.5. A `.txt` costs under 3x: 4.8 MiB at
   1.9 MiB.
-- **An archive's directory is still held whole.** `zipfile` reads every central-directory entry into a
-  `ZipInfo`, and `tarfile` keeps each member's `TarInfo`, however few entries are supported; a 200 MB
-  upload can name millions of entries. Not measured.
+- **An archive's directory is bounded, 2026-10-04.** `zipfile` reads a ZIP's whole central directory into a `ZipInfo`
+  per entry before anything looks at one, and the extraction budget counted only supported entries after that. A
+  94 MB ZIP of a million empty entries cost 586 MiB and 8 s to open, and the 200 MB upload cap allows two to four
+  million. `archive_extractor.open_zip` opens a ZIP through a reader that refuses any read over
+  `MAX_ZIP_DIRECTORY_BYTES` (8 MiB) while `zipfile` opens it. That bounds the directory by its size, which is how
+  `zipfile` reads it; the entry count in the end record is not trusted. The same ZIP is now refused at once, with no
+  RSS growth. The preview's extraction and a backup restore (`import_data._extract_and_validate`, which counted
+  members only after reading them) both open ZIPs this way. A TGZ is refused past `MAX_TAR_MEMBERS` (50,000) members,
+  supported or not: `tarfile` keeps each `TarInfo`, 123 MiB a million (`test_archive_directory_bounds.py`).
 
 ---
 

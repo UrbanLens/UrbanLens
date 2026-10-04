@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import functools
 import logging
 import os
@@ -34,6 +35,11 @@ _GZIP_MAGIC = b"\x1f\x8b"
 _MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 _MAX_SINGLE_FILE_BYTES = 1 * 1024 * 1024 * 1024
 _MAX_FILE_COUNT = 1000
+#: The most central directory a ZIP may have. ``zipfile`` reads it whole into a ``ZipInfo`` per entry, about 600 bytes
+#: each, before any entry is looked at, so this bounds what opening one costs: about 100 MiB at the most.
+MAX_ZIP_DIRECTORY_BYTES = 8 * 1024 * 1024
+#: The most members a TAR may have, supported or not; ``tarfile`` keeps each one's ``TarInfo``.
+MAX_TAR_MEMBERS = 50_000
 
 # Only files with these extensions are considered when extracting from archives.
 # KMZ is included because it is itself a ZIP (containing KML) and may appear inside an outer
@@ -381,6 +387,65 @@ def _sniff_wkb(data: bytes) -> bool:
     return (geom_code & 0xFFFF) % 1000 in _WKB_GEOMETRY_TYPE_CODES
 
 
+class ZipDirectoryTooLargeError(zipfile.BadZipFile):
+    """A ZIP's central directory is over :data:`MAX_ZIP_DIRECTORY_BYTES`."""
+
+
+class _DirectoryReadBound:
+    """A file whose reads are refused past a size while ``zipfile`` opens it.
+
+    ``zipfile`` reads the central directory in one read of the size the end record gives, and parses entries until
+    that many bytes are used, whatever count the record claims. Refusing that read refuses the directory before any
+    of it is held. Every other read it makes while opening is a few bytes, or the end record's last 64 KiB.
+    """
+
+    def __init__(self, raw: IO[bytes], limit: int) -> None:
+        self._raw = raw
+        self.limit: int | None = limit
+
+    def read(self, size: int | None = -1, /) -> bytes:
+        if self.limit is None:
+            return self._raw.read(-1 if size is None else size)
+        if size is not None and size > self.limit:
+            raise ZipDirectoryTooLargeError(f"the central directory is {size} bytes, over {self.limit}")
+        data = self._raw.read(self.limit + 1 if size is None or size < 0 else size)
+        if len(data) > self.limit:
+            raise ZipDirectoryTooLargeError(f"a read while opening the archive was over {self.limit} bytes")
+        return data
+
+    def seek(self, offset: int, whence: int = os.SEEK_SET, /) -> int:
+        return self._raw.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._raw.tell()
+
+    def seekable(self) -> bool:
+        return self._raw.seekable()
+
+    def flush(self) -> None:
+        self._raw.flush()
+
+
+@contextmanager
+def open_zip(source: IO[bytes]) -> Iterator[zipfile.ZipFile]:
+    """``zipfile.ZipFile`` over *source*, refusing a central directory over :data:`MAX_ZIP_DIRECTORY_BYTES` unread.
+
+    Args:
+        source: A seekable binary file holding the archive.
+
+    Yields:
+        The open archive.
+
+    Raises:
+        ZipDirectoryTooLargeError: The directory is over the bound.
+        zipfile.BadZipFile: The archive is not a ZIP.
+    """
+    bounded = _DirectoryReadBound(source, MAX_ZIP_DIRECTORY_BYTES)
+    with zipfile.ZipFile(bounded) as archive:
+        bounded.limit = None
+        yield archive
+
+
 # Internal helpers
 
 
@@ -402,7 +467,7 @@ def _extension(filename: str) -> str:
 def _zip_entries[T](source: IO[bytes], budget: ExtractionBudget, take: _Take[T]) -> Iterator[T]:
     """Hand each supported ZIP entry to *take*, one at a time, drawing on *budget*."""
     try:
-        with zipfile.ZipFile(source) as zf:
+        with open_zip(source) as zf:
             for info in zf.infolist():
                 if info.is_dir():
                     continue
@@ -435,6 +500,9 @@ def _zip_entries[T](source: IO[bytes], budget: ExtractionBudget, take: _Take[T])
                 if taken is not None:
                     yield taken
 
+    except ZipDirectoryTooLargeError as exc:
+        logger.info("ZIP archive refused: %s", exc)
+        raise ValueError("The ZIP archive lists too many files.") from exc
     except zipfile.BadZipFile as exc:
         logger.info("Invalid ZIP archive: %s", exc)
         raise ValueError("Invalid ZIP archive.") from exc
@@ -445,7 +513,9 @@ def _tgz_entries[T](source: IO[bytes], budget: ExtractionBudget, take: _Take[T])
     """Hand each supported member of a GZIP-compressed TAR archive to *take*, one at a time, drawing on *budget*."""
     try:
         with tarfile.open(fileobj=source, mode="r:gz") as tf:
-            for member in tf:
+            for count, member in enumerate(tf, start=1):
+                if count > MAX_TAR_MEMBERS:
+                    raise ValueError("The TGZ archive holds too many files.")
                 # Only regular files - skip dirs, symlinks, hardlinks, devices.
                 if not member.isfile():
                     continue

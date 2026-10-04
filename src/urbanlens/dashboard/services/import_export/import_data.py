@@ -3,20 +3,22 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import json
 import logging
 import math
 import os
 import shutil
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import IO, TYPE_CHECKING, Any, ClassVar
 import zipfile
 
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
+from urbanlens.dashboard.services.import_export.archive_extractor import ZipDirectoryTooLargeError, open_zip
 from urbanlens.dashboard.services.media.storage_errors import IMPORT_STORAGE_WAITS, OBJECT_STORE_ERRORS, STORAGE_ERRORS, storage_retry_countdown
 
 if TYPE_CHECKING:
@@ -517,7 +519,7 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
     os.makedirs(extract_dir, exist_ok=True)
     extract_root = os.path.realpath(extract_dir)
     ceiling = _extraction_size_ceiling(profile)
-    with zipfile.ZipFile(zip_path, "r") as zf:
+    with open(zip_path, "rb") as raw, _opened_zip(raw) as zf:
         members = zf.infolist()
         if len(members) > _MAX_ARCHIVE_MEMBERS:
             raise _ImportValidationError("Archive contains too many files.")
@@ -554,6 +556,16 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
         )
 
     return data_dir
+
+
+@contextmanager
+def _opened_zip(raw: IO[bytes]) -> Iterator[zipfile.ZipFile]:
+    """``archive_extractor.open_zip``, refusing an over-long directory as too many files."""
+    try:
+        with open_zip(raw) as archive:
+            yield archive
+    except ZipDirectoryTooLargeError as exc:
+        raise _ImportValidationError("Archive contains too many files.") from exc
 
 
 def _extract_zip_members_bounded(
