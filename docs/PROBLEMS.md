@@ -832,74 +832,6 @@ name, so the outcome depended on which test imported that module first. Seeding 
 `suppressed_enqueues()` (a `ContextVar`). Worth checking first for the two above: process-global state set by
 one test and read through a name another module imported earlier.
 
-## P53 — The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer
-
-`id: P53` · `status: open, decided` · `updated: 2026-10-02`
-
-**Jess, 2026-10-02: ask once which panels have content, and skip the rest.** One request answers which of the 27
-panels have anything for this pin, and the page requests only those. On most places that removes the 12 plugin panels
-that come back empty. Lanes stay as they are.
-
-Previously titled "One Private Pin page load fires dozens of concurrent panel requests and can
-exhaust the DB connection pool", and before that "one Private Pin page load can exhaust the database
-connection pool".
-
-Found by `tests/integration/` on 2026-08-24, and only visible because the console/network guard
-watches every request a page makes rather than just the document. Opening
-`/dashboard/map/pin/<slug>/` fired every enrichment panel at once, and each one is a Django request
-taking its own database connection (`CONN_MAX_AGE` is 0). On the dev stack, whose Postgres runs the
-default `max_connections = 100`, 14 requests in one hour failed with `FATAL: sorry, too many clients
-already`, spread evenly across seven different panel endpoints - the signature of pool exhaustion
-rather than of any one panel being broken.
-
-**Re-measured 2026-09-06 in Chromium against the running `development_main` stack, and it was worse
-than "roughly thirty": 95 requests in total, 61 of them within the first two seconds, peaking at
-**58 simultaneous**.** Two readers is enough to want 116 connections against a pool of 100.
-
-**Bounded 2026-09-06 with `hx-sync` lanes**, which is htmx's own answer and needs no JavaScript:
-requests naming the same element with `queue all` run one after another. The 27 enrichment panels on
-that page - the external-data panels, the collapsible sections, and the media gallery's 13
-per-provider loaders - are spread across four panel lanes and three media lanes. Measured after: the
-same page peaks at **27**, and reaches an identical settled state (same gallery contents, same
-visible panels, no console errors).
-
-**Two things that were tried first and cannot work, recorded so the next person does not spend the
-same afternoon on them.**
-
-- **`revealed` / `intersect` deferral is impossible here.** Every one of these panels renders with
-  the `hidden` attribute and only unhides once its content arrives, so it never intersects the
-  viewport and would never fire at all. Measured: of 46 load-triggered elements on a real page, 40
-  were hidden and 0 were in the viewport. The five tab panels (Visits, Photos, Article, Notes, Changes) are a
-  different shape, laid out but off-tab, and since 2026-10-02 they wait for `intersect once`. Their earlier
-  switch to `revealed` deferred nothing: htmx counts a hidden element as revealed, so all five still loaded on
-  every view (measured on the dev stack, along with the same five on the wiki page; P191 is the Organize case).
-  Now none of them is requested until its tab opens (`test_hidden_tab_panels_defer.py`).
-- **A `delay:` stagger bounds the rate, not the concurrency.** Starting four panels every 400ms
-  still leaves fifty in flight if each takes five seconds, which on a cold cache they can.
-
-**Still open, and this is now the interesting half: the tail.** Serialising makes the last panel
-arrive later. Measured on a cold cache: the unlaned page had settled by 30 seconds and the laned one
-needed 45. The end state is identical, so nothing is lost - but a first visit to a location nobody
-has opened before now takes noticeably longer to fill in, and that trade was made here without
-anyone deciding it was the right one. Three ways to shorten it, none free:
-
-1. **More lanes.** Six panel lanes instead of four cuts the tail by about a third and raises the
-   peak by two. Cheap, and a straight dial between the two costs.
-2. **Fewer panels.** Twelve of the 27 are plugin panels that 204 on most locations - a page that
-   asked one endpoint "which of these have anything?" could skip the rest entirely.
-3. **Make the panels cheaper.** The tail is a cold-cache figure; a warm one collapses it. Which
-   suggests the external-data cache, not the fan-out, is what a returning user actually feels.
-
-**What holds it.** `test_pin_detail_fanout_budget.py` still ratchets the count, but the count is no
-longer the concurrency and the lane assertion is what matters now: every enrichment panel must name
-a lane, because one added without `hx-sync` re-opens the problem while leaving the count green.
-Verified to gate - 27 unlaned before the change, 0 after.
-
-The ~27 concurrent requests measured then were the page's own content (overview, gallery, boundary, markup and
-detail-pin JSON), the site chrome (notifications, undo stack, safety banner), and the five off-tab panels, which
-no longer load with the page (the new peak is not measured). Laning the rest would delay the page itself, which is
-a different trade.
-
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
 `id: P56` · `status: open` · `updated: 2026-10-02` · `corrects a "zero violation reports" claim measured with the wrong browser API; also corrects its own "overlays are the blocker" claim now that P159 downloads pasted overlay URLs instead of referencing them live - the blocker is P165 (third-party thumbnails) now`
@@ -2889,3 +2821,22 @@ backlog as caches refresh; a one-off command run at deploy; or accepting it, sin
 (`auto_nest.auto_nest_pin`) mirrors every building of the campus into a wiki when its owner has community features on.
 Creating at view time is ruled out: `get_or_create_for_location` says a wiki appearing as a side effect of viewing is a
 bug.
+
+## P277 — A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged
+
+`id: P277` · `status: open` · `updated: 2026-10-04` · `found by: Claude, implementing P53`
+
+P53's fix leaves out the panels already known to be empty. That shortens a returning visit: on an ordinary place,
+49 requests became 22 and the page settled at 2.4 s instead of 4.3 s. A panel with no stored answer still has to
+load, fetch and poll, so the first visit to a place is as slow as before. P53 measured that tail on 2026-09-06 at
+45 s laned against 30 s unlaned, cold. It has not been re-measured cleanly, because dev's panel worker fails every
+first cache write (see P53's archive entry). In a process that has not yet resolved a remote geo boundary, the probe
+also cannot decide CRIS's or Digital Commonwealth's gate, so on the first page that process serves those load.
+
+What is left of P53's options, both still undecided:
+
+- **More lanes.** Six panel lanes instead of four cut the tail by about a third and raised the peak by two (P53's
+  2026-09-06 measurement).
+- **Have the answer stored before the first visit.** Background enrichment (`LocationCacheEnrichmentSource`)
+  already warms some sources per location. Warming the rest when a pin is created would turn the first visit into a
+  returning one.
