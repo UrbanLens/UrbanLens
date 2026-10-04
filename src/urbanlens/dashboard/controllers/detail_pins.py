@@ -8,11 +8,13 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
@@ -278,9 +280,11 @@ class DetailPinJsonView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         include_children = request.GET.get("children") == "1"
         if include_children:
-            detail_pins = pin.descendants().select_related("location", "parent_pin", "parent_pin__location").order_by("pin_type", "name")
+            detail_pins = pin.descendants().select_related("location__wiki", "parent_pin__location__wiki")
         else:
-            detail_pins = pin.detail_pins.select_related("location").order_by("pin_type", "name")
+            detail_pins = pin.detail_pins.select_related("location__wiki")
+        labels = Prefetch("labels", queryset=Label.objects.with_customizations_for(pin.profile_id))
+        detail_pins = detail_pins.prefetch_related(labels).order_by("pin_type", "name")
 
         payload = []
         for dp in detail_pins:

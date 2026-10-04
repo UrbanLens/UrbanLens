@@ -665,7 +665,7 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         from urbanlens.dashboard.services.pins.auto_nest import request_sweep
         from urbanlens.dashboard.services.pins.pin_restructure import importable_building_indexes, property_polygon
 
-        children = list(pin.descendants().select_related("location"))
+        children = list(pin.descendants().select_related("location__wiki"))
         boundary = property_polygon(pin)
         importable = importable_building_indexes(pin, buildings, children, boundary)
         rows = building_rows(buildings, children, boundary_polygon=boundary)

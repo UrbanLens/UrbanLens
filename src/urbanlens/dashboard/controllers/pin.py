@@ -1649,7 +1649,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         def url_for(child: Pin) -> str:
             return reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid})
 
-        children = list(pin.detail_pins.select_related("location"))
+        children = list(pin.detail_pins.select_related("location__wiki"))
         child_rows = child_pin_rows(children, url_for=url_for)
         panel = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
         rows: list[dict] = []
@@ -1665,7 +1665,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     return pending
         if cached is not None:
             buildings = (cached.data or {}).get("buildings") or []
-            descendants = list(pin.descendants().select_related("location"))
+            descendants = list(pin.descendants().select_related("location__wiki"))
             external_rows, unmatched = match_buildings_to_children(buildings, descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
             if any(not row["child_uuid"] for row in external_rows):
                 from urbanlens.dashboard.services.pins.auto_nest import request_sweep
