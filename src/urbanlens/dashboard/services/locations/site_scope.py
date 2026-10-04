@@ -124,8 +124,11 @@ def site_buildings(location: Location) -> list[dict]:
         location: A building's or a site's location.
 
     Returns:
-        The location's own parcel list, else that of the first site it is nested under that has one, else ``[]``.
+        The location's own parcel list, else that of the first site it is nested under that has one, else ``[]``
+        (also for an unsaved location, which has neither).
     """
+    if location.pk is None:
+        return []
     buildings = parcel_buildings(location)
     if buildings:
         return buildings
