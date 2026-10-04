@@ -85,6 +85,11 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
         return None
 
     wiki, created = Wiki.objects.get_or_create_for_location(location)
+    if created:
+        from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
+
+        # From the places already known, so a building's wiki nests without waiting on enrichment.
+        reconcile_wiki_nesting(wiki)
     # Enrichment sends the coordinate to outside providers, so it waits for an owner who allows that.
     consented = Pin.objects.filter(location=location, profile__external_apis_enabled=True).exists()
     if consented and (created or not boundary_generation_ran(location)):
