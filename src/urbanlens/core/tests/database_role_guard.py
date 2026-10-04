@@ -6,6 +6,7 @@ from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
 from django.db import DatabaseError
+import psycopg
 
 
 class _Connection(Protocol):
@@ -29,7 +30,7 @@ def refusal_for_role(connection: _Connection) -> str | None:
         with connection.cursor() as cursor:
             cursor.execute("SELECT current_user, rolcreatedb OR rolsuper FROM pg_roles WHERE rolname = current_user")
             row = cursor.fetchone()
-    except DatabaseError:
+    except (DatabaseError, psycopg.Error):
         return None
     if row is None or row[1]:
         return None

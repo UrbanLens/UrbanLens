@@ -23198,3 +23198,22 @@ field's choices select `location__wiki`.
 pin still shows its wiki's name. The overlay's customized label is checked too. The count tests failed before the fix,
 as did the customization test. The Buildings API payload's count test passed before; it names only the children
 matched to a building, and stays as a guard.
+
+## RESOLVED 2026-10-04: Every `--reuse-db` test run failed its geometry queries with "cache lookup failed for type"
+
+`id: P297` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, after a fourth test database failed on reuse`
+
+**What was wrong.** Since P130 (2026-10-02, `03accd780`), conftest's `django_db_modify_db_settings` asked whether
+the database role may create databases, through `django.db.connection`, before the test database's name was set. In
+the test runner that is the `postgres` database, where PostGIS's `geometry` type is oid 18055. Django's PostGIS backend
+caches type ids per connection alias for the whole process (`DatabaseWrapper._type_infos`). `--create-db` hid it:
+creating the extension in the new database re-registers the types. With `--reuse-db` the extension already exists,
+nothing re-registers, and every geometry query sent oid 18055 to a database where it means nothing. Each targeted rerun
+therefore needed `--create-db`, about four minutes before the first test.
+
+**Fix.** The role check opens a bare psycopg connection from the same parameters, so no Django alias caches anything.
+`refusal_for_role` treats a psycopg error as "could not ask", as it did Django's. A database built by one run and reused
+by the next two passed both reuses, in 3.2 s and 2.5 s; before the fix the first reuse failed every geometry test.
+
+**Tests.** `core/tests/test_database_role_guard.py` still passes. The reuse itself was checked by running, not by a test:
+it needs two pytest processes against one database.

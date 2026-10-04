@@ -24,7 +24,6 @@ from urbanlens.core.tests.database_role_guard import refusal_for_role
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from pytest_django.plugin import DjangoDbBlocker
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +85,23 @@ _configure_hypothesis()
 
 
 @pytest.fixture(scope="session")
-def django_db_modify_db_settings(django_db_modify_db_settings_parallel_suffix: None, django_db_blocker: DjangoDbBlocker) -> None:  # noqa: ARG001
-    """Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE`` (P130)."""
-    from django.db import connection
+def django_db_modify_db_settings(django_db_modify_db_settings_parallel_suffix: None) -> None:  # noqa: ARG001
+    """Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE`` (P130).
 
-    with django_db_blocker.unblock():
-        refusal = refusal_for_role(connection)
+    Asked over a bare driver connection: Django caches PostGIS type ids per connection alias for the whole process, so
+    asking through ``django.db.connection`` kept the configured database's ids for a reused test database, and every
+    geometry query failed with "cache lookup failed for type".
+    """
+    from django.db import connection
+    import psycopg
+
+    try:
+        probe = psycopg.connect(**connection.get_connection_params())
+    except psycopg.Error:
+        refusal = None
+    else:
+        with probe:
+            refusal = refusal_for_role(probe)
     if refusal is not None:
         pytest.exit(refusal, returncode=4)
 
