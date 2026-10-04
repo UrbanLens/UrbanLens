@@ -83,6 +83,23 @@ class TheAsgiEntrypointWarmsTheUrlconfTests(SimpleTestCase):
 
         self.assertEqual(result.stdout.strip().splitlines()[-1], "COLD", f"stderr:\n{result.stderr[-1500:]}")
 
+    def test_importing_asgi_leaves_the_warmed_heap_out_of_full_collections(self) -> None:
+        """P207: a full collection walked the whole boot heap, about 190 ms holding the GIL on every WebSocket."""
+        source = textwrap.dedent(
+            f"""
+            import gc, sys
+            sys.path.insert(0, {str(REPO_ROOT / "src")!r})
+            import urbanlens.UrbanLens.asgi  # noqa: F401
+            print(gc.get_freeze_count())
+            """,
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", source], capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT), check=False
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr[-1500:])
+        self.assertGreater(int(result.stdout.strip().splitlines()[-1]), 100_000)
+
     def test_the_setting_names_a_real_module(self) -> None:
         """`ROOT_URLCONF in sys.modules` is the whole assertion, so a typo in
         the setting would make both tests above vacuous."""

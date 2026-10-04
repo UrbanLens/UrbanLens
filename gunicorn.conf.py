@@ -123,12 +123,13 @@ def _warm_urlconf(worker):
         import django
 
         django.setup()
-        from urbanlens.core.warmup import warm_urlconf
+        from urbanlens.core import warmup
 
         # Logging the counts both uses the values (so neither half can be
         # optimised away or read as a mistake) and puts proof in the boot log
         # that each ran. See warm_urlconf for what the two halves are.
-        patterns, reversible = warm_urlconf()
-        worker.log.info("URLconf warmed: %d root patterns, %d reversible names", patterns, reversible)
+        patterns, reversible = warmup.warm_urlconf()
+        frozen = warmup.freeze_warm_heap()
+        worker.log.info("URLconf warmed: %d root patterns, %d reversible names; %d objects frozen", patterns, reversible, frozen)
     except Exception:
         worker.log.exception("URLconf warm-up failed; continuing without it")

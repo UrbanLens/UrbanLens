@@ -97,6 +97,8 @@ class TheWarmUpSkipsProcessesItCannotWarmTests(SimpleTestCase):
         self.patch = mock.patch("django.setup")
         self.setup = self.patch.start()
         self.addCleanup(self.patch.stop)
+        # A real freeze would keep this test process's whole heap out of every later collection.
+        self.freeze = self.enterContext(mock.patch("urbanlens.core.warmup.freeze_warm_heap", return_value=1))
 
     def test_a_process_without_django_settings_is_left_alone(self) -> None:
         worker = _worker()
@@ -120,3 +122,22 @@ class TheWarmUpSkipsProcessesItCannotWarmTests(SimpleTestCase):
             any("URLconf warmed" in str(call) for call in worker.log.info.call_args_list),
             "the Django app was not warmed",
         )
+
+    def test_the_warmed_heap_is_frozen_after_the_warm_up(self) -> None:
+        """P207: a full collection walked the whole boot heap, about 190 ms holding the GIL for every thread."""
+        worker = _worker()
+        with mock.patch.dict(os.environ, {"DJANGO_SETTINGS_MODULE": "urbanlens.UrbanLens.settings"}):
+            self.config.post_worker_init(worker)
+
+        self.freeze.assert_called_once_with()
+
+    def test_a_failed_warm_up_freezes_nothing(self) -> None:
+        worker = _worker()
+        with (
+            mock.patch.dict(os.environ, {"DJANGO_SETTINGS_MODULE": "urbanlens.UrbanLens.settings"}),
+            mock.patch("urbanlens.core.warmup.warm_urlconf", side_effect=RuntimeError("boom")),
+        ):
+            self.config.post_worker_init(worker)
+
+        self.freeze.assert_not_called()
+        worker.log.exception.assert_called_once()

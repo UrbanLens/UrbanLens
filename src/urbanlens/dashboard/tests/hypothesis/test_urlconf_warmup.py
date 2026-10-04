@@ -101,3 +101,42 @@ class TheEntrypointsUseItTests(SimpleTestCase):
         )
 
         self.assertEqual(_run(hook), "imported=True reversible=True")
+
+
+class FreezingTheWarmHeapTests(SimpleTestCase):
+    """P207: run in a fresh interpreter, since a freeze here would keep the test process's heap out of collections."""
+
+    def test_a_frozen_heap_leaves_a_full_collection_little_to_walk(self) -> None:
+        body = (
+            "import gc\n"
+            "from urbanlens.core.warmup import freeze_warm_heap, warm_urlconf\n"
+            "warm_urlconf()\n"
+            "gc.collect()\n"
+            "before = len(gc.get_objects(2))\n"
+            "frozen = freeze_warm_heap()\n"
+            "print(before, frozen, gc.get_freeze_count(), len(gc.get_objects(2)))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", _PRELUDE.format(src=str(REPO_ROOT / "src")) + body],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=str(REPO_ROOT),
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-2500:])
+        before, frozen, counted, left = (int(value) for value in result.stdout.strip().splitlines()[-1].split())
+
+        self.assertGreater(frozen, 100_000)
+        self.assertEqual(frozen, counted)
+        self.assertLess(left, before // 100)
+
+    def test_a_pytest_process_freezes_nothing(self) -> None:
+        import gc
+
+        from urbanlens.core.warmup import freeze_warm_heap
+
+        before = gc.get_freeze_count()
+
+        self.assertEqual(freeze_warm_heap(), 0)
+        self.assertEqual(gc.get_freeze_count(), before)

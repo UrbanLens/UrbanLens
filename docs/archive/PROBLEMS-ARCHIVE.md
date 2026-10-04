@@ -22545,3 +22545,44 @@ label and a small circle sharing their place, a resend sharing nothing twice, th
 a received place redrawn and sent on keeps its chain. The 4 cases that must share nothing passed before and after: a
 wide circle, the four other shapes, a marker on the sender's pin (shared once, as the pin), and a place the recipient
 pinned.
+
+## RESOLVED 2026-10-04: A worker's warmed heap is frozen, so a full collection no longer walks it (about 190 ms each on chiron)
+
+`id: P207` · `status: fixed` · `resolved: 2026-10-04`
+
+**Measured on chiron, 2026-10-04.** The probe ran in the `development_main` app container as appuser, in a fresh
+interpreter that imported the WSGI application and ran `warm_urlconf()` (35 root patterns, 1,500 reversible names),
+on CPython 3.12.15. That heap tracks about 407,000 objects in generation 2. Five settled full collections took
+175–207 ms each, over three runs. CPU time equalled wall time, so this was the collector's own work, not contention
+on a host at load 4–6 on 8 cores. Serving three requests through the WSGI app first added about 7,000 objects and did
+not change the timing. After `gc.freeze()`, the same collections took under 0.1 ms.
+
+**Fix.** `core/warmup.freeze_warm_heap()` runs one collection, then `gc.freeze()`, and returns
+`gc.get_freeze_count()`. Two places call it, and only after a successful `warm_urlconf()`:
+
+- gunicorn's `post_worker_init`;
+- `asgi.py`'s `_warm_urlconf`, because daphne is one process with `cpus: 1`.
+
+Both boot lines now end "N objects frozen", so a boot that froze nothing shows in the log. In a pytest process
+(`"pytest" in sys.modules`) it freezes nothing, because `test_asgi_disconnect_does_not_wedge_the_loop.py` imports
+`asgi.py` in-process. Celery workers are not frozen.
+
+**This entry's warning about freezing was wrong.** It said a frozen container that later stores a new cyclic object
+could have that object freed while still pointing at it. That cannot happen: a reference from a frozen object counts
+as an external reference, the same as one from a C global, so it keeps its target alive. What a freeze does cost is
+any cycle made only of frozen objects, which is never collected. The collection that runs just before the freeze
+clears the boot garbage, and what survives it lives as long as the process.
+
+Tests:
+- `test_urlconf_warmup.py::FreezingTheWarmHeapTests`, in a fresh interpreter: more than 100,000 objects frozen, and
+  generation 2 left under 1% of its size. A second test checks that a pytest process freezes nothing.
+- `test_asgi_warms_the_urlconf.py`: importing `asgi.py` freezes the heap.
+- `test_shared_gunicorn_config.py`: `post_worker_init` freezes after the warm-up and not after a failed one. Those
+  tests mock the freeze.
+
+6 of these failed before the change. The three reads this entry also asked for (slow-request lines, nginx against
+Django timing, the running worker class) are production reads and were not made.
+
+**Verified on the dev stack.** Synced to `development_main`'s app and app_ws and restarted. The boot logs read "URLconf
+warmed: 35 root patterns, 1500 reversible names; 444739 objects frozen" (app) and "...; 406632 objects frozen"
+(daphne). Both containers report healthy, and the login page answers 200.

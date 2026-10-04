@@ -12,7 +12,7 @@ django_asgi_app = get_asgi_application()
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
 
-from urbanlens.core.warmup import warm_urlconf  # noqa: E402
+from urbanlens.core.warmup import freeze_warm_heap, warm_urlconf  # noqa: E402
 from urbanlens.dashboard.checks import websocket_frame_cap_conflict  # noqa: E402
 from urbanlens.dashboard.routing import websocket_urlpatterns  # noqa: E402
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddlewareStack  # noqa: E402
@@ -39,7 +39,8 @@ def _warm_urlconf() -> None:
     """
     try:
         patterns, reversible = warm_urlconf()
-        logging.getLogger(__name__).info("URLconf warmed: %d root patterns, %d reversible names", patterns, reversible)
+        frozen = freeze_warm_heap()
+        logging.getLogger(__name__).info("URLconf warmed: %d root patterns, %d reversible names; %d objects frozen", patterns, reversible, frozen)
     except Exception:
         # A warm-up is an optimisation; the request path will raise the same
         # error somewhere it can be handled.
