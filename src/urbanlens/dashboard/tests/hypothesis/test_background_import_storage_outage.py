@@ -9,6 +9,7 @@ from production's options and answered in-process by a fake Garage, so nothing l
 from __future__ import annotations
 
 from collections.abc import Callable
+import datetime
 import io
 import json
 from pathlib import Path
@@ -25,8 +26,10 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 from PIL import Image as PILImage
+import requests
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
@@ -44,6 +47,7 @@ from urbanlens.dashboard.services.apis.flickr.public import FlickrAlbumPhoto, Fl
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
 from urbanlens.dashboard.services.apis.photos.google import GooglePhotosGateway, session_items_cache_key
 from urbanlens.dashboard.services.core.celery import RetryNoticeError, TaskProgress, get_task_progress
+from urbanlens.dashboard.services.core.rate_limiter import _RateLimitedSession
 from urbanlens.dashboard.services.import_export import import_data
 from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus
 from urbanlens.dashboard.tests.hypothesis.test_object_store_client_config import (
@@ -351,6 +355,41 @@ class GooglePhotosImportStorageTests(_LibraryImportTests):
 
         with mock.patch.object(GooglePhotosGateway, "download_media_item", download):
             return self.task.apply(args=(self.pin.pk, self.profile.pk, "sess", photo_ids)).get()
+
+    def test_google_unreachable_after_storage_waits_fails_that_photo_and_not_the_import(self) -> None:
+        """A network error reaching Google fails the one photo, as Immich's and Flickr's do.
+
+        Escaping as a raw ``requests`` error, it went to the task's ``OSError`` autoretry, whose limit of 3 counts
+        every retry the task has made, the storage waits included.
+        """
+        GooglePhotosAccount.objects.filter(profile=self.profile).update(
+            token_expiry=timezone.now() + datetime.timedelta(hours=1)
+        )
+        self.garage.down_after = 1
+
+        def recover_on_the_third_wait() -> None:
+            if len(self.retries) == 3:
+                self.garage.down = False
+
+        self.on_retry = recover_on_the_third_wait
+
+        def get(_session: _RateLimitedSession, url: str, **_kwargs: Any) -> requests.Response:
+            photo_id = url.removesuffix("=d").rsplit("/", 1)[-1]
+            if photo_id == "p3":
+                raise requests.ConnectionError("Google is unreachable")
+            response = requests.Response()
+            response.status_code = 200
+            response._content = self.content[photo_id]
+            return response
+
+        with (
+            mock.patch.object(_RateLimitedSession, "get", get),
+            mock.patch.object(requests.Session, "request", side_effect=AssertionError("a request left the process")),
+        ):
+            counts = self.task.apply(args=(self.pin.pk, self.profile.pk, "sess", self.photo_ids)).get()
+
+        self.assertEqual(counts, {"imported": 2, "skipped": 0, "failed": 1, "storage_unavailable": 0})
+        self.assertEqual(self.countdowns, [60, 120, 240])
 
 
 class RetryNoticeProgressTests(TestCase):

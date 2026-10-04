@@ -1073,7 +1073,7 @@ fields, pin/wiki links, the archive importer, and the three external-API seriali
 - **Google Photos** — OAuth import from a connected Google Photos library
 - **Flickr (personal library)** — connect your own Flickr account (OAuth1) in Settings, then search/import your own photos on a pin's Media tab (near this pin, on recorded visit dates, or all)
 - **Flickr (public album import)** — pin and wiki Media: paste the public URL of *any* Flickr user's album/photoset (no OAuth needed) to preview and import up to 100 of its photos, with the same confirm-grid + progress-bar workflow as the other importers
-- All four importers share `services/photos/library_import.PhotoImport`: when media storage refuses a photo, the task is retried later for that photo and the ones after it (1, 2, 4, 8, then 15 minutes apart; a photo stored in between starts the wait over), so nothing already stored is downloaded or stored again. The progress dialog says storage is unavailable while it waits, and the closing toast counts any photos left when storage stayed down
+- All four importers share `services/photos/library_import.PhotoImport`: when media storage refuses a photo, the task is retried later for that photo and the ones after it (1, 2, 4, 8, then 15 minutes apart; a photo stored in between starts the wait over), so nothing already stored is downloaded or stored again. The progress dialog says storage is unavailable while it waits, and the closing toast counts any photos left when storage stayed down. A photo the source could not send (a network error included) counts as failed and the import goes on
 
 ## Account & Auth
 

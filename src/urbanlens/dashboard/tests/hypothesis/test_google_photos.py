@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import partial
 import hashlib
 from unittest import mock
 
@@ -9,6 +11,7 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
+import requests
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
@@ -22,6 +25,7 @@ from urbanlens.dashboard.services.apis.photos.google import (
     PickerSession,
     media_item_web_url,
 )
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.media.storage import lock_profile_uploads
 
 
@@ -143,6 +147,23 @@ class GooglePhotosGatewayTests(TestCase):
         """Guards the constant: raising it back would leave the assertion above
         passing while restoring the defect it exists to prevent."""
         self.assertLessEqual(PREVIEW_MAX_DIMENSION, 1024)
+
+    def test_every_call_reports_an_unreachable_google_as_a_gateway_error(self) -> None:
+        """Not the raw ``requests`` error, which the import tasks' ``OSError`` autoretry would take instead."""
+        for error in (requests.ConnectionError("unreachable"), requests.Timeout("timed out")):
+            session = mock.MagicMock()
+            session.get.side_effect = error
+            session.post.side_effect = error
+            gw = GooglePhotosGateway(account=_account(), session=session)
+            calls: dict[str, Callable[[], object]] = {
+                "create_session": gw.create_session,
+                "get_session": partial(gw.get_session, "s"),
+                "list_session_media_items": partial(gw.list_session_media_items, "s"),
+                "download_media_item": partial(gw.download_media_item, "https://x/a"),
+            }
+            for name, call in calls.items():
+                with self.subTest(call=name, error=type(error).__name__), self.assertRaises(GatewayRequestError):
+                    call()
 
 
 # -- Settings: connect / disconnect -------------------------------------------

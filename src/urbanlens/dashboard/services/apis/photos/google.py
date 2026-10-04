@@ -14,6 +14,10 @@ from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestErr
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import requests
+
     from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
 
 logger = logging.getLogger(__name__)
@@ -180,6 +184,26 @@ class GooglePhotosGateway(Gateway):
             self.account.refresh_token = payload["refresh_token"]
         self.account.save(update_fields=["access_token", "refresh_token", "token_expiry", "updated"])
 
+    def _send(self, send: Callable[..., requests.Response], url: str, *, what: str, **kwargs: Any) -> requests.Response:
+        """Send one authenticated request to Google.
+
+        Args:
+            send: The session method to send it with.
+            url: The URL.
+            what: What the request was for, for the error.
+            **kwargs: Further arguments for *send*.
+
+        Returns:
+            The response, whatever its status.
+
+        Raises:
+            GatewayRequestError: Google could not be reached, or the token could not be refreshed.
+        """
+        try:
+            return send(url, headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT, **kwargs)
+        except OSError as exc:
+            raise GatewayRequestError(f"Could not reach Google Photos to {what}: {exc}") from exc
+
     def create_session(self) -> PickerSession:
         """Create a new picker session for the user to select photos in.
 
@@ -188,7 +212,7 @@ class GooglePhotosGateway(Gateway):
 
         Raises:
             GatewayRequestError: On a network error or non-2xx response."""
-        response = self.session.post(f"{PICKER_API_BASE}/sessions", json={}, headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
+        response = self._send(self.session.post, f"{PICKER_API_BASE}/sessions", what="start a picker session", json={})
         if not response.ok:
             logger.warning("Google Photos create_session failed (%s): %s", response.status_code, response.text[:500])
             raise GatewayRequestError(f"Could not start a Google Photos picker session (status {response.status_code}).")
@@ -206,7 +230,7 @@ class GooglePhotosGateway(Gateway):
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
         """
-        response = self.session.get(f"{PICKER_API_BASE}/sessions/{session_id}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
+        response = self._send(self.session.get, f"{PICKER_API_BASE}/sessions/{session_id}", what="check a picker session")
         if not response.ok:
             logger.warning("Google Photos get_session failed (%s): %s", response.status_code, response.text[:500])
             raise GatewayRequestError(f"Could not check the Google Photos picker session (status {response.status_code}).")
@@ -240,7 +264,7 @@ class GooglePhotosGateway(Gateway):
             params: dict[str, Any] = {"sessionId": session_id, "pageSize": 100}
             if page_token:
                 params["pageToken"] = page_token
-            response = self.session.get(f"{PICKER_API_BASE}/mediaItems", params=params, headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
+            response = self._send(self.session.get, f"{PICKER_API_BASE}/mediaItems", what="list picked items", params=params)
             if not response.ok:
                 logger.warning("Google Photos list_session_media_items failed (%s): %s", response.status_code, response.text[:500])
                 raise GatewayRequestError(f"Could not list picked Google Photos items (status {response.status_code}).")
@@ -277,7 +301,7 @@ class GooglePhotosGateway(Gateway):
             GatewayRequestError: On a network error or non-2xx response.
         """
         suffix = "=d" if original else f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}"
-        response = self.session.get(f"{base_url}{suffix}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
+        response = self._send(self.session.get, f"{base_url}{suffix}", what="download an item")
         if not response.ok:
             raise GatewayRequestError(f"Downloading the Google Photos item failed (status {response.status_code}).")
         return response.content
