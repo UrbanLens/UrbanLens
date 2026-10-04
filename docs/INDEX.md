@@ -211,7 +211,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P207 | open | 2026-10-02 | A worker's gen-2 collection still walks the startup heap, and that pause has never been timed on a real worker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P220 | open | 2026-10-03 | A background photo import stops at the first object store refusal, and the rest of the selection is never imported | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P236 | open | 2026-10-03 | A wiki URL's response time tells whether a Location exists under that slug | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -32,6 +32,32 @@ _BATCH_QUEUES = frozenset({Queue.BULK, Queue.MAINTENANCE, Queue.SANDBOX_BATCH, Q
 _enqueues_suppressed: ContextVar[bool] = ContextVar("enqueues_suppressed", default=False)
 
 
+class RetryNoticeError(Exception):
+    """Why a task waits to run again, worded for whoever polls it, and how far it had got.
+
+    Passed to ``Task.retry`` as ``exc``, which the result backend keeps as the task's RETRY state. Its arguments
+    are its whole state, since the backend rebuilds it from them.
+
+    Attributes:
+        message: What the poller is shown.
+        current: Items completed so far.
+        total: Total items.
+    """
+
+    def __init__(self, message: str, current: int = 0, total: int = 1) -> None:
+        """Store the notice.
+
+        Args:
+            message: What the poller is shown.
+            current: Items completed so far.
+            total: Total items.
+        """
+        super().__init__(message, current, total)
+        self.message = message
+        self.current = current
+        self.total = total
+
+
 @contextmanager
 def suppressed_enqueues() -> Iterator[None]:
     """Drop every :func:`safely_enqueue_task` call made in this context, without touching the outbox.
@@ -90,6 +116,21 @@ class TaskProgress:
         }
 
 
+def _progress(current: int, total: int) -> tuple[int, int, int]:
+    """Bound a progress count and work out its percentage.
+
+    Args:
+        current: Items completed so far.
+        total: Total items; coerced to at least 1 so the percentage is always defined.
+
+    Returns:
+        ``(current, total, percent)``.
+    """
+    safe_total = max(int(total or 1), 1)
+    safe_current = max(0, min(int(current or 0), safe_total))
+    return safe_current, safe_total, int((safe_current / safe_total) * 100)
+
+
 def update_task_progress(task: Any, *, current: int, total: int, message: str = "") -> None:
     """Update Celery task metadata in a consistent progress format.
     Best-effort, and deliberately broad in what it swallows, matching ``channel_broadcast.send_group_message``'s "never raises" contract.
@@ -99,9 +140,7 @@ def update_task_progress(task: Any, *, current: int, total: int, message: str = 
         current: Items completed so far.
         total: Total items; coerced to at least 1 so the percentage is always defined.
         message: Human-readable status line for polling clients."""
-    safe_total = max(int(total or 1), 1)
-    safe_current = max(0, min(int(current or 0), safe_total))
-    percent = int((safe_current / safe_total) * 100)
+    safe_current, safe_total, percent = _progress(current, total)
     try:
         task.update_state(
             state=PROGRESS_STATE,
@@ -117,7 +156,16 @@ def update_task_progress(task: Any, *, current: int, total: int, message: str = 
 
 
 def get_task_progress(task_id: str) -> TaskProgress:
-    """Return normalized task status for polling clients."""
+    """Return normalized task status for polling clients.
+
+    A task waiting to retry reports its :class:`RetryNoticeError`, when it gave one; any other retry reason is for the logs.
+
+    Args:
+        task_id: The task polled.
+
+    Returns:
+        Its status.
+    """
     result = AsyncResult(task_id, app=current_app)
     state = result.state
     info = result.info if isinstance(result.info, dict) else {}
@@ -127,6 +175,10 @@ def get_task_progress(task_id: str) -> TaskProgress:
     if state in {"FAILURE", "REVOKED"}:
         error = str(result.result or result.info or "Task failed")
         return TaskProgress(task_id=task_id, state=state, error=error)
+    if isinstance(result.info, RetryNoticeError):
+        notice = result.info
+        current, total, percent = _progress(notice.current, notice.total)
+        return TaskProgress(task_id=task_id, state=state, current=current, total=total, percent=percent, message=notice.message)
 
     current = int(info.get("current") or 0)
     total = int(info.get("total") or 1)

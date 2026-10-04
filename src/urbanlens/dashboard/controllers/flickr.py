@@ -26,6 +26,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.core.request_upstream import Outcome
 from urbanlens.dashboard.services.geo.distance import haversine_meters
+from urbanlens.dashboard.services.photos.library_import import ImportCounts
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
 from urbanlens.dashboard.services.security.throttle import account_or_address
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -272,9 +273,7 @@ class PinFlickrImportProgressView(LoginRequiredMixin, View):
         context = {"pin": pin, "task_id": task_id, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
         response = render(request, _PROGRESS_PARTIAL, context)
         if progress.state == "SUCCESS":
-            result = progress.result or {}
-            summary = f"Imported {result.get('imported', 0)} photo(s)" + (f", skipped {result.get('skipped')} duplicate(s)" if result.get("skipped") else "") + "."
-            response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": summary}, "refreshGallery": {}})
+            response["HX-Trigger"] = json.dumps({"showToast": ImportCounts.from_dict(progress.result).toast(), "refreshGallery": {}})
         elif progress.state in {"FAILURE", "REVOKED"}:
             response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": progress.error or "Import failed."}})
         return response
@@ -378,9 +377,7 @@ def _album_progress_response(request: HttpRequest, *, task_id: str, progress_url
     context = {"progress_url": progress_url, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
     response = render(request, _ALBUM_PROGRESS_PARTIAL, context)
     if progress.state == "SUCCESS":
-        result = progress.result or {}
-        summary = f"Imported {result.get('imported', 0)} photo(s)" + (f", skipped {result.get('skipped')} duplicate(s)" if result.get("skipped") else "") + "."
-        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": summary}, "refreshGallery": {}})
+        response["HX-Trigger"] = json.dumps({"showToast": ImportCounts.from_dict(progress.result).toast(), "refreshGallery": {}})
     elif progress.state in {"FAILURE", "REVOKED"}:
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": progress.error or "Import failed."}})
     return response

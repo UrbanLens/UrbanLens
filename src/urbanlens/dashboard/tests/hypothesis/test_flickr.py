@@ -363,7 +363,7 @@ class ImportFlickrPhotosTaskTests(TestCase):
 
     def test_imports_a_new_photo_and_logs_a_visit(self) -> None:
         counts = self._run(["42"], {"42": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
-        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0, "storage_unavailable": 0})
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertEqual(image.source_url, self.account.photo_web_url("42"))
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.PHOTO).exists())
@@ -375,13 +375,13 @@ class ImportFlickrPhotosTaskTests(TestCase):
 
         counts = self._run(["dup"], {"dup": (content, "photo.jpg", "image/jpeg")})
 
-        self.assertEqual(counts, {"imported": 0, "skipped": 1, "failed": 0})
+        self.assertEqual(counts, {"imported": 0, "skipped": 1, "failed": 0, "storage_unavailable": 0})
 
     def test_missing_account_is_a_noop(self) -> None:
         self.account.delete()
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_flickr_photos(self.pin.pk, self.profile.pk, ["42"])
-        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0, "storage_unavailable": 0})
 
     def test_upload_holds_the_profile_upload_reservation(self) -> None:
         """Regression test: this bulk-import path used to check-then-create with no locking at all."""

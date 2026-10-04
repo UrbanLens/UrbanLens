@@ -34,7 +34,7 @@ from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's aut
     run_assistant_turn_task,
 )
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
-from urbanlens.dashboard.services.core.celery import update_task_progress
+from urbanlens.dashboard.services.core.celery import RetryNoticeError, update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, beat_lock, release_lock
 from urbanlens.dashboard.services.media.storage_errors import OBJECT_STORE_ERRORS, STORAGE_ERRORS, is_transient
 from urbanlens.dashboard.services.pins import confirmed_import, import_preview
@@ -446,14 +446,36 @@ def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) ->
     logger.info("Cleaned up export artifacts for job %s", job_id or export_dir)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_BATCH_QUEUE)
-def run_user_data_import(self, user_id: int, zip_path: str, job_id: str) -> bool:
-    """Parse a UrbanLens export ZIP and import data for the user."""
-    from urbanlens.dashboard.services.import_export.import_data import run_import
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=SANDBOX_BATCH_QUEUE)
+def run_user_data_import(self, user_id: int, zip_path: str, job_id: str, resume: dict[str, Any] | None = None, storage_waits: int = 0) -> bool:
+    """Parse a UrbanLens export ZIP and import data for the user.
+
+    Runs again, later, for files storage refused (``import_data.ImportWaitingForStorageError``).
+
+    Args:
+        user_id: PK of the importing user.
+        zip_path: The uploaded archive.
+        job_id: The import job whose status the page polls.
+        resume: The tally and deferred files of the runs before a storage wait.
+        storage_waits: Storage waits in a row so far.
+
+    Returns:
+        Whether the import succeeded, even partly.
+    """
+    from urbanlens.dashboard.services.import_export.import_data import ImportWaitingForStorageError, run_import
 
     logger.info("Starting data import for user %s, job %s", user_id, job_id)
     update_task_progress(self, current=0, total=1, message="Preparing import...")
-    success = run_import(user_id, zip_path, job_id)
+    try:
+        success = run_import(user_id, zip_path, job_id, resume=resume, storage_waits=storage_waits)
+    except ImportWaitingForStorageError as waiting:
+        logger.info("Data import for user %s, job %s waits %ss for storage", user_id, job_id, waiting.countdown)
+        raise self.retry(
+            args=(user_id, zip_path, job_id),
+            kwargs={"resume": waiting.resume, "storage_waits": waiting.storage_waits},
+            countdown=waiting.countdown,
+            exc=RetryNoticeError(waiting.message),
+        ) from waiting
     if success:
         update_task_progress(self, current=1, total=1, message="Import complete")
         logger.info("Finished data import for user %s, job %s", user_id, job_id)
@@ -2546,100 +2568,46 @@ def _resolve_image_location(image: Image, coords: tuple[float, float] | None) ->
     return None
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
-def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str], visit_id_by_asset: dict[str, int] | None = None) -> dict[str, int]:
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=Queue.BULK)
+def import_immich_photos(
+    self,
+    pin_id: int,
+    profile_id: int,
+    asset_ids: list[str],
+    visit_id_by_asset: dict[str, int] | None = None,
+    done: dict[str, int] | None = None,
+    storage_waits: int = 0,
+) -> dict[str, int]:
     """Download selected Immich assets and import them onto a pin.
 
-    An asset already imported to this pin, or one that would exceed the uploader's storage quota, is
-    skipped rather than failing the whole batch.
+    An asset already imported to this pin, or one that would exceed the uploader's storage quota, is skipped rather
+    than failing the whole batch. One that storage refuses is retried later with the assets after it
+    (``library_import.PhotoImport``).
 
     Args:
         pin_id: PK of the pin to import onto.
         profile_id: PK of the requesting profile (also the pin owner).
-        asset_ids: Immich asset ids selected in the picker dialog.
+        asset_ids: Immich asset ids selected in the picker dialog, or those left after a storage wait.
         visit_id_by_asset: When importing on behalf of an accepted ``PinSuggestion`` (see
-        ``services.pins.pin_suggestions.accept_pin_suggestion``), maps an asset...
+            ``services.pins.pin_suggestions.accept_pin_suggestion``), maps an asset id to the visit its photo joins.
+        done: Counts from the runs before a storage wait.
+        storage_waits: Storage waits in a row so far.
 
     Returns:
-        Counts of imported/skipped/failed assets, surfaced to the polling UI.
+        Counts of imported/skipped/failed/storage_unavailable assets, surfaced to the polling UI.
     """
-    import io
-
-    from django.core.files.base import ContentFile
-
-    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.immich.model import ImmichAccount
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.visits.model import PinVisit
-    from urbanlens.dashboard.services.apis.immich import ImmichGateway
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-    from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
-    from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
+    from urbanlens.dashboard.services.photos.library_import import ImmichPhotoImport, ImportCounts
 
-    counts = {"imported": 0, "skipped": 0, "failed": 0}
     pin = Pin.objects.select_related("location", "profile").filter(pk=pin_id).first()
     profile = Profile.objects.filter(pk=profile_id).first()
     account = ImmichAccount.objects.get_for_profile(profile) if profile is not None else None
     if pin is None or profile is None or account is None:
         update_task_progress(self, current=0, total=1, message="Import failed: pin, profile, or Immich connection no longer exists.")
-        return counts
-
-    gateway = ImmichGateway(account=account)
-    dedupe_filter = {"pin": pin, "profile": profile}
-    total = len(asset_ids)
-    for index, asset_id in enumerate(asset_ids):
-        update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
-        try:
-            content, filename, _content_type = gateway.get_asset_original(asset_id)
-        except GatewayRequestError:
-            logger.warning("import_immich_photos: failed to download asset %s for pin %s", asset_id, pin_id, exc_info=True)
-            counts["failed"] += 1
-            continue
-
-        checksum = compute_checksum(io.BytesIO(content))
-        try:
-            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
-                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
-                    counts["skipped"] += 1
-                    continue
-                reservation.reserve(len(content))
-
-                target_visit_id = (visit_id_by_asset or {}).get(asset_id)
-                target_visit = PinVisit.objects.filter(pk=target_visit_id, pin=pin).first() if target_visit_id else None
-
-                image = Image.objects.create(
-                    image=ContentFile(content, name=filename),
-                    pin=pin,
-                    location=pin.location,
-                    profile=profile,
-                    source=ImageSource.IMMICH,
-                    checksum=checksum,
-                    file_size=len(content),
-                    source_url=account.asset_web_url(asset_id),
-                    visit=target_visit,
-                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
-                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
-                    # strips and clears it.
-                    pending_scan=True,
-                )
-        except UploadRefusedError:
-            counts["failed"] += 1
-            continue
-        if target_visit is None:
-            log_visit_on_pin(profile, image, pin)
-        safely_enqueue_task(process_image_upload, image.pk)
-        counts["imported"] += 1
-
-    summary = f"Imported {counts['imported']}"
-    if counts["skipped"]:
-        summary += f", skipped {counts['skipped']} duplicate(s)"
-    if counts["failed"]:
-        summary += f", {counts['failed']} failed"
-    update_task_progress(self, current=total, total=total, message=summary + ".")
-    return counts
+        return ImportCounts.from_dict(done).as_dict()
+    return ImmichPhotoImport(self, profile, pin, account, visit_id_by_asset, done=done, storage_waits=storage_waits).run(asset_ids)
 
 
 #: Coordinate precision the library sweep groups assets by, about 11m. Chosen to
@@ -3147,93 +3115,34 @@ def resolve_deferred_pin_locations(
     return {"created": created_count, "exists": exists_count, "skipped": skipped_count}
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
-def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str]) -> dict[str, int]:
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=Queue.BULK)
+def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str], done: dict[str, int] | None = None, storage_waits: int = 0) -> dict[str, int]:
     """Download selected Flickr photos and import them onto a pin.
 
-    Same five-step pipeline as ``import_immich_photos`` (checksum dedupe, storage-quota check, ``Image``
-    creation, ``log_visit_on_pin``, ``process_image_upload`` enqueue) - only the download source
-    differs.
+    The same pipeline as ``import_immich_photos`` (``library_import.PhotoImport``); only the download source differs.
 
     Args:
         pin_id: PK of the pin to import onto.
         profile_id: PK of the requesting profile (also the pin owner).
-        photo_ids: Flickr photo ids selected in the picker dialog.
+        photo_ids: Flickr photo ids selected in the picker dialog, or those left after a storage wait.
+        done: Counts from the runs before a storage wait.
+        storage_waits: Storage waits in a row so far.
 
     Returns:
-        Counts of imported/skipped/failed photos, surfaced to the polling UI.
+        Counts of imported/skipped/failed/storage_unavailable photos, surfaced to the polling UI.
     """
-    import io
-
-    from django.core.files.base import ContentFile
-
     from urbanlens.dashboard.models.flickr.model import FlickrAccount
-    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-    from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
-    from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
+    from urbanlens.dashboard.services.photos.library_import import FlickrPhotoImport, ImportCounts
 
-    counts = {"imported": 0, "skipped": 0, "failed": 0}
     pin = Pin.objects.select_related("location", "profile").filter(pk=pin_id).first()
     profile = Profile.objects.filter(pk=profile_id).first()
     account = FlickrAccount.objects.get_for_profile(profile) if profile is not None else None
     if pin is None or profile is None or account is None:
         update_task_progress(self, current=0, total=1, message="Import failed: pin, profile, or Flickr connection no longer exists.")
-        return counts
-
-    gateway = FlickrGateway(account=account)
-    dedupe_filter = {"pin": pin, "profile": profile}
-    total = len(photo_ids)
-    for index, photo_id in enumerate(photo_ids):
-        update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
-        try:
-            content, filename, _content_type = gateway.get_original(photo_id)
-        except GatewayRequestError:
-            logger.warning("import_flickr_photos: failed to download photo %s for pin %s", photo_id, pin_id, exc_info=True)
-            counts["failed"] += 1
-            continue
-
-        checksum = compute_checksum(io.BytesIO(content))
-        try:
-            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
-                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
-                    counts["skipped"] += 1
-                    continue
-                reservation.reserve(len(content))
-
-                image = Image.objects.create(
-                    image=ContentFile(content, name=filename),
-                    pin=pin,
-                    location=pin.location,
-                    profile=profile,
-                    source=ImageSource.FLICKR,
-                    checksum=checksum,
-                    file_size=len(content),
-                    source_url=account.photo_web_url(photo_id),
-                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
-                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
-                    # strips and clears it.
-                    pending_scan=True,
-                )
-        except UploadRefusedError:
-            counts["failed"] += 1
-            continue
-        log_visit_on_pin(profile, image, pin)
-        safely_enqueue_task(process_image_upload, image.pk)
-        counts["imported"] += 1
-
-    summary = f"Imported {counts['imported']}"
-    if counts["skipped"]:
-        summary += f", skipped {counts['skipped']} duplicate(s)"
-    if counts["failed"]:
-        summary += f", {counts['failed']} failed"
-    update_task_progress(self, current=total, total=total, message=summary + ".")
-    return counts
+        return ImportCounts.from_dict(done).as_dict()
+    return FlickrPhotoImport(self, profile, pin, account, done=done, storage_waits=storage_waits).run(photo_ids)
 
 
 @shared_task(bind=True, queue=Queue.INTERACTIVE)
@@ -3255,39 +3164,43 @@ def import_calendar_events(self, profile_id: int, selections: list[dict[str, Any
     return run_calendar_import(profile_id, selections, report_progress=report)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
-def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_id: int, album_url: str, photo_ids: list[str]) -> dict[str, int]:
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=Queue.BULK)
+def import_flickr_album_photos(
+    self,
+    target_kind: str,
+    target_id: int,
+    profile_id: int,
+    album_url: str,
+    photo_ids: list[str],
+    done: dict[str, int] | None = None,
+    storage_waits: int = 0,
+) -> dict[str, int]:
     """Download selected photos from a *public* Flickr album/photoset onto a pin or wiki.
 
-    Unlike ``import_flickr_photos`` (one user's own OAuth-connected library), this imports from any
-    public album given its URL - no OAuth token involved, just the site's Flickr API key.
+    Unlike ``import_flickr_photos`` (one user's own OAuth-connected library), this imports from any public album
+    given its URL - no OAuth token involved, just the site's Flickr API key.
 
     Args:
         target_kind: ``"pin"`` or ``"wiki"`` - which FK to set on the created ``Image`` rows.
         target_id: PK of the target pin or wiki.
         profile_id: PK of the requesting profile.
-        album_url: The Flickr album URL as submitted in the lookup step - re-resolved here (rather than
-        trusting a client-supplied photo list) so the...
-        photo_ids: Flickr photo ids selected in the preview grid.
+        album_url: The Flickr album URL as submitted in the lookup step - re-resolved here, on every run, rather than
+            trusting a client-supplied photo list.
+        photo_ids: Flickr photo ids selected in the preview grid, or those left after a storage wait.
+        done: Counts from the runs before a storage wait.
+        storage_waits: Storage waits in a row so far.
 
     Returns:
-        Counts of imported/skipped/failed photos, surfaced to the polling UI.
+        Counts of imported/skipped/failed/storage_unavailable photos, surfaced to the polling UI.
     """
-    import io
-
-    from django.core.files.base import ContentFile
-
-    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
-    from urbanlens.dashboard.services.apis.flickr.public import FlickrPublicGateway, photo_web_url
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.apis.flickr.public import FlickrPublicGateway
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-    from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
+    from urbanlens.dashboard.services.photos.library_import import FlickrAlbumPhotoImport, ImportCounts
 
-    counts = {"imported": 0, "skipped": 0, "failed": 0}
+    counts = ImportCounts.from_dict(done).as_dict()
     profile = Profile.objects.filter(pk=profile_id).first()
     pin = Pin.objects.select_related("location").filter(pk=target_id).first() if target_kind == "pin" else None
     wiki = Wiki.objects.select_related("location").filter(pk=target_id).first() if target_kind == "wiki" else None
@@ -3296,166 +3209,57 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
         update_task_progress(self, current=0, total=1, message="Import failed: the pin, wiki, or your profile no longer exists.")
         return counts
 
+    gateway = FlickrPublicGateway()
     try:
-        album = FlickrPublicGateway().get_album(album_url)
+        album = gateway.get_album(album_url)
     except (ValueError, GatewayRequestError) as exc:
         update_task_progress(self, current=0, total=1, message=f"Import failed: {exc}")
         return counts
 
-    photos_by_id = {photo.id: photo for photo in album.photos}
-    selected = [photos_by_id[photo_id] for photo_id in photo_ids if photo_id in photos_by_id]
-    dedupe_filter = {"profile": profile, **({"pin": pin} if pin is not None else {"wiki": wiki})}
-    total = len(selected)
-    for index, photo in enumerate(selected):
-        update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
-        try:
-            content, filename, _content_type = FlickrPublicGateway().download_photo(photo)
-        except GatewayRequestError:
-            logger.warning("import_flickr_album_photos: failed to download photo %s from album %s", photo.id, album_url, exc_info=True)
-            counts["failed"] += 1
-            continue
-
-        checksum = compute_checksum(io.BytesIO(content))
-        try:
-            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
-                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
-                    counts["skipped"] += 1
-                    continue
-                reservation.reserve(len(content))
-
-                image = Image.objects.create(
-                    image=ContentFile(content, name=filename),
-                    pin=pin,
-                    wiki=wiki,
-                    location=location,
-                    profile=profile,
-                    source=ImageSource.FLICKR,
-                    caption=photo.title or "",
-                    author=photo.author,
-                    source_url=photo_web_url(album.owner_nsid, photo.id),
-                    checksum=checksum,
-                    file_size=len(content),
-                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
-                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
-                    # strips and clears it.
-                    pending_scan=True,
-                )
-        except UploadRefusedError:
-            counts["failed"] += 1
-            continue
-        safely_enqueue_task(process_image_upload, image.pk)
-        counts["imported"] += 1
-
-    summary = f"Imported {counts['imported']}"
-    if counts["skipped"]:
-        summary += f", skipped {counts['skipped']} duplicate(s)"
-    if counts["failed"]:
-        summary += f", {counts['failed']} failed"
-    update_task_progress(self, current=total, total=total, message=summary + ".")
-    return counts
+    listed = {photo.id for photo in album.photos}
+    selected = [photo_id for photo_id in photo_ids if photo_id in listed]
+    importer = FlickrAlbumPhotoImport(self, profile, pin=pin, wiki=wiki, location=location, album_url=album_url, album=album, gateway=gateway, done=done, storage_waits=storage_waits)
+    return importer.run(selected)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
-def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, media_item_ids: list[str]) -> dict[str, int]:
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=Queue.BULK)
+def import_google_photos(
+    self,
+    pin_id: int,
+    profile_id: int,
+    session_id: str,
+    media_item_ids: list[str],
+    done: dict[str, int] | None = None,
+    storage_waits: int = 0,
+) -> dict[str, int]:
     """Download selected Google Photos picker items and import them onto a pin.
 
-    Same five-step pipeline as ``import_immich_photos``/``import_flickr_photos`` (checksum dedupe,
-    storage-quota check, ``Image`` creation, ``log_visit_on_pin``, ``process_image_upload`` enqueue).
+    The same pipeline as ``import_immich_photos``/``import_flickr_photos`` (``library_import.PhotoImport``).
 
     Args:
         pin_id: PK of the pin to import onto.
         profile_id: PK of the requesting profile (also the pin owner).
         session_id: The picker session the items were selected in.
-        media_item_ids: Picker API media item ids selected in the picker grid.
+        media_item_ids: Picker API media item ids selected in the picker grid, or those left after a storage wait.
+        done: Counts from the runs before a storage wait.
+        storage_waits: Storage waits in a row so far.
 
     Returns:
-        Counts of imported/skipped/failed items, surfaced to the polling UI.
+        Counts of imported/skipped/failed/storage_unavailable items, surfaced to the polling UI.
     """
-    import io
-
-    from django.core.cache import cache
-    from django.core.files.base import ContentFile
-
     from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
-    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.apis.photos.google import GooglePhotosGateway, media_item_web_url, session_items_cache_key
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-    from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
-    from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
+    from urbanlens.dashboard.services.photos.library_import import GooglePhotosImport, ImportCounts
 
-    counts = {"imported": 0, "skipped": 0, "failed": 0}
     pin = Pin.objects.select_related("location", "profile").filter(pk=pin_id).first()
     profile = Profile.objects.filter(pk=profile_id).first()
     account = GooglePhotosAccount.objects.get_for_profile(profile) if profile is not None else None
     if pin is None or profile is None or account is None:
         update_task_progress(self, current=0, total=1, message="Import failed: pin, profile, or Google Photos connection no longer exists.")
-        return counts
-
-    gateway = GooglePhotosGateway(account=account)
-    items = cache.get(session_items_cache_key(session_id)) or {}
-    missing_ids = [item_id for item_id in media_item_ids if item_id not in items]
-    if missing_ids:
-        try:
-            for item in gateway.list_session_media_items(session_id):
-                items[item.id] = {"base_url": item.base_url, "mime_type": item.mime_type, "filename": item.filename}
-        except GatewayRequestError:
-            logger.warning("import_google_photos: could not re-list session %s to resolve %d missing item(s)", session_id, len(missing_ids), exc_info=True)
-
-    dedupe_filter = {"pin": pin, "profile": profile}
-    total = len(media_item_ids)
-    for index, item_id in enumerate(media_item_ids):
-        update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
-        cached_item = items.get(item_id)
-        if cached_item is None:
-            counts["failed"] += 1
-            continue
-        try:
-            content = gateway.download_media_item(cached_item["base_url"], original=True)
-        except GatewayRequestError:
-            logger.warning("import_google_photos: failed to download item %s for pin %s", item_id, pin_id, exc_info=True)
-            counts["failed"] += 1
-            continue
-
-        checksum = compute_checksum(io.BytesIO(content))
-        try:
-            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
-                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
-                    counts["skipped"] += 1
-                    continue
-                reservation.reserve(len(content))
-
-                image = Image.objects.create(
-                    image=ContentFile(content, name=cached_item.get("filename") or f"{item_id}.jpg"),
-                    pin=pin,
-                    location=pin.location,
-                    profile=profile,
-                    source=ImageSource.GOOGLE_PHOTOS,
-                    checksum=checksum,
-                    file_size=len(content),
-                    source_url=media_item_web_url(item_id),
-                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
-                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
-                    # strips and clears it.
-                    pending_scan=True,
-                )
-        except UploadRefusedError:
-            counts["failed"] += 1
-            continue
-        log_visit_on_pin(profile, image, pin)
-        safely_enqueue_task(process_image_upload, image.pk)
-        counts["imported"] += 1
-
-    summary = f"Imported {counts['imported']}"
-    if counts["skipped"]:
-        summary += f", skipped {counts['skipped']} duplicate(s)"
-    if counts["failed"]:
-        summary += f", {counts['failed']} failed"
-    update_task_progress(self, current=total, total=total, message=summary + ".")
-    return counts
+        return ImportCounts.from_dict(done).as_dict()
+    importer = GooglePhotosImport(self, profile, pin, account, session_id, media_item_ids, done=done, storage_waits=storage_waits)
+    return importer.run(media_item_ids)
 
 
 #: One database backup at a time, whichever entry point started it: the admin button, the

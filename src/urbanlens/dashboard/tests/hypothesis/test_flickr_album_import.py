@@ -353,7 +353,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
 
-        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0, "storage_unavailable": 0})
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertEqual(image.source, ImageSource.FLICKR)
         self.assertEqual(image.author, "somebody")
@@ -371,7 +371,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         ):
             counts = tasks.import_flickr_album_photos("wiki", self.wiki.pk, self.profile.pk, self.album_url, ["1"])
 
-        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0, "storage_unavailable": 0})
         image = Image.objects.get(wiki=self.wiki, profile=self.profile)
         self.assertIsNone(image.pin_id)
 
@@ -405,7 +405,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
-        self.assertEqual(counts, {"imported": 0, "skipped": 1, "failed": 0})
+        self.assertEqual(counts, {"imported": 0, "skipped": 1, "failed": 0, "storage_unavailable": 0})
 
     def test_download_failure_is_counted_as_failed(self) -> None:
         with (
@@ -414,7 +414,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
-        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 1})
+        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 1, "storage_unavailable": 0})
 
     def test_quota_exceeded_is_counted_as_failed(self) -> None:
         with (
@@ -426,12 +426,12 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
-        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 1})
+        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 1, "storage_unavailable": 0})
 
     def test_missing_pin_returns_empty_counts_without_crashing(self) -> None:
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_flickr_album_photos("pin", 0, self.profile.pk, self.album_url, ["1"])
-        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0, "storage_unavailable": 0})
 
     def test_upload_holds_the_profile_upload_reservation(self) -> None:
         """Regression test: this bulk-import path used to check-then-create with no locking at all."""
@@ -457,4 +457,4 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             counts = tasks.import_flickr_album_photos(
                 "pin", self.pin.pk, self.profile.pk, self.album_url, ["does-not-exist"]
             )
-        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0, "storage_unavailable": 0})

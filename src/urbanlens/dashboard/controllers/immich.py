@@ -36,6 +36,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.core.upstream_slots import KeyedUpstreamSlots, UpstreamSlots
 from urbanlens.dashboard.services.media.proxied_media import proxied_media_response, retry_later_response
+from urbanlens.dashboard.services.photos.library_import import ImportCounts
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
 from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
@@ -422,11 +423,9 @@ class PinImmichImportProgressView(LoginRequiredMixin, View):
         context = {"pin": pin, "task_id": task_id, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
         response = render(request, _PROGRESS_PARTIAL, context)
         if progress.state == "SUCCESS":
-            result = progress.result or {}
-            summary = f"Imported {result.get('imported', 0)} photo(s)" + (f", skipped {result.get('skipped')} duplicate(s)" if result.get("skipped") else "") + "."
             # refreshGallery is the same body-level event _photo_gallery.html already
             # listens for after other photo-adding actions (see visits.py).
-            response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": summary}, "refreshGallery": {}})
+            response["HX-Trigger"] = json.dumps({"showToast": ImportCounts.from_dict(progress.result).toast(), "refreshGallery": {}})
         elif progress.state in {"FAILURE", "REVOKED"}:
             response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": progress.error or "Import failed."}})
         return response
