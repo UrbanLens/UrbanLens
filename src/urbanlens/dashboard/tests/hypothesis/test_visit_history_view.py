@@ -191,3 +191,54 @@ class VisitCreatePostTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(PinVisit.objects.filter(pin=self.pin).exists())
+
+
+class ChildVisitsSurviveAnEditTests(TestCase):
+    """Logging, editing or deleting a visit re-renders the panel without a ``children`` flag; the page's address,
+    which the child-details toggle keeps current, says whether the child pins' visits belong in it."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.parent = baker.make(
+            "dashboard.Pin",
+            profile=self.profile,
+            location=baker.make("dashboard.Location", latitude="40.0", longitude="-74.0"),
+        )
+        self.child = baker.make(
+            "dashboard.Pin",
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=baker.make("dashboard.Location", latitude="40.001", longitude="-74.0"),
+            name="Boiler house",
+        )
+        baker.make(PinVisit, pin=self.child, notes="Went in through the boiler house")
+        self.client.force_login(self.user)
+
+    def _page(self, children: str) -> str:
+        return (
+            "http://testserver"
+            + reverse("pin.details", kwargs={"pin_slug": self.parent.slug})
+            + f"?children={children}"
+        )
+
+    def test_logging_a_visit_keeps_the_childs_visits_while_the_page_shows_them(self):
+        response = self.client.post(
+            reverse("pin.visits", args=[self.parent.slug]),
+            {"visited_date": "2024-06-15"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_CURRENT_URL=self._page("1"),
+        )
+
+        self.assertContains(response, "Went in through the boiler house")
+
+    def test_logging_a_visit_leaves_them_out_while_the_page_does(self):
+        response = self.client.post(
+            reverse("pin.visits", args=[self.parent.slug]),
+            {"visited_date": "2024-06-15"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_CURRENT_URL=self._page("0"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Went in through the boiler house")

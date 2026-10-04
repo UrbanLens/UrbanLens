@@ -21892,3 +21892,34 @@ A folded notification keeps its first change's position in the bell; only its te
   own flags (it lacked `--no-privileges`, despite its comment) and restores through gzip. `docs/BACKUPS.md` covers both.
 
 The platform still has to set `UL_BACKUP_ENABLED=false` on its workers (an infrastructure change, not this repo's).
+
+## RESOLVED 2026-10-04: A parent pin lists its child pins' aliases and labels, and edits keep the page's child-details setting
+
+`id: P16` · `status: fixed` · `resolved: 2026-10-04`
+
+With "child pin details" on, a parent pin's Aliases and labels panels list each descendant pin's aliases and
+labels read-only, each row led by a chip naming and linking the child (`services/pins/child_listings.py`, tests in
+`tests/hypothesis/test_child_listings.py`). Editing stays on the child's own page, as Jess ruled on 2026-10-02. A
+child's alias that only repeats its name is left out, since the chip already shows it.
+
+The two panels joined P224's in-place toggle as regions (`partials/pins/child_details/_aliases.html`,
+`_labels.html`). The labels placeholder gained the `category-panel` id its loaded panel already had, so the toggle's
+out-of-band swap can find it.
+
+**The same gap in notes and visits.** A panel re-rendered by its own edit carries no `children` flag, so posting a
+note, or logging, editing or deleting a visit, dropped the children's rows until the page reloaded. This happened on
+pin and wiki pages alike. `services/core/child_details.child_details_requested` now decides for all four panels, in
+this order:
+1. the request's own flag;
+2. the page's address in `HX-Current-URL`, which the toggle keeps current;
+3. the page's default.
+
+Steps 2 and 3 apply only when that page is the pin's or wiki's own. A panel opened elsewhere, such as the map's label
+dialog, lists the target alone, as before. The placeholders and pagination now send an explicit `children=0`, so a
+lazy load never falls back to an address that the toggle has not replaced yet.
+
+Verified in Chromium on dev: a parcel's page opens with the child's aliases and label listed; toggling off and on
+removes and restores them; adding an alias keeps them.
+
+The two identical child chips (`.comment-child-chip`, `.visit-child-chip`) became one `.child-chip` component in
+`_components.scss`, which this listing reuses.

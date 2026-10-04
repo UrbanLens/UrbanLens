@@ -1371,8 +1371,10 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
     """Add or remove any organize label on a pin (HTMX panel on pin detail)."""
 
     @staticmethod
-    def _ctx(profile: Profile, pin: Pin, pin_slug: str) -> dict:
+    def _ctx(request: HttpRequest, profile: Profile, pin: Pin, pin_slug: str) -> dict:
+        from urbanlens.dashboard.services.core.child_details import child_details_requested
         from urbanlens.dashboard.services.labels.redata_suggestions import redata_labels_configured
+        from urbanlens.dashboard.services.pins.child_listings import child_label_listings
 
         ctx = _membership_panel_ctx(
             profile,
@@ -1392,6 +1394,7 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         # Lazily loaded (see label.pin_suggestions) rather than fetched here -
         # a live REData call has no business blocking this panel's own render.
         ctx["redata_labels_enabled"] = redata_labels_configured()
+        ctx["child_listings"] = child_label_listings(pin) if child_details_requested(request, pin) else []
         return ctx
 
     def get(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
@@ -1399,7 +1402,7 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
             return HttpResponse(status=404)
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
-        return render(request, _MEMBERSHIP_PANEL, self._ctx(profile, pin, pin_slug))
+        return render(request, _MEMBERSHIP_PANEL, self._ctx(request, profile, pin, pin_slug))
 
     def post(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
@@ -1416,7 +1419,7 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
             from urbanlens.dashboard.services.undo.mutations import stash_label_add
 
             stash_label_add(profile, target="pin", target_id=pin.pk, label=label)
-            return render(request, _MEMBERSHIP_PANEL, self._ctx(profile, pin, pin_slug))
+            return render(request, _MEMBERSHIP_PANEL, self._ctx(request, profile, pin, pin_slug))
 
         label_id = _membership_label_id(request)
         label = get_object_or_404(Label.objects.visible_to(profile), id=label_id, kind__in=_ORGANIZE_KINDS)
@@ -1436,7 +1439,7 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         return render(
             request,
             _MEMBERSHIP_PANEL,
-            self._ctx(profile, pin, pin_slug),
+            self._ctx(request, profile, pin, pin_slug),
         )
 
 

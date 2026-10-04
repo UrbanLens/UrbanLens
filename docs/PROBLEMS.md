@@ -453,36 +453,6 @@ access only Jess has.
 
 ---
 
-## P16 — Aliases and label membership are still strictly per-pin, with no aggregation across child pins
-
-`id: P16` · `status: open, decided` · `updated: 2026-10-02`
-
-**Jess, 2026-10-02: read-only listings.** With "show child pin details" on, a parent pin's page lists each child's
-aliases and labels as "also on child pin X", read-only, the way comments already aggregate. Editing stays on the
-child's own page.
-
-Previously titled "aliases/labels aggregation, and boundary voting". **The boundary-voting half
-shipped 2026-07-30** - after this entry's last update, so it sat here as "not started at all" long
-after it wasn't: `models/boundary_vote/model.py`, `services/geo/boundary_voting.py`
-(recency-weighted, tie-break rules), `controllers/location_wiki.py::BoundaryVoteView`, a wired UI
-dialog, and two hypothesis test files. Only the aggregation gap below is still open.
-
-The ROADMAP's "Pin Restructure" section also asks for this, deliberately not attempted as a rider on
-other work:
-
-**Aliases and labels are not yet aggregated across child pins.** The parent detail page's "show
-child pin details" toggle now aggregates map markers, the photo gallery, visit history, and
-Notes/comments - but `pin_alias_suggestions` (`controllers/pin.py`) and the
-category/tag/status membership panel (`controllers/labels.py`'s `LabelPinMembershipView` /
-`label_membership_panel.html`) are both strictly per-pin, with no descendant awareness. Both are
-shared generic components also used for Wiki and Image label/alias editing - bolting
-hierarchy-aware aggregation onto them risks either duplicating the template or polluting a
-generic component with a pin-specific concern. Decide whether aggregation means read-only "also
-shown on child pin X" listings (cheapest, matches what comments got) or genuine cross-pin
-editing before touching the shared templates.
-
----
-
 ## P19 — Audit residue: group chats lack direct messages' features, and the hypothesis strategies are barely shared
 
 `id: P19` · `status: open` · `updated: 2026-10-02`

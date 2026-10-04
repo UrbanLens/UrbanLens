@@ -47,3 +47,30 @@ class WikiCommentsViewTests(TestCase):
         other_location, _other_wiki = _location_with_wiki("Unpinned Place")
         response = self.client.get(reverse("location.wiki.comments", args=[other_location.slug]))
         self.assertEqual(response.status_code, 404)
+
+
+class WikiChildCommentsSurviveAPostTests(TestCase):
+    """A comment posted while the wiki page shows child wikis' comments keeps them in the re-rendered panel."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+        self.location, self.wiki = _location_with_wiki("Campus")
+        baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+        child_location = baker.make("dashboard.Location")
+        child = baker.make("dashboard.Wiki", location=child_location, name="Powerhouse", parent_wiki=self.wiki)
+        baker.make("dashboard.Comment", wiki=child, pin=None, profile=self.profile, text="a comment on the child wiki")
+
+    def test_posting_keeps_the_child_wikis_comments(self):
+        page = reverse("location.wiki", args=[self.location.slug]) + "?children=1"
+
+        response = self.client.post(
+            reverse("location.wiki.comments", args=[self.location.slug]),
+            {"text": "a comment on the campus"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_CURRENT_URL=f"http://testserver{page}",
+        )
+
+        self.assertContains(response, "a comment on the campus")
+        self.assertContains(response, "a comment on the child wiki")

@@ -1,5 +1,5 @@
 <div id="visit-history-panel"{% if oob %} hx-swap-oob="true"{% endif %}
-    hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
+    hx-get="{% url 'pin.visits' pin.slug %}?children={% if include_children %}1{% else %}0{% endif %}"
     hx-trigger="intersect once"
     hx-swap="outerHTML"
     class="visit-history card">

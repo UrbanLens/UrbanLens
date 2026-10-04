@@ -49,6 +49,20 @@ class PinCommentsAggregationTests(TestCase):
         self.assertContains(response, "a note on the parent")
         self.assertContains(response, "a note on the child")
 
+    def test_posting_a_note_keeps_the_child_notes_while_the_page_shows_them(self) -> None:
+        """The post carries no ``children`` flag; the page's address, which the toggle keeps current, does."""
+        page = reverse("pin.details", kwargs={"pin_slug": self.parent.slug}) + "?children=1"
+
+        response = self.client.post(
+            reverse("pin.comments", kwargs={"pin_slug": self.parent.slug}),
+            {"text": "a second note on the parent"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_CURRENT_URL=f"http://testserver{page}",
+        )
+
+        self.assertContains(response, "a second note on the parent")
+        self.assertContains(response, "a note on the child")
+
     def test_an_aggregated_child_note_is_labelled_with_its_sub_pin(self) -> None:
         response = self.client.get(reverse("pin.comments", kwargs={"pin_slug": self.parent.slug}), {"children": "1"})
         self.assertContains(response, "Tool Shed")
@@ -58,7 +72,7 @@ class PinCommentsAggregationTests(TestCase):
         """Only aggregated child notes get the 'written on the child pin' chip - one chip
         total, for the one child note, never for the parent's own."""
         response = self.client.get(reverse("pin.comments", kwargs={"pin_slug": self.parent.slug}), {"children": "1"})
-        self.assertEqual(response.content.decode().count("comment-child-chip"), 1)
+        self.assertEqual(response.content.decode().count('class="child-chip"'), 1)
 
     def test_grandchildren_notes_are_included_at_any_depth(self) -> None:
         grandchild = baker.make(Pin, profile=self.profile, parent_pin=self.child, location=_make_location())

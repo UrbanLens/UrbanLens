@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.services.core.child_details import child_details_requested
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.profile.avatar_colors import assign_avatar_colors
@@ -116,7 +117,7 @@ _PENDING_SUGGESTIONS_PAGE_SIZE = 5
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     """Render the visit history panel for a pin, paginated newest-first.
 
-    With ``?children=1`` (the pin page's "show child pin details" toggle) the panel also lists visits
+    With "child pin details" on (see :func:`child_details_requested`) the panel also lists visits
     logged on the pin's child pins (any depth), each labelled with the child pin it belongs to.
 
     Args:
@@ -126,7 +127,7 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     Returns:
         Rendered HTML partial.
     """
-    include_children = request.GET.get("children") == "1"
+    include_children = child_details_requested(request, pin)
     if include_children:
         subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
         visits_qs: QuerySet[PinVisit] = PinVisit.objects.filter(pin__in=subtree).select_related("pin", "pin__location", "pin__location__wiki").order_by("-visited_at")

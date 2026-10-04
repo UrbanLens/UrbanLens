@@ -75,7 +75,10 @@ def _annotated(aliases, current_name: str | None):
 
 
 def _render_pin_panel(request, pin: Pin) -> HttpResponse:
-    """Render the pin aliases panel with current-name annotation."""
+    """Render the pin aliases panel with current-name annotation, and its child pins' aliases while child pin details show."""
+    from urbanlens.dashboard.services.core.child_details import child_details_requested
+    from urbanlens.dashboard.services.pins.child_listings import child_alias_listings
+
     aliases = _annotated(pin.aliases.order_by("name"), pin.effective_name)
     return render(
         request,
@@ -99,6 +102,7 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
             "url_use": "pin.alias.use",
             "url_delete": "pin.alias.delete",
             "url_add": "pin.aliases",
+            "child_listings": child_alias_listings(pin) if child_details_requested(request, pin) else [],
         },
     )
 

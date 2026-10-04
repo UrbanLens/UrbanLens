@@ -20,6 +20,7 @@
 
     {% if not dialog_only %}
     {% include "dashboard/partials/labels/_label_chips.html" with label_url_kind=label_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_labels=all_labels member_ids=member_ids empty_text=empty_text %}
+    {% include "dashboard/partials/pins/child_details/_child_listing.html" with kind="label" %}
     {% endif %}
 
     {% include "dashboard/partials/labels/_label_dialog.html" with dialog_id_prefix=dialog_id_prefix dialog_id_suffix=dialog_id_suffix label_url_kind=label_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_labels=all_labels member_ids=member_ids %}

@@ -1,0 +1,19 @@
+{% comment %}A parent pin's child pins and the aliases or labels each carries, read-only; editing stays on the child's page. See services.pins.child_listings.{% endcomment %}
+{% if child_listings %}
+<div class="child-listings">
+    {% for listing in child_listings %}
+    <div class="{% if kind == 'label' %}tag-chips-row{% else %}alias-chips-row{% endif %}">
+        <a class="child-chip" href="{{ listing.url }}" title="On the child pin {{ listing.child.effective_name }}">
+            <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ listing.child.effective_name }}
+        </a>
+        {% for item in listing.items %}
+        {% if kind == 'label' %}
+        <span class="tag-chip tag-chip--{{ item.kind }}"{% if item.color %} style="--tag-color:{{ item.color }}"{% endif %}><span class="tag-chip-name">{{ item.name }}</span></span>
+        {% else %}
+        <span class="alias-chip{% if item.is_nickname %} alias-chip--nickname{% endif %}"><span class="alias-chip-name">{{ item.name }}</span></span>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

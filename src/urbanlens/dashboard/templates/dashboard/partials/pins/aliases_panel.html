@@ -57,6 +57,7 @@
     {% else %}
     <p class="aliases-empty">{{ empty_text }}</p>
     {% endif %}
+    {% include "dashboard/partials/pins/child_details/_child_listing.html" with kind="alias" %}
 
     <form class="alias-add-form{% if show_header_add_button %} alias-add-form--collapsed{% endif %}"
           hx-post="{% url url_add obj_slug %}"

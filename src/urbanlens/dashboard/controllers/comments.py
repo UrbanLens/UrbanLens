@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, UnsupportedReactionEmojiError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_count, visible_comment_tree
+from urbanlens.dashboard.services.core.child_details import child_details_requested
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
@@ -353,7 +354,7 @@ def _pin_comments_context(pin, profile: Profile, request: HttpRequest) -> dict:
     """
     from urbanlens.dashboard.models.pin.model import Pin
 
-    include_children = request.GET.get("children") == "1"
+    include_children = child_details_requested(request, pin)
     if include_children:
         subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
         comments_qs = Comment.objects.filter(pin__in=subtree)
@@ -366,7 +367,7 @@ def _pin_comments_context(pin, profile: Profile, request: HttpRequest) -> dict:
         pin=pin,
         context_type="pin",
         include_children=include_children,
-        extra_query="children=1" if include_children else "",
+        extra_query=f"children={int(include_children)}",
     )
 
 
@@ -534,7 +535,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        include_children = request.GET.get("children") == "1"
+        include_children = child_details_requested(request, wiki)
         ctx = _build_context(
             _visible_wiki_comments(wiki, profile, include_children=include_children),
             profile,
@@ -545,7 +546,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             location=wiki.location,
             context_type="wiki",
             include_children=include_children,
-            extra_query="children=1" if include_children else "",
+            extra_query=f"children={int(include_children)}",
         )
         return _render_comments(request, ctx)
 
@@ -586,7 +587,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             return HttpResponse(exc.message, status=exc.status, headers=exc.headers)
         if parent and parent.profile != profile:
             notify_reply(profile, parent, reply=comment)
-        include_children = request.GET.get("children") == "1"
+        include_children = child_details_requested(request, wiki)
         ctx = _build_context(
             _visible_wiki_comments(wiki, profile, include_children=include_children),
             profile,
@@ -597,7 +598,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             location=wiki.location,
             context_type="wiki",
             include_children=include_children,
-            extra_query="children=1" if include_children else "",
+            extra_query=f"children={int(include_children)}",
         )
         return _render_comments(request, ctx)
 
@@ -625,7 +626,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
             stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
             markup_map.delete()
         # Replies to a deleted comment survive (parent FK is SET_NULL), becoming orphaned top-level comments.
-        include_children = request.GET.get("children") == "1"
+        include_children = child_details_requested(request, wiki)
         ctx = _build_context(
             _visible_wiki_comments(wiki, profile, include_children=include_children),
             profile,
@@ -636,7 +637,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
             location=wiki.location,
             context_type="wiki",
             include_children=include_children,
-            extra_query="children=1" if include_children else "",
+            extra_query=f"children={int(include_children)}",
         )
         return _render_comments(request, ctx)
 

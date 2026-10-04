@@ -85,12 +85,19 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   typed as a building, whose building child is a structure inside it
 - **The "child pin details" toggle swaps in place** (`PinController.child_details`,
   `LocationWikiChildDetailsView`, `shared/child-details.ts`) — on a pin's page and a wiki's page it
-  fetches every panel that reads the setting (photos, visits, albums, notes, Article > Sources) as
+  fetches every panel that reads the setting (photos, visits, albums, notes, Article > Sources, and on a pin
+  the aliases and labels) as
   out-of-band swaps, replaces the address's `?children=`, and announces `childDetailsChanged` so
   the map refetches its markup, detail pins, photo layer and outlines with `children=` set. With it
   on, the pin map draws each descendant building's own outline once
   (`Boundary.objects.own_polygons_for_pins`); off, none. A new panel that reads the setting needs a
-  region in `_child_details_regions.html` and an id it keeps after loading
+  region in `_child_details_regions.html` and an id it keeps after loading. Panels that re-render after their own
+  edit (notes, visits, aliases, labels) read the setting through `services/core/child_details.py`: the request's
+  `children`, else the page's address in `HX-Current-URL` when that page is the pin's or wiki's own, else that
+  page's default; a panel opened from any other page, such as the map, lists the target alone
+- **Child pins' aliases and labels on the parent** (`services/pins/child_listings.py`) — with child pin
+  details on, a pin's Aliases and labels panels list each descendant's aliases and labels read-only, after a
+  `.child-chip` naming the child; editing stays on the child's page
 - **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
   matching child wiki for the selected sub pins, skipping ones the wiki already has; "Share with a
   friend" shares just the selected sub pins, not the pin's whole hierarchy. A "pull from wiki"

@@ -1,0 +1,13 @@
+<div hx-get="{% url 'pin.aliases' pin.slug %}?children={% if include_children %}1{% else %}0{% endif %}"
+    hx-trigger="{% if oob %}load{% else %}ul:lazy-load, ul:unhide{% endif %}, pinAliasesChanged from:body" data-ul-lazy-section="pin:aliases"
+    hx-swap="outerHTML"
+    id="pin-aliases-panel"{% if oob %} hx-swap-oob="true"{% endif %}
+    hx-sync="#pin-panel-lane-0:queue all"
+    class="aliases-panel card card--secondary"
+    data-collapse-scope="pin" data-collapse-section="aliases">
+    <div class="card-header">
+        <i class="material-symbols-outlined">label_important</i>
+        <span>Aliases</span>
+    </div>
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+</div>

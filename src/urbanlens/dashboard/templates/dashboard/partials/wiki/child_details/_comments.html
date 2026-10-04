@@ -1,5 +1,5 @@
 <div id="comment-panel"{% if oob %} hx-swap-oob="true"{% endif %}
-     hx-get="{% url 'location.wiki.comments' location.slug %}{% if include_children %}?children=1{% endif %}"
+     hx-get="{% url 'location.wiki.comments' location.slug %}?children={% if include_children %}1{% else %}0{% endif %}"
      hx-trigger="intersect once"
      hx-swap="outerHTML"
      class="card wiki-card">

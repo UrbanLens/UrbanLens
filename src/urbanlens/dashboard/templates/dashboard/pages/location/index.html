@@ -380,12 +380,7 @@
                     </button>
                 </div>
             </div>
-            <div hx-get="{% url 'label.pin' label_kind='category' pin_slug=pin.slug %}"
-                hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:categories"
-                hx-swap="outerHTML"
-                class="tag-panel tag-panel--embedded">
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-            </div>
+            {% include "dashboard/partials/pins/child_details/_labels.html" %}
         </div>
 
 
@@ -413,19 +408,7 @@
         </div>
         {% endwith %}
 
-        <div hx-get="{% url 'pin.aliases' pin.slug %}"
-            hx-trigger="ul:lazy-load, ul:unhide, pinAliasesChanged from:body" data-ul-lazy-section="pin:aliases"
-            hx-swap="outerHTML"
-            id="pin-aliases-panel"
-            hx-sync="#pin-panel-lane-0:queue all"
-            class="aliases-panel card card--secondary"
-            data-collapse-scope="pin" data-collapse-section="aliases">
-            <div class="card-header">
-                <i class="material-symbols-outlined">label_important</i>
-                <span>Aliases</span>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
+        {% include "dashboard/partials/pins/child_details/_aliases.html" %}
 
         <div hx-get="{% url 'pin.custom_fields' pin.slug %}"
             hx-trigger="load, ul:unhide"

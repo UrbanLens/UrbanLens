@@ -1,0 +1,7 @@
+<div hx-get="{% url 'label.pin' label_kind='category' pin_slug=pin.slug %}?children={% if include_children %}1{% else %}0{% endif %}"
+    hx-trigger="{% if oob %}load{% else %}ul:lazy-load, ul:unhide{% endif %}" data-ul-lazy-section="pin:categories"
+    hx-swap="outerHTML"
+    id="category-panel"{% if oob %} hx-swap-oob="true"{% endif %}
+    class="tag-panel tag-panel--embedded">
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+</div>
