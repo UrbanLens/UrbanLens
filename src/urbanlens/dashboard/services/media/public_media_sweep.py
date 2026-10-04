@@ -9,7 +9,8 @@ of custom names is judged by the names of each pin holding that set, and is left
 
 Only the cached results change. The row keeps its age, so it is refetched when it would have been, and no row of
 any user's (marks, copies, uploads) is read for anything but its keys. Each row records the ``RULE_VERSION`` it was
-judged under, and a write of new results resets that, so a row is judged once per rule and per fetch.
+judged under, and a write of new results resets that, so a row is judged once per rule and per fetch. A row that
+could not be judged (an error, or a fetch rewriting it meanwhile) stays unjudged for the next run.
 """
 
 from __future__ import annotations
@@ -99,8 +100,7 @@ def _sweep_batch(rows: list[LocationCache], sources: dict[str, GalleryMediaSourc
         try:
             readers = _reader_subjects(located[0].location, {row.audience for row in located})
         except Exception:
-            logger.exception("Public-media sweep could not build the subjects for location %s; leaving its rows", location_id)
-            unchanged.extend(located)
+            logger.exception("Public-media sweep could not build the subjects for location %s; its rows wait for the next run", location_id)
             continue
         for row in located:
             source = sources[row.source]
@@ -108,8 +108,8 @@ def _sweep_batch(rows: list[LocationCache], sources: dict[str, GalleryMediaSourc
             try:
                 pruned = source.without_irrelevant(data, readers.get(row.audience, ()), kept=kept[location_id])
             except Exception:
-                logger.exception("Public-media sweep could not judge cache row %s; leaving it", row.pk)
-                pruned = None
+                logger.exception("Public-media sweep could not judge cache row %s; it waits for the next run", row.pk)
+                continue
             if pruned is None:
                 unchanged.append(row)
             elif _write(row, pruned, version):
@@ -136,18 +136,19 @@ def _touched_keys(location_ids: Collection[int]) -> dict[int, set[str]]:
 def _reader_subjects(location: Location, audiences: set[str]) -> dict[str, tuple[MediaSubject, ...]]:
     """The subjects each of ``audiences``' readers judge its row against; an audience no pin holds is absent."""
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.pins.search_names import SHARED_AUDIENCE, search_names
+    from urbanlens.dashboard.services.pins.search_names import SHARED_AUDIENCE, search_names, shared_names
 
+    shared = shared_names(location)
     subjects: dict[str, list[MediaSubject]] = defaultdict(list)
     if SHARED_AUDIENCE in audiences:
-        subjects[SHARED_AUDIENCE].append(subject_relevance.subject_for_location(location))
+        subjects[SHARED_AUDIENCE].append(subject_relevance.subject_for_location(location, shared=shared))
     custom = audiences - {SHARED_AUDIENCE}
     if custom:
         for pin in Pin.objects.filter(location=location):
             pin.location = location
-            audience = search_names(pin).audience
-            if audience in custom and (subject := subject_relevance.subject_for_pin(pin)) not in subjects[audience]:
-                subjects[audience].append(subject)
+            names = search_names(pin, shared=shared)
+            if names.audience in custom and (subject := subject_relevance.subject_for_pin(pin, names=names)) not in subjects[names.audience]:
+                subjects[names.audience].append(subject)
     return {audience: tuple(found) for audience, found in subjects.items() if found}
 
 

@@ -23,8 +23,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.media import subject_relevance
 from urbanlens.dashboard.services.media.public_media_sweep import sweep_public_media
 from urbanlens.dashboard.services.media.subject_relevance import MediaSubject, subject_for_location
-from urbanlens.dashboard.services.pins.external_data import get_panel_source
-from urbanlens.dashboard.services.pins.search_names import search_names
+from urbanlens.dashboard.services.pins.external_data import DocumentMediaPanelSource, get_panel_source
+from urbanlens.dashboard.services.pins.search_names import search_names, shared_names
 from urbanlens.dashboard.tests.hypothesis.test_media_place_relevance import (
     ACROSS_THE_RIVER,
     ANCESTRY,
@@ -205,12 +205,51 @@ class AudienceRowTests(_SweepCase):
 
         self.assertEqual(self.cached_urls(), ABOUT_THE_PLACE)
 
+    def test_the_places_public_names_are_read_once_however_many_pins_hold_the_row(self) -> None:
+        for _ in range(3):
+            holder = baker.make_recipe("dashboard.pin", name="Hudson River State Hospital", location=self.location)
+            PinAlias.objects.create(pin=holder, name="Withers Asylum")
+            PinAlias.objects.create(pin=holder, name="WSAP")
+            assert search_names(holder).audience == self.audience
+
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.search_names.shared_names", wraps=shared_names
+        ) as read_public_names:
+            sweep_public_media()
+
+        self.assertEqual(read_public_names.call_count, 1)
+        self.assertEqual(self.cached_urls(self.audience), [BY_ALIAS.url, BY_ACRONYM.url])
+
     def test_a_row_no_pin_reads_any_more_is_left_alone(self) -> None:
         PinAlias.objects.filter(pin=self.pin).delete()
 
         sweep_public_media()
 
         self.assertEqual(self.cached_urls(self.audience), [BY_ALIAS.url, BY_ACRONYM.url, ACROSS_THE_RIVER.url])
+
+
+class FailureTests(_SweepCase):
+    """A row the sweep could not judge is left for the next run, not recorded as judged."""
+
+    def test_a_place_whose_readers_could_not_be_worked_out(self) -> None:
+        with mock.patch(
+            "urbanlens.dashboard.services.media.public_media_sweep._reader_subjects", side_effect=RuntimeError("blip")
+        ):
+            sweep_public_media()
+        self.assertEqual(len(self.cached_urls()), len(ITEMS))
+
+        sweep_public_media()
+
+        self.assertEqual(self.cached_urls(), ABOUT_THE_PLACE)
+
+    def test_a_row_whose_results_could_not_be_read(self) -> None:
+        with mock.patch.object(DocumentMediaPanelSource, "without_irrelevant", side_effect=ValueError("bad row")):
+            sweep_public_media()
+        self.assertEqual(len(self.cached_urls()), len(ITEMS))
+
+        sweep_public_media()
+
+        self.assertEqual(self.cached_urls(), ABOUT_THE_PLACE)
 
 
 class RuleVersionTests(_SweepCase):
