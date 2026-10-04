@@ -46,8 +46,9 @@ gzip -dc /app/src/backups/backup_20261004_060200.sql.gz \
 ```
 
 Check the archive first. A truncated `.gz` decompresses to a prefix of the dump, which can end on a statement boundary;
-`--single-transaction` then commits that prefix as if it were the whole database. `bin/restore_backup.sh` runs the same
-check and also makes a read failure mid-stream end in a statement that cannot succeed.
+`--single-transaction` then commits that prefix as if it were the whole database. A plain `.sql` dump has no checksum,
+so for those check that it still ends with pg_dump's `-- PostgreSQL database dump complete` line. `bin/restore_backup.sh`
+runs both checks and also makes a read failure mid-stream end in a statement that cannot succeed.
 
 The dump carries no grants, so it restores into a cluster that has never had the tiers' roles. The
 restored tables are the owner's alone: no tier can read them until `db-setup` runs against that

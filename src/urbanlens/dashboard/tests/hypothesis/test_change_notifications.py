@@ -27,7 +27,14 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.notifications.change_notifications import FOLD_WINDOW
 from urbanlens.dashboard.services.social.friendship import block_profile, mute_profile
-from urbanlens.dashboard.services.trips.trip_activities import create_activity, delete_activity
+from urbanlens.dashboard.services.trips.trip_activities import (
+    create_activity,
+    delete_activity,
+    move_activity,
+    reorder_activities,
+    set_activity_position,
+    update_activity,
+)
 from urbanlens.dashboard.services.trips.trip_crud import create_trip, update_trip
 from urbanlens.dashboard.services.wiki.articles import save_article
 from urbanlens.dashboard.services.wiki.wiki_aliases import create_wiki_alias
@@ -160,6 +167,72 @@ class TripUpdatedTests(TestCase):
             update_trip(self.trip, self.alice, changes={"name": "Mill run"})
 
         self.assertEqual(_notifications(self.bob, NotificationType.TRIP_UPDATED), [])
+
+    def test_saving_an_activity_unchanged_announces_nothing(self) -> None:
+        """The edit form posts every field, changed or not."""
+        with self.captureOnCommitCallbacks(execute=True):
+            activity = create_activity(self.trip, self.bob, title="Boiler house", notes="Bring torches")
+        NotificationLog.objects.all().delete()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            update_activity(
+                self.trip,
+                self.alice,
+                activity.pk,
+                changes={"title": "Boiler house", "notes": "Bring torches", "status": activity.status},
+            )
+
+        self.assertEqual(_notifications(self.bob, NotificationType.TRIP_UPDATED), [])
+
+    def test_editing_an_activity_is_announced(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            activity = create_activity(self.trip, self.bob, title="Boiler house")
+        NotificationLog.objects.all().delete()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            update_activity(self.trip, self.alice, activity.pk, changes={"title": "Boiler house, then the tunnels"})
+
+        [notification] = _notifications(self.bob, NotificationType.TRIP_UPDATED)
+        self.assertIn("edited an activity", notification.message)
+
+    def test_dropping_an_activity_where_it_already_was_announces_nothing(self) -> None:
+        """A map drag, a calendar drop or an itinerary drag can each end where it started."""
+        when = timezone.now().replace(microsecond=0)
+        with self.captureOnCommitCallbacks(execute=True):
+            first = create_activity(self.trip, self.bob, title="Boiler house", scheduled_at=when)
+            second = create_activity(self.trip, self.bob, title="Tunnels")
+            set_activity_position(self.trip, self.bob, first.pk, lat=41.7, lng=-73.9)
+            reorder_activities(self.trip, self.bob, [first.pk, second.pk])
+        NotificationLog.objects.all().delete()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            set_activity_position(self.trip, self.alice, first.pk, lat=41.7, lng=-73.9)
+            move_activity(self.trip, self.alice, first.pk, date=timezone.localtime(when).date())
+            reorder_activities(self.trip, self.alice, [first.pk, second.pk])
+
+        self.assertEqual(_notifications(self.bob, NotificationType.TRIP_UPDATED), [])
+
+    def test_moving_an_activity_somewhere_new_is_announced(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            first = create_activity(self.trip, self.bob, title="Boiler house")
+            second = create_activity(self.trip, self.bob, title="Tunnels")
+            reorder_activities(self.trip, self.bob, [first.pk, second.pk])
+        NotificationLog.objects.all().delete()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            reorder_activities(self.trip, self.alice, [second.pk, first.pk])
+
+        [notification] = _notifications(self.bob, NotificationType.TRIP_UPDATED)
+        self.assertIn("reordered the itinerary", notification.message)
+
+    def test_a_folded_notification_names_the_trip_as_it_is_now(self) -> None:
+        self._add_activity(self.alice)
+        with self.captureOnCommitCallbacks(execute=True):
+            update_trip(self.trip, self.alice, changes={"name": "Mill and tunnels"})
+
+        [notification] = _notifications(self.bob, NotificationType.TRIP_UPDATED)
+        self.assertEqual(notification.fold_count, 2)
+        self.assertIn("Mill and tunnels", notification.title)
 
     def test_removing_an_activity_is_announced(self) -> None:
         with self.captureOnCommitCallbacks(execute=True):

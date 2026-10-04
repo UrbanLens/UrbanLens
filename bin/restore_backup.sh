@@ -132,9 +132,14 @@ if [ -n "$EXISTS" ]; then
     [ "$DRY_RUN" -eq 1 ] || psql_t -d postgres -c "DROP DATABASE \"$TARGET\";" >/dev/null
 fi
 
-# A truncated archive decompresses to a prefix that can end on a statement boundary, and would commit.
+# A truncated dump can end on a statement boundary, and --single-transaction would commit that prefix. A plain dump has
+# no checksum, so its closing comment is the only sign it was copied whole.
 case "$REMOTE" in
     *.gz) in_app "$CONTAINER" gzip -t "$REMOTE" 2>/dev/null || die "'$REMOTE' is not an intact gzip archive (truncated or corrupt); nothing was restored." ;;
+    *)
+        # shellcheck disable=SC2016
+        in_app "$CONTAINER" sh -c 'tail -n 8 "$1" | grep -q "^-- PostgreSQL database dump complete"' _ "$REMOTE" \
+            || die "'$REMOTE' does not end with pg_dump's closing line, so it is truncated; nothing was restored." ;;
 esac
 
 echo "==> dump: $REMOTE (pg_dump $DUMP_PG, psql $PSQL_PG)"

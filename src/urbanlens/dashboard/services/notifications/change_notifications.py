@@ -131,6 +131,7 @@ def announce_change(
             burst = open_bursts.get(profile.pk)
             if burst is not None:
                 burst.fold_count += 1
+                burst.title = notice.title
                 burst.message = notice.message(name, burst.fold_count)
                 burst.updated = now
                 folded.append(burst)
@@ -147,7 +148,7 @@ def announce_change(
                 importance=Importance.LOW,
             )
         if folded:
-            NotificationLog.objects.bulk_update(folded, ["fold_count", "message", "updated"])
+            NotificationLog.objects.bulk_update(folded, ["fold_count", "title", "message", "updated"])
     return len(audience)
 
 

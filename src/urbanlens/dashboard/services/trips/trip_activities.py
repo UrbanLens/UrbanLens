@@ -619,6 +619,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
         TripValidationError: The notes exceed the shared text limit, a time is outside the schedulable span, or ``place`` names a pin that isn't the actor's own."""
     require_perform(actor, trip, trip.allow_edit_activities, EDIT_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
+    before = _editable_state(activity)
 
     if "title" in changes:
         activity.title = _clean_text(changes["title"])
@@ -644,12 +645,29 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     if "location_hidden" in changes and (activity.added_by_id == actor.id or is_organizer(actor, trip)):
         activity.location_hidden = _as_bool(changes["location_hidden"])
 
+    # The edit form posts every field, so a save that changes nothing must not reach the trip's members.
+    if _editable_state(activity) == before:
+        return activity
     activity.save()
 
     if activity.status == TripActivity.STATUS_CONFIRMED and activity.scheduled_at:
         expand_trip_dates(trip, activity.scheduled_at.date())
     announce_trip_change(trip, actor, "edited an activity")
     return activity
+
+
+def _editable_state(activity: TripActivity) -> tuple[Any, ...]:
+    return (
+        activity.title,
+        activity.notes,
+        activity.scheduled_at,
+        activity.scheduled_end,
+        activity.location_id,
+        activity.pin_id,
+        activity.status,
+        activity.child_trip_id,
+        activity.location_hidden,
+    )
 
 
 def delete_activity(trip: Trip, actor: Profile, activity_id: int) -> None:
@@ -697,6 +715,8 @@ def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: 
         raise TripValidationError("lat must be between -90 and 90, and lng between -180 and 180.")
 
     activity = get_activity(trip, activity_id)
+    if (activity.lat_override, activity.lng_override) == (lat_value, lng_value):
+        return lat_value, lng_value
     activity.lat_override = lat_value
     activity.lng_override = lng_value
     activity.save(update_fields=["lat_override", "lng_override", "updated"])
@@ -728,6 +748,8 @@ def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetim
         moved = timezone.make_aware(datetime.datetime.combine(date, activity.scheduled_at.time()))
     else:
         moved = timezone.make_aware(datetime.datetime.combine(date, datetime.time(0, 0)))
+    if moved == activity.scheduled_at:
+        return activity
     activity.scheduled_at = _checked_schedule(moved, "The new date")
     activity.save(update_fields=["scheduled_at", "updated"])
 
@@ -920,7 +942,9 @@ def reorder_activities(trip: Trip, actor: Profile, order: Sequence[int]) -> None
         # non-completed activities, so one statement is safe here - and the lock makes
         # the read-check-write sequence atomic either way.
         positions = {activity_id: position for position, activity_id in enumerate(order)}
-        activities = list(TripActivity.objects.filter(id__in=positions, trip=trip))
+        activities = [activity for activity in TripActivity.objects.filter(id__in=positions, trip=trip) if activity.order != positions[activity.pk]]
+        if not activities:
+            return
         for activity in activities:
             activity.order = positions[activity.pk]
         TripActivity.objects.bulk_update(activities, ["order"])
