@@ -232,6 +232,55 @@ describe("lazy sections", () => {
     });
 });
 
+describe("a tab strip collapsed when the page opened", () => {
+    const STRIP = (trigger: string) => `
+      <div class="card" data-collapse-scope="pin" data-collapse-section="property-records">
+        <div class="card-header"><h3>Property Records</h3></div>
+        <button id="overview" data-ul-lazy-section="pin:property-records" hx-get="/overview/" hx-trigger="${trigger}">Overview</button>
+      </div>`;
+
+    function open(trigger: string): { fired: string[] } {
+        document.body.innerHTML = FAB + STRIP(trigger);
+        const fired: string[] = [];
+        window.htmx = { process: () => {}, trigger: (_el: Element, name: string) => fired.push(name) } as unknown as typeof window.htmx;
+        document.getElementById("overview")!.dispatchEvent(new CustomEvent("htmx:afterProcessNode", { bubbles: true }));
+        scanAll();
+        return { fired };
+    }
+
+    function restore(): void {
+        document.querySelector<HTMLElement>(".collapse-restore-item")!.dispatchEvent(new Event("click"));
+    }
+
+    test("loads its open tab once it is restored", () => {
+        localStorage.setItem("ul-collapsed:pin:property-records", "1");
+        const { fired } = open("ul:lazy-load, click");
+        expect(fired).toEqual([]);
+
+        restore();
+
+        expect(fired).toEqual(["ul:lazy-load"]);
+    });
+
+    test("an element that already loads on ul:unhide is not loaded twice", () => {
+        localStorage.setItem("ul-collapsed:pin:property-records", "1");
+        const { fired } = open("ul:lazy-load, ul:unhide");
+
+        restore();
+
+        expect(fired).toEqual(["ul:unhide"]);
+    });
+
+    test("a strip that loaded before it was collapsed is not reloaded on restore", () => {
+        const { fired } = open("ul:lazy-load, click");
+        clickToggle("property-records");
+
+        restore();
+
+        expect(fired).toEqual(["ul:lazy-load"]);
+    });
+});
+
 describe("installGlobalCollapsibleSections", () => {
     test("exposes the restore refresher", () => {
         expect(typeof window.ulRefreshCollapseRestore).toBe("function");

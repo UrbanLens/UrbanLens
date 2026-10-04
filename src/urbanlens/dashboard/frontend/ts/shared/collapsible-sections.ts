@@ -152,6 +152,7 @@ export function updateRestoreControls(): void {
             if (section.getAttribute("hx-get") && window.htmx) window.htmx.trigger(section, "ul:unhide");
             const innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
             if (innerLoader && window.htmx) window.htmx.trigger(innerLoader, "ul:unhide");
+            loadSkipped(section);
             updateRestoreControls();
         });
         restoreMenu.appendChild(item);
@@ -195,10 +196,12 @@ function onDocumentClick(event: MouseEvent): void {
 }
 
 const lazyLoaded = new WeakSet<Element>();
+/** Lazy elements skipped because their section was collapsed when the page opened. */
+const waitingForRestore = new WeakSet<Element>();
 
 /**
  * Fires `ul:lazy-load` on a `data-ul-lazy-section="scope:section"` element once htmx has
- * processed it, unless that section is collapsed; `ul:unhide` loads it on restore instead.
+ * processed it, unless that section is collapsed; restoring the section loads it instead.
  */
 export function loadLazySection(event: Event): void {
     const el = event.target;
@@ -207,8 +210,20 @@ export function loadLazySection(event: Event): void {
     if (!spec) return;
     lazyLoaded.add(el);
     const [scope = "", section = ""] = spec.split(":");
-    if (isCollapsed(scope, section)) return;
+    if (isCollapsed(scope, section)) {
+        waitingForRestore.add(el);
+        return;
+    }
     window.htmx?.trigger(el, "ul:lazy-load");
+}
+
+/** Loads what a restored section skipped while collapsed. An element that also listens for `ul:unhide` is left to that. */
+function loadSkipped(section: HTMLElement): void {
+    for (const el of [section, ...section.querySelectorAll<HTMLElement>("[data-ul-lazy-section]")]) {
+        if (!waitingForRestore.has(el)) continue;
+        waitingForRestore.delete(el);
+        if (!(el.getAttribute("hx-trigger") ?? "").includes("ul:unhide")) window.htmx?.trigger(el, "ul:lazy-load");
+    }
 }
 
 /** Reset module state. Test-only: a fresh document invalidates the forced-open set. */

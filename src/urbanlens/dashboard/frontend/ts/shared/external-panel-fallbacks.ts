@@ -37,27 +37,39 @@ function hideOwnTab(el: HTMLElement): void {
     if (wasActive) tabBtn.closest(".card-tabs")?.querySelector<HTMLElement>(".pin-plugin-tab-btn:not([hidden])")?.click();
 }
 
+function tabPlaceholder(message: string): HTMLParagraphElement {
+    const p = document.createElement("p");
+    p.className = "pin-plugin-tab-placeholder";
+    p.textContent = message;
+    return p;
+}
+
 /** A tab button targets a body shared by its strip, so the message goes in that body. */
 function showTabPlaceholder(btn: HTMLElement, message: string): void {
     const selector = btn.getAttribute("hx-target");
     const body = selector ? document.querySelector(selector) : null;
-    if (!body) return;
-    const p = document.createElement("p");
-    p.className = "pin-plugin-tab-placeholder";
-    p.textContent = message;
-    body.replaceChildren(p);
+    body?.replaceChildren(tabPlaceholder(message));
 }
 
+/** A still-fetching panel polling inside a tab body is the tab's only content: it ends in a message, not a blank tab. */
+function endsTab(panel: HTMLElement, message: string): boolean {
+    if (!panel.closest(".pin-plugin-tab-body")) return false;
+    panel.replaceWith(tabPlaceholder(message));
+    return true;
+}
+
+const NO_DATA = "No data available.";
 const UNAVAILABLE = "This data is temporarily unavailable.";
 
 function onAfterOnLoad(event: Event): void {
     const { elt, xhr } = detailOf(event);
     if (xhr?.status !== 204) return;
     if (isAutoPanel(elt)) {
+        if (endsTab(elt, NO_DATA)) return;
         hideOwnTab(elt);
         dismiss(elt);
     } else if (isPluginTabButton(elt)) {
-        showTabPlaceholder(elt, "No data available.");
+        showTabPlaceholder(elt, NO_DATA);
     }
 }
 
@@ -65,6 +77,7 @@ function onResponseError(event: Event): void {
     const { elt, xhr } = detailOf(event);
     if (isAutoPanel(elt)) {
         event.stopImmediatePropagation();
+        if (endsTab(elt, UNAVAILABLE)) return;
         // Web search answers a non-subscriber with a real partial (the upsell) on its 403.
         if (elt.id === "web-search-section" && xhr?.status === 403 && xhr.responseText) {
             elt.outerHTML = xhr.responseText;
@@ -86,15 +99,15 @@ function onSendFailure(event: Event): void {
     const { elt } = detailOf(event);
     if (isAutoPanel(elt)) {
         event.stopImmediatePropagation();
-        dismiss(elt);
+        if (!endsTab(elt, UNAVAILABLE)) dismiss(elt);
     } else if (isPluginTabButton(elt)) {
         event.stopImmediatePropagation();
         showTabPlaceholder(elt, UNAVAILABLE);
     }
 }
 
-/** location_data_overview names the sources it found empty (HX-Trigger: pinLocationDataEmpty); their tabs go. */
-function onLocationDataEmpty(event: Event): void {
+/** A card's Overview names the tabs it found empty (HX-Trigger: pinTabsEmpty); they go. */
+function onTabsEmpty(event: Event): void {
     const keys = (event as CustomEvent<{ keys?: string[] }>).detail?.keys ?? [];
     if (!keys.length) return;
     for (const sectionId of ["location-data-section", "property-records-section"]) {
@@ -147,6 +160,6 @@ export function installExternalPanelFallbacks(): void {
     document.body.addEventListener("htmx:responseError", onResponseError, true);
     document.body.addEventListener("htmx:sendError", onSendFailure, true);
     document.body.addEventListener("htmx:timeout", onSendFailure, true);
-    document.body.addEventListener("pinLocationDataEmpty", onLocationDataEmpty);
+    document.body.addEventListener("pinTabsEmpty", onTabsEmpty);
     bindLocationDataTabCache();
 }

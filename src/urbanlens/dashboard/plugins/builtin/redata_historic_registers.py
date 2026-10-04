@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.pins.external_data import PanelPlacement
+from urbanlens.dashboard.services.pins.external_data import OverviewSummary, PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
@@ -206,6 +206,8 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     icon = "history_edu"
     title = "Historic Registers"
     placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
+    #: New York's CRIS card is shown inside this tab (``CrisBuildingPanelSource.shown_in``).
+    tab_label: ClassVar[str] = "Historic Preservation"
     building_level: ClassVar[bool] = True
     tab_order: ClassVar[int] = 40
     payload_key: ClassVar[str] = "resources"
@@ -287,6 +289,36 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     def has_content(self, data: dict | None) -> bool:
         """A row with no name renders nothing worth a tab."""
         return bool(register_rows((data or {}).get(self.payload_key) or []))
+
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """This place's own register listings, for the Property Records Overview.
+
+        Only a record that is the place's own counts, by the rule its links follow: for one building of a site, that
+        building's records; otherwise a listing whose boundary holds the place or whose own point stands on it. A
+        neighbour inside REData's search radius is not this place's status.
+        """
+        from urbanlens.dashboard.services.locations.national_register import containing_listings, reference_field
+        from urbanlens.dashboard.services.locations.register_names import CONTAINS_POINT_KEY
+
+        if pin.location is None:
+            return None
+        one_building = self.one_building_of_a_site(pin)
+        resources = self.own_resources(pin, data, one_building=one_building)
+        own = resources if one_building else [{**row, CONTAINS_POINT_KEY: True} for row in containing_listings(pin.location, resources)]
+        note = national_register_note(pin, own, one_building=one_building)
+        fields: list[dict[str, str]] = []
+        if note and (number := reference_field(national_register_reference(pin, own, one_building=one_building))):
+            fields.append(number)
+        for row in own:
+            if str(row.get("resource_type") or "") in _NOT_A_DESCRIPTION or not str(row.get("name") or "").strip():
+                continue
+            provider, status = str(row.get("provider") or ""), str(row.get("status") or "").strip()
+            label = register_label(provider)
+            if provider != _NATIONAL_REGISTER and status and all(existing["label"] != label for existing in fields):
+                fields.append({"label": label, "value": status})
+        if not (note or fields):
+            return None
+        return OverviewSummary(fields=fields, notes=[note] if note else [])
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """List what each register says, site-level records first for a parcel pin.

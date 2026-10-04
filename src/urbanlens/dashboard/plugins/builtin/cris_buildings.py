@@ -12,7 +12,7 @@ from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.media.previews import tile_preview_url
-from urbanlens.dashboard.services.pins.external_data import FAILURE_SKIP_TTL_SECONDS, CoordinateGatedInfoPanelSource, DocumentPanelSource, DocumentUnavailableError, GalleryMediaSource, PanelApiKind, PanelPlacement, SourceDocument
+from urbanlens.dashboard.services.pins.external_data import FAILURE_SKIP_TTL_SECONDS, CoordinateGatedInfoPanelSource, DocumentPanelSource, DocumentUnavailableError, GalleryMediaSource, OverviewSummary, PanelApiKind, PanelPlacement, SourceDocument
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -395,6 +395,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
     tab_order: ClassVar[int] = 30
     building_level: ClassVar[bool] = True
+    shown_in: ClassVar[str] = "redata_historic_registers"
     geo_boundary: ClassVar[GeoBoundary | None] = state_boundary("NY")
     # The one source that is honestly both shapes, and the reason api_kinds is a set rather than a
     # single value: the same cached CRIS record is an eligibility/address card *and* the survey
@@ -937,6 +938,38 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
                 meta.append(nrhp)
 
         return {"heading_name": usn_name, "meta": meta}
+
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """CRIS's status for this place and its listing's number, for the Property Records Overview.
+
+        Only CRIS's own record of the place counts: on a site, the site record whose boundary holds it; otherwise a
+        building record whose point stands on the building, since the nearest record within 200 m can be a neighbour's.
+        """
+        from urbanlens.dashboard.services.locations.national_register import reference_field, reference_named, stands_on
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
+        location = pin.location
+        if location is None:
+            return None
+        data = data or {}
+        if is_site_scope(pin):
+            record = data.get("district") or {}
+            if record.get("contains_point") is not True:
+                return None
+        elif stands_on(location, data.get("source_latitude"), data.get("source_longitude")):
+            record = data
+        else:
+            return None
+        name = str(record.get("USNName") or record.get("HistoricName") or "")
+        if not name:
+            return None
+        status = str(record.get("EligibilityDesc") or "").strip()
+        fields = [{"label": "NY SHPO status", "value": status}] if status else []
+        if number := reference_field(reference_named(location, name)):
+            fields.append(number)
+        elif record.get("NRNum") and (status.lower() == "listed" or record.get("resource_type") == "national_register_listing"):
+            fields.append({"label": "NYSHPO National Register number", "value": str(record["NRNum"])})
+        return OverviewSummary(fields=fields) if fields else None
 
     @staticmethod
     def _nrhp_reference(pin: Pin, listing_name: str) -> dict[str, str] | None:

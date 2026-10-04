@@ -77,8 +77,9 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   `controllers/child_buildings.py`) — a building row in the property's Buildings on this Property
   list (a building a child pin covers, or a building in its Child pins tab) opens that child's card
   in place: the owner's description and dates, links to the building's page and wiki, and every
-  info panel declaring `building_level` (CRIS, Building Attributes, Building Characteristics,
-  Historic Registers) fetched for the child, not the property. Nothing is fetched until the row is
+  info panel declaring `building_level` (Building Attributes, Building Characteristics, and
+  Historic Preservation, which shows Historic Registers and CRIS together) fetched for the child, not
+  the property. Nothing is fetched until the row is
   opened. The page-wide "child pin details" toggle (`?children=`, not a stored preference) starts on
   for a parcel and for any property holding exactly one building child, but not for a pin its owner
   typed as a building, whose building child is a structure inside it
@@ -474,10 +475,10 @@ direct-only because REData's contract can't reproduce what they show:
   and queues `fetch_recorded_weather_at` for the rest, clustered by date so a page of visits costs one
   request per place rather than one per visit. Days are stored one row per 0.01° cell and day
   (`RecordedWeatherDay`), shared by nearby places (`services.locations.visit_weather`)
-- **Historic Registers** (a Property Records tab) — what the historic inventories say about the pin:
-  the nationwide National Register plus 24 state SHPO and city/county registers, from REData's
-  cultural-resources registry. Location Data's Overview does not name the listing: it merges only
-  `PanelPlacement.LOCATION` sources, and consults Property Records sources only to hide empty tabs.
+- **Historic Registers** (in Property Records' Historic Preservation tab, beside CRIS) — what the
+  historic inventories say about the pin: the nationwide National Register plus 24 state SHPO and
+  city/county registers, from REData's cultural-resources registry. Property Records' Overview names
+  the place's own listing and its number; Location Data's Overview does not.
   Renders only REData's standardized fields (name, type, status, year built, style, use), so a
   register REData adds appears without a release; which registers cover the point comes from
   `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
@@ -487,10 +488,12 @@ direct-only because REData's contract can't reproduce what they show:
   only that building's own records show: a structure listing whose own point stands on it, or the listing
   holding it when CRIS's record of the building calls it listed; the campus listing whose boundary
   merely holds a building does not (`services.locations.national_register`, P230)
-- **NY Historic Preservation (CRIS)** (New York) — the nearest surveyed building's USN record
+- **NY Historic Preservation (CRIS)** (New York, in the Historic Preservation tab after the
+  registers, under its own heading) — the nearest surveyed building's USN record
   (eligibility, address, USN number), or the historic district/National Register listing on a
   parcel-scope pin (NYSHPO's own National Register number, and NPS's reference number linked when
-  the Historic Registers rows name the same listing; CRIS has no public link to a record), plus that building's and site's survey photos and scanned forms in the Media
+  the Historic Registers rows name the same listing, unless those rows already show it in the same
+  tab; CRIS has no public link to a record), plus that building's and site's survey photos and scanned forms in the Media
   gallery. A parcel-scope pin (a campus) also gathers every CRIS building inside the site record's
   footprint and any it links, each attachment tagged with the building it documents; REData is
   asked to warm the whole site with its bulk `fetch-details/`, and each pass live-fetches at most
@@ -533,7 +536,7 @@ direct-only because REData's contract can't reproduce what they show:
 - **National Park Service** (USA) — nearest park info, via REData
 - **Yelp** — nearby business details, via REData
 - **LoopNet** (USA) — commercial real-estate listings
-- **Property Records** (USA) — county parcel ownership/tax/sale-history lookup, retrieved from
+- **Property Records** (USA, the card's Parcel tab) — county parcel ownership/tax/sale-history lookup, retrieved from
   REData via `RedataGateway`
   (`services.apis.property_records.redata_gateway`); populates the wiki's Ownership and Sale
   History cards with `OFFICIAL`-sourced records in addition to a details card. Coverage varies by
@@ -556,17 +559,33 @@ direct-only because REData's contract can't reproduce what they show:
   nearest-feature lookup, via REData)
 - **Panel placement** — an info panel declares where the Private Pin page shows it:
   `InfoPanelSource.placement` is `PanelPlacement.STANDALONE` (a card of its own, the default),
-  `REGIONAL` or `LOCATION` (a tab in one of the two cards below), with `tab_label` and `tab_order`.
-  A plugin panel picks its card by declaration; the controller holds no list of keys
-  (`services.pins.external_data.tabbed_panels`)
+  `REGIONAL`, `LOCATION` or `PROPERTY` (a tab in one of the cards below), with `tab_label` and
+  `tab_order`. A panel naming another in `shown_in` has no tab or card of its own: the other panel's
+  tab (and building card) renders both, each under its own title, and drops a later panel's fact that
+  repeats a link or a label and value an earlier one gave (`external_data.without_repeats`). Each keeps
+  its own gate, fetch and polling. A plugin panel picks its card by declaration; the controller holds
+  no list of keys (`services.pins.external_data.tabbed_panels`)
+- **Tab bodies** — a tab whose data is still being fetched shows its spinner (the pending
+  placeholder is hidden only as a card of its own), and one whose polling ends empty or fails says
+  "No data available." or "This data is temporarily unavailable." rather than going blank
+  (`shared/external-panel-fallbacks.ts`). A card collapsed when the page opened loads its open tab
+  when it is restored (`shared/collapsible-sections.ts`)
 - **Regional Data** — data about the area rather than the site: US Census, Wildlife (iNaturalist),
   Seismic (USGS earthquakes), Disasters (Fire & Disaster History), Water (Water & Hydrology), Air
   Quality and EPA, each loaded when its tab is opened; the first tab with data opens by default,
   and a tab with nothing to show says "No data available."
 - **Location Data** — data about this place: an Overview merging every tab's
-  `overview_summary()` into one unattributed list, then Nominatim, Photon, Building
-  Characteristics, Elevation and Historic Registers. Tabs that settle with nothing to show are
-  removed
+  `overview_summary()` into one unattributed list, then Nominatim, Photon, Elevation and Site
+  Conditions. Tabs that settle with nothing to show are removed, and so is a tab whose panel's gate
+  refuses the pin, which the Overview never fetches (`PinController._card_overview`)
+- **Property Records** — the parcel's and building's records: an Overview (owner, parcel number, year
+  built, historic status and National Register number), then Parcel, Building Characteristics (not
+  on a parcel, whose buildings carry their own) and Historic Preservation (Historic Registers and
+  CRIS). The Overview names an official owner only to a viewer holding `SiteFeature.PROPERTY_OWNERS`,
+  as the Parcel tab does, and says "Owner on record - subscribers only" to anyone else. It counts
+  only the place's own records: a listing whose boundary holds it or whose point stands on it (for one
+  building of a site, P230's rule), and a CRIS record standing on the building or, on a site, the site
+  record holding it. It fetches its tabs' data and removes empty tabs, as Location Data's does
 - **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
@@ -603,9 +622,10 @@ direct-only because REData's contract can't reproduce what they show:
   `SiteFeature.NEARBY_RESEARCH`)
 - **Water & Hydrology** (USA, a Regional Data tab) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
   the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
-- **Site Conditions** (USA) — NLCD land cover, EPA walkability index (incl. transit distance), and
-  USDA SSURGO soil composition (dominant-first, no invented averages) folded into one panel, via
-  REData (`plugins.builtin.redata_site_conditions`)
+- **Site Conditions** (USA, a Location Data tab; its panel is requested when the tab opens, and the card's Overview
+  fetches its data in the background, as for the card's other tabs) — NLCD land cover, EPA
+  walkability index (incl. transit distance), and USDA SSURGO soil composition (dominant-first, no
+  invented averages) folded into one panel, via REData (`plugins.builtin.redata_site_conditions`)
 - **Air Quality** (a Regional Data tab) — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
   average — of nearby community sensors, via REData (`plugins.builtin.redata_air_quality`)
 - **Fire & Disaster History** (USA, the Regional Data "Disasters" tab) — NIFC wildfire perimeters that reached the site (back to
