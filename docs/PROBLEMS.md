@@ -992,7 +992,7 @@ excluded (guarded; the guard cannot fire).
 `Trip.objects` as `Any` on 2026-09-29 against the same code the full run typed, so a single-file
 probe proves nothing either way.
 
-## P95 — An import preview reads each file a chunk at a time, but one oversized element is still built whole at 10-13x its size
+## P95 — An import preview reads each file a chunk at a time, but one oversized OSM way is still built whole at about 10x its size
 
 `id: P95` · `status: open` · `updated: 2026-10-04`
 
@@ -1136,7 +1136,7 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 
 **Still open.**
 
-- **One element is built whole: GeoJSON and OSM still are, KML no longer is (2026-10-04).** A file that is one
+- **One element is built whole: OSM still is; KML and GeoJSON no longer are (2026-10-04).** A file that is one
   element (a single placemark, feature, way, row or line) is read whole into that element and then parsed. Measured
   after the 2026-10-02 work, RSS; a single row or line was not measured:
 
@@ -1158,11 +1158,26 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 
   `test_import_parse_memory.py::OneLargeElementTests` holds both under 3x.
 
-  **GeoJSON** builds the feature in ijson's C object builder, so compact coordinates would mean building features
-  from events in Python, slowing every GeoJSON import. **OSM** holds an Element per `<nd>` of the way and an
-  id-to-coordinates entry per reference across its two passes. Jess ruled on 2026-10-02 that there is no
-  per-element cap, so streaming is the only fix left for either. At about 11x, one element of roughly 270 MB still
-  fills `media-worker`'s 3 GB.
+  **GeoJSON, fixed.** `json_stream.iter_geojson_features` builds each feature from ijson's events, not its C object
+  builder. Under a geometry's `coordinates`, an array whose items are all two- or three-number positions arrives as
+  one `float64` array of shape `(n, 2)` or `(n, 3)`. Any other array is built as `json.loads` builds it, and so is a
+  property that happens to be named `coordinates`. shapely builds the same geometry from the array, so the
+  centroid is unchanged. A Point whose coordinates came out as an array is read back as lists. For a 12 MiB file
+  that is one feature, the tracemalloc peak fell from 145.3 MB to under 3x, for a LineString and for a Polygon
+  outline (`OneLargeElementTests`). Three properties in `test_import_streaming_parsers.py::GeoJsonGeometriesReadCompactlyTests`
+  check the change:
+  - Arbitrary JSON documents build what ijson's builder builds, once the arrays are read back as lists.
+  - Arbitrary geometries do too. They cover every type, collections, wrong nesting, booleans, 60-bit integers and
+    mixed sizes.
+  - Arbitrary geometries make the same pins.
+
+  The cost is speed. A 16 MiB Saved Places file of 58,416 Point features read in 0.84 s instead of 0.37 s. The
+  preview stops at 20,000 pins, about 5.6 MiB of that file, so it pays about 0.15 s more. A skipped feature's
+  warning now names its geometry type rather than logging the whole geometry.
+
+  **OSM** holds an Element per `<nd>` of the way and an id-to-coordinates entry per reference across its two
+  passes. Jess ruled on 2026-10-02 that there is no per-element cap, so streaming is the only fix left. At about
+  11x, one way of roughly 270 MB still fills `media-worker`'s 3 GB.
 - **History grows with the file, by design.** Location History's visits and routes and GPX's routes
   are what the confirmed import saves, so they are kept to the end of the file: 1.26x and 5.9x RSS at
   16 MiB. What bounds them now is the 110-second soft limit rather than memory: at the measured rates

@@ -46,7 +46,7 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
     pick_name_and_description,
 )
 from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
-from urbanlens.dashboard.services.import_formats.json_stream import iter_array_items
+from urbanlens.dashboard.services.import_formats.json_stream import iter_geojson_features
 from urbanlens.dashboard.services.import_formats.streams import as_stream, iter_decoded, iter_lines
 from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
 from urbanlens.dashboard.services.pins.history_import import ImportedHistory
@@ -1150,7 +1150,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         """Return a representative ``(longitude, latitude)`` for any GeoJSON geometry type."""
         geom_type = geometry.get("type")
         if geom_type == "Point":
-            coordinates = geometry.get("coordinates") or []
+            coordinates = geometry.get("coordinates")
+            # A list of positions where one belongs reads as compact arrays; this branch takes it as lists, as it was.
+            coordinates = (coordinates.tolist() if isinstance(coordinates, np.ndarray) else coordinates) or []
             if len(coordinates) < 2:
                 return None
             return coordinates[0], coordinates[1]
@@ -1211,13 +1213,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             MalformedJSONError: Malformed JSON, once reading reaches it.
             AttributeError: A feature, or its geometry or properties, is not an object.
         """
-        for feature in iter_array_items(as_stream(file_contents), "features"):
+        for feature in iter_geojson_features(as_stream(file_contents)):
             geometry = feature.get("geometry") or {}
             properties = feature.get("properties") or {}
 
             point = self._geojson_feature_point(geometry)
             if point is None:
-                logger.warning("Skipping feature with unresolvable geometry: %s", geometry)
+                logger.warning("Skipping a feature whose %r geometry has no point.", geometry.get("type"))
                 continue
             longitude, latitude = point
 

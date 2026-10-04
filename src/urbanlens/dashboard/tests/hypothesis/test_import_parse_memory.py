@@ -87,6 +87,18 @@ def _kml_one_element(geometry: str) -> bytes:
     )
 
 
+def _geojson_one_element(geometry: str) -> bytes:
+    """A GeoJSON holding one feature, whose geometry is the whole file: a long track, or a large area's outline."""
+    first = f"[{_lng(0):.6f}, {_lat(0):.6f}]"
+    opening, closing = {"LineString": ("[", "]"), "Polygon": ("[[", "]]")}[geometry]
+    return _filled(
+        '{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"name": "The long walk"}, '
+        f'"geometry": {{"type": "{geometry}", "coordinates": {opening}\n',
+        lambda i: f"[{_lng(i):.6f}, {_lat(i // 997):.6f}], ",
+        f"{first}{closing}}}}}]}}\n",
+    )
+
+
 def _kml_styles_first() -> bytes:
     """A KML whose placemarks follow a file's worth of shared styles, as a My Maps export's do."""
     return _filled(
@@ -357,6 +369,12 @@ class OneLargeElementTests(_MemoryCase):
 
     def test_a_kml_outline(self) -> None:
         self.assert_held_near_its_text("outline.kml", _kml_one_element("Polygon"))
+
+    def test_a_geojson_track(self) -> None:
+        self.assert_held_near_its_text("track.geojson", _geojson_one_element("LineString"))
+
+    def test_a_geojson_outline(self) -> None:
+        self.assert_held_near_its_text("outline.geojson", _geojson_one_element("Polygon"))
 
 
 class HistoryFormatsAreReadInPiecesTests(_MemoryCase):

@@ -18,6 +18,7 @@ import datetime
 import io
 import itertools
 import json
+import math
 from pathlib import Path
 import struct
 import tempfile
@@ -28,6 +29,7 @@ from defusedxml.ElementTree import ParseError, fromstring as parse_xml_defused
 import geopandas
 import gpxpy
 import gpxpy.gpx
+import numpy as np
 import pyogrio.errors
 import shapely.wkb
 import shapely.wkt
@@ -56,6 +58,7 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
     normalize_header_key,
     pick_name_and_description,
 )
+from urbanlens.dashboard.services.import_formats.json_stream import iter_array_items, iter_geojson_features
 from urbanlens.dashboard.services.import_formats.wkt_wkb import _pin_from_geometry, wkb_to_dict, wkt_to_dict
 from urbanlens.dashboard.services.pins.history_import import _VISIT_KEYS, ImportedHistory, _encoded
 
@@ -295,6 +298,96 @@ class GeoJsonAgreesWithJsonLoadsTests(SimpleTestCase):
     def test_malformed_json_is_a_value_error_as_it_was(self) -> None:
         with self.assertRaises(ValueError):
             GoogleMapsGateway(api_key="").geojson_to_dict('{"features": [{"geometry": ', user_profile=None)  # type: ignore[arg-type]
+
+
+_COORDINATE_NUMBER = st.integers(-(2**60), 2**60) | st.floats(-179, 179, allow_nan=False) | st.booleans()
+_NESTED_COORDINATES = st.recursive(
+    st.lists(_COORDINATE_NUMBER, max_size=4), lambda inner: st.lists(inner, max_size=3), max_leaves=12
+)
+_ANY_GEOMETRY = st.builds(
+    lambda kind, coordinates: {"type": kind, "coordinates": coordinates},
+    st.sampled_from(["Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "LinearRing"]),
+    _NESTED_COORDINATES | _JSON_SCALAR,
+)
+_ANY_GEOMETRY_OR_COLLECTION = _ANY_GEOMETRY | st.builds(
+    lambda members: {"type": "GeometryCollection", "geometries": members}, st.lists(_ANY_GEOMETRY, max_size=3)
+)
+
+
+def _as_lists(value: Any) -> Any:
+    """*value* with every array the compact reader made back as the lists ``json.loads`` builds."""
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, dict):
+        return {key: _as_lists(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_as_lists(item) for item in value]
+    return value
+
+
+def _comparable(value: Any) -> Any:
+    """A centroid of NaN equals another, as the test means it to."""
+    if isinstance(value, float) and math.isnan(value):
+        return "nan"
+    if isinstance(value, (list, tuple)):
+        return [_comparable(item) for item in value]
+    return value
+
+
+class GeoJsonGeometriesReadCompactlyTests(SimpleTestCase):
+    """P95: a geometry's positions arrive as one float array, and every pin is what the lists made."""
+
+    @_hyp
+    @given(document=_JSON_DOCUMENT)
+    def test_any_document_builds_as_ijson_builds_it(self, document: str) -> None:
+        raw = document.encode()
+
+        self.assertEqual(
+            _outcome(lambda: _as_lists(list(iter_geojson_features(io.BytesIO(raw))))),
+            _outcome(lambda: list(iter_array_items(io.BytesIO(raw), "features"))),
+        )
+
+    @_hyp
+    @given(geometries=st.lists(_ANY_GEOMETRY_OR_COLLECTION, max_size=4))
+    def test_any_geometry_builds_as_ijson_builds_it(self, geometries: list[dict[str, Any]]) -> None:
+        raw = json.dumps({"features": [{"geometry": geometry} for geometry in geometries]}).encode()
+
+        self.assertEqual(
+            _as_lists(list(iter_geojson_features(io.BytesIO(raw)))),
+            list(iter_array_items(io.BytesIO(raw), "features")),
+        )
+
+    @_hyp
+    @given(geometries=st.lists(_ANY_GEOMETRY_OR_COLLECTION, max_size=4))
+    def test_any_geometry_makes_the_pin_the_lists_made(self, geometries: list[dict[str, Any]]) -> None:
+        features = [{"geometry": geometry, "properties": {"name": f"n{i}"}} for i, geometry in enumerate(geometries)]
+        content = json.dumps({"type": "FeatureCollection", "features": features})
+        gateway = GoogleMapsGateway(api_key="")
+
+        def new() -> list[tuple[Any, ...]]:
+            pins = gateway.iter_geojson_pins(content.encode(), user_profile=None)  # type: ignore[arg-type]
+            return [(pin["latitude"], pin["longitude"], pin["name"]) for pin in pins]
+
+        self.assertEqual(
+            _comparable(_outcome(new)), _comparable(_outcome(lambda: [row[:3] for row in _old_geojson(content)]))
+        )
+
+    def test_a_track_s_positions_are_one_float_array(self) -> None:
+        raw = b'{"features": [{"geometry": {"type": "LineString", "coordinates": [[1, 2], [3.5, 4], [5, 6]]}}]}'
+
+        (feature,) = iter_geojson_features(io.BytesIO(raw))
+        coordinates = feature["geometry"]["coordinates"]
+
+        self.assertIsInstance(coordinates, np.ndarray)
+        self.assertEqual(coordinates.dtype, np.float64)
+        self.assertEqual(coordinates.tolist(), [[1.0, 2.0], [3.5, 4.0], [5.0, 6.0]])
+
+    def test_a_property_named_coordinates_is_left_as_lists(self) -> None:
+        raw = b'{"features": [{"properties": {"coordinates": [[1, 2], [3, 4]]}}]}'
+
+        (feature,) = iter_geojson_features(io.BytesIO(raw))
+
+        self.assertEqual(feature["properties"]["coordinates"], [[1, 2], [3, 4]])
 
 
 _TIMESTAMP = st.sampled_from(["2019-01-01T00:00:00Z", "2019-06-01T12:30:00.123Z", "not a time", ""]) | st.none()
