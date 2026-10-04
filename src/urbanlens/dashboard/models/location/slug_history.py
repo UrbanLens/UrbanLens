@@ -11,6 +11,9 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
 
+#: Former slugs kept per Location; the oldest goes first.
+MAX_FORMER_SLUGS = 10
+
 
 class LocationSlugHistory(abstract.DashboardModel):
     """A slug a Location was addressed by before, so links to it keep resolving.
@@ -37,6 +40,8 @@ class LocationSlugHistory(abstract.DashboardModel):
         """Remember ``former`` for ``location`` after its slug became ``current``.
 
         The Location's own uuid needs no row, since it always resolves; a slug the Location takes back is dropped.
+        Only the newest :data:`MAX_FORMER_SLUGS` are kept, so a provider cycling through names cannot grow the
+        history without bound; a slug dropped from it can be minted for another Location again.
 
         Args:
             location: The Location whose slug changed.
@@ -47,3 +52,5 @@ class LocationSlugHistory(abstract.DashboardModel):
             cls.objects.filter(location=location, slug=current).delete()
         if former and former != current and former != str(location.uuid):
             cls.objects.get_or_create(slug=former, defaults={"location": location})
+            oldest = cls.objects.filter(location=location).order_by("-pk").values_list("pk", flat=True)[MAX_FORMER_SLUGS:]
+            cls.objects.filter(pk__in=list(oldest)).delete()

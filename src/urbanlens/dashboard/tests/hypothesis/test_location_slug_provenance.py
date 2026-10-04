@@ -57,14 +57,14 @@ class ProviderNameReMintTests(_Locations):
         self.assertEqual(location.official_name_source, "wikipedia")
         self.assertEqual(location.slug, "old-grain-mill")
 
-    def test_a_later_provider_rename_keeps_the_minted_slug(self) -> None:
+    def test_a_later_provider_rename_re_mints_the_slug(self) -> None:
         location = self._location("Old Grain Mill", "wikipedia")
 
         update_location_name_from_external_sources(location, extra_candidates=[("wikipedia", "Smith Brothers Mill")])
 
         location.refresh_from_db()
         self.assertEqual(location.official_name, "Smith Brothers Mill")
-        self.assertEqual(location.slug, "old-grain-mill")
+        self.assertEqual(location.slug, "smith-brothers-mill")
 
     def test_saving_a_provider_name_directly_re_mints_a_uuid_slug(self) -> None:
         location = self._location()

@@ -347,6 +347,28 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         parent_name = parent._provider_name()  # noqa: SLF001 - same class
         return parent_slug_prefix([parent_name]) if parent_name else ""
 
+    def sync_slug_with_provider_name(self) -> bool:
+        """Re-mint the slug when its Location's provider name, under its parent's prefix, could no longer give it.
+
+        A wiki with no provider name behind it takes its uuid.
+
+        Returns:
+            Whether the slug changed.
+        """
+        from urbanlens.dashboard.services.core.slugs import could_mint
+
+        name = self._provider_name()
+        if not name:
+            if self.slug == str(self.uuid):
+                return False
+            self.slug = str(self.uuid)
+            self.save(update_fields=["slug"])
+            return True
+        if could_mint(self.slug or "", name, prefix=self._slug_parent_prefix(), max_length=self._slug_max_length(), preferred_length=self._slug_preferred_length()):
+            return False
+        self.regenerate_slug()
+        return True
+
     def _slug_preferred_length(self) -> int:
         from urbanlens.dashboard.services.core.slugs import PREFERRED_CHILD_SLUG_LENGTH
 
