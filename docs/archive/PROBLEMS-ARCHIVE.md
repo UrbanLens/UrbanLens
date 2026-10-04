@@ -21932,15 +21932,20 @@ Jess ruled on 2026-10-02: ask once which panels have content, and skip the rest.
 request. `services/pins/panel_probe.py` reads the pin's cache rows in one batch and, for each standalone info card,
 each bespoke card (Azure Maps, Buildings, Yelp, NPS, LoopNet, USGS Topo, Wikipedia), each Regional Data tab and each
 Media provider, decides whether the panel's own request would answer 204 or an empty gallery. The template renders no
-placeholder for those. A panel with no stored answer still loads and fetches. The hx-sync lanes are unchanged, and
-every placeholder that still renders keeps its lane.
+placeholder for those cards and providers, and hides the Wikipedia sub-tab. A known-empty Regional Data tab keeps its
+button, but is no longer chosen as the tab that loads on open. A panel with no stored answer still loads and fetches.
+The hx-sync lanes are unchanged. The placeholders that still render are dealt across them round-robin, as before, so
+a panel's lane now depends on which others were left out.
 
-**Each decision is the panel's own, so the page and the panel cannot disagree.** The bespoke views (Azure Maps, NPS,
+**Each decision is the panel's own, so the page never leaves out a panel that would have shown something.** The bespoke views (Azure Maps, NPS,
 LoopNet, Yelp, USGS Topo, Wikipedia) now go through their source's `gate()`, `cached_entry()` and `shows()`.
 Their inline 204 rules moved into `has_content`, and the coordinate and key checks moved into `gate`.
 `schedule_panel_fetch`'s refusal became `external_data.fetch_blocked`. An info panel's `shows` is
 `render_context(...) is not None`, which is exactly what its view 204s on. `ProbeAgreesWithThePanelsTests` asks
 both the page and the view about the same payloads.
+Buildings is the exception. Its view was not refactored, and the probe keeps that card whenever the payload lists
+any building or the pin has child pins, even when the view then drops every building as off the property. That
+costs a request, never a hidden card.
 
 **Why the page's own request and not a lazily loaded fragment.** A fragment would add a round trip before any panel
 could start. It would also need out-of-band swaps into the slots the panels occupy across four parts of the page,
