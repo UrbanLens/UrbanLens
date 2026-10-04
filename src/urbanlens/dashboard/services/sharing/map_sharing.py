@@ -9,7 +9,7 @@ from django.db import IntegrityError, transaction
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
-from urbanlens.dashboard.services.sharing.map_pin_share_detection import sync_pin_inferences
+from urbanlens.dashboard.services.sharing.map_pin_share_detection import marked_places, sync_pin_inferences
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 #: them. Approximate by nature - see module docstring on that function.
 INFERRED_SOURCE_SHARE_RADIUS_METERS = 150
 INFERRED_SOURCE_SHARE_WINDOW_DAYS = 30
+
+#: How many places one send may share by marking them, as a message's typed coordinates are capped.
+MAX_MARKED_PLACES_PER_SEND = 5
 
 
 def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup_map: MarkupMap) -> PinShare | None:
@@ -59,8 +62,56 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
     return share
 
 
+def _record_marked_place_share(sender: Profile, recipient: Profile, latitude: float, longitude: float, markup_map: MarkupMap) -> PinShare | None:
+    """Share a place the map marks outside the sender's shared pins, as a coordinate typed into a message is (P21).
+
+    Args:
+        sender: The map's owner at the time of sending.
+        recipient: The profile the map was sent to.
+        latitude: The marked point's latitude.
+        longitude: The marked point's longitude.
+        markup_map: The map that marks it.
+
+    Returns:
+        The new share, or None when the recipient has a pin there, was already told of the place, or the write lost a race.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.sharing.share_provenance import (
+        find_profile_pin_near_location,
+        profile_is_exposed_to,
+        record_share_exposure,
+        resolve_and_stamp_origin_share,
+        resolve_origin_share,
+    )
+
+    location, _created = Location.objects.get_nearby_or_create(latitude, longitude)
+    if find_profile_pin_near_location(recipient.pk, location) is not None:
+        return None
+    if PinShare.objects.already_shared_with(recipient, location=location).exists() or profile_is_exposed_to(recipient.pk, location):
+        return None
+    sender_pin = find_profile_pin_near_location(sender.pk, location)
+    if sender_pin is not None and PinShare.objects.already_shared_with(recipient, pin=sender_pin).exists():
+        return None
+    try:
+        with transaction.atomic():
+            share = PinShare.objects.create(
+                pin=sender_pin,
+                location=location,
+                from_profile=sender,
+                to_profile=recipient,
+                parent_share=resolve_and_stamp_origin_share(sender_pin) if sender_pin is not None else resolve_origin_share(sender.pk, location=location),
+                origin=PinShareOrigin.MAP_DETECTED,
+                status=PinShareStatus.DETECTED,
+                detected_via_map=markup_map,
+            )
+            record_share_exposure(share)
+    except IntegrityError:
+        return None
+    return share
+
+
 def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_map: MarkupMap) -> list[PinShare]:
-    """Run pin-share detection for a map being sent from ``sender`` to ``recipient``.
+    """Record what a map being sent from ``sender`` to ``recipient`` shares: the sender's pins it calls out, then the places it marks.
 
     Args:
         sender: ``markup_map``'s owner at the time of sending.
@@ -68,11 +119,15 @@ def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_ma
         markup_map: The map being shared.
 
     Returns:
-        Newly created PinShare rows (empty if nothing was detected, or everything was already recorded from a prior send of this or another map covering the same pins)."""
+        Newly created PinShare rows (empty if nothing was detected, or everything was already recorded from a prior send of this or another map covering the same places)."""
     pins = sync_pin_inferences(markup_map)
     shares = []
     for pin in pins:
         share = _record_detected_share(sender, recipient, pin, markup_map)
+        if share is not None:
+            shares.append(share)
+    for latitude, longitude in marked_places(markup_map, pins, limit=MAX_MARKED_PLACES_PER_SEND):
+        share = _record_marked_place_share(sender, recipient, latitude, longitude, markup_map)
         if share is not None:
             shares.append(share)
     return shares

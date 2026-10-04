@@ -215,7 +215,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
   records a provenance chain (`LocationExposure`) of how a location reached each user.
   `services.sharing.pin_sharing.create_pin_share` (gated by `require_pin_owner`) is the single
-  path every caller, web and messaging alike, goes through to create one
+  path every caller, web and messaging alike, goes through to create one. A sent markup map records
+  the sender's pins it calls out and, up to five per send, the places it marks where they have none (a marker or
+  label's point, a property-sized circle's centre), as location-only shares
+  (`services.sharing.map_sharing.share_markup_map_with_profile`, P21), as a coordinate typed into a message does
 - Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
   Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list

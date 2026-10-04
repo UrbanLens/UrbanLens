@@ -519,68 +519,6 @@ Removed on 2026-10-02, measured rather than assumed:
   ones below the threshold, so a batch's worth of them blocked every later question. The sweep now
   filters on `voting.score_expression()` in SQL.
 
-## P21 — A shared markup map stamps provenance only for places its sender has pinned
-
-`id: P21` · `status: open` · `updated: 2026-09-05`
-
-Previously titled "`LocationWikiEditView.post` drops invalid wiki field edits and still answers
-`{"ok": true}`", and before that "Messaging / external API (noted 2026-07-26)". Nine of this entry's
-eleven sub-items are resolved and were removed on 2026-09-05 rather than left to be re-read - git
-history has them. Two are live.
-
-### A markup map only records what its sender already had a pin for
-
-The original claim - that attaching a `MarkupMap` to a direct message records no `LocationExposure`
-at all - stopped being true in `57a4a90af` (2026-08-27), a month after this entry was last touched.
-All three attach paths now stamp the chain: the DM (`services/messaging/direct_messages.py` ->
-`share_markup_map_with_profile`), the standalone map share, and the pin-share dialog. Group chats
-cannot attach a map at all, so there is no second hole there.
-
-What survives is the sub-question the original entry deferred, and it is the more interesting half.
-`detect_shared_pins` matches the map against **the sender's own pins** (`_candidate_pins` filters
-`profile=sender`). A map that marks a place the sender has never pinned produces no share and no
-exposure - so the recipient learns the location and their onward share resolves `parent_share=None`,
-ending the chain there. That is exactly the laundering pattern `share_provenance.py`'s own docstring
-says the design exists to defeat: receive a share, never pin it, redraw it, forward it. It applies to
-a cloned map too, whose new owner usually has no pin at the depicted place.
-
-The asymmetry with the sibling path is the argument for fixing it: `dm_location_detection` already
-mints a location-only `PinShare` (`pin=None`) plus an exposure for bare coordinates *typed* into a
-chat. Drawing a marker on that same spot and attaching the map is the more precise disclosure,
-arrives in the same message, and records nothing. `PinShare.pin` is already nullable and documented
-for location-only shares, `place_label` already falls back to the location, and the Memories >
-Sharing page already renders rows of that shape - so the model layer needs nothing.
-
-**Two decisions to make before writing it**, which is why this is filed rather than done:
-
-- **Which item types assert a place.** A placed marker or text label asserts one spot; a circle
-  asserts its centre, but only below some radius (a 5 km circle asserts nothing). A line, arrow,
-  square or polygon has no single defensible coordinate - a centroid is not what the sender pointed
-  at - and those already contribute by matching against real pins. Minting locations for them would
-  fill the chain with noise and inflate `chain_share_count`, which counts rows.
-- **Whether the saved viewport counts.** `detect_shared_pins` already treats "zoomed in past the
-  threshold, pin in the central quarter" as a share, so the map itself asserts its centre and the
-  recipient can read it off the snapshot. Including it is what makes the record independent of the
-  sender's own bookkeeping - and it changes behaviour for every map ever sent, so it wants its own
-  decision rather than riding along.
-
-A cap belongs on whatever ships: a map can hold hundreds of items, and `dm_location_detection`
-already caps mentions at five per message for the same reason.
-
-### Legacy `BLOCKED` rows may still record the wrong blocker
-
-`Friendship` has no "blocked_by" column, so `from_profile` is the only record of who blocked whom,
-and `block_profile` used to reuse whichever row already joined the pair - a block placed on an
-inbound request left the *blocked* party as `from_profile`. It normalises direction now, so every
-block placed since is right, but existing rows carry no signal a migration could use: it would have
-to guess.
-
-Impact on a legacy row is bounded and inverted from the original defect - the true blocker gets a 404
-from `unblock_profile`/`remove_friend` and must re-block to normalise the row, and the blocked party
-can lift it. `manage.py audit_inverted_friendship_blocks --before YYYY-MM-DD` reports the candidates
-read-only, with no default `--before` on purpose: the fix's deploy date for a given production
-database is something only a human knows.
-
 ## P22 — REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron
 
 `id: P22` · `status: open` · `updated: 2026-07-31`
@@ -2851,3 +2789,19 @@ or if any page adds it by hand. It also checks the bridge, and checks itself aga
 Leaflet's own attribution control renders raw HTML. Its strings are `TILE_DEFS` constants, plus a vector style's
 source attributions, which the bridge's `getAttribution` passes through. Treat a third-party style URL as trusted
 markup until that changes.
+
+## P279 — Legacy `BLOCKED` friendship rows may still record the wrong blocker
+
+`id: P279` · `status: open` · `updated: 2026-10-04` · `split from P21, whose other half was fixed on 2026-10-04`
+
+`Friendship` has no "blocked_by" column, so `from_profile` is the only record of who blocked whom,
+and `block_profile` used to reuse whichever row already joined the pair - a block placed on an
+inbound request left the *blocked* party as `from_profile`. It normalises direction now, so every
+block placed since is right, but existing rows carry no signal a migration could use: it would have
+to guess.
+
+Impact on a legacy row is bounded and inverted from the original defect - the true blocker gets a 404
+from `unblock_profile`/`remove_friend` and must re-block to normalise the row, and the blocked party
+can lift it. `manage.py audit_inverted_friendship_blocks --before YYYY-MM-DD` reports the candidates
+read-only, with no default `--before` on purpose: the fix's deploy date for a given production
+database is something only a human knows.

@@ -52,6 +52,9 @@ AIMED_AT_VIEWPORT_FRACTION = 0.25
 #: The boundary type used for pin-share detection matching.
 _DETECTION_BOUNDARY_TYPE = "property"
 
+#: A circle wider than this marks an area rather than a place, so its centre is not one the map shares.
+MAX_PLACE_CIRCLE_METERS = 500
+
 
 @dataclass(frozen=True)
 class MapBounds:
@@ -347,6 +350,61 @@ def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
         if any(_item_matches_pin(item, boundary) for item in items):
             matches.append(pin)
     return matches
+
+
+def _marked_point(item: PinMarkup) -> tuple[float, float] | None:
+    """The one place ``item`` marks by itself: a marker's or label's point, or a property-sized circle's centre."""
+    geometry = item.geometry or {}
+    if item.markup_type in (MarkupType.PIN, MarkupType.TEXT):
+        if geometry.get("type") != "Point":
+            return None
+    elif item.markup_type == MarkupType.CIRCLE:
+        radius = geometry.get("radius")
+        if geometry.get("type") != "Circle" or radius is None:
+            return None
+        try:
+            if float(radius) > MAX_PLACE_CIRCLE_METERS:
+                return None
+        except (TypeError, ValueError):
+            return None
+    else:
+        return None
+    try:
+        longitude, latitude = float(geometry["coordinates"][0]), float(geometry["coordinates"][1])
+    except (KeyError, TypeError, ValueError, IndexError):
+        return None
+    if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0) or (latitude, longitude) == (0.0, 0.0):
+        return None
+    return round(latitude, 6), round(longitude, 6)
+
+
+def marked_places(markup_map: MarkupMap, shared_pins: list[Pin], *, limit: int) -> list[tuple[float, float]]:
+    """The places ``markup_map`` marks outside every pin it was found to share, in drawing order.
+
+    A marker or text label marks its point and a property-sized circle its centre. A line, arrow, square or polygon has
+    no one point its sender aimed at, so it shares only the pins it calls out.
+
+    Args:
+        markup_map: The map being shared.
+        shared_pins: The sender's pins :func:`detect_shared_pins` matched; a point inside one is already shared.
+        limit: How many places to return at most.
+
+    Returns:
+        ``(latitude, longitude)`` pairs, each once.
+    """
+    boundaries = list(_boundaries_for_pins(shared_pins, _DETECTION_BOUNDARY_TYPE).values())
+    places: list[tuple[float, float]] = []
+    for item in markup_map.items.all():
+        point = _marked_point(item)
+        if point is None or point in places:
+            continue
+        spot = Point(point[1], point[0], srid=4326)
+        if any(boundary.intersects(spot) for boundary in boundaries):
+            continue
+        places.append(point)
+        if len(places) == limit:
+            break
+    return places
 
 
 def sync_pin_inferences(markup_map: MarkupMap) -> list[Pin]:

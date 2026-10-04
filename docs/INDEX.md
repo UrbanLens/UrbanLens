@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P279` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P280` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -43,7 +43,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P14 | open | 2026-10-04 | Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-10-02 | Audit residue: group chats lack direct messages' features, and the hypothesis strategies are barely shared | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-09-24 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-10-03 | 43 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -210,3 +209,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P277 | open | 2026-10-04 | A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P278 | open | 2026-10-04 | MapLibre 5.24's attribution sanitizer can be bypassed, and the fix is only in the v6 line this app pins against | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P279 | open | 2026-10-04 | Legacy `BLOCKED` friendship rows may still record the wrong blocker | [`docs/PROBLEMS.md`](PROBLEMS.md) |

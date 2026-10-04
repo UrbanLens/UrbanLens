@@ -22509,3 +22509,39 @@ the cases that must create nothing:
 - a location holding no campus wiki.
 
 The sweep of every test file touching parcel buildings, auto-nesting or wiki creation passed: 700 passed, 1 xfailed.
+
+## RESOLVED 2026-10-04: A sent markup map shares the places it marks, not only the places its sender has pinned
+
+`id: P21` · `status: fixed` · `resolved: 2026-10-04` · `its other live item, legacy BLOCKED friendship rows, moved to P279`
+
+`detect_shared_pins` matched a map only against **the sender's own pins**. A map that marked a place its sender had
+never pinned recorded no share and no exposure, so the recipient learned the place and any onward share of it
+started a fresh chain. The laundering pattern the provenance chain exists to defeat was therefore open: receive a
+share, never pin it, redraw it on a map, send that. The same applied to a cloned map, whose new owner usually has no
+pin at the depicted place. A coordinate typed into a message already counted
+(`messaging.dm_location_detection`).
+
+**Fix.** `share_markup_map_with_profile` records the pins a map calls out as before, then the places it marks
+(`map_pin_share_detection.marked_places`):
+
+- **What marks a place.** A marker or text label marks its point. A circle marks its centre, up to
+  `MAX_PLACE_CIRCLE_METERS` (500 m); a wider circle marks an area, not a place.
+- **What does not.** A line, arrow, square or polygon has no one point its sender aimed at, so it still shares only
+  the pins it calls out.
+- **Points already covered.** A point inside a pin the map was found to share is skipped, so marking your own pins
+  does not use up the cap.
+- **The share.** Each remaining place gets a location-only `MAP_DETECTED`/`DETECTED` share with its exposure, at most
+  `MAX_MARKED_PLACES_PER_SEND` (5) per send, under the rules typed coordinates follow: none where the recipient has a
+  pin or was already told of the place, and the parent comes from the sender's pin there or their own exposure. All
+  three send paths (DM attachment, map share, pin-share dialog) go through it.
+
+**Decisions taken, open to revisiting:**
+- **The saved viewport does not count.** Counting it would change what every map ever sent records.
+- **The cap is per send and counts in drawing order.** Five decoy marks drawn first can still push a sixth place past
+  it, as five decoy coordinates can in a message.
+
+Tests (`tests/hypothesis/test_map_marker_location_shares.py`): 6 failed before the change. They cover a marker, a
+label and a small circle sharing their place, a resend sharing nothing twice, the cap, and the laundering case, where
+a received place redrawn and sent on keeps its chain. The 4 cases that must share nothing passed before and after: a
+wide circle, the four other shapes, a marker on the sender's pin (shared once, as the pin), and a place the recipient
+pinned.
