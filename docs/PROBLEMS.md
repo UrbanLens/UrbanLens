@@ -3125,15 +3125,3 @@ the same guard after the pin's own row, so a pin there skips its wiki's drawn ou
 `test_detail_building_outlines.py`'s fixtures, not yet reproduced as a failing test. Fix: let the guard return
 early only when the place says the type does not apply, and keep the drawn row for a building place without
 geometry.
-
-## P251 — The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes
-
-`id: P251` · `status: open` · `updated: 2026-10-04` · `found by: adversarial review of P233`
-
-`test_beat_lock_intervals.py::_effective_period_seconds` returns 3600 for a crontab whose `hour` covers the whole day,
-whatever its `minute`. P233's `public-media-cache-sweep` runs at `crontab(minute="13,28,43,58")`, every 15 minutes,
-and is checked against an hour: `test_every_lock_expires_before_the_next_tick` would pass a lock of up to 3599 s on it.
-Its real lock is 600 s against 900 s, so nothing is broken today; the test just proves less than it appears to.
-
-Fix: take the shortest gap between consecutive `minute` values (wrapping the hour) when `hour` is every hour, and the
-shortest gap between `hour` values otherwise. Pin it with a minute-list case beside the existing helper tests.

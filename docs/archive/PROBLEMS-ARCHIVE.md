@@ -21841,3 +21841,25 @@ viewer sees the withheld chip and the locked line, and no owner details.
 
 Not built: listing an owner's other parcels by name. REData's owner rows carry numeric parcel ids,
 and REData offers no owner-to-parcels lookup, so only the count is shown.
+
+## RESOLVED 2026-10-04: The beat-lock test read any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passed
+
+`id: P251` · `status: fixed` · `resolved: 2026-10-04` · `found by: adversarial review of P233`
+
+`test_beat_lock_intervals.py::_effective_period_seconds` returned 3600 for any crontab whose `hour` covered the whole
+day, whatever its `minute`, and divided the day evenly by the number of hours otherwise. P233's
+`public-media-cache-sweep`, at `crontab(minute="13,28,43,58")`, was checked against an hour rather than 15 minutes, so
+`test_every_lock_expires_before_the_next_tick` would have passed a lock of up to 3599 s on it. An uneven hour list
+(`hour="0,6,8"`) was read as 8 hours apart rather than 2.
+
+The helper now lists a crontab's firings over one day and takes the shortest gap between consecutive ones, wrapping
+midnight. For a crontab firing every hour that is the shortest gap between its minutes, wrapping the hour; for one
+limited to some hours, the shortest gap between them (or between minutes, where it fires more than once in an hour).
+Day-of-week and day-of-month limits are ignored, since they only lengthen a gap.
+
+Every locked beat entry still passes. The tightest is `public-media-cache-sweep`, 600 s against 900 s. The scan
+covers only locks taken in a beat task's own body in `tasks.py`; `_run_database_backup`'s lock (2100 s, released in a
+`finally`, beat hourly) is taken in a helper and is not in the map, and was checked by hand.
+
+**Tests.** Six new cases failed first (a minute list, a minute gap wrapping the hour, uneven hours, an hour gap
+wrapping the day, minutes within limited hours, and a 1200 s lock on the 15-minute crontab flagged); all 20 pass.
