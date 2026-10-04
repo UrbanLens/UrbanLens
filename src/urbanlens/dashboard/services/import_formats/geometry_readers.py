@@ -85,6 +85,24 @@ def read_wkb(data: bytes) -> BaseGeometry:
     return shapely.from_wkb(data)
 
 
+def geojson_nests_too_deep(geometry: object) -> bool:
+    """Whether a GeoJSON geometry's collections nest deeper than :data:`MAX_NESTING`, which shapely's recursive ``shape``
+    cannot read: past about a thousand levels it raises ``RecursionError``, which no import handler expects.
+
+    Args:
+        geometry: A decoded GeoJSON geometry.
+
+    Returns:
+        True when its ``geometries`` nest too deeply.
+    """
+    level = [geometry]
+    for _depth in range(MAX_NESTING + 1):
+        level = [member for item in level if isinstance(item, dict) and isinstance(item.get("geometries"), list) for member in item["geometries"]]
+        if not level:
+            return False
+    return True
+
+
 def _refuse_deep_wkt(line: str) -> None:
     if line.count("(") <= MAX_NESTING:
         return

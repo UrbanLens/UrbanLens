@@ -745,6 +745,10 @@ def backfill_location_address(location_id: int) -> bool:
         return False
 
 
+#: How long one task may hold a URL's Wayback lookup before another may try; a save can take a minute.
+_WAYBACK_ARCHIVE_LOCK_SECONDS = 180
+
+
 def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     """Shared logic for :func:`archive_link_to_wayback` and its per-model chunk-batching siblings.
 
@@ -754,17 +758,25 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     would immediately re-raise instead of scheduling a delayed retry (Celery only defers a retry
     when the task was reached through the broker, not called as a plain function).
 
+    A URL is looked up once, however many links name it: an auto link is a ``PinLink`` and a
+    ``WikiLink`` at once, and a popular page is linked from many pins. A snapshot another link already
+    holds is reused, a snapshot found is given to every link still waiting on the URL, and a link whose
+    URL another task is looking up is left to that task.
+
     Args:
         link_model: ``"PinLink"`` or ``"WikiLink"``.
         link_id: PK of the link row to archive.
 
     Returns:
-        True when a wayback_url was saved, False otherwise.
+        True when this link was given a wayback_url, False otherwise.
     """
+    import hashlib
+
     import requests
 
     from urbanlens.dashboard.models.links.model import PinLink, WikiLink
     from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway, is_own_site_url
+    from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
 
     model = {"PinLink": PinLink, "WikiLink": WikiLink}.get(link_model)
     if model is None:
@@ -778,28 +790,65 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     if is_own_site_url(link.url):
         return False
 
-    gateway = WaybackMachineGateway()
+    known = _stored_wayback_snapshot(link.url)
+    if known:
+        return _give_wayback_snapshot(link_model, link_id, link.url, known)
+
+    lock_key = f"wayback-archive:{hashlib.sha256(link.url.encode()).hexdigest()}"
+    token = acquire_lock(lock_key, _WAYBACK_ARCHIVE_LOCK_SECONDS)
+    if token is None:
+        return False
     try:
-        availability = gateway.get_availability(link.url)
-        wayback_url = (availability.get("archived_snapshots") or {}).get("closest", {}).get("url", "")
-        if not wayback_url:
-            saved = gateway.save_url(link.url)
-            wayback_url = saved.get("archived_url", "")
-    except requests.RequestException:
-        logger.warning("archive_link_to_wayback: could not archive %s", link.url, exc_info=True)
-        return False
+        gateway = WaybackMachineGateway()
+        try:
+            availability = gateway.get_availability(link.url)
+            wayback_url = (availability.get("archived_snapshots") or {}).get("closest", {}).get("url", "")
+            if not wayback_url:
+                saved = gateway.save_url(link.url)
+                wayback_url = saved.get("archived_url", "")
+        except requests.RequestException:
+            logger.warning("archive_link_to_wayback: could not archive %s", link.url, exc_info=True)
+            return False
 
-    from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
-    from urbanlens.dashboard.services.security.link_urls import is_link_url
+        from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
+        from urbanlens.dashboard.services.security.link_urls import is_link_url
 
-    # The snapshot URL embeds the original, so a near-cap link comes back too long to store.
-    if not is_link_url(wayback_url, max_length=MAX_LINK_URL_LENGTH):
-        logger.info("archive_link_to_wayback: snapshot url for %s %s is not storable", link_model, link_id)
-        return False
+        # The snapshot URL embeds the original, so a near-cap link comes back too long to store.
+        if not is_link_url(wayback_url, max_length=MAX_LINK_URL_LENGTH):
+            logger.info("archive_link_to_wayback: snapshot url for %s %s is not storable", link_model, link_id)
+            return False
+        return _give_wayback_snapshot(link_model, link_id, link.url, wayback_url)
+    finally:
+        release_lock(lock_key, token)
 
-    link.wayback_url = wayback_url
-    link.save(update_fields=["wayback_url", "updated"])
-    return True
+
+def _stored_wayback_snapshot(url: str) -> str:
+    """A snapshot some link naming *url* already holds, or ""."""
+    from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+
+    for model in (PinLink, WikiLink):
+        stored = model.objects.filter(url=url).exclude(wayback_url="").values_list("wayback_url", flat=True).first()
+        if stored:
+            return stored
+    return ""
+
+
+def _give_wayback_snapshot(link_model: str, link_id: int, url: str, snapshot: str) -> bool:
+    """Store *snapshot* on every link naming *url* that has none, returning whether link ``link_id`` was one.
+
+    *snapshot* has passed ``is_link_url``, so it is what ``save`` would have stored.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+
+    now = timezone.now()
+    given = False
+    for model in (PinLink, WikiLink):
+        waiting = model.objects.filter(url=url, wayback_url="")
+        given = given or (model.__name__ == link_model and waiting.filter(pk=link_id).exists())
+        waiting.update(wayback_url=snapshot, updated=now)
+    return given
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)

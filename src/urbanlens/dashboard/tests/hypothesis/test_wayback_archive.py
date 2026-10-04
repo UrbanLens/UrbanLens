@@ -9,7 +9,7 @@ from model_bakery import baker
 import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.links.model import PinLink
+from urbanlens.dashboard.models.links.model import PinLink, WikiLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.wayback_machine import is_own_site_url
 from urbanlens.dashboard.tasks import archive_link_to_wayback
@@ -139,3 +139,75 @@ class ArchiveLinkToWaybackTests(TestCase):
         self.assertFalse(result)
         link.refresh_from_db()
         self.assertEqual(link.wayback_url, "")
+
+
+class OneUrlIsArchivedOnceTests(TestCase):
+    """A URL linked from a pin and its wiki, or from many pins, is looked up at the Wayback Machine once."""
+
+    _SNAPSHOT = "https://web.archive.org/web/20240101000000/https://example.com/a"
+
+    def setUp(self) -> None:
+        self.pin = baker.make(Pin, profile=baker.make("auth.User").profile)
+        self.wiki = baker.make("dashboard.Wiki")
+
+    def test_a_snapshot_another_link_holds_is_reused_without_asking(self) -> None:
+        baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url=self._SNAPSHOT)
+        waiting = baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url="")
+
+        with mock.patch(f"{_GATEWAY}.get_availability") as get_availability, mock.patch(f"{_GATEWAY}.save_url") as save:
+            self.assertTrue(archive_link_to_wayback("WikiLink", waiting.pk))
+
+        get_availability.assert_not_called()
+        save.assert_not_called()
+        waiting.refresh_from_db()
+        self.assertEqual(waiting.wayback_url, self._SNAPSHOT)
+
+    def test_a_snapshot_found_is_given_to_every_link_waiting_on_the_url(self) -> None:
+        first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
+        others = [
+            baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url=""),
+            baker.make(
+                PinLink, pin=baker.make(Pin, profile=baker.make("auth.User").profile), url="https://example.com/a"
+            ),
+        ]
+        unrelated = baker.make(PinLink, pin=self.pin, url="https://example.com/b", wayback_url="")
+        found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
+
+        with mock.patch(f"{_GATEWAY}.get_availability", return_value=found) as get_availability:
+            self.assertTrue(archive_link_to_wayback("PinLink", first.pk))
+            for other in others:
+                archive_link_to_wayback(type(other).__name__, other.pk)
+
+        self.assertEqual(get_availability.call_count, 1)
+        for link in (first, *others):
+            link.refresh_from_db()
+            self.assertEqual(link.wayback_url, self._SNAPSHOT)
+        unrelated.refresh_from_db()
+        self.assertEqual(unrelated.wayback_url, "")
+
+    def test_a_link_whose_url_is_being_archived_is_left_to_that_task(self) -> None:
+        """The task already asking gives its snapshot to this link too, so this one does not ask again."""
+        first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
+        second = baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url="")
+        asked: list[str] = []
+
+        def availability_while_the_other_runs(url: str) -> dict:
+            asked.append(url)
+            self.assertFalse(archive_link_to_wayback("WikiLink", second.pk))
+            return {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
+
+        with mock.patch(f"{_GATEWAY}.get_availability", side_effect=availability_while_the_other_runs):
+            self.assertTrue(archive_link_to_wayback("PinLink", first.pk))
+
+        self.assertEqual(asked, ["https://example.com/a"])
+        second.refresh_from_db()
+        self.assertEqual(second.wayback_url, self._SNAPSHOT)
+
+    def test_a_failed_lookup_frees_the_url_for_the_next_task(self) -> None:
+        first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
+        second = baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url="")
+        found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
+
+        with mock.patch(f"{_GATEWAY}.get_availability", side_effect=[requests.RequestException("boom"), found]):
+            self.assertFalse(archive_link_to_wayback("PinLink", first.pk))
+            self.assertTrue(archive_link_to_wayback("WikiLink", second.pk))

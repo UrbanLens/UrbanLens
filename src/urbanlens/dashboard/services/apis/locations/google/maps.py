@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.core.capacity import CapacityExceededError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.import_formats.geometry_readers import MAX_NESTING, geojson_nests_too_deep
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
     DEFAULT_LONGITUDE_KEYS,
@@ -1173,6 +1174,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 return None
             return coordinates[0], coordinates[1]
         if geom_type in {"MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection"}:
+            if geojson_nests_too_deep(geometry):
+                return None
             try:
                 shape = shapely_shape(geometry)
             except (ValueError, TypeError, AttributeError):
@@ -1343,7 +1346,8 @@ def _kml_coordinate_array(element: Element) -> np.ndarray:
     return np.frombuffer(flat, dtype=np.float64).reshape(-1, 2)
 
 
-def _kml_shape(element: Element) -> BaseGeometry | None:
+def _kml_shape(element: Element, depth: int = 0) -> BaseGeometry | None:
+    """A KML geometry element as a shape; a ``MultiGeometry`` nested past ``MAX_NESTING`` reads as none."""
     name = _kml_local_name(element.tag)
     if name == "Point":
         first = _kml_first_coordinate(element)
@@ -1360,7 +1364,9 @@ def _kml_shape(element: Element) -> BaseGeometry | None:
         outer = rings["outerBoundaryIs"][0] if rings["outerBoundaryIs"] else None
         return ShapelyPolygon(outer, rings["innerBoundaryIs"]) if outer is not None and len(outer) >= 3 else None
     if name == "MultiGeometry":
-        parts = [shape for shape in (_kml_shape(child) for child in element) if shape is not None and not shape.is_empty]
+        if depth >= MAX_NESTING:
+            return None
+        parts = [shape for shape in (_kml_shape(child, depth + 1) for child in element) if shape is not None and not shape.is_empty]
         return ShapelyGeometryCollection(parts) if parts else None
     return None
 

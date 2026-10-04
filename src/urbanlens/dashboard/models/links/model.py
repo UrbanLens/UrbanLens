@@ -12,6 +12,7 @@ import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from django.contrib.postgres.indexes import HashIndex
 from django.db.models import CASCADE, SET_NULL, F, ForeignKey, TextChoices, UniqueConstraint
 from django.db.models.fields import CharField, IntegerField, URLField
 from django.db.models.functions import MD5
@@ -99,7 +100,8 @@ class PinLink(_LinkBase):
         constraints = [
             UniqueConstraint(F("pin"), MD5("url"), name="db_plink_pin_url_unique"),
         ]
-        indexes = []
+        # The Wayback archive finds every link naming a URL (tasks._archive_link_to_wayback); a URL can outgrow a btree entry.
+        indexes = [HashIndex(fields=["url"], name="db_plink_url_hash")]
 
 
 class WikiLink(_LinkBase):
@@ -128,4 +130,4 @@ class WikiLink(_LinkBase):
             # Hashed for the same reason as PinLink's - see the note there.
             UniqueConstraint(F("wiki"), MD5("url"), name="db_wlink_wiki_url_unique"),
         ]
-        indexes = []
+        indexes = [HashIndex(fields=["url"], name="db_wlink_url_hash")]

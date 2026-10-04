@@ -22902,9 +22902,10 @@ exception, nothing the import could catch. The `.wkt` and `.wkb` import formats 
 killed the worker and the task in its other slot, and nothing stopped the same upload being sent again. Measured in
 the test runner, GEOS 3.13.1: WKT read 10,000 levels and crashed at 30,000; WKB read 10,000 and crashed at 100,000.
 
-The other places that parse a geometry from user input reach GEOS through `json.loads` first. That refuses nesting
-past about a thousand levels, which GEOS reads safely, and `decode_json` already answers it with a 400. KML builds its
-collections with Python recursion, which raises `RecursionError` long before GEOS's limit.
+The geometries posted to a view as GeoJSON reach GEOS through GDAL's GeoJSON reader, which refuses nesting past about
+32 levels with a `GDALException` ("nesting too deep"), far short of GEOS's limit. KML and GeoJSON imports build their
+collections in Python (`_kml_shape`, shapely's `shape`), so deep nesting raised `RecursionError` there rather than
+crashing. That was its own defect, below: `RecursionError` is not in `IMPORT_PARSE_ERRORS`.
 
 **Fix.** `services/import_formats/geometry_readers.py`:
 
@@ -22915,6 +22916,11 @@ collections with Python recursion, which raises `RecursionError` long before GEO
   for. A point list is skipped by arithmetic, so the walk costs one step per geometry, not per point.
 - A refused line is skipped with the same warning as any invalid line. A refused binary file fails only itself:
   `UnreadableGeometryError` is a `ValueError`, which is in `IMPORT_PARSE_ERRORS`.
+- **Found by the adversarial review: one deeply nested KML or GeoJSON item failed the whole upload.** A placemark of
+  about a thousand nested `MultiGeometry` elements (32 KB), or a feature of a thousand nested `GeometryCollection`s,
+  raised `RecursionError`, which escaped every import handler. `_kml_shape` now reads a `MultiGeometry` nested past
+  `MAX_NESTING` as no shape, and `geometry_readers.geojson_nests_too_deep` checks a feature iteratively before
+  shapely's `shape`, so the item is skipped like any other with no point, and the next one is read.
 - **Found on the way: a curve failed the whole upload.** GEOS 3.13 reads `CIRCULARSTRING` and the other curve types,
   but shapely 2.1 has no geometry to hold one and raises `NotImplementedError`, which is not a `ValueError`. One such
   line in a `.wkt` or `.wkb` file escaped the per-line handling and failed every file in the upload. Both readers now
@@ -22930,5 +22936,29 @@ The same module now reads a WKT line over 1 MiB without GEOS's WKT reader (P95).
   before and after.
 - `test_geometry_readers.py::NestingTests` checks the limit's edges for both readers and both byte orders. A
   hypothesis property holds the WKB walk to every collection, line and polygon GEOS writes, ISO and EWKB, 2D and 3D,
-  with an SRID. `test_import_wkt_wkb.py` checks a curve line is skipped, in WKT and hex WKB, and a curve file refused;
+  with an SRID. `DeeplyNestedCollectionsInOtherFormatsTests` reads a KML placemark and a GeoJSON feature nested 3,000
+  deep, then a valid one; both raised `RecursionError` before. `test_import_wkt_wkb.py` checks a curve line is skipped, in WKT and hex WKB, and a curve file refused;
   both failed with `NotImplementedError` before.
+
+## RESOLVED 2026-10-04: Every auto-added link asked the Wayback Machine twice, and a page linked from many pins was archived once per pin
+
+`id: P288` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, reading ApiCallLog while measuring P277`
+
+**What was wrong.** Each new `PinLink` and `WikiLink` queues its own archive task, and an auto link is both: P228's
+National Register record, a place's Wikipedia article or its OpenStreetMap feature is added to the pin and to its
+wiki. Each task asked the availability API and, finding no snapshot, Save Page Now. On P277's cold visit, two saves of
+one OpenStreetMap URL ran four seconds apart and both failed with a 520. A URL linked from many pins was looked up
+again for every one. Save Page Now limits each client to a handful of captures a minute.
+
+**Fix.** `tasks._archive_link_to_wayback` reuses a snapshot any link naming the URL already holds, gives a snapshot it
+finds to every link still waiting on that URL, and holds a lock per URL while it asks. A task that finds the lock held
+leaves its link to the holder. A failed lookup releases the lock, so the next task may try. Migration 0056 adds a hash
+index on each link table's `url`; the existing unique constraints lead with the pin or wiki, so they cannot serve a
+lookup by URL.
+
+Reusing a snapshot found on another account's link discloses nothing: it is the public archive of a public URL, and
+the availability API returns it to anyone who asks.
+
+**Tests.** `test_wayback_archive.py::OneUrlIsArchivedOnceTests`: a held snapshot is reused without asking; one lookup
+serves a pin link, a wiki link and another account's pin link, and leaves another URL alone; a link whose URL is
+being looked up is left to that task; a failed lookup frees the URL. The first three failed before.

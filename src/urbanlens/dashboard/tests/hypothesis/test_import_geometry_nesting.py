@@ -83,3 +83,44 @@ class DeeplyNestedGeometryTests(SimpleTestCase):
         """Anti-vacuity: the refusal is for the depth, not for nesting."""
         self.assertEqual(self._parse_in_a_child(_nested_wkt(20).encode(), "iter_wkt_pins"), "pins (1.0, 2.0)")
         self.assertEqual(self._parse_in_a_child(_nested_wkb(20), "iter_wkb_pins"), "pins (1.0, 2.0)")
+
+
+def _nested_kml(depth: int) -> bytes:
+    deep = "<MultiGeometry>" * depth + "<Point><coordinates>1,2</coordinates></Point>" + "</MultiGeometry>" * depth
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+        f"<Placemark><name>deep</name>{deep}</Placemark>"
+        "<Placemark><name>fine</name><Point><coordinates>3,4</coordinates></Point></Placemark>"
+        "</Document></kml>"
+    ).encode()
+
+
+def _nested_geojson(depth: int) -> bytes:
+    deep = '{"type": "GeometryCollection", "geometries": [' * depth + '{"type": "Point", "coordinates": [1, 2]}'
+    deep += "]}" * depth
+    return (
+        '{"type": "FeatureCollection", "features": ['
+        f'{{"type": "Feature", "properties": {{"name": "deep"}}, "geometry": {deep}}}, '
+        '{"type": "Feature", "properties": {"name": "fine"}, "geometry": {"type": "Point", "coordinates": [3, 4]}}]}'
+    ).encode()
+
+
+class DeeplyNestedCollectionsInOtherFormatsTests(SimpleTestCase):
+    """KML and GeoJSON build collections with Python recursion, whose RecursionError no import handler caught."""
+
+    def _pins(self, parse, content: bytes) -> list[tuple[float, float]]:
+        from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+
+        pins = getattr(GoogleMapsGateway(api_key=""), parse)(content, user_profile=None)
+        return [(pin["longitude"], pin["latitude"]) for pin in pins]
+
+    def test_a_kml_placemark_nested_deep_is_skipped_and_the_next_read(self) -> None:
+        self.assertEqual(self._pins("iter_kml_pins", _nested_kml(3_000)), [(3.0, 4.0)])
+
+    def test_a_geojson_feature_nested_deep_is_skipped_and_the_next_read(self) -> None:
+        self.assertEqual(self._pins("iter_geojson_pins", _nested_geojson(3_000)), [(3.0, 4.0)])
+
+    def test_shallow_collections_are_still_read(self) -> None:
+        """Anti-vacuity: the skip is for the depth."""
+        self.assertEqual(self._pins("iter_kml_pins", _nested_kml(5)), [(1.0, 2.0), (3.0, 4.0)])
+        self.assertEqual(self._pins("iter_geojson_pins", _nested_geojson(5)), [(1.0, 2.0), (3.0, 4.0)])
