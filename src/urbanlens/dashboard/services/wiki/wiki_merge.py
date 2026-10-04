@@ -119,11 +119,15 @@ def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
 def absorb_wiki(parent: Wiki, child: Wiki) -> None:
     """Nest ``child`` under ``parent`` and log it on the parent's edit history.
 
+    A Wikipedia article seeded while the child was a root, and untouched since, goes when the child turns out to be
+    one of the parent's buildings (``wiki_seed.drop_misplaced_wikipedia_seed``).
+
     Args:
         parent: The wiki that gains a child.
         child: The wiki being nested."""
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
+    from urbanlens.dashboard.services.wiki.wiki_seed import drop_misplaced_wikipedia_seed
 
     Wiki.objects.filter(pk=child.pk).update(parent_wiki=parent)
     child.parent_wiki = parent
@@ -133,6 +137,7 @@ def absorb_wiki(parent: Wiki, child: Wiki) -> None:
         changes={"child_wiki_merged": {"from": None, "to": child.name}},
     )
     logger.info("wiki_merge: nested wiki %s (%r) under %s (%r)", child.pk, child.name, parent.pk, parent.name)
+    drop_misplaced_wikipedia_seed(child)
 
 
 def reconcile_wiki_nesting(wiki: Wiki) -> int:

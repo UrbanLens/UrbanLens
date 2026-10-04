@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.place.model import Place
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 
 class NameTier(IntEnum):
@@ -171,6 +172,30 @@ def naming_scope(location: Location | None) -> NamingScope:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     if Wiki.objects.filter(location=location, parent_wiki__isnull=False).exists():
+        return NamingScope.BUILDING
+    return NamingScope.PARCEL
+
+
+def wiki_scope(wiki: Wiki) -> NamingScope:
+    """Whether a wiki describes one building of several, or something on one, rather than a property.
+
+    A wiki nested under another describes part of it when it holds no place of its own, or holds one of a
+    multi-building parcel's buildings (``scope.pin_type_for_place``). One holding a property's place - a parcel under
+    its site, the one building of an ordinary property - describes a property. Read from the wiki and its place alone.
+
+    Args:
+        wiki: The wiki.
+
+    Returns:
+        The scope.
+    """
+    from urbanlens.dashboard.models.pin.model import PinType
+    from urbanlens.dashboard.services.places.scope import pin_type_for_place
+
+    if wiki.parent_wiki_id is None:
+        return NamingScope.PARCEL
+    place = wiki.place if wiki.place_id else None
+    if place is None or pin_type_for_place(place) == PinType.BUILDING:
         return NamingScope.BUILDING
     return NamingScope.PARCEL
 

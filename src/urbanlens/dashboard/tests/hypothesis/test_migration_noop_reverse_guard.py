@@ -96,6 +96,11 @@ REVIEWED: dict[str, str] = {
         "misplaced CRIS cards and nests root wikis under their parcel's. A reverse keeps every value, each one the old "
         "code reads; the dropped rows are a cache it refetches, and old links resolve through the history."
     ),
+    "0053_building_wikis_drop_wikipedia_seed.py": (
+        "drop_building_wikipedia_seeds deletes untouched Wikipedia seeds (no person's revision) from building wikis. "
+        "Not recoverable, and nothing to recover: the old code reads a wiki with no article, and seeds it again the "
+        "next time the match is cached."
+    ),
 }
 
 

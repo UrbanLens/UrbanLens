@@ -22019,3 +22019,50 @@ naming, and a building with a place of its own unchanged. 8 of the 16 written fi
 17 pass after, with a race in which the campus's wiki appears between the lookup and the insert added alongside.
 `test_canonical_create_helpers.py`'s wiki race tests now make the manager's `_resolve` miss once, since
 `get_or_create_for_location` no longer goes through `existing_for_location`.
+
+## RESOLVED 2026-10-04: A building's wiki was seeded with its campus's Wikipedia article
+
+`id: P262` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by Claude while fixing P231. On the dev stack, 11 of the 55 child wikis under HRSH's campus wiki (1805) opened
+with the campus's Wikipedia article, attribution link to `Hudson_River_State_Hospital` included: 1315, 1806-1812,
+2063, 3211 and 3227, each placeless or holding a building place (read 2026-10-04). Each also carries a link to that
+article, with no `auto_source` (added before the column existed), so it cannot be told from one a person added.
+The Wikipedia panel stores the campus's article on a child pin's location when the pin's own point finds none
+(`WikipediaPanelSource._ancestor_campus_article`), any match at a building's point is the campus's or a neighbour's
+(the premise of `name_tiers.describes_scope`), and `models.cache.signals.seed_articles_on_wikipedia_cache_write`
+started the location's wiki article from whatever was cached there (`wiki_seed.seed_wiki_article_from_wikipedia`),
+and added the article's link. P231 had stopped the article naming a building's location, not seeding its wiki.
+
+**Decision (Jess):** wiki content comes only from official sources describing that place, so a building's wiki
+carries no article that describes its campus.
+
+**Fix.**
+
+- `name_tiers.wiki_scope(wiki)`: a wiki nested under another describes part of it when it holds no place of its own
+  or holds one of a multi-building parcel's buildings (`pin_type_for_place`). One holding a property's place - a
+  parcel under its site, or the one building of an ordinary property nested under its parcel's wiki - still
+  describes a property. Read from the wiki and its place, never pins. `wiki_seed.takes_wikipedia_article` applies
+  `describes_scope(ENCYCLOPEDIA, ...)` to it, and both the seeding and the signal's Wikipedia link skip a wiki that
+  does not take one. Root wikis are seeded as before.
+- A root wiki seeded from its own point and later nested as a building (`wiki_merge.absorb_wiki`) loses the seed
+  while it is untouched (`drop_misplaced_wikipedia_seed`, under a row lock so an edit landing meanwhile waits).
+- Migration `0053_building_wikis_drop_wikipedia_seed` removes the seed already on such wikis, only while untouched:
+  the first revision is the seed, every later one is `localize_article_images` (`EDIT_SUMMARY_IMAGES_LOCALIZED`,
+  now a constant) changing nothing but image addresses, no revision has an editor, `last_edited_by` is empty and
+  the article holds the last revision's text. A revision with no editor and any other summary is a person whose
+  account was deleted, and keeps the article. Dev's 11 each hold the seed plus the localising command's revision; a
+  read-only SQL transcription of the rule, run against dev's data (2026-10-04), selects exactly those 11 and nothing
+  else. The migration itself was not run there. The localising summary stays out of `SYSTEM_EDIT_SUMMARIES`:
+  it can rewrite a person's text, which concealment must not show as system content.
+- `_ancestor_campus_article` is unchanged: the campus's article is what a child pin's own Wikipedia panel shows, and
+  with the gate it no longer reaches the building's wiki.
+
+**Not done.** The 11 existing Wikipedia links on dev's building wikis stay: with no `auto_source` they cannot be told
+from a person's. New ones are no longer added.
+
+**Tests.** `test_building_wiki_articles.py`: a building wiki (placeless, and holding a building) is neither seeded nor
+linked, the campus's and a parcel under its site still are, nesting drops an untouched seed and keeps an edited one,
+the migration removes untouched seeds (dev's shape included) and keeps every human-touched or possibly-own article,
+and the runtime and migration judges agree case by case. An ordinary property's one building is still seeded. With
+the three call sites put back as they were, 4 of the 9 seeding and nesting tests failed; all 15 in the file pass with the fix.

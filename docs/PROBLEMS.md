@@ -3004,19 +3004,6 @@ Making them `DocumentMediaPanelSource`s fixes the listing but makes every Source
 REData searches, and the Sources tests assume CRIS and Commons are the only sources. Either accept that, or let a
 non-document source keep its documents as gallery tiles.
 
-## P262 — A building's wiki is seeded with its campus's Wikipedia article
-
-`id: P262` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
-
-On the dev stack, 11 of the 55 child wikis under HRSH's campus wiki (1805) open with the campus's Wikipedia article,
-attribution link to `Hudson_River_State_Hospital` included (wikis 1807, 1808 and 1812 among them, read 2026-10-04).
-The Wikipedia panel stores the campus's article on a child pin's location when the pin's own point finds none
-(`WikipediaPanelSource._ancestor_campus_article`), and `models.cache.signals.seed_articles_on_wikipedia_cache_write`
-starts the location's wiki article from whatever is cached there (`wiki_seed.seed_wiki_article_from_wikipedia`).
-P231 stopped that article naming a building's location (`name_tiers.describes_scope`); the article seeding was not
-changed. Open: whether a building's wiki carries no article from it, or the campus's with a note that the building is
-part of it.
-
 ## P251 — The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes
 
 `id: P251` · `status: open` · `updated: 2026-10-04` · `found by: adversarial review of P233`
