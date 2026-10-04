@@ -553,9 +553,12 @@ direct-only because REData's contract can't reproduce what they show:
 - **LoopNet** (USA) — commercial real-estate listings
 - **Property Records** (USA, the card's Parcel tab) — county parcel ownership/tax/sale-history lookup, retrieved from
   REData via `RedataGateway`
-  (`services.apis.property_records.redata_gateway`); populates the wiki's Ownership and Sale
-  History cards with `OFFICIAL`-sourced records in addition to a details card. Coverage varies by
-  county. **Owner names and contact details from those `OFFICIAL` records are subscriber-only**
+  (`services.apis.property_records.redata_gateway`); populates the Ownership and Sale History cards,
+  on the wiki and on the Private Pin page alike, with `OFFICIAL`-sourced records in addition to a details
+  card. REData's `/owners/` adds contact details, former owners and how many other parcels an owner
+  holds; its `/sales/` adds sales an earlier retrieval saw. A location's linked owners are its current
+  ones: a seller is kept on the sale only, and an official owner the newest record no longer names is
+  unlinked. Coverage varies by county. **Owner names and contact details from those `OFFICIAL` records are subscriber-only**
   (`SiteFeature.PROPERTY_OWNERS`, enforced in `services.property.owner_access`) - the parcel, tax,
   assessment and district facts stay open to everyone, as do a user's own private `PinOwner` notes
   and any `WikiOwner` the community typed in themselves

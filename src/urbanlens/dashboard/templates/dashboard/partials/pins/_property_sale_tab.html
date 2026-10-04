@@ -3,11 +3,11 @@
 <div class="po-sale-list">
     {% for row in sales %}
     {% with sale=row.sale %}
-    <div class="po-sale-row" id="po-sale-{{ sale.id }}">
+    <div class="po-sale-row" id="po-{% if row.official %}official-{% endif %}sale-{{ sale.id }}">
         <div class="po-sale-main">
             <span class="po-sale-date">{{ sale.sale_date|default:"Undated" }}</span>
             {% if sale.sale_price %}<span class="po-sale-price">${{ sale.sale_price|floatformat:2 }}</span>{% endif %}
-            {% if show_official_badge and sale.source == "official" %}
+            {% if row.official %}
             <span class="po-badge po-badge--official" title="Official data - not directly editable">
                 <i class="material-symbols-outlined">verified</i>Official
             </span>

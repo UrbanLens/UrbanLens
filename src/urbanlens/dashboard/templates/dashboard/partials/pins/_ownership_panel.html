@@ -1,7 +1,7 @@
 <div id="{{ panel_id }}" class="ownership-panel card" data-card-tabs
      data-collapse-scope="{{ collapse_scope }}" data-collapse-section="ownership"
      {# Auto-collapsed. #}
-     data-collapse-if-empty="{% if not owners %}true{% endif %}">
+     data-collapse-if-empty="{% if not owners and not withheld_official_count %}true{% endif %}">
     <div class="card-header">
         <i class="material-symbols-outlined">real_estate_agent</i>
         <span>Ownership</span>
@@ -27,18 +27,18 @@
         {% if owners %}
         <div class="po-owner-list">
             {% for owner in owners %}
-            <div class="po-owner-row" id="po-owner-{{ owner.id }}">
+            <div class="po-owner-row" id="po-{% if owner.source == "official" %}official-{% endif %}owner-{{ owner.id }}">
                 <div class="po-owner-display">
                     <div class="po-owner-main">
                         <span class="po-owner-name">{{ owner.name }}</span>
                         {% if owner.company_name %}<span class="po-owner-company">{{ owner.company_name }}</span>{% endif %}
-                        {% if show_official_badge and owner.source == "official" %}
+                        {% if owner.source == "official" %}
                         <span class="po-badge po-badge--official" title="Official data - not directly editable">
                             <i class="material-symbols-outlined">verified</i>Official
                         </span>
                         {% endif %}
                         <div class="po-owner-actions">
-                            {% if not show_official_badge or owner.source != "official" %}
+                            {% if owner.source != "official" %}
                             <button type="button" class="btn btn--icon-sm" title="Edit owner" data-panel-action="owner-edit">
                                 <i class="material-symbols-outlined">edit</i>
                             </button>
@@ -54,12 +54,13 @@
                     </div>
                     <div class="po-owner-contact">
                         {% if owner.address %}<span class="po-owner-detail"><i class="material-symbols-outlined">place</i>{{ owner.address }}</span>{% endif %}
+                        {% if owner.care_of %}<span class="po-owner-detail"><i class="material-symbols-outlined">forward_to_inbox</i>c/o {{ owner.care_of }}</span>{% endif %}
                         {% if owner.phone %}<span class="po-owner-detail"><i class="material-symbols-outlined">call</i>{{ owner.phone }}</span>{% endif %}
                         {% if owner.email %}<span class="po-owner-detail"><i class="material-symbols-outlined">mail</i>{{ owner.email }}</span>{% endif %}
                     </div>
                     {% if owner.notes %}<p class="po-owner-notes">{{ owner.notes|linebreaksbr }}</p>{% endif %}
                 </div>
-                {% if not show_official_badge or owner.source != "official" %}
+                {% if owner.source != "official" %}
                 <form class="po-owner-edit-form" hidden
                       hx-post="{% url url_edit obj_slug owner.id %}"
                       hx-target="#{{ panel_id }}"
@@ -68,6 +69,7 @@
                     <input type="text" name="name" class="po-input" placeholder="Name" maxlength="200" value="{{ owner.name }}" required>
                     <input type="text" name="company_name" class="po-input" placeholder="Company (optional)" maxlength="200" value="{{ owner.company_name }}">
                     <input type="text" name="address" class="po-input" placeholder="Address" value="{{ owner.address }}">
+                    <input type="text" name="care_of" class="po-input" placeholder="Care of (optional)" maxlength="200" value="{{ owner.care_of }}">
                     <input type="text" name="phone" class="po-input" placeholder="Phone" maxlength="50" value="{{ owner.phone }}">
                     <input type="email" name="email" class="po-input" placeholder="Email" value="{{ owner.email }}">
                     <textarea name="notes" class="po-input po-notes-input" placeholder="Notes">{{ owner.notes }}</textarea>
@@ -104,6 +106,7 @@
             <input type="text" name="name" class="po-input" placeholder="Owner name" maxlength="200" required>
             <input type="text" name="company_name" class="po-input" placeholder="Company (optional)" maxlength="200">
             <input type="text" name="address" class="po-input" placeholder="Address">
+            <input type="text" name="care_of" class="po-input" placeholder="Care of (optional)" maxlength="200">
             <input type="text" name="phone" class="po-input" placeholder="Phone" maxlength="50">
             <input type="email" name="email" class="po-input" placeholder="Email">
             <textarea name="notes" class="po-input po-notes-input" placeholder="Notes"></textarea>

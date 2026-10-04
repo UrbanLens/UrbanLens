@@ -19,6 +19,7 @@ _OFFICIAL_NAME = "Hudson Heritage LLC"
 _OFFICIAL_ADDRESS = "1 Main St"
 _OFFICIAL_PHONE = "555-0100"
 _OFFICIAL_EMAIL = "records@hudsonheritage.example"
+_OFFICIAL_CARE_OF = "Hudson Estate Trustee"
 _USER_NAME = "Community Contributed Owner"
 
 
@@ -68,6 +69,7 @@ class _OwnerApiTestCase(TestCase):
             address=_OFFICIAL_ADDRESS,
             phone=_OFFICIAL_PHONE,
             email=_OFFICIAL_EMAIL,
+            care_of=_OFFICIAL_CARE_OF,
         )
         self.official.locations.add(self.location)
         self.contributed = baker.make(WikiOwner, name=_USER_NAME, source=OwnerSource.USER)
@@ -96,12 +98,15 @@ class WikiOwnershipApiGateTests(_OwnerApiTestCase):
         self.assertNotIn(_OFFICIAL_ADDRESS, raw)
         self.assertNotIn(_OFFICIAL_PHONE, raw)
         self.assertNotIn(_OFFICIAL_EMAIL, raw)
+        self.assertNotIn(_OFFICIAL_CARE_OF, raw)
 
     def test_a_subscribers_key_receives_both_owners(self) -> None:
         response = self._get(self._key_for(_subscriber()))
         self.assertEqual(response.status_code, 200)
         names = {row["name"] for row in response.json()["results"]}
         self.assertEqual(names, {_OFFICIAL_NAME, _USER_NAME})
+        official = next(row for row in response.json()["results"] if row["name"] == _OFFICIAL_NAME)
+        self.assertEqual(official["care_of"], _OFFICIAL_CARE_OF)
 
     def test_only_a_contributed_owner_yields_the_same_result_for_everyone(self) -> None:
         """No official row at all - gating must not hide user-contributed data either."""

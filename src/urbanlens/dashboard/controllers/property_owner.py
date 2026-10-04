@@ -72,6 +72,7 @@ def _owner_fields_from_post(request: HttpRequest) -> dict[str, str]:
         "name": (request.POST.get("name") or "").strip(),
         "company_name": (request.POST.get("company_name") or "").strip(),
         "address": (request.POST.get("address") or "").strip(),
+        "care_of": (request.POST.get("care_of") or "").strip(),
         "phone": (request.POST.get("phone") or "").strip(),
         "email": (request.POST.get("email") or "").strip(),
         "notes": (request.POST.get("notes") or "").strip(),
@@ -143,21 +144,32 @@ def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, da
 # ======================================================================
 
 
+def _official_owners_of(pin: Pin) -> list[WikiOwner]:
+    """The current owners county records name for the pin's location."""
+    if pin.location_id is None:
+        return []
+    return list(WikiOwner.objects.for_location(pin.location).filter(source=OwnerSource.OFFICIAL))
+
+
 def _render_pin_ownership_panel(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the Private Pin page's private Ownership card.
+    """Render the Private Pin page's Ownership card: the official owners of record, then the pin's own notes.
 
     Putting a subscription in front of a user's own notes would be taking something away rather than
     offering something - only the county-sourced records UrbanLens looks up *for* them are gated (see
-    ``services.property.owner_access``).
+    ``services.property.owner_access``). Members' shared owner notes belong to the wiki and stay there.
     """
+    from urbanlens.dashboard.services.property.owner_access import can_see_official_owners
+
+    official = _official_owners_of(pin)
+    entitled = can_see_official_owners(request.user)
     response = render(
         request,
         "dashboard/partials/pins/_ownership_panel.html",
         {
-            "owners": PinOwner.objects.for_pin(pin),
+            "owners": [*(official if entitled else []), *PinOwner.objects.for_pin(pin)],
+            "withheld_official_count": 0 if entitled else len(official),
             "panel_id": "pin-ownership-panel",
             "collapse_scope": "pin",
-            "show_official_badge": False,
             "obj_slug": pin.slug,
             "url_add": "pin.ownership",
             "url_edit": "pin.ownership.edit",
@@ -225,21 +237,26 @@ class PinOwnerRemoveView(LoginRequiredMixin, View):
         return _show_toast(response, f"Removed “{owner_name}”.")
 
 
-def _render_pin_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the Private Pin page's private Sale History tab.
+def _newest_first(sale: PinPropertySale | WikiPropertySale) -> tuple[bool, datetime.date, datetime.datetime]:
+    """Sort key putting dated sales newest first and undated ones last."""
+    return sale.sale_date is not None, sale.sale_date or datetime.date.min, sale.created
 
-    Goes through the same row builder as the wiki tab purely so one template shape serves both; nothing
-    is ever withheld here, since a pin's parties are ``PinOwner`` rows and those are always
-    user-entered.
+
+def _render_pin_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
+    """Render the Private Pin page's Sale History tab: the pin's own sale notes and the location's recorded sales.
+
+    A recorded sale's parties are official owners, withheld from a viewer not entitled to them as on the wiki's tab;
+    a pin's own parties are ``PinOwner`` rows, always user-entered, and never withheld.
     """
     from urbanlens.dashboard.services.property.owner_access import sale_rows
 
+    own = PinPropertySale.objects.for_pin(pin).prefetch_related("previous_owners", "new_owners")
+    recorded = WikiPropertySale.objects.for_location(pin.location).filter(source=OwnerSource.OFFICIAL).prefetch_related("previous_owners", "new_owners") if pin.location_id else WikiPropertySale.objects.none()
     response = render(
         request,
         "dashboard/partials/pins/_property_sale_tab.html",
         {
-            "sales": sale_rows(PinPropertySale.objects.for_pin(pin).prefetch_related("previous_owners", "new_owners"), request.user),
-            "show_official_badge": False,
+            "sales": sale_rows(sorted([*own, *recorded], key=_newest_first, reverse=True), request.user),
             "obj_slug": pin.slug,
             "url_add": "pin.sales",
             "url_delete": "pin.sales.delete",
@@ -315,7 +332,6 @@ def _render_wiki_ownership_panel(request: HttpRequest, location: Location, wiki:
             "withheld_official_count": withheld_official_count(all_owners, request.user),
             "panel_id": "location-ownership-panel",
             "collapse_scope": "wiki",
-            "show_official_badge": True,
             "obj_slug": location.slug,
             "url_add": "location.wiki.ownership",
             "url_edit": "location.wiki.ownership.edit",
@@ -405,7 +421,6 @@ def _render_wiki_sale_tab(request: HttpRequest, location: Location, wiki: Wiki, 
         "dashboard/partials/pins/_property_sale_tab.html",
         {
             "sales": sale_rows(visible_rows(WikiPropertySale.objects.for_location(location), wiki, profile).prefetch_related("previous_owners", "new_owners"), request.user),
-            "show_official_badge": True,
             "obj_slug": location.slug,
             "url_add": "location.wiki.sales",
             "url_delete": "location.wiki.sales.delete",

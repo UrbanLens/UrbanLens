@@ -448,7 +448,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 `PUT/DELETE /wikis/{location_slug}/cover-photo/` — scopes: `wiki:write` — PUT: `{image_uuid}`, must already be in the wiki's own gallery (404 otherwise) — DELETE clears it — response: `{cover_photo_url}`.
 
-`GET /wikis/{location_slug}/ownership/` — scopes: `wiki:read` — paginated shared owner records (`WikiOwner`) currently or previously linked to this place — rows: `{id, name, company_name, address, phone, email, notes, source, created, updated}` — **read-only this pass**; see `docs/notes/mobile_app_notes.md` Part 7 for why the write side (which does exist internally) is deferred.
+`GET /wikis/{location_slug}/ownership/` — scopes: `wiki:read` — paginated shared owner records (`WikiOwner`) currently linked to this place, official ones only for a caller holding the property-owners feature — rows: `{id, name, company_name, address, care_of, phone, email, notes, source, created, updated}` — **read-only this pass**; see `docs/notes/mobile_app_notes.md` Part 7 for why the write side (which does exist internally) is deferred.
 
 `GET /wikis/{location_slug}/sales/` — scopes: `wiki:read` — paginated shared sale history (`WikiPropertySale`), newest first — rows: `{id, sale_price, sale_date, notes, source, previous_owners:[{id,name}], new_owners:[{id,name}], created}` — read-only, same reason as Ownership above.
 

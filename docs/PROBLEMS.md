@@ -2939,15 +2939,6 @@ uses `min(60 * 2**retries, 900)`), and say in the progress message that storage 
 `tasks.py` declare `autoretry_for=(OSError,)`, so whether to widen all of them is a separate question. Not reproduced
 in a test.
 
-## P229 — The Ownership panel shows a subscriber only the owner's name
-
-`id: P229` · `status: open` · `updated: 2026-10-03` · `found by: Jess, a subscriber, on production (v0.8.0) HRSH`
-
-A subscriber sees "EFG/DRA Heritage LLC" and nothing else: no sale history, no contact, nothing related. Find out
-whether the panel asks REData for those fields, whether REData has them for this parcel, and whether the subscriber
-gate is applied. A subscriber should see everything the property-owner feature offers. Check production's entitlement
-logic on the dev stack with the e2e `subscriber` role.
-
 ## P236 — A wiki URL's response time tells whether a Location exists under that slug
 
 `id: P236` · `status: open` · `updated: 2026-10-03` · `found by: adversarial review of P186`

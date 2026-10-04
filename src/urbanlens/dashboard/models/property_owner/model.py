@@ -20,6 +20,7 @@ class _OwnerBase(abstract.DashboardModel):
     name = CharField(max_length=200)
     company_name = CharField(max_length=200, blank=True, default="")
     address = TextField(blank=True, default="")
+    care_of = CharField(max_length=200, blank=True, default="")
     phone = CharField(max_length=50, blank=True, default="")
     email = EmailField(blank=True, default="")
     notes = TextField(blank=True, default="")

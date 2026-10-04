@@ -66,17 +66,20 @@ def sale_rows(sales, user: AbstractBaseUser | AnonymousUser) -> list[dict]:
         user: The viewing user.
 
     Returns:
-        One dict per sale: ``sale``, the visible ``previous_owners`` and ``new_owners``, and ``parties_withheld`` when any name was removed - so the template can say the parties are known but not shown, rather than rendering a misleading "Unknown"."""
+        One dict per sale: ``sale``, whether it is ``official``, the visible ``previous_owners`` and ``new_owners``, and ``parties_withheld`` when any name was removed - so the template can say the parties are known but not shown, rather than rendering a misleading "Unknown"."""
+    from urbanlens.dashboard.models.property_owner.meta import OwnerSource
+
     entitled = can_see_official_owners(user)
     rows = []
     for sale in sales:
         previous = list(sale.previous_owners.all())
         new = list(sale.new_owners.all())
-        visible_previous = previous if entitled else visible_owners(previous, user)
-        visible_new = new if entitled else visible_owners(new, user)
+        visible_previous = previous if entitled else [owner for owner in previous if getattr(owner, "source", None) != OwnerSource.OFFICIAL]
+        visible_new = new if entitled else [owner for owner in new if getattr(owner, "source", None) != OwnerSource.OFFICIAL]
         rows.append(
             {
                 "sale": sale,
+                "official": getattr(sale, "source", None) == OwnerSource.OFFICIAL,
                 "previous_owners": visible_previous,
                 "new_owners": visible_new,
                 "parties_withheld": len(visible_previous) < len(previous) or len(visible_new) < len(new),

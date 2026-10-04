@@ -21806,3 +21806,38 @@ mount, dead once it left the grid, are gone.
 
 Verified in Chromium on `development_main` at 1280 and 900 px: the elements at the card's eyebrow and title corners
 are the card's own. Test: `test_floating_onboarding_mounts.py` (no mount has a `.container` ancestor; 4 red before).
+
+## RESOLVED 2026-10-04: The Ownership panel showed a subscriber only the owner's name
+
+`id: P229` · `status: fixed` · `resolved: 2026-10-04`
+
+A subscriber on HRSH saw "EFG/DRA Heritage LLC" and nothing else. The gate was not the cause:
+`can_see_official_owners` passed. The data was there too: the dev cache held the owner's mailing
+address, and REData's `/parcels/{uuid}/owners/` held the same address plus a second parcel linked to the
+LLC. HRSH has no recorded sales in REData, so an empty Sale History is right for it.
+
+Causes, all fixed test-first (`tests/hypothesis/test_official_owner_records.py`):
+
+- The Private Pin page's Ownership card and Sale History tab listed only the pin's own notes. Official
+  records were shown only on the wiki, and the Parcel tab showed just the owner's name. Both now show the
+  location's official owners and sales (read-only, parties gated as on the wiki), and the Parcel tab gives
+  an entitled viewer the owner's mailing address, care-of line, phone, email, other-parcel count and
+  former owners.
+- `_get_or_create_official_owner` never updated an existing row, so an owner first recorded without an
+  address (for example as a sale party) kept a blank one for good. Official rows now take each fetch's
+  non-blank contact values; member-entered rows are never rewritten. Care-of is stored (new
+  `care_of` field, migration 0052, on the API's owner rows too).
+- Official grantors were linked to the location, which the community model reads as "current owner",
+  so sellers were listed as owners. Sale parties are now recorded on the sale only, and an official
+  owner the newest record no longer names is unlinked; a record naming no owner changes nobody.
+- UrbanLens never called REData's `/owners/` or `/sales/`. Both are fetched now, best-effort.
+  Client-entered (`manual`) rows are left out.
+- A card holding only withheld official owners counted as empty and hid itself whole, so the
+  "official owner record on file - Subscribe" line could never be seen, on the wiki either.
+
+Verified on development_main (HRSH, pin `p221-check`) with a temporarily granted subscriber role: the
+Parcel tab and the Ownership card show the address and "1 other parcel on record". Without the role the
+viewer sees the withheld chip and the locked line, and no owner details.
+
+Not built: listing an owner's other parcels by name. REData's owner rows carry numeric parcel ids,
+and REData offers no owner-to-parcels lookup, so only the count is shown.

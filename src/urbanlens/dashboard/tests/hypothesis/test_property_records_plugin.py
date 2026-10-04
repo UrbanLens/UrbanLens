@@ -687,7 +687,7 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
         self.assertEqual(owners.count(), 1)
         self.assertEqual(owners.first().source, OwnerSource.USER)
 
-    def test_mailing_address_only_applied_to_a_newly_created_owner(self) -> None:
+    def test_a_new_owner_takes_the_records_mailing_address(self) -> None:
         _write_official_owners_and_sales(
             self.location, {"owner_name": ["Jane Smith"], "owner_mailing_address": "PO Box 1"}
         )

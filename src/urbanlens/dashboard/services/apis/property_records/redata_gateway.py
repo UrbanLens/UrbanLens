@@ -318,6 +318,37 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/liens/") or {}
         return list(body.get("results") or [])
 
+    def lookup_owners(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return every owner REData has linked to a parcel, former ones included.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw owner rows, first page only. ``current`` says whether the parcel's latest record still names
+            the owner, and ``parcels`` lists every parcel the owner is linked to, this one included.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/owners/") or {}
+        return list(body.get("results") or [])
+
+    def lookup_sales(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return the sales REData has recorded against a parcel across every retrieval, newest first.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw sale rows, first page only.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/sales/") or {}
+        return list(body.get("results") or [])
+
     def lookup_tax_payments(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """``delinquent`` is the publisher's own determination rather than something derived from ``paid`` - a row can be unpaid but not yet delinquent, since bills are unpaid before their due date.
 

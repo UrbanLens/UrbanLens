@@ -434,6 +434,7 @@ class WikiOwnerSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     company_name = serializers.CharField(read_only=True, allow_blank=True)
     address = serializers.CharField(read_only=True, allow_blank=True)
+    care_of = serializers.CharField(read_only=True, allow_blank=True)
     phone = serializers.CharField(read_only=True, allow_blank=True)
     email = serializers.CharField(read_only=True, allow_blank=True)
     notes = serializers.CharField(read_only=True, allow_blank=True)

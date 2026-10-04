@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
 import json
@@ -126,6 +127,22 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
             tax_rows = []
         if tax_rows:
             payload["tax_status"] = _tax_status(tax_rows)
+
+        # The record names only today's owner; REData's owner rows add former owners, contact details and how
+        # many other parcels each holds, and its recorded sales outlast the one retrieval behind this record.
+        try:
+            owner_rows = gateway.lookup_owners(parcel_uuid)
+        except PropertyRecordsUnavailableError:
+            owner_rows = []
+        if owners := _owner_records(owner_rows):
+            payload["owners"] = owners
+
+        try:
+            recorded_sales = gateway.lookup_sales(parcel_uuid)
+        except PropertyRecordsUnavailableError:
+            recorded_sales = []
+        if recorded := _recorded_sales(recorded_sales):
+            payload["sales_history"] = _merged_sales(payload.get("sales_history") or [], recorded)
 
         # Neighbourhood demographics (census tract population/income/home value/rent/owner-renter
         # split) - genuinely useful context for someone researching a site.
@@ -273,28 +290,200 @@ def _assessment_history(rows: list[dict[str, Any]], apn: str) -> list[dict[str, 
     return [{"tax_year": row.get("tax_year"), "total_value": total, "value_stage": row.get("value_stage") or ""} for row, total in valued[:10]]
 
 
-def _get_or_create_official_owner(location: Location, name: str, *, mailing_address: str = "") -> WikiOwner | None:
-    """Find or create an OFFICIAL WikiOwner for this Location, never overwriting an existing one.
+#: REData owner fields an official owner row is kept current from, keyed by the row's own field.
+_OWNER_CONTACT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("company_name", "company_name"),
+    ("address", "mailing_address"),
+    ("care_of", "care_of"),
+    ("phone", "phone"),
+    ("email", "email"),
+)
+
+
+def _owner_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Shape REData's owner rows for the cache, leaving out rows another REData client typed in.
 
     Args:
-        location: The Location the owner should be linked to.
-        name: The owner's name, as reported by the source.
-        mailing_address: Optional mailing address, only used when creating a new row.
+        rows: Raw rows from :meth:`RedataGateway.lookup_owners`.
 
     Returns:
-        The matched or newly-created WikiOwner, or None for a blank name."""
+        ``{"name", contact fields, "first_observed", "last_observed", "current", "other_parcels"}`` dicts. ``current``
+        is None when the parcel has no official record to judge by.
+    """
+    records: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("source") == "manual":
+            continue
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+        parcels = {parcel for parcel in row.get("parcels") or [] if isinstance(parcel, int | str)}
+        current = row.get("current")
+        record: dict[str, Any] = {redata: str(row.get(redata) or "").strip() for _, redata in _OWNER_CONTACT_FIELDS}
+        record.update(
+            name=name,
+            first_observed=str(row.get("first_observed_at") or ""),
+            last_observed=str(row.get("last_observed_at") or ""),
+            current=current if isinstance(current, bool) else None,
+            other_parcels=max(len(parcels) - 1, 0),
+        )
+        records.append(record)
+    return records
+
+
+def _recorded_sales(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """REData's recorded sales of the parcel, shaped like the record's own ``sales_history``.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_sales`.
+
+    Returns:
+        ``{"date", "price", "grantor", "grantee", "doc_type", "doc_number"}`` dicts, leaving out client-entered rows and
+        rows with neither a date nor a price.
+    """
+    sales: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("source") == "manual":
+            continue
+        if not (row.get("sale_date") or row.get("sale_price")):
+            continue
+        sale: dict[str, Any] = {"date": row.get("sale_date") or "", "price": row.get("sale_price") or ""}
+        sale.update({key: str(row.get(key) or "").strip() for key in ("grantor", "grantee", "doc_type", "doc_number")})
+        sales.append(sale)
+    return sales
+
+
+def _merged_sales(known: list[dict[str, Any]], recorded: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The record's sales with REData's recorded ones added, one entry per date and price.
+
+    Args:
+        known: The record's ``sales_history`` so far.
+        recorded: :func:`_recorded_sales`'s rows.
+
+    Returns:
+        ``known`` with blank party and document fields filled from a recorded sale of the same date and price, then
+        the recorded sales it lacked.
+    """
+
+    def key(sale: dict[str, Any]) -> tuple[str, Decimal | None]:
+        return str(sale.get("date") or ""), _parse_sale_price(sale.get("price"))
+
+    merged = [dict(sale) for sale in known if isinstance(sale, dict)]
+    by_key = {key(sale): sale for sale in merged}
+    for sale in recorded:
+        match = by_key.get(key(sale))
+        if match is None:
+            merged.append(sale)
+            by_key[key(sale)] = sale
+            continue
+        for key_name in ("grantor", "grantee", "doc_type", "doc_number"):
+            if not match.get(key_name) and sale.get(key_name):
+                match[key_name] = sale[key_name]
+    return merged
+
+
+@dataclass(frozen=True)
+class _OwnerDetails:
+    """What one record says about one owner."""
+
+    name: str
+    contact: dict[str, str] = field(default_factory=dict)
+
+
+def _fit(field_name: str, value: str) -> str:
+    """``value`` cut to the owner field's length, so one overlong county value cannot fail the whole write."""
+    from django.db.models import Field
+
+    from urbanlens.dashboard.models.property_owner.model import WikiOwner
+
+    model_field = WikiOwner._meta.get_field(field_name)  # noqa: SLF001 - fields are only exposed through _meta
+    max_length = model_field.max_length if isinstance(model_field, Field) else None
+    return value[:max_length] if max_length else value
+
+
+def _current_owner_details(payload: dict[str, Any]) -> list[_OwnerDetails]:
+    """The owners the record names, each with the contact details known for it.
+
+    Args:
+        payload: A successful ``_fetch_payload`` result.
+
+    Returns:
+        One entry per distinct name in ``owner_name`` (else per REData owner marked current). The record's own mailing
+        address and care-of line come first, being from the newest retrieval; REData's owner row fills the rest.
+    """
+    owners = [owner for owner in payload.get("owners") or [] if isinstance(owner, dict) and owner.get("name")]
+    by_name = {str(owner["name"]).casefold(): owner for owner in owners}
+    names = [str(name).strip() for name in payload.get("owner_name") or [] if str(name or "").strip()]
+    if not names:
+        names = [str(owner["name"]) for owner in owners if owner.get("current") is True]
+    record_contact = {"address": str(payload.get("owner_mailing_address") or "").strip(), "care_of": str(payload.get("owner_care_of") or "").strip()}
+
+    details: list[_OwnerDetails] = []
+    for name in dict.fromkeys(names, None):
+        known = by_name.get(name.casefold()) or {}
+        contact = {own: record_contact.get(own) or str(known.get(redata) or "").strip() for own, redata in _OWNER_CONTACT_FIELDS}
+        details.append(_OwnerDetails(name=name, contact={own: _fit(own, value) for own, value in contact.items() if value}))
+    return details
+
+
+def _owner_named(location: Location, name: str) -> WikiOwner:
+    """The owner of this name a location already knows, else a new OFFICIAL row, unlinked.
+
+    Args:
+        location: The location the record is for.
+        name: A non-blank owner name, already cut to the field's length.
+
+    Returns:
+        A current owner of the location, else a party to one of its sales, else the new row.
+    """
+    from django.db.models import Q
+
     from urbanlens.dashboard.models.property_owner.meta import OwnerSource
     from urbanlens.dashboard.models.property_owner.model import WikiOwner
 
-    clean_name = (name or "").strip()
-    if not clean_name:
-        return None
+    existing = WikiOwner.objects.for_location(location).filter(name__iexact=name).first()
+    if existing is None:
+        parties = Q(sales_as_previous_owner__location=location) | Q(sales_as_new_owner__location=location)
+        existing = WikiOwner.objects.filter(parties, name__iexact=name).first()
+    return existing or WikiOwner.objects.create(name=name, source=OwnerSource.OFFICIAL)
 
-    existing = WikiOwner.objects.for_location(location).filter(name__iexact=clean_name).first()
-    if existing is not None:
-        return existing
 
-    owner = WikiOwner.objects.create(name=clean_name, source=OwnerSource.OFFICIAL, address=mailing_address or "")
+def _sale_party_owner(location: Location, name: str) -> WikiOwner | None:
+    """The owner row a sale of this location names; a party to a sale is not made a current owner.
+
+    Args:
+        location: The location sold.
+        name: The party's name, as the record spells it.
+
+    Returns:
+        The party's row, or None for a blank name.
+    """
+    clean_name = _fit("name", (name or "").strip())
+    return _owner_named(location, clean_name) if clean_name else None
+
+
+def _current_official_owner(location: Location, details: _OwnerDetails) -> WikiOwner:
+    """Link the named owner to the location, keeping an official row's contact details current.
+
+    A member-entered owner of the same name is linked as it stands, never rewritten. A blank in the record never
+    clears a known value.
+
+    Args:
+        location: The location the record is for.
+        details: The record's owner.
+
+    Returns:
+        The linked owner.
+    """
+    from urbanlens.dashboard.models.property_owner.meta import OwnerSource
+
+    owner = _owner_named(location, _fit("name", details.name))
+    if owner.source == OwnerSource.OFFICIAL:
+        changed = [field_name for field_name, value in details.contact.items() if getattr(owner, field_name) != value]
+        for field_name in changed:
+            setattr(owner, field_name, details.contact[field_name])
+        if changed:
+            owner.save(update_fields=[*changed, "updated"])
     owner.locations.add(location)
     return owner
 
@@ -312,37 +501,46 @@ def _parse_sale_price(raw: Any) -> Decimal | None:
 def _write_official_owners_and_sales(location: Location, payload: dict[str, Any]) -> None:
     """Upsert OFFICIAL WikiOwner/WikiPropertySale rows from a successful fetch's payload.
 
+    A location's linked owners are its current ones, as the community Sale History form treats them: the record's
+    owners are linked, an official owner it no longer names is unlinked, and a sale's parties are recorded on the sale
+    only. A record naming no owner changes nobody.
+
     Args:
         location: The Location the record belongs to.
         payload: A successful (``available: True``) ``_fetch_payload`` result."""
+    from django.db import transaction
+
     from urbanlens.dashboard.models.property_owner.meta import OwnerSource
-    from urbanlens.dashboard.models.property_owner.model import WikiPropertySale
+    from urbanlens.dashboard.models.property_owner.model import WikiOwner, WikiPropertySale
 
-    mailing_address = payload.get("owner_mailing_address") or ""
-    for name in payload.get("owner_name") or []:
-        _get_or_create_official_owner(location, name, mailing_address=mailing_address)
+    with transaction.atomic():
+        current = [_current_official_owner(location, details) for details in _current_owner_details(payload)]
+        if current:
+            superseded = WikiOwner.objects.for_location(location).filter(source=OwnerSource.OFFICIAL).exclude(pk__in=[owner.pk for owner in current])
+            location.owners.remove(*superseded)
 
-    for sale in payload.get("sales_history") or []:
-        raw_date = sale.get("date")
-        try:
-            sale_date = date.fromisoformat(raw_date) if raw_date else None
-        except ValueError:
-            sale_date = None
-        sale_price = _parse_sale_price(sale.get("price"))
-        if sale_date is None and sale_price is None:
-            continue
+        for sale in payload.get("sales_history") or []:
+            raw_date = sale.get("date")
+            try:
+                sale_date = date.fromisoformat(raw_date) if raw_date else None
+            except ValueError:
+                sale_date = None
+            sale_price = _parse_sale_price(sale.get("price"))
+            if sale_date is None and sale_price is None:
+                continue
 
-        already_recorded = WikiPropertySale.objects.for_location(location).filter(sale_date=sale_date, sale_price=sale_price).exists()
-        if already_recorded:
-            continue
-
-        new_sale = WikiPropertySale.objects.create(location=location, source=OwnerSource.OFFICIAL, sale_date=sale_date, sale_price=sale_price)
-        grantor = _get_or_create_official_owner(location, sale.get("grantor") or "")
-        grantee = _get_or_create_official_owner(location, sale.get("grantee") or "")
-        if grantor is not None:
-            new_sale.previous_owners.add(grantor)
-        if grantee is not None:
-            new_sale.new_owners.add(grantee)
+            recorded = WikiPropertySale.objects.for_location(location).filter(sale_date=sale_date, sale_price=sale_price).first()
+            if recorded is None:
+                recorded = WikiPropertySale.objects.create(location=location, source=OwnerSource.OFFICIAL, sale_date=sale_date, sale_price=sale_price)
+            elif recorded.source != OwnerSource.OFFICIAL:
+                continue
+            # A sale first recorded from a source without party names takes them from a later one that has them.
+            for side, party_name in ((recorded.previous_owners, sale.get("grantor")), (recorded.new_owners, sale.get("grantee"))):
+                if side.exists():
+                    continue
+                party = _sale_party_owner(location, party_name or "")
+                if party is not None:
+                    side.add(party)
 
 
 #: Recorded-document links shown before the list is truncated.
@@ -447,14 +645,60 @@ def _demographics_rows(demographics: Any, *, show_demographics: bool) -> list[di
     return rows
 
 
+#: Former owners shown on the card, most recently on record first.
+_MAX_FORMER_OWNER_ROWS = 5
+
+
+def _observed_span(owner: dict[str, Any]) -> str:
+    """The years an owner was on record for the parcel, e.g. ``"1990-2005"``, or ``""`` when unknown."""
+    first, last = str(owner.get("first_observed") or "")[:4], str(owner.get("last_observed") or "")[:4]
+    if first and last and first != last:
+        return f"{first}-{last}"
+    return last or first
+
+
+def _owner_rows(data: dict[str, Any]) -> list[dict[str, str]]:
+    """The owner's contact details, its other parcels and the parcel's former owners, for an entitled viewer.
+
+    Args:
+        data: The cached property-record payload.
+
+    Returns:
+        Meta rows; the record's own mailing address and care-of line, else those REData holds for a current owner.
+    """
+    owners = [owner for owner in data.get("owners") or [] if isinstance(owner, dict) and owner.get("name")]
+    current = [owner for owner in owners if owner.get("current") is not False]
+    former = sorted((owner for owner in owners if owner.get("current") is False), key=lambda owner: str(owner.get("last_observed") or ""), reverse=True)
+
+    def first_known(record_key: str, owner_key: str) -> str:
+        return str(data.get(record_key) or "").strip() or next((str(owner[owner_key]) for owner in current if owner.get(owner_key)), "")
+
+    rows: list[dict[str, str]] = []
+    for label, record_key, owner_key in (("Owner mailing address", "owner_mailing_address", "mailing_address"), ("Care of", "owner_care_of", "care_of")):
+        if value := first_known(record_key, owner_key):
+            rows.append({"label": label, "value": value})
+    for label, owner_key in (("Owner phone", "phone"), ("Owner email", "email")):
+        rows.extend({"label": label, "value": str(owner[owner_key])} for owner in current if owner.get(owner_key))
+    for owner in current:
+        if count := owner.get("other_parcels") or 0:
+            whose = f" ({owner['name']})" if len(current) > 1 else ""
+            rows.append({"label": "Owner's other parcels", "value": f"{count} other parcel{'s' if count != 1 else ''} on record{whose}"})
+    for owner in former[:_MAX_FORMER_OWNER_ROWS]:
+        span = _observed_span(owner)
+        rows.append({"label": "Former owner", "value": f"{owner['name']} (on record {span})" if span else str(owner["name"])})
+    return rows
+
+
 def _render_available(data: dict[str, Any], *, show_owner: bool, show_demographics: bool) -> dict[str, Any]:
     """Build the info-panel context for a successful record.
 
     Args:
         data: The cached property-record payload.
-        show_owner: Whether this viewer may see the owner's name.
+        show_owner: Whether this viewer may see who owns the parcel and how to reach them.
         show_demographics: Whether this viewer may see the neighbourhood demographics section - see :func:`_may_see_nearby_research` and the module docstring."""
-    meta = [{"label": "Address", "value": data["situs_address"]}] if data.get("situs_address") else []
+    meta = _owner_rows(data) if show_owner else []
+    if data.get("situs_address"):
+        meta.append({"label": "Address", "value": data["situs_address"]})
     if data.get("apn"):
         meta.append({"label": "APN / Parcel ID", "value": data["apn"]})
     if data.get("prior_parcel_ids"):
