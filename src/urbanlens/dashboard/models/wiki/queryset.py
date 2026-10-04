@@ -78,7 +78,7 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         return f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
 
     def get_or_create_for_location(self, location: Location, defaults: dict | None = None) -> tuple[Wiki, bool]:
-        """Return the Wiki for a Location, creating it if absent.
+        """Return the Wiki for a Location, creating it if absent, nested where the places already say it belongs.
         The one creation path.
         Everything else should use ``get_for_location``, which never creates - a wiki appearing as a side effect of viewing or editing other content is a bug.
 
@@ -103,10 +103,11 @@ class WikiManager(_WikiManagerBase["Wiki"]):
             # Location on the same place, fails here; the savepoint keeps a caller's transaction usable.
             with transaction.atomic():
                 if explicit_name:
-                    return self.create(location=location, place_id=location.place_id, name=explicit_name, **defaults), True
-                # Nobody chose this name, even when a request triggered the creation, so a better public name may replace it.
-                with writing_as(WriteSource.AUTOMATIC):
-                    wiki = self.create(location=location, place_id=location.place_id, name=self._placeholder_name(location), **defaults)
+                    wiki = self.create(location=location, place_id=location.place_id, name=explicit_name, **defaults)
+                else:
+                    # Nobody chose this name, even when a request triggered the creation, so a better public name may replace it.
+                    with writing_as(WriteSource.AUTOMATIC):
+                        wiki = self.create(location=location, place_id=location.place_id, name=self._placeholder_name(location), **defaults)
         except IntegrityError:
             # Drops the reverse `wiki` cache, which holds either the earlier miss or the instance that failed to insert.
             location.refresh_from_db()
@@ -114,7 +115,12 @@ class WikiManager(_WikiManagerBase["Wiki"]):
                 raise
             return existing, False
 
+        from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
         from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
 
-        adopt_public_name(wiki, location.provider_name, source=OFFICIAL_NAME_SOURCE)
+        if not explicit_name:
+            adopt_public_name(wiki, location.provider_name, source=OFFICIAL_NAME_SOURCE)
+        # From the places already stored, so a building's wiki nests without waiting on boundary generation.
+        if reconcile_wiki_nesting(wiki):
+            wiki.refresh_from_db(fields=["parent_wiki"])
         return wiki, True

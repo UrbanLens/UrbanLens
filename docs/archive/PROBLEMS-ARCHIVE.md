@@ -21950,3 +21950,23 @@ instead of drawing nothing.
 parent outline, nothing drawn, a parcel asked for a building outline, share detection) and
 `test_detail_building_outlines.py` (a footprintless child wiki's and child pin's drawn outlines on the campus maps):
 6 failed before the fix, all 68 in both files pass after.
+
+## RESOLVED 2026-10-04: A wiki created outside `ensure_wiki_for_location` nested only when its boundary was generated
+
+`id: P263` · `status: fixed` · `resolved: 2026-10-04`
+
+Found by reading while fixing P231, not seen on dev. P231 made `tasks.ensure_wiki_for_location` reconcile nesting
+as soon as it created a wiki. The other callers of `Wiki.objects.get_or_create_for_location` did not:
+`WikiShareService.share_from_pin` (when a share races ahead of that task), `photo_enrichment._save_enriched_image`
+(during enrichment) and `BuildingNester.campus_wiki`. A wiki one of them created stayed a root until boundary
+generation, which runs only for an owner who allows enrichment, and the task that followed found the wiki and did
+not reconcile it.
+
+**Fix.** `get_or_create_for_location`, the one creation path, now reconciles nesting for every wiki it creates
+(`wiki_merge.reconcile_wiki_nesting`, from the places already stored), so every caller nests the same way and
+`ensure_wiki_for_location` no longer does it separately. The returned wiki carries its new parent. Reconciling on
+creation only, rather than on every root wiki the task returns, keeps the task's cost for existing wikis at zero.
+A wiki created with an explicit name now also nests; it still skips the provider-name adoption, as before.
+
+**Tests.** `test_building_wiki_nesting.py`: a share and an enrichment photo that create a building's wiki each nest it
+under the campus's (both failed before the fix).

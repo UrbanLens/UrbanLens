@@ -8,26 +8,34 @@ none was found.
 
 from __future__ import annotations
 
+import io
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
+from django.test import override_settings
 from model_bakery import baker
+from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.models.images.model import ImageSource
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.photos import photo_enrichment
 from urbanlens.dashboard.services.places import lineage
 from urbanlens.dashboard.services.wiki import wiki_merge
 from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
+from urbanlens.dashboard.services.wiki.wiki_share import WikiShareService
 from urbanlens.dashboard.tasks import ensure_wiki_for_location
 
 from .place_helpers import make_place
 
 _LAT, _LNG = 41.7333, -73.9281
+_MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 
 
 def _square(latitude: float, longitude: float, half: float) -> MultiPolygon:
@@ -68,6 +76,30 @@ class BuildingWikiNestingTests(TestCase):
         wiki = Wiki.objects.get(pk=wiki_pk)
         self.assertEqual(wiki.location_id, self.location.pk)
         self.assertEqual(wiki.parent_wiki_id, self.campus_wiki.pk)
+
+    def test_a_share_that_creates_the_buildings_wiki_nests_it(self) -> None:
+        """P263: a share racing ahead of ``ensure_wiki_for_location`` creates the wiki itself."""
+        pin = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None)
+        self.assertFalse(Wiki.objects.filter(location=self.location).exists())
+
+        wiki, _shared = WikiShareService().share_from_pin(pin)
+
+        self.assertEqual(wiki.location_id, self.location.pk)
+        self.assertEqual(Wiki.objects.get(pk=wiki.pk).parent_wiki_id, self.campus_wiki.pk)
+
+    @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
+    def test_an_enrichment_photo_that_creates_the_buildings_wiki_nests_it(self) -> None:
+        """P263."""
+        buffer = io.BytesIO()
+        PILImage.new("RGB", (8, 8)).save(buffer, format="JPEG")
+
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
+            image = photo_enrichment._save_enriched_image(
+                self.location, buffer.getvalue(), source=ImageSource.GOOGLE_MAPS, max_dimension=800
+            )
+
+        self.assertEqual(image.wiki.location_id, self.location.pk)
+        self.assertEqual(Wiki.objects.get(pk=image.wiki_id).parent_wiki_id, self.campus_wiki.pk)
 
     def test_a_placeless_wiki_on_a_building_with_no_wiki_finds_the_parcels(self) -> None:
         """No pin anywhere: the places alone decide."""

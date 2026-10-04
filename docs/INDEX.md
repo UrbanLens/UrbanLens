@@ -217,5 +217,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P260 | open | 2026-10-03 | A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P261 | open | 2026-10-04 | A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P262 | open | 2026-10-04 | A building's wiki is seeded with its campus's Wikipedia article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P263 | open | 2026-10-04 | A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P251 | open | 2026-10-04 | The beat-lock test reads any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passes | [`docs/PROBLEMS.md`](PROBLEMS.md) |
