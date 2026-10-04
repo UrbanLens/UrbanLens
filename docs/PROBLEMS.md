@@ -1206,8 +1206,19 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
   (16 MiB of Location History in 9.9 s, 16 MiB of GPX in 28.8 s, on a host running other work),
   roughly 180 MB of Location History (about 230 MB RSS) or 60 MB of GPX (about 360 MB) is the largest
   that finishes. A larger history file fails on time, not memory. Whether to allow more - a longer
-  limit, or history written to disk as it is read - is a product call. The confirmed import then reads
-  `history.json` with `json.load` on a BULK worker; that was not measured.
+  limit, or history written to disk as it is read - is a product call.
+- **The confirm request no longer reads the history, 2026-10-04.** It used to `json.load` the preview's
+  `history.json` and dump it again into the import's payload, in the web worker. 16 MiB of Location History
+  makes 11.7 MiB of it, and 16 MiB of GPX 9.0 MiB; reading either back peaked at about 39 MiB, so the largest
+  history the preview can finish would have cost the web worker about 450 MB. `start_confirmed_import` copies the
+  file undecoded (`preview_history_path`), and the import's worker reads it, as it read the payload before
+  (`test_import_wizard_history.py::test_confirming_a_large_history_does_not_read_it_in_the_request`: a 10 MB
+  history peaked at 51 MB in the request before, under 5 MB now). A payload stored before the change, with its
+  history inline, still imports.
+- **`test_import_parse_memory.py` measured first-use imports, 2026-10-04.** The modules a format imports when it
+  is first read cost about 1.1 MB, which counted against whichever test reached that format first. `test_csv`
+  failed alone at 2.18 MB against its 1.57 MB bound, and passed at 1.10 MB once warm. Each case now reads its file
+  once unmeasured first.
 - **Documents were already bounded, and still are.** `.txt` and `.docx` are read up to
   `MAX_DOCUMENT_BYTES` (2 MB), and a `.docx` declaring more than `MAX_DOCUMENT_UNCOMPRESSED_BYTES`
   (20 MB) unzipped is refused. A `.docx` costs 5.2x-5.6x RSS of its unzipped size, the same before and
@@ -2687,7 +2698,7 @@ already-pinned suffixes). Not done: it rewrites stored rows users see, which wan
 
 ## P216 — Historic Newspapers shows nothing, because no page reaches UrbanLens with its text
 
-`id: P216` · `status: open` · `updated: 2026-10-03` · `found by: P196, checking each provider's fields, 2026-10-03`
+`id: P216` · `status: open` · `updated: 2026-10-04` · `found by: P196, checking each provider's fields, 2026-10-03`
 
 REData's half is asked for in `docs/handoffs/redata-chronicling-america-description-dropped.md`.
 
@@ -2705,7 +2716,8 @@ contain the name. LoC matches each word separately.
 To fix it, REData should join the list as its LoC gateway does. Then the dateline still names the paper's town and county,
 which reads as a conflict for any place elsewhere ("Pierce County" against Dutchess). Judge a newspaper page on its text
 alone, for example by keeping the dateline out of `title` and `caption`, or have the source tell the judge to skip them.
-Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03.
+Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03, and on
+2026-10-04 REData's search still ended in `chronicling_america could not be reached: ReadTimeout`.
 
 ## P240 — Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out
 

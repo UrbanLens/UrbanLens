@@ -358,15 +358,15 @@ def read_preview(user_id: int, job_id: str) -> dict[str, Any] | None:
     return state
 
 
-def read_preview_history(user_id: int, preview_id: object) -> dict[str, Any] | None:
-    """The history a finished preview of *user_id*'s is holding for its confirmed import.
+def preview_history_path(user_id: int, preview_id: object) -> str | None:
+    """Where a finished preview of *user_id*'s keeps the history for its confirmed import.
 
     Args:
         user_id: The requesting user.
         preview_id: The preview's job id, as the client sent it.
 
     Returns:
-        ``ImportedHistory.to_json`` output; None when *preview_id* is not one of *user_id*'s finished
+        The ``ImportedHistory.to_json`` file's path; None when *preview_id* is not one of *user_id*'s finished
         previews, or holds no history - deliberately the same answer.
     """
     try:
@@ -376,15 +376,15 @@ def read_preview_history(user_id: int, preview_id: object) -> dict[str, Any] | N
     state = read_preview(user_id, job_id)
     if state is None or state.get("status") != "done":
         return None
-    history = _read_json(job_dir(job_id), _HISTORY)
-    return history if isinstance(history, dict) else None
+    path = os.path.join(job_dir(job_id), _HISTORY)
+    return path if os.path.isfile(path) else None
 
 
 def discard_preview_history(job_id: str) -> None:
     """Remove a preview's history once an import has taken it, so the same trips are not saved twice.
 
     Args:
-        job_id: A preview :func:`read_preview_history` accepted.
+        job_id: A preview :func:`preview_history_path` accepted.
     """
     with contextlib.suppress(OSError):
         os.remove(os.path.join(job_dir(str(uuid.UUID(job_id))), _HISTORY))

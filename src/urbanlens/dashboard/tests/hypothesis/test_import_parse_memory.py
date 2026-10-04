@@ -303,22 +303,35 @@ class _MemoryCase(TestCase):
         self.addCleanup(single_flight.release, import_preview.guard_key(self.profile.pk))
 
     def _peak(self, name: str, upload: bytes) -> tuple[int, dict[str, Any]]:
-        """Read *upload* as a preview, returning the parse's tracemalloc peak and what the dialog would be told."""
+        """Read *upload* as a preview, returning the parse's tracemalloc peak and what the dialog would be told.
+
+        The file is read once unmeasured first: the modules a format imports on its first use cost over 1 MB, which
+        would count only against whichever test reached that format first.
+        """
+        self._parse(name, upload, measured=False)
+        return self._parse(name, upload, measured=True)
+
+    def _parse(self, name: str, upload: bytes, *, measured: bool) -> tuple[int, dict[str, Any]]:
         with mock.patch(ENQUEUE, return_value=mock.Mock()):
             job_id = import_preview.start_import_preview(self.profile, [SimpleUploadedFile(name, upload)])
         self.addCleanup(import_preview.shutil.rmtree, import_preview.job_dir(job_id), True)
+        self.addCleanup(import_preview.single_flight.release, import_preview.guard_key(self.profile.pk))
 
+        peak = 0
         with (
             override_settings(UL_PROCESS_ROLE="sandbox", UL_UNTRUSTED_PARSE_POLICY="deny"),
             mock.patch(ENQUEUE, return_value=mock.Mock()),
             mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", _KEPT_PINS),
         ):
-            tracemalloc.start()
+            if measured:
+                tracemalloc.start()
             try:
                 import_preview.parse_import_preview(self.profile.pk, job_id)
-                _current, peak = tracemalloc.get_traced_memory()
+                if measured:
+                    _current, peak = tracemalloc.get_traced_memory()
             finally:
-                tracemalloc.stop()
+                if measured:
+                    tracemalloc.stop()
         return peak, import_preview.read_preview(self.profile.user_id, job_id) or {}
 
     def assert_read_in_pieces(

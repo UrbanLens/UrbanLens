@@ -48,6 +48,7 @@ GUARD_TTL_SECONDS = TIME_LIMIT_SECONDS + 10 * 60
 PROGRESS_EVERY = 25
 
 PAYLOAD_FILENAME = "confirmed.json"
+HISTORY_FILENAME = "history.json"
 
 #: Its own subtree of ``MEDIA_ROOT``, because a selection can wait for a worker longer than the
 #: data import's hour; the vestigial sweep ages this one by the guard instead.
@@ -191,7 +192,7 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
     """
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.pins.import_preview import discard_preview_history, read_preview_history
+    from urbanlens.dashboard.services.pins.import_preview import discard_preview_history, preview_history_path
     from urbanlens.dashboard.tasks import run_confirmed_pin_import
 
     wants_history = preview_id is not None
@@ -205,14 +206,21 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
     job_id = str(uuid.uuid4())
     directory = job_dir(job_id)
     status = ConfirmedImportStatus(job_id)
-    history = read_preview_history(profile.user_id, preview_id) if wants_history else None
+    history = preview_history_path(profile.user_id, preview_id) if wants_history else None
     if wants_history and history is None:
         _discard(directory, status, guard)
         raise ConfirmedImportRefusedError(_EXPIRED, 410)
     try:
         os.makedirs(directory, exist_ok=True)
+        if history is not None:
+            # Copied undecoded: it grows with the upload, and reading it here would hold several times that in the web worker.
+            try:
+                shutil.copyfile(history, os.path.join(directory, HISTORY_FILENAME))
+            except FileNotFoundError:
+                _discard(directory, status, guard)
+                raise ConfirmedImportRefusedError(_EXPIRED, 410) from None
         with open(os.path.join(directory, PAYLOAD_FILENAME), "w", encoding="utf-8") as handle:
-            json.dump({"lists": confirmed_lists, "auto_tag": auto_tag, "history": history}, handle)
+            json.dump({"lists": confirmed_lists, "auto_tag": auto_tag, "history_file": history is not None}, handle)
         status.write("pending", 0, "Waiting to start...", user_id=profile.user_id, result={"total": total, "current": 0})
         # Recorded before the enqueue: a task that finishes first releases the guard, and adopting after would re-take it.
         single_flight.adopt(guard, job_id, GUARD_TTL_SECONDS)
@@ -372,7 +380,15 @@ def _read_payload(directory: str) -> dict[str, Any] | None:
             payload = json.load(handle)
     except (OSError, ValueError):
         return None
-    return payload if isinstance(payload, dict) and isinstance(payload.get("lists"), list) else None
+    if not isinstance(payload, dict) or not isinstance(payload.get("lists"), list):
+        return None
+    if payload.get("history_file"):
+        try:
+            with open(os.path.join(directory, HISTORY_FILENAME), encoding="utf-8") as handle:
+                payload["history"] = json.load(handle)
+        except (OSError, ValueError):
+            return None
+    return payload
 
 
 def _discard(directory: str, status: ImportJobStatus, guard: str) -> None:

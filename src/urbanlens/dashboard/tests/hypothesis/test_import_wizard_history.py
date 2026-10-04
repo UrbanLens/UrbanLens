@@ -267,6 +267,39 @@ class ImportWizardHistoryTests(TestCase):
                 enqueue.assert_not_called()
                 self.assertIsNone(single_flight.holder(confirmed_import.guard_key(self.profile.pk)))
 
+    def test_confirming_a_large_history_does_not_read_it_in_the_request(self) -> None:
+        """The history is what the import saves, so it grows with the file: 12 MiB for 16 MiB of Location History.
+
+        The confirm request used to ``json.load`` it and dump it again, about 3x its size in the web worker. It is
+        copied as it is, and the import's worker reads it.
+        """
+        import gc
+        import os
+        import tracemalloc
+
+        job, state = self._preview("2026_JANUARY.json", _timeline())
+        visit = json.loads(_timeline())["timelineObjects"][0]
+        stored = os.path.join(import_preview.job_dir(job["job_id"]), "history.json")
+        with open(stored, "w", encoding="utf-8") as handle:
+            json.dump({"visits": [visit] * 40_000, "activity": [], "routes": []}, handle)
+        size = os.path.getsize(stored)
+        self.assertGreater(size, 8 * 1024 * 1024)
+
+        gc.collect()
+        tracemalloc.start()
+        try:
+            response = self._confirm(job, state)
+            _current, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+
+        self.assertEqual(response.status_code, 202, response.content)
+        self.assertLess(peak, size // 2)
+        copied = os.path.join(confirmed_import.job_dir(response.json()["job_id"]), "history.json")
+        with open(copied, encoding="utf-8") as handle:
+            self.assertEqual(len(json.load(handle)["visits"]), 40_000)
+        self.assertFalse(os.path.exists(stored), "the preview's copy is kept, so it could be imported twice")
+
 
 class ImportedHistoryTests(TestCase):
     """What the preview stores for the confirmed import survives being written down and read back."""
