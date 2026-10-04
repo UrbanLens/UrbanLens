@@ -38,6 +38,21 @@ def _takes_a_lock(node: ast.FunctionDef) -> bool:
     return False
 
 
+def _parse_function(source: str) -> ast.FunctionDef:
+    """The function *source* defines first.
+
+    Args:
+        source: Python source starting with a function definition.
+
+    Returns:
+        Its definition.
+    """
+    node = ast.parse(source).body[0]
+    if not isinstance(node, ast.FunctionDef):
+        raise TypeError(f"{source!r} does not start with a function")
+    return node
+
+
 #: beat-schedule entry name -> the lock TTL (seconds) the task guards itself with.
 #: Values are read live off ``tasks`` so this can't drift from the constants.
 _LOCKED_BEAT_TASKS: dict[str, int] = {
@@ -148,17 +163,17 @@ class BeatLockIntervalTests(SimpleTestCase):
         idiom has zero real matches in ``tasks.py`` today - nothing else in this
         file would notice if this arm silently broke.
         """
-        node = ast.parse("def f():\n    cache.add('k', 'v', 30)\n").body[0]
+        node = _parse_function("def f():\n    cache.add('k', 'v', 30)\n")
 
         self.assertTrue(_takes_a_lock(node))
 
     def test_takes_a_lock_matches_acquire_lock(self) -> None:
-        node = ast.parse("def f():\n    acquire_lock('k', 30)\n").body[0]
+        node = _parse_function("def f():\n    acquire_lock('k', 30)\n")
 
         self.assertTrue(_takes_a_lock(node))
 
     def test_takes_a_lock_matches_beat_lock(self) -> None:
-        node = ast.parse("def f():\n    with beat_lock('k', 30) as got:\n        pass\n").body[0]
+        node = _parse_function("def f():\n    with beat_lock('k', 30) as got:\n        pass\n")
 
         self.assertTrue(_takes_a_lock(node))
 
@@ -167,7 +182,7 @@ class BeatLockIntervalTests(SimpleTestCase):
         A ``_takes_a_lock`` that always returns ``True`` would still pass every
         other test in this file that only checks names already known to lock.
         """
-        node = ast.parse("def f():\n    do_something_else()\n").body[0]
+        node = _parse_function("def f():\n    do_something_else()\n")
 
         self.assertFalse(_takes_a_lock(node))
 
